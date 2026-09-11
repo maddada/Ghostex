@@ -25,6 +25,7 @@ import type { WorkspaceIdeTargetApp } from './workspace-open-targets';
 import type { SidebarPinnedPrompt } from './sidebar-pinned-prompts';
 import type { SidebarSessionTag, SidebarSessionTagFilter } from './session-tags';
 import type {
+  GxserverCustomSessionTagsState,
   GxserverPortlessPresentation,
   GxserverPortlessStatus,
   GxserverPresentationSessionGitStatus,
@@ -119,6 +120,14 @@ export type SidebarAgentHookStatusItem = {
  */
 export type SidebarAgentHookStatusMessage = {
   agents: SidebarAgentHookStatusItem[];
+  /**
+   * CDXC:Onboarding 2026-09-11 WHY:
+   * The desktop host probes providers one at a time and posts a merged payload after each, so a host that
+   * clears its loading state on the first payload reports the scan as finished too early. `false` marks a
+   * partial post of that walk and `true` its final one; a payload without the field (install/uninstall
+   * replies, remote hosts) is complete.
+   */
+  complete?: boolean;
   errorMessage?: string;
   generatedAt: string;
   hookStateDirectory: string;
@@ -978,9 +987,12 @@ export type SidebarHudState = {
 };
 
 export type SidebarHydrateMessage = {
+  /** The local daemon's custom session tag catalog; same local/remote split as `sidebarSpaces`. */
+  customSessionTags?: GxserverCustomSessionTagsState;
   groups: SidebarSessionGroup[];
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
+  remoteCustomSessionTagsByMachineId?: Readonly<Record<string, GxserverCustomSessionTagsState>>;
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   remoteSidebarSpacesByMachineId?: Readonly<Record<string, GxserverSidebarSpacesState>>;
   revision: number;
@@ -991,9 +1003,11 @@ export type SidebarHydrateMessage = {
 };
 
 export type SidebarSessionStateMessage = {
+  customSessionTags?: GxserverCustomSessionTagsState;
   groups: SidebarSessionGroup[];
   pinnedPrompts: SidebarPinnedPrompt[];
   previousSessions: SidebarPreviousSessionItem[];
+  remoteCustomSessionTagsByMachineId?: Readonly<Record<string, GxserverCustomSessionTagsState>>;
   remoteSidebarProjectCollectionsByMachineId?: Readonly<Record<string, GxserverSidebarProjectCollectionsState>>;
   remoteSidebarSpacesByMachineId?: Readonly<Record<string, GxserverSidebarSpacesState>>;
   revision: number;
@@ -1047,6 +1061,16 @@ export type SidebarSpacesChangedMessage = {
   remoteMachineId?: string;
   sidebarSpaces: GxserverSidebarSpacesState;
   type: 'sidebarSpacesChanged';
+};
+
+export type CustomSessionTagsChangedMessage = {
+  /**
+   * CDXC:Sessions 2026-09-11 WHY:
+   * gxserver owns the custom session tag catalog for the sessions it hosts. Hosts forward the normalized wire state (snapshot field, live event, or update ack) to SidebarApp tagged with the owning machine, exactly like `sidebarSpacesChanged`, so a remote daemon's tags resolve for that daemon's sessions without merging into the local catalog.
+   */
+  customSessionTags: GxserverCustomSessionTagsState;
+  remoteMachineId?: string;
+  type: 'customSessionTagsChanged';
 };
 
 /**
@@ -1492,6 +1516,7 @@ export type ExtensionToSidebarMessage =
   | SidebarGroupsChangedMessage
   | SidebarProjectCollectionsChangedMessage
   | SidebarSpacesChangedMessage
+  | CustomSessionTagsChangedMessage
   | ApplySidebarSpaceEditorResultMessage
   | SidebarHudChangedMessage
   | SidebarPlayCompletionSoundMessage
@@ -1851,6 +1876,10 @@ export type SidebarToExtensionMessage =
        * Session and project context menus notify native when open so clicks on
        * terminal, titlebar, and other non-sidebar surfaces dismiss the menu
        * while the original AppKit click still reaches its target.
+       *
+       * CDXC:ContextMenus 2026-09-11 WHY:
+       * On the desktop app the same pair also holds the sidebar's native focus grant for as long as any menu is open, so every SidebarContextMenuPortal instance must send both, balanced.
+       * SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts.
        */
       type: 'sidebarContextMenuOpened';
     }
@@ -2818,6 +2847,15 @@ export type SidebarToExtensionMessage =
       remoteMachineId?: string;
       state: GxserverSidebarSpacesState;
       type: 'updateSidebarSpaces';
+    }
+  | {
+      /**
+       * CDXC:Sessions 2026-09-11 WHY:
+       * SidebarApp write-through-syncs the whole custom session tag catalog of one gxserver after each create, delete, or reorder. The host pushes the wire state to that daemon's /api/updateCustomSessionTags; `remoteMachineId` selects the owning daemon.
+       */
+      remoteMachineId?: string;
+      state: GxserverCustomSessionTagsState;
+      type: 'updateCustomSessionTags';
     }
   | (SidebarSpaceEditorResultFields & {
       /*

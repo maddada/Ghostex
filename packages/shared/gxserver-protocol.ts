@@ -217,11 +217,22 @@ export type GxserverEndpointPath =
   | '/api/readNavigationHistory'
   | '/api/recordNavigationVisit'
   | '/api/navigateHistory'
+  /*
+   * CDXC:Notifications 2026-09-11:
+   * The notification feed is daemon-owned so the desktop titlebar bell, the web
+   * app, and mobile read one list with one read state. See
+   * packages/shared/notification-feed for the row/state contract.
+   */
+  | '/api/readNotificationFeed'
+  | '/api/updateNotificationFeed'
+  | '/api/createNotification'
   | '/api/readSidebarProjectCollections'
   | '/api/updateSidebarProjectCollections'
   | '/api/assignProjectToSidebarCollection'
   | '/api/readSidebarSpaces'
   | '/api/updateSidebarSpaces'
+  | '/api/readCustomSessionTags'
+  | '/api/updateCustomSessionTags'
   | '/api/scheduleDelayedSend'
   | '/api/cancelDelayedSend'
   | '/api/readDelayedSends'
@@ -1674,7 +1685,9 @@ export type GxserverSessionTag =
   | 'done'
   | 'bug'
   | 'feature'
-  | 'design';
+  | 'design'
+  /** A user-defined tag from the daemon's custom tag catalog (`/api/readCustomSessionTags`). */
+  | `custom-${string}`;
 export type GxserverSessionTagFilter = GxserverSessionTag | 'untagged';
 export type GxserverDomainLifecycleState = 'running' | 'sleeping' | 'stopped' | 'missing' | 'unknown';
 export type GxserverProviderLifecycleState = 'exists' | 'missing' | 'unknown';
@@ -2974,6 +2987,43 @@ export interface GxserverUpdateSidebarSpacesResult {
   sidebarSpaces: GxserverSidebarSpacesState;
 }
 
+/*
+CDXC:Sessions 2026-09-11 WHY:
+User-defined session tags are a gxserver-owned catalog, per daemon, exactly like
+Spaces: `order` is authoritative, `tags` is keyed by tag id, and clients
+write-through-sync the whole document via /api/updateCustomSessionTags. A tag
+removed from the document is cleared from every session that carried it in the
+same write, so a session can never point at a tag the daemon no longer knows.
+The catalog rides the presentation snapshot and the mobile summary so every
+client (desktop, web, phone, CLI) resolves the same id to the same name, icon
+id, and color.
+*/
+export interface GxserverCustomSessionTag {
+  /** `#rrggbb`, lowercase. */
+  color: string;
+  /** A SIDEBAR_COMMAND_ICON_IDS id; the daemon bounds it but does not validate it. */
+  icon: string;
+  name: string;
+  tagId: string;
+}
+
+export interface GxserverCustomSessionTagsState {
+  order: readonly string[];
+  tags: Readonly<Record<string, GxserverCustomSessionTag>>;
+}
+
+export interface GxserverReadCustomSessionTagsResult {
+  customSessionTags: GxserverCustomSessionTagsState;
+}
+
+export interface GxserverUpdateCustomSessionTagsParams {
+  state: GxserverCustomSessionTagsState;
+}
+
+export interface GxserverUpdateCustomSessionTagsResult {
+  customSessionTags: GxserverCustomSessionTagsState;
+}
+
 export interface GxserverPresentationSnapshot {
   /*
   CDXC:StateSync 2026-07-29:
@@ -3001,6 +3051,7 @@ export interface GxserverPresentationSnapshot {
   sessions: readonly GxserverPresentationSession[];
   sidebarProjectCollections?: GxserverSidebarProjectCollectionsState;
   sidebarSpaces?: GxserverSidebarSpacesState;
+  customSessionTags?: GxserverCustomSessionTagsState;
   workspaceGroups?: GxserverWorkspaceSessionGroupsState;
 }
 
@@ -3229,7 +3280,8 @@ export interface GxserverTerminalTitleEventResult {
   visibleTitle?: string;
 }
 
-export type GxserverFirstPromptTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'custom';
+export type GxserverFirstPromptTitleGenerationAgent =
+  'codex' | 'cursor' | 'claude' | 'grok' | 'pi' | 'antigravity' | 'custom';
 
 export interface GxserverSessionStateEventParams extends GxserverSessionLifecycleParams {
   agentName?: string;
@@ -3530,6 +3582,13 @@ export type GxserverEvent =
       type: 'sidebarSpacesChanged';
     }
   | {
+      customSessionTags: GxserverCustomSessionTagsState;
+      protocolVersion: GxserverProtocolVersion;
+      revision: GxserverPresentationRevision;
+      serverId: GxserverServerId;
+      type: 'customSessionTagsChanged';
+    }
+  | {
       groups: GxserverWorkspaceSessionGroupsState;
       protocolVersion: GxserverProtocolVersion;
       revision: GxserverPresentationRevision;
@@ -3549,6 +3608,17 @@ export type GxserverEvent =
       revision: GxserverPresentationRevision;
       serverId: GxserverServerId;
       type: 'globalSidebarCommandsChanged';
+    }
+  /*
+   * CDXC:Notifications 2026-09-11:
+   * Announces that the notification feed changed (a new row, a read-state
+   * change, a dismissal). It carries no rows and no presentation revision:
+   * `/api/readNotificationFeed` stays the single projection, so clients refetch.
+   */
+  | {
+      protocolVersion: GxserverProtocolVersion;
+      serverId: GxserverServerId;
+      type: 'notificationFeedChanged';
     }
   | GxserverSessionChatSnapshotEvent
   | GxserverSessionChatAppendedEvent

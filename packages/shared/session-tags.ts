@@ -14,7 +14,232 @@ export const SIDEBAR_SESSION_TAGS = [
   'design',
 ] as const;
 
-export type SidebarSessionTag = (typeof SIDEBAR_SESSION_TAGS)[number];
+export type BuiltinSidebarSessionTag = (typeof SIDEBAR_SESSION_TAGS)[number];
+
+/**
+ * CDXC:Sessions 2026-09-11 DECISION:
+ * User: users can define their own session tags (a name, an icon from the shared icon allowlist, and a color from a preset list) and sort them, without editing the built-in tags.
+ * A custom tag is one more value of the same single session marker: its id is `custom-` plus a random token, gxserver owns the catalog per daemon (name, icon, color, order) exactly like Spaces, and the persisted `sessionTag` stores the id.
+ * The phone renders custom tags from the hex color and icon id shipped in the catalog, so it needs no palette mirror.
+ * SEE-ALSO: server/src/custom_session_tags.rs, packages/core-ui/session-tag-ui.tsx, apps/mobile/app/src/contract/sessionTags.ts.
+ */
+export const CUSTOM_SESSION_TAG_ID_PREFIX = 'custom-';
+
+export type CustomSessionTagId = `custom-${string}`;
+
+export type SidebarSessionTag = BuiltinSidebarSessionTag | CustomSessionTagId;
+
+const CUSTOM_SESSION_TAG_ID_PATTERN = /^custom-[a-z0-9]{4,40}$/;
+
+export function isCustomSessionTagId(value: unknown): value is CustomSessionTagId {
+  return typeof value === 'string' && CUSTOM_SESSION_TAG_ID_PATTERN.test(value);
+}
+
+export function createCustomSessionTagId(): CustomSessionTagId {
+  const random = Math.random().toString(36).slice(2, 8).padEnd(6, '0');
+  return `${CUSTOM_SESSION_TAG_ID_PREFIX}${Date.now().toString(36)}${random}`;
+}
+
+export type CustomSessionTag = {
+  /** `#rrggbb`, lowercase. */
+  color: string;
+  /** A SIDEBAR_COMMAND_ICON_IDS id. Unknown ids render as the default tag glyph. */
+  icon: string;
+  name: string;
+  tagId: CustomSessionTagId;
+};
+
+export type CustomSessionTagsState = {
+  order: readonly CustomSessionTagId[];
+  tags: Readonly<Record<string, CustomSessionTag>>;
+};
+
+export const EMPTY_CUSTOM_SESSION_TAGS_STATE: CustomSessionTagsState = { order: [], tags: {} };
+
+export const MAX_CUSTOM_SESSION_TAGS = 64;
+export const MAX_CUSTOM_SESSION_TAG_NAME_LENGTH = 40;
+export const DEFAULT_CUSTOM_SESSION_TAG_ICON = 'sparkles';
+export const DEFAULT_CUSTOM_SESSION_TAG_NAME = 'Tag';
+
+/**
+ * CDXC:Sessions 2026-09-11 DECISION:
+ * User: custom tag colors come from a preset list. The presets are the built-in tag hues, which are already tuned to read as a 15px stroke glyph on the dark sidebar; the collection palette's dim tones vanish at that size.
+ * Mirrored in server/src/custom_session_tags.rs for the server-side fallback rotation.
+ */
+export const SESSION_TAG_COLOR_PRESETS = [
+  { label: 'Gold', value: '#f3cc5f' },
+  { label: 'Coral', value: '#ff8b6b' },
+  { label: 'Amber', value: '#f0c66e' },
+  { label: 'Mint', value: '#4ee6b8' },
+  { label: 'Sky', value: '#59d9ff' },
+  { label: 'Ice', value: '#95d7f6' },
+  { label: 'Blue', value: '#8fb8ff' },
+  { label: 'Lavender', value: '#d2a7ff' },
+  { label: 'Pink', value: '#ff9ee7' },
+  { label: 'Rose', value: '#ff5f73' },
+  { label: 'Brick', value: '#a54646' },
+  { label: 'Silver', value: '#d9dee6' },
+  { label: 'Gray', value: '#8e949d' },
+] as const;
+
+export type SessionTagColorPreset = (typeof SESSION_TAG_COLOR_PRESETS)[number]['value'];
+
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
+
+export function normalizeSessionTagColor(value: unknown, fallbackIndex: number): string {
+  if (typeof value === 'string') {
+    const color = value.trim().toLowerCase();
+    if (HEX_COLOR_PATTERN.test(color)) {
+      return color;
+    }
+  }
+  return SESSION_TAG_COLOR_PRESETS[Math.abs(fallbackIndex) % SESSION_TAG_COLOR_PRESETS.length]!.value;
+}
+
+export function normalizeCustomSessionTagName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+  return (name || DEFAULT_CUSTOM_SESSION_TAG_NAME).slice(0, MAX_CUSTOM_SESSION_TAG_NAME_LENGTH);
+}
+
+/**
+ * Mirrors `normalize_custom_session_tags_state` in server/src/custom_session_tags.rs: the order array is authoritative, tags missing from it append in map order, and every kept tag has a bounded name, an icon id, and a lowercase `#rrggbb` color.
+ */
+export function normalizeCustomSessionTagsState(candidate: unknown): CustomSessionTagsState {
+  if (!isRecord(candidate)) {
+    return EMPTY_CUSTOM_SESSION_TAGS_STATE;
+  }
+  const rawTags = isRecord(candidate.tags) ? candidate.tags : {};
+  const candidates = new Map<CustomSessionTagId, Record<string, unknown>>();
+  for (const [rawId, rawTag] of Object.entries(rawTags)) {
+    const tagId = rawId.trim();
+    if (!isCustomSessionTagId(tagId) || !isRecord(rawTag) || candidates.has(tagId)) {
+      continue;
+    }
+    candidates.set(tagId, rawTag);
+  }
+  const orderedIds: CustomSessionTagId[] = [];
+  const seen = new Set<string>();
+  for (const entry of Array.isArray(candidate.order) ? candidate.order : []) {
+    const id = typeof entry === 'string' ? entry.trim() : '';
+    if (isCustomSessionTagId(id) && candidates.has(id) && !seen.has(id)) {
+      seen.add(id);
+      orderedIds.push(id);
+    }
+  }
+  for (const id of candidates.keys()) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      orderedIds.push(id);
+    }
+  }
+  const order: CustomSessionTagId[] = [];
+  const tags: Record<string, CustomSessionTag> = {};
+  for (const tagId of orderedIds) {
+    if (order.length >= MAX_CUSTOM_SESSION_TAGS) {
+      break;
+    }
+    const raw = candidates.get(tagId)!;
+    const icon = typeof raw.icon === 'string' && raw.icon.trim() ? raw.icon.trim().slice(0, 64) : DEFAULT_CUSTOM_SESSION_TAG_ICON;
+    tags[tagId] = {
+      color: normalizeSessionTagColor(raw.color, order.length),
+      icon,
+      name: normalizeCustomSessionTagName(raw.name),
+      tagId,
+    };
+    order.push(tagId);
+  }
+  return { order, tags };
+}
+
+export function listCustomSessionTags(state: CustomSessionTagsState | undefined): CustomSessionTag[] {
+  if (!state) {
+    return [];
+  }
+  return state.order.flatMap((tagId) => {
+    const tag = state.tags[tagId];
+    return tag ? [tag] : [];
+  });
+}
+
+export function areCustomSessionTagsStatesEqual(
+  left: CustomSessionTagsState | undefined,
+  right: CustomSessionTagsState | undefined
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.order.length !== right.order.length) {
+    return false;
+  }
+  return left.order.every((tagId, index) => {
+    const leftTag = left.tags[tagId];
+    const rightTag = right.tags[right.order[index]!];
+    return (
+      tagId === right.order[index] &&
+      leftTag !== undefined &&
+      rightTag !== undefined &&
+      leftTag.color === rightTag.color &&
+      leftTag.icon === rightTag.icon &&
+      leftTag.name === rightTag.name
+    );
+  });
+}
+
+/**
+ * Resolve a custom tag id against one or more daemon catalogs. Ids are random tokens, so looking a remote session's tag up across every connected daemon's catalog cannot collide in practice, and callers need no session-to-machine mapping.
+ */
+export function findCustomSessionTag(
+  tagId: string | undefined,
+  states: readonly (CustomSessionTagsState | undefined)[]
+): CustomSessionTag | undefined {
+  if (!isCustomSessionTagId(tagId)) {
+    return undefined;
+  }
+  for (const state of states) {
+    const tag = state?.tags[tagId];
+    if (tag) {
+      return tag;
+    }
+  }
+  return undefined;
+}
+
+export function createCustomSessionTag(
+  state: CustomSessionTagsState,
+  tag: { color?: string; icon?: string; name: string }
+): { state: CustomSessionTagsState; tagId: CustomSessionTagId } {
+  const tagId = createCustomSessionTagId();
+  return {
+    state: normalizeCustomSessionTagsState({
+      order: [...state.order, tagId],
+      tags: {
+        ...state.tags,
+        [tagId]: {
+          color: normalizeSessionTagColor(tag.color, state.order.length),
+          icon: tag.icon ?? DEFAULT_CUSTOM_SESSION_TAG_ICON,
+          name: tag.name,
+          tagId,
+        },
+      },
+    }),
+    tagId,
+  };
+}
+
+export function deleteCustomSessionTag(state: CustomSessionTagsState, tagId: string): CustomSessionTagsState {
+  const { [tagId]: _removed, ...tags } = state.tags;
+  return normalizeCustomSessionTagsState({ order: state.order.filter((id) => id !== tagId), tags });
+}
+
+export function reorderCustomSessionTags(
+  state: CustomSessionTagsState,
+  orderedTagIds: readonly string[]
+): CustomSessionTagsState {
+  return normalizeCustomSessionTagsState({ order: orderedTagIds, tags: state.tags });
+}
+
+/** Catalogs a tag-rendering surface can resolve custom ids against: the local daemon's plus every connected remote daemon's. */
+export type CustomSessionTagCatalogs = readonly (CustomSessionTagsState | undefined)[];
 
 /**
  * CDXC:Sessions 2026-08-18-02:49:
@@ -31,7 +256,7 @@ export type SidebarSessionTagOption = {
 };
 
 export type SidebarSessionTagSection = {
-  label: 'Priority' | 'Progress' | 'Type';
+  label: 'Priority' | 'Progress' | 'Type' | 'Custom';
   options: readonly SidebarSessionTagOption[];
 };
 
@@ -158,8 +383,12 @@ export const DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS: readonly SidebarSessionTagL
   createDefaultSidebarSessionTagListUntaggedItem(),
 ];
 
-export function isSidebarSessionTag(value: unknown): value is SidebarSessionTag {
+export function isBuiltinSidebarSessionTag(value: unknown): value is BuiltinSidebarSessionTag {
   return typeof value === 'string' && SIDEBAR_SESSION_TAG_SET.has(value);
+}
+
+export function isSidebarSessionTag(value: unknown): value is SidebarSessionTag {
+  return isBuiltinSidebarSessionTag(value) || isCustomSessionTagId(value);
 }
 
 export function isSidebarSessionTagFilter(value: unknown): value is SidebarSessionTagFilter {
@@ -170,16 +399,27 @@ export function normalizeSidebarSessionTag(value: unknown): SidebarSessionTag | 
   return isSidebarSessionTag(value) ? value : undefined;
 }
 
-export function getSidebarSessionTagLabel(tag: SidebarSessionTagFilter | undefined): string | undefined {
+export const UNKNOWN_CUSTOM_SESSION_TAG_LABEL = 'Custom tag';
+
+export function getSidebarSessionTagLabel(
+  tag: SidebarSessionTagFilter | undefined,
+  customTags: CustomSessionTagCatalogs = []
+): string | undefined {
   if (tag === SIDEBAR_SESSION_TAG_FILTER_UNTAGGED) {
     return 'No tag';
+  }
+  if (isCustomSessionTagId(tag)) {
+    return findCustomSessionTag(tag, customTags)?.name ?? UNKNOWN_CUSTOM_SESSION_TAG_LABEL;
   }
   return SIDEBAR_SESSION_TAG_OPTIONS.find((option) => option.value === tag)?.label;
 }
 
-export function getSidebarSessionTagListItemLabel(item: SidebarSessionTagListItem): string {
+export function getSidebarSessionTagListItemLabel(
+  item: SidebarSessionTagListItem,
+  customTags: CustomSessionTagCatalogs = []
+): string {
   if (item.type === 'tag') {
-    return getSidebarSessionTagLabel(item.tag) ?? item.tag;
+    return getSidebarSessionTagLabel(item.tag, customTags) ?? item.tag;
   }
   if (item.type === 'untagged') {
     return 'No tag';
@@ -223,18 +463,26 @@ export function getEffectiveSidebarSessionTag(input: {
   return input.sessionTag ?? (input.isFavorite === true ? 'favorite' : undefined);
 }
 
-export function normalizeSidebarSessionTagListItems(candidate: unknown): SidebarSessionTagListItem[] {
-  if (!Array.isArray(candidate)) {
-    return cloneSidebarSessionTagListItems(DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS);
-  }
-
+/**
+ * CDXC:Sessions 2026-09-11 WHY:
+ * The tag filter list is a client setting, so it keeps custom tag ids by shape when it is normalized without a catalog (settings persistence), and only a caller that has the daemon catalog drops ids the daemon no longer knows and inserts newly created tags. New custom tags land just before the No tag separator, enabled and visible, so they show up in menus the moment they are created.
+ */
+export function normalizeSidebarSessionTagListItems(
+  candidate: unknown,
+  customTags?: CustomSessionTagsState
+): SidebarSessionTagListItem[] {
   const seenIds = new Set<string>();
   const normalized: SidebarSessionTagListItem[] = [];
 
-  for (const item of candidate) {
+  for (const item of Array.isArray(candidate) ? candidate : []) {
     const normalizedItem = normalizeSidebarSessionTagListItem(item);
     if (!normalizedItem || seenIds.has(normalizedItem.id)) {
       continue;
+    }
+    if (customTags && normalizedItem.type === 'tag' && isCustomSessionTagId(normalizedItem.tag)) {
+      if (!customTags.tags[normalizedItem.tag]) {
+        continue;
+      }
     }
     seenIds.add(normalizedItem.id);
     normalized.push(normalizedItem);
@@ -246,7 +494,28 @@ export function normalizeSidebarSessionTagListItems(candidate: unknown): Sidebar
     }
   }
 
+  if (customTags) {
+    const missing = customTags.order.filter((tagId) => !seenIds.has(tagId));
+    if (missing.length > 0) {
+      const separatorIndex = normalized.findIndex((item) => item.id === 'separator-type-untagged');
+      const untaggedIndex = normalized.findIndex((item) => item.type === 'untagged');
+      const insertAt = separatorIndex >= 0 ? separatorIndex : untaggedIndex >= 0 ? untaggedIndex : normalized.length;
+      normalized.splice(
+        insertAt,
+        0,
+        ...missing.map(
+          (tagId): SidebarSessionTagListItem => ({ enabled: true, id: tagId, tag: tagId, type: 'tag', visible: true })
+        )
+      );
+    }
+  }
+
   return normalized;
+}
+
+/** The relative order of the custom tags inside a tag filter list, which is written back to the daemon catalog. */
+export function getCustomSessionTagOrderFromListItems(items: readonly SidebarSessionTagListItem[]): CustomSessionTagId[] {
+  return items.flatMap((item) => (item.type === 'tag' && isCustomSessionTagId(item.tag) ? [item.tag] : []));
 }
 
 export function areSidebarSessionTagListItemsEqual(
@@ -284,7 +553,7 @@ export function getEnabledVisibleSidebarSessionTags(items: readonly SidebarSessi
 
 export function getEnabledVisibleSidebarSessionTagSections(
   items: unknown,
-  options: { includeTags?: readonly SidebarSessionTag[] } = {}
+  options: { customTags?: CustomSessionTagsState; includeTags?: readonly SidebarSessionTag[] } = {}
 ): SidebarSessionTagSection[] {
   /*
    * CDXC:Sessions 2026-06-15-22:33:
@@ -295,19 +564,35 @@ export function getEnabledVisibleSidebarSessionTagSections(
    * removal.
    */
   const visibleTagSet = new Set<SidebarSessionTag>();
-  for (const item of normalizeSidebarSessionTagListItems(items)) {
+  const visibleCustomTagIds: CustomSessionTagId[] = [];
+  for (const item of normalizeSidebarSessionTagListItems(items, options.customTags)) {
     if (item.type === 'tag' && item.enabled && item.visible) {
       visibleTagSet.add(item.tag);
+      if (isCustomSessionTagId(item.tag)) {
+        visibleCustomTagIds.push(item.tag);
+      }
     }
   }
   for (const tag of options.includeTags ?? []) {
+    if (visibleTagSet.has(tag)) {
+      continue;
+    }
     visibleTagSet.add(tag);
+    if (isCustomSessionTagId(tag)) {
+      visibleCustomTagIds.push(tag);
+    }
   }
 
-  return SIDEBAR_SESSION_TAG_SECTIONS.map((section) => ({
+  const sections: SidebarSessionTagSection[] = SIDEBAR_SESSION_TAG_SECTIONS.map((section) => ({
     ...section,
     options: section.options.filter((option) => visibleTagSet.has(option.value)),
-  })).filter((section) => section.options.length > 0);
+  }));
+  const customOptions: SidebarSessionTagOption[] = visibleCustomTagIds.flatMap((tagId) => {
+    const tag = options.customTags?.tags[tagId];
+    return tag ? [{ label: tag.name, value: tag.tagId }] : [];
+  });
+  sections.push({ label: 'Custom', options: customOptions });
+  return sections.filter((section) => section.options.length > 0);
 }
 
 function createDefaultSidebarSessionTagListTagItem(tag: SidebarSessionTag): SidebarSessionTagListItem {
