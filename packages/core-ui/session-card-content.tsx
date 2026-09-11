@@ -138,7 +138,9 @@ export function SessionCardContent({
   this interval changes display text only and does not own or fire the timer.
   */
   const relativeTimeTick = useRelativeTimeTick(
-    hasLiveTimerDeadline || (showLastActiveTime && Boolean(session.lastInteractionAt))
+    hasLiveTimerDeadline || (showLastActiveTime && Boolean(session.lastInteractionAt)),
+    1_000,
+    hasLiveTimerDeadline ? undefined : session.lastInteractionAt
   );
   const timerTrailingLabel = getSessionCardTimerTrailingLabel(session, relativeTimeTick);
   const hasLastInteractionTime =

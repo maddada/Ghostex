@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { nextRelativeTimeLabelTick, subscribeRelativeTimeClock } from './relative-time-clock';
 
-export function useRelativeTimeTick(enabled: boolean, intervalMs = 1_000): number {
+export function useRelativeTimeTick(enabled: boolean, intervalMs = 1_000, relativeTimestamp?: string): number {
   const [tick, setTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -8,14 +9,11 @@ export function useRelativeTimeTick(enabled: boolean, intervalMs = 1_000): numbe
       return;
     }
 
-    const id = window.setInterval(() => {
-      setTick(Date.now());
-    }, intervalMs);
-
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [enabled, intervalMs]);
+    const timestampMs = relativeTimestamp === undefined ? undefined : Date.parse(relativeTimestamp);
+    return subscribeRelativeTimeClock(setTick, (nowMs) =>
+      timestampMs === undefined ? nowMs + intervalMs : nextRelativeTimeLabelTick(timestampMs, nowMs)
+    );
+  }, [enabled, intervalMs, relativeTimestamp]);
 
   return tick;
 }
