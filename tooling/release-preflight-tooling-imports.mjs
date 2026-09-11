@@ -141,12 +141,20 @@ function skipRegexLiteral(source, start) {
   return index;
 }
 
+/*
+ CDXC:Release 2026-09-11 WHY:
+ `\b` treats `-` and `.` as word boundaries, so the string literal
+ 'dynamic-import' and a method call like `loader.import(` both read as import
+ statements and swallow the closing quote as a specifier; 9.3.0's preflight
+ failed on exactly that in tooling/docs-classic-assets.ts. The keyword must not
+ be preceded by an identifier character, a dot, or a hyphen.
+*/
 const specifierPatterns = [
-  /\bimport\s*(?:[\w$*{}\s,]+?\s*from\s*)?["']([^"']+)["']/g,
-  /\bexport\s*(?:[\w$*{}\s,]+?\s*from\s*)?["']([^"']+)["']/g,
-  /\bimport\s*\(\s*["']([^"']+)["']/g,
-  /\brequire\s*\(\s*["']([^"']+)["']/g,
-  /\bcreateRequire\s*\([^)]*\)\s*\(\s*["']([^"']+)["']/g,
+  /(?<![\w$.-])import\s*(?:[\w$*{}\s,]+?\s*from\s*)?["']([^"']+)["']/g,
+  /(?<![\w$.-])export\s*(?:[\w$*{}\s,]+?\s*from\s*)?["']([^"']+)["']/g,
+  /(?<![\w$.-])import\s*\(\s*["']([^"']+)["']/g,
+  /(?<![\w$.-])require\s*\(\s*["']([^"']+)["']/g,
+  /(?<![\w$.-])createRequire\s*\([^)]*\)\s*\(\s*["']([^"']+)["']/g,
 ];
 
 function collectSpecifiers(source) {
