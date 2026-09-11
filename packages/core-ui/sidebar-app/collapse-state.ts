@@ -64,10 +64,29 @@ export type SidebarUiCollapseState = {
    * this record is read.
    */
   selectedSpaceIdBySectionKey: Record<string, string>;
+  /*
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: switching Spaces restores the state each Space was last in, and that
+   * memory lives here in the client, beside the selected Space: one client has
+   * one work area, so "what I had open in this Space" shares the selection's
+   * scope and lifetime instead of being split across gxserver daemons.
+   * Keyed by section key, then Space id (real id or the built-in `other`), to
+   * the section's session ids, most recent first. Ids are the sidebar
+   * vocabulary, so a remote machine's section holds machine-scoped ids and
+   * several remotes never collide. Dead ids are skipped at restore time, not
+   * pruned here: the presentation that could vouch for them arrives later.
+   */
+  recentSessionIdsBySpace: Record<string, Record<string, string[]>>;
 };
 
+/** Per Space; deep enough to walk past a handful of closed sessions. */
+export const MAX_RECENT_SIDEBAR_SPACE_SESSION_IDS = 20;
+
 /*
- * Version 3 added `selectedSpaceIdBySectionKey`. Version 2 payloads still load:
+ * Version 3 added `selectedSpaceIdBySectionKey`, and later (2026-09-11)
+ * `recentSessionIdsBySpace` without a bump: an absent map normalizes to empty
+ * and a Space with no memory simply has nothing to restore.
+ * Version 2 payloads still load:
  * they normalize to an empty selection map, which every section resolves
  * through the default rule (its first Space, else Other). Version 3 payloads
  * written while the built-in view was still "All Projects" need no migration
@@ -115,6 +134,7 @@ export function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
     collapsedProjectSessionListsById: {},
     collapsedProjectSessionSectionsById: {},
     isReferenceChatsCollapsed: false,
+    recentSessionIdsBySpace: {},
     selectedSpaceIdBySectionKey: {},
   };
 }
@@ -149,7 +169,64 @@ export function normalizeSidebarUiCollapseState(candidate: unknown): SidebarUiCo
       state.collapsedProjectSessionSectionsById
     ),
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed === true,
+    recentSessionIdsBySpace: normalizeStoredRecentSessionIdsBySpace(state.recentSessionIdsBySpace),
     selectedSpaceIdBySectionKey: normalizeStoredSelectedSpaceIdBySectionKey(state.selectedSpaceIdBySectionKey),
+  };
+}
+
+export function normalizeStoredRecentSessionIdsBySpace(candidate: unknown): Record<string, Record<string, string[]>> {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {};
+  }
+  const recentSessionIdsBySpace: Record<string, Record<string, string[]>> = {};
+  for (const [sectionKey, spaces] of Object.entries(candidate)) {
+    if (!sectionKey || !spaces || typeof spaces !== 'object' || Array.isArray(spaces)) {
+      continue;
+    }
+    const sessionIdsBySpaceId: Record<string, string[]> = {};
+    for (const [spaceId, sessionIds] of Object.entries(spaces as Record<string, unknown>)) {
+      if (!spaceId || !Array.isArray(sessionIds)) {
+        continue;
+      }
+      const normalized: string[] = [];
+      for (const sessionId of sessionIds) {
+        if (typeof sessionId === 'string' && sessionId.length > 0 && !normalized.includes(sessionId)) {
+          normalized.push(sessionId);
+        }
+      }
+      if (normalized.length > 0) {
+        sessionIdsBySpaceId[spaceId] = normalized.slice(0, MAX_RECENT_SIDEBAR_SPACE_SESSION_IDS);
+      }
+    }
+    if (Object.keys(sessionIdsBySpaceId).length > 0) {
+      recentSessionIdsBySpace[sectionKey] = sessionIdsBySpaceId;
+    }
+  }
+  return recentSessionIdsBySpace;
+}
+
+/**
+ * Moves `sessionId` to the front of the Space's list, returning the same
+ * object when it is already there so React state stays referentially stable.
+ */
+export function rememberSidebarSpaceSession(
+  recentSessionIdsBySpace: Record<string, Record<string, string[]>>,
+  sectionKey: string,
+  spaceId: string,
+  sessionId: string
+): Record<string, Record<string, string[]>> {
+  const sectionMemory = recentSessionIdsBySpace[sectionKey] ?? {};
+  const current = sectionMemory[spaceId] ?? [];
+  if (current[0] === sessionId) {
+    return recentSessionIdsBySpace;
+  }
+  const next = [sessionId, ...current.filter((candidate) => candidate !== sessionId)].slice(
+    0,
+    MAX_RECENT_SIDEBAR_SPACE_SESSION_IDS
+  );
+  return {
+    ...recentSessionIdsBySpace,
+    [sectionKey]: { ...sectionMemory, [spaceId]: next },
   };
 }
 
@@ -248,6 +325,7 @@ export function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): 
     collapsedProjectCollectionCount: Object.keys(state.collapsedProjectCollectionsByKey).length,
     collapsedProjectSessionListCount: Object.keys(state.collapsedProjectSessionListsById).length,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
+    rememberedSpaceSectionCount: Object.keys(state.recentSessionIdsBySpace).length,
     selectedSpaceSectionCount: Object.keys(state.selectedSpaceIdBySectionKey).length,
   };
 }

@@ -79,6 +79,7 @@ import {
   createSidebarSpaceSessionSummaries,
   LOCAL_SIDEBAR_SPACE_SECTION_KEY,
   resolveSelectedSidebarSpace,
+  resolveSelectedSidebarSpaceId,
   resolveSidebarSpaceForRevealedGroup,
   resolveSidebarSpaceIdContainingActiveSession,
 } from './sidebar-app/space-filtering';
@@ -127,6 +128,7 @@ import {
   normalizeSidebarWindowScopeId,
   readSidebarKeepAwakeRuntime,
   readSidebarUiCollapseState,
+  rememberSidebarSpaceSession,
   summarizeSidebarUiCollapseState,
   writeSidebarUiCollapseState,
 } from './sidebar-app/collapse-state';
@@ -242,6 +244,10 @@ const sensors = [
 ];
 
 const SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID = 'gxserver-unavailable';
+/** Added to the collapse transition so the restore outlives the last frame of growing project bodies. */
+const SIDEBAR_SPACE_SCROLL_RESTORE_MARGIN_MS = 150;
+/** Any of these over the viewport means the user took over scrolling; the restore stops at once. */
+const SIDEBAR_USER_SCROLL_EVENT_TYPES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
 const SIDEBAR_GXSERVER_UNAVAILABLE_EMPTY_STATE_DELAY_MS = 20_000;
 const MIN_SESSION_SEARCH_QUERY_LENGTH = 4;
 const COMPLETION_FLASH_DURATION_MS = 3_000;
@@ -364,6 +370,9 @@ export function SidebarApp({
   const lastGxserverSyncedSpacesRef = useRef<SidebarSpacesState | undefined>(undefined);
   const [selectedSpaceIdBySectionKey, setSelectedSpaceIdBySectionKey] = useState<Record<string, string>>(
     initialUiCollapseState.selectedSpaceIdBySectionKey
+  );
+  const [recentSessionIdsBySpace, setRecentSessionIdsBySpace] = useState<Record<string, Record<string, string[]>>>(
+    initialUiCollapseState.recentSessionIdsBySpace
   );
   const [autoEditingProjectCollectionId, setAutoEditingProjectCollectionId] = useState<string>();
   /*
@@ -1783,7 +1792,9 @@ export function SidebarApp({
     const positionByGroupId = new Map(sectionGroupIds.map((id, index) => [id, index]));
     const position = (item: SidebarProjectCollectionRenderItem) =>
       Math.min(
-        ...(item.kind === 'collection' ? item.groupIds : [item.groupId]).map((id) => positionByGroupId.get(id) ?? Infinity)
+        ...(item.kind === 'collection' ? item.groupIds : [item.groupId]).map(
+          (id) => positionByGroupId.get(id) ?? Infinity
+        )
       );
     return items.sort((a, b) => position(a) - position(b));
   };
@@ -2470,6 +2481,146 @@ export function SidebarApp({
     () => Object.values(sessionsById).find((session) => session.isFocused)?.sessionId,
     [sessionsById]
   );
+  /*
+   * Everything Space-aware about one gxserver section, resolved the same way
+   * the reveal effect and the Space rows resolve it: `machineId` undefined is
+   * the local section.
+   */
+  const describeSidebarSpaceSection = (machineId: string | undefined) => {
+    const sectionKey = machineId ? createRemoteSidebarSpaceSectionKey(machineId) : LOCAL_SIDEBAR_SPACE_SECTION_KEY;
+    const sectionSpaces = machineId ? remoteSpacesByMachineId[machineId] : spacesState;
+    const groupIds = machineId
+      ? (unfilteredRemoteProjectGroupIdsByMachineId[machineId] ?? [])
+      : unfilteredReferenceProjectGroupIds.filter((groupId) => groupId !== SIDEBAR_GXSERVER_UNAVAILABLE_GROUP_ID);
+    const collectionState = machineId
+      ? (remoteProjectCollectionsByMachineId[machineId] ?? { collections: [], nextCollectionNumber: 1 })
+      : projectCollections;
+    const resolveProjectId = (groupId: string) =>
+      machineId
+        ? groupsById[groupId]?.remoteMachineContext?.projectId
+        : groupsById[groupId]?.projectContext?.editor.projectId;
+    return { collectionState, groupIds, resolveProjectId, sectionKey, sectionSpaces };
+  };
+  /*
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: switching Spaces restores the state each Space was last in, so every
+   * focus change is filed under the Space that owns the focused session's
+   * project (its section's selected Space when that one contains it, else the
+   * first Space that does, else Other). The lists live in `recentSessionIdsBySpace`.
+   *
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: "Follow the active session's Space" (off by default, may be removed
+   * after testing) moves the section's selected Space to that owning Space
+   * when a session outside the selected Space becomes active, for example
+   * through Back/Forward, Search by Prompt, a notification, or Previous
+   * Sessions. It reacts to focus changes only, never to a Space switch, so a
+   * restore in flight cannot pull the sidebar back to the Space it just left.
+   */
+  const rememberFocusedSessionSpace = useEffectEvent((sessionId: string) => {
+    const targetGroupId = effectiveGroupIds.find((groupId) =>
+      (effectiveSessionIdsByGroup[groupId] ?? []).includes(sessionId)
+    );
+    if (!targetGroupId || groupsById[targetGroupId]?.isChatCollection === true) {
+      return;
+    }
+    const section = describeSidebarSpaceSection(groupsById[targetGroupId]?.remoteMachineContext?.machineId);
+    if (!section.sectionSpaces || !section.groupIds.includes(targetGroupId)) {
+      return;
+    }
+    const selectedSpaceId = selectedSpaceIdBySectionKey[section.sectionKey];
+    const owningSpaceId = resolveSidebarSpaceForRevealedGroup({
+      targetGroupId,
+      spacesState: section.sectionSpaces,
+      selectedSpaceId,
+      collectionState: section.collectionState,
+      groupIds: section.groupIds,
+      groupsById,
+      resolveProjectId: section.resolveProjectId,
+    });
+    setRecentSessionIdsBySpace((previous) =>
+      rememberSidebarSpaceSession(previous, section.sectionKey, owningSpaceId, sessionId)
+    );
+    if (
+      effectiveSettings.sidebarSpaceFollowActiveSession &&
+      owningSpaceId !== resolveSelectedSidebarSpaceId(section.sectionSpaces, selectedSpaceId)
+    ) {
+      selectSidebarSpace(section.sectionKey, owningSpaceId);
+    }
+  });
+  useEffect(() => {
+    if (focusedSessionId) {
+      rememberFocusedSessionSpace(focusedSessionId);
+    }
+  }, [focusedSessionId]);
+  /*
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: "Restore the Space's projects" reopens the newest remembered session
+   * that still exists in the Space, so a closed session falls through to the
+   * one before it, and a Space with nothing left to restore opens its first
+   * project (first listed session, or the project itself when it has none).
+   * The focus carries `keepView` so the project's remembered view comes back
+   * even when the session lives in the project that is already active.
+   */
+  const restoreSidebarSpaceSession = (machineId: string | undefined, spaceId: string) => {
+    const section = describeSidebarSpaceSection(machineId);
+    const selection = resolveSelectedSidebarSpace(section.sectionSpaces, spaceId);
+    if (!selection) {
+      return;
+    }
+    const isVisibleInSpace = createSelectedSidebarSpaceVisibility({
+      collectionState: section.collectionState,
+      groupIds: section.groupIds,
+      groupsById,
+      resolveProjectId: section.resolveProjectId,
+      selection,
+    });
+    const visibleGroupIds = section.groupIds.filter(isVisibleInSpace);
+    let target: { groupId: string; sessionId: string } | undefined;
+    for (const sessionId of recentSessionIdsBySpace[section.sectionKey]?.[selection.spaceId] ?? []) {
+      if (!sessionsById[sessionId]) {
+        continue;
+      }
+      const groupId = visibleGroupIds.find((candidate) =>
+        (effectiveSessionIdsByGroup[candidate] ?? []).includes(sessionId)
+      );
+      if (groupId) {
+        target = { groupId, sessionId };
+        break;
+      }
+    }
+    if (!target) {
+      const groupId = visibleGroupIds.find(
+        (candidate) => (displayedWorkspaceSessionIdsByGroup[candidate] ?? []).length > 0
+      );
+      const sessionId = groupId ? displayedWorkspaceSessionIdsByGroup[groupId]?.[0] : undefined;
+      if (groupId && sessionId) {
+        target = { groupId, sessionId };
+      } else if (visibleGroupIds[0]) {
+        dismissAppModalForSidebarNavigation('SettingsDismissal:focusSession');
+        vscode.postMessage({ groupId: visibleGroupIds[0], type: 'focusGroup' });
+        return;
+      } else {
+        return;
+      }
+    }
+    if (target.sessionId === focusedSessionId) {
+      return;
+    }
+    focusSidebarSessionFromNavigation(target.groupId, target.sessionId);
+    vscode.postMessage({ keepView: true, sessionId: target.sessionId, type: 'focusSession' });
+  };
+  /** A Space row click, swipe, or overflow pick: select, then restore when the Space actually changed. */
+  const switchSidebarSpaceFromUser = useEffectEvent((machineId: string | undefined, spaceId: string) => {
+    const section = describeSidebarSpaceSection(machineId);
+    const previousSpaceId = section.sectionSpaces
+      ? resolveSelectedSidebarSpaceId(section.sectionSpaces, selectedSpaceIdBySectionKey[section.sectionKey])
+      : undefined;
+    selectSidebarSpace(section.sectionKey, spaceId);
+    if (effectiveSettings.sidebarSpaceSwitchBehavior !== 'restore' || previousSpaceId === spaceId) {
+      return;
+    }
+    restoreSidebarSpaceSession(machineId, spaceId);
+  });
   const postMultiSelectSelectionDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     /*
      * CDXC:Sessions 2026-07-02-07:32:
@@ -2762,6 +2913,7 @@ export function SidebarApp({
       collapsedProjectSessionListsById,
       collapsedProjectSessionSectionsById,
       isReferenceChatsCollapsed,
+      recentSessionIdsBySpace,
       selectedSpaceIdBySectionKey,
     };
     const writeResult = writeSidebarUiCollapseState(windowScopeId, nextCollapseState);
@@ -2778,6 +2930,7 @@ export function SidebarApp({
     collapsedProjectSessionListsById,
     collapsedProjectSessionSectionsById,
     isReferenceChatsCollapsed,
+    recentSessionIdsBySpace,
     selectedSpaceIdBySectionKey,
     windowScopeId,
   ]);
@@ -2840,6 +2993,79 @@ export function SidebarApp({
     </div>
   );
   const { hasOverflow: sessionGroupsHaveScrollableOverflow } = useScrollGlowState(sessionGroupsContentRef);
+  /*
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: switching Spaces by click or swipe must keep the scroll position; it was lost every time.
+   * The scroll viewport is one element for every Space, so an offset only survives as long as the
+   * content does: the incoming Space's project bodies mount short and grow over the collapse
+   * transition, the browser clamps the offset to the shrinking content, and the overflow
+   * measurement pins a momentarily fitting list back to the top. Each Space (per machine tab)
+   * therefore remembers its own offset from the scroll events it receives, and a switch re-applies
+   * the incoming Space's offset every frame until that transition has run, stopping the moment the
+   * user scrolls. A Space seen for the first time starts at the top.
+   */
+  const sidebarScrollScopeKey = `${selectedRemoteMachineId ?? LOCAL_SIDEBAR_MACHINE_TAB_ID}|${
+    (selectedRemoteMachineId
+      ? resolveSelectedSidebarSpace(
+          remoteSpacesByMachineId[selectedRemoteMachineId],
+          selectedSpaceIdBySectionKey[createRemoteSidebarSpaceSectionKey(selectedRemoteMachineId)]
+        )
+      : selectedLocalSpace
+    )?.spaceId ?? ''
+  }`;
+  const sidebarScrollTopByScopeKeyRef = useRef(new Map<string, number>());
+  const sidebarScrollScopeKeyRef = useRef(sidebarScrollScopeKey);
+  useEffect(() => {
+    const viewport = sessionGroupsContentRef.current;
+    if (!viewport) {
+      return;
+    }
+    const recordScrollTop = () => {
+      sidebarScrollTopByScopeKeyRef.current.set(sidebarScrollScopeKeyRef.current, viewport.scrollTop);
+    };
+    viewport.addEventListener('scroll', recordScrollTop, { passive: true });
+    return () => viewport.removeEventListener('scroll', recordScrollTop);
+  }, []);
+  const sidebarSpaceScrollRestoreWindowMs =
+    effectiveSettings.sidebarCollapseAnimationDurationMs + SIDEBAR_SPACE_SCROLL_RESTORE_MARGIN_MS;
+  useLayoutEffect(() => {
+    if (sidebarScrollScopeKeyRef.current === sidebarScrollScopeKey) {
+      return;
+    }
+    sidebarScrollScopeKeyRef.current = sidebarScrollScopeKey;
+    const viewport = sessionGroupsContentRef.current;
+    if (!viewport) {
+      return;
+    }
+    const targetScrollTop = sidebarScrollTopByScopeKeyRef.current.get(sidebarScrollScopeKey) ?? 0;
+    const startedAt = performance.now();
+    let frameId = 0;
+    const stop = () => {
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId);
+        frameId = 0;
+      }
+      for (const type of SIDEBAR_USER_SCROLL_EVENT_TYPES) {
+        viewport.removeEventListener(type, stop);
+      }
+    };
+    const applyTargetScrollTop = () => {
+      frameId = 0;
+      if (viewport.scrollTop !== targetScrollTop) {
+        viewport.scrollTop = targetScrollTop;
+      }
+      if (performance.now() - startedAt < sidebarSpaceScrollRestoreWindowMs) {
+        frameId = window.requestAnimationFrame(applyTargetScrollTop);
+      } else {
+        stop();
+      }
+    };
+    for (const type of SIDEBAR_USER_SCROLL_EVENT_TYPES) {
+      viewport.addEventListener(type, stop, { passive: true });
+    }
+    applyTargetScrollTop();
+    return stop;
+  }, [sidebarScrollScopeKey, sidebarSpaceScrollRestoreWindowMs]);
   const sidebarSessionSearchResults = useMemo(
     () =>
       createSidebarSessionSearchResults({
@@ -3791,7 +4017,7 @@ export function SidebarApp({
                             activeSessionSpaceId={localActiveSessionSpaceId}
                             collapsed={false}
                             onReorderSpaces={reorderLocalSpaces}
-                            onSelectSpace={(spaceId) => selectSidebarSpace(LOCAL_SIDEBAR_SPACE_SECTION_KEY, spaceId)}
+                            onSelectSpace={(spaceId) => switchSidebarSpaceFromUser(undefined, spaceId)}
                             sectionKey={LOCAL_SIDEBAR_SPACE_SECTION_KEY}
                             selectedSpaceId={selectedLocalSpace?.spaceId}
                             sessionSummaryBySpaceId={localSpaceSessionSummaries}
@@ -4087,9 +4313,7 @@ export function SidebarApp({
                                     onReorderSpaces={(orderedSpaceIds) =>
                                       reorderRemoteSpaces(machine.id, orderedSpaceIds)
                                     }
-                                    onSelectSpace={(spaceId) =>
-                                      selectSidebarSpace(createRemoteSidebarSpaceSectionKey(machine.id), spaceId)
-                                    }
+                                    onSelectSpace={(spaceId) => switchSidebarSpaceFromUser(machine.id, spaceId)}
                                     selectedSpaceId={machineSelectedSpace?.spaceId}
                                     sessionSummaryBySpaceId={remoteSpaceSessionSummariesByMachineId[machine.id]}
                                     spaces={machineSpaces}
