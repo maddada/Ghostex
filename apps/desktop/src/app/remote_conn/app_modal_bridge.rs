@@ -55,15 +55,40 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
-                let Some(home) = std::env::var_os("HOME")
-                    .map(std::path::PathBuf::from)
-                    .filter(|p| p.is_absolute())
+                let snapshot = self.latest_sidebar_project_snapshot.as_ref();
+                if gpui_active_project_id_from_snapshot(snapshot)
+                    .is_some_and(|id| id.starts_with("remote:"))
+                {
+                    self.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Account sign-in unavailable",
+                        "Open a local project to sign in to an account on this computer.",
+                        cx,
+                    );
+                    return;
+                }
+                // First-launch account setup happens before the user has chosen a project.
+                let Some(cwd) = gpui_active_local_project_directory(snapshot)
+                    .map(std::path::Path::to_path_buf)
+                    .or_else(|| {
+                        gpui_active_project_id_from_snapshot(snapshot)
+                            .is_none()
+                            .then(|| std::env::var_os("HOME").map(std::path::PathBuf::from))
+                            .flatten()
+                    })
+                    .filter(|path| path.is_absolute())
                 else {
+                    self.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Account sign-in unavailable",
+                        "The active project's folder is unavailable. Open a local project first.",
+                        cx,
+                    );
                     return;
                 };
                 if self.dispatch_gpui_os_integration_command_message(
                     serde_json::json!({
-                        "action": "createQuickTerminal", "command": command, "cwd": home, "title": title,
+                        "action": "createQuickTerminal", "command": command, "cwd": cwd, "title": title,
                     }),
                     cx,
                 ) {
@@ -301,7 +326,10 @@ impl GhostexGpuiApp {
                 let is_first_launch_setup = self.app_modal_window.clone().is_some_and(|handle| {
                     handle
                         .update(cx, |host, _window, _cx| {
-                            host.current_modal == GpuiAppModalKind::FirstLaunchSetup
+                            matches!(
+                                host.current_modal,
+                                GpuiAppModalKind::FirstLaunchSetup | GpuiAppModalKind::Onboarding
+                            )
                         })
                         .unwrap_or(false)
                 });
@@ -324,7 +352,10 @@ impl GhostexGpuiApp {
                         .update(cx, |host, _window, _cx| host.current_modal.modal_id())
                         .ok()
                 });
-                if closing_modal_id.as_deref() == Some("firstLaunchSetup") {
+                if matches!(
+                    closing_modal_id.as_deref(),
+                    Some("firstLaunchSetup") | Some("onboarding")
+                ) {
                     return;
                 }
                 support_logs::append(
@@ -562,6 +593,9 @@ impl GhostexGpuiApp {
             }
             navigation_history::NAVIGATION_HISTORY_STATE_MESSAGE_TYPE => {
                 self.receive_navigation_history_state_message(&message, cx);
+            }
+            notification_feed::NOTIFICATION_FEED_STATE_MESSAGE_TYPE => {
+                self.receive_notification_feed_state_message(&message, cx);
             }
             "runProcess" => {
                 self.receive_gpui_titlebar_native_host_run_process(message, cx);

@@ -527,6 +527,22 @@ pub(crate) fn gpui_active_project_id_from_snapshot(
         .map(|project_id| project_id.0.as_str())
 }
 
+/// CDXC:AgentLauncher 2026-09-11 DECISION:
+/// User: app-launched commands should use the current project's folder to avoid unnecessary folder-trust prompts.
+pub(crate) fn gpui_active_local_project_directory(
+    snapshot: Option<&GpuiProjectSnapshot>,
+) -> Option<&std::path::Path> {
+    let snapshot = snapshot?;
+    let project_id = gpui_active_project_id_from_snapshot(Some(snapshot))?;
+    if project_id.starts_with("remote:") {
+        return None;
+    }
+    snapshot
+        .in_memory_project_path
+        .as_deref()
+        .filter(|path| path.is_absolute())
+}
+
 pub(crate) fn gpui_project_snapshot_is_quick_automations_overview(
     snapshot: Option<&GpuiProjectSnapshot>,
 ) -> bool {

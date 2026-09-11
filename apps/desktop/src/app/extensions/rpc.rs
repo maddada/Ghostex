@@ -215,7 +215,15 @@ impl GhostexGpuiApp {
                 }
             }
             "cli" => self.run_extension_cli(request, responder, cx),
-            "exec" => run_extension_exec(request, responder, cx),
+            "exec" => run_extension_exec(
+                request,
+                crate::app::helpers::gpui_active_local_project_directory(
+                    self.latest_sidebar_project_snapshot.as_ref(),
+                )
+                .map(Path::to_path_buf),
+                responder,
+                cx,
+            ),
             _ => responder(error_response(
                 &request.request_id,
                 "invalidRequest",
@@ -313,10 +321,14 @@ impl GhostexGpuiApp {
             return;
         };
         let request_id = request.request_id;
+        let cwd = crate::app::helpers::gpui_active_local_project_directory(
+            self.latest_sidebar_project_snapshot.as_ref(),
+        )
+        .map(Path::to_path_buf);
         let background = cx.background_executor().clone();
         cx.spawn(async move |_this, _cx| {
             let result = background
-                .spawn(async move { run_ghostex_cli(&verb, &args) })
+                .spawn(async move { run_ghostex_cli(&verb, &args, cwd.as_deref()) })
                 .await;
             responder(result_response(&request_id, result));
         })
@@ -413,8 +425,16 @@ fn ghostex_cli_executable() -> Result<PathBuf, String> {
         .ok_or_else(|| "Ghostex CLI is unavailable.".to_string())
 }
 
-fn run_ghostex_cli(verb: &str, args: &[String]) -> Result<serde_json::Value, String> {
-    let output = Command::new(ghostex_cli_executable()?)
+fn run_ghostex_cli(
+    verb: &str,
+    args: &[String],
+    cwd: Option<&Path>,
+) -> Result<serde_json::Value, String> {
+    let mut command = Command::new(ghostex_cli_executable()?);
+    if let Some(cwd) = cwd {
+        command.current_dir(cwd);
+    }
+    let output = command
         .arg(verb)
         .args(args)
         .stdin(Stdio::null())
@@ -435,6 +455,7 @@ enum ExecMessage {
 
 fn run_extension_exec(
     request: ExtensionBridgeRequest,
+    project_directory: Option<PathBuf>,
     responder: GpuiExtensionBridgeResponder,
     cx: &mut gpui::Context<GhostexGpuiApp>,
 ) {
@@ -451,8 +472,25 @@ fn run_extension_exec(
         .params
         .get("cwd")
         .and_then(serde_json::Value::as_str)
-        .map(PathBuf::from);
-    if cwd.as_deref().is_some_and(|path| !path.is_dir()) {
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .map(|path| {
+            if path.is_relative() {
+                project_directory.as_ref().map(|base| base.join(&path))
+            } else {
+                Some(path)
+            }
+        })
+        .unwrap_or(project_directory);
+    let Some(cwd) = cwd else {
+        responder(error_response(
+            &request.request_id,
+            "invalidRequest",
+            "Open a local project or provide an absolute working directory for this command.",
+        ));
+        return;
+    };
+    if !cwd.is_dir() {
         responder(error_response(
             &request.request_id,
             "invalidRequest",
@@ -462,7 +500,7 @@ fn run_extension_exec(
     }
     let request_id = request.request_id;
     let (sender, mut receiver) = futures::channel::mpsc::unbounded();
-    thread::spawn(move || run_streaming_command(&command, cwd.as_deref(), sender));
+    thread::spawn(move || run_streaming_command(&command, Some(&cwd), sender));
     cx.spawn(async move |_this, _cx| {
         let mut stdout = String::new();
         let mut stderr = String::new();

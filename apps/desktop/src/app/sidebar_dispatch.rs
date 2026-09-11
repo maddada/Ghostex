@@ -677,6 +677,33 @@ impl GhostexGpuiApp {
         title: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
+        let snapshot = self.latest_sidebar_project_snapshot.as_ref();
+        let cwd = cwd.filter(|value| !value.trim().is_empty());
+        if cwd.is_none()
+            && gpui_active_project_id_from_snapshot(snapshot)
+                .is_some_and(|id| id.starts_with("remote:"))
+        {
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                "Open Terminal unavailable",
+                "Open a local project or include a local folder in the terminal link.",
+                cx,
+            );
+            return;
+        }
+        let cwd = cwd.or_else(|| {
+            gpui_active_local_project_directory(snapshot)
+                .map(|path| path.to_string_lossy().into_owned())
+        });
+        if cwd.is_none() && gpui_active_project_id_from_snapshot(snapshot).is_some() {
+            self.dispatch_gpui_app_modal_toast(
+                "warning",
+                "Open Terminal unavailable",
+                "The active project's folder is unavailable. Open a local project first.",
+                cx,
+            );
+            return;
+        }
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let resolved_cwd = background
