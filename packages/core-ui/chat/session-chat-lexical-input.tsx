@@ -83,7 +83,7 @@ export function SessionChatLexicalInput({
   placeholder: string;
   fillHeight: boolean;
   collapsed?: boolean;
-  registerApi: (api: SessionChatComposerInputApi | null) => void;
+  registerApi: (api: ComposerEditorControls | null) => void;
   theme: SessionChatTheme;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);

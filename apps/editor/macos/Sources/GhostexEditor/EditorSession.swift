@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import UniformTypeIdentifiers
 
 enum EditorCloseAction {
@@ -13,6 +14,10 @@ struct EditorCursorSnapshot {
 }
 
 final class EditorSession {
+  private static let imagePreviewQueue = DispatchQueue(
+    label: "com.madda.ghostex.editor.image-preview", qos: .userInitiated,
+    autoreleaseFrequency: .workItem)
+
   weak var daemon: EditorDaemon?
   weak var openerConnection: ClientConnection?
   var editorWindow: EditorWindowController?
@@ -62,7 +67,7 @@ final class EditorSession {
     /*
      * Presentation happens right at open handling, before the configure
      * round-trip through the web layer completes: a warm window already has
-     * Monaco loaded, so waiting for the "configured" reply only delays window
+     * the composer loaded, so waiting for the "configured" reply only delays window
      * visibility. Capture the frontmost app first — present() activates this
      * daemon, and focus must return to the terminal that pressed Ctrl+G.
      */
@@ -92,7 +97,7 @@ final class EditorSession {
       editorWindow.requestWebSaveAndClose()
     } else {
       /*
-       * The window can be closed before Monaco ever loaded (cold-start open
+       * The window can be closed before the composer ever loaded (cold-start open
        * that was presented immediately). The web layer cannot answer the
        * save keystroke yet, and latestDraft still holds the initial text, so
        * finishing directly is lossless.
@@ -170,14 +175,15 @@ final class EditorSession {
 
     /*
      * The thumbnail shelf must load every image path already present in the
-     * Monaco text. Resolve short home-relative image paths, including legacy
+     * prompt text. Resolve short home-relative image paths, including legacy
      * ~/.ghostex/i references, natively and send
      * display-safe data URLs back to the web layer so WKWebView local-file
      * read limits do not block thumbnail or popup rendering. Decode and
      * downsample off the main queue so large images cannot stall typing.
      */
     let editorWindow = self.editorWindow
-    DispatchQueue.global(qos: .userInitiated).async {
+    Self.imagePreviewQueue.async { [weak editorWindow] in
+      guard editorWindow != nil else { return }
       var response: [String: Any] = [
         "type": "imagePreviewResult",
         "requestId": previewRequestId,
@@ -188,7 +194,7 @@ final class EditorSession {
       } catch {
         response["error"] = error.localizedDescription
       }
-      DispatchQueue.main.async {
+      DispatchQueue.main.async { [weak editorWindow] in
         editorWindow?.dispatchHostMessage(response)
       }
     }
@@ -202,12 +208,11 @@ final class EditorSession {
       throw ghostexError("Image preview path does not point to a local image.")
     }
 
-    let data = try Data(contentsOf: fileURL)
     if fileURL.pathExtension.lowercased() == "svg" {
+      let data = try Data(contentsOf: fileURL)
       return "data:image/svg+xml;base64,\(data.base64EncodedString())"
     }
-    guard let image = NSImage(data: data),
-      let pngData = previewPNGData(from: image)
+    guard let pngData = previewPNGData(from: fileURL)
     else {
       throw ghostexError("Image preview data could not be decoded.")
     }
@@ -240,35 +245,26 @@ final class EditorSession {
     return nil
   }
 
-  private static func previewPNGData(from image: NSImage) -> Data? {
-    /*
-     * Thumbnails and the popup share one data URL, so cap the longest edge at
-     * 1600px: large screenshots stay crisp in the popup while the base64
-     * payload crossing into the webview stays bounded.
-     */
-    let sourceSize =
-      image.size.width > 0 && image.size.height > 0 ? image.size : NSSize(width: 1, height: 1)
-    let maximumDimension = CGFloat(1600)
-    let scale = min(1, maximumDimension / max(sourceSize.width, sourceSize.height))
-    let drawSize = NSSize(
-      width: max(1, sourceSize.width * scale), height: max(1, sourceSize.height * scale))
-    let output = NSImage(size: drawSize)
-    output.lockFocus()
-    NSColor.clear.setFill()
-    NSRect(origin: .zero, size: drawSize).fill()
-    image.draw(
-      in: NSRect(origin: .zero, size: drawSize),
-      from: NSRect(origin: .zero, size: sourceSize),
-      operation: .sourceOver,
-      fraction: 1.0
-    )
-    output.unlockFocus()
-    guard let tiffData = output.tiffRepresentation,
-      let bitmap = NSBitmapImageRep(data: tiffData)
-    else {
-      return nil
-    }
-    return bitmap.representation(using: .png, properties: [:])
+  /// CDXC:PromptEditor 2026-09-11 WHY:
+  /// Decode previews directly at 1600 pixels instead of decoding full screenshots and allocating Retina-sized NSImage/TIFF intermediates. A serial queue also bounds simultaneous image decodes.
+  private static func previewPNGData(from fileURL: URL) -> Data? {
+    guard let source = CGImageSourceCreateWithURL(
+      fileURL as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary)
+    else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: 1600,
+      kCGImageSourceShouldCacheImmediately: true,
+    ]
+    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    else { return nil }
+    let data = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil)
+    else { return nil }
+    CGImageDestinationAddImage(destination, thumbnail, nil)
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return data as Data
   }
 
   func handlePasteImage(_ body: [String: Any]) {

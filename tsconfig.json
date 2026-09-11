@@ -26,6 +26,7 @@
     "packages/core-ui/**/*",
     "packages/components/**/*",
     "apps/desktop/views/**/*",
+    "apps/editor/web/**/*",
     "apps/mobile/views/chat/**/*",
     "apps/mobile/views/find/**/*"
   ],

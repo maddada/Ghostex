@@ -36,18 +36,6 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
     self.indexURL = indexURL
     let contentController = WKUserContentController()
 
-    let script = WKUserScript(
-      source: """
-        Object.defineProperty(window, "__require", {
-          configurable: true,
-          get: function() { return window.require; }
-        });
-        """,
-      injectionTime: .atDocumentStart,
-      forMainFrameOnly: true
-    )
-    contentController.addUserScript(script)
-
     let webConfiguration = WKWebViewConfiguration()
     webConfiguration.userContentController = contentController
     webConfiguration.suppressesIncrementalRendering = false
@@ -61,6 +49,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate, WKScriptMessageH
       backing: .buffered,
       defer: false
     )
+    // CDXC:PromptEditor 2026-09-11 WHY:
+    // ARC owns this window; AppKit must not release it again on close. Retaining closed controllers forever kept their WebKit pages alive and grew the idle editor to 600 MB.
+    window.isReleasedWhenClosed = false
     window.minSize = NSSize(width: 480, height: 320)
     /*
      * The titlebar names the app; each native window tab names the terminal

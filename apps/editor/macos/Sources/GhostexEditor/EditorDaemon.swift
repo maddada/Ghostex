@@ -15,7 +15,6 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
   private var openCountWatcherIds: Set<UUID> = []
   private var sessions: [String: EditorSession] = [:]
   private var warmWindow: EditorWindowController?
-  private var retiredWindows: [EditorWindowController] = []
   private var warmWaiters: [() -> Void] = []
   private var pendingShutdown = false
   private var isExiting = false
@@ -64,7 +63,7 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
      * WKWebView only performs clipboard operations for Cmd+X/C/V/A when the
      * application main menu carries the standard Edit actions, so a menu-less
      * accessory daemon silently drops those shortcuts. Undo/Redo stay off the
-     * menu on purpose: Monaco owns its undo stack via keydown, and a native
+     * menu on purpose: The shared composer owns its undo stack via keydown, and a native
      * undo: menu item would capture Cmd+Z before the page sees it.
      */
     let mainMenu = NSMenu()
@@ -310,7 +309,6 @@ final class EditorDaemon: NSObject, NSApplicationDelegate {
       }
       if let editorWindow {
         editorWindow.cleanup()
-        self.retiredWindows.append(editorWindow)
       }
       if shouldExitAfterCleanup {
         self.cleanupAndExit(0)

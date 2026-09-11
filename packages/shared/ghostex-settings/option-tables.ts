@@ -250,9 +250,9 @@ export const PROMPT_EDITOR_BACKEND_OPTIONS: ReadonlyArray<{
 }> = [
   /**
    * CDXC:PromptEditor 2026-06-30-00:08:
-   * Ctrl+G Settings should be a two-choice dropdown: use the bundled Monaco prompt editor or leave $EDITOR/$VISUAL to the user's machine defaults. gte install/use and custom command controls are intentionally absent.
+   * Ctrl+G Settings should be a two-choice dropdown: use the bundled prompt editor or leave $EDITOR/$VISUAL to the user's machine defaults. gte install/use and custom command controls are intentionally absent.
    */
-  { label: 'Monaco editor', value: 'monaco' },
+  { label: 'Ghostex editor', value: 'monaco' },
   { label: 'Use default from this machine', value: 'inherit' },
 ];
 

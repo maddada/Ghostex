@@ -604,7 +604,7 @@ impl EditorApp {
         self.configure_window_if_ready(window_id);
         // Presentation happens right at open handling, before the configure
         // round-trip through the web layer completes: a warm window already
-        // has Monaco loaded, so waiting for the "configured" reply only
+        // has the composer loaded, so waiting for the "configured" reply only
         // delays window visibility.
         self.present_window(window_id);
         self.notify_open_count_watchers();
@@ -1135,7 +1135,7 @@ document.dispatchEvent(new KeyboardEvent("keydown", {
         }
 
         // The thumbnail shelf must load every image path already present in
-        // the Monaco text. Resolve short ~ paths natively and send data URLs
+        // the prompt text. Resolve short ~ paths natively and send data URLs
         // back to the web layer so webview local-file read limits do not
         // block thumbnail or popup rendering.
         let detail = match load_image_preview_data_url(path) {

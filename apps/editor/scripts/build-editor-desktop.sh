@@ -19,5 +19,6 @@ MINGW* | MSYS* | CYGWIN*)
 	;;
 esac
 
+rm -rf "$DIST/web"
 mkdir -p "$DIST/web"
 cp -R "$ROOT/apps/editor/dist/web/." "$DIST/web/"

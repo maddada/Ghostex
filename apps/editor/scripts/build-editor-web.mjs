@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,8 +8,6 @@ const editorRoot = path.resolve(scriptDir, '..');
 const repoRoot = path.resolve(editorRoot, '..', '..');
 const webRoot = path.join(editorRoot, 'web');
 const distRoot = path.join(editorRoot, 'dist', 'web');
-const monacoSource = path.join(repoRoot, 'node_modules', 'monaco-editor', 'min', 'vs');
-const monacoDest = path.join(distRoot, 'monaco', 'vs');
 const bundleMarker = '__GHOSTEX_EDITOR_BUNDLE__';
 
 const buildResult = await Bun.build({
@@ -17,6 +15,8 @@ const buildResult = await Bun.build({
   format: 'iife',
   target: 'browser',
   write: false,
+  minify: true,
+  define: { 'process.env.NODE_ENV': JSON.stringify('production') },
 });
 
 if (!buildResult.success) {
@@ -32,15 +32,19 @@ if (!sourceHtml.includes(bundleMarker)) {
   throw new Error(`Missing ${bundleMarker} marker in apps/editor/web/index.html`);
 }
 
-const html = sourceHtml.replace(bundleMarker, bundle);
+const css = await Promise.all(
+  buildResult.outputs.filter((output) => output.path.endsWith('.css')).map((output) => output.text())
+);
+const html = sourceHtml
+  .replace('__GHOSTEX_EDITOR_STYLES__', () => css.join('\n'))
+  .replace(bundleMarker, () => bundle.replace(/<\/script/gi, '<\\/script'));
 
 await rm(distRoot, { force: true, recursive: true });
-await mkdir(path.dirname(monacoDest), { recursive: true });
-await cp(monacoSource, monacoDest, { recursive: true });
+await mkdir(distRoot, { recursive: true });
 await writeFile(path.join(distRoot, 'index.html'), html);
 
 console.log(`Built ${path.relative(repoRoot, path.join(distRoot, 'index.html'))}`);
-console.log(`Staged ${path.relative(repoRoot, monacoDest)}`);
+console.log(`Editor JavaScript: ${Buffer.byteLength(bundle)} bytes; CSS: ${Buffer.byteLength(css.join('\n'))} bytes`);
 
 async function outputTextForJavaScript(outputs) {
   const output = outputs.find((candidate) => candidate.path.endsWith('.js'));

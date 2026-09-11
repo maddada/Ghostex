@@ -235,7 +235,7 @@ impl GhostexGpuiApp {
                         copy_text: None,
                         id: GPUI_MISSING_MONACO_PROMPT_EDITOR_TOAST_ID.to_string(),
                         level: GpuiAppToastLevel::Warning,
-                        title: "Monaco prompt editor unavailable".to_string(),
+                        title: "Ghostex prompt editor unavailable".to_string(),
                         description: Some(
                             "The Ghostex Editor helper is missing from this build, so Ctrl+G opens the machine editor instead. Set GHOSTEX_EDITOR_APP or reinstall Ghostex."
                                 .to_string(),

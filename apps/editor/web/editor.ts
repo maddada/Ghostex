@@ -1,4 +1,8 @@
-import { trimPromptEditorTrailingSpaces } from '../../../packages/shared/prompt-editor-text';
+import { createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import { SessionChatLexicalInput } from '@/packages/core-ui/chat/session-chat-lexical-input';
+import type { ComposerEditorControls } from '@/packages/core-ui/chat/session-chat-lexical/commands';
+import { trimPromptEditorTrailingSpaces } from '@/packages/shared/prompt-editor-text';
 
 type GhostexEditorConfigureMessage = {
   type: 'configure';
@@ -53,81 +57,23 @@ type ImagePreview = {
   startOffset: number;
 };
 
-type MonacoEditor = {
-  createContextKey<T>(key: string, defaultValue: T): { set(value: T): void };
-  dispose(): void;
-  executeEdits(source: string, edits: Array<{ range: unknown; text: string; forceMoveMarkers?: boolean }>): boolean;
-  focus(): void;
-  getModel(): MonacoModel | null;
-  getPosition(): unknown;
-  getSelection(): unknown;
-  getValue(): string;
-  onDidChangeModelContent(handler: () => void): { dispose(): void };
-  onDidChangeCursorPosition(handler: () => void): { dispose(): void };
-  pushUndoStop(): boolean;
-  revealPositionInCenterIfOutsideViewport(position: unknown): void;
-  setModel(model: MonacoModel | null): void;
-  setPosition(position: unknown): void;
-  updateOptions(options: Record<string, unknown>): void;
-};
-
-type MonacoPosition = {
-  column: number;
-  lineNumber: number;
-};
-
-type MonacoModel = {
-  dispose(): void;
-  getLanguageId(): string;
-  getOffsetAt(position: unknown): number;
-  getPositionAt(offset: number): MonacoPosition;
-  getValue(): string;
-  getValueLength(): number;
-};
-
-type MonacoApi = {
-  Uri: {
-    file(path: string): unknown;
-    parse(value: string): unknown;
-  };
-  editor: {
-    create(element: HTMLElement, options: Record<string, unknown>): MonacoEditor;
-    createModel(value: string, language?: string, uri?: unknown): MonacoModel;
-    setModelLanguage(model: MonacoModel, language: string): void;
+const hostWindow = window as Window & {
+  ipc?: { postMessage(message: string): void };
+  webkit?: {
+    messageHandlers?: {
+      ghostexEditorHost?: { postMessage(message: GhostexEditorHostMessage): void };
+    };
   };
 };
-
-type MonacoAmdRequire = {
-  (dependencies: string[], callback: () => void, errorback?: (error: unknown) => void): void;
-  config(options: Record<string, unknown>): void;
-};
-
-declare global {
-  interface Window {
-    MonacoEnvironment?: {
-      getWorkerUrl(_workerId: string, _label: string): string;
-    };
-    ipc?: {
-      postMessage(message: string): void;
-    };
-    webkit?: {
-      messageHandlers?: {
-        ghostexEditorHost?: {
-          postMessage(message: GhostexEditorHostMessage): void;
-        };
-      };
-    };
-  }
-
-  const monaco: MonacoApi;
-  const require: MonacoAmdRequire;
-}
 
 const pendingImagePasteRequests = new Map<string, (result: ImagePasteResult) => void>();
 
-let editorInstance: MonacoEditor | null = null;
-let draftUpdateTimer: ReturnType<typeof window.setTimeout> | null = null;
-let cursorUpdateTimer: ReturnType<typeof window.setTimeout> | null = null;
+let editorInstance: ComposerEditorControls | null = null;
+let currentCursorOffset = 0;
+let editorGeneration = 0;
+const editorRoot = createRoot(getRequiredElement('editor'));
+let draftUpdateTimer: number | null = null;
+let cursorUpdateTimer: number | null = null;
 let pendingConfigureMessage: GhostexEditorConfigureMessage | null = null;
 
 let imagePreviews: ImagePreview[] = [];
@@ -136,18 +82,6 @@ const imagePreviewDataUrls = new Map<string, string>();
 const failedImagePreviewPaths = new Set<string>();
 const pendingImagePreviewPaths = new Set<string>();
 const pendingImagePreviewRequests = new Map<string, string>();
-
-window.MonacoEnvironment = {
-  getWorkerUrl() {
-    return './monaco/vs/base/worker/workerMain.js';
-  },
-};
-
-require.config({
-  paths: {
-    vs: './monaco/vs',
-  },
-});
 
 window.addEventListener('ghostex-editor-host-message', (event) => {
   const detail = (event as CustomEvent<unknown>).detail;
@@ -175,150 +109,86 @@ window.addEventListener('ghostex-editor-host-message', (event) => {
   resolve(detail);
 });
 
-require(['vs/editor/editor.main'], () => {
-  getRequiredElement('editor-hint').textContent = editorShortcutHint();
-  const editorElement = getRequiredElement('editor');
-  const saveButton = getRequiredElement('save-button') as HTMLButtonElement;
-  const cancelButton = getRequiredElement('cancel-button') as HTMLButtonElement;
-  const model = createModelForConfig({
-    filePath: '',
-    initialText: '',
-    language: 'markdown',
-  });
-
-  editorInstance = monaco.editor.create(editorElement, {
-    acceptSuggestionOnEnter: 'off',
-    automaticLayout: true,
-    cursorBlinking: 'smooth',
-    fontFamily: "JetBrains Mono, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace",
-    fontLigatures: true,
-    fontSize: 14,
-    lineNumbersMinChars: 3,
-    minimap: {
-      enabled: false,
-    },
-    model,
-    occurrencesHighlight: 'off',
-    copyWithSyntaxHighlighting: false,
-    padding: {
-      bottom: 48,
-      top: 12,
-    },
-    parameterHints: {
-      enabled: false,
-    },
-    quickSuggestions: false,
-    renderLineHighlight: 'none',
-    scrollBeyondLastLine: false,
-    scrollbar: {
-      horizontalScrollbarSize: 7,
-      verticalScrollbarSize: 7,
-    },
-    selectionHighlight: false,
-    snippetSuggestions: 'none',
-    suggestOnTriggerCharacters: false,
-    tabCompletion: 'off',
-    theme: 'vs-dark',
-    wordBasedSuggestions: 'off',
-    wordWrap: 'on',
-  });
-
-  editorInstance.onDidChangeModelContent(() => {
-    scheduleDraftUpdate();
-    updateImagePreviews();
-  });
-  editorInstance.onDidChangeCursorPosition(() => {
-    scheduleCursorUpdate();
-  });
-
-  document.addEventListener('keydown', handleDocumentKeyDown, true);
-  /*
-   * The paste hook must live on window capture: Monaco's clipboard stack
-   * halts capture descent below document, so a listener on the editor
-   * container (or anywhere deeper) never fires and image pastes get
-   * silently dropped by the textarea default handling.
-   */
-  window.addEventListener('paste', handlePaste, true);
-  saveButton.addEventListener('click', () => {
-    saveAndClose();
-  });
-  cancelButton.addEventListener('click', () => {
-    cancel();
-  });
-  installImagePreviewPopupHandlers();
-
-  postToHost({ type: 'ready' });
-  if (pendingConfigureMessage) {
-    const configureMessage = pendingConfigureMessage;
-    pendingConfigureMessage = null;
-    applyConfigureMessage(configureMessage);
-  } else {
-    editorInstance.focus();
-  }
-}, (error) => {
-  console.error('Failed to load Monaco editor', error);
-});
-
-function normalizeConfigureMessage(rawMessage: GhostexEditorConfigureMessage) {
-  const filePath = typeof rawMessage.filePath === 'string' && rawMessage.filePath.length > 0 ? rawMessage.filePath : '';
-  return {
-    filePath,
-    initialText: typeof rawMessage.initialText === 'string' ? rawMessage.initialText : '',
-    cursorOffset: normalizeCursorOffset(rawMessage.cursorOffset),
-    language: typeof rawMessage.language === 'string' && rawMessage.language.length > 0 ? rawMessage.language : null,
-  };
-}
-
-function createModelForConfig(config: { filePath: string; initialText: string; language: string | null }): MonacoModel {
-  const language = config.language || undefined;
-  const model = monaco.editor.createModel(config.initialText, language, uriForFilePath(config.filePath));
-  if (config.language) {
-    monaco.editor.setModelLanguage(model, config.language);
-  } else if (model.getLanguageId() === 'plaintext') {
-    monaco.editor.setModelLanguage(model, 'markdown');
-  }
-  return model;
+/**
+ * CDXC:PromptEditor 2026-09-11 DECISION:
+ * User: use the same editor as the chat composer instead of Monaco to reduce the standalone prompt editor's memory.
+ * Mount only the shared Lexical input, including its commands and find/replace panels.
+ */
+function mountEditor(config?: GhostexEditorConfigureMessage): void {
+  const initialValue = typeof config?.initialText === 'string' ? config.initialText.replace(/\r\n?/g, '\n') : '';
+  const cursorOffset = normalizeCursorOffset(config?.cursorOffset) ?? initialValue.length;
+  editorRoot.render(
+    createElement(SessionChatLexicalInput, {
+      key: ++editorGeneration,
+      initialValue,
+      placeholder: 'Write a prompt…',
+      fillHeight: true,
+      theme: 'dark',
+      onKeyDown: () => {},
+      onPasteData: handlePasteData,
+      onChange: () => {
+        scheduleDraftUpdate();
+        updateImagePreviews();
+      },
+      onCaretChange: (caret: number) => {
+        currentCursorOffset = caret;
+        scheduleCursorUpdate();
+      },
+      registerApi: (api: ComposerEditorControls | null) => {
+        editorInstance = api;
+        if (!api) return;
+        currentCursorOffset = clampOffset(cursorOffset, initialValue.length);
+        api.setSelection(currentCursorOffset);
+        updateImagePreviews();
+        if (config) {
+          postToHost({ type: 'configured' });
+        } else {
+          postToHost({ type: 'ready' });
+          if (pendingConfigureMessage) {
+            const pending = pendingConfigureMessage;
+            pendingConfigureMessage = null;
+            applyConfigureMessage(pending);
+          }
+        }
+      },
+    })
+  );
 }
 
 function applyConfigureMessage(message: GhostexEditorConfigureMessage): boolean {
-  if (!editorInstance) {
-    return false;
-  }
-
+  if (!editorInstance) return false;
   clearDraftUpdateTimer();
   clearCursorUpdateTimer();
   resetImagePreviewState();
-
-  const config = normalizeConfigureMessage(message);
-  const previousModel = editorInstance.getModel();
-  if (previousModel) {
-    editorInstance.setModel(null);
-    previousModel.dispose();
-  }
-
-  const model = createModelForConfig(config);
-  editorInstance.setModel(model);
-  editorInstance.updateOptions({
-    wordWrap: model.getLanguageId() === 'markdown' ? 'on' : 'off',
-  });
-  moveCaretToOffset(model, config.cursorOffset ?? model.getValueLength());
-  editorInstance.focus();
-  updateImagePreviews();
-  postToHost({ type: 'configured' });
-
+  pendingImagePasteRequests.clear();
+  // A new editing session must not inherit the previous file's undo history.
+  mountEditor(message);
   return true;
 }
 
-/*
- * Cmd+S/Ctrl+S also save (see isSaveShortcut); the hint intentionally shows
- * only one shortcut per modifier to stay short.
- */
 function editorShortcutHint(): string {
-  const platform = navigator.platform || navigator.userAgent;
-  return /mac/iu.test(platform)
+  return /mac/iu.test(navigator.platform || navigator.userAgent)
     ? 'F1 for commands - CMD + S or CTRL + G to Save'
     : 'F1 for commands - CTRL + S or CTRL + G to Save';
 }
+
+getRequiredElement('editor-hint').textContent = editorShortcutHint();
+getRequiredElement('save-button').addEventListener('click', saveAndClose);
+getRequiredElement('cancel-button').addEventListener('click', cancel);
+document.addEventListener('keydown', handleDocumentKeyDown, true);
+installImagePreviewPopupHandlers();
+mountEditor();
+window.addEventListener(
+  'pagehide',
+  () => {
+    clearDraftUpdateTimer();
+    clearCursorUpdateTimer();
+    resetImagePreviewState();
+    pendingImagePasteRequests.clear();
+    editorRoot.unmount();
+  },
+  { once: true }
+);
 
 function getRequiredElement(id: string): HTMLElement {
   const element = document.getElementById(id);
@@ -328,25 +198,12 @@ function getRequiredElement(id: string): HTMLElement {
   return element;
 }
 
-function uriForFilePath(filePath: string): unknown {
-  if (filePath.length > 0) {
-    return monaco.Uri.file(filePath);
-  }
-  return monaco.Uri.parse('inmemory://ghostex-editor/draft.md');
-}
-
 function getCurrentText(): string {
   return editorInstance?.getValue() ?? '';
 }
 
 function getCurrentCursorOffset(): number {
-  const model = editorInstance?.getModel();
-  const position = editorInstance?.getPosition();
-  if (!model || !position) {
-    return getCurrentText().length;
-  }
-  const offset = model.getOffsetAt(position);
-  return clampOffset(offset, model.getValueLength());
+  return clampOffset(currentCursorOffset, getCurrentText().length);
 }
 
 function saveAndClose(): void {
@@ -366,6 +223,7 @@ function cancel(): void {
 }
 
 function handleDocumentKeyDown(event: KeyboardEvent): void {
+  if (event.isComposing || event.keyCode === 229) return;
   const key = event.key.toLowerCase();
   if (key === 'escape' && openImagePreview && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     stopShortcutEvent(event);
@@ -434,69 +292,42 @@ function clearCursorUpdateTimer(): void {
 }
 
 function postToHost(message: GhostexEditorHostMessage): void {
-  const webKitHost = window.webkit?.messageHandlers?.ghostexEditorHost;
+  const webKitHost = hostWindow.webkit?.messageHandlers?.ghostexEditorHost;
   if (webKitHost) {
     webKitHost.postMessage(message);
     return;
   }
 
-  window.ipc?.postMessage(JSON.stringify(message));
+  hostWindow.ipc?.postMessage(JSON.stringify(message));
 }
 
-function handlePaste(event: ClipboardEvent): void {
-  if (!editorInstance || event.defaultPrevented) {
-    return;
-  }
-
-  if (!hasImagePastePayload(event)) {
-    /*
-     * Pasting plain text must not accumulate invisible trailing whitespace
-     * from shell capture or clipboard content: strip spaces/tabs at line ends
-     * and only take over the paste when that changes the text.
-     */
-    const pastedText = event.clipboardData?.getData('text/plain') ?? '';
+function handlePasteData(data: DataTransfer): boolean {
+  if (!editorInstance) return false;
+  const generation = editorGeneration;
+  const insertResult = (result: ImagePasteResult) => {
+    if (generation === editorGeneration) handleImagePasteResult(result);
+  };
+  if (!hasImagePastePayload(data)) {
+    const pastedText = data.getData('text/plain');
     const trimmedText = trimPromptEditorTrailingSpaces(pastedText);
-    if (!pastedText || trimmedText === pastedText) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
+    if (trimmedText === pastedText) return false;
     insertTextAtCursor(trimmedText);
-    return;
+    return true;
   }
-
-  if (window.webkit?.messageHandlers?.ghostexEditorHost) {
-    // macOS host: native resolves the clipboard image (file or bitmap) itself.
-    event.preventDefault();
-    event.stopPropagation();
-    requestImagePaste(createRequestId(), undefined, undefined)
-      .then(handleImagePasteResult)
-      .catch((error) => {
-        console.error('Image paste failed', error);
-      });
-    return;
+  if (hostWindow.webkit?.messageHandlers?.ghostexEditorHost) {
+    requestImagePaste(createRequestId(), undefined, undefined).then(insertResult);
+    return true;
   }
-
-  const imageFile = firstImageClipboardItem(event.clipboardData)?.getAsFile();
-  if (!imageFile) {
-    return;
-  }
-
-  event.preventDefault();
-  event.stopPropagation();
-
+  const imageFile = firstImageClipboardItem(data)?.getAsFile();
+  if (!imageFile) return false;
   const requestId = createRequestId();
-  const suggestedName = suggestedImageName(imageFile, requestId);
-
   readFileAsDataUrl(imageFile)
-    .then((dataUrl) => {
-      const base64Data = dataUrl.split(',', 2)[1] ?? '';
-      return requestImagePaste(requestId, base64Data, suggestedName);
-    })
-    .then(handleImagePasteResult)
-    .catch((error) => {
-      console.error('Image paste failed', error);
-    });
+    .then((dataUrl) =>
+      requestImagePaste(requestId, dataUrl.split(',', 2)[1] ?? '', suggestedImageName(imageFile, requestId))
+    )
+    .then(insertResult)
+    .catch((error) => console.error('Image paste failed', error));
+  return true;
 }
 
 function handleImagePasteResult(result: ImagePasteResult): void {
@@ -573,6 +404,19 @@ function updateImagePreviews(): void {
   if (openImagePreview && !imagePreviews.some((preview) => preview.id === openImagePreview?.id)) {
     closeImagePreviewPopup();
   }
+  const paths = new Set(imagePreviews.map((preview) => preview.path));
+  for (const path of imagePreviewDataUrls.keys()) {
+    if (!paths.has(path)) imagePreviewDataUrls.delete(path);
+  }
+  for (const path of failedImagePreviewPaths) {
+    if (!paths.has(path)) failedImagePreviewPaths.delete(path);
+  }
+  for (const [requestId, path] of pendingImagePreviewRequests) {
+    if (!paths.has(path)) {
+      pendingImagePreviewRequests.delete(requestId);
+      pendingImagePreviewPaths.delete(path);
+    }
+  }
   requestMissingImagePreviews();
   renderImagePreviewStrip();
 }
@@ -638,6 +482,8 @@ function renderImagePreviewStrip(): void {
     if (dataUrl) {
       const image = document.createElement('img');
       image.alt = '';
+      image.loading = 'lazy';
+      image.decoding = 'async';
       image.src = dataUrl;
       openButton.appendChild(image);
     } else {
@@ -704,12 +550,12 @@ function closeImagePreviewPopup(): void {
   const popup = document.getElementById('image-popup');
   if (popup) {
     popup.hidden = true;
+    document.getElementById('image-popup-image')?.removeAttribute('src');
   }
 }
 
 function removeImagePreview(preview: ImagePreview): void {
-  const model = editorInstance?.getModel();
-  if (!editorInstance || !model) {
+  if (!editorInstance) {
     return;
   }
 
@@ -729,34 +575,15 @@ function removeImagePreview(preview: ImagePreview): void {
   } else if (currentText[startOffset - 1] === '\n') {
     startOffset -= 1;
   }
-  const startPosition = model.getPositionAt(startOffset);
-  const endPosition = model.getPositionAt(endOffset);
-  editorInstance.pushUndoStop();
-  editorInstance.executeEdits('ghostex-image-preview-remove', [
-    {
-      forceMoveMarkers: true,
-      range: {
-        endColumn: endPosition.column,
-        endLineNumber: endPosition.lineNumber,
-        startColumn: startPosition.column,
-        startLineNumber: startPosition.lineNumber,
-      },
-      text: '',
-    },
-  ]);
-  editorInstance.pushUndoStop();
+  editorInstance.setSelection(startOffset, endOffset);
+  editorInstance.insertText('');
   editorInstance.focus();
   if (openImagePreview?.id === preview.id) {
     closeImagePreviewPopup();
   }
 }
 
-function hasImagePastePayload(event: ClipboardEvent): boolean {
-  const clipboardData = event.clipboardData;
-  if (!clipboardData) {
-    return false;
-  }
-
+function hasImagePastePayload(clipboardData: DataTransfer): boolean {
   const files = Array.from(clipboardData.files);
   if (
     files.some((file) => {
@@ -832,55 +659,7 @@ function requestImagePaste(
 }
 
 function insertTextAtCursor(text: string): void {
-  if (!editorInstance) {
-    return;
-  }
-
-  const selection = editorInstance.getSelection();
-  if (!selection) {
-    return;
-  }
-
-  editorInstance.pushUndoStop();
-  editorInstance.executeEdits('ghostex-editor-image-paste', [
-    {
-      forceMoveMarkers: true,
-      range: selection,
-      text,
-    },
-  ]);
-  const model = editorInstance.getModel();
-  if (model) {
-    const insertedPosition = positionAfterInsertedText(selection, text);
-    editorInstance.setPosition(insertedPosition);
-    editorInstance.revealPositionInCenterIfOutsideViewport(insertedPosition);
-  }
-  editorInstance.pushUndoStop();
-  editorInstance.focus();
-}
-
-function positionAfterInsertedText(selection: unknown, text: string): unknown {
-  const startLineNumber = readNumberProperty(selection, 'startLineNumber', 1);
-  const startColumn = readNumberProperty(selection, 'startColumn', 1);
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  if (lines.length === 1) {
-    return {
-      column: startColumn + text.length,
-      lineNumber: startLineNumber,
-    };
-  }
-  return {
-    column: lines[lines.length - 1].length + 1,
-    lineNumber: startLineNumber + lines.length - 1,
-  };
-}
-
-function readNumberProperty(value: unknown, key: string, fallback: number): number {
-  if (!value || typeof value !== 'object') {
-    return fallback;
-  }
-  const record = value as Record<string, unknown>;
-  return typeof record[key] === 'number' ? record[key] : fallback;
+  editorInstance?.insertText(text);
 }
 
 function suggestedImageName(file: File, requestId: string): string {
@@ -913,15 +692,6 @@ function normalizeCursorOffset(value: unknown): number | null {
     return null;
   }
   return Math.max(0, Math.floor(value));
-}
-
-function moveCaretToOffset(model: MonacoModel, offset: number): void {
-  if (!editorInstance) {
-    return;
-  }
-  const position = model.getPositionAt(clampOffset(offset, model.getValueLength()));
-  editorInstance.setPosition(position);
-  editorInstance.revealPositionInCenterIfOutsideViewport(position);
 }
 
 function clampOffset(offset: number, length: number): number {

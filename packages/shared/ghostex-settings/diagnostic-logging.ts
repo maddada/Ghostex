@@ -163,7 +163,7 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     logFiles: ['terminal-link-open-debug.log'],
   },
   {
-    description: 'Prompt editor window, Monaco/GTE initialization, prewarm, and native child-window diagnostics.',
+    description: 'Prompt editor window, composer initialization, prewarm, and native child-window diagnostics.',
     group: 'macOS',
     id: 'native.prompt.editor',
     label: 'Prompt editor',

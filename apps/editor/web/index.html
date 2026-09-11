@@ -4,8 +4,18 @@
     <meta charset="UTF-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <style>
+      __GHOSTEX_EDITOR_STYLES__
+    </style>
+    <style>
       :root {
         color-scheme: dark;
+        --foreground: #d4d4d4;
+        --background: #1e1e1e;
+        --muted-foreground: #8f8f8f;
+        --popover: #252526;
+        --popover-foreground: #d4d4d4;
+        --border: #3c3c3c;
+        --accent: #3f3f46;
         font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
       }
 
@@ -96,9 +106,32 @@
         width: 100%;
       }
 
+      #editor .ghostex-chat-composer-lexical {
+        margin: 0;
+        width: 100%;
+        font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      #editor .ghostex-chat-composer-lexical-content {
+        padding: 12px 16px 48px;
+      }
+      #editor .ghostex-chat-editor-panel {
+        margin: 6px;
+      }
+      #editor .ghostex-chat-editor-panel input {
+        color: inherit;
+        font: inherit;
+      }
+      #editor .ghostex-chat-editor-panel button {
+        min-width: 24px;
+      }
+      #editor .ghostex-chat-reference-pill {
+        color: #b3c0d1;
+        white-space: nowrap;
+      }
+
       /*
        * Pasted prompt images should remain visible while writing without
-       * replacing Monaco text. Render a compact thumbnail shelf below the
+       * replacing the prompt text. Render a compact thumbnail shelf below the
        * editor, keep every thumbnail square, and reveal removal controls only
        * on hover so the shelf stays quiet during normal prompt editing.
        */
@@ -263,7 +296,6 @@
         color: #ffffff;
       }
     </style>
-    <script src="./monaco/vs/loader.js"></script>
   </head>
   <body>
     <div id="root">

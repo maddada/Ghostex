@@ -530,7 +530,7 @@ EOF_HELPER_PLIST
 	printf '%s\n' "$helper_binary"
 }
 
-# The Ctrl+G "Monaco editor" prompt-editor backend is served by the standalone
+# The Ctrl+G prompt-editor backend is served by the standalone
 # GhostexEditor daemon. Ship it inside the app bundle so installed builds resolve
 # a real helper; without it the setting silently degrades to the machine editor
 # (vi for anyone with no $EDITOR).
@@ -539,11 +539,11 @@ stage_gpui_ghostex_editor_app() {
 	local editor_digest
 
 	# CDXC:Build 2026-09-04 WHY:
-	# Every start rebuilt the editor helper (Bun bundle, Monaco copy, SwiftPM
+	# Every start rebuilt the editor helper (Bun bundle, SwiftPM
 	# release build, ad-hoc sign) and re-copied it into the bundle. Skip all of
 	# it when its inputs match the last successful staging.
 	editor_digest="$(fingerprint_inputs \
-		--value "gpui-ghostex-editor-app-v1" \
+		--value "gpui-ghostex-editor-app-v2" \
 		--value "arch=$GHOSTEX_MACOS_ARCH" \
 		--value "developer=${GHOSTEX_GPUI_SWIFT_DEVELOPER_DIR:-${DEVELOPER_DIR:-}}|$(xcode-select -p 2>/dev/null || true)" \
 		--value "swift=$(xcrun swiftc --version 2>/dev/null | head -n 1 || true)" \
@@ -551,12 +551,16 @@ stage_gpui_ghostex_editor_app() {
 		--path "$REPO_ROOT/apps/editor/macos/Package.swift" \
 		--path "$REPO_ROOT/apps/editor/macos/Sources" \
 		--path "$REPO_ROOT/apps/editor/scripts" \
-		--path "$REPO_ROOT/node_modules/monaco-editor/package.json")"
+		--path "$REPO_ROOT/packages/core-ui/chat" \
+		--path "$REPO_ROOT/packages/core-ui/app-tooltip.tsx" \
+		--path "$REPO_ROOT/packages/components" \
+		--path "$REPO_ROOT/packages/shared" \
+		--path "$REPO_ROOT/bun.lock" \
+		--path "$REPO_ROOT/tsconfig.json")"
 	if cache_matches "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest" \
 		"$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" \
 		"$editor_executable" \
-		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html" \
-		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/monaco/vs/loader.js"; then
+		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html"; then
 		echo "Bundled GhostexEditor helper is current; skipping rebuild." >&2
 		return 0
 	fi
@@ -577,8 +581,8 @@ stage_gpui_ghostex_editor_app() {
 		echo "Packaged GhostexEditor helper is missing or not executable: $editor_executable" >&2
 		exit 1
 	fi
-	if [[ ! -f "$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html" || ! -f "$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/monaco/vs/loader.js" ]]; then
-		echo "Packaged GhostexEditor helper is missing its Monaco web payload." >&2
+	if [[ ! -f "$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html" ]]; then
+		echo "Packaged GhostexEditor helper is missing its editor web payload." >&2
 		exit 1
 	fi
 	if ! /usr/bin/lipo -archs "$editor_executable" | tr ' ' '\n' | grep -Fxq "$GHOSTEX_MACOS_ARCH"; then

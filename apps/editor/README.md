@@ -1,42 +1,47 @@
 # Ghostex Editor
 
-Standalone Monaco editor assets for `GhostexEditor.app`.
+Standalone prompt editor for `GhostexEditor.app` on macOS and the Rust/wry
+host on Linux and Windows. It mounts the same Lexical input as Session Chat,
+including its editing commands, find/replace, reference links, and undo/redo.
+The host adds save/cancel, cursor restoration, image paste, and image previews.
 
-Phase 1 builds a self-contained web page with no React or Ghostex app imports.
-The page boots with an empty Monaco model, posts `ready`, and is configured by
-the host later through a `ghostex-editor-host-message` CustomEvent with
-`type: "configure"`. The page talks back through the `ghostexEditorHost`
-WKWebView message handler, or through `window.ipc.postMessage` for wry hosts.
+## Build
 
-Build the web bundle from the repo root:
+From the repository root:
 
-```bash
-bun editor/scripts/build-editor-web.mjs
+```sh
+bun apps/editor/scripts/build-editor-web.mjs
+bash apps/editor/scripts/build-editor-app.sh       # macOS bundle
+bash apps/editor/scripts/build-editor-desktop.sh   # Rust/wry host
 ```
 
-The output is written to `editor/dist/web/`, with Monaco's AMD runtime staged at
-`editor/dist/web/monaco/vs`.
+The web build produces `apps/editor/dist/web/index.html`, a self-contained
+production bundle with inline JavaScript and styles. There is no Monaco
+runtime or worker payload. The macOS bundle is written to
+`apps/editor/dist/GhostexEditor.app`; the Rust host and page are staged under
+`apps/editor/dist/desktop/`.
 
-## Linux and Windows desktop host
+## Host contract
 
-`editor/desktop` builds the Rust `ghostex-editor` daemon host. It uses `wry`
-to render the same web bundle through the OS webview backend: WebKitGTK on
-Linux, WebView2 on Windows, and WKWebView on macOS for development checks.
+The page boots an empty composer and posts `ready`. The host dispatches a
+`ghostex-editor-host-message` custom event with a `configure` detail containing
+`initialText` and an optional `cursorOffset`. The page then posts `configured`.
+Each configuration starts a fresh editing session and undo history.
 
-Build and stage the current host platform from the repo root:
+Messages go through the `ghostexEditorHost` WebKit message handler on macOS,
+or through `window.ipc.postMessage` on wry. Save/cancel, draft/cursor updates,
+and image request/reply messages keep the existing daemon protocol.
 
-```bash
-bash editor/scripts/build-editor-desktop.sh
-```
+The daemon accepts `--daemon`, `--socket <path>`, and `GHOSTEX_EDITOR_SOCKET`.
+`GHOSTEX_EDITOR_WEB_ROOT` can point to another built page during development.
 
-The script rebuilds `editor/dist/web`, compiles
-`editor/desktop/Cargo.toml --release`, and stages the binary plus
-`editor/dist/desktop/web/`. Run the daemon as:
+## Memory lifetime
 
-```bash
-editor/dist/desktop/ghostex-editor --daemon
-```
+The macOS daemon retains open editors and one warm editor. Closed controllers
+are released after native cleanup; they must never be accumulated in a retired
+window list. The controller owns the NSWindow through ARC and disables
+AppKit's release-on-close to avoid a second release.
 
-The daemon also accepts `--socket <path>` and honors
-`GHOSTEX_EDITOR_SOCKET`; `GHOSTEX_EDITOR_WEB_ROOT` can point at an alternate
-web bundle during development.
+Raster previews are decoded serially at a maximum of 1600 pixels. Removed
+attachments release their page cache entries, and closing a preview clears
+its image source. Originals on disk remain untouched.

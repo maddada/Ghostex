@@ -52,10 +52,7 @@ if [[ ! -f "$WEB_DIST/index.html" ]]; then
 	echo "Editor web build did not produce $WEB_DIST/index.html" >&2
 	exit 1
 fi
-if [[ ! -f "$WEB_DIST/monaco/vs/loader.js" ]]; then
-	echo "Editor web build did not produce $WEB_DIST/monaco/vs/loader.js" >&2
-	exit 1
-fi
+
 
 # Rebuild the bundle from scratch: a stale payload left behind by an earlier
 # build would be copied into the app bundle and break its code signature.
