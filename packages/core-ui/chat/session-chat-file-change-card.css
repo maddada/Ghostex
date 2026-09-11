@@ -1,5 +1,5 @@
-/* CDXC:SessionChat 2026-09-10 DECISION:
- * User: use the Activity rail design, with green added lines and red removed lines, on a #262628 background, replacing #0b0b0b.
+/* CDXC:SessionChat 2026-09-11 DECISION:
+ * User: use the Activity rail design, with green added lines and red removed lines, on a #141414 background, replacing #262628.
  * User: use #747475 for the circle center and rail when not hovered, replacing the too-dark #0b0b0b.
  * User: match the spacing above the component below it when the following content is not another file-change component.
  * User: hover backgrounds must have padding around the hovered item; inline path links use an underline instead, and disclosure buttons have padded hover areas.
@@ -33,7 +33,7 @@
   --file-change-rail: #747475;
   --file-change-added: #94caaa;
   --file-change-removed: #e5a0a4;
-  background: #262628;
+  background: #141414;
 }
 .ghostex-chat-file-change-card {
   display: grid;
