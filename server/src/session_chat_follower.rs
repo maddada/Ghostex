@@ -209,7 +209,7 @@ pub(crate) fn follower_drain_once(
         state.incremental.reset();
     }
 
-    let outcome = if want_snapshot || content_replaced {
+    let mut outcome = if want_snapshot || content_replaced {
         match follower_snapshot_drain(
             file_path,
             limit,
@@ -323,6 +323,15 @@ pub(crate) fn follower_drain_once(
         FollowerDrainOutcome::Idle
     };
 
+    if let FollowerDrainOutcome::Snapshot { tail, .. } = &mut outcome {
+        if crate::session_chat_fork_stitch::stitch_session_chat_snapshot(
+            agent, file_path, limit, tail,
+        )
+        .is_err()
+        {
+            return FollowerDrainOutcome::Missing;
+        }
+    }
     state.watched_boundary =
         boundary_fingerprint(file_path, state.incremental.offset).unwrap_or_default();
     match read_transcript_file_version(file_path) {
@@ -617,10 +626,6 @@ fn emit_snapshot_frame(
     epoch: i64,
     frame_type: &str,
     tail: &SessionChatTailFileResult,
-    // CDXC:SessionFork 2026-08-28: the tailed rollout was opened by
-    // `codex fork`, so older rows live in an ancestor file the read path can
-    // stitch in. Keeps the client's scroll-up gate open past this file's top.
-    has_fork_ancestor: bool,
     prompt: Option<&SessionChatInteractivePrompt>,
     working: bool,
     selected_options: Option<&crate::session_chat_options::SessionChatDetectedOptions>,
@@ -635,10 +640,7 @@ fn emit_snapshot_frame(
                 serde_json::to_value(&tail.messages).unwrap_or(Value::Array(Vec::new())),
             );
             insert_optional_lifecycle(&mut frame, tail.lifecycle.as_ref());
-            frame.insert(
-                "hasMore".to_string(),
-                json!(tail.has_more || has_fork_ancestor),
-            );
+            frame.insert("hasMore".to_string(), json!(tail.has_more));
             frame.insert("hasMoreExact".to_string(), json!(true));
             frame.insert("beforeOffset".to_string(), json!(tail.before_offset));
             let status = if tail.messages.is_empty() {
@@ -997,16 +999,6 @@ pub async fn run_session_chat_follower(
     // session stopped, the daemon went away) must not put the composer back
     // under a loading skeleton.
     let mut published_screen_probed = false;
-    /*
-    CDXC:SessionFork 2026-08-28:
-    A `codex fork` rollout carries no pre-fork rows, so a snapshot that included
-    the whole file would report `hasMore: false` and close the client's scroll-up
-    gate on history that /api/readSessionChat can still stitch in. The flag says
-    "scroll-back continues past the top of this file"; it is resolved once per
-    transcript path (the cached lineage lookup below) and never per frame.
-    */
-    let mut fork_ancestor_path: Option<PathBuf> = None;
-    let mut has_fork_ancestor = false;
     let mut reconcile_ticks: u64 = 0;
     let mut startup_option_reconcile_ticks: u64 = 0;
     // CDXC:AgentScreenDetection 2026-09-02: reconciles left in the
@@ -1057,8 +1049,6 @@ pub async fn run_session_chat_follower(
                 resolved = None;
                 file_state = FollowerFileState::new();
                 transcript_prompt = SessionChatTranscriptPromptState::default();
-                fork_ancestor_path = None;
-                has_fork_ancestor = false;
                 emitted_starting = false;
                 published_state_valid = false;
                 if identity.agent_session_path.is_none() {
@@ -1069,7 +1059,6 @@ pub async fn run_session_chat_follower(
                         epoch,
                         "sessionChatSnapshot",
                         &SessionChatTailFileResult::default(),
-                        false,
                         None,
                         false,
                         published_options.as_ref(),
@@ -1315,19 +1304,6 @@ pub async fn run_session_chat_follower(
                     );
                 let prompt = resolve_session_chat_prompt(live.prompt.clone(), &transcript_prompt)
                     .or_else(|| snapshot_detection.prompt.clone());
-                let lineage_path = resolved.clone().expect("resolved transcript path");
-                if fork_ancestor_path.as_ref() != Some(&lineage_path) {
-                    let probe_path = lineage_path.clone();
-                    has_fork_ancestor = tokio::task::spawn_blocking(move || {
-                        crate::session_chat_fork_stitch::codex_transcript_has_fork_ancestor(
-                            transcript_agent,
-                            &probe_path,
-                        )
-                    })
-                    .await
-                    .unwrap_or(false);
-                    fork_ancestor_path = Some(lineage_path);
-                }
                 emit_snapshot_frame(
                     &emit,
                     &config,
@@ -1335,7 +1311,6 @@ pub async fn run_session_chat_follower(
                     epoch,
                     frame_type,
                     &tail,
-                    has_fork_ancestor,
                     prompt.as_ref(),
                     live.working,
                     snapshot_detection.options.as_ref(),

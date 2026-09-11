@@ -15,7 +15,13 @@ use crate::session_chat_successor::{
     codex_rollout_session_id, collect_all_codex_day_directories, read_codex_session_meta,
     SUCCESSOR_CHAIN_LIMIT,
 };
-use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
+use crate::session_chat_tail::{
+    read_session_chat_tail_page, SessionChatTailFileResult, SessionChatTailPage,
+};
+
+#[cfg(test)]
+#[path = "session_chat_fork_stitch_tests.rs"]
+mod tests;
 
 /*
 CDXC:SessionFork 2026-08-28:
@@ -406,6 +412,39 @@ pub fn codex_transcript_has_fork_ancestor(
     file_path: &Path,
 ) -> bool {
     codex_fork_lineage(agent, file_path).is_some_and(|lineage| lineage.forked_from_id.is_some())
+}
+
+/// CDXC:SessionFork 2026-09-11 WHY:
+/// An authoritative stream snapshot replaces the client's seed read, so publishing only an empty child rollout erased the inherited chat until the next prompt triggered a read.
+/// Use the same bounded history and pagination cursor as reads, while leaving the live follower's child-file offset and lifecycle untouched.
+pub(crate) fn stitch_session_chat_snapshot(
+    agent: SessionChatTranscriptAgent,
+    file_path: &Path,
+    limit: usize,
+    tail: &mut SessionChatTailFileResult,
+) -> std::io::Result<()> {
+    if tail.has_more || !codex_transcript_has_fork_ancestor(agent, file_path) {
+        return Ok(());
+    }
+    let stitched =
+        read_session_chat_tail_page_stitched(agent, file_path, limit, Some(tail.consumed_to))?;
+    match stitched.page {
+        SessionChatTailPage::Page {
+            messages,
+            has_more,
+            before_offset,
+            ..
+        } => {
+            tail.messages = messages;
+            tail.has_more = has_more;
+            tail.before_offset = before_offset;
+            Ok(())
+        }
+        SessionChatTailPage::NotFound => Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Fork transcript disappeared while reading its snapshot.",
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------
