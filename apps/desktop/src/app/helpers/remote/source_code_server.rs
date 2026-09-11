@@ -257,6 +257,7 @@ pub(crate) fn run_remote_manage_files_bridge_request_for_project_snapshot(
             action.as_str(),
             "list"
                 | "read"
+                | "gitBaseline"
                 | "stat"
                 | "save"
                 | "rename"
@@ -292,9 +293,14 @@ pub(crate) fn run_remote_manage_files_bridge_request_for_project_snapshot(
             "additionalDocsFolders".to_string(),
             serde_json::Value::String(additional_docs_folders_text.to_string()),
         );
-        for key in ["path", "newPath", "content"] {
+        for key in ["path", "newPath", "content", "revision"] {
             if let Some(value) = manage_request_string(&request, key) {
                 params.insert(key.to_string(), serde_json::Value::String(value));
+            }
+        }
+        for key in ["directoryOnly", "deferGitBaseline", "force"] {
+            if let Some(value) = request.get(key).and_then(serde_json::Value::as_bool) {
+                params.insert(key.to_string(), serde_json::Value::Bool(value));
             }
         }
         let response = gpui_remote_gxserver_rpc_result(

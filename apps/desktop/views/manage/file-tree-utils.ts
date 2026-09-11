@@ -62,7 +62,7 @@ export function createDuplicateManageFilePath(entries: ManageFileEntry[], path: 
 export function orderManageEntriesForTree(entries: readonly ManageFileEntry[]): ManageFileEntry[] {
   const childrenByParentPath = new Map<string, ManageFileEntry[]>();
   for (const entry of entries) {
-    const parentPath = parentManagePath(entry.path);
+    const parentPath = entry.depth === 0 ? '' : parentManagePath(entry.path);
     const siblings = childrenByParentPath.get(parentPath);
     if (siblings) {
       siblings.push(entry);
@@ -171,10 +171,10 @@ export function createInitialCollapsedManageDirectoryPaths(entries: ManageFileEn
 }
 
 export function hasCollapsedManageAncestor(path: string, collapsedDirectoryPaths: Set<string>): boolean {
-  for (const collapsedPath of collapsedDirectoryPaths) {
-    if (isManageDescendantPath(path, collapsedPath)) {
-      return true;
-    }
+  let parent = parentManagePath(path);
+  while (parent) {
+    if (collapsedDirectoryPaths.has(parent)) return true;
+    parent = parentManagePath(parent);
   }
   return false;
 }

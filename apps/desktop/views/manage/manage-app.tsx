@@ -1,3 +1,5 @@
+import { useManageFileIndex } from './file-index';
+import { ManageFileTree, type ManageFileTreeHandle } from './file-tree';
 import { AppTooltip } from '@/packages/core-ui/app-tooltip';
 import {
   type CSSProperties,
@@ -56,9 +58,7 @@ import {
   ManageWebKitWindow,
 } from './types';
 import {
-  ManageEmptyState,
   ManageFileContextMenu,
-  ManageFileRow,
   ManageRenameDialog,
   ManageSidebarActions,
 } from './file-tree-ui';
@@ -72,7 +72,6 @@ import {
   canRenameManageEntry,
   createDuplicateManageFilePath,
   createInitialArtifactContent,
-  createInitialCollapsedManageDirectoryPaths,
   createUniqueArtifactPath,
   createUniqueFolderPath,
   dropDirectoryPathForManageEntry,
@@ -391,7 +390,7 @@ export function ManageApp() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const projectId = params.get('projectId') ?? '';
   const projectEditorId = params.get('projectEditorId') ?? projectId;
-  const [entries, setEntries] = useState<ManageFileEntry[]>([]);
+  const { entries, setEntries, indexing, initialized: indexInitialized, error: indexError, loaded: loadedDirectories, failures: directoryFailures, refreshIndex, prioritizeDirectory, completeEntries } = useManageFileIndex(projectId, projectEditorId, requestManageFiles);
   const [query, setQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedPath, setSelectedPath] = useState<string>();
@@ -399,7 +398,7 @@ export function ManageApp() {
   const [preview, setPreview] = useState<ManageFilePreview>();
   const [draftContent, setDraftContent] = useState('');
   const [lastSavedContent, setLastSavedContent] = useState('');
-  const [listState, setListState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const listState = indexing ? 'loading' : indexError ? 'error' : 'ready';
   const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [hasExternalChanges, setHasExternalChanges] = useState(false);
@@ -431,13 +430,19 @@ export function ManageApp() {
   const [revealOpenFileRequested, setRevealOpenFileRequested] = useState(false);
   const annotationsLoadedRef = useRef(false);
   const annotationsSaveTimerRef = useRef<number | undefined>(undefined);
-  const hasInitializedDirectoryCollapseRef = useRef(false);
+  const discoveredDirectoriesRef = useRef(new Set<string>());
+  const expandAllDirectoriesRef = useRef(false);
+  const requestedExpandedDirectoriesRef = useRef(new Set<string>());
+  const fileReadSequenceRef = useRef(0);
+  const selectedWasListedRef = useRef<string | undefined>(undefined);
+  const fileTreeRef = useRef<ManageFileTreeHandle>(null);
   const lastPersistedAnnotationsRef = useRef('');
   const isEditablePreview = preview?.kind === 'text';
   const isDirty = isEditablePreview && draftContent !== lastSavedContent;
 
   const readFile = useCallback(
     async (path: string) => {
+      const sequence = ++fileReadSequenceRef.current;
       setHasExternalChanges(false);
       setSelectedPath(path);
       selectedPathRef.current = path;
@@ -450,10 +455,12 @@ export function ManageApp() {
       try {
         const response = await requestManageFiles({
           action: 'read',
+          deferGitBaseline: true,
           path,
           projectEditorId,
           projectId,
         });
+        if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
         if (response.error) {
           throw new Error(response.error);
         }
@@ -476,7 +483,17 @@ export function ManageApp() {
           );
         }
         setPreviewState('ready');
+        if (response.deferredGitBaseline && openedFile?.kind === 'text' && isMarkdownPath(path)) {
+          void requestManageFiles({ action: 'gitBaseline', path, projectEditorId, projectId }).then((baselineResponse) => {
+            if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
+            setPreview((current) => current?.path === path ? { ...current, gitBaseline: baselineResponse.gitBaseline ?? { available: false, tracked: false, reason: 'error' } } : current);
+          }).catch(() => {
+            if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
+            setPreview((current) => current?.path === path ? { ...current, gitBaseline: { available: false, tracked: false, reason: 'error' } } : current);
+          });
+        }
       } catch (readError) {
+        if (sequence !== fileReadSequenceRef.current || selectedPathRef.current !== path) return;
         setPreviewState('error');
         setError(readError instanceof Error ? readError.message : 'Could not open file.');
       }
@@ -493,6 +510,7 @@ export function ManageApp() {
   useEffect(() => {
     registerManageDocsOpenFileHandler((path) => {
       const ancestors = manageAncestorDirectoryPaths(path);
+      for (const ancestor of ancestors) requestedExpandedDirectoriesRef.current.add(ancestor);
       if (ancestors.length > 0) {
         setCollapsedDirectoryPaths((current) => {
           const next = new Set(current);
@@ -507,50 +525,40 @@ export function ManageApp() {
     return () => registerManageDocsOpenFileHandler(undefined);
   }, [readFile]);
 
-  const refreshFiles = useCallback(async () => {
-    setListState('loading');
-    setError(undefined);
-    try {
-      const response = await requestManageFiles({
-        action: 'list',
-        projectEditorId,
-        projectId,
-      });
-      if (response.error) {
-        throw new Error(response.error);
+  const refreshFiles = useCallback(() => refreshIndex(true), [refreshIndex]);
+
+  useLayoutEffect(() => {
+    const additions = entries.filter((entry) => entry.kind === 'directory' && !discoveredDirectoriesRef.current.has(entry.path));
+    if (!additions.length) return;
+    for (const entry of additions) discoveredDirectoriesRef.current.add(entry.path);
+    setCollapsedDirectoryPaths((current) => {
+      const next = new Set(current);
+      for (const entry of additions) {
+        if (!expandAllDirectoriesRef.current && !requestedExpandedDirectoriesRef.current.has(entry.path)) next.add(entry.path);
       }
-      const nextEntries = response.entries ?? [];
-      setEntries(nextEntries);
-      if (!hasInitializedDirectoryCollapseRef.current) {
-        /*
-         * CDXC:Docs 2026-06-30-12:40:
-         * Opening Docs should start with every expandable folder and subfolder collapsed in the file-list sidebar. Initialize this once from the first successful listing so later refreshes preserve the user's manual expand/collapse choices.
-         */
-        hasInitializedDirectoryCollapseRef.current = true;
-        setCollapsedDirectoryPaths(createInitialCollapsedManageDirectoryPaths(nextEntries));
-      }
-      setListState('ready');
-      const currentSelectedPath = selectedPathRef.current;
-      const selectedStillExists =
-        currentSelectedPath && nextEntries.some((entry) => entry.kind === 'file' && entry.path === currentSelectedPath);
-      if (!selectedStillExists) {
-        const firstFile = nextEntries.find((entry) => entry.kind === 'file');
-        if (firstFile) {
-          void readFile(firstFile.path);
-        } else {
-          selectedPathRef.current = undefined;
-          setSelectedPath(undefined);
-          setPreview(undefined);
-          setDraftContent('');
-          setLastSavedContent('');
-          setPreviewState('idle');
-        }
-      }
-    } catch (listError) {
-      setListState('error');
-      setError(listError instanceof Error ? listError.message : 'Could not load project files.');
+      return next;
+    });
+  }, [entries]);
+
+  useEffect(() => {
+    const path = selectedPathRef.current;
+    if (path && entries.some((entry) => entry.kind === 'file' && entry.path === path)) {
+      selectedWasListedRef.current = path;
+      return;
     }
-  }, [projectEditorId, projectId, readFile]);
+    if (path && (selectedWasListedRef.current !== path || indexing || !indexInitialized || indexError || fileOperation || isDirty || saveState === 'saving')) return;
+    const firstFile = entries.find((entry) => entry.kind === 'file');
+    if (firstFile) void readFile(firstFile.path);
+    else if (path) {
+      selectedPathRef.current = undefined;
+      fileReadSequenceRef.current++;
+      setSelectedPath(undefined);
+      setPreview(undefined);
+      setDraftContent('');
+      setLastSavedContent('');
+      setPreviewState('idle');
+    }
+  }, [entries, fileOperation, indexError, indexInitialized, indexing, isDirty, readFile, saveState]);
 
   const openDocsFoldersSettings = useCallback(async () => {
     setError(undefined);
@@ -567,10 +575,6 @@ export function ManageApp() {
       setError(settingsError instanceof Error ? settingsError.message : 'Could not open Docs settings.');
     }
   }, [projectEditorId, projectId]);
-
-  useEffect(() => {
-    void refreshFiles();
-  }, [refreshFiles]);
 
   useEffect(() => {
     /*
@@ -669,11 +673,16 @@ export function ManageApp() {
      * CDXC:Docs 2026-06-30-19:47:
      * Native watches the active project's Docs scan roots for file additions, removals, and renames. Treat the event as a path-free invalidation signal and reuse the normal list bridge so the sidebar refreshes without requiring an app refresh.
      */
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const handleFilesChanged = () => {
-      void refreshFiles();
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => { void refreshFiles(); }, 120);
     };
     window.addEventListener(MANAGE_FILES_CHANGED_EVENT, handleFilesChanged);
-    return () => window.removeEventListener(MANAGE_FILES_CHANGED_EVENT, handleFilesChanged);
+    return () => {
+      clearTimeout(refreshTimer);
+      window.removeEventListener(MANAGE_FILES_CHANGED_EVENT, handleFilesChanged);
+    };
   }, [refreshFiles]);
 
   useEffect(() => {
@@ -1142,13 +1151,14 @@ export function ManageApp() {
       if (creatingArtifactKind || isCreatingFolder) {
         return;
       }
-      const path = createUniqueArtifactPath(entries, kind, directoryPath);
       const content = createInitialArtifactContent(kind);
       setCreatingArtifactKind(kind);
       setFileOperation({ action: 'createFile', path: directoryPath });
       setSaveState('saving');
       setError(undefined);
       try {
+        const path = createUniqueArtifactPath(await completeEntries(), kind, directoryPath);
+        requestedExpandedDirectoriesRef.current.add(directoryPath);
         const response = await requestManageFiles({
           action: 'save',
           content,
@@ -1195,7 +1205,7 @@ export function ManageApp() {
         );
       }
     },
-    [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles]
+    [completeEntries, creatingArtifactKind, isCreatingFolder, projectEditorId, projectId, refreshFiles]
   );
 
   const createFolder = useCallback(
@@ -1203,11 +1213,13 @@ export function ManageApp() {
       if (creatingArtifactKind || isCreatingFolder) {
         return;
       }
-      const path = createUniqueFolderPath(entries, directoryPath);
       setIsCreatingFolder(true);
       setFileOperation({ action: 'createFolder', path: directoryPath });
       setError(undefined);
       try {
+        const path = createUniqueFolderPath(await completeEntries(), directoryPath);
+        requestedExpandedDirectoriesRef.current.add(directoryPath);
+        requestedExpandedDirectoriesRef.current.add(path);
         const response = await requestManageFiles({
           action: 'createFolder',
           path,
@@ -1234,7 +1246,7 @@ export function ManageApp() {
         );
       }
     },
-    [creatingArtifactKind, entries, isCreatingFolder, projectEditorId, projectId, refreshFiles]
+    [completeEntries, creatingArtifactKind, isCreatingFolder, projectEditorId, projectId, refreshFiles]
   );
 
   const clearPendingContentAutosave = useCallback(() => {
@@ -1318,6 +1330,8 @@ export function ManageApp() {
           throw new Error('Docs did not return renamed file metadata.');
         }
         setAnnotationsByPath((current) => remapManageAnnotationPathsForMove(current, path, nextPath));
+        discoveredDirectoriesRef.current = remapManagePathSetForMove(discoveredDirectoriesRef.current, path, nextPath);
+        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(requestedExpandedDirectoriesRef.current, path, nextPath);
         setCollapsedDirectoryPaths((current) => remapManagePathSetForMove(current, path, nextPath));
         if (currentEntry.kind === 'file' && renamedFile && selectedPathRef.current === path) {
           selectedPathRef.current = renamedFile.path;
@@ -1390,6 +1404,8 @@ export function ManageApp() {
           throw new Error(response.error);
         }
         setAnnotationsByPath((current) => removeManageAnnotationPathsForDeletedEntry(current, path));
+        discoveredDirectoriesRef.current = removeManagePathSetForDeletedEntry(discoveredDirectoriesRef.current, path);
+        requestedExpandedDirectoriesRef.current = removeManagePathSetForDeletedEntry(requestedExpandedDirectoriesRef.current, path);
         setCollapsedDirectoryPaths((current) => removeManagePathSetForDeletedEntry(current, path));
         setFileContextMenu(undefined);
         if (deletesSelectedPath) {
@@ -1416,10 +1432,10 @@ export function ManageApp() {
       if (entry.kind !== 'file' || fileOperation) {
         return;
       }
-      const nextPath = createDuplicateManageFilePath(entries, entry.path);
       setFileOperation({ action: 'duplicate', path: entry.path });
       setError(undefined);
       try {
+        const nextPath = createDuplicateManageFilePath(await completeEntries(), entry.path);
         if (selectedPathRef.current === entry.path && isDirty) {
           clearPendingContentAutosave();
           await saveContentSnapshot({
@@ -1466,9 +1482,9 @@ export function ManageApp() {
       }
     },
     [
+      completeEntries,
       clearPendingContentAutosave,
       draftContent,
-      entries,
       fileOperation,
       isDirty,
       projectEditorId,
@@ -1555,6 +1571,8 @@ export function ManageApp() {
           throw new Error(response.error);
         }
         setAnnotationsByPath((current) => remapManageAnnotationPathsForMove(current, entry.path, nextPath));
+        discoveredDirectoriesRef.current = remapManagePathSetForMove(discoveredDirectoriesRef.current, entry.path, nextPath);
+        requestedExpandedDirectoriesRef.current = remapManagePathSetForMove(requestedExpandedDirectoriesRef.current, entry.path, nextPath);
         setCollapsedDirectoryPaths((current) => remapManagePathSetForMove(current, entry.path, nextPath));
         if (movedSelectedPath) {
           selectedPathRef.current = movedSelectedPath;
@@ -1587,8 +1605,10 @@ export function ManageApp() {
       const next = new Set(current);
       if (next.has(path)) {
         next.delete(path);
+        requestedExpandedDirectoriesRef.current.add(path);
       } else {
         next.add(path);
+        requestedExpandedDirectoriesRef.current.delete(path);
       }
       return next;
     });
@@ -1736,9 +1756,10 @@ export function ManageApp() {
       if (parentPath) {
         paths.add(parentPath);
       }
+      if (entry.kind === 'directory' && (!loadedDirectories.has(entry.path) || directoryFailures.has(entry.path))) paths.add(entry.path);
     }
     return paths;
-  }, [entries]);
+  }, [directoryFailures, entries, loadedDirectories]);
 
   const treeOrderedEntries = useMemo(() => orderManageEntriesForTree(entries), [entries]);
   const expandableDirectoryPaths = useMemo(() => {
@@ -1763,9 +1784,12 @@ export function ManageApp() {
     setCollapsedDirectoryPaths((current) => {
       for (const path of expandableDirectoryPaths) {
         if (!current.has(path)) {
+          expandAllDirectoriesRef.current = false;
+          requestedExpandedDirectoriesRef.current.clear();
           return new Set(expandableDirectoryPaths);
         }
       }
+      expandAllDirectoriesRef.current = true;
       return new Set();
     });
   }, [expandableDirectoryPaths]);
@@ -1778,6 +1802,12 @@ export function ManageApp() {
     return filterManageEntriesForSearch(treeOrderedEntries, normalizedQuery);
   }, [collapsedDirectoryPaths, query, treeOrderedEntries]);
   const isFileSearchActive = query.trim().length > 0;
+  const selectTreeEntry = useCallback((entry: ManageFileEntry) => {
+    if (entry.kind === 'file') { void readFile(entry.path); return; }
+    prioritizeDirectory(entry.path);
+    toggleDirectory(entry.path);
+  }, [prioritizeDirectory, readFile, toggleDirectory]);
+
 
   /**
    * CDXC:Docs 2026-09-07 DECISION:
@@ -1787,6 +1817,7 @@ export function ManageApp() {
   const revealOpenFile = useCallback(() => {
     if (!selectedPath) return;
     setQuery('');
+    for (const path of manageAncestorDirectoryPaths(selectedPath)) requestedExpandedDirectoriesRef.current.add(path);
     setCollapsedDirectoryPaths((current) => {
       const next = new Set(current);
       for (const path of manageAncestorDirectoryPaths(selectedPath)) next.delete(path);
@@ -1797,11 +1828,10 @@ export function ManageApp() {
 
   useLayoutEffect(() => {
     if (!revealOpenFileRequested) return;
-    const row = sidebarRef.current?.querySelector<HTMLButtonElement>('.manage-file-row[aria-selected="true"]');
-    row?.scrollIntoView({ block: 'center', inline: 'nearest' });
-    row?.focus({ preventScroll: true });
+    if (selectedPath && !visibleEntries.some((entry) => entry.path === selectedPath)) return;
+    if (selectedPath) fileTreeRef.current?.reveal(selectedPath);
     setRevealOpenFileRequested(false);
-  }, [revealOpenFileRequested, visibleEntries]);
+  }, [revealOpenFileRequested, selectedPath, visibleEntries]);
 
   const contextMenuEntry = fileContextMenu ? entries.find((entry) => entry.path === fileContextMenu.path) : undefined;
   const contextMenuOperation =
@@ -1919,47 +1949,28 @@ export function ManageApp() {
               </ManageTooltipButton>
             ) : null}
           </div>
-          <div className='manage-file-list' data-root-drop-target={String(dropTarget?.kind === 'root')} role='tree'>
-            {listState === 'loading' && entries.length === 0 ? (
-              <ManageEmptyState icon={<IconRefresh aria-hidden='true' size={18} />} text='Loading files' />
-            ) : null}
-            {listState !== 'loading' && visibleEntries.length === 0 ? (
-              <ManageEmptyState icon={<IconSearch aria-hidden='true' size={18} />} text='No files found' />
-            ) : null}
-            {visibleEntries.map((entry) => (
-              <ManageFileRow
-                annotationCount={annotationCountsByPath.get(entry.path) ?? 0}
-                isContextMenuOpen={fileContextMenu?.path === entry.path}
-                hasChildren={directoryPathsWithChildren.has(entry.path)}
-                entry={entry}
-                hasActiveFileDescendant={
-                  entry.kind === 'directory' &&
-                  selectedPath !== undefined &&
-                  isManageDescendantPath(selectedPath, entry.path)
-                }
-                isDragging={dragState?.path === entry.path}
-                isDropTarget={dropTarget?.kind === 'entry' && dropTarget.path === entry.path}
-                isExpanded={isFileSearchActive || !collapsedDirectoryPaths.has(entry.path)}
-                isSelected={entry.path === selectedPath}
-                key={entry.path}
-                canOpenContextMenu={canOpenManageEntryContextMenu(entry)}
-                onEntryDragOver={updateEntryDropTarget}
-                onEntryDrop={dropOnEntry}
-                onDragEnd={clearDragState}
-                onDragStart={startEntryDrag}
-                onOpenContextMenu={openFileContextMenu}
-                onSelect={() => {
-                  if (entry.kind === 'file') {
-                    void readFile(entry.path);
-                    return;
-                  }
-                  if (entry.kind === 'directory' && directoryPathsWithChildren.has(entry.path)) {
-                    toggleDirectory(entry.path);
-                  }
-                }}
-              />
-            ))}
-          </div>
+          <ManageFileTree
+            ref={fileTreeRef}
+            entries={visibleEntries}
+            selectedPath={selectedPath}
+            annotationCountsByPath={annotationCountsByPath}
+            directoryPathsWithChildren={directoryPathsWithChildren}
+            collapsedDirectoryPaths={collapsedDirectoryPaths}
+            loadedDirectories={loadedDirectories}
+            directoryFailures={directoryFailures}
+            indexing={indexing}
+            indexError={indexError}
+            isFileSearchActive={isFileSearchActive}
+            fileContextMenuPath={fileContextMenu?.path}
+            dragPath={dragState?.path}
+            dropTarget={dropTarget}
+            onEntryDragOver={updateEntryDropTarget}
+            onEntryDrop={dropOnEntry}
+            onDragEnd={clearDragState}
+            onDragStart={startEntryDrag}
+            onOpenContextMenu={openFileContextMenu}
+            onSelect={selectTreeEntry}
+          />
         </aside>
       ) : (
         <button
@@ -1998,7 +2009,7 @@ export function ManageApp() {
         <ManagePreview
           annotations={annotationsForSelectedPath}
           draftContent={draftContent}
-          error={error}
+          error={error ?? indexError}
           isDirty={isDirty}
           hasExternalChanges={hasExternalChanges}
           onAnnotationsChange={updateAnnotationsForSelectedFile}

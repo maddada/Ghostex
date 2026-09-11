@@ -1,3 +1,5 @@
+mod listing;
+
 use std::{
     collections::HashSet,
     fs,
@@ -323,7 +325,24 @@ fn run_action(
         Value::Object(response)
     };
 
+    let _mutation = matches!(
+        action.as_str(),
+        "save" | "rename" | "delete" | "duplicate" | "createFolder" | "move"
+    )
+    .then(ghostex_docs::directory::MutationGuard::new);
+
+    if action == "list" && params.get("directoryOnly").and_then(Value::as_bool) == Some(true) {
+        return listing::list_directory(context, params);
+    }
+    if action == "read" && params.get("deferGitBaseline").and_then(Value::as_bool) == Some(true) {
+        return Ok(
+            json!({"action": action, "requestId": request_id, "deferredGitBaseline": true, "file": project_file_preview_with_baseline(context, string_param(params, "path").as_deref(), false)?}),
+        );
+    }
     match action.as_str() {
+        "gitBaseline" => Ok(
+            json!({"action": action, "requestId": request_id, "gitBaseline": listing::file_git_baseline(context, string_param(params, "path").as_deref())?}),
+        ),
         "list" => Ok(response(None, Some(project_file_entries(context)?))),
         "read" => Ok(response(
             Some(project_file_preview(
@@ -786,14 +805,18 @@ always been, so setting a Docs directory can never take the repo's README.md,
 CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
 */
 fn project_file_entries(context: DocsContext<'_>) -> Result<Vec<Value>, String> {
-    let mut entries = project_root_file_entries(context.roots.project.as_path(), context)?;
+    let mut entries = project_root_file_entries(context.roots.project.as_path(), context, true)?;
     if let Some(mount) = context.roots.extra.as_ref() {
         append_extra_root_entries(&mut entries, mount);
     }
     Ok(entries)
 }
 
-fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Vec<Value>, String> {
+fn project_root_file_entries(
+    root: &Path,
+    context: DocsContext<'_>,
+    recursive: bool,
+) -> Result<Vec<Value>, String> {
     let mut entries = Vec::new();
     let mut scanned_directory_entries = 0;
     let roots = scan_roots(root, context.additional_docs_folders);
@@ -815,6 +838,9 @@ fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Ve
         }));
     }
     append_root_artifacts(&mut entries, root, &mut scanned_directory_entries)?;
+    if !recursive {
+        return Ok(entries);
+    }
     for relative_path in &roots {
         let Some(directory) = project_directory(root, relative_path) else {
             continue;
@@ -826,6 +852,7 @@ fn project_root_file_entries(root: &Path, context: DocsContext<'_>) -> Result<Ve
             relative_path,
             1,
             &mut scanned_directory_entries,
+            true,
         )?;
     }
     Ok(entries)
@@ -863,6 +890,7 @@ fn append_extra_root_entries(entries: &mut Vec<Value>, mount: &DocsExtraMount) {
         EXTRA_ROOT_MOUNT_SEGMENT,
         1,
         &mut scanned_directory_entries,
+        true,
     ) {
         entries.push(unavailable_extra_root_entry(&mount.name, &error));
         return;
@@ -928,6 +956,7 @@ fn append_docs_tree_entries(
     relative_directory: &str,
     depth: usize,
     scanned_directory_entries: &mut usize,
+    recursive: bool,
 ) -> Result<(), String> {
     if depth > DOCS_TREE_MAX_DEPTH {
         return Err(docs_tree_depth_cap_error());
@@ -978,6 +1007,11 @@ fn append_docs_tree_entries(
             &relative_path,
             &metadata,
         ));
+        if is_directory && child.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            if let Some(entry) = entries.last_mut().and_then(Value::as_object_mut) {
+                entry.insert("childrenLoaded".to_string(), Value::Bool(true));
+            }
+        }
         if is_directory
             && !child
                 .file_type()
@@ -985,6 +1019,9 @@ fn append_docs_tree_entries(
         {
             directories.push((child.path(), relative_path));
         }
+    }
+    if !recursive {
+        return Ok(());
     }
     for (directory, relative_path) in directories {
         append_docs_tree_entries(
@@ -994,6 +1031,7 @@ fn append_docs_tree_entries(
             &relative_path,
             depth + 1,
             scanned_directory_entries,
+            true,
         )?;
     }
     Ok(())
@@ -1033,20 +1071,8 @@ fn bounded_directory_entries(
     scanned_directory_entries: &mut usize,
     limit: usize,
     limit_error: fn() -> String,
-) -> Result<Vec<fs::DirEntry>, String> {
-    let mut children = Vec::new();
-    let directory =
-        fs::read_dir(directory).map_err(|_| "Could not list project files.".to_string())?;
-    for child in directory {
-        if *scanned_directory_entries >= limit {
-            return Err(limit_error());
-        }
-        *scanned_directory_entries += 1;
-        if let Ok(child) = child {
-            children.push(child);
-        }
-    }
-    Ok(children)
+) -> Result<Vec<ghostex_docs::directory::Entry>, String> {
+    ghostex_docs::directory::children(directory, scanned_directory_entries, limit, limit_error)
 }
 
 fn append_root_artifacts(
@@ -1093,6 +1119,7 @@ fn append_file_entries(
     relative_directory: &str,
     depth: usize,
     scanned_directory_entries: &mut usize,
+    recursive: bool,
 ) -> Result<(), String> {
     let mut children = bounded_directory_entries(
         directory,
@@ -1141,6 +1168,11 @@ fn append_file_entries(
             &relative_path,
             &metadata,
         ));
+        if is_directory && child.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            if let Some(entry) = entries.last_mut().and_then(Value::as_object_mut) {
+                entry.insert("childrenLoaded".to_string(), Value::Bool(true));
+            }
+        }
         if is_directory
             && !child
                 .file_type()
@@ -1148,6 +1180,9 @@ fn append_file_entries(
         {
             directories.push((child.path(), relative_path));
         }
+    }
+    if !recursive {
+        return Ok(());
     }
     for (directory, relative_path) in directories {
         append_file_entries(
@@ -1157,6 +1192,7 @@ fn append_file_entries(
             &relative_path,
             depth + 1,
             scanned_directory_entries,
+            true,
         )?;
     }
     Ok(())
@@ -1187,6 +1223,14 @@ answered with a bare inner path would hand the page an address that means the
 project root next time it is used.
 */
 fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<Value, String> {
+    project_file_preview_with_baseline(context, path, true)
+}
+
+fn project_file_preview_with_baseline(
+    context: DocsContext<'_>,
+    path: Option<&str>,
+    include_baseline: bool,
+) -> Result<Value, String> {
     let path = docs_path(context, path)?;
     if path.inner.is_empty() {
         return Err("Select a project file to preview.".to_string());
@@ -1238,7 +1282,7 @@ fn project_file_preview(context: DocsContext<'_>, path: Option<&str>) -> Result<
         shows the reserved mount segment. Mirrors gpui/src/main.rs.
         */
         "displayPath": path.display(context),
-        "gitBaseline": git_baseline(path.root, &target, &path.inner),
+        "gitBaseline": if include_baseline { git_baseline(path.root, &target, &path.inner) } else { Value::Null },
         "kind": "text",
         "modifiedAt": modified_at(&metadata),
         "name": name,
@@ -1664,7 +1708,10 @@ fn git_baseline(root: &Path, file: &Path, _relative_path: &str) -> Value {
         return renderable_git_baseline(None, head_oid.as_deref(), None, None, tracked);
     }
     let head_oid = head_oid.unwrap();
-    let head_spec = format!("HEAD:{git_path}");
+    if let Some(cached) = ghostex_docs::baseline::get(&repo_root, &git_path, &head_oid) {
+        return cached;
+    }
+    let head_spec = format!("{head_oid}:{git_path}");
     let Some((0, size)) = run_git(&["cat-file", "-s", &head_spec], &repo_root) else {
         return renderable_git_baseline(None, Some(&head_oid), None, Some("error"), tracked);
     };
@@ -1695,11 +1742,13 @@ fn git_baseline(root: &Path, file: &Path, _relative_path: &str) -> Value {
     if baseline.contains(&0) {
         return renderable_git_baseline(None, Some(&head_oid), None, Some("binary"), tracked);
     }
-    renderable_git_baseline(
+    let baseline = renderable_git_baseline(
         Some(String::from_utf8_lossy(&baseline).to_string()),
         Some(&head_oid),
         None,
         None,
         tracked,
-    )
+    );
+    ghostex_docs::baseline::insert(&repo_root, &git_path, &head_oid, &baseline);
+    baseline
 }

@@ -541,7 +541,15 @@ export const MANAGE_STYLES = `
     outline: none;
   }
 
+  .manage-index-status {
+    padding: 8px 12px;
+    color: var(--muted-foreground);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
   .manage-file-list {
+    flex: 1;
     min-height: 0;
     overflow: auto;
     padding: 4px 0 10px;

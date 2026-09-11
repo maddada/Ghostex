@@ -3,6 +3,8 @@ export const PROJECT_DOCS_RESOURCE_ACTION = 'readResource' as const;
 
 export type ProjectDocsFileEntry = {
   depth: number;
+  /** True for directories that must not be traversed, such as directory symlinks. */
+  childrenLoaded?: boolean;
   /**
    * CDXC:Docs 2026-08-10:
    * The same entry named the way the Docs tree names it, so anything that puts
@@ -56,6 +58,7 @@ export type ProjectDocsRequest = {
     | 'copyFullPath'
     | 'list'
     | 'read'
+    | 'gitBaseline'
     | 'stat'
     | 'save'
     | 'rename'
@@ -66,6 +69,10 @@ export type ProjectDocsRequest = {
     | 'revealInFinder'
     | 'openDocsFoldersSettings';
   content?: string;
+  directoryOnly?: boolean;
+  deferGitBaseline?: boolean;
+  force?: boolean;
+  revision?: string;
   newPath?: string;
   path?: string;
   projectEditorId: string;
@@ -78,6 +85,14 @@ export type ProjectDocsResponse = {
   entries?: ProjectDocsFileEntry[];
   error?: string;
   file?: ProjectDocsFilePreview;
+  gitBaseline?: ProjectDocsGitBaseline;
+  deferredGitBaseline?: boolean;
+  progressive?: boolean;
+  scannedEntries?: number;
+  scope?: string;
+  revision?: string;
+  unchanged?: boolean;
+  path?: string;
   requestId: string;
   rootName?: string;
 };

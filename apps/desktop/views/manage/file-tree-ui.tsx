@@ -5,13 +5,13 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  memo,
   useCallback,
   useEffect,
   useId,
   useRef,
   useState,
 } from 'react';
-import { Excalidraw } from '@excalidraw/excalidraw';
 import {
   IconArrowsDiagonal2,
   IconArrowsDiagonalMinimize,
@@ -283,7 +283,7 @@ export function ManageSidebarActions({
   );
 }
 
-export function ManageFileRow({
+export const ManageFileRow = memo(function ManageFileRow({
   annotationCount,
   canOpenContextMenu,
   entry,
@@ -300,6 +300,8 @@ export function ManageFileRow({
   onDragStart,
   onOpenContextMenu,
   onSelect,
+  loadState,
+  loadError,
 }: {
   annotationCount: number;
   canOpenContextMenu: boolean;
@@ -316,7 +318,9 @@ export function ManageFileRow({
   onDragEnd: () => void;
   onDragStart: (entry: ManageFileEntry, event: ReactDragEvent<HTMLButtonElement>) => void;
   onOpenContextMenu: (entry: ManageFileEntry, point: { x: number; y: number }) => void;
-  onSelect: () => void;
+  onSelect: (entry: ManageFileEntry) => void;
+  loadState?: 'pending' | 'error';
+  loadError?: string;
 }) {
   const Icon = entry.kind === 'directory' ? (isExpanded ? IconFolderOpen : IconFolder) : fileIconForPath(entry.path);
   return (
@@ -330,9 +334,12 @@ export function ManageFileRow({
       data-dragging={String(isDragging)}
       data-drop-target={String(isDropTarget)}
       data-kind={entry.kind}
+      data-path={entry.path}
+      aria-busy={loadState === 'pending'}
+      title={loadError}
       data-selected={String(isSelected)}
       draggable={entry.kind === 'file' || entry.kind === 'directory'}
-      onClick={onSelect}
+      onClick={() => onSelect(entry)}
       onContextMenu={(event: ReactMouseEvent<HTMLButtonElement>) => {
         event.preventDefault();
         event.stopPropagation();
@@ -360,7 +367,7 @@ export function ManageFileRow({
       onDragStart={(event) => onDragStart(entry, event)}
       onDrop={(event) => onEntryDrop(entry, event)}
       role='treeitem'
-      style={{ '--depth': entry.depth } as CSSProperties}
+      style={{ '--depth': entry.depth, height: 34, flexShrink: 0 } as CSSProperties}
       type='button'
     >
       <span
@@ -373,11 +380,12 @@ export function ManageFileRow({
       <Icon aria-hidden='true' className='manage-file-icon' size={15} stroke={1.75} />
       <span className='manage-file-name'>{entry.name}</span>
       <span className='manage-file-badges'>
+        {loadState ? <span aria-label={loadState === 'error' ? 'Folder could not load' : 'Folder not loaded yet'}>{loadState === 'error' ? '!' : '…'}</span> : null}
         {annotationCount > 0 ? <span className='manage-count-badge'>{annotationCount}</span> : null}
       </span>
     </button>
   );
-}
+});
 
 export function ManageFileContextMenu({
   canAddToSessionContext,

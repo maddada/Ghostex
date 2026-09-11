@@ -474,6 +474,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ghostex-docs"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "ghostex-find"
 version = "0.1.0"
 dependencies = [
@@ -498,6 +505,7 @@ dependencies = [
  "chrono",
  "crossterm",
  "futures-util",
+ "ghostex-docs",
  "ghostex-find",
  "ghostex-paths",
  "libc",

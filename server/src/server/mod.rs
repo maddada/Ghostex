@@ -176,6 +176,7 @@ pub mod http_endpoints;
 pub mod http_infra;
 pub mod presentation_delta;
 pub mod project_paths;
+mod project_docs_http;
 pub mod session_state_sync;
 pub mod telemetry_http;
 pub mod telemetry_tasks;
@@ -321,18 +322,6 @@ const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MESSAGE_COUNT: usize = 5;
 const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MESSAGE_MAX_LENGTH: usize = 400;
 const GXSERVER_SESSION_HISTORY_TITLE_SOURCE_MAX_LENGTH: usize = 2200;
 const GXSERVER_FIRST_PROMPT_TITLE_GENERATION_TIMEOUT_MS: u64 = 30_000;
-/*
-CDXC:SessionTitles 2026-09-03:
-How long the first-prompt job gives Codex to replace its provisional
-first-words thread name with its own generated title before Ghostex generates
-one and submits `/rename`. Codex's hidden title thread lands three to five
-seconds after the prompt when it works; the window is several times that so a
-slow model never produces two competing renames, and short enough that a
-session Codex failed to name is not left showing the truncated prompt for
-long.
-*/
-const GXSERVER_CODEX_AUTO_TITLE_WAIT_MS: u64 = 20_000;
-const GXSERVER_CODEX_AUTO_TITLE_POLL_MS: u64 = 1_000;
 const GXSERVER_COMMIT_MESSAGE_GENERATION_TIMEOUT_MS: u64 = 120_000;
 const GXSERVER_SESSION_STATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
 
@@ -1348,10 +1337,12 @@ async fn route_http(
                 every such row survives the filter, so they operate on the same
                 candidate set either way. The one pass that also touches other
                 rows is the working-directory title repair inside
-                `sync_session_state_sidecars`; it stays exhaustive on the
-                unfiltered paths (`/api/readProjectStatus`,
-                `/api/readPresentationSnapshot`, the presentation subscribe) and
-                is idempotent, so an active-only list simply defers it.
+                `sync_session_state_sidecars`; it stays exhaustive on the one
+                unfiltered path left (`/api/readProjectStatus`) and is
+                idempotent, so a narrower list simply defers it. Since
+                2026-09-11 the snapshot poll and the presentation subscribe use
+                `list_presentation_sessions`, which also covers every row the
+                repair could change while it is still visible.
                 */
                 let include_stopped = params
                     .get("includeStopped")
@@ -1580,11 +1571,19 @@ async fn route_http(
             |repository, db, _, server_id| {
                 /*
                 CDXC:StateSync 2026-09-01:
-                One `list_sessions` feeds all three sync passes and the
-                snapshot projection. The passes can mutate rows, so re-read
-                only when one of them reports an actual change.
+                One session list feeds all three sync passes and the snapshot
+                projection. The passes can mutate rows, so re-read only when
+                one of them reports an actual change.
+
+                CDXC:StateSync 2026-09-11 WHY:
+                The list is presentation-scoped: the sync passes only act on
+                `running` rows, and the projection discards every stopped row
+                that is not pinned, parked, favorite, or tagged, so hydrating
+                the thousands of other stopped rows on every two-second poll
+                was pure cost. Fork families are derived inside the snapshot
+                from the narrow fork-row read over the whole registry.
                 */
-                let sessions = repository.list_sessions(None)?;
+                let sessions = repository.list_presentation_sessions()?;
                 let mut sessions_changed = sync_session_state_sidecars(
                     &state,
                     db,
@@ -1602,7 +1601,7 @@ async fn route_http(
                     "read-presentation-snapshot",
                 )?;
                 let sessions = if sessions_changed {
-                    repository.list_sessions(None)?
+                    repository.list_presentation_sessions()?
                 } else {
                     sessions
                 };
@@ -2229,41 +2228,7 @@ async fn route_http(
         | "/api/runBeadsAction" => {
             handle_typed_operation_http(&state, endpoint.path, request_id, &body_json).await
         }
-        "/api/runProjectDocsAction" => handle_domain_http(
-            &state,
-            endpoint.path,
-            request_id,
-            &body_json,
-            |repository, _db, params, _| {
-                let project_id = read_project_id(params)?;
-                let project = repository.get_project(&project_id)?.ok_or_else(|| {
-                    DomainStateError::not_found(format!("Project {project_id} does not exist."))
-                })?;
-                let project_path = project
-                    .get("path")
-                    .and_then(Value::as_str)
-                    .map(str::trim)
-                    .filter(|path| !path.is_empty())
-                    .ok_or_else(|| {
-                        DomainStateError::bad_request("Project has no filesystem path.")
-                    })?;
-                /*
-                CDXC:Docs 2026-08-09:
-                Docs reads the project's own folder plus its configured Docs
-                directory (then the Global Default). Resolving here keeps
-                `run_project_docs_action` taking a plain root.
-
-                CDXC:Docs 2026-08-09: a bad Docs directory no longer
-                fails the request. It comes back as one unavailable mount inside
-                the listing, so the project's own docs still show and the panel
-                still names the path that could not be opened.
-                */
-                Ok(project_docs::run_project_docs_action(
-                    &project_docs::resolve_project_docs_root(&project, project_path),
-                    params,
-                ))
-            },
-        ),
+        "/api/runProjectDocsAction" => project_docs_http::handle(state.clone(), endpoint.path, request_id, body_json).await,
         "/api/startBoardWork" => {
             handle_board_start_work_http(&state, endpoint.path, request_id, &body_json).await
         }

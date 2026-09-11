@@ -14,12 +14,12 @@ use std::{
 
 #[cfg(target_os = "windows")]
 use windows_sys::Win32::Security::Cryptography::{
-    BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
+    BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
 };
 
 use anyhow::Result;
 use futures::StreamExt as _;
-use gpui::{Action, AppContext as _, Entity, ParentElement as _, prelude::FluentBuilder as _};
+use gpui::{prelude::FluentBuilder as _, Action, AppContext as _, Entity, ParentElement as _};
 
 use crate::app::helpers::*;
 use crate::*;
@@ -484,7 +484,34 @@ pub(crate) fn manage_files_bridge_result(
         roots: &roots,
     };
 
+    let _mutation = matches!(
+        action.as_str(),
+        "save" | "rename" | "delete" | "duplicate" | "createFolder" | "move"
+    )
+    .then(ghostex_docs::directory::MutationGuard::new);
+
+    if action == "list"
+        && request
+            .get("directoryOnly")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    {
+        return manage_list_directory(context, request);
+    }
+    if action == "read"
+        && request
+            .get("deferGitBaseline")
+            .and_then(serde_json::Value::as_bool)
+            == Some(true)
+    {
+        return Ok(
+            serde_json::json!({"action": action, "requestId": request_id, "deferredGitBaseline": true, "file": manage_project_file_preview_with_baseline(context, manage_request_string(request, "path").as_deref(), false)?}),
+        );
+    }
     match action.as_str() {
+        "gitBaseline" => Ok(
+            serde_json::json!({"action": action, "requestId": request_id, "gitBaseline": manage_file_git_baseline(context, manage_request_string(request, "path").as_deref())?}),
+        ),
         "list" => Ok(serde_json::json!({
             "action": action,
             "entries": manage_project_file_entries(context)?,
@@ -1313,7 +1340,8 @@ CLAUDE.md, or docs/ away. The mounted Docs directory is appended after them.
 pub(crate) fn manage_project_file_entries(
     context: ManageDocsContext<'_>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let mut entries = manage_project_root_file_entries(context.roots.project.as_path(), context)?;
+    let mut entries =
+        manage_project_root_file_entries(context.roots.project.as_path(), context, true)?;
     if let Some(mount) = context.roots.extra.as_ref() {
         manage_append_docs_extra_root_entries(&mut entries, mount);
     }
@@ -1323,6 +1351,7 @@ pub(crate) fn manage_project_file_entries(
 pub(crate) fn manage_project_root_file_entries(
     root: &Path,
     context: ManageDocsContext<'_>,
+    recursive: bool,
 ) -> Result<Vec<serde_json::Value>, String> {
     /*
     macOS `manageProjectFileEntries` parity: docs/ and each configured Docs
@@ -1359,6 +1388,9 @@ pub(crate) fn manage_project_root_file_entries(
         root,
         &mut scanned_directory_entries,
     )?;
+    if !recursive {
+        return Ok(entries);
+    }
     for relative_path in &scan_roots {
         let Some(directory) = manage_project_directory(root, relative_path) else {
             continue;
@@ -1370,6 +1402,7 @@ pub(crate) fn manage_project_root_file_entries(
             relative_path,
             1,
             &mut scanned_directory_entries,
+            true,
         )?;
     }
     Ok(entries)
@@ -1418,6 +1451,7 @@ pub(crate) fn manage_append_docs_extra_root_entries(
         MANAGE_DOCS_EXTRA_ROOT_MOUNT_SEGMENT,
         1,
         &mut scanned_directory_entries,
+        true,
     ) {
         entries.push(manage_unavailable_docs_extra_root_entry(
             &mount.name,
@@ -1500,18 +1534,8 @@ pub(crate) fn manage_bounded_docs_children(
     scanned_directory_entries: &mut usize,
     limit: usize,
     limit_error: fn() -> String,
-) -> Result<Vec<fs::DirEntry>, String> {
-    let mut children = Vec::new();
-    for child in fs::read_dir(directory).map_err(|_| "Could not list project files.".to_string())? {
-        if *scanned_directory_entries >= limit {
-            return Err(limit_error());
-        }
-        *scanned_directory_entries += 1;
-        if let Ok(child) = child {
-            children.push(child);
-        }
-    }
-    Ok(children)
+) -> Result<Vec<ghostex_docs::directory::Entry>, String> {
+    ghostex_docs::directory::children(directory, scanned_directory_entries, limit, limit_error)
 }
 
 pub(crate) fn manage_append_docs_tree_entries(
@@ -1521,6 +1545,7 @@ pub(crate) fn manage_append_docs_tree_entries(
     relative_directory_path: &str,
     depth: usize,
     scanned_directory_entries: &mut usize,
+    recursive: bool,
 ) -> Result<(), String> {
     if depth > MANAGE_DOCS_TREE_MAX_DEPTH {
         return Err(manage_docs_tree_depth_cap_error());
@@ -1580,6 +1605,14 @@ pub(crate) fn manage_append_docs_tree_entries(
             "path": relative_path,
             "size": if is_directory { None } else { Some(metadata.len()) },
         }));
+        if is_directory && child.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            if let Some(entry) = entries
+                .last_mut()
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                entry.insert("childrenLoaded".to_string(), serde_json::Value::Bool(true));
+            }
+        }
         if is_directory
             && !child
                 .file_type()
@@ -1590,6 +1623,9 @@ pub(crate) fn manage_append_docs_tree_entries(
         }
     }
 
+    if !recursive {
+        return Ok(());
+    }
     for (directory, relative_path) in directories {
         manage_append_docs_tree_entries(
             entries,
@@ -1598,6 +1634,7 @@ pub(crate) fn manage_append_docs_tree_entries(
             &relative_path,
             depth + 1,
             scanned_directory_entries,
+            true,
         )?;
     }
     Ok(())
@@ -1676,6 +1713,7 @@ pub(crate) fn manage_append_project_file_entries(
     relative_directory_path: &str,
     depth: usize,
     scanned_directory_entries: &mut usize,
+    recursive: bool,
 ) -> Result<(), String> {
     let mut children = manage_bounded_docs_children(
         directory,
@@ -1737,6 +1775,14 @@ pub(crate) fn manage_append_project_file_entries(
             "path": relative_path,
             "size": if is_directory { None } else { Some(metadata.len()) },
         }));
+        if is_directory && child.file_type().is_ok_and(|kind| kind.is_symlink()) {
+            if let Some(entry) = entries
+                .last_mut()
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                entry.insert("childrenLoaded".to_string(), serde_json::Value::Bool(true));
+            }
+        }
         if is_directory
             && !child
                 .file_type()
@@ -1747,6 +1793,9 @@ pub(crate) fn manage_append_project_file_entries(
         }
     }
 
+    if !recursive {
+        return Ok(());
+    }
     for (directory, relative_path) in directories {
         manage_append_project_file_entries(
             entries,
@@ -1755,6 +1804,7 @@ pub(crate) fn manage_append_project_file_entries(
             &relative_path,
             depth + 1,
             scanned_directory_entries,
+            true,
         )?;
     }
     Ok(())
@@ -1770,6 +1820,14 @@ next time it is used.
 pub(crate) fn manage_project_file_preview(
     context: ManageDocsContext<'_>,
     path: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    manage_project_file_preview_with_baseline(context, path, true)
+}
+
+pub(crate) fn manage_project_file_preview_with_baseline(
+    context: ManageDocsContext<'_>,
+    path: Option<&str>,
+    include_baseline: bool,
 ) -> Result<serde_json::Value, String> {
     let path = manage_docs_path(context, path)?;
     if path.inner.is_empty() {
@@ -1827,7 +1885,7 @@ pub(crate) fn manage_project_file_preview(
         shows the reserved mount segment.
         */
         "displayPath": path.display(context),
-        "gitBaseline": manage_git_baseline_payload(path.root, &target, &path.inner),
+        "gitBaseline": if include_baseline { manage_git_baseline_payload(path.root, &target, &path.inner) } else { serde_json::Value::Null },
         "kind": "text",
         "modifiedAt": metadata.modified().ok().map(gpui_iso8601_utc),
         "name": name,
@@ -2289,7 +2347,10 @@ pub(crate) fn manage_git_baseline_payload(
         return manage_renderable_git_baseline(None, head_oid.as_deref(), None, None, tracked);
     }
     let head_oid = head_oid.unwrap();
-    let head_spec = format!("HEAD:{git_path}");
+    if let Some(cached) = ghostex_docs::baseline::get(&repo_root, &git_path, &head_oid) {
+        return cached;
+    }
+    let head_spec = format!("{head_oid}:{git_path}");
 
     let Some((size_exit, size_stdout)) =
         manage_run_git(&["cat-file", "-s", &head_spec], &repo_root)
@@ -2337,13 +2398,15 @@ pub(crate) fn manage_git_baseline_payload(
             tracked,
         );
     }
-    manage_renderable_git_baseline(
+    let baseline = manage_renderable_git_baseline(
         Some(String::from_utf8_lossy(&baseline_stdout).to_string()),
         Some(&head_oid),
         None,
         None,
         tracked,
-    )
+    );
+    ghostex_docs::baseline::insert(&repo_root, &git_path, &head_oid, &baseline);
+    baseline
 }
 
 /*
