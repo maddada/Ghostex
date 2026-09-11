@@ -495,6 +495,7 @@ impl GhostexGpuiApp {
                     &url,
                     Some(bridge_surface),
                     Some(event_handler),
+                    None,
                 );
                 let _ = app.update_in(&mut async_cx, |this, _window, cx| {
                     this.attach_titlebar_extension_panel(generation, id, result, cx);

@@ -150,6 +150,8 @@ pub(crate) fn discover(home: &Path, provider: Provider) -> Result<Vec<Discovered
             shared_history: false,
             usage: vec![],
             reset_credits: None,
+            reset_credit_details: None,
+            reset_credits_error: None,
             usage_updated_at: None,
             usage_error: None,
         };
@@ -221,6 +223,13 @@ pub(crate) fn discover(home: &Path, provider: Provider) -> Result<Vec<Discovered
                         account.usage = usage;
                         account.reset_credits = reset_credits;
                         account.usage_updated_at = Some(chrono::Utc::now().to_rfc3339());
+                        match super::reset_credits::read(row) {
+                            Ok(credits) => {
+                                account.reset_credits = Some(credits.len() as u64);
+                                account.reset_credit_details = Some(credits);
+                            }
+                            Err(error) => account.reset_credits_error = Some(error),
+                        }
                     }
                     Err(e) => account.usage_error = Some(e),
                 }
@@ -230,7 +239,7 @@ pub(crate) fn discover(home: &Path, provider: Provider) -> Result<Vec<Discovered
     }
     Ok(accounts)
 }
-fn codex_usage(row: &Value) -> Result<(Vec<UsageWindow>, Option<u64>), String> {
+pub(crate) fn codex_get(row: &Value, path: &str) -> Result<Value, String> {
     let home = PathBuf::from(text(row, "home"));
     if !home.is_absolute() {
         return Err("Invalid Codex account home.".into());
@@ -249,10 +258,12 @@ fn codex_usage(row: &Value) -> Result<(Vec<UsageWindow>, Option<u64>), String> {
     let response = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(12))
         .build()
-        .get("https://chatgpt.com/backend-api/wham/usage")
+        .get(&format!("https://chatgpt.com/backend-api/wham/{path}"))
         .set("Authorization", &format!("Bearer {token}"))
         .set("ChatGPT-Account-Id", &expected)
         .set("Accept", "application/json")
+        .set("OpenAI-Beta", "codex-1")
+        .set("originator", "Codex Desktop")
         .call();
     let response = match response {
         Ok(r) => r,
@@ -264,9 +275,12 @@ fn codex_usage(row: &Value) -> Result<(Vec<UsageWindow>, Option<u64>), String> {
         }
         Err(_) => return Err("Usage could not be refreshed. Ghostex will try again.".into()),
     };
-    let value: Value = response
+    response
         .into_json()
-        .map_err(|_| "The usage service returned an invalid response.")?;
+        .map_err(|_| "The usage service returned an invalid response.".to_string())
+}
+fn codex_usage(row: &Value) -> Result<(Vec<UsageWindow>, Option<u64>), String> {
+    let value = codex_get(row, "usage")?;
     let mut windows = Vec::new();
     codex_windows(&mut windows, "", &value["rate_limit"]);
     if let Some(extras) = value

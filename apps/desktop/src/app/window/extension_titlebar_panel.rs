@@ -21,10 +21,13 @@ impl GpuiTitlebarExtensionPanel {
         url: &str,
         bridge_surface: Option<cef::ExtensionBridgeSurfaceSpec>,
         bridge_event_handler: Option<cef::ExtensionBridgeEventHandler>,
+        popup_handler: Option<cef::BrowserPopupOpenHandler>,
     ) -> Result<Rc<CefBrowser>, String> {
         let id = extension_id.as_str();
-        let popup_open_handler: cef::BrowserPopupOpenHandler = Rc::new(|requested_url, _| {
-            let _ = gpui_open_external_http_url(&requested_url);
+        let popup_open_handler: cef::BrowserPopupOpenHandler = popup_handler.unwrap_or_else(|| {
+            Rc::new(|requested_url, _| {
+                let _ = gpui_open_external_http_url(&requested_url);
+            })
         });
         let browser = Rc::new(CefBrowser::new(
             parent_ns_view,
