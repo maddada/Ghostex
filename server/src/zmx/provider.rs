@@ -590,10 +590,9 @@ pub fn read_zmx_session_process_identities(
             if let Some((agent_session_id, agent_session_path)) =
                 read_codex_process_session_identity(identity.process_id)
             {
-                identity.agent_session_id.get_or_insert(agent_session_id);
-                identity
-                    .agent_session_path
-                    .get_or_insert(agent_session_path);
+                // CDXC:SessionIdentity 2026-09-11 WHY: Codex keeps its original resume argv after rewind. The live rollout must replace both fields together, or polling restores the old ID beside the new branch's path.
+                identity.agent_session_id = Some(agent_session_id);
+                identity.agent_session_path = Some(agent_session_path);
             }
         }
         if identity.agent_id.as_deref() != Some("omp")

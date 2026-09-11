@@ -161,6 +161,62 @@ pub(crate) fn apply_transcript_successor_session_identity(
     agent_session_id: &str,
     agent_session_path: &str,
 ) -> Result<bool, DomainStateError> {
+    apply_successor_session_identity(
+        repository,
+        project_id,
+        session_id,
+        expected_agent_session_id,
+        agent_session_id,
+        agent_session_path,
+        SessionIdentityUpdateSource::Passive,
+        None,
+    )
+}
+
+/// CDXC:SessionIdentity 2026-09-11 WHY:
+/// A user-confirmed Codex rewind proves the branch in its own terminal, but the passive observer deliberately refuses replacing a Codex ID. Keep that protection and give verified rewinds an explicit, transactional adoption path.
+pub(crate) fn apply_verified_rewind_session_identity(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    expected_agent_session_id: &str,
+    agent_session_id: &str,
+    agent_session_path: &str,
+    process_id: i64,
+) -> Result<bool, DomainStateError> {
+    apply_successor_session_identity(
+        repository,
+        project_id,
+        session_id,
+        Some(expected_agent_session_id),
+        agent_session_id,
+        agent_session_path,
+        SessionIdentityUpdateSource::VerifiedRewind,
+        Some(process_id),
+    )
+}
+
+fn apply_successor_session_identity(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+    expected_agent_session_id: Option<&str>,
+    agent_session_id: &str,
+    agent_session_path: &str,
+    source: SessionIdentityUpdateSource,
+    rewind_process_id: Option<i64>,
+) -> Result<bool, DomainStateError> {
+    let transaction = repository
+        .db
+        .is_autocommit()
+        .then(|| {
+            rusqlite::Transaction::new_unchecked(
+                repository.db,
+                rusqlite::TransactionBehavior::Immediate,
+            )
+        })
+        .transpose()
+        .map_err(crate::domain::sql_error)?;
     let lifecycle = LifecycleParams {
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
@@ -168,10 +224,13 @@ pub(crate) fn apply_transcript_successor_session_identity(
     let current = require_session(repository, &lifecycle)?;
     let stored_agent_session_id =
         read_text_from_map(&object_field(&current, "runtimeSettings"), "agentSessionId");
-    if stored_agent_session_id.as_deref() != expected_agent_session_id {
+    let already_adopted = stored_agent_session_id.as_deref() == Some(agent_session_id);
+    if stored_agent_session_id.as_deref() != expected_agent_session_id
+        && !(source == SessionIdentityUpdateSource::VerifiedRewind && already_adopted)
+    {
         return Ok(false);
     }
-    if stored_agent_session_id.as_deref() == Some(agent_session_id) {
+    if already_adopted && source != SessionIdentityUpdateSource::VerifiedRewind {
         return Ok(false);
     }
     let mut params = Map::new();
@@ -183,24 +242,22 @@ pub(crate) fn apply_transcript_successor_session_identity(
         "agentSessionPath".to_string(),
         json!(agent_session_path.to_string()),
     );
-    let (result, _) = apply_session_state_update(
-        repository,
-        &lifecycle,
-        &params,
-        SessionIdentityUpdateSource::Passive,
-    )?;
+    if let Some(process_id) = rewind_process_id {
+        params.insert("codexRewindProcessId".into(), json!(process_id));
+    }
+    let (result, _) = apply_session_state_update(repository, &lifecycle, &params, source)?;
     if result.get("reason").and_then(Value::as_str) == Some("passive-session-identity-conflict") {
         return Ok(false);
     }
-    let applied = read_text_from_map(
-        &object_field(
-            result.get("session").unwrap_or(&Value::Null),
-            "runtimeSettings",
-        ),
-        "agentSessionId",
-    )
-    .as_deref()
-        == Some(agent_session_id);
+    let applied_runtime = object_field(
+        result.get("session").unwrap_or(&Value::Null),
+        "runtimeSettings",
+    );
+    let applied = read_text_from_map(&applied_runtime, "agentSessionId").as_deref()
+        == Some(agent_session_id)
+        && (source != SessionIdentityUpdateSource::VerifiedRewind
+            || read_text_from_map(&applied_runtime, "agentSessionPath").as_deref()
+                == (!agent_session_path.is_empty()).then_some(agent_session_path));
     /*
     CDXC:SessionNotes 2026-08-24:
     The session-note re-key for the adopted successor id happens inside
@@ -208,9 +265,12 @@ pub(crate) fn apply_transcript_successor_session_identity(
     source (agent hooks, live-process scan) — nothing extra to do here.
     */
     if applied {
-        if let Some(previous) = stored_agent_session_id.as_deref() {
+        if let Some(previous) = expected_agent_session_id {
             record_previous_agent_session_id(repository, &lifecycle, previous, agent_session_id)?;
         }
+    }
+    if let Some(transaction) = transaction {
+        transaction.commit().map_err(crate::domain::sql_error)?;
     }
     Ok(applied)
 }

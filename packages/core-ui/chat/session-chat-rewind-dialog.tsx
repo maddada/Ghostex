@@ -73,6 +73,7 @@ export function SessionChatRewindDialog({
   const [error, setError] = useState<string | null>(null);
   const [rewinding, setRewinding] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [synchronizationPending, setSynchronizationPending] = useState(false);
   const open = request !== null;
 
   useEffect(() => {
@@ -82,6 +83,7 @@ export function SessionChatRewindDialog({
     setError(null);
     setRewinding(false);
     setCompleted(false);
+    setSynchronizationPending(false);
   }, [open, request?.messageId]);
 
   const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
@@ -93,6 +95,13 @@ export function SessionChatRewindDialog({
     setError(null);
     try {
       const result = await rewind({ messageId: request.messageId });
+      // CDXC:SessionChat 2026-09-11 DECISION: User approved Retry synchronization after Codex confirms rewind; preserve the dialog and draft while the server reconnects to that branch.
+      if (result.synchronizationPending) {
+        setSynchronizationPending(true);
+        setError(result.warning ?? 'The rewind needs synchronization.');
+        setRewinding(false);
+        return;
+      }
       // The daemon re-snapshots the chat stream itself, so the rewound rows
       // leave the list on their own frame. Nothing is pruned here.
       if (!result.warning) onOpenChange(false);
@@ -159,11 +168,13 @@ export function SessionChatRewindDialog({
           </div>
           <DialogFooter>
             <Button disabled={rewinding} onClick={() => onOpenChange(false)} type='button' variant='outline'>
-              {completed ? 'Close' : 'Cancel'}
+              {completed || synchronizationPending ? 'Close' : 'Cancel'}
             </Button>
             <Button autoFocus disabled={rewinding || completed} type='submit' variant='outline'>
               {rewinding ? <IconLoader2 className='animate-spin' data-icon='inline-start' /> : null}
-              {rewinding ? 'Rewinding' : 'Rewind'}
+              {synchronizationPending
+                ? (rewinding ? 'Synchronizing' : 'Retry synchronization')
+                : (rewinding ? 'Rewinding' : 'Rewind')}
             </Button>
           </DialogFooter>
         </form>

@@ -716,6 +716,9 @@ impl RewindDriver<'_> {
         );
         if let Some(codex) = &plan.codex {
             codex::drive(self, plan, codex).await?;
+            if codex.synchronizing_since.is_some() {
+                return Ok(());
+            }
         } else if let Err(error) = self.drive(plan).await {
             self.cancel_dialog().await;
             return Err(error);

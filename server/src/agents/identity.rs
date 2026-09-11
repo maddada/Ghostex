@@ -10,6 +10,7 @@ pub(crate) enum SessionIdentityUpdateSource {
     Lifecycle,
     LiveProcess,
     Passive,
+    VerifiedRewind,
     TerminalTitle,
 }
 
@@ -46,11 +47,31 @@ impl<'a, 'db> LazyProjectSessions<'a, 'db> {
         }
     }
 
+    /// The project's non-stopped rows. The only reader is the active Codex
+    /// owner lookup, and `is_active_identity_owner` never accepts a stopped
+    /// row, so leaving stopped history out of the read changes nothing.
     pub(crate) fn get(&mut self) -> Result<&[Value], DomainStateError> {
         if self.sessions.is_none() {
-            self.sessions = Some(self.repository.list_sessions(Some(self.project_id))?);
+            self.sessions = Some(
+                self.repository
+                    .list_sessions_excluding_stopped(Some(self.project_id))?,
+            );
         }
         Ok(self.sessions.as_deref().unwrap_or_default())
+    }
+
+    /// The project's rows that can match `identity` (same agent session id or
+    /// path), read narrowly from SQLite. See
+    /// `DomainRepository::list_sessions_matching_identity`.
+    pub(crate) fn matching_identity(
+        &self,
+        identity: &ResolvedIdentity,
+    ) -> Result<Vec<Value>, DomainStateError> {
+        self.repository.list_sessions_matching_identity(
+            self.project_id,
+            identity.agent_session_id.as_deref(),
+            identity.agent_session_path.as_deref(),
+        )
     }
 }
 
@@ -134,6 +155,14 @@ pub(crate) fn apply_session_state_update(
         identity_update_source,
         session_launch_agent_provider_id(&session),
     );
+    if identity_update_source == SessionIdentityUpdateSource::VerifiedRewind
+        && read_text(params, "agentSessionPath").is_none()
+    {
+        runtime_settings.remove("agentSessionPath");
+    }
+    if identity_update_source == SessionIdentityUpdateSource::VerifiedRewind {
+        insert_optional_from_params(&mut runtime_settings, params, "codexRewindProcessId");
+    }
     if let Some(dropped_activity) = stored_runtime_settings
         .get("agentActivity")
         .filter(|_| runtime_settings.get("agentActivity").is_none())
@@ -178,7 +207,9 @@ pub(crate) fn apply_session_state_update(
         );
     }
 
-    if trusted_resume_title(&current_with_identity).is_none() {
+    if provisional_fork_title(&current_with_identity).is_some() {
+        reason = "fork-provisional-title-preserved".to_string();
+    } else if trusted_resume_title(&current_with_identity).is_none() {
         if let Some(candidate) = select_trusted_title_for_identity(
             &project,
             &mut project_sessions,
@@ -391,7 +422,8 @@ pub(crate) fn live_process_identity_update_is_noop(
 /// `project_sessions` is only hydrated inside the passive-Codex ownership
 /// branch: every other source (and every passive observation that carries no
 /// new Codex conversation id) returns before the list is ever read. When it IS
-/// read it is the full project list, all lifecycles included.
+/// read it is the project's non-stopped rows, which is every row
+/// `is_active_identity_owner` can accept.
 pub(crate) fn resolve_allowed_session_identity(
     current_identity: &ResolvedIdentity,
     current_session: &Value,
@@ -621,6 +653,7 @@ fn log_identity_dropped_agent_activity(
         SessionIdentityUpdateSource::Lifecycle => "lifecycle",
         SessionIdentityUpdateSource::LiveProcess => "liveProcess",
         SessionIdentityUpdateSource::Passive => "passive",
+        SessionIdentityUpdateSource::VerifiedRewind => "verifiedRewind",
         SessionIdentityUpdateSource::TerminalTitle => "terminalTitle",
     };
     let _ = logger.log(crate::logging::GxserverLogInput {
@@ -738,6 +771,7 @@ pub(crate) fn identity_update_source_name(source: SessionIdentityUpdateSource) -
         SessionIdentityUpdateSource::Lifecycle => "lifecycle",
         SessionIdentityUpdateSource::LiveProcess => "live-process",
         SessionIdentityUpdateSource::Passive => "passive",
+        SessionIdentityUpdateSource::VerifiedRewind => "verified-rewind",
         SessionIdentityUpdateSource::TerminalTitle => "terminal-title",
     }
 }
@@ -766,9 +800,16 @@ pub(crate) fn select_trusted_title_for_identity(
     }
 
     let current_session_id = read_text_value(current_session, "sessionId");
+    /*
+    CDXC:SessionIdentity 2026-09-11 WHY:
+    `live_process_identity_update_is_noop` deliberately re-runs this pass on
+    every poll while the title is still a placeholder, so this hunt must not
+    hydrate the whole project. The rows are narrowed in SQL to the ones that
+    share the agent session id or path; `identities_match` still decides.
+    */
+    let identity_sessions = project_sessions.matching_identity(identity)?;
     let live_candidate = select_newest_candidate(
-        project_sessions
-            .get()?
+        identity_sessions
             .iter()
             .filter(|session| read_text_value(session, "sessionId") != current_session_id)
             .filter_map(|session| {

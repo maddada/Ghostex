@@ -12,6 +12,10 @@ use crate::session_chat_successor::{find_codex_successor_transcript, read_codex_
 use crate::session_chat_tail::SessionChatTailPage;
 use crate::storage::open_gxserver_database;
 
+#[path = "session_chat_rewind_codex_state.rs"]
+mod state;
+use state::{pending_rewind, write_pending_rewind};
+
 const ESCAPE: &str = "\u{1b}[27u";
 const LEFT: &str = "\u{1b}[1;1D";
 
@@ -22,6 +26,7 @@ pub(super) struct CodexRewindPlan {
     transcript_path: PathBuf,
     agent_session_id: String,
     message_id: String,
+    pub(super) synchronizing_since: Option<i64>,
     /// Newest first, including inherited prompts, with stable transcript IDs.
     prompts: Vec<(String, String)>,
 }
@@ -85,15 +90,34 @@ pub(super) async fn rewind(
     target: SessionChatSendTarget,
     message_id: &str,
 ) -> Result<Value, DomainStateError> {
-    idle(&target.session)?;
-    let transcript_path = crate::session_chat::resolve_session_chat_transcript_path(
-        SessionChatTranscriptAgent::Codex,
-        read_runtime_text(&target.session, "agentSessionId").as_deref(),
-        read_runtime_text(&target.session, "agentSessionPath").as_deref(),
-    )
-    .ok_or_else(|| message_not_found("This session has no Codex transcript yet."))?;
+    let pending = pending_rewind(&target.session)?;
+    if let Some(pending) = &pending {
+        if pending.target_message_id != message_id || pending.zmx_name != target.zmx_name {
+            return Err(agent_busy("The previous Codex rewind still needs synchronization. Retry it before starting another rewind."));
+        }
+    } else {
+        idle(&target.session)?;
+    }
+    let transcript_path = if let Some(pending) = &pending {
+        pending.previous_transcript_path.clone()
+    } else {
+        crate::session_chat::resolve_session_chat_transcript_path(
+            SessionChatTranscriptAgent::Codex,
+            read_runtime_text(&target.session, "agentSessionId").as_deref(),
+            read_runtime_text(&target.session, "agentSessionPath").as_deref(),
+        )
+        .ok_or_else(|| message_not_found("This session has no Codex transcript yet."))?
+    };
     let meta = read_codex_session_meta(&transcript_path)
         .ok_or_else(|| message_not_found("Codex's transcript identity could not be read."))?;
+    if pending
+        .as_ref()
+        .is_some_and(|pending| pending.previous_agent_session_id != meta.session_id)
+    {
+        return Err(agent_busy(
+            "The pending rewind's original conversation changed.",
+        ));
+    }
     let prompts = prompts(&transcript_path)?;
     let presses = prompts
         .iter()
@@ -118,6 +142,7 @@ pub(super) async fn rewind(
             transcript_path,
             agent_session_id: meta.session_id,
             message_id: message_id.to_string(),
+            synchronizing_since: pending.as_ref().map(|pending| pending.started_at),
             prompts,
         }),
     });
@@ -130,6 +155,24 @@ pub(super) async fn rewind(
     )
     .await;
     let outcome = take_rewind_job_outcome(job_id);
+    if sent.is_err() || outcome.as_ref().is_some_and(Result::is_err) {
+        let db = open_gxserver_database(&state.paths)
+            .map_err(|error| session_not_running(error.to_string()))?;
+        let repository = DomainRepository::new(&db, &state.metadata.server_id);
+        if repository
+            .get_session(&target.project_id, &target.session_id)?
+            .map(|session| pending_rewind(&session))
+            .transpose()?
+            .flatten()
+            .is_some()
+        {
+            return Ok(
+                json!({"ok": true, "targetMessageId": message_id, "leafId": null,
+                "synchronizationPending": true,
+                "warning": "Ghostex could not synchronize the submitted Codex rewind. Retry synchronization to reconnect this chat without rewinding again."}),
+            );
+        }
+    }
     let warning = match outcome.as_ref() {
         Some(Err(error)) if error.code == "rewindCleanupFailed" => Some(error.message.clone()),
         Some(Err(error)) => {
@@ -299,6 +342,10 @@ pub(super) async fn drive(
     plan: &RewindPlan,
     codex: &CodexRewindPlan,
 ) -> Result<(), DomainStateError> {
+    if let Some(started) = codex.synchronizing_since {
+        adopt_branch(driver, plan, codex, started).await?;
+        return write_pending_rewind(driver, codex, None);
+    }
     let started_at_composer = driver
         .capture()
         .await
@@ -331,16 +378,25 @@ async fn drive_inner(
             "The conversation changed while the rewind was queued. Try again.",
         ));
     }
-    let started = drive_picker(driver, plan, codex, || {
-        let live = live_session(driver, codex)?;
-        idle(&live)?;
-        if read_runtime_text(&live, "agentSessionId").as_deref() != Some(&codex.agent_session_id) {
-            return Err(agent_busy("The conversation changed while rewinding."));
-        }
-        Ok(())
-    })
+    let started = drive_picker(
+        driver,
+        plan,
+        codex,
+        || {
+            let live = live_session(driver, codex)?;
+            idle(&live)?;
+            if read_runtime_text(&live, "agentSessionId").as_deref()
+                != Some(&codex.agent_session_id)
+            {
+                return Err(agent_busy("The conversation changed while rewinding."));
+            }
+            Ok(())
+        },
+        |started| write_pending_rewind(driver, codex, Some(started)),
+    )
     .await?;
-    adopt_branch(driver, plan, codex, started).await
+    adopt_branch(driver, plan, codex, started).await?;
+    write_pending_rewind(driver, codex, None)
 }
 
 async fn drive_picker(
@@ -348,6 +404,7 @@ async fn drive_picker(
     plan: &RewindPlan,
     codex: &CodexRewindPlan,
     check_idle: impl Fn() -> Result<(), DomainStateError>,
+    record_submission: impl Fn(i64) -> Result<(), DomainStateError>,
 ) -> Result<i64, DomainStateError> {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     loop {
@@ -419,6 +476,7 @@ async fn drive_picker(
         return Err(agent_busy("The rewind was cancelled."));
     }
     let started = chrono::Utc::now().timestamp_millis();
+    record_submission(started)?;
     driver.write("\r").await?;
     driver
         .wait_for("close", |screen| (!picker_open(screen)).then_some(()))
@@ -433,27 +491,46 @@ async fn adopt_branch(
     started: i64,
 ) -> Result<(), DomainStateError> {
     let next = wait_for_branch(driver, plan, codex, started).await?;
+    let name = driver.zmx_name.to_string();
+    let home_dir = codex.paths.home_dir.clone();
+    let live = tokio::task::spawn_blocking(move || {
+        crate::zmx::read_zmx_session_process_identities(&[name.clone()], &home_dir)
+            .ok()?
+            .remove(&name)
+    })
+    .await
+    .map_err(|error| session_not_running(error.to_string()))?
+    .filter(|identity| identity.agent_id.as_deref() == Some("codex"))
+    .ok_or_else(|| session_not_running("Codex's process identity could not be verified."))?;
+    if let Some(path) = &next.path {
+        if live.agent_session_id.as_deref() != Some(&next.agent_session_id)
+            || live.agent_session_path.as_deref().map(Path::new) != Some(path.as_path())
+        {
+            return Err(agent_busy(
+                "Codex changed conversations before synchronization finished.",
+            ));
+        }
+    }
+    let process_id = live
+        .process_id
+        .ok_or_else(|| session_not_running("Codex's process could not be identified."))?;
     let db = open_gxserver_database(&codex.paths)
         .map_err(|error| session_not_running(error.to_string()))?;
     let repository = DomainRepository::new(&db, &codex.server_id);
-    let current = repository
-        .get_session(driver.project_id, driver.session_id)?
-        .ok_or_else(|| session_not_running("The session no longer exists."))?;
-    if read_runtime_text(&current, "agentSessionId").as_deref() == Some(&next.agent_session_id) {
-        return Ok(());
-    }
-    if crate::agents::apply_transcript_successor_session_identity(
+    if crate::agents::apply_verified_rewind_session_identity(
         &repository,
         driver.project_id,
         driver.session_id,
-        Some(&codex.agent_session_id),
+        &codex.agent_session_id,
         &next.agent_session_id,
         &next
             .path
             .as_deref()
             .map(|path| path.to_string_lossy().into_owned())
             .unwrap_or_default(),
+        process_id,
     )? {
+        crate::zmx::invalidate_zmx_process_identity_cache();
         return Ok(());
     }
     return Err(agent_busy(
@@ -501,12 +578,27 @@ async fn wait_for_branch(
         }
         let old = codex.agent_session_id.clone();
         let path = codex.transcript_path.clone();
+        let zmx_name = driver.zmx_name.to_string();
+        let home_dir = codex.paths.home_dir.clone();
         let candidate = tokio::task::spawn_blocking(move || {
-            find_codex_successor_transcript(&old, &path, started, &[])
+            let candidate = find_codex_successor_transcript(&old, &path, started, &[]);
+            if let crate::session_chat::SessionChatSuccessorOutcome::Found(next) = &candidate {
+                let identities =
+                    crate::zmx::read_zmx_session_process_identities(&[zmx_name.clone()], &home_dir)
+                        .ok()?;
+                let live = identities.get(&zmx_name)?;
+                if live.agent_session_id.as_deref() != Some(&next.agent_session_id)
+                    || live.agent_session_path.as_deref().map(Path::new)
+                        != Some(next.path.as_path())
+                {
+                    return None;
+                }
+            }
+            Some(candidate)
         })
         .await
         .map_err(|error| session_not_running(error.to_string()))?;
-        if let crate::session_chat::SessionChatSuccessorOutcome::Found(next) = candidate {
+        if let Some(crate::session_chat::SessionChatSuccessorOutcome::Found(next)) = candidate {
             if prompts(&next.path)? != codex.prompts[plan.presses + 1..] {
                 return Err(dialog_mismatch(
                     "branch",
@@ -601,9 +693,27 @@ mod tests {
         let name = std::env::var("GHOSTEX_CODEX_REWIND_TEST_ZMX").expect("disposable session");
         let mut path =
             PathBuf::from(std::env::var("GHOSTEX_CODEX_REWIND_TEST_ROLLOUT").expect("rollout"));
+        let temp = tempfile::tempdir().unwrap();
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        crate::storage::initialize_gxserver_storage(&paths).unwrap();
+        let db = open_gxserver_database(&paths).unwrap();
+        let repository = DomainRepository::new(&db, "rewind-test");
+        let project = repository
+            .create_project(
+                json!({"name": "Rewind test", "path": temp.path()})
+                    .as_object()
+                    .unwrap(),
+            )
+            .unwrap();
+        let project_id = project["projectId"].as_str().unwrap();
+        let session = repository.create_session(json!({
+            "projectId": project_id, "agentId": "codex", "kind": "agent",
+            "runtimeSettings": {"agentName": "codex", "agentSessionId": read_codex_session_meta(&path).unwrap().session_id, "agentSessionPath": path},
+        }).as_object().unwrap(), false).unwrap();
+        let session_id = session["sessionId"].as_str().unwrap();
         let driver = RewindDriver {
-            project_id: "codex-rewind-live-test",
-            session_id: "codex-rewind-live-test",
+            project_id,
+            session_id,
             zmx_name: &name,
             source: "codex-rewind-live-test",
             cancelled: &|| false,
@@ -617,11 +727,12 @@ mod tests {
             let presses = if latest { 0 } else { rows.len() - 1 };
             let meta = read_codex_session_meta(&path).unwrap();
             let codex = CodexRewindPlan {
-                paths: crate::paths::get_gxserver_paths(None),
-                server_id: String::new(),
+                paths: paths.clone(),
+                server_id: "rewind-test".into(),
                 transcript_path: path.clone(),
                 agent_session_id: meta.session_id,
                 message_id: rows[presses].0.clone(),
+                synchronizing_since: None,
                 prompts: rows,
             };
             let plan = RewindPlan {
@@ -640,12 +751,51 @@ mod tests {
                 .await
                 .unwrap();
             tokio::time::sleep(Duration::from_millis(300)).await;
-            let started = drive_picker(&driver, &plan, &codex, || Ok(()))
+            let started = drive_picker(&driver, &plan, &codex, || Ok(()), |_| Ok(()))
                 .await
                 .unwrap();
             let next = wait_for_branch(&driver, &plan, &codex, started)
                 .await
                 .unwrap();
+            let current = repository
+                .get_session(project_id, session_id)
+                .unwrap()
+                .unwrap();
+            let mut runtime = current["runtimeSettings"].as_object().unwrap().clone();
+            runtime.insert(
+                "sessionChatPendingCodexRewind".into(),
+                json!(state::PendingCodexRewind {
+                    previous_agent_session_id: codex.agent_session_id.clone(),
+                    previous_transcript_path: codex.transcript_path.clone(),
+                    target_message_id: codex.message_id.clone(),
+                    started_at: started,
+                    zmx_name: name.clone(),
+                }),
+            );
+            repository.update_session(json!({"projectId": project_id, "sessionId": session_id, "runtimeSettings": runtime}).as_object().unwrap()).unwrap();
+            let mut retry_codex = codex.clone();
+            retry_codex.synchronizing_since = Some(started);
+            let retry_plan = RewindPlan {
+                codex: Some(retry_codex),
+                ..plan.clone()
+            };
+            driver.run(&retry_plan).await.unwrap();
+            let stored = repository
+                .get_session(project_id, session_id)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                read_runtime_text(&stored, "agentSessionId").as_deref(),
+                Some(next.agent_session_id.as_str())
+            );
+            assert_eq!(
+                read_runtime_text(&stored, "agentSessionPath")
+                    .as_deref()
+                    .map(PathBuf::from),
+                next.path
+            );
+            assert!(pending_rewind(&stored).unwrap().is_none());
+            adopt_branch(&driver, &plan, &codex, started).await.unwrap();
             assert_ne!(next.agent_session_id, codex.agent_session_id);
             if let Some(next_path) = next.path {
                 assert_eq!(prompts(&next_path).unwrap(), codex.prompts[presses + 1..]);

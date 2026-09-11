@@ -332,7 +332,8 @@ fn codex_process_open_rollout_resolves_exact_session_identity() {
     fs::create_dir_all(&sessions).expect("sessions directory");
     let rollout =
         sessions.join("rollout-2026-08-11T20-15-34-019fda6e-fdbe-7570-a4fd-347e9e0bfb40.jsonl");
-    let _open_rollout = fs::File::create(&rollout).expect("open rollout");
+    let mut open_rollout = fs::File::create(&rollout).expect("open rollout");
+    std::io::Write::write_all(&mut open_rollout, b"{\"type\":\"session_meta\",\"payload\":{\"id\":\"019fda6e-fdbe-7570-a4fd-347e9e0bfb40\",\"source\":\"cli\"}}\n").expect("rollout metadata");
     let identity = read_codex_process_session_identity(Some(i64::from(std::process::id())))
         .expect("process rollout identity");
     assert_eq!(identity.0, "019fda6e-fdbe-7570-a4fd-347e9e0bfb40");

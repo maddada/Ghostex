@@ -275,12 +275,45 @@ pub(crate) fn sync_live_zmx_process_identities(
         let hook_identity = (identity.agent_id.as_deref() == Some("codex"))
             .then(|| codex_hook_identities.get(&zmx_name))
             .flatten();
-        let agent_session_id = hook_identity
-            .map(|hook| hook.agent_session_id.clone())
-            .or_else(|| identity.agent_session_id.clone());
-        let agent_session_path = hook_identity
-            .and_then(|hook| hook.agent_session_path.clone())
-            .or_else(|| identity.agent_session_path.clone());
+        // CDXC:SessionIdentity 2026-09-11 WHY: A persisted hook can still name the pre-rewind thread. The process's open rollout supplies an inseparable ID/path pair and takes precedence over that older observation.
+        let (mut agent_session_id, mut agent_session_path) =
+            if identity.agent_session_path.is_some() {
+                (
+                    identity.agent_session_id.clone(),
+                    identity.agent_session_path.clone(),
+                )
+            } else {
+                hook_identity
+                    .map(|hook| {
+                        (
+                            Some(hook.agent_session_id.clone()),
+                            hook.agent_session_path.clone(),
+                        )
+                    })
+                    .unwrap_or_else(|| (identity.agent_session_id.clone(), None))
+            };
+        // Before the first prompt, the new conversation has no rollout handle.
+        // Retired handles and startup argv from this same process cannot undo a
+        // verified rewind; a newly launched process can still resume an ancestor.
+        let retired_in_same_process = identity.process_id.is_some()
+            && identity.process_id
+                == current
+                    .pointer("/runtimeSettings/codexRewindProcessId")
+                    .and_then(Value::as_i64)
+            && agent_session_id.as_deref()
+                != current
+                    .pointer("/runtimeSettings/agentSessionId")
+                    .and_then(Value::as_str)
+            && agent_session_id.as_ref().is_some_and(|incoming| {
+                current
+                    .pointer("/runtimeSettings/previousAgentSessionIds")
+                    .and_then(Value::as_array)
+                    .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(incoming)))
+            });
+        if retired_in_same_process {
+            agent_session_id = None;
+            agent_session_path = None;
+        }
         /*
         CDXC:SessionIdentity 2026-06-21-18:25:
         Rust must copy TypeScript gxserver's live zmx process repair before sidebar list/snapshot responses. A running zmx terminal whose foreground process is Codex/Claude/etc. must be promoted to the matching agent row in durable state so macOS shows the same session identity after the server cutover.

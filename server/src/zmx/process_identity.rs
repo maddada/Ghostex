@@ -287,13 +287,33 @@ pub(crate) fn read_codex_process_session_identity(
     process_id: Option<i64>,
 ) -> Option<(String, String)> {
     let process_id = process_id.filter(|process_id| *process_id > 0)?;
+    codex_process_session_identity_from_paths(process_open_file_paths(process_id))
+}
+
+fn codex_process_session_identity_from_paths(
+    paths: impl IntoIterator<Item = PathBuf>,
+) -> Option<(String, String)> {
     let mut identities = HashMap::<String, PathBuf>::new();
-    for target in process_open_file_paths(process_id) {
+    let mut predecessors = HashSet::new();
+    for target in paths {
         let Some(agent_session_id) = codex_session_id_from_transcript_path(&target) else {
             continue;
         };
+        let meta = crate::session_chat_successor::read_codex_session_meta(&target)?;
+        if meta.is_subagent {
+            continue;
+        }
+        if meta.session_id != agent_session_id {
+            return None;
+        }
+        if let Some(parent) = meta.forked_from_id {
+            predecessors.insert(parent);
+        }
         identities.entry(agent_session_id).or_insert(target);
     }
+    // Codex may retain the previous rollout handle after rewinding. Among its
+    // open root rollouts, only an unambiguous descendant can be the active branch.
+    identities.retain(|id, _| !predecessors.contains(id));
     if identities.len() != 1 {
         return None;
     }
