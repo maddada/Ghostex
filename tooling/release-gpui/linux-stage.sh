@@ -100,6 +100,11 @@ mkdir -p \
 	"$PACKAGE_ROOT/usr/share/applications" \
 	"$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps"
 cp -a "$APP_DIR/." "$PACKAGE_ROOT/opt/ghostex/"
+mkdir -p "$PACKAGE_ROOT/opt/ghostex/gxserver/bin/skills"
+for skill_dir in "$REPO_ROOT"/skills/ghostex-*; do
+	[[ -d "$skill_dir" ]] || continue
+	cp -a "$skill_dir" "$PACKAGE_ROOT/opt/ghostex/gxserver/bin/skills/"
+done
 cp "$REPO_ROOT/apps/desktop/resources/AppIcon.appiconset/icon_256x256.png" \
 	"$PACKAGE_ROOT/usr/share/icons/hicolor/256x256/apps/ghostex.png"
 cat >"$PACKAGE_ROOT/usr/bin/ghostex" <<'EOF'

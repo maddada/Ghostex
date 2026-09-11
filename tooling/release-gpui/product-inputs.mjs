@@ -230,6 +230,7 @@ function linuxDesktopProduct(format) {
     kind: 'product',
     pathspecs: [
       ...DESKTOP_APP_PATHSPECS,
+      { pathspec: 'skills/**' },
       { pathspec: 'tooling/release-gpui/linux-stage.sh' },
       { pathspec: `tooling/release-gpui/linux-${format}.sh` },
       { pathspec: '.github/workflows/release-gpui-linux.yml' },
