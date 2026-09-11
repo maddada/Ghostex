@@ -403,7 +403,36 @@
    * stay fixed under wheel/trackpad input. The React overflow measurement
    * flips this back to auto only when the list is taller than its viewport.
    */
+  animation: none;
+  -webkit-mask-image: none;
+  mask-image: none;
   overflow-y: hidden;
+}
+
+/*
+ * CDXC:Sidebar 2026-09-11 DECISION:
+ * User: the main sidebar scroller fades rows at both ends like the chat transcript (scroll-fade-y on .session-groups-content in sidebar-app.tsx).
+ * The utility's own mask would also fade the sticky Space row, which sits in the scroller's top strip, so the mask keeps that strip fully opaque and starts the top fade right under the row's bottom edge. Without a Space row the offset is 0 and the mask is the utility's default. --scroll-fade-t and --scroll-fade-b are the utility's scroll-linked sizes: the top fade grows in as the list starts to scroll and the bottom fade drops out at the end.
+ */
+.session-groups-content {
+  /* 28px Space buttons plus the row's 12px bottom cushion; the sticky row below is sized from the same value. */
+  --sidebar-space-filter-row-height: 40px;
+}
+
+.session-groups-content:has(> .sidebar-space-filter-row) {
+  --sidebar-scroll-fade-pinned-top: var(--sidebar-space-filter-row-height);
+}
+
+.session-groups-content.scroll-fade-y {
+  --scroll-fade-mask: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 var(--sidebar-scroll-fade-pinned-top, 0px),
+    transparent var(--sidebar-scroll-fade-pinned-top, 0px),
+    #000 calc(var(--sidebar-scroll-fade-pinned-top, 0px) + var(--scroll-fade-t, 0px)),
+    #000 calc(100% - var(--scroll-fade-b, 0px)),
+    transparent 100%
+  );
 }
 
 .session-groups-scroll-shell {
@@ -2715,6 +2744,7 @@ manual mode visibly selected without adding text to the section row.
  */
 .session-groups-content > .sidebar-space-filter-row {
   background: var(--app-background);
+  height: var(--sidebar-space-filter-row-height);
   margin-top: 0;
   position: sticky;
   top: 0;
@@ -2766,6 +2796,27 @@ manual mode visibly selected without adding text to the section row.
  */
 button.sidebar-space-filter-button {
   border-radius: 6px;
+}
+
+/*
+ * CDXC:Spaces 2026-09-11 DECISION:
+ * User: with no Spaces yet, a labelled "Create space" button takes up the left side of the row and pushes Other to the right edge.
+ * It grows to fill the track and keeps its label left-aligned, while the base 28px icon-button shape is kept for Other.
+ */
+.sidebar-space-filter-button.sidebar-space-filter-create {
+  border-color: color-mix(in srgb, var(--app-foreground) 14%, transparent);
+  flex: 1 1 auto;
+  font-size: 12px;
+  gap: 6px;
+  justify-content: flex-start;
+  min-width: 0;
+  padding: 0 10px;
+  white-space: nowrap;
+  width: auto;
+}
+
+.sidebar-space-filter-button.sidebar-space-filter-create > svg {
+  flex: 0 0 auto;
 }
 
 .sidebar-space-filter-button:hover {

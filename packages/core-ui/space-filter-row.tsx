@@ -363,6 +363,7 @@ export function SpaceFilterRow({
   const [measurement, setMeasurement] = useState<SpaceRowMeasurement>();
   const [isMeasuring, setIsMeasuring] = useState(true);
   const [moreMenuPosition, setMoreMenuPosition] = useState<ContextMenuPosition>();
+  const [otherMenuPosition, setOtherMenuPosition] = useState<ContextMenuPosition>();
   const [editMenu, setEditMenu] = useState<{ position: ContextMenuPosition; spaceId: string }>();
 
   /*
@@ -837,6 +838,7 @@ export function SpaceFilterRow({
 
   const dismissMenus = () => {
     setMoreMenuPosition(undefined);
+    setOtherMenuPosition(undefined);
     setEditMenu(undefined);
   };
 
@@ -901,10 +903,28 @@ export function SpaceFilterRow({
           />
         ))}
         {/*
+         * CDXC:Spaces 2026-09-11 DECISION:
+         * User: when there are no Spaces yet, a "Create space" button fills the left side of the row and pushes Other to the right edge.
+         * It renders only while the section has no user Space, so the measuring pass and the overflow split never see it.
+         */}
+        {orderedSpaces.length === 0 ? (
+          <button
+            className='sidebar-space-filter-button sidebar-space-filter-create'
+            onClick={() => openSpaceEditor()}
+            type='button'
+          >
+            <IconPlus aria-hidden='true' size={14} stroke={2} />
+            Create space
+          </button>
+        ) : null}
+        {/*
          * CDXC:Spaces 2026-09-02:
          * Other is built-in chrome, not a Space: it sits after every user Space,
          * is never draggable, never overflows into More, and has no edit/delete
-         * context menu because there is nothing about it to edit.
+         * entry because there is nothing about it to edit.
+         *
+         * CDXC:Spaces 2026-09-11 DECISION:
+         * User: right-clicking Other offers New Space, the same action as the More menu and the Space icon menu.
          */}
         <AppTooltip
           content={getSpaceSessionStatusLabel(
@@ -924,6 +944,13 @@ export function SpaceFilterRow({
             data-has-session-status={String(hasSpaceSessionStatus(sessionSummaryBySpaceId[OTHER_SIDEBAR_SPACE_ID]))}
             data-sidebar-space-id={OTHER_SIDEBAR_SPACE_ID}
             onClick={() => onSelectSpace(OTHER_SIDEBAR_SPACE_ID)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setMoreMenuPosition(undefined);
+              setEditMenu(undefined);
+              setOtherMenuPosition({ x: event.clientX, y: event.clientY });
+            }}
             ref={otherButtonRef}
             type='button'
           >
@@ -1003,6 +1030,27 @@ export function SpaceFilterRow({
               ) : null}
             </button>
           ))}
+        </SidebarContextMenuPortal>
+      ) : null}
+      {otherMenuPosition ? (
+        <SidebarContextMenuPortal
+          menuRef={menuRef}
+          menuStyle={{ left: `${otherMenuPosition.x}px`, top: `${otherMenuPosition.y}px`, width: '218px' }}
+          onDismiss={dismissMenus}
+          vscode={vscode}
+        >
+          <button
+            className='session-context-menu-item'
+            onClick={() => {
+              dismissMenus();
+              openSpaceEditor();
+            }}
+            role='menuitem'
+            type='button'
+          >
+            <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} stroke={2} />
+            New Space
+          </button>
         </SidebarContextMenuPortal>
       ) : null}
       {editMenu && editedSpace ? (

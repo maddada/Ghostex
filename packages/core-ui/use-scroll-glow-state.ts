@@ -52,7 +52,7 @@ export function useScrollGlowState(scrollContainerRef: RefObject<HTMLElement | n
       /*
        * CDXC:Sidebar 2026-06-30-01:59:
        * The main sidebar must prioritize raw scroll throughput over edge-fade polish.
-       * Keep the overflow measurement that disables wheel handling for sparse lists, but do not subscribe to scroll frames or update top/bottom glow state now that the main sidebar scroll mask is removed.
+       * Keep the overflow measurement that disables wheel handling for sparse lists, but do not subscribe to scroll frames or update top/bottom glow state. The edge fade that returned on 2026-09-11 (scroll-fade-y in sidebar-app.tsx) is a CSS scroll-linked mask and needs no JS state.
        */
       const showTopGlow = false;
       const showBottomGlow = false;
