@@ -2673,14 +2673,18 @@ manual mode visibly selected without adding text to the section row.
    * header is gone, so the row is now the first thing in its list and rests
    * flush at the top instead of pulling itself into the scroll offset.
    */
-  margin: 0 0 13px;
+  margin: 0;
   overflow: hidden;
   /*
    * CDXC:Spaces 2026-09-11 DECISION:
-   * User: add 12px below the Spaces row only when Spaces are enabled. The row is not rendered when Spaces are disabled, so nothing else changes.
-   * The 12px is padding on the row, not extra margin: the local row is sticky, so a margin is scrollable space that disappears the moment the list scrolls under the pinned row, which made the first attempt look like nothing had been added. Padding stays inside the pinned, opaque row and keeps the cushion while scrolling.
+   * User: the gap below the Spaces row is 12px, only when Spaces are enabled (the row is not rendered when they are disabled), and it must look the same at the top of the list as it does while scrolling.
+   * The 12px is padding on the row, not margin: the local row is sticky, so a margin is scrollable space that disappears the moment the list scrolls under the pinned row, which made the first attempt look like nothing had been added. Padding stays inside the pinned, opaque row and keeps the cushion while scrolling.
+   * The row's old 13px bottom margin is gone for the same reason: stacked on the padding it made the resting gap 25px against 12px once scrolled, so the user asked for the margin to go so both states match.
+   *
+   * CDXC:Spaces 2026-09-11 WHY:
+   * The right padding is for the buttons that reach the row's end: the full-width "Create space" button pushes Other to the edge, and More lands there on overflow. The reference layout zeroes the list's own right padding, so without it the last button sat flush against the sidebar edge. The track is measured inside this padding, so the overflow split accounts for it.
    */
-  padding: 0 0 12px 3px;
+  padding: 0 10px 12px 3px;
   width: 100%;
 }
 
@@ -2738,9 +2742,9 @@ manual mode visibly selected without adding text to the section row.
  * With the Projects header removed the Space row is the only pinned chrome in
  * the local list, so it pins at the scroller's top edge, which is also its
  * resting position: nothing above it can scroll away. The gap to the first
- * project is the shared 12px row padding plus the 13px bottom margin, the same
- * as the remote machine's (non-sticky) Space row; only the padding survives
- * once the list scrolls under the pinned row.
+ * project is the shared 12px row padding alone, the same as the remote
+ * machine's (non-sticky) Space row, so it is identical at rest and once the
+ * list scrolls under the pinned row.
  */
 .session-groups-content > .sidebar-space-filter-row {
   background: var(--app-background);
