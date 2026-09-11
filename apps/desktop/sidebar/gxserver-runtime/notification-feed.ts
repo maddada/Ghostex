@@ -15,6 +15,7 @@ import {
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
 import { localGxserverSessionIdForSidebarSession } from './helpers/app-shot';
+import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import type { SidebarSessionItem } from '@/packages/shared/session-grid-contract';
 import {
   NOTIFICATION_FEED_READ_ENDPOINT,
@@ -26,6 +27,8 @@ import type {
   NotificationFeedState,
   NotificationFeedUpdateParams,
 } from '@/packages/shared/notification-feed/notification-feed-contract';
+
+let notificationRevealRequestId = Date.now();
 
 const NOTIFICATION_FEED_COMMAND_ACTIONS = [
   'open',
@@ -113,7 +116,10 @@ export const gpuiSidebarRuntimeNotificationFeedMethods = {
    * sessions by their presentation id (sometimes project-scoped), so the match
    * goes through the same id projection every other local lookup uses.
    */
-  findSidebarSessionForNotificationFeedItem(this: GpuiSidebarRuntime, sessionId: string): SidebarSessionItem | undefined {
+  findSidebarSessionForNotificationFeedItem(
+    this: GpuiSidebarRuntime,
+    sessionId: string
+  ): SidebarSessionItem | undefined {
     for (const group of this.latestGroups) {
       for (const session of group.sessions) {
         if (localGxserverSessionIdForSidebarSession(session) === sessionId) {
@@ -139,15 +145,22 @@ export const gpuiSidebarRuntimeNotificationFeedMethods = {
     return undefined;
   },
 
-  /** A row whose session is gone cannot be opened, so it is dismissed instead of lingering unread forever. */
+  /**
+   * CDXC:Notifications 2026-09-11 DECISION:
+   * User: clicking a notification always takes you to that session and reveals it in the sidebar.
+   * The row's raw ids are turned into the sidebar's project-scoped session id without requiring the row to be in the current snapshot, so a session hidden by a Space, a filter, or a stale snapshot still gets focused; the reveal request then selects its Space, clears filters, and scrolls to it once the row is published. The daemon drops rows for deleted sessions on read, so a missing session never strands a row.
+   */
   async openNotificationFeedItem(this: GpuiSidebarRuntime, item: NotificationFeedItem): Promise<void> {
-    const session = this.findSidebarSessionForNotificationFeedItem(item.sessionId);
-    if (!session) {
-      await this.updateNotificationFeed({ action: 'dismiss', notificationId: item.id });
-      return;
-    }
+    const sidebarSessionId =
+      this.findSidebarSessionForNotificationFeedItem(item.sessionId)?.sessionId ??
+      createGxserverPresentationProjectSessionId(item.projectId, item.sessionId);
     await this.updateNotificationFeed({ action: 'markRead', notificationId: item.id });
-    void this.focusSession(session.sessionId, { sessionId: session.sessionId, type: 'focusSession' });
+    void this.focusSession(sidebarSessionId, { sessionId: sidebarSessionId, type: 'focusSession' });
+    this.messageSource.postMessage({
+      requestId: ++notificationRevealRequestId,
+      sessionId: sidebarSessionId,
+      type: 'revealSidebarSession',
+    });
   },
 
   async jumpToLatestUnreadNotification(this: GpuiSidebarRuntime): Promise<void> {

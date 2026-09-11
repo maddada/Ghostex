@@ -5,15 +5,14 @@ use crate::domain::{
     optional_trimmed_string_param, read_unvalidated_project_lookup_id,
     read_unvalidated_session_lookup_id, DomainRepository, DomainResult, DomainStateError,
 };
-use crate::presentation::read_runtime_text;
 use crate::server::AppState;
 
 use super::store::{
     bounded_notification_body, clear_notification_feed, defer_session_notification,
     dismiss_notification, insert_notification_feed_row, mark_all_notifications_read,
     mark_notification_read, mark_notification_unread, mark_session_notifications_read,
-    notification_exists, read_notification_feed_state, NewNotificationFeedRow,
-    NOTIFICATION_FEED_KIND_CUSTOM,
+    notification_agent_icon, notification_exists, read_notification_feed_state,
+    NewNotificationFeedRow, NOTIFICATION_FEED_KIND_CUSTOM,
 };
 
 pub(crate) const NOTIFICATION_FEED_READ_ENDPOINT: &str = "/api/readNotificationFeed";
@@ -144,7 +143,7 @@ pub(crate) fn create_notification_endpoint(
             title,
             subtitle,
             body,
-            agent_name: read_runtime_text(&session, "agentName"),
+            agent_name: notification_agent_icon(&session),
             attention_event_id: None,
         },
     )?;

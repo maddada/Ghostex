@@ -11,9 +11,11 @@ use crate::notification_feed::{
 use crate::*;
 
 const NOTIFICATION_PANEL_BELL_ICON: &str = "titlebar/bell.svg";
-const NOTIFICATION_PANEL_CLOSE_ICON: &str = "titlebar/xmark.svg";
-/// The hover-only dismiss button replaces the time in the title line's trailing slot, so line one keeps this height in both states.
-const NOTIFICATION_CARD_DISMISS_SIZE: f32 = 18.0;
+const NOTIFICATION_PANEL_CHECK_ICON: &str = "titlebar/check.svg";
+/// Same size as the Tips card check, floating in the card's bottom-right corner over the short footer line.
+const NOTIFICATION_CARD_CHECK_SIZE: f32 = 22.0;
+/// Title line height, so the line keeps one height whether or not it is hovered.
+const NOTIFICATION_CARD_TITLE_LINE_HEIGHT: f32 = 18.0;
 
 impl GpuiTitlebarReadingPanel {
     pub(crate) fn notifications(
@@ -67,14 +69,26 @@ impl GpuiTitlebarReadingPanel {
     }
 
     fn open_notification(&mut self, id: String, window: &mut Window, cx: &mut gpui::Context<Self>) {
+        let mut reveal_session_id = None;
         if let Some(feed) = self.notifications_feed_mut()
             && let Some(item) = feed.items.iter_mut().find(|item| item.id == id)
-            && !item.read
         {
-            item.read = true;
-            feed.unread_count = feed.unread_count.saturating_sub(1);
+            if !item.read {
+                item.read = true;
+                feed.unread_count = feed.unread_count.saturating_sub(1);
+            }
+            reveal_session_id = Some(gpui_combined_presentation_session_id(
+                &item.project_id,
+                &item.session_id,
+            ));
         }
         self.send_notification_feed_command("open", Some(id), cx);
+        // The sidebar runtime focuses and reveals the session; this only makes sure a collapsed sidebar opens so the reveal is visible, the same as the titlebar's reveal-active-session button.
+        if let Some(session_id) = reveal_session_id {
+            let _ = self.main_app.update_in(cx, move |app, _main_window, cx| {
+                app.reveal_sidebar_session(&session_id, cx);
+            });
+        }
         self.close_popup(window, cx);
     }
 
@@ -113,6 +127,7 @@ impl GpuiTitlebarReadingPanel {
         let Some(item) = feed.items.iter_mut().find(|item| item.id == id) else {
             return;
         };
+        let was_read = item.read;
         item.read = !item.read;
         let action = if item.read {
             feed.unread_count = feed.unread_count.saturating_sub(1);
@@ -121,6 +136,19 @@ impl GpuiTitlebarReadingPanel {
             feed.unread_count += 1;
             "markUnread"
         };
+        // The card leaves its group, so the next card of that group slides under the pointer; hand it the hover like a dismiss does.
+        let next_hovered_id = feed
+            .items
+            .iter()
+            .skip_while(|item| item.id != id)
+            .skip(1)
+            .find(|item| item.read == was_read)
+            .map(|item| item.id.clone());
+        if let GpuiTitlebarReadingPanelState::Notifications { hovered_id, .. } = &mut self.state
+            && hovered_id.as_deref() == Some(id.as_str())
+        {
+            *hovered_id = next_hovered_id;
+        }
         self.send_notification_feed_command(action, Some(id), cx);
         cx.notify();
     }
@@ -373,44 +401,64 @@ impl GpuiTitlebarReadingPanel {
         } else {
             format!("{} · {}", item.subtitle, item.kind.label())
         };
-        let trailing_slot: AnyElement = if hovered {
+        // CDXC:Notifications 2026-09-11 DECISION:
+        // User: one square check button per card in the bottom-right corner, shown on hover only, no X and no separate column for it.
+        // On an unread card it marks the card read; on a read card it dismisses the card from history.
+        let check_button: Option<AnyElement> = hovered.then(|| {
             div()
-                .id(format!(
-                    "ghostex-gpui-titlebar-notification-dismiss-{index}"
-                ))
+                .id(format!("ghostex-gpui-titlebar-notification-check-{index}"))
+                .absolute()
+                .bottom(px(8.0))
+                .right(px(8.0))
                 .flex()
-                .flex_shrink_0()
-                .size(px(NOTIFICATION_CARD_DISMISS_SIZE))
+                .size(px(NOTIFICATION_CARD_CHECK_SIZE))
                 .items_center()
                 .justify_center()
-                .rounded_full()
-                .bg(rgb(0xffffff).opacity(0.10))
                 .cursor_pointer()
-                .hover(|this| this.bg(rgb(0xffffff).opacity(0.20)))
+                .border_1()
+                .border_color(if unread {
+                    rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.45)
+                } else {
+                    rgb(0xffffff).opacity(0.16)
+                })
+                .bg(if unread {
+                    rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.18)
+                } else {
+                    rgb(0xffffff).opacity(0.12)
+                })
+                .hover(move |this| {
+                    this.bg(if unread {
+                        rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.32)
+                    } else {
+                        rgb(0xffffff).opacity(0.22)
+                    })
+                })
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                         window.prevent_default();
                         cx.stop_propagation();
-                        this.dismiss_notification(dismiss_id.clone(), cx);
+                        if unread {
+                            this.toggle_notification_read(read_id.clone(), cx);
+                        } else {
+                            this.dismiss_notification(dismiss_id.clone(), cx);
+                        }
                     }),
                 )
                 .child(titlebar_svg_icon(
-                    NOTIFICATION_PANEL_CLOSE_ICON,
-                    8.0,
-                    rgb(0xffffff).opacity(0.75).into(),
+                    NOTIFICATION_PANEL_CHECK_ICON,
+                    14.0,
+                    rgb(0xffffff).opacity(0.92).into(),
                 ))
                 .into_any_element()
-        } else {
-            div()
-                .flex_shrink_0()
-                .whitespace_nowrap()
-                .text_size(px(11.0))
-                .line_height(px(16.0))
-                .text_color(rgb(0xffffff).opacity(0.45))
-                .child(time_label)
-                .into_any_element()
-        };
+        });
+        let time_slot = div()
+            .flex_shrink_0()
+            .whitespace_nowrap()
+            .text_size(px(11.0))
+            .line_height(px(16.0))
+            .text_color(rgb(0xffffff).opacity(0.45))
+            .child(time_label);
         // The agent's own logo when the session has one, else an icon for the kind.
         let tile_icon: AnyElement = if let Some(agent_name) = item.agent_name.as_deref()
             && let Some(icon_path) = workspace_tab_agent_icon_path(agent_name)
@@ -456,7 +504,7 @@ impl GpuiTitlebarReadingPanel {
                         h_flex()
                             .w_full()
                             .min_w_0()
-                            .h(px(NOTIFICATION_CARD_DISMISS_SIZE))
+                            .h(px(NOTIFICATION_CARD_TITLE_LINE_HEIGHT))
                             .items_center()
                             .gap(px(8.0))
                             .child(
@@ -471,7 +519,7 @@ impl GpuiTitlebarReadingPanel {
                                     .text_color(rgb(0xffffff).opacity(0.94))
                                     .child(title),
                             )
-                            .child(trailing_slot),
+                            .child(time_slot),
                     )
                     .when(!item.body.is_empty(), |this| {
                         this.child(
@@ -502,48 +550,14 @@ impl GpuiTitlebarReadingPanel {
                             .child(meta_line),
                     ),
             );
-        // Same check as the Tips cards: a button that reads an unread card, a muted mark on a read one.
-        let read_mark = div()
-            .id(format!("ghostex-gpui-titlebar-notification-read-{index}"))
-            .flex_shrink_0()
-            .flex()
-            .size(px(24.0))
-            .self_end()
-            .items_center()
-            .justify_center()
-            .when(unread, |this| {
-                this.cursor_pointer()
-                    .border_1()
-                    .border_color(rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.45))
-                    .bg(rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.18))
-                    .hover(|this| this.bg(rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.30)))
-                    .on_mouse_down(
-                        MouseButton::Left,
-                        cx.listener(move |this, _: &MouseDownEvent, window, cx| {
-                            window.prevent_default();
-                            cx.stop_propagation();
-                            this.toggle_notification_read(read_id.clone(), cx);
-                        }),
-                    )
-            })
-            .child(titlebar_svg_icon(
-                "titlebar/check.svg",
-                15.0,
-                if unread {
-                    rgb(0xffffff).opacity(0.92).into()
-                } else {
-                    rgb(0xffffff).opacity(0.46).into()
-                },
-            ));
-
         h_flex()
             .id(format!("ghostex-gpui-titlebar-notification-row-{index}"))
+            .relative()
             // The scroll column must not shrink cards to fit the panel; the column overflows and scrolls instead.
             .flex_shrink_0()
             .w_full()
             .min_h(px(72.0))
             .items_start()
-            .gap(px(10.0))
             .border_1()
             .border_color(if unread {
                 rgb(NOTIFICATION_ATTENTION_BLUE).opacity(0.30)
@@ -592,7 +606,7 @@ impl GpuiTitlebarReadingPanel {
                 }),
             )
             .child(detail)
-            .child(read_mark)
+            .children(check_button)
             .into_any_element()
     }
     fn render_notifications_empty_state() -> AnyElement {

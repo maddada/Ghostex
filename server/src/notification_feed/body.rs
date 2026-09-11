@@ -18,13 +18,14 @@ pub(crate) fn last_assistant_message_text(session: &Value) -> Option<String> {
         read_runtime_text(session, "agentSessionId").as_deref(),
         read_runtime_text(session, "agentSessionPath").as_deref(),
     )?;
-    let SessionChatTailPage::Page { messages, .. } = crate::session_chat::read_session_chat_tail_page(
-        transcript_agent,
-        &path,
-        NOTIFICATION_BODY_SCAN_LIMIT,
-        None,
-    )
-    .ok()?
+    let SessionChatTailPage::Page { messages, .. } =
+        crate::session_chat::read_session_chat_tail_page(
+            transcript_agent,
+            &path,
+            NOTIFICATION_BODY_SCAN_LIMIT,
+            None,
+        )
+        .ok()?
     else {
         return None;
     };

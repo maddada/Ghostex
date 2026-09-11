@@ -204,7 +204,10 @@ fn item_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     Ok(item)
 }
 
-pub(crate) fn read_notification_feed_item(db: &Connection, id: &str) -> DomainResult<Option<Value>> {
+pub(crate) fn read_notification_feed_item(
+    db: &Connection,
+    id: &str,
+) -> DomainResult<Option<Value>> {
     db.query_row(
         &format!("SELECT {ITEM_COLUMNS} FROM notification_feed WHERE id = ?1"),
         params![id],
@@ -222,11 +225,12 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
             "SELECT {ITEM_COLUMNS} FROM notification_feed ORDER BY createdAt DESC, id DESC LIMIT ?1"
         ))
         .map_err(sql_error)?;
-    let items = statement
+    let mut items = statement
         .query_map(params![NOTIFICATION_FEED_READ_LIMIT as i64], item_from_row)
         .map_err(sql_error)?
         .collect::<rusqlite::Result<Vec<Value>>>()
         .map_err(sql_error)?;
+    overlay_live_session_agent_icons(db, &mut items)?;
     let unread_count: i64 = db
         .query_row(
             "SELECT COUNT(*) FROM notification_feed WHERE readAt IS NULL",
@@ -260,4 +264,55 @@ pub(crate) fn read_notification_feed_state(db: &Connection) -> DomainResult<Valu
         state["nextUnreadId"] = Value::String(next_unread_id);
     }
     Ok(state)
+}
+
+/// The icon slug a client should draw for a session: the sidebar agent's icon from launch settings, which is what a `custom-…` agent configuration declares as its CLI family, then the transcript family, then the runtime agent name.
+pub(crate) fn notification_agent_icon(session: &Value) -> Option<String> {
+    session
+        .get("launchSettings")
+        .and_then(Value::as_object)
+        .and_then(|settings| settings.get("icon"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|icon| !icon.is_empty() && *icon != "browser")
+        .map(str::to_string)
+        .or_else(|| crate::session_chat_follower::session_chat_agent_for_session(session))
+        .or_else(|| crate::presentation::read_runtime_text(session, "agentName"))
+}
+
+/// Rows written before the icon resolution existed carry the raw `custom-…` agent id, and a session's agent icon can change after the row was written, so the live session's icon wins over the stored value whenever the session still exists.
+fn overlay_live_session_agent_icons(db: &Connection, items: &mut [Value]) -> DomainResult<()> {
+    let mut icon_by_session: std::collections::HashMap<String, Option<String>> =
+        std::collections::HashMap::new();
+    for item in items.iter_mut() {
+        let Some(session_id) = item.get("sessionId").and_then(Value::as_str) else {
+            continue;
+        };
+        let icon = match icon_by_session.get(session_id) {
+            Some(icon) => icon.clone(),
+            None => {
+                let icon = db
+                    .query_row(
+                        "SELECT launchSettingsJson, runtimeSettingsJson FROM sessions WHERE sessionId = ?1",
+                        params![session_id],
+                        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+                    )
+                    .optional()
+                    .map_err(sql_error)?
+                    .and_then(|(launch_settings, runtime_settings)| {
+                        let session = json!({
+                            "launchSettings": serde_json::from_str::<Value>(&launch_settings).unwrap_or(Value::Null),
+                            "runtimeSettings": serde_json::from_str::<Value>(&runtime_settings).unwrap_or(Value::Null),
+                        });
+                        notification_agent_icon(&session)
+                    });
+                icon_by_session.insert(session_id.to_string(), icon.clone());
+                icon
+            }
+        };
+        if let Some(icon) = icon {
+            item["agentName"] = Value::String(icon);
+        }
+    }
+    Ok(())
 }

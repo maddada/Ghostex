@@ -4,7 +4,6 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
-use crate::presentation::read_runtime_text;
 use crate::server::AppState;
 use crate::session_status::TURN_COMPLETE_ATTENTION_SOURCE;
 use crate::storage::open_gxserver_database_with_busy_timeout;
@@ -13,8 +12,8 @@ use super::api::broadcast_notification_feed_changed;
 use super::body::last_assistant_message_text;
 use super::store::{
     bounded_notification_body, insert_notification_feed_row, mark_session_notifications_read,
-    NewNotificationFeedRow, NOTIFICATION_FEED_KIND_BELL, NOTIFICATION_FEED_KIND_FINISHED,
-    NOTIFICATION_FEED_KIND_NEEDS_INPUT,
+    notification_agent_icon, NewNotificationFeedRow, NOTIFICATION_FEED_KIND_BELL,
+    NOTIFICATION_FEED_KIND_FINISHED, NOTIFICATION_FEED_KIND_NEEDS_INPUT,
 };
 
 const OBSERVER_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
@@ -155,7 +154,7 @@ fn record_attention_row(
             title,
             subtitle,
             body,
-            agent_name: read_runtime_text(session, "agentName"),
+            agent_name: notification_agent_icon(session),
             attention_event_id: activity
                 .get("attentionEventId")
                 .and_then(Value::as_str)
