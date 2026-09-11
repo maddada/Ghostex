@@ -134,6 +134,26 @@ pub(crate) fn refresh(
             response_at = Some(timestamp);
         }
     }
+    // CDXC:AgentProviders 2026-09-11 WHY:
+    // A limit the transcript records again after the account switch is the new login running out, even though the screen wording is identical to the hidden one. Drop the suppression, in memory and in the row, so the notice can show and the switch pass can act on it.
+    if notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT {
+        if let Some((identity, since)) =
+            crate::session_chat_notice::account_usage_notice_suppression(project, session)
+        {
+            if identity == notice.identity()
+                && error_at.is_some_and(|error| error > since.timestamp_millis())
+            {
+                crate::session_chat_notice::lift_account_usage_notice_suppression(project, session);
+                let mut runtime = row["runtimeSettings"]
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default();
+                runtime.remove("accountSuppressedUsageNotice");
+                runtime.remove("accountSuppressedUsageNoticeAt");
+                let _ = crate::accounts::endpoint::update_session(repository, &row, runtime);
+            }
+        }
+    }
     let recovered = response_at.is_some_and(|response| response > error_at.unwrap_or(observed_at));
     if let Ok(mut entries) = cleared().lock() {
         if recovered {
