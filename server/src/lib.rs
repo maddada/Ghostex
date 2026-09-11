@@ -110,6 +110,7 @@ pub mod session_chat_workspace_trust;
 pub mod session_git_status;
 pub mod session_keep_awake;
 pub mod session_lifecycle;
+pub mod session_parking;
 pub mod session_status;
 pub mod session_transcript_export;
 pub mod session_transcript_size;

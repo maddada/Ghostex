@@ -1098,6 +1098,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         suppress_draft_activity_after_app_command(state, &target.project_id, &target.session_id);
     } else {
         promote_draft_session_after_send(state, &target.project_id, &target.session_id);
+        unpark_session_after_send(state, &target.project_id, &target.session_id);
     }
     if let Some(version) = draft_version {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
@@ -1319,6 +1320,28 @@ broadcasts, so revision order and broadcast order stay identical.
 /// Clears a draft session's marker after a chat/queue send reached the agent,
 /// and republishes the row so every client stops drawing it as a draft. A send
 /// into a session that was never a draft costs one indexed read and no write.
+/// The chat half of "Unpark after sending a message" (session_parking.rs).
+/// Sits next to draft promotion because it wants the same moment: after the
+/// bytes were accepted, and never for an option command.
+fn unpark_session_after_send(state: &AppState, project_id: &str, session_id: &str) {
+    let Ok(db) = open_gxserver_database(&state.paths) else {
+        return;
+    };
+    let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
+    if matches!(
+        crate::session_parking::unpark_session_after_user_message(
+            &repository,
+            &state.paths.app_config_dir,
+            project_id,
+            session_id,
+        ),
+        Ok(true)
+    ) {
+        let _ =
+            schedule_presentation_session_delta(state, &db, &repository, project_id, session_id);
+    }
+}
+
 fn promote_draft_session_after_send(state: &AppState, project_id: &str, session_id: &str) {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return;

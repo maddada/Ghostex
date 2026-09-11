@@ -737,9 +737,14 @@ export function SessionGroupSection({
   showSessionDropPositionIndicators = true,
   vscode,
 }: SessionGroupSectionProps) {
-  const launchAccountsTransport = useMemo(() => vscode.requestGroupAccounts
-    ? (request: import('@/packages/shared/agent-accounts').AgentAccountsRequest) => vscode.requestGroupAccounts!(groupId, request)
-    : undefined, [vscode, groupId]);
+  const launchAccountsTransport = useMemo(
+    () =>
+      vscode.requestGroupAccounts
+        ? (request: import('@/packages/shared/agent-accounts').AgentAccountsRequest) =>
+            vscode.requestGroupAccounts!(groupId, request)
+        : undefined,
+    [vscode, groupId]
+  );
 
   const sidebarItemTooltipDelayMs = useSidebarItemTooltipDelayMs();
   const group = useSidebarStore((state) => state.groupsById[groupId]);
@@ -965,6 +970,8 @@ export function SessionGroupSection({
       showCloseButton: state.hud.showCloseButtonOnSessionCards,
       showDebugSessionNumbers: state.hud.debuggingMode,
       enableSessionParking: state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking,
+      showTagMenuWhenParking:
+        state.hud.settings?.showTagMenuWhenParking ?? DEFAULT_ghostex_SETTINGS.showTagMenuWhenParking,
       showLastActiveTime: !(
         state.hud.settings?.hideLastActiveTimeOnSessionCards ??
         DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
@@ -2517,10 +2524,7 @@ export function SessionGroupSection({
                                 tooltip={`Create ${primaryProjectAgentLabel}`}
                                 type='button'
                               >
-                                <ProjectAgentLauncherIcon
-                                  agent={primaryProjectAgent}
-                                  colorMode='brand'
-                                />
+                                <ProjectAgentLauncherIcon agent={primaryProjectAgent} colorMode='brand' />
                               </ProjectHeaderActionButton>
                               <ProjectHeaderActionButton
                                 aria-expanded={openControlMenu === 'project-agent'}
@@ -2633,7 +2637,10 @@ export function SessionGroupSection({
                       Boolean(projectContext) &&
                       sessionIndex > 0 &&
                       projectSessionSection !== 'pinned' &&
-                      getProjectSessionSection(sessionsById[renderedSessionIds[sessionIndex - 1]], enableSessionParking) === 'pinned';
+                      getProjectSessionSection(
+                        sessionsById[renderedSessionIds[sessionIndex - 1]],
+                        enableSessionParking
+                      ) === 'pinned';
                     const isProjectSessionListOverflowRow =
                       shouldClipProjectSessionList && !visibleSessionIdSet.has(sessionId);
                     const sessionIdsBelowStartIndex = isProjectSessionListOverflowRow ? undefined : sessionIndex + 1;
@@ -2652,7 +2659,9 @@ export function SessionGroupSection({
 
                     return (
                       <Fragment key={sessionId}>
-                        {isPinnedSectionEndGap && !collapsedProjectSessionSections.pinned && shouldRenderSessionRowGaps ? (
+                        {isPinnedSectionEndGap &&
+                        !collapsedProjectSessionSections.pinned &&
+                        shouldRenderSessionRowGaps ? (
                           <div
                             aria-hidden
                             className='pinned-session-drop-gap'
@@ -3429,8 +3438,13 @@ export function SessionGroupSection({
            * Project-header agent menus can open near the bottom of the native sidebar.
            * Use the measured sidebar menu portal so long agent lists clamp to the visible webview and scroll instead of overflowing past the sidebar edge.
            */}
-          <AgentLauncherMenuItems agents={agents} primaryAgentId={primaryProjectAgent?.agentId}
-            transport={launchAccountsTransport} onRun={requestRunProjectAgent} onConfigure={openConfigureAgentsModal} />
+          <AgentLauncherMenuItems
+            agents={agents}
+            primaryAgentId={primaryProjectAgent?.agentId}
+            transport={launchAccountsTransport}
+            onRun={requestRunProjectAgent}
+            onConfigure={openConfigureAgentsModal}
+          />
         </SidebarContextMenuPortal>
       ) : null}
       {/**

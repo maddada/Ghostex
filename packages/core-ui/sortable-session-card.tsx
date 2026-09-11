@@ -172,6 +172,7 @@ export type SortableSessionCardSharedSettings = {
   showSessionCloseContextMenuAction: boolean;
   showSessionCommandCopyActions: boolean;
   showSessionDetailsCopyAction: boolean;
+  showTagMenuWhenParking: boolean;
 };
 
 export type SortableSessionCardProps = {
@@ -729,9 +730,46 @@ export function SortableSessionCard({
     showSessionCloseContextMenuAction,
     showSessionCommandCopyActions,
     showSessionDetailsCopyAction,
+    showTagMenuWhenParking,
   } = sessionCardSettings;
   const canFocusMode = sessionGroup?.canFocusMode === true;
   const [tagSubmenuPosition, setTagSubmenuPosition] = useState<ContextMenuPosition>();
+  /**
+   * CDXC:Sessions 2026-09-11 DECISION:
+   * User: add a "Show tag menu when parking" setting under the parking toggle.
+   * With it on, Park opens the Tag as submenu so the session can be tagged in the same gesture.
+   * The park itself is committed when the context menu closes, not when Park is clicked: parking first moves the card into the Parked section, and a collapsed Parked section unmounts the card and takes the open menu with it.
+   * Every way of closing the menu (a tag choice, Escape, a click elsewhere, another menu action) still parks, so the extra step can add a tag but never cancels the park.
+   */
+  const pendingParkRef = useRef<{ clearSelection: boolean; sessionIds: readonly string[] } | undefined>(undefined);
+  useEffect(() => {
+    if (contextMenuPosition) {
+      return;
+    }
+    const pendingPark = pendingParkRef.current;
+    if (!pendingPark) {
+      return;
+    }
+    pendingParkRef.current = undefined;
+    if (pendingPark.clearSelection) {
+      onSessionSelectionChange?.({ groupId, mode: 'clear', reason: 'bulkSetParked', sessionId });
+      runSidebarBulkContextMenuActionInBackground(pendingPark.sessionIds, (targetSessionId) => {
+        vscode.postMessage({
+          parked: true,
+          sessionId: targetSessionId,
+          type: 'setSessionParked',
+        });
+      });
+      return;
+    }
+    for (const targetSessionId of pendingPark.sessionIds) {
+      vscode.postMessage({
+        parked: true,
+        sessionId: targetSessionId,
+        type: 'setSessionParked',
+      });
+    }
+  }, [contextMenuPosition, groupId, onSessionSelectionChange, sessionId, vscode]);
   const [advancedSubmenuPosition, setAdvancedSubmenuPosition] = useState<ContextMenuPosition>();
   const [switchAccountSubmenuPosition, setSwitchAccountSubmenuPosition] = useState<ContextMenuPosition>();
   const [completionFlashRunId, setCompletionFlashRunId] = useState(0);
@@ -960,7 +998,8 @@ export function SortableSessionCard({
   const setSessionCardElement = useCallback(
     (element: HTMLElement | null) => {
       sessionCardRef.current = element;
-      sortable.sourceRef(element);
+      // Keep the frame as the cloned source so its row geometry and drag styling apply.
+      sortable.handleRef(element);
     },
     [sortable]
   );
@@ -1557,7 +1596,11 @@ export function SortableSessionCard({
   };
 
   const accountProvider = resolveSessionChatTranscriptAgent(session.agentName, session.agentIcon);
-  const canSwitchAccount = !isProjectSessionListMoreRow && !isBrowserSession && !isStaleRemoteRow && Boolean(vscode.requestSessionAccounts) &&
+  const canSwitchAccount =
+    !isProjectSessionListMoreRow &&
+    !isBrowserSession &&
+    !isStaleRemoteRow &&
+    Boolean(vscode.requestSessionAccounts) &&
     (accountProvider === 'claude' || accountProvider === 'codex');
   const openSwitchAccountSubmenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
     if (switchAccountSubmenuPosition) {
@@ -1893,6 +1936,17 @@ export function SortableSessionCard({
     });
   };
 
+  const requestParkWithTagMenu = (
+    event: ReactMouseEvent<HTMLButtonElement>,
+    pendingPark: { clearSelection: boolean; sessionIds: readonly string[] }
+  ) => {
+    pendingParkRef.current = pendingPark;
+    if (!tagSubmenuPosition) {
+      openSessionTagSubmenu(event);
+    }
+  };
+  const parkOpensTagMenu = showTagMenuWhenParking && sessionTagSubmenuItemCount > 0;
+
   const bulkPrimaryActions: SessionContextMenuAction[] = [];
   if (bulkActionAvailability && bulkActionAvailability.sleepableSessionIds.length > 0) {
     bulkPrimaryActions.push({
@@ -1944,11 +1998,16 @@ export function SortableSessionCard({
    * User: add Park selected to the selected-session context menu.
    */
   if (bulkActionAvailability && bulkActionAvailability.parkableSessionIds.length > 0) {
+    const parkableSessionIds = bulkActionAvailability.parkableSessionIds;
+    const bulkParkOpensTagMenu = parkOpensTagMenu && bulkActionAvailability.taggableSessionIds.length > 0;
     bulkPrimaryActions.push({
       icon: <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       key: 'park-selected',
       label: 'Park selected',
-      onClick: () => requestSetSelectedSessionsParked(true),
+      onClick: bulkParkOpensTagMenu
+        ? (event) => requestParkWithTagMenu(event, { clearSelection: true, sessionIds: parkableSessionIds })
+        : () => requestSetSelectedSessionsParked(true),
+      ...(bulkParkOpensTagMenu ? { submenu: 'session-tags' as const } : {}),
     });
   }
   if (bulkActionAvailability && bulkActionAvailability.unparkableSessionIds.length > 0) {
@@ -2026,11 +2085,15 @@ export function SortableSessionCard({
     });
   }
   if (enableSessionParking && canPinSession && !isBrowserSession) {
+    const singleParkOpensTagMenu = !session.isParked && parkOpensTagMenu && canTagSession;
     primaryActions.push({
       icon: <IconArchive aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />,
       key: 'park',
       label: session.isParked ? 'Unpark' : 'Park',
-      onClick: () => requestSetParked(!session.isParked),
+      onClick: singleParkOpensTagMenu
+        ? (event) => requestParkWithTagMenu(event, { clearSelection: false, sessionIds: [session.sessionId] })
+        : () => requestSetParked(!session.isParked),
+      ...(singleParkOpensTagMenu ? { submenu: 'session-tags' as const } : {}),
     });
   }
   if (canOpenSessionNote) {
@@ -2979,7 +3042,11 @@ export function SortableSessionCard({
             document.body
           )
         : null}
-      {contextMenuPosition && advancedSubmenuPosition && switchAccountSubmenuPosition && !isProjectSessionListMoreRow && vscode.requestSessionAccounts
+      {contextMenuPosition &&
+      advancedSubmenuPosition &&
+      switchAccountSubmenuPosition &&
+      !isProjectSessionListMoreRow &&
+      vscode.requestSessionAccounts
         ? createPortal(
             <SidebarAccountMenu
               sessionId={session.sessionId}
