@@ -26,12 +26,14 @@ import {
   IconSparkles,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { detectghostexHotkeyPlatform } from '../../shared/ghostex-hotkeys';
 import {
   SESSION_CHAT_FORK_BOUNDARY_ID_PREFIX,
   type SessionChatMessage,
   type SessionChatTheme,
 } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
+import { SessionChatStartupSendStatus, type SessionChatStartupSendActions } from './session-chat-startup-send-status';
 import { Button } from '../../components/ui/button';
 import { Separator } from '../../components/ui/separator';
 import {
@@ -125,13 +127,30 @@ LAST reader scroll ended within the follow threshold, and the button is hidden
 while it did; it shows only after the reader has actually scrolled away.
 */
 const FOLLOW_BOTTOM_ATTRIBUTE = 'data-ghostex-follow-bottom';
+
+/**
+ * Set on the viewport while the stream hold owns scrolling. The scroller only
+ * activates its button after a reader scroll, so chat.css uses this to keep
+ * the Scroll to bottom pill reachable while the hold keeps the end off screen.
+ */
+const STREAM_HOLD_ATTRIBUTE = 'data-ghostex-stream-hold';
+
+/** Gap kept above the streaming row while the stream hold anchors it to the top. */
+const STREAM_HOLD_TOP_MARGIN_PX = 12;
+
+/** The chat's Scroll to bottom chord (session-chat-view.tsx dispatches it). */
+export function scrollToBottomHotkeyLabel(): string {
+  return detectghostexHotkeyPlatform() === 'mac' ? '⌥+↓' : 'Alt+Down';
+}
 const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 /** Terminal-pane parity: the conversation scrollbar fades out this long after
  * the last scroll (chat.css keys on the data-user-scrolling attribute). */
 const SCROLLBAR_FADE_MS = 2000;
 
-export interface SessionChatMessageListProps {
+export interface SessionChatMessageListProps extends SessionChatStartupSendActions {
   composerCollapsed?: boolean;
+  /** Bumped by the view's Scroll to bottom hotkey; each change jumps to the end. */
+  scrollToBottomRequest?: number;
   messages: readonly SessionChatMessage[];
   isWorking: boolean;
   hasMore: boolean;
@@ -229,10 +248,7 @@ function ImageAttachments({
               <AttachmentTitle>{label}</AttachmentTitle>
             </AttachmentContent>
             {viewer?.canOpen(target) === true ? (
-              <AttachmentTrigger
-                aria-label={`View ${label}`}
-                onClick={() => viewer?.open(target)}
-              />
+              <AttachmentTrigger aria-label={`View ${label}`} onClick={() => viewer?.open(target)} />
             ) : null}
           </Attachment>
         );
@@ -756,6 +772,8 @@ function MessageRow({
   onRewind,
   onSaveMarkdown,
   onSavePrompt,
+  onRetryStartupSend,
+  onRemoveStartupSend,
   questionPairsAsRows = false,
   showAssistantCopy,
   verboseMode,
@@ -777,7 +795,7 @@ function MessageRow({
   questionPairsAsRows?: boolean;
   showAssistantCopy: boolean;
   verboseMode: boolean;
-}) {
+  } & SessionChatStartupSendActions) {
   const { prose, tools: allTools } = splitSessionChatBlocks(message.blocks);
   const { tools, changes } = splitSessionChatFileChanges(allTools);
   const fileCards = hideFileChanges ? null : <SessionChatFileChangeCards changes={changes} messageId={message.id} />;
@@ -834,6 +852,7 @@ function MessageRow({
     onRewind !== undefined &&
     showCopy &&
     message.queued !== true &&
+    !message.startupDelivery &&
     !isSessionChatPendingMessageId(message.id);
 
   const autoNamedTitle =
@@ -948,7 +967,15 @@ function MessageRow({
     return (
       <Message align='end' className='pb-4' data-role='user'>
         <MessageContent className='ghostex-chat-user-message-container'>
-          {message.queued === true ? <QueuedLabel /> : null}
+          {message.startupDelivery ? (
+            <SessionChatStartupSendStatus
+              delivery={message.startupDelivery}
+              onRetryStartupSend={onRetryStartupSend}
+              onRemoveStartupSend={onRemoveStartupSend}
+            />
+          ) : message.queued === true ? (
+            <QueuedLabel />
+          ) : null}
           <SessionChatUserMessageLayout>
             {showCopy ? (
               <CopyFooter
@@ -1411,12 +1438,15 @@ function ScrollToLatestSend({ pendingMessageId }: { pendingMessageId: string | n
 
 export function SessionChatMessageList({
   composerCollapsed = false,
+  scrollToBottomRequest = 0,
   hasMore,
   isWorking,
   loadingEarlier,
   messages,
   onLoadEarlier,
   onSavePrompt,
+  onRetryStartupSend,
+  onRemoveStartupSend,
   canRewind = true,
   listMessageMarkdownPaths,
   onRewound,
@@ -1455,6 +1485,88 @@ export function SessionChatMessageList({
   // A collapsed composer means the reader scrolled into history; streaming growth must not pull them back to the end.
   const composerCollapsedRef = useRef(composerCollapsed);
   composerCollapsedRef.current = composerCollapsed;
+  /*
+  CDXC:SessionChat 2026-09-11 DECISION:
+  User: while a reply streams in from the terminal, stop following the bottom so
+  the reader stays at the top of the streamed text and can read it as it grows;
+  resume following once the stream is done. Trying this UX deliberately.
+  User: give the incoming text as much room as possible while the hold is on.
+  So the hold anchors the streaming row's top to the top of the viewport and
+  keeps it there as the text grows (each growth re-anchors until the row can
+  reach the top), instead of leaving it two lines above the composer.
+  Both follow paths (the ResizeObserver below and the scroller's autoScroll)
+  hold while the synthetic streaming row is in the list. A reader scroll during
+  the hold ends the anchoring, and the viewport then stays wherever they put it
+  when the transcript's row replaces the stream. Scroll to bottom (the pill or
+  Option+Down) releases the hold for the rest of that stream, so following
+  resumes at once; otherwise following resumes when the stream ends.
+  */
+  const streamOnScreen = messages.some((message) => message.id === SESSION_CHAT_STREAMING_ID);
+  const [streamHoldReleased, setStreamHoldReleased] = useState(false);
+  const streamHoldRef = useRef(false);
+  streamHoldRef.current = streamOnScreen && !streamHoldReleased;
+  const readerScrolledInHoldRef = useRef(false);
+  const programmaticScrollTopRef = useRef<number | null>(null);
+  const setViewportScrollTop = useCallback((top: number): void => {
+    const viewport = viewportRef.current;
+    if (!viewport) {
+      return;
+    }
+    const next = Math.max(0, Math.min(top, viewport.scrollHeight - viewport.clientHeight));
+    if (Math.abs(next - viewport.scrollTop) < 1) {
+      return;
+    }
+    programmaticScrollTopRef.current = next;
+    viewport.scrollTop = next;
+  }, []);
+  const anchorStreamTop = useCallback((): void => {
+    const viewport = viewportRef.current;
+    const row = contentRef.current?.querySelector<HTMLElement>(`[data-message-id="${SESSION_CHAT_STREAMING_ID}"]`);
+    if (!viewport || !row) {
+      return;
+    }
+    const rowTop = row.getBoundingClientRect().top - viewport.getBoundingClientRect().top + viewport.scrollTop;
+    setViewportScrollTop(rowTop - STREAM_HOLD_TOP_MARGIN_PX);
+  }, [setViewportScrollTop]);
+  const jumpToBottom = useCallback((): void => {
+    resumeFileScrolling();
+    streamHoldRef.current = false;
+    setStreamHoldReleased(true);
+    shouldFollowBottomRef.current = true;
+    const viewport = viewportRef.current;
+    if (viewport) {
+      viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
+      viewport.removeAttribute(STREAM_HOLD_ATTRIBUTE);
+      setViewportScrollTop(viewport.scrollHeight);
+    }
+  }, [resumeFileScrolling, setViewportScrollTop]);
+  useEffect(() => {
+    if (scrollToBottomRequest > 0) {
+      jumpToBottom();
+    }
+  }, [jumpToBottom, scrollToBottomRequest]);
+  useEffect(() => {
+    if (streamOnScreen) {
+      readerScrolledInHoldRef.current = false;
+      // The pill must be reachable while the hold keeps the viewport off the end.
+      viewportRef.current?.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'false');
+      viewportRef.current?.setAttribute(STREAM_HOLD_ATTRIBUTE, 'true');
+      anchorStreamTop();
+      return;
+    }
+    viewportRef.current?.removeAttribute(STREAM_HOLD_ATTRIBUTE);
+    const resume = !readerScrolledInHoldRef.current || streamHoldReleased;
+    readerScrolledInHoldRef.current = false;
+    setStreamHoldReleased(false);
+    const viewport = viewportRef.current;
+    if (resume && viewport && !composerCollapsedRef.current && !fileNavigationActiveRef.current) {
+      shouldFollowBottomRef.current = true;
+      viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
+      setViewportScrollTop(viewport.scrollHeight);
+    }
+    // streamHoldReleased is read for the resume decision only when the stream ends.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchorStreamTop, setViewportScrollTop, streamOnScreen]);
   const scrollbarFadeTimeoutRef = useRef<number | undefined>(undefined);
   const [markdownToSave, setMarkdownToSave] = useState<string | null>(null);
   const [rewindRequest, setRewindRequest] = useState<SessionChatRewindRequest | null>(null);
@@ -1486,14 +1598,25 @@ export function SessionChatMessageList({
     }
     const observer = new ResizeObserver(() => {
       const viewport = viewportRef.current;
-      if (viewport && shouldFollowBottomRef.current && !composerCollapsedRef.current && !fileNavigationActiveRef.current) {
+      if (streamHoldRef.current) {
+        if (!readerScrolledInHoldRef.current) {
+          anchorStreamTop();
+        }
+        return;
+      }
+      if (
+        viewport &&
+        shouldFollowBottomRef.current &&
+        !composerCollapsedRef.current &&
+        !fileNavigationActiveRef.current
+      ) {
         viewport.scrollTop = viewport.scrollHeight;
       }
     });
     observer.observe(content);
     viewportRef.current?.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
     return () => observer.disconnect();
-  }, []);
+  }, [anchorStreamTop]);
 
   const loadEarlierIfNearTop = useCallback(
     (viewport: HTMLDivElement): void => {
@@ -1525,6 +1648,17 @@ export function SessionChatMessageList({
   const handleScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget;
+      if (
+        programmaticScrollTopRef.current !== null &&
+        Math.abs(viewport.scrollTop - programmaticScrollTopRef.current) < 1
+      ) {
+        programmaticScrollTopRef.current = null;
+        loadEarlierIfNearTop(viewport);
+        return;
+      }
+      if (streamHoldRef.current) {
+        readerScrolledInHoldRef.current = true;
+      }
       shouldFollowBottomRef.current =
         !fileNavigationActiveRef.current &&
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_EDGE_THRESHOLD_PX;
@@ -1584,37 +1718,43 @@ export function SessionChatMessageList({
 
   return (
     <SessionChatFileChangeInteractionContext value={reportFileInteraction}>
-    <MessageScrollerProvider
-      autoScroll={!composerCollapsed && !fileNavigationActive}
-      defaultScrollPosition='end'
-      scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
-    >
-      <ScrollToLatestSend pendingMessageId={pendingMessageId} />
-      <MessageScroller className={cn('flex-1', summaryTurns.length >= 2 && 'ghostex-chat-has-minimap')}>
-        <SessionChatMinimap onNavigate={navigateHistory} turns={summaryTurns} />
-        {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
-        {/* outline-none: Chromium makes scrollers keyboard-focusable and paints
+      <MessageScrollerProvider
+        autoScroll={!composerCollapsed && !fileNavigationActive && (!streamOnScreen || streamHoldReleased)}
+        defaultScrollPosition='end'
+        scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
+      >
+        <ScrollToLatestSend pendingMessageId={pendingMessageId} />
+        <MessageScroller className={cn('flex-1', summaryTurns.length >= 2 && 'ghostex-chat-has-minimap')}>
+          <SessionChatMinimap onNavigate={navigateHistory} turns={summaryTurns} />
+          {/* RTL viewport + LTR content puts the scrollbar on the left edge. */}
+          {/* outline-none: Chromium makes scrollers keyboard-focusable and paints
             its default focus ring on them; a transcript is not a control. */}
-        <MessageScrollerViewport
-          className='outline-none [direction:rtl]'
-          onWheel={resumeFileScrolling}
-          onTouchMove={resumeFileScrolling}
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) resumeFileScrolling();
-          }}
-          onKeyDown={(event) => {
-            if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) resumeFileScrolling();
-          }}
-          onScroll={handleScroll}
-          preserveScrollOnPrepend
-          ref={viewportRef}
-        >
-          <MessageScrollerContent className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 [direction:ltr]' ref={contentRef}>
-            {summaryMode
-              ? summaryTurns.map((turn) => (
+          <MessageScrollerViewport
+            className='outline-none [direction:rtl]'
+            onWheel={resumeFileScrolling}
+            onTouchMove={resumeFileScrolling}
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget) resumeFileScrolling();
+            }}
+            onKeyDown={(event) => {
+              if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key))
+                resumeFileScrolling();
+            }}
+            onScroll={handleScroll}
+            preserveScrollOnPrepend
+            ref={viewportRef}
+          >
+            <MessageScrollerContent
+              className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 [direction:ltr]'
+              ref={contentRef}
+            >
+              {summaryMode
+                ? summaryTurns.map((turn) => (
                   <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
                     <MessageRow
                       message={turn.user}
+                      onRetryStartupSend={onRetryStartupSend}
+                      onRemoveStartupSend={onRemoveStartupSend}
                       onSavePrompt={onSavePrompt}
                       {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
                       showAssistantCopy={false}
@@ -1646,13 +1786,9 @@ export function SessionChatMessageList({
                     ) : null}
                   </MessageScrollerItem>
                 ))
-              : renderItems.map((item, index) => (
+                : renderItems.map((item, index) => (
                   <MessageScrollerItem
-                    key={
-                      item.kind === 'message'
-                        ? item.message.id
-                        : `completed-work:${item.turn.user.id}`
-                    }
+                    key={item.kind === 'message' ? item.message.id : `completed-work:${item.turn.user.id}`}
                     messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
                     // No row is a scroll anchor: anchoring a message to the top of
                     // the viewport makes message-scroller pad the transcript with a
@@ -1676,6 +1812,8 @@ export function SessionChatMessageList({
                          */
                         isStreaming={isWorking && index === renderItems.length - 1}
                         message={item.message}
+                        onRetryStartupSend={onRetryStartupSend}
+                        onRemoveStartupSend={onRemoveStartupSend}
                         onSavePrompt={onSavePrompt}
                         {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
                         {...(saveMessageMarkdown && listMessageMarkdownPaths
@@ -1697,40 +1835,50 @@ export function SessionChatMessageList({
                     )}
                   </MessageScrollerItem>
                 ))}
-          </MessageScrollerContent>
-        </MessageScrollerViewport>
-        <MessageScrollerButton className='ghostex-chat-scroll-bottom-button' onClick={resumeFileScrolling} />
-      </MessageScroller>
-      {saveMessageMarkdown && listMessageMarkdownPaths ? (
-        <SessionChatSaveMarkdownDialog
-          listExistingPaths={listMessageMarkdownPaths}
-          markdown={markdownToSave ?? ''}
-          onOpenChange={(open) => {
-            if (!open) {
-              setMarkdownToSave(null);
-            }
-          }}
-          open={markdownToSave !== null}
-          save={saveMessageMarkdown}
-          sessionTitle={sessionTitle}
-          theme={theme}
-        />
-      ) : null}
-      {rewindToMessage ? (
-        <SessionChatRewindDialog
-          agent={rewindAgent}
-          onOpenChange={(open) => {
-            if (!open) {
-              setRewindRequest(null);
-            }
-          }}
-          {...(onRewound ? { onRewound } : {})}
-          request={rewindRequest}
-          rewind={rewindToMessage}
-          theme={theme}
-        />
-      ) : null}
-    </MessageScrollerProvider>
+            </MessageScrollerContent>
+          </MessageScrollerViewport>
+          {/* CDXC:SessionChat 2026-09-11 DECISION:
+              User: the scroll-to-bottom pill reads "Scroll to bottom (⌥+↓)" so the
+              end is reachable from the keyboard at any time; keep it small, no icon,
+              fully circular. */}
+          <MessageScrollerButton
+            className='ghostex-chat-scroll-bottom-button h-6 rounded-full px-2.5 text-[11px] font-medium'
+            onClick={jumpToBottom}
+            size='xs'
+          >
+            Scroll to bottom ({scrollToBottomHotkeyLabel()})
+          </MessageScrollerButton>
+        </MessageScroller>
+        {saveMessageMarkdown && listMessageMarkdownPaths ? (
+          <SessionChatSaveMarkdownDialog
+            listExistingPaths={listMessageMarkdownPaths}
+            markdown={markdownToSave ?? ''}
+            onOpenChange={(open) => {
+              if (!open) {
+                setMarkdownToSave(null);
+              }
+            }}
+            open={markdownToSave !== null}
+            save={saveMessageMarkdown}
+            sessionTitle={sessionTitle}
+            theme={theme}
+          />
+        ) : null}
+        {rewindToMessage ? (
+          <SessionChatRewindDialog
+            agent={rewindAgent}
+            onOpenChange={(open) => {
+              if (!open) {
+                setRewindRequest(null);
+              }
+            }}
+            {...(onRewound ? { onRewound } : {})}
+            request={rewindRequest}
+            rewind={rewindToMessage}
+            theme={theme}
+          />
+        ) : null}
+      </MessageScrollerProvider>
     </SessionChatFileChangeInteractionContext>
   );
 }

@@ -202,6 +202,12 @@ export interface SessionChatMessage {
    * rename, extend or reuse this field for that feature.
    */
   queued?: boolean;
+  /** Client presentation of an accepted send waiting for the terminal, separate from the agent CLI queue. */
+  startupDelivery?: {
+    promptId: string;
+    state: 'queued' | 'sending' | 'failed';
+    errorMessage?: string;
+  };
 }
 
 export type SessionChatTurnLifecycleState = 'working' | 'completed' | 'interrupted';
@@ -511,8 +517,12 @@ export interface SessionChatTerminalNotice {
 /*
 CDXC:AgentScreenDetection 2026-08-22:
 Live work the agent CLI reports on its terminal before transcript JSONL catches
-up. `claude-status` is the current `⏺ …` assistant line (its first paragraph,
-re-joined from the wrapped rows) and becomes transient reasoning history in the
+up. `agent-stream` is the `⏺ …` message Claude is writing right now: `text`
+carries the whole block as painted so far (stitched across probes once the
+bullet scrolls off the full-screen grid; `label` is its first paragraph), and
+the client shows it as the streaming assistant bubble until the transcript
+carries the same text (session-chat-terminal-stream.ts). `claude-status` is an
+allowlisted star-marker line and becomes transient reasoning history in the
 client; `claude-tool` is the row above a `⎿` output gutter, i.e. a tool call,
 shown as a pending tool row at the bottom of the transcript and never in the
 working strip; `shells-running` remains one bottom activity
@@ -533,7 +543,7 @@ numbers move. Carried by read results and by snapshot/replaced/state frames with
 learns the work finished.
 */
 export interface SessionChatTerminalActivity {
-  /** Open set (`compacting`, `claude-status`, `claude-tool`, `shells-running`). */
+  /** Open set (`compacting`, `agent-stream`, `claude-status`, `claude-tool`, `shells-running`). */
   kind: string;
   /** Agent-facing wording, without the spinner glyph or the clock. */
   label: string;
@@ -545,6 +555,8 @@ export interface SessionChatTerminalActivity {
   detectedAt: string;
   /** `claude-tool` only: the tool block painted under the row, as shown on the terminal. */
   detail?: string;
+  /** `agent-stream` only: the message text painted so far; starts with `…` when its first rows scrolled off before the first probe stitched them. */
+  text?: string;
 }
 
 /*

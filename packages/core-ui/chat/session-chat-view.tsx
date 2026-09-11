@@ -21,7 +21,7 @@ import {
 } from '../../components/ui/context-menu';
 import { cn } from '@/packages/components/utils';
 import type { GxserverSessionForkBranch } from '../../shared/gxserver-protocol';
-import type { SessionChatSkill, SessionChatTheme } from '../../shared/session-chat';
+import type { SessionChatTheme } from '../../shared/session-chat';
 import { ghostexHotkeyTextFromKeyboardEvent } from '../../shared/ghostex-hotkeys';
 import { AppTooltip, TooltipProvider } from '../app-tooltip';
 import { displayAgentName, NewSessionWelcome } from './session-chat-new-session-welcome';
@@ -29,6 +29,7 @@ import { SessionChatComposer, type SessionChatComposerHandle } from './session-c
 import { sessionChatKeyboardPopupOpen } from './session-chat-caret-navigation';
 import { sessionChatEditingShortcut, sessionChatHasTranscriptSelection } from './session-chat-edit-shortcuts';
 import { useSessionChatPaneFocus } from './use-session-chat-pane-focus';
+import { useSessionChatSkills } from './use-session-chat-skills';
 import { SessionChatWorkingStrip } from './session-chat-working-strip';
 import { sessionChatDataTransferHasFiles } from './session-chat-drop-attachments';
 import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
@@ -666,29 +667,7 @@ export function SessionChatView({
       clearTimeout(retryTimer);
     };
   }, [initialTranscriptLoading, sessionKey, transport]);
-  const [skills, setSkills] = useState<readonly SessionChatSkill[]>([]);
-  useEffect(() => {
-    const readSkills = transport.readSkills?.bind(transport);
-    if (!readSkills) {
-      setSkills([]);
-      return;
-    }
-    let active = true;
-    void readSkills()
-      .then((result) => {
-        if (active) {
-          setSkills(result.skills);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setSkills([]);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [transport]);
+  const { skills, skillsLoading, skillsError, requestSkills } = useSessionChatSkills(transport, chat.sessionAgentId);
   /*
   Composer "@" mentions. The project walk is server work, so it runs on first
   use and the answer is cached for the rest of the mount; `undefined` means
@@ -757,6 +736,34 @@ export function SessionChatView({
     writeStoredSessionChatSummary(sessionKey, next);
     setSummaryMode(next);
   }, [sessionKey, summaryMode]);
+  const [scrollToBottomRequest, setScrollToBottomRequest] = useState(0);
+  /*
+  CDXC:SessionChat 2026-09-11 DECISION:
+  User: Option+Down (Alt+Down elsewhere) scrolls the chat to the bottom at any
+  time, so the end is reachable without the mouse while the stream hold keeps
+  the viewport up. Window-level like the summary hotkey so it also fires while
+  the composer has focus, but only for the chat that contains the focused
+  element, since the web workspace can show several chats side by side.
+  */
+  useEffect(() => {
+    const handleScrollToBottomHotkey = (event: globalThis.KeyboardEvent): void => {
+      if (event.key !== 'ArrowDown' || !event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) {
+        return;
+      }
+      const root = chatRootRef.current;
+      const target = event.target;
+      if (!root || !(target instanceof Node) || (target !== document.body && !root.contains(target))) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) {
+        setScrollToBottomRequest((current) => current + 1);
+      }
+    };
+    window.addEventListener('keydown', handleScrollToBottomHotkey, true);
+    return () => window.removeEventListener('keydown', handleScrollToBottomHotkey, true);
+  }, []);
   useEffect(() => {
     const handleSummaryHotkey = (event: globalThis.KeyboardEvent): void => {
       if (ghostexHotkeyTextFromKeyboardEvent(event) !== sessionChatSummaryToggleHotkey()) {
@@ -1623,10 +1630,13 @@ export function SessionChatView({
                           <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                             <SessionChatMessageList
                               composerCollapsed={composerCollapsed}
+                              scrollToBottomRequest={scrollToBottomRequest}
                               hasMore={chat.hasMore}
                               isWorking={transcriptWorking}
                               loadingEarlier={chat.loadingEarlier}
                               messages={chat.messages}
+                              onRetryStartupSend={chat.queue.retryPrompt}
+                              onRemoveStartupSend={chat.queue.removePrompt}
                               onLoadEarlier={chat.loadEarlier}
                               {...(hostComposerBridge?.stashPrompt ? { onSavePrompt: saveTranscriptPrompt } : {})}
                               {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
@@ -1661,10 +1671,13 @@ export function SessionChatView({
                             >
                               <SessionChatMessageList
                                 composerCollapsed={composerCollapsed}
+                                scrollToBottomRequest={scrollToBottomRequest}
                                 hasMore={chat.hasMore}
                                 isWorking={transcriptWorking}
                                 loadingEarlier={chat.loadingEarlier}
                                 messages={chat.messages}
+                                onRetryStartupSend={chat.queue.retryPrompt}
+                                onRemoveStartupSend={chat.queue.removePrompt}
                                 onLoadEarlier={chat.loadEarlier}
                                 {...(hostComposerBridge?.stashPrompt ? { onSavePrompt: saveTranscriptPrompt } : {})}
                                 {...(listMessageMarkdownPaths ? { listMessageMarkdownPaths } : {})}
@@ -1934,6 +1947,9 @@ export function SessionChatView({
                             slashCommands={slashCommands}
                             slashHeading={sessionChatSlashHeadingForAgent(resolvedAgentLabel)}
                             skills={skills}
+                            skillsLoading={skillsLoading}
+                            skillsError={skillsError}
+                            onRequestSkills={requestSkills}
                             files={files}
                             filesLoading={filesLoading}
                             onRequestFiles={requestFiles}

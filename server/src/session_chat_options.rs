@@ -3001,12 +3001,34 @@ impl SessionChatOptionDetector {
             `detectedAt`, so re-minting it on every probe would peg the timer at
             zero for the whole run.
             */
+            let cached_activity = cache
+                .get(&key)
+                .and_then(|entry| entry.value.activity.as_ref());
+            // CDXC:AgentScreenDetection 2026-09-11 WHY:
+            // An `agent-stream` probe is one grid of a message that may already have scrolled; stitching it onto the rows earlier probes accumulated needs the previous value, and this cache is the one place every fresh capture passes through.
+            // A capture that failed or lost its tail says nothing about the message, so the accumulated stream stands until a whole capture replaces it; letting the miss overwrite it tore the stream at its next headless sample (seen once per reply in testing, when a 1s capture came back empty).
+            if !detected.captured && detected.activity.is_none() {
+                if let Some(stream) = cached_activity.filter(|activity| {
+                    activity.kind
+                        == crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_AGENT_STREAM
+                }) {
+                    detected.activity = Some(stream.clone());
+                }
+            }
+            if detected.activity.as_ref().is_some_and(|activity| {
+                activity.kind
+                    == crate::session_chat_terminal_activity::SESSION_CHAT_ACTIVITY_AGENT_STREAM
+            }) {
+                let mut activity = detected.activity.take().unwrap();
+                if crate::session_chat_terminal_activity::merge_agent_stream(
+                    &mut activity,
+                    cached_activity,
+                ) {
+                    detected.activity = Some(activity);
+                }
+            }
             if let Some(activity) = detected.activity.as_mut() {
-                activity.carry_forward_detected_at(
-                    cache
-                        .get(&key)
-                        .and_then(|entry| entry.value.activity.as_ref()),
-                );
+                activity.carry_forward_detected_at(cached_activity);
             }
             /*
             CDXC:AgentScreenDetection 2026-08-23: deliberately NOT carried

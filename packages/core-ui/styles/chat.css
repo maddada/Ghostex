@@ -1146,6 +1146,18 @@ the markdown block) rather than pinned to a tier of its own.
 
 /* Hidden while the reader's last scroll ended at the bottom (see
    FOLLOW_BOTTOM_ATTRIBUTE in session-chat-message-list.tsx). */
+/* While the stream hold parks the viewport at the top of the streamed reply,
+   the scroller has seen no reader scroll and leaves its button inactive; the
+   hold is exactly when the end is off screen, so the pill stays reachable. */
+.ghostex-session-chat-scope
+  [data-ghostex-stream-hold='true']
+  ~ .ghostex-chat-scroll-bottom-button[data-active='false'] {
+  opacity: 1;
+  pointer-events: auto;
+  scale: 1;
+  translate: -50% 0;
+}
+
 [data-ghostex-follow-bottom='true'] ~ .ghostex-chat-scroll-bottom-button {
   opacity: 0;
   pointer-events: none;
@@ -1460,14 +1472,22 @@ the markdown block) rather than pinned to a tier of its own.
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-file-change-card button),
+  ):not(.ghostex-chat-markdown-file-chip):not(
+    .ghostex-chat-status-line-copy,
+    .ghostex-chat-minimap-rail,
+    .ghostex-chat-file-change-card button
+  ),
 body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-file-change-card button) {
+  ):not(.ghostex-chat-markdown-file-chip):not(
+    .ghostex-chat-status-line-copy,
+    .ghostex-chat-minimap-rail,
+    .ghostex-chat-file-change-card button
+  ) {
   background-color: transparent;
   color: var(--chat-primary-foreground);
 }
@@ -1477,18 +1497,24 @@ body[data-session-chat-theme='dark']
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-subagent-link, .ghostex-chat-file-change-card button):not(
-    :disabled
-  ):hover,
+  ):not(.ghostex-chat-markdown-file-chip):not(
+    .ghostex-chat-status-line-copy,
+    .ghostex-chat-minimap-rail,
+    .ghostex-chat-subagent-link,
+    .ghostex-chat-file-change-card button
+  ):not(:disabled):hover,
 body[data-session-chat-theme='dark']
   .ghostex-session-chat-popup
   button:not(.ghostex-chat-send-button):not(.ghostex-chat-completed-work-trigger):not(.ghostex-chat-expansion-rail):not(
     .ghostex-chat-scroll-bottom-button
   ):not([data-slot='session-chat-host-action']):not([data-chat-answer-control]):not([data-chat-picker-option]):not(
     .ghostex-chat-reference-pill
-  ):not(.ghostex-chat-markdown-file-chip):not(.ghostex-chat-status-line-copy, .ghostex-chat-minimap-rail, .ghostex-chat-subagent-link, .ghostex-chat-file-change-card button):not(
-    :disabled
-  ):hover {
+  ):not(.ghostex-chat-markdown-file-chip):not(
+    .ghostex-chat-status-line-copy,
+    .ghostex-chat-minimap-rail,
+    .ghostex-chat-subagent-link,
+    .ghostex-chat-file-change-card button
+  ):not(:disabled):hover {
   background-color: #333333;
 }
 

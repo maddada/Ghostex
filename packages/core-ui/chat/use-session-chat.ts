@@ -90,6 +90,12 @@ import {
 } from './session-chat-pagination';
 import { classifySessionChatSend, SESSION_CHAT_DEFAULT_COMMAND_CATALOG } from './session-chat-send-classification';
 import { deriveSessionChatStreamingText, sessionChatStreamingMessage } from './session-chat-streaming';
+import {
+  sessionChatTerminalStreamFromActivity,
+  sessionChatTerminalStreamIsTool,
+  sessionChatTerminalStreamRetired,
+  type SessionChatTerminalStream,
+} from './session-chat-terminal-stream';
 import { surfaceSkillInvocationUserTurns } from './session-chat-command-envelope';
 import {
   mergeSessionChatDraftState,
@@ -99,6 +105,7 @@ import {
   type SessionChatQueueCapabilities,
 } from './session-chat-queue';
 import type { SessionChatTransport } from './session-chat-transport';
+import { sessionChatFullQueueOrder, sessionChatPendingWithStartupSends } from './session-chat-startup-sends';
 import {
   selectSessionChatViewState,
   sessionChatTranscriptStatusAfterState,
@@ -540,6 +547,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // lines that the transcript later swallows, so a "differs from the previous
   // one" rule leaves the same phrase standing several times in a row.
   const [terminalStatusMessages, setTerminalStatusMessages] = useState<readonly SessionChatMessage[]>([]);
+  /** The message Claude is painting right now (see session-chat-terminal-stream.ts). */
+  const [terminalStream, setTerminalStream] = useState<SessionChatTerminalStream | null>(null);
   /** The pending tool row (see session-chat-terminal-status.ts) and its off-screen hold. */
   const [terminalTool, setTerminalTool] = useState<SessionChatMessage | null>(null);
   const terminalToolHoldRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -651,6 +660,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   const applyTerminalActivity = useCallback(
     (activity: SessionChatTerminalActivity | undefined): void => {
+      const stream = activity ? sessionChatTerminalStreamFromActivity(activity) : null;
+      if (stream) {
+        setTerminalStream(stream);
+      } else {
+        // The stream is no longer the newest thing on screen: hold it for the
+        // transcript to retire (session-chat-terminal-stream.ts).
+        setTerminalStream((current) => (current?.live ? { ...current, live: false } : current));
+      }
       const tool = activity ? sessionChatTerminalToolMessage(activity) : null;
       if (tool) {
         clearTerminalToolHold();
@@ -660,6 +677,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
             : tool
         );
         setTerminalStatusMessages((current) => withoutSessionChatTerminalStatus(current, tool));
+        setTerminalStream((current) => (current && sessionChatTerminalStreamIsTool(current, tool) ? null : current));
         setTerminalActivity(null);
         return;
       }
@@ -670,6 +688,11 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
           terminalToolHoldRef.current = null;
           setTerminalTool(null);
         }, SESSION_CHAT_TERMINAL_TOOL_HOLD_MS);
+      }
+      if (stream) {
+        // Rendered in the transcript as the streaming bubble, never in the working strip.
+        setTerminalActivity(null);
+        return;
       }
       const transient = activity ? sessionChatTerminalStatusMessage(activity) : null;
       if (!transient) {
@@ -984,6 +1007,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       setTerminalNotice(null);
       setTerminalActivity(null);
       setTerminalStatusMessages([]);
+      setTerminalStream(null);
       clearTerminalToolHold();
       setTerminalTool(null);
       setAppCommands([]);
@@ -1331,12 +1355,15 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     });
   }, [boundaried]);
 
+  // Keep hydrated sends until the transcript replaces them, including the gap
+  // between terminal delivery and the agent flushing its transcript to disk.
   useEffect(() => {
-    const failedIds = new Set(queuePrompts?.filter((prompt) => prompt.state === 'failed').map((prompt) => prompt.id));
-    if (pending.some((entry) => entry.queuedPromptId && failedIds.has(entry.queuedPromptId))) {
-      setPending((current) => current.filter((entry) => !entry.queuedPromptId || !failedIds.has(entry.queuedPromptId)));
-    }
-  }, [queuePrompts, pending]);
+    if (queuePrompts === null) return;
+    setPending((current) => {
+      const next = pruneSessionChatPendingSends(sessionChatPendingWithStartupSends(current, queuePrompts), boundaried);
+      return next.length === current.length && next.every((entry, index) => entry === current[index]) ? current : next;
+    });
+  }, [queuePrompts, boundaried]);
 
   // --- Working / status derivation -------------------------------------------
   // Three independent starts: the `working` flag on read results/snapshots,
@@ -1389,7 +1416,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   // --- Composition (§11.1 order: markers → streaming → pending) --------------
   const messages = useMemo(() => {
     const transcript = reconcileSessionChatLocalCommandOutput(boundaried, appCommands);
-    const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(pending, boundaried));
+    const startupPending = sessionChatPendingWithStartupSends(pending, queuePrompts ?? []);
+    const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(startupPending, boundaried));
     const authoritativeText = new Set(
       boundaried
         .filter((message) => message.source === 'transcript')
@@ -1411,11 +1439,21 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       ...sessionChatAppCommandsAsMessages(appCommands, transcript),
       ...markerMessages,
     ];
-    const streamingText = deriveSessionChatStreamingText({
-      messages: [...boundaried, ...pendingMessages],
-      previewText,
-      working,
-    });
+    // The terminal's live message wins over the hook preview: it is the same
+    // bubble, read from the screen Claude is painting instead of a status line.
+    const terminalStreamText =
+      terminalStream &&
+      (terminalStream.live || working) &&
+      !sessionChatTerminalStreamRetired(terminalStream, boundaried)
+        ? terminalStream.text
+        : null;
+    const streamingText =
+      terminalStreamText ??
+      deriveSessionChatStreamingText({
+        messages: [...boundaried, ...pendingMessages],
+        previewText,
+        working,
+      });
     if (streamingText) {
       tail.push(sessionChatStreamingMessage(streamingText));
     }
@@ -1430,8 +1468,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     compactionRecords,
     markers,
     pending,
+    queuePrompts,
     previewText,
     terminalStatusMessages,
+    terminalStream,
     terminalTool,
     working,
   ]);
@@ -1666,13 +1706,14 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       if (!queueCapabilities.canReorder || !call) {
         return;
       }
+      const fullOrder = sessionChatFullQueueOrder(queuePrompts ?? [], promptIds);
       // Optimistic: the strip must settle into the dropped order immediately.
       setQueuePrompts((current) => {
         if (current === null) {
           return current;
         }
         let next = [...current];
-        promptIds.forEach((id, target) => {
+        fullOrder.forEach((id, target) => {
           const from = next.findIndex((prompt) => prompt.id === id);
           if (from >= 0) {
             next = moveSessionChatQueueRow(next, from, target);
@@ -1680,9 +1721,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         });
         return next;
       });
-      await queueMutation(() => call({ promptIds }));
+      await queueMutation(() => call({ promptIds: fullOrder }));
     },
-    [queueCapabilities.canReorder, queueMutation, transport]
+    [queueCapabilities.canReorder, queueMutation, queuePrompts, transport]
   );
   const sendNow = useCallback(
     async (promptId: string): Promise<void> => {
@@ -1717,14 +1758,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const queue = useMemo<SessionChatQueueController>(
     () => ({
       capabilities: queueCapabilities,
-      prompts: queuePrompts ?? [],
+      prompts: (queuePrompts ?? []).filter((prompt) =>
+        !prompt.startupSend && !pending.some((entry) => entry.queuedPromptId === prompt.id)
+      ),
       queuePrompt,
       removePrompt,
       reorder,
       retryPrompt,
       sendNow,
     }),
-    [queueCapabilities, queuePrompt, queuePrompts, removePrompt, reorder, retryPrompt, sendNow]
+    [queueCapabilities, queuePrompt, queuePrompts, pending, removePrompt, reorder, retryPrompt, sendNow]
   );
   const draft = useMemo<SessionChatDraftController>(
     () => ({
