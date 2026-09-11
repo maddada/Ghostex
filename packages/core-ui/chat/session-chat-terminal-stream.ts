@@ -10,12 +10,12 @@ server/src/session_chat_terminal_activity.rs). The client shows it as the
 synthetic streaming assistant bubble (session-chat-streaming.ts) and retires
 it on transcript evidence:
 
-  - the transcript carries an assistant row whose text contains the stream's
+  - the transcript carries an assistant or system row whose text contains the stream's
     first paragraph (`label`). A prefix is not enough because a stream whose
     bullet scrolled off before its first probe starts mid-message; the
     terminal wraps at spaces, so the words of any painted paragraph are a
     substring of the saved text once markdown decoration is normalized away.
-    Only the newest few assistant rows are consulted, so an older turn that
+    Only the newest few assistant and system rows are consulted, so an older turn that
     happened to open with the same words cannot hide a live stream.
   - once gxserver stops publishing it (the block is no longer the newest
     thing on screen, or the agent went idle): any transcript row newer than
@@ -37,11 +37,11 @@ import { sessionChatTerminalStatusText } from './session-chat-terminal-status';
 const AGENT_TERMINAL_STREAM_KIND = 'agent-stream';
 
 /**
- * Newest transcript assistant rows a stream is matched against. Wide enough
+ * Newest transcript assistant and system rows a stream is matched against. Wide enough
  * that a tool-heavy turn (one row per call) cannot push the text a stale
  * on-screen block belongs to out of range, which would show it twice.
  */
-const STREAM_MATCH_ASSISTANT_ROWS = 25;
+const STREAM_MATCH_MESSAGE_ROWS = 25;
 
 export interface SessionChatTerminalStream {
   /** `detectedAt` of the run: stable for one message across probes. */
@@ -73,7 +73,7 @@ export function sessionChatTerminalStreamFromActivity(
   };
 }
 
-function assistantText(message: SessionChatMessage): string {
+function messageText(message: SessionChatMessage): string {
   return sessionChatTerminalStatusText(
     message.blocks
       .filter((block) => block.type === 'text')
@@ -82,12 +82,16 @@ function assistantText(message: SessionChatMessage): string {
   );
 }
 
-/** True once the transcript makes the stream redundant (see the header). */
+/**
+ * True once the transcript makes the stream redundant (see the header).
+ * CDXC:AgentScreenDetection 2026-09-11 WHY:
+ * Claude paints informational warnings with the same bullet as assistant prose but saves them as system rows, so assistant-only matching left the terminal preview beside the saved warning.
+ */
 export function sessionChatTerminalStreamRetired(
   stream: SessionChatTerminalStream,
   transcript: readonly SessionChatMessage[]
 ): boolean {
-  let assistantRowsSeen = 0;
+  let messageRowsSeen = 0;
   let latestTimestamp: number | null = null;
   let newestRow = true;
   for (let index = transcript.length - 1; index >= 0; index -= 1) {
@@ -108,9 +112,9 @@ export function sessionChatTerminalStreamRetired(
     if (message.timestamp !== null && (latestTimestamp === null || message.timestamp > latestTimestamp)) {
       latestTimestamp = message.timestamp;
     }
-    if (message.role === 'assistant' && assistantRowsSeen < STREAM_MATCH_ASSISTANT_ROWS) {
-      assistantRowsSeen += 1;
-      if (stream.key && assistantText(message).includes(stream.key)) {
+    if ((message.role === 'assistant' || message.role === 'system') && messageRowsSeen < STREAM_MATCH_MESSAGE_ROWS) {
+      messageRowsSeen += 1;
+      if (stream.key && messageText(message).includes(stream.key)) {
         return true;
       }
     }
