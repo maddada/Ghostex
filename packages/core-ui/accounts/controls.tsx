@@ -1,3 +1,4 @@
+import { accountHeadlineWindows } from '@/packages/shared/account-usage-windows';
 import { useId } from 'react';
 import { accountUsageLabel } from '@/packages/shared/account-usage-label';
 import { formatResetCountdown } from '@/packages/shared/reset-countdown';
@@ -35,18 +36,13 @@ export function AccountLogo({
  * CDXC:AgentProviders 2026-09-08 DECISION:
  * User: Codex account badges show the five-hour percentage on the second line when that limit exists; otherwise show available resets as "2rs" or "0rs".
  * Use the main account windows so Spark's separate five-hour limit does not stand in for an absent account limit.
+ * Claude figures are the two tightest of weekly, five-hour, and Fable (see accountHeadlineWindows).
  */
 export function accountFigureWindows(
   account: AgentAccount
 ): [AccountUsageWindow | undefined, AccountUsageWindow | undefined] {
-  const mainWindows = account.usage.filter((window) => !window.model);
-  if (account.provider === 'codex') {
-    return [
-      mainWindows.find((window) => (window.limitWindowSeconds ?? 0) >= 604800),
-      mainWindows.find((window) => window.limitWindowSeconds === 18000),
-    ];
-  }
-  return [account.usage[0], account.usage[1]];
+  const [first, second] = accountHeadlineWindows(account);
+  return [first, second];
 }
 export function AccountIdentity({ account }: { account: AgentAccount }) {
   const [first, second] = accountFigureWindows(account);

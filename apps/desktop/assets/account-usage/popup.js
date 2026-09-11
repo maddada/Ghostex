@@ -118,7 +118,10 @@ function render() {
   const main = windows.filter((w) => !w.model && w.id !== 'spend');
   const session = main.find((w) => w.id === 'fiveHour' || w.limitWindowSeconds === 18000);
   const weekly = main.find((w) => w.id === 'sevenDay' || w.limitWindowSeconds >= 604800);
-  const other = windows.filter((w) => w.id !== 'spend' && w !== session && w !== weekly);
+  // CDXC:AgentProviders 2026-09-11 DECISION: User: the Fable limit is the most important Claude number and must be visible wherever Claude usage bars are shown, so it is a main bar next to the five-hour and weekly limits instead of a collapsed model limit.
+  const scoped = windows.filter((w) => w.model);
+  const fable = codex ? undefined : (scoped.find((w) => String(w.model).toLowerCase().includes('fable')) ?? scoped[0]);
+  const other = windows.filter((w) => w.id !== 'spend' && w !== session && w !== weekly && w !== fable);
   document.body.dataset.provider = account.provider;
   document.title = `${provider} usage`;
   byId('heading').textContent = `${provider} usage`;
@@ -136,7 +139,11 @@ function render() {
   const mark = account.indicator || account.selector;
   byId('indicator').textContent = mark && mark !== '-' ? mark : '';
   byId('indicator').style.display = mark && mark !== '-' ? 'grid' : 'none';
-  renderBars([session, weekly], ['5-hour limit', 'Weekly limit'], codex);
+  renderBars(
+    fable ? [session, weekly, fable] : [session, weekly],
+    fable ? ['5-hour limit', 'Weekly limit', `${fable.model} weekly limit`] : ['5-hour limit', 'Weekly limit'],
+    codex
+  );
   byId('modelLimits').hidden = other.length === 0;
   byId('modelSummary').textContent = `More model limits (${other.length})`;
   renderBars(

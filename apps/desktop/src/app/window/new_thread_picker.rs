@@ -3,7 +3,9 @@
 //! It mirrors the project-header agent dropdown: every agent with its account count and chat badge, the last-used agent first and preselected, typing filters, Up/Down move, Enter starts, Tab or Right on Claude or Codex opens that provider's account list (Left, Backspace on an empty query, or Esc goes back), Esc closes. The highlighted row uses the sidebar's focused-session chrome and is never bolded.
 //! SEE-ALSO: apps/desktop/src/app/new_thread_picker_lifecycle.rs (open, close, data), packages/core-ui/new-thread-palette.tsx (web), packages/core-ui/accounts/agent-launcher-menu.tsx (the dropdown this mirrors).
 use crate::app::helpers::*;
-use crate::app::titlebar::account_usage::{account_display_name, account_display_text};
+use crate::app::titlebar::account_usage::{
+    account_display_name, account_display_text, claude_headline_windows,
+};
 use crate::*;
 use gpui::{ScrollHandle, SharedString};
 use gpui_component::Sizable as _;
@@ -193,7 +195,7 @@ fn usage_window_label(window: &Value) -> Option<String> {
 }
 
 /// Port of `AccountLauncherUsage` in packages/core-ui/accounts/agent-launcher-menu.tsx:
-/// Claude shows the weekly and five-hour windows, Codex the weekly window and available resets.
+/// Claude shows its two tightest limits out of weekly, five-hour, and Fable, Codex the weekly window and available resets.
 fn account_usage_line(account: &Value) -> Option<String> {
     let windows = account["usage"]
         .as_array()
@@ -204,18 +206,14 @@ fn account_usage_line(account: &Value) -> Option<String> {
         w["id"].as_str() == Some("sevenDay")
             || w["limitWindowSeconds"].as_i64().unwrap_or(0) >= 604_800
     });
-    let five_hour = main.iter().copied().find(|w| {
-        w["id"].as_str() == Some("fiveHour") || w["limitWindowSeconds"].as_i64() == Some(18_000)
-    });
     let percent = |w: &Value| -> Option<String> {
         let label = usage_window_label(w)?;
         let used = w["usedPercent"].as_f64()?;
         Some(format!("{label}: {}%", used.round() as i64))
     };
     let values: Vec<String> = if account["provider"].as_str() == Some("claude") {
-        [weekly, five_hour]
+        claude_headline_windows(windows)
             .into_iter()
-            .flatten()
             .filter_map(percent)
             .collect()
     } else {
@@ -272,7 +270,11 @@ impl GpuiNewThreadPickerWindow {
             );
             let activation_subscription =
                 cx.observe_window_activation(window, |this, window, cx| {
-                    if !window.is_window_active() {
+                    // CDXC:AgentLauncher 2026-09-11 WHY:
+                    // A hidden preload has never owned activation, so an inactive notification must not close it and create another preload.
+                    if window.is_window_active() {
+                        this.was_active = true;
+                    } else if this.was_active {
                         this.close(window, cx);
                     }
                 });
@@ -288,7 +290,7 @@ impl GpuiNewThreadPickerWindow {
                 selected: 0,
                 scope: None,
                 scroll: ScrollHandle::new(),
-                was_active: false,
+                was_active: window.is_window_active(),
                 _subscriptions: vec![change_subscription, activation_subscription],
             }
         })

@@ -1,3 +1,4 @@
+import { accountHeadlineWindows, isWeeklyWindow } from '@/packages/shared/account-usage-windows';
 import { openAppModal } from '../app-modal-host-bridge';
 import { AccountText, useAccountText } from './account-text';
 import { useLayoutEffect, useRef, useState } from 'react';
@@ -5,6 +6,7 @@ import { IconChevronLeft, IconSettings, IconUser } from '@tabler/icons-react';
 import { accountUsageLabel } from '@/packages/shared/account-usage-label';
 import {
   quickLaunchAccountId,
+  type AccountUsageWindow,
   type AgentAccount,
   type AccountsTransport,
 } from '@/packages/shared/agent-accounts';
@@ -76,13 +78,17 @@ export function AgentLauncherMenuItems({
                 className={rowClass}
                 role='menuitem'
                 disabled={account.status !== 'ready'}
-                title={account.status !== 'ready' ? 'Reconnect this account in Settings first.' : accountText(account.name)}
+                title={
+                  account.status !== 'ready' ? 'Reconnect this account in Settings first.' : accountText(account.name)
+                }
                 onClick={() => onRun(selected, account.id)}
               >
                 <AccountLogo provider={provider} slot={account.selector} />
                 <span className='gx-account-launcher-copy'>
                   <span className='gx-account-launcher-heading'>
-                    <span className='group-agent-menu-label'><AccountText text={account.name} /></span>
+                    <span className='group-agent-menu-label'>
+                      <AccountText text={account.name} />
+                    </span>
                     {account.id === data?.defaultAccounts[provider] && (
                       <span className='gx-account-launcher-default'>· Default</span>
                     )}
@@ -120,7 +126,11 @@ export function AgentLauncherMenuItems({
                 <p className='gx-account-launcher-hint'>Uses your existing CLI sign-in. No account switcher needed.</p>
                 <div className='session-context-menu-divider' role='separator' />
                 <p className='gx-account-launcher-hint'>Add your account to see usage and reset times in Ghostex.</p>
-                <button className={rowClass} role='menuitem' onClick={() => openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' })}>
+                <button
+                  className={rowClass}
+                  role='menuitem'
+                  onClick={() => openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' })}
+                >
                   Add account
                 </button>
               </>
@@ -193,21 +203,14 @@ export function launcherProvider(agent: SidebarAgentButton) {
   return family === 'claude' || family === 'codex' ? family : null;
 }
 
-/** CDXC:AgentLauncher 2026-09-09 DECISION: User: account-picker rows show Claude's weekly and five-hour usage, and Codex's weekly usage and available resets, using the same account data as starred titlebar buttons. */
+/** CDXC:AgentLauncher 2026-09-11 DECISION: User: account-picker rows show Claude's two tightest limits out of weekly, five-hour, and Fable (superseding the 2026-09-09 fixed weekly and five-hour pair), and Codex's weekly usage and available resets, using the same account data as starred titlebar buttons. */
 export function AccountLauncherUsage({ account }: { account: AgentAccount }) {
-  const mainWindows = account.usage.filter((window) => !window.model);
-  const weekly = mainWindows.find(
-    (window) => window.id === 'sevenDay' || (window.limitWindowSeconds ?? 0) >= 604800
-  );
-  const fiveHour = mainWindows.find(
-    (window) => window.id === 'fiveHour' || window.limitWindowSeconds === 18000
-  );
-  const values = account.provider === 'claude'
-    ? [weekly, fiveHour].map((window) => window ? `${accountUsageLabel(window)}: ${Math.round(window.usedPercent)}%` : null)
-    : [
-        weekly ? `${accountUsageLabel(weekly)}: ${Math.round(weekly.usedPercent)}%` : null,
-        account.resetCredits != null ? `${account.resetCredits}rs` : null,
-      ];
+  const percent = (window: AccountUsageWindow) => `${accountUsageLabel(window)}: ${Math.round(window.usedPercent)}%`;
+  const weekly = account.usage.filter((window) => !window.model).find(isWeeklyWindow);
+  const values =
+    account.provider === 'claude'
+      ? accountHeadlineWindows(account).map(percent)
+      : [weekly ? percent(weekly) : null, account.resetCredits != null ? `${account.resetCredits}rs` : null];
   const label = values.filter((value): value is string => value !== null).join(' · ');
   return label ? <span className='gx-account-launcher-usage'>{label}</span> : null;
 }
