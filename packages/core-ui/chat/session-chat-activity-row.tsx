@@ -22,9 +22,10 @@ comes off the screen or is not drawn at all.
 */
 
 import { useEffect, useState } from 'react';
-import { IconLoader2 } from '@tabler/icons-react';
+import { IconInfoCircle, IconLoader2 } from '@tabler/icons-react';
 import type { SessionChatTerminalActivity } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
+import { AppTooltip } from '../app-tooltip';
 
 /** How often the local clock re-renders between server samples. */
 const ACTIVITY_CLOCK_TICK_MS = 1_000;
@@ -106,7 +107,21 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
         ) : (
           <span aria-hidden='true' className='size-1.5 shrink-0 animate-pulse rounded-full bg-primary' />
         )}
-        <span className='ghostex-chat-card-title min-w-0 flex-1 truncate text-foreground/90'>{activity.label}</span>
+        <div className='flex min-w-0 flex-1 items-center gap-1.5'>
+          <span className='ghostex-chat-card-title min-w-0 truncate text-foreground/90'>{activity.label}</span>
+          {/* CDXC:SessionChat 2026-09-11 DECISION: User: put the compaction hint in an info-circle tooltip immediately right of the title, replacing the visible hint line. */}
+          {activity.kind === 'compacting' ? (
+            <AppTooltip content='Send or queue a message and it will be posted after compaction' side='top'>
+              <button
+                type='button'
+                aria-label='Messaging during compaction'
+                className='inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/20'
+              >
+                <IconInfoCircle aria-hidden='true' className='size-3.5' stroke={1.5} />
+              </button>
+            </AppTooltip>
+          ) : null}
+        </div>
         {elapsed !== null ? (
           <span className='ghostex-chat-card-hint shrink-0 text-xs text-muted-foreground tabular-nums'>
             {formatSessionChatActivityElapsed(elapsed)}
@@ -131,12 +146,6 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
             style={{ width: `${percent}%` }}
           />
         </div>
-      ) : null}
-      {/* CDXC:SessionChat 2026-09-10 DECISION: User: Claude Code compaction shows "Send a message to queue it after compaction". */}
-      {activity.kind === 'compacting' ? (
-        <p className='ghostex-chat-card-hint text-xs text-muted-foreground'>
-          Send a message to queue it after compaction
-        </p>
       ) : null}
     </div>
   );

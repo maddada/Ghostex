@@ -39,7 +39,15 @@ const ESCAPED_HARNESS_MARKER =
 const ANSI_STYLE_SEQUENCE = /(?:\u001b|\u009b)?\[[0-9;]{1,8}m/g;
 const COMPACTION_OUTPUT =
   /^compact(?:ed|ing|ion)\b(?:\s+(?:is\s+)?(?:complete[d]?|done|finished|successful(?:ly)?))?(?:\s*\([^)]*\))?\s*[.!…]*$/i;
-const POST_COMPACT_SUCCESS_OUTPUT = /^postcompact\b.*\bcompleted successfully:\s*\{\s*"continue"\s*:\s*true\s*\}\s*$/i;
+/*
+ * CDXC:SessionChat 2026-09-11 WHY:
+ * Claude appends one receipt line per PostCompact hook. Ghostex's hook answers
+ * `{"continue":true}`, but a hook another tool registered answers `{}` (or any
+ * object), and matching the JSON demoted the whole row to a raw "Local command
+ * output" marker whenever a second hook was installed. Only "ran and succeeded"
+ * matters here; a failed receipt still falls through and stays readable.
+ */
+const POST_COMPACT_SUCCESS_OUTPUT = /^postcompact\s+\[.*\]\s+completed successfully:/i;
 
 /** Claude: the row derived from `/compact`'s local-command output. */
 const COMPACTION_COMPLETED_LABEL = 'Compaction completed';
