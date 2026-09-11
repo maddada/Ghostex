@@ -14,7 +14,7 @@ pub(crate) fn project_session_title(session: &Value) -> Map<String, Value> {
     let title_source = session_title_source(session, &title);
     let agent_id = string_field(session, "agentId");
     let mut primary_candidate = session_card_primary_title(&title, agent_id.as_deref());
-    if title_source == "placeholder" {
+    if title_source == "placeholder" && crate::agents::provisional_fork_title(session).is_none() {
         let family = crate::agents::session_agent_family_id(&Value::Null, session);
         if matches!(family.as_deref(), Some("claude" | "codex")) {
             primary_candidate = Some(crate::agents::create_agent_session_default_title(

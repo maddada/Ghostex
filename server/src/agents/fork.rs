@@ -9,6 +9,10 @@ use crate::presentation::project_session_title_projection;
 use crate::zmx::dispatch_zmx_lifecycle_endpoint;
 use crate::zmx::ZmxServerContext;
 
+#[cfg(test)]
+#[path = "fork_tests.rs"]
+mod tests;
+
 pub(crate) fn fork_session(
     repository: &DomainRepository<'_>,
     lifecycle: &LifecycleParams,
@@ -158,6 +162,22 @@ pub(crate) fn build_agent_fork_plan(
         );
     }
     Value::Object(plan)
+}
+
+/// CDXC:SessionFork 2026-09-11 DECISION:
+/// User: a newly forked session must show `Fork:` in its sidebar name.
+/// Keep this provisional name through launch identity updates and inherited Codex metadata until the fork receives its own name.
+pub(crate) fn provisional_fork_title(session: &Value) -> Option<String> {
+    let runtime = object_field(session, "runtimeSettings");
+    if runtime
+        .get("forkFirstPromptAutoTitlePending")
+        .and_then(Value::as_bool)
+        != Some(true)
+        || runtime.get("titleSource").and_then(Value::as_str) != Some("placeholder")
+    {
+        return None;
+    }
+    read_text_value(session, "title").filter(|title| title.starts_with("Fork: "))
 }
 
 pub(crate) fn create_agent_fork_session_params(
