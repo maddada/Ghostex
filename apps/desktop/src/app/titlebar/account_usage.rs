@@ -74,7 +74,7 @@ pub(crate) fn account_display_text(value: &str) -> String {
                     let mut characters = local.chars();
                     let first = characters.next().unwrap();
                     let last = characters.last().map(|c| c.to_string()).unwrap_or_default();
-                    format!("{first}•••{last}@••••••.•••{whitespace}")
+                    format!("{first}•••{last}@•••••.•••{whitespace}")
                 }
                 _ => part.to_string(),
             }
@@ -251,7 +251,12 @@ impl GhostexGpuiApp {
                                 this.titlebar_accounts.retain(|a| text(a, "titlebarMachine") != machine);
                                 for account in result["accounts"].as_array().into_iter().flatten()
                                     .filter(|a| a["registered"] == true && a["showInTitlebar"] == true) {
-                                    this.titlebar_accounts.push(titlebar_entry(account, &machine));
+                                    let mut entry = titlebar_entry(account, &machine);
+                                    entry["usageHistory"] = result.get("usageHistory")
+                                        .map(|history| history[text(account, "provider")].clone())
+                                        .unwrap_or_else(|| json!({"status":"unavailable"}));
+                                    entry["providerAccountCount"] = result["accountCounts"][text(account, "provider")].clone();
+                                    this.titlebar_accounts.push(entry);
                                 }
                             }
                             Err(_) => {
@@ -370,33 +375,43 @@ impl GhostexGpuiApp {
             trigger_bounds,
             size: GpuiExtensionPopupSize {
                 width: 380.0,
-                height: 560.0,
+                height: 640.0,
             },
             generation,
             panel: None,
             error: None,
         });
-        let template = if text(&account, "provider") == "codex" {
-            include_str!("../../../assets/account-usage/codex.html")
+        let logo = if text(&account, "provider") == "codex" {
+            include_str!("../../../assets/account-usage/codex.svg")
         } else {
-            include_str!("../../../assets/account-usage/claude.html")
+            include_str!("../../../assets/account-usage/claude.svg")
         };
+        let template = include_str!("../../../assets/account-usage/popup.html");
         let script = include_str!("../../../assets/account-usage/popup.js").replace(
             "__ACCOUNT_JSON__",
             &popup_account(&account).to_string().replace('<', "\\u003c"),
         );
-        let html = template.replace("__ACCOUNT_SCRIPT__", &script);
+        let html = template
+            .replace("__PROVIDER_LOGO__", logo)
+            .replace("__ACCOUNT_SCRIPT__", &script);
         let url = format!(
             "data:text/html;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(html)
         );
         let parent = self.parent_ns_view;
+        let popup_handler = self.account_reset_popup_handler(generation, id, cx);
         let app = cx.entity().downgrade();
         let mut async_cx = cx.to_async();
         cx.foreground_executor()
             .spawn(async move {
-                let result =
-                    GpuiTitlebarExtensionPanel::create_browser(parent, id, &url, None, None);
+                let result = GpuiTitlebarExtensionPanel::create_browser(
+                    parent,
+                    id,
+                    &url,
+                    None,
+                    None,
+                    Some(popup_handler),
+                );
                 let _ = app.update_in(&mut async_cx, |this, _window, cx| {
                     this.attach_titlebar_extension_panel(generation, id, result, cx)
                 });
