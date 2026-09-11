@@ -1,5 +1,56 @@
 # Changelog
 
+## 9.3.0 - 2026-09-11
+
+- New Features
+
+  - Switching Spaces brings back what each Space was last showing: its last session, in that project's remembered view, and its scroll position. A new option lets the selected Space follow whichever session becomes active.
+  - Landing on another project keeps that project's view (Code, Browser, Kanban, Automate or Docs) instead of jumping to Agents. Only clicking a session inside the project you are already in opens Agents.
+  - Watch Claude's reply as it is written. Long answers stream into the chat straight from the terminal and switch to the saved message the moment it lands in the transcript. The view holds at the top of the new text so you can read it as it grows; press Option+Down or the "Scroll to bottom" pill to jump to the end.
+  - Choose how new sessions pick their account: Most limit remaining (the default), Soonest reset, Most used first, Same as last session, or one pinned account.
+  - The titlebar usage popup is one page for Claude and Codex: live limits per account, extra model limits behind a disclosure, and a 30-day token history for the provider, read from the conversations on your computer. Codex accounts with reset credits can redeem one right there.
+  - Paste almost anything into Add Project: a folder path, a `cd` command, a clone command, or a GitHub, GitLab, Bitbucket or Azure DevOps link, and it routes itself to browse or clone. A path that is already a project offers to open it, and a file inside a repository offers the repository root.
+  - Docs loads folder by folder and shows a cached tree instantly when you come back, while a background index keeps search complete. Big projects show up instead of hanging.
+  - Park and tag in one gesture with "Show tag menu when parking", and parked sessions unpark themselves when you send them a message (on by default).
+  - Chat sends now work with Hermes, Pi and OMP: Ghostex reads their input box and clears it before pasting.
+
+- Major Improvements
+
+  - gxserver uses far less CPU when idle with a large session list: polls no longer load every stopped session, fork families and searches read only what they need, and one process probe serves every session.
+  - The Docs window is much lighter. The editors load when first needed instead of shipping a 13.5 MB page for every Markdown file.
+  - Saved Prompts opens instantly: drafts no longer rescan storage on every keystroke, Recovered shows one row per session with earlier versions behind a popover, and history loads only when its tab opens.
+  - Codex rewind is dependable. If Ghostex loses track of the new thread after a rewind, the dialog stays open with Retry synchronization instead of dropping your draft, and the rewound thread is adopted without the old one resurfacing.
+  - Claude and Codex name their own sessions now. Ghostex no longer runs its first-prompt rename job, so nothing blocks typing while a title is generated. Manual rename and Generate Name remain.
+  - Messages sent while a session is still starting stay in the transcript with a "Waiting for agent" status, plus Retry and Remove, and survive reopening the chat or switching devices.
+  - The desktop shell's right-click and dropdown menus (titlebar, tabs, panes, browser profiles, terminal Copy and Paste, Keep Awake, the pet) are drawn by Ghostex itself, so they look the same on every platform and stay above the embedded browser on Linux.
+  - Sending from chat clears whatever was already typed in the agent's terminal with a method proven for each agent, and checks the box is empty before pasting.
+
+- Minor Improvements
+
+  - Usage rows in Context details are one value each (5h limit, 7d limit, model limit, and both resets), and the dialog has a filter bar.
+  - Dragging a session shows a ghost that matches the row, and the list reorders only when you drop.
+  - Space buttons have 6px corners, their counts sit lower on the icon, and there is more room under the Spaces row.
+  - Hidden emails use visible mask characters instead of a blur, so nothing shows through on select or hover.
+  - The compaction hint moved into an info tooltip beside the activity title.
+  - A new fork keeps its "Fork:" name until it earns its own.
+  - Sidebar "last active" labels share one clock that ticks only when a label would change and pauses while the window is hidden.
+  - File-change cards in chat use a darker background.
+  - Option+Left and Option+Right in the terminal jump by word on macOS, like Ghostty.
+  - The web app gets the new Add Project flow too.
+
+- Stabilization
+
+  - Sending works again in Codex 0.154: the input box is recognised with or without its animated particles, and the queued-message indicator is found anywhere on screen.
+  - The skill picker no longer stays empty after a failed load. It shows loading, an error with Retry, or "No skills available", and reopening tries again.
+  - Sidebar menus close when you click back into a terminal or browser.
+  - Forked Codex sessions keep their inherited history when the chat opens.
+  - After switching accounts, a usage limit hit by the new login shows again instead of staying hidden.
+  - Account recovery no longer stops for every session when one of them fails, and failures are logged.
+  - A third-party PostCompact hook no longer turns the compaction row into raw command output.
+  - Account panels opened at the same time share one request instead of each asking the server.
+  - Azure DevOps clone links keep their `_git` paths.
+  - Remote machines' last-seen project lists are stored per machine, so one update cannot overwrite another's.
+
 ## 9.2.0 - 2026-09-10
 
 - New Features
