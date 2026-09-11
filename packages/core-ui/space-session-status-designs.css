@@ -157,7 +157,7 @@ body:has(.ssid-study),
   appearance: none;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 6px;
   color: #898d93;
   display: inline-flex;
   flex: none;

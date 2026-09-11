@@ -2646,7 +2646,12 @@ manual mode visibly selected without adding text to the section row.
    */
   margin: 0 0 13px;
   overflow: hidden;
-  padding-left: 3px;
+  /*
+   * CDXC:Spaces 2026-09-11 DECISION:
+   * User: add 12px below the Spaces row only when Spaces are enabled. The row is not rendered when Spaces are disabled, so nothing else changes.
+   * The 12px is padding on the row, not extra margin: the local row is sticky, so a margin is scrollable space that disappears the moment the list scrolls under the pinned row, which made the first attempt look like nothing had been added. Padding stays inside the pinned, opaque row and keeps the cushion while scrolling.
+   */
+  padding: 0 0 12px 3px;
   width: 100%;
 }
 
@@ -2703,9 +2708,10 @@ manual mode visibly selected without adding text to the section row.
  * CDXC:ContextMenus 2026-09-02:
  * With the Projects header removed the Space row is the only pinned chrome in
  * the local list, so it pins at the scroller's top edge, which is also its
- * resting position: nothing above it can scroll away. It carries no extra
- * bottom padding: the shared 13px bottom margin is the whole gap to the first
- * project, the same as the remote machine's (non-sticky) Space row.
+ * resting position: nothing above it can scroll away. The gap to the first
+ * project is the shared 12px row padding plus the 13px bottom margin, the same
+ * as the remote machine's (non-sticky) Space row; only the padding survives
+ * once the list scrolls under the pinned row.
  */
 .session-groups-content > .sidebar-space-filter-row {
   background: var(--app-background);
@@ -2731,7 +2737,7 @@ manual mode visibly selected without adding text to the section row.
 }
 
 /*
- * Icon-only circular buttons: the Space name lives in the shared sidebar tooltip
+ * Icon-only buttons: the Space name lives in the shared sidebar tooltip
  * and in the More menu, so every button measures the same small width and the
  * overflow split stays purely a function of how many Spaces there are.
  */
@@ -2739,7 +2745,7 @@ manual mode visibly selected without adding text to the section row.
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: 6px;
   color: color-mix(in srgb, var(--app-foreground) 62%, transparent);
   cursor: pointer;
   display: inline-flex;
@@ -2753,9 +2759,17 @@ manual mode visibly selected without adding text to the section row.
   width: 28px;
 }
 
+/*
+ * CDXC:Spaces 2026-09-11 DECISION:
+ * User: make the Space button outline, hover fill, and selected chrome less rounded. All states share 6px corners, superseding the circular buttons.
+ * WHY the element-qualified selector: styles.css ends with the squared-controls reset (`:is(button, …) { border-radius: 0 }`), which matches these <button>s at the same specificity as the class and loads after this file, so a class-only radius never painted and the buttons rendered square. The former circular look only survived because the hover, selected, and active-session rules each restated the radius at higher specificity. The drag ghost is a div the reset does not match, so the base rule above covers it.
+ */
+button.sidebar-space-filter-button {
+  border-radius: 6px;
+}
+
 .sidebar-space-filter-button:hover {
   background: color-mix(in srgb, var(--app-foreground) 8%, transparent);
-  border-radius: 999px;
   color: color-mix(in srgb, var(--app-foreground) 86%, transparent);
 }
 
@@ -2778,7 +2792,6 @@ manual mode visibly selected without adding text to the section row.
 .sidebar-space-filter-button[data-selected='true'] {
   background: color-mix(in srgb, var(--app-foreground) 12%, transparent);
   border-color: color-mix(in srgb, var(--app-foreground) 16%, transparent);
-  border-radius: 999px;
   color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
 }
 
@@ -2786,12 +2799,11 @@ manual mode visibly selected without adding text to the section row.
  * CDXC:Sessions 2026-03-09:
  * User: the Space that owns the currently active session, when that Space is
  * not the selected view, must use the same composer fill / outline / inner
- * highlight as the selected session card. Keep the circular button radius.
+ * highlight as the selected session card. The radius follows the Space button.
  */
 .sidebar-space-filter-button[data-contains-active-session='true']:not([data-selected='true']) {
   background: var(--sidebar-composer-surface, #141414);
   border-color: var(--sidebar-composer-outline, rgb(255 255 255 / 5%));
-  border-radius: 999px;
   box-shadow: inset 0 1px var(--sidebar-composer-highlight, rgb(255 255 255 / 3%));
   color: color-mix(in srgb, var(--app-foreground) 94%, transparent);
   overflow: hidden;
@@ -2856,6 +2868,14 @@ manual mode visibly selected without adding text to the section row.
   flex: 0 0 auto;
 }
 
+/*
+ * CDXC:Spaces 2026-09-11 DECISION:
+ * User: when a Space has one or two status numbers on its icon, render the icon at 80% opacity, superseding 60%. Only the icon dims; the numbers stay fully opaque, including on the active Space.
+ */
+.sidebar-space-filter-button[data-has-session-status='true'] > svg {
+  opacity: 0.8;
+}
+
 .sidebar-space-filter-track .sidebar-space-filter-button[data-has-session-status='true'] {
   overflow: visible;
 }
@@ -2870,7 +2890,7 @@ manual mode visibly selected without adding text to the section row.
   line-height: 1;
   pointer-events: none;
   position: absolute;
-  top: 50%;
+  top: calc(50% + 6px);
   translate: -50% -50%;
   white-space: nowrap;
 }

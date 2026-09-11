@@ -1135,8 +1135,8 @@ function getSpaceSessionStatusLabel(name: string, summary: SidebarSpaceSessionSu
 }
 
 /**
- * CDXC:Spaces 2026-09-10 DECISION:
- * User: always keep the usual Space icon visible, and add the aggregate working and attention numbers for every Space, including the active Space, as a small extra-bold row centered inside the icon. Working is amber, attention is blue, and the numbers have a small gap with no dots. This supersedes both the earlier beneath-the-icon placement and the rule that hid counts on the active Space.
+ * CDXC:Spaces 2026-09-11 DECISION:
+ * User: keep the usual Space icon visible and show aggregate working and attention numbers for every Space, including the active Space, as a small extra-bold row horizontally centered and lower on the icon. Working is amber, attention is blue, and the numbers have a small gap with no dots. This supersedes vertically centering the numbers on the icon; active Spaces still show counts.
  */
 export function SpaceSessionStatusCounts({
   menu = false,

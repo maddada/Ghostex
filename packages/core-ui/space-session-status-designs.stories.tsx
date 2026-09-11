@@ -35,8 +35,9 @@ function SpaceButton({ space }: { space: SpaceExample }) {
       <button
         aria-label={`${space.name}${space.selected ? ', selected' : showStatus ? `, ${statusLabel}` : ''}`}
         aria-pressed={space.selected === true}
-        className='ssid-space-button'
-        data-has-status={String(showStatus)}
+        className='ssid-space-button sidebar-space-filter-button'
+        data-has-session-status={String(showStatus)}
+        data-selected={String(space.selected === true)}
         type='button'
       >
         <Icon aria-hidden='true' className='ssid-space-icon' size={16} stroke={1.8} />
@@ -50,7 +51,7 @@ function SpaceButton({ space }: { space: SpaceExample }) {
 function SpaceStrip({ spaces }: { spaces: readonly SpaceExample[] }) {
   return (
     <div className='sidebar-reference-layout' data-reference-sidebar='true' style={{ display: 'contents' }}>
-      <div className='ssid-space-strip' aria-label='Example Space switcher'>
+      <div className='ssid-space-strip sidebar-space-filter-row' aria-label='Example Space switcher'>
         {spaces.map((space) => (
           <SpaceButton key={space.name} space={space} />
         ))}
@@ -110,10 +111,10 @@ function CenteredNumbersStudy({
         <header className='ssid-study-header'>
           <div>
             <p className='ssid-eyebrow'>GHOSTEX / SPACES / OFF-SCREEN ACTIVITY</p>
-            <h1>Colored counts centered inside Space icons</h1>
+            <h1>Colored counts lower on Space icons</h1>
             <p>
-              Every Space keeps its usual icon and layers its aggregate counts into the icon's exact center, including
-              the active Space. Working is amber, attention is light blue, and the JetBrains Mono ExtraBold values use a
+              Every Space keeps its usual icon and layers its aggregate counts near the icon's bottom, including the
+              active Space. Working is amber, attention is light blue, and the JetBrains Mono ExtraBold values use a
               small gap.
             </p>
           </div>
@@ -134,7 +135,8 @@ function CenteredNumbersStudy({
 
         <footer className='ssid-footnote'>
           The selected Work Space keeps its counts visible along with every inactive Space. The Personal Space uses the
-          Storybook count controls, and every icon stays fully visible.
+          Storybook count controls. Icons with counts use 80% opacity; the numbers stay fully opaque. Buttons use 6px
+          corners, and the Spaces row has 12px of additional bottom margin.
         </footer>
       </div>
     </main>
