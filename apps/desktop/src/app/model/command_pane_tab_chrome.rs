@@ -767,12 +767,13 @@ pub(crate) fn command_pane_sticky_active_tab_tooltip() -> &'static str {
 pub(crate) fn command_pane_sticky_active_tab_trailing_inset(
     expanded_chrome: bool,
     tab_add_visible: bool,
+    keep_open_visible: bool,
 ) -> f32 {
     /*
     CDXC:CommandPane 2026-06-25-18:51:
     Native Show Active Tab chrome overlays the tab viewport edge and does not consume tab-run layout width. Keep the trailing proxy before the inline New Terminal button and fixed command-panel actions so the overlay covers clipped tabs, not controls.
     */
-    command_pane_fixed_panel_control_width(expanded_chrome)
+    command_pane_fixed_panel_control_width(expanded_chrome, keep_open_visible)
         + if tab_add_visible {
             COMMAND_PANE_TAB_ADD_BUTTON_GAP + COMMAND_PANE_TAB_BAR_HEIGHT
         } else {
@@ -790,11 +791,10 @@ pub(crate) fn command_pane_empty_titlebar_double_click_creates_new_terminal(
     click_count >= 2
 }
 
-pub(crate) fn command_pane_fixed_panel_control_count(expanded_chrome: bool) -> usize {
-    /*
-    CDXC:CommandPane 2026-06-25-12:26:
-    Native command-panel fixed chrome has one visibility action in all states, plus Pin/Unpin only while visible. New Terminal stays inline with tabs, and visible panels do not add a second close/minimize button.
-    */
+pub(crate) fn command_pane_fixed_panel_control_count(
+    expanded_chrome: bool,
+    keep_open_visible: bool,
+) -> usize {
     let mut count = 1;
     if command_pane_new_command_control_placement()
         == CommandPaneNewCommandControlPlacement::FixedActionCluster
@@ -804,11 +804,17 @@ pub(crate) fn command_pane_fixed_panel_control_count(expanded_chrome: bool) -> u
     if command_pane_panel_mode_controls_visible(expanded_chrome) {
         count += 1;
     }
+    if expanded_chrome && keep_open_visible {
+        count += 1;
+    }
     count
 }
 
-pub(crate) fn command_pane_fixed_panel_control_width(expanded_chrome: bool) -> f32 {
-    command_pane_fixed_panel_control_count(expanded_chrome) as f32
+pub(crate) fn command_pane_fixed_panel_control_width(
+    expanded_chrome: bool,
+    keep_open_visible: bool,
+) -> f32 {
+    command_pane_fixed_panel_control_count(expanded_chrome, keep_open_visible) as f32
         * COMMAND_PANE_CONTROL_BUTTON_SIZE
         + command_pane_control_trailing_padding(expanded_chrome)
 }
@@ -816,13 +822,15 @@ pub(crate) fn command_pane_fixed_panel_control_width(expanded_chrome: bool) -> f
 pub(crate) fn command_pane_inline_tab_add_visible_for_chrome_width(
     chrome_width: f32,
     expanded_chrome: bool,
+    keep_open_visible: bool,
 ) -> bool {
     /*
     CDXC:CommandPane 2026-06-25-18:46:
     Native computes command tab-add visibility from the tab area left after fixed panel actions. Hide GPUI's inline plus under the same threshold so narrow command groups keep usable tab/double-click chrome instead of pinning a New Terminal button over it.
     */
-    let tab_area_width =
-        (chrome_width - command_pane_fixed_panel_control_width(expanded_chrome)).max(0.0);
+    let tab_area_width = (chrome_width
+        - command_pane_fixed_panel_control_width(expanded_chrome, keep_open_visible))
+    .max(0.0);
     tab_area_width
         >= COMMAND_PANE_MINIMUM_VISIBLE_TAB_VIEWPORT_WIDTH_WITH_DOUBLE_CLICK_TARGET
             + COMMAND_PANE_TAB_ADD_BUTTON_GAP

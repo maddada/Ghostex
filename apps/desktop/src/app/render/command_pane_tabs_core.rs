@@ -125,8 +125,12 @@ impl GhostexGpuiApp {
             .get(&group_id)
             .map(|bounds| bounds.size.width.as_f32())
             .unwrap_or(estimated_chrome_width);
-        let show_tab_add_button =
-            command_pane_inline_tab_add_visible_for_chrome_width(chrome_width, true);
+        let keep_open_visible = self.command_pane_keep_open_control_visible(true);
+        let show_tab_add_button = command_pane_inline_tab_add_visible_for_chrome_width(
+            chrome_width,
+            true,
+            keep_open_visible,
+        );
         let scroll_handle = self.command_tab_scroll_handle(group_id);
         let wheel_scroll_handle = scroll_handle.clone();
         let tab_count = leaf.tab_group.tabs.len();
@@ -137,8 +141,11 @@ impl GhostexGpuiApp {
                 command_pane_sticky_active_tab_edge_for_scroll_handle(&scroll_handle, active_index)
                     .map(|edge| (edge, active_index))
             });
-        let sticky_trailing_inset =
-            command_pane_sticky_active_tab_trailing_inset(true, show_tab_add_button);
+        let sticky_trailing_inset = command_pane_sticky_active_tab_trailing_inset(
+            true,
+            show_tab_add_button,
+            keep_open_visible,
+        );
 
         h_flex()
             .id(format!("ghostex-gpui-command-pane-titlebar-{}", group_id.0))
@@ -324,7 +331,7 @@ impl GhostexGpuiApp {
             - COMMAND_PANE_COLLAPSED_STRIP_RIGHT_MARGIN)
             .max(0.0);
         let show_tab_add_button =
-            command_pane_inline_tab_add_visible_for_chrome_width(strip_chrome_width, false);
+            command_pane_inline_tab_add_visible_for_chrome_width(strip_chrome_width, false, false);
         let scroll_handle = self.command_collapsed_tab_scroll_handle.clone();
         let wheel_scroll_handle = scroll_handle.clone();
         let active_flat_tab = self.command_pane.active_group_and_session_id().and_then(
@@ -342,7 +349,7 @@ impl GhostexGpuiApp {
                 .map(|edge| (edge, active_group_id, active_index))
         });
         let sticky_trailing_inset =
-            command_pane_sticky_active_tab_trailing_inset(false, show_tab_add_button);
+            command_pane_sticky_active_tab_trailing_inset(false, show_tab_add_button, false);
 
         /*
         CDXC:CommandPane 2026-06-25-12:32:

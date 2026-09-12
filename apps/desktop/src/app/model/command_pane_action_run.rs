@@ -169,6 +169,7 @@ pub(crate) struct CommandTerminalProcessExitCleanup {
 pub(crate) enum CommandPaneControlAction {
     NewCommandPlaceholder,
     TogglePinned,
+    ToggleKeepOpen,
     ToggleExpanded,
 }
 
@@ -214,6 +215,7 @@ pub(crate) fn command_pane_control_action_focuses_command_pane(
     Any titlebar control that focuses an existing command session should also acknowledge that session's Attention state, matching native command titlebar focus while leaving non-focusing Minimize and new idle command creation out of the acknowledgement path.
     */
     match action {
+        CommandPaneControlAction::ToggleKeepOpen => false,
         CommandPaneControlAction::NewCommandPlaceholder => true,
         CommandPaneControlAction::TogglePinned => is_expanded_after,
         CommandPaneControlAction::ToggleExpanded => !was_expanded && is_expanded_after,

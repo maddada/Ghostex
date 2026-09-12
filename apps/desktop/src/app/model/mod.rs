@@ -42,6 +42,7 @@ pub(crate) mod runtime_state;
 pub(crate) mod session_chat_parking;
 pub(crate) mod shell_focus_state;
 pub(crate) mod shell_layout;
+pub(crate) mod view_pane_layouts;
 pub(crate) mod sidebar_bridge_messages;
 pub(crate) mod sidebar_chrome;
 pub(crate) mod tab_drag_preview_render;
@@ -94,6 +95,7 @@ pub(crate) use runtime_state::*;
 pub(crate) use session_chat_parking::*;
 pub(crate) use shell_focus_state::*;
 pub(crate) use shell_layout::*;
+pub(crate) use view_pane_layouts::*;
 pub(crate) use sidebar_bridge_messages::*;
 pub(crate) use sidebar_chrome::*;
 #[allow(unused_imports)]

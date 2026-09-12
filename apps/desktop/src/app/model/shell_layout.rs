@@ -26,6 +26,7 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) pending_command_gxserver_cleanup: HashSet<GpuiLocalWorkspaceSessionKey>,
     pub(crate) project_editor_shell: ProjectEditorShellModel,
     pub(crate) project_view_states_by_project: HashMap<String, GpuiProjectViewState>,
+    pub(crate) view_pane_layouts: GpuiViewPaneLayouts,
     pub(crate) browser_profiles: BrowserProfileModel,
     pub(crate) browser_tabs: BrowserTabModel,
     pub(crate) browser_tabs_project_id: Option<String>,
@@ -82,6 +83,7 @@ impl GpuiShellLayoutState {
             pending_command_gxserver_cleanup: HashSet::new(),
             project_editor_shell: ProjectEditorShellModel::shell_default(),
             project_view_states_by_project: HashMap::new(),
+            view_pane_layouts: GpuiViewPaneLayouts::shell_default(),
             browser_profiles,
             browser_tabs,
             browser_tabs_project_id: None,
@@ -401,6 +403,16 @@ impl GpuiShellLayoutState {
                     .collect::<HashMap<_, _>>()
             })
             .unwrap_or_default();
+        let view_pane_layouts = object
+            .get("viewPaneLayouts")
+            .and_then(GpuiViewPaneLayouts::from_shell_state)
+            .unwrap_or_else(|| {
+                GpuiViewPaneLayouts::seeded_from_restored_shell(
+                    active_mode,
+                    &project_editor_shell,
+                    &command_pane,
+                )
+            });
 
         Some(Self {
             active_mode,
@@ -422,6 +434,7 @@ impl GpuiShellLayoutState {
             pending_command_gxserver_cleanup,
             project_editor_shell,
             project_view_states_by_project,
+            view_pane_layouts,
             browser_profiles,
             browser_tabs,
             browser_tabs_project_id,

@@ -59,23 +59,28 @@ impl GhostexGpuiApp {
             ProjectScopedWorkareaAvailability::from_env_bridge(),
             &shared_settings_snapshot,
         );
-        let restored_panes = shell_layout_state
-            .agents_workspace_project_id
-            .as_ref()
-            .and_then(|id| shell_layout_state.project_view_states_by_project.get(id))
-            .and_then(|state| {
-                state
-                    .panes_by_mode
-                    .get(&shell_layout_state.active_mode.element_slug())
-            })
-            .copied();
-        if let Some(panes) = restored_panes {
+        let sidebar_visibility_memory =
+            GpuiSidebarVisibilityMemory::from_shared_settings(&shared_settings_snapshot);
+        let restored_panes =
             shell_layout_state
-                .project_editor_shell
-                .left_companion_visible = panes.companion_visible;
-            shell_layout_state.command_pane.mode = panes.command_mode;
-            shell_layout_state.command_pane.last_expanded_mode = panes.command_last_expanded_mode;
-        }
+                .view_pane_layouts
+                .get(GpuiViewPaneLayoutKind::for_mode(
+                    shell_layout_state.active_mode,
+                ));
+        shell_layout_state
+            .project_editor_shell
+            .left_companion_visible = restored_panes.companion_visible;
+        shell_layout_state.command_pane.mode = restored_panes.command_mode;
+        shell_layout_state.command_pane.last_expanded_mode =
+            restored_panes.command_last_expanded_mode;
+        let restored_sidebar_collapsed = match sidebar_visibility_memory {
+            GpuiSidebarVisibilityMemory::Shared => {
+                shell_layout_state
+                    .view_pane_layouts
+                    .shared_sidebar_collapsed
+            }
+            GpuiSidebarVisibilityMemory::PerView => restored_panes.sidebar_collapsed,
+        };
         let restored_command_gxserver_session_mappings =
             command_gxserver_session_mappings_from_command_model(&shell_layout_state.command_pane);
         let restored_command_remote_action_sessions =
@@ -144,6 +149,7 @@ impl GhostexGpuiApp {
                 project_switch_pending_requests: Vec::new(),
                 project_switch_flush_scheduled: false,
                 command_pane: shell_layout_state.command_pane,
+                command_pane_auto_minimize: Default::default(),
                 command_pane_project_id: shell_layout_state.command_pane_project_id,
                 parked_command_panes_by_project: shell_layout_state.parked_command_panes_by_project,
                 command_pane_project_epoch: 0,
@@ -220,6 +226,8 @@ impl GhostexGpuiApp {
                 startup_restore_wake_pending,
                 remote_workspace_attach_pending: HashSet::new(),
                 project_view_states_by_project: shell_layout_state.project_view_states_by_project,
+                view_pane_layouts: shell_layout_state.view_pane_layouts,
+                sidebar_visibility_memory,
                 remote_attach_sessions: shell_layout_state.remote_attach_sessions,
                 #[cfg(target_os = "macos")]
                 remote_attach_askpass_scripts: HashMap::new(),
@@ -430,7 +438,7 @@ impl GhostexGpuiApp {
                 sidebar_side,
                 command_pane_side,
                 sidebar_width,
-                sidebar_collapsed: restored_panes.is_some_and(|panes| panes.sidebar_collapsed),
+                sidebar_collapsed: restored_sidebar_collapsed,
                 #[cfg(target_os = "macos")]
                 companion_reveal: None,
                 sidebar_drag: None,
@@ -592,6 +600,7 @@ impl GhostexGpuiApp {
             #[cfg(target_os = "macos")]
             this.start_sidebar_hover_reveal_polling(cx);
             this.start_command_action_status_polling(cx);
+            this.start_command_pane_auto_minimize_polling(window, cx);
             this.start_session_chat_queued_count_polling(cx);
             this.start_agents_chat_surface_eviction_polling(cx);
             this.start_prompt_editor_daemon_polling(cx);

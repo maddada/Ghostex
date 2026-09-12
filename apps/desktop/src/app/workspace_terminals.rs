@@ -619,23 +619,8 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn current_project_view_state(&self) -> GpuiProjectViewState {
-        let mut panes_by_mode = self
-            .agents_workspace_project_id
-            .as_ref()
-            .and_then(|id| self.project_view_states_by_project.get(id))
-            .map(|state| state.panes_by_mode.clone())
-            .unwrap_or_default();
-        let mut panes = self.saved_view_pane_state(self.active_mode);
-        panes.sidebar_collapsed = self.sidebar_collapsed;
-        panes.companion_visible = self.project_editor_shell.left_companion_visible;
-        if self.command_pane_project_id == self.agents_workspace_project_id {
-            panes.command_mode = self.command_pane.mode;
-            panes.command_last_expanded_mode = self.command_pane.last_expanded_mode;
-        }
-        panes_by_mode.insert(self.active_mode.element_slug(), panes);
         GpuiProjectViewState {
             active_mode: self.available_titlebar_mode_or_agents(self.active_mode),
-            panes_by_mode,
             companion_split_enabled: self.project_editor_shell.left_companion_split_enabled,
             companion_width_ratio: self.project_editor_shell.left_companion_width_ratio,
             companion_split_ratio: self.project_editor_shell.left_companion_split_ratio,
@@ -664,6 +649,7 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn capture_outgoing_project_view_state(&mut self) {
+        self.capture_view_pane_layout();
         if let Some(project_id) = self.agents_workspace_project_id.clone() {
             let state = self.current_project_view_state();
             self.project_view_states_by_project

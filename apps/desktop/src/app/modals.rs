@@ -1989,6 +1989,7 @@ impl GhostexGpuiApp {
             cx,
         );
         self.apply_gpui_sidebar_side_from_saved_settings(settings_snapshot);
+        self.apply_gpui_sidebar_visibility_memory_from_saved_settings(settings_snapshot);
         self.apply_gpui_command_pane_side_from_saved_settings(settings_snapshot);
         refresh_gpui_visual_settings(settings_snapshot);
         self.refresh_sidebar_runtime_settings_from_shared_settings(settings_snapshot, cx);

@@ -138,7 +138,8 @@ static const void *GhostexGpuiSidebarRevealKey = &GhostexGpuiSidebarRevealKey;
 
 bool GhostexGpuiSidebarRevealUpdate(void *sidebarPtr, void *rootPtr,
                                   bool enabled, double width, double titlebarHeight, bool onRight,
-                                  bool companionHidden, bool requested, bool *expandCompanion) {
+                                  bool companionHidden, bool requested, bool keepUnderPointer,
+                                  bool *expandCompanion) {
   *expandCompanion = false;
   NSView *sidebar = (__bridge NSView *)sidebarPtr;
   NSView *root = (__bridge NSView *)rootPtr;
@@ -173,7 +174,7 @@ bool GhostexGpuiSidebarRevealUpdate(void *sidebarPtr, void *rootPtr,
   if (onRight) edge.origin.x = NSMaxX(body) - edge.size.width;
   BOOL overEdge = NSPointInRect(pointer, edge);
   if (!overEdge) state.companionTriggerLatched = NO;
-  if (!state && !overEdge && !requested) return false;
+  if (!state && !overEdge && !requested && !keepUnderPointer) return false;
   if (!state) {
     state = [GhostexGpuiSidebarReveal new];
     state.sidebar = sidebar;
@@ -201,7 +202,8 @@ bool GhostexGpuiSidebarRevealUpdate(void *sidebarPtr, void *rootPtr,
     state.outsideSince = 0;
   }
   if (!state.attached && state.companionTriggerLatched) return false;
-  if (!requested && !state.attached && overEdge && companionHidden && pointer.y < NSMidY(body)) {
+  if (!requested && !keepUnderPointer && !state.attached && overEdge && companionHidden &&
+      pointer.y < NSMidY(body)) {
     if (NSEvent.pressedMouseButtons == 0) {
       state.companionTriggerLatched = YES;
       *expandCompanion = true;
@@ -214,14 +216,28 @@ bool GhostexGpuiSidebarRevealUpdate(void *sidebarPtr, void *rootPtr,
   state.targetFrame = panelFrame;
   state.onRight = onRight;
   if (!state.attached) {
-    if (!requested && (!overEdge || NSEvent.pressedMouseButtons != 0)) return false;
+    // CDXC:Sidebar 2026-09-12 DECISION:
+    // User: a project or view switch that hides the docked sidebar must not pull it out from under the pointer.
+    // While the pointer is over the sidebar's slot it stays as the floating panel at full width, with no slide, and leaves through the ordinary pointer-leave dismissal below.
+    BOOL sticky = keepUnderPointer && NSPointInRect(pointer, panelFrame);
+    if (!requested && !sticky && (!overEdge || NSEvent.pressedMouseButtons != 0)) return false;
     state.originalSuperview = sidebar.superview;
     state.originalFrame = sidebar.frame;
     [sidebar removeFromSuperview];
     [state.panel.contentView addSubview:sidebar];
     [parent addChildWindow:state.panel ordered:NSWindowAbove];
     state.attached = YES;
-    [state animateIn];
+    if (sticky) {
+      state.requestedRevealDeadline = 0;
+      state.outsideSince = 0;
+      state.revealTarget = 1;
+      state.revealProgress = 1;
+      [state layoutReveal];
+      [state.panel orderFront:nil];
+      GhostexGpuiCEFRefreshSidebarPointerInside();
+    } else {
+      [state animateIn];
+    }
   } else {
     [state layoutReveal];
   }

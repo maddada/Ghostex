@@ -2184,6 +2184,10 @@ impl GhostexGpuiApp {
         }
 
         match action {
+            CommandPaneControlAction::ToggleKeepOpen => {
+                self.toggle_command_pane_keep_open(cx);
+                return;
+            }
             CommandPaneControlAction::NewCommandPlaceholder => {
                 self.prepare_hidden_command_pane_open_height_from_shared_settings(window);
                 let Some((group_id, session_id)) =
@@ -2249,6 +2253,10 @@ impl GhostexGpuiApp {
                 let was_expanded = self.command_pane.is_expanded();
                 if !was_expanded {
                     self.prepare_hidden_command_pane_open_height_from_shared_settings(window);
+                }
+                self.command_pane_auto_minimize.idle_since = None;
+                if was_expanded {
+                    self.clear_command_pane_keep_open();
                 }
                 self.command_pane.toggle_expanded();
                 let is_expanded_after = self.command_pane.is_expanded();

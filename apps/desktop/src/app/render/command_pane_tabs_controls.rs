@@ -502,12 +502,6 @@ impl GhostexGpuiApp {
         CDXC:CommandPane 2026-06-25-12:05:
         Collapsed command-strip chrome keeps New Terminal inline with the tab run and keeps Expand in the fixed panel cluster, but omits Pin/Unpin because macOS hidden command tabs expose expand-only panel actions. Panel mode mutation stays scoped to expanded titlebars so a hidden strip cannot flip pinned/floating state before opening.
 
-        CDXC:CommandPane 2026-06-25-12:13:
-        The fixed command-pane action cluster excludes New Terminal because macOS renders creation as an inline tab-run plus button. Keep this cluster panel-scoped so collapsed chrome has only Expand while expanded titlebars have Pin/Unpin plus the single Minimize affordance.
-
-        CDXC:CommandPane 2026-06-25-12:26:
-        Native visible command panels publish exactly Pin/Unpin Commands Panel plus closeCommandsPanel, rendered as the Minimize chevron. Do not add a second `x` minimize button to expanded GPUI command titlebars.
-
         CDXC:CommandPane 2026-06-25-13:47:
         Native command-panel action buttons are normal titlebar button frames, not a padded cluster: keep buttons contiguous, flat, stable-colored, and apply the 8px trailing inset only in expanded command titlebars.
         */
@@ -547,6 +541,27 @@ impl GhostexGpuiApp {
                     ))
                 },
             )
+            .when(
+                self.command_pane_keep_open_control_visible(expanded_chrome),
+                |this| {
+                    this.child(self.render_command_pane_control_button(
+                        "keep-open",
+                        if self.command_pane_keep_open() {
+                            "titlebar/lock.svg"
+                        } else {
+                            "titlebar/lock-open.svg"
+                        },
+                        Some(if self.command_pane_keep_open() {
+                            "Keep open is on. Click to allow auto-minimize."
+                        } else {
+                            "Keep open: pause auto-minimize for this project."
+                        }),
+                        CommandPaneControlAction::ToggleKeepOpen,
+                        group_id,
+                        cx,
+                    ))
+                },
+            )
             .child(self.render_command_pane_control_button(
                 "expand",
                 expand_icon_path,
@@ -572,6 +587,13 @@ impl GhostexGpuiApp {
             None => format!("ghostex-gpui-command-pane-control-{id}"),
         };
         let is_visibility_control = matches!(action, CommandPaneControlAction::ToggleExpanded);
+        let keep_open_active = matches!(action, CommandPaneControlAction::ToggleKeepOpen)
+            && self.command_pane_keep_open();
+        let icon_color = if keep_open_active {
+            gpui::rgb(0x72b7ff).into()
+        } else {
+            command_pane_control_text_color()
+        };
 
         div()
             .id(element_id)
@@ -584,9 +606,16 @@ impl GhostexGpuiApp {
             })
             .rounded(px(COMMAND_PANE_CONTROL_CORNER_RADIUS))
             .bg(command_pane_control_button_color())
+            .when(keep_open_active, |this| this.bg(gpui::rgb(0x19354f)))
             .text_color(command_pane_control_text_color())
             .cursor_default()
-            .hover(|this| this.bg(command_pane_control_hover_color()))
+            .hover(move |this| {
+                this.bg(if keep_open_active {
+                    gpui::rgb(0x244968).into()
+                } else {
+                    command_pane_control_hover_color()
+                })
+            })
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
@@ -608,7 +637,7 @@ impl GhostexGpuiApp {
             .child(titlebar_svg_icon(
                 icon_path,
                 COMMAND_PANE_CONTROL_ICON_SIZE,
-                command_pane_control_text_color(),
+                icon_color,
             ))
             .into_any_element()
     }

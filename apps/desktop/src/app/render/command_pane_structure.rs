@@ -194,6 +194,12 @@ impl GhostexGpuiApp {
             } else {
                 "ghostex-gpui-command-pane-pinned"
             })
+            .on_hover(cx.listener(|this, _, _, _| {
+                this.command_pane_auto_minimize.idle_since = None;
+            }))
+            .on_mouse_move(cx.listener(|this, _, _, _| {
+                this.command_pane_auto_minimize.idle_since = None;
+            }))
             .when(!docked_right, |this| this.h(px(extent)))
             .when(docked_right, |this| {
                 this.w(px(extent)).h_full().flex_shrink_0()

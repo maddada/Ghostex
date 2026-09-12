@@ -28,6 +28,7 @@ pub(crate) mod app_new;
 pub(crate) mod browser_history;
 pub(crate) mod browser_pane;
 pub(crate) mod browser_parked_runtime;
+pub(crate) mod command_pane_auto_minimize;
 pub(crate) mod command_pane_remote_action;
 #[cfg(target_os = "macos")]
 pub(crate) mod companion_reveal;

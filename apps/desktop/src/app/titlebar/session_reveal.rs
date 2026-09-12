@@ -14,7 +14,7 @@ impl GhostexGpuiApp {
     ) {
         if self.sidebar_collapsed {
             #[cfg(target_os = "macos")]
-            self.update_sidebar_reveal(true, cx);
+            self.update_sidebar_reveal(true, false, cx);
             #[cfg(not(target_os = "macos"))]
             self.toggle_gpui_sidebar_collapsed(cx);
         }

@@ -124,6 +124,7 @@ impl GhostexGpuiApp {
             }
             return;
         }
+        self.command_pane_auto_minimize.idle_since = None;
         self.first_responder_target = target;
         self.first_responder_transition_suppressed_by_programmatic_focus =
             suppressed_by_programmatic_focus;
@@ -632,6 +633,9 @@ impl GhostexGpuiApp {
                     "forceHandoff": force_terminal_appkit_focus_handoff,
                 }),
             );
+        }
+        if self.shell_focus != focus {
+            self.command_pane_auto_minimize.idle_since = None;
         }
         self.shell_focus = focus;
         if let Some(focus) = valid_non_command_shell_focus_with_browser_tabs(

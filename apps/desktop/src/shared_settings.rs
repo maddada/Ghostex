@@ -195,6 +195,21 @@ pub enum SharedSidebarSide {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SharedSidebarVisibilityMemory {
+    Shared,
+    PerView,
+}
+
+impl SharedSidebarVisibilityMemory {
+    pub fn from_settings_value(value: Option<&str>) -> Self {
+        match value {
+            Some("perView") => Self::PerView,
+            _ => Self::Shared,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SharedChatFileOpenView {
     Docs,
     Code,
@@ -735,6 +750,32 @@ impl SharedSidebarSettingsSnapshot {
         SharedSidebarSide::from_settings_value(
             self.object.get("sidebarSide").and_then(Value::as_str),
         )
+    }
+
+    pub fn sidebar_visibility_memory(&self) -> SharedSidebarVisibilityMemory {
+        SharedSidebarVisibilityMemory::from_settings_value(
+            self.object
+                .get("sidebarVisibilityMemory")
+                .and_then(Value::as_str),
+        )
+    }
+
+    pub fn command_pane_auto_minimize_delay(&self) -> Option<std::time::Duration> {
+        if !self
+            .object
+            .get("commandsPanelAutoMinimize")
+            .and_then(Value::as_bool)
+            .unwrap_or(true)
+        {
+            return None;
+        }
+        let seconds = self
+            .object
+            .get("commandsPanelAutoMinimizeDelaySeconds")
+            .and_then(Value::as_f64)
+            .filter(|seconds| [15.0, 30.0, 60.0, 120.0, 300.0].contains(seconds))
+            .unwrap_or(60.0);
+        Some(std::time::Duration::from_secs(seconds as u64))
     }
 
     pub fn command_pane_side(&self) -> SharedCommandPaneSide {

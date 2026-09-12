@@ -250,6 +250,7 @@ pub struct GhostexGpuiApp {
     pub(crate) project_switch_pending_requests: Vec<GpuiPendingProjectSwitchRequest>,
     pub(crate) project_switch_flush_scheduled: bool,
     pub(crate) command_pane: CommandPaneModel,
+    pub(crate) command_pane_auto_minimize: super::command_pane_auto_minimize::CommandPaneAutoMinimize,
     /*
     CDXC:CommandPane 2026-07-10:
     Command panes are per-project state like macOS `NativeProject.commandsPanel`.
@@ -479,6 +480,9 @@ pub struct GhostexGpuiApp {
     // CDXC:Navigation 2026-08-07: last workarea + companion
     // arrangement per canonical workspace project key. See GpuiProjectViewState.
     pub(crate) project_view_states_by_project: HashMap<String, GpuiProjectViewState>,
+    // CDXC:Workarea 2026-09-12: app-wide Agents and Wide pane layouts. See GpuiViewPaneLayouts.
+    pub(crate) view_pane_layouts: GpuiViewPaneLayouts,
+    pub(crate) sidebar_visibility_memory: GpuiSidebarVisibilityMemory,
     #[cfg(target_os = "macos")]
     pub(crate) remote_attach_askpass_scripts:
         HashMap<GpuiRemoteAttachSessionKey, GpuiRemoteAskpassScript>,
@@ -1393,6 +1397,17 @@ impl Render for GhostexGpuiApp {
             .relative()
             .size_full()
             .bg(workspace_background_color())
+            .when(
+                self.titlebar_popup_menu.as_ref().is_some_and(|state| {
+                    matches!(state.kind, GpuiTitlebarPopupKind::AccountUsage(_))
+                }),
+                |this| {
+                    this.track_focus(&self.titlebar_dropdown_focus_handle)
+                        .capture_key_down(cx.listener(|app, event: &gpui::KeyDownEvent, _, cx| {
+                            app.forward_account_usage_key(event, cx);
+                        }))
+                },
+            )
             .when(self.active_mode == TitlebarMode::Browser, |this| {
                 this.key_context(BROWSER_KEY_CONTEXT)
             })
@@ -1632,7 +1647,7 @@ impl Render for GhostexGpuiApp {
             )
             .on_action(cx.listener(|this, _: &TitlebarDropdownCancel, window, cx| {
                 if this.titlebar_popup_menu.is_some() {
-                    this.close_gpui_titlebar_popup(None, window, cx);
+                    this.cancel_gpui_titlebar_popup(window, cx);
                 } else if this.titlebar_extension_popup.is_some() {
                     this.close_titlebar_extension_popup(window, cx);
                 } else if this.titlebar_resources_panel_open {
