@@ -1,5 +1,62 @@
 # Changelog
 
+## 9.4.0 - 2026-09-12
+
+- New Features
+
+  - A Notifications bell sits in the titlebar with an unread count. Open it for one row per session, newest first, saying whether the agent finished its turn or needs you, with the last thing it said. Click a row to jump to that session, hover a row to dismiss it, and use Next unread, Mark all read or Clear all in the header. Cmd+I opens the panel, Cmd+Shift+U jumps to the latest unread, and Cmd+Ctrl+U pushes the current session to the back of the queue and moves to the next one. Scripts and agent hooks can post their own rows with `ghostex notify --title "..."`.
+  - First run is a real walkthrough now: what lives next to your agents, the agent CLIs you already have (found for you and listed), and pairing your phone, and then it opens your first project. "I already know Ghostex" skips the whole thing.
+  - Make your own session tags. In Settings > General > Sidebar > Sidebar Tags choose Add tag, then give it a name, an icon and a color; New tag at the bottom of the Tag as menu opens the same form. Custom tags sit beside the built-in Priority, Progress and Type tags in menus and filters, can be reordered, hidden or deleted, show up in the mobile app, and work with `ghostex tag-session`.
+  - Snooze a session until later: 1 hour, 3 hours, Tomorrow at 9:00, or Next week on Monday at 9:00. It sleeps in its own Snoozed section and returns to its usual place when the time comes. Unsnooze brings it back early.
+  - Choose what a hovered session card shows. Settings > General > Session Cards has a strip of buttons (Rename, Pin, Note, Snooze, Close After Done, Tag, Park, Sleep, Close): click one to turn it on or off, drag to reorder them, and the chevron keeps everything before it hidden until you open it. Each project remembers whether its chevron is open.
+  - Codex can ask you something while it keeps working. The question appears above the composer so you can keep typing: pick a suggested answer or write your own, move between questions with the arrows, collapse the panel to answer later, or Skip it. The sidebar shows a working spinner with a blue dot until you answer.
+  - Switching a running session to another account keeps the session. Ghostex exits the CLI in its own terminal and resumes the same conversation there, so the tab and the chat stay open, and a card in the middle of the chat shows both accounts, their usage and the progress, with Retry switch if something fails. Usage-limit notices in chat now offer Switch account beside Open terminal.
+  - The companion and Commands panes are remembered per view: one layout for Agents and one for the wide views (Browser, Code, Docs, Kanban, Automate), the same in every project. The Commands pane also minimizes itself a minute after you leave it, with commands still running, and a Keep open lock pauses that for the current project.
+  - Chat follows your computer's appearance. Chat Appearance is System by default, so chat turns light or dark with the system; Light and Dark keep it in one palette.
+  - Long projects stay readable: a project with more than 13 sessions starts compact and adds a "Show all N sessions" row, its header stays pinned while you scroll, and each project remembers the mode you chose.
+  - The Docs files list can be hidden, peeked and pinned from the same corner button, remembers how you left it, and opens as a drawer when the window is narrow. Cmd+F (Ctrl+F on Windows and Linux) opens Find and Replace inside a Markdown document, or the files search everywhere else.
+
+- Major Improvements
+
+  - The titlebar usage popup is drawn by Ghostex itself instead of an embedded page, so it opens instantly and matches the rest of the app. Clicking the same button closes it, a click anywhere else (including in chat) closes it too, and Claude's Fable limit gets its own bar.
+  - Claude buttons and rows show the two tightest of the weekly, five-hour and Fable limits, so a Fable limit that is running out can no longer hide behind the others. The launcher, the New Thread picker and Settings > Accounts use those same two numbers.
+  - Account for new sessions has a new default, Auto, which weighs how much limit is left against how soon it resets and picks the account that can absorb the most work.
+  - Account switches are verified before anything is relabeled: the running CLI keeps its old account until the exit and the resume both succeed. A manual switch then waits for your next message, and an automatic one continues the interrupted work by itself.
+  - The Ctrl+G prompt editor is the same editor as the chat composer now, with F1 commands, find and replace, undo and redo, and image previews. The bundled Monaco copy is gone, so the app is smaller and long prompts behave the same everywhere.
+  - Typing goes where you are looking. Keyboard input is routed through one owner, so focus can no longer end up split between a terminal, the chat box and the sidebar.
+  - The status line and Context details are cleaner: every row holds a single value, rows with no data hide themselves until it comes back (your starred choices stay saved), and the line under the chat box holds its space and fades in instead of pushing the conversation down when usage arrives.
+  - Scroll Chat to Bottom is a shortcut you can rebind. Ctrl+Shift+Down scrolls the focused chat to the bottom even while you are typing, and the pill shows whichever chord is bound.
+
+- Minor Improvements
+
+  - Summary mode has its own button in the chat toolbar when there is room, and stays under More actions when the chat is narrow.
+  - Settings rows that depend on the row above them are indented and appear only once their parent is on.
+  - The model picker orders Cursor and Antigravity models like the rest, and Pi and Antigravity can generate session titles.
+  - Codex update cards name both versions and explain the update in words instead of printing a raw install command.
+  - The History button on a project header opens Quick Access > Sessions for that project with Closed selected, ready to search what you closed.
+  - Folder paths in chat open in your system file explorer, and right-clicking any path offers Copy Path.
+  - Extension commands, Open Terminal, account sign-in and `ghostex://terminal` links all run in the active project's folder; a remote project says so instead of quietly starting in your home folder.
+  - An empty Spaces row offers Create space, and New Space is in the Other button's context menu.
+  - The Notifications panel is wider, its header buttons show their hotkeys, agent icons stay live, and rows mark themselves read as you use them.
+  - The Subagents card shows a Codex child's name beside its model and effort.
+  - Right-click and dropdown menus in the shell are sized to their labels, so a short Copy and Paste menu stays compact.
+  - Linux can install from the AUR: the `ghostex-bin` package is documented in the README.
+
+- Stabilization
+
+  - Ghostex starts from the desktop entry on Wayland compositors again: a running window is found through /proc instead of needing wmctrl.
+  - Linux, WSL and remote Ubuntu installs ship the bundled skills, so first-run capability setup no longer fails there.
+  - Remote setup reads the hostname without relying on PATH, thanks to @rgruenewald.
+  - Closing an exited tab no longer leaves its neighbour stuck on Loading Chat.
+  - Codex rewind starts from the prompt you highlighted.
+  - The Claude usage-limit card no longer tells you to wait it out in the terminal; sending still cancels the wait on that account.
+  - The chat account panel shows each email once, and usage-limit cards stay hidden across an account switch.
+  - Opening a file from chat that lives outside the project is handed to the Code view's own workbench instead of waiting forever.
+  - Command actions stage their scripts on macOS and Linux and reuse a surface that is already mounted.
+  - Terminal streaming retires cleanly when the reply lands as a system row.
+  - Enabled hover buttons on session cards use a neutral fill, and the Subagents row text no longer resizes the card title.
+  - The Spaces row keeps the same gap while the session list scrolls.
+
 ## 9.3.0 - 2026-09-11
 
 - New Features
