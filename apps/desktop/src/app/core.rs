@@ -250,7 +250,8 @@ pub struct GhostexGpuiApp {
     pub(crate) project_switch_pending_requests: Vec<GpuiPendingProjectSwitchRequest>,
     pub(crate) project_switch_flush_scheduled: bool,
     pub(crate) command_pane: CommandPaneModel,
-    pub(crate) command_pane_auto_minimize: super::command_pane_auto_minimize::CommandPaneAutoMinimize,
+    pub(crate) command_pane_auto_minimize:
+        super::command_pane_auto_minimize::CommandPaneAutoMinimize,
     /*
     CDXC:CommandPane 2026-07-10:
     Command panes are per-project state like macOS `NativeProject.commandsPanel`.
