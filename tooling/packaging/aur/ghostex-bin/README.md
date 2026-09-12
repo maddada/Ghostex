@@ -95,9 +95,10 @@ These four steps are manual and cannot be automated:
 4. **Add the `AUR_SSH_PRIVATE_KEY` GitHub secret.** In the `maddada/Ghostex`
    repository, go to _Settings → Secrets and variables → Actions → New
    repository secret_, name it `AUR_SSH_PRIVATE_KEY`, and paste the **private**
-   key (`~/.ssh/ghostex_aur_ed25519`, the file _without_ `.pub`), including the
-   `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END …-----` lines and the
-   trailing newline.
+   key (`~/.ssh/ghostex_aur_ed25519`, the file _without_ `.pub`), including its
+   `BEGIN OPENSSH PRIVATE KEY` and `END OPENSSH PRIVATE KEY` armor lines and the
+   trailing newline. (Written without the dashes here so the release preflight's
+   secret scan does not read this instruction as a leaked key.)
 
 Until step 4 is done, the release workflow logs `AUR_SSH_PRIVATE_KEY is not
 configured; skipping the AUR update` and succeeds — it never fails the release.
@@ -165,34 +166,34 @@ Two rules:
 (`tooling/release-gpui/linux-deb.sh`), translated to the Arch package that owns
 each shared library. Keep the two in step when either changes.
 
-| Debian package                                       | Arch package                                                                  |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `libasound2`                                         | `alsa-lib`                                                                    |
-| `libatk-bridge2.0-0`, `libatk1.0-0`, `libatspi2.0-0` | `at-spi2-core` (Arch merged `atk` and `at-spi2-atk` into it)                  |
-| `libc6`                                              | `glibc`                                                                       |
-| `libcairo2`                                          | `cairo`                                                                       |
-| `libcups2`                                           | `libcups` (not `cups`)                                                        |
-| `libdbus-1-3`                                        | `dbus` (a short-lived `libdbus` split was folded back in)                     |
-| `libdrm2`                                            | `libdrm`                                                                      |
-| `libexpat1`                                          | `expat`                                                                       |
-| `libfontconfig1`                                     | `fontconfig`                                                                  |
-| `libgbm1`                                            | `mesa`                                                                        |
-| `libglib2.0-0`                                       | `glib2`                                                                       |
-| `libgtk-3-0`                                         | `gtk3`                                                                        |
-| `libnspr4`                                           | `nspr`                                                                        |
-| `libnss3`                                            | `nss`                                                                         |
-| `libpango-1.0-0`, `libpangocairo-1.0-0`              | `pango`                                                                       |
-| `libx11-6`, `libx11-xcb1`                            | `libx11` (both sonames are in this one package)                               |
-| `libxcb1`                                            | `libxcb`                                                                      |
-| `libxcomposite1`                                     | `libxcomposite`                                                               |
-| `libxdamage1`                                        | `libxdamage`                                                                  |
-| `libxext6`                                           | `libxext`                                                                     |
-| `libxfixes3`                                         | `libxfixes`                                                                   |
-| `libxkbcommon0`                                      | `libxkbcommon`                                                                |
-| `libxrandr2`                                         | `libxrandr`                                                                   |
-| `libxshmfence1`                                      | `libxshmfence`                                                                |
+| Debian package                                       | Arch package                                                                               |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `libasound2`                                         | `alsa-lib`                                                                                 |
+| `libatk-bridge2.0-0`, `libatk1.0-0`, `libatspi2.0-0` | `at-spi2-core` (Arch merged `atk` and `at-spi2-atk` into it)                               |
+| `libc6`                                              | `glibc`                                                                                    |
+| `libcairo2`                                          | `cairo`                                                                                    |
+| `libcups2`                                           | `libcups` (not `cups`)                                                                     |
+| `libdbus-1-3`                                        | `dbus` (a short-lived `libdbus` split was folded back in)                                  |
+| `libdrm2`                                            | `libdrm`                                                                                   |
+| `libexpat1`                                          | `expat`                                                                                    |
+| `libfontconfig1`                                     | `fontconfig`                                                                               |
+| `libgbm1`                                            | `mesa`                                                                                     |
+| `libglib2.0-0`                                       | `glib2`                                                                                    |
+| `libgtk-3-0`                                         | `gtk3`                                                                                     |
+| `libnspr4`                                           | `nspr`                                                                                     |
+| `libnss3`                                            | `nss`                                                                                      |
+| `libpango-1.0-0`, `libpangocairo-1.0-0`              | `pango`                                                                                    |
+| `libx11-6`, `libx11-xcb1`                            | `libx11` (both sonames are in this one package)                                            |
+| `libxcb1`                                            | `libxcb`                                                                                   |
+| `libxcomposite1`                                     | `libxcomposite`                                                                            |
+| `libxdamage1`                                        | `libxdamage`                                                                               |
+| `libxext6`                                           | `libxext`                                                                                  |
+| `libxfixes3`                                         | `libxfixes`                                                                                |
+| `libxkbcommon0`                                      | `libxkbcommon`                                                                             |
+| `libxrandr2`                                         | `libxrandr`                                                                                |
+| `libxshmfence1`                                      | `libxshmfence`                                                                             |
 | `wmctrl` (Recommends)                                | `wmctrl` as `optdepends` (in `extra`); only used to raise an already running window on X11 |
-| —                                                    | `hicolor-icon-theme` (owns the theme directory this package's icon goes into) |
+| —                                                    | `hicolor-icon-theme` (owns the theme directory this package's icon goes into)              |
 
 ## Known caveats
 
