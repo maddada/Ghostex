@@ -288,22 +288,45 @@ async function validateBundledGxserverRuntime({ arch, resourcesRoot }) {
 }
 
 /*
- * The Ctrl+G "Monaco editor" prompt-editor backend is served by the standalone
- * GhostexEditor daemon. Release bundles must carry it, or the setting silently
- * degrades to the machine editor (vi for anyone with no $EDITOR) with no error,
- * no toast, and no log line.
+ * The Ctrl+G prompt-editor backend is served by the standalone GhostexEditor
+ * daemon. Release bundles must carry it, or the setting silently degrades to
+ * the machine editor (vi for anyone with no $EDITOR) with no error, no toast,
+ * and no log line.
+ *
+ * CDXC:PromptEditor 2026-09-12 WHY:
+ * The editor dropped Monaco for the shared composer, so its whole web payload
+ * is one self-contained index.html with the script and CSS inlined at build
+ * time; there is no monaco/vs/loader.js to look for any more. A stale path list
+ * failed 9.4.0's macOS assemble step, so check the payload itself instead: the
+ * template markers must be gone and the file must carry the real bundle.
  */
+const MINIMUM_EDITOR_WEB_PAYLOAD_BYTES = 100 * 1024;
+
 async function validateBundledGhostexEditorHelper({ appPath, arch }) {
   const editorApp = path.join(appPath, 'Contents', 'Resources', 'GhostexEditor.app');
   const editorExecutable = path.join(editorApp, 'Contents', 'MacOS', 'GhostexEditor');
   const editorWebRoot = path.join(editorApp, 'Contents', 'Resources', 'Web');
+  const editorIndexHtml = path.join(editorWebRoot, 'index.html');
   await assertRequiredPaths(arch, 'bundled GhostexEditor helper', [
     editorApp,
     path.join(editorApp, 'Contents', 'Info.plist'),
     editorExecutable,
-    path.join(editorWebRoot, 'index.html'),
-    path.join(editorWebRoot, 'monaco', 'vs', 'loader.js'),
+    editorIndexHtml,
   ]);
+  const editorHtml = await readFile(editorIndexHtml, 'utf8');
+  for (const marker of ['__GHOSTEX_EDITOR_BUNDLE__', '__GHOSTEX_EDITOR_STYLES__']) {
+    if (editorHtml.includes(marker)) {
+      throw new MacosAppBundleValidationError(
+        `${arch} bundled GhostexEditor helper still has the unreplaced ${marker} template marker: ${editorIndexHtml}`
+      );
+    }
+  }
+  const editorHtmlBytes = Buffer.byteLength(editorHtml);
+  if (editorHtmlBytes < MINIMUM_EDITOR_WEB_PAYLOAD_BYTES) {
+    throw new MacosAppBundleValidationError(
+      `${arch} bundled GhostexEditor helper index.html is ${editorHtmlBytes} bytes; the inlined composer payload is at least ${MINIMUM_EDITOR_WEB_PAYLOAD_BYTES}: ${editorIndexHtml}`
+    );
+  }
   await assertExecutableFileMode(arch, 'bundled GhostexEditor helper executable', editorExecutable);
   await assertMachOContainsArch(editorExecutable, arch);
 }
