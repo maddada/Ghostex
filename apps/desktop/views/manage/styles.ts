@@ -91,11 +91,66 @@ export const MANAGE_STYLES = `
     height: 100%;
     min-height: 0;
     position: relative;
+    /*
+     * CDXC:Docs 2026-09-12 DECISION:
+     * User: the files sidebar slides in with the same speed and style as the app's floating sidebar reveal.
+     * That reveal moves the panel across its own width in 220ms on an ease-out cubic curve, so both surfaces share the duration and the curve.
+     * The panel travels one panel width from the shell edge it lives on, and the document root already clips at the viewport, so no extra clipping is needed.
+     * SEE-ALSO: apps/desktop/native/macos/GpuiSidebarReveal.m (animateTo:), apps/desktop/views/manage/constants.ts.
+     */
+    --manage-sidebar-reveal-duration: 220ms;
+    --manage-sidebar-reveal-easing: cubic-bezier(0.33, 1, 0.68, 1);
+    --manage-sidebar-reveal-offset: -100%;
     width: 100%;
   }
 
   .manage-shell[data-sidebar-side="right"] {
     grid-template-columns: minmax(0, 1fr) 5px var(--manage-sidebar-width, 292px);
+    --manage-sidebar-reveal-offset: 100%;
+  }
+
+  @keyframes manage-sidebar-reveal-in {
+    from {
+      transform: translateX(var(--manage-sidebar-reveal-offset));
+    }
+
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes manage-sidebar-reveal-out {
+    from {
+      transform: translateX(0);
+    }
+
+    to {
+      transform: translateX(var(--manage-sidebar-reveal-offset));
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .manage-shell[data-sidebar-motion="in"] .manage-sidebar {
+      animation: manage-sidebar-reveal-in var(--manage-sidebar-reveal-duration) var(--manage-sidebar-reveal-easing);
+      will-change: transform;
+    }
+
+    /* The leaving panel holds its final offset until React unmounts it, and stops taking clicks so the document is usable the instant it is dismissed. */
+    .manage-shell[data-sidebar-motion="out"] .manage-sidebar {
+      animation: manage-sidebar-reveal-out var(--manage-sidebar-reveal-duration) var(--manage-sidebar-reveal-easing)
+        forwards;
+      pointer-events: none;
+      will-change: transform;
+    }
+
+    /* Pinning a peek leaves the panel exactly where it is and only drops its raised shadow, so fade that out over the same curve instead of snapping it. */
+    .manage-sidebar {
+      transition: box-shadow var(--manage-sidebar-reveal-duration) var(--manage-sidebar-reveal-easing);
+    }
+
+    .manage-shell[data-sidebar-motion] .manage-sidebar {
+      transition: none;
+    }
   }
 
   .manage-shell[data-sidebar-hidden="true"] {
@@ -318,6 +373,17 @@ export const MANAGE_STYLES = `
     width: 40px;
   }
 
+  /* The edge button mirrors the corner restore button's geometry so a peek's pin control lands on the same pixels. */
+  .manage-sidebar-header .manage-sidebar-edge-button {
+    width: 40px;
+  }
+
+  .manage-shell[data-sidebar-side="left"] .manage-sidebar-header .manage-sidebar-edge-button {
+    border-left: 0;
+    border-right: 1px solid #252525;
+    margin-right: auto;
+  }
+
   .manage-sidebar-header .manage-icon-button:not(:disabled):hover,
   .manage-sidebar-header .manage-icon-button:not(:disabled):focus-visible,
   .manage-sidebar-header .manage-icon-button[aria-expanded="true"],
@@ -472,6 +538,16 @@ export const MANAGE_STYLES = `
   .manage-shell[data-sidebar-hidden="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="html"] .manage-preview-header,
   .manage-shell[data-sidebar-floating="true"][data-sidebar-side="right"] .manage-preview-content[data-kind="html"] .manage-preview-header {
     padding-right: 40px;
+  }
+
+  /*
+   * CDXC:Docs 2026-09-12 DECISION:
+   * User: keep the document search off the right edge of the Docs view when the files sidebar is hidden.
+   * The panel hung 14px past the editor toolbar it drops from, which is the view's own edge in every state except a docked right sidebar, so it read as glued to the frame and bled over the files list in that one remaining state.
+   * Pulling it inside the toolbar instead lines its right edge up with the last toolbar button above it, and this stays scoped to Docs so the editor app's own copy of the panel is untouched.
+   */
+  .manage-shell .find-panel {
+    right: 14px;
   }
 
   .manage-search {

@@ -136,6 +136,7 @@ export function ManageMeoTopToolbar({
   contentMaxWidthEnabled,
   currentMode,
   findCaseSensitive,
+  findFocusRequest,
   findOpen,
   findQuery,
   findReplacement,
@@ -162,6 +163,7 @@ export function ManageMeoTopToolbar({
   contentMaxWidthEnabled: boolean;
   currentMode: ManageMeoMode;
   findCaseSensitive: boolean;
+  findFocusRequest: number;
   findOpen: boolean;
   findQuery: string;
   findReplacement: string;
@@ -215,13 +217,14 @@ export function ManageMeoTopToolbar({
     onReplaceCurrent();
   };
 
+  /* The request counter re-runs this when the shortcut is pressed while the panel is already open, so the query is selected and ready to be typed over. */
   useEffect(() => {
     if (!findOpen) {
       return;
     }
     findInputRef.current?.focus();
     findInputRef.current?.select();
-  }, [findOpen]);
+  }, [findFocusRequest, findOpen]);
 
   useLayoutEffect(() => {
     const toolbar = toolbarRef.current;

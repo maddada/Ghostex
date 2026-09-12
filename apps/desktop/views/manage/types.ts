@@ -161,7 +161,7 @@ export type ManageMeoEditor = {
   replaceCurrent?: (
     query: string,
     replacement: string,
-    options?: { caseSensitive?: boolean; wholeWord?: boolean }
+    options?: { caseSensitive?: boolean; focusEditor?: boolean; wholeWord?: boolean }
   ) => { current?: number; found?: boolean; replaced?: boolean; total?: number };
   setGitBaseline?: (snapshot?: ManageGitBaseline | null) => void;
   setGitGutterVisible?: (visible: boolean) => void;

@@ -15,8 +15,11 @@ import {
   useState,
 } from 'react';
 import {
+  IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
+  IconLayoutSidebarRightCollapse,
   IconLayoutSidebarRightExpand,
+  IconPin,
   IconRefresh,
   IconSearch,
   IconX,
@@ -41,7 +44,12 @@ import {
   MANAGE_GPUI_FILE_CHANGE_POLL_INTERVAL_MS,
   MANAGE_SIDEBAR_DEFAULT_WIDTH,
   MANAGE_SIDEBAR_MAX_WIDTH,
+  MANAGE_SIDEBAR_EDGE_REVEAL_WIDTH,
   MANAGE_SIDEBAR_MIN_WIDTH,
+  MANAGE_SIDEBAR_PEEK_CLOSE_GRACE_MS,
+  MANAGE_SIDEBAR_PEEK_OPEN_DELAY_MS,
+  MANAGE_SIDEBAR_PINNED_STORAGE_KEY,
+  MANAGE_SIDEBAR_REVEAL_DURATION_MS,
   MANAGE_SIDEBAR_SIDE_STORAGE_KEY,
   MANAGE_SIDEBAR_WIDTH_STORAGE_KEY,
 } from './constants';
@@ -58,6 +66,7 @@ import {
   ManageWebKitWindow,
 } from './types';
 import { ManageFileContextMenu, ManageRenameDialog, ManageSidebarActions } from './file-tree-ui';
+import { isManageFindShortcut } from './keyboard';
 import { ManagePreview } from './preview/manage-preview';
 import { ManageTooltipButton } from './manage-tooltip-button';
 import {
@@ -418,12 +427,33 @@ export function ManageApp() {
   );
   const [sidebarSide, setSidebarSide] = useState<ManageSidebarSide>(() => readStoredManageSidebarSide());
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredManageSidebarWidth());
-  const [sidebarHidden, setSidebarHidden] = useState(false);
-  /** CDXC:Docs 2026-09-06 DECISION: User: hovering over the expand button reveals the files list for as long as the cursor stays inside it. */
-  const [sidebarHoverExpanded, setSidebarHoverExpanded] = useState(false);
+  /**
+   * CDXC:Docs 2026-09-12 DECISION:
+   * User: the files sidebar has one persisted intent, pinned or hidden, and the shell width alone decides whether a pinned sidebar is docked or, below the floating breakpoint, a closed drawer.
+   * Width never rewrites the intent, so growing the shell back past the breakpoint restores whatever the user chose.
+   * Below the breakpoint the sidebar never covers the document on load; it opens only as a transient drawer and closes when a file opens, on an outside click, or on Escape.
+   * Hovering the corner button peeks the list for as long as the cursor stays inside it; the button under the cursor then pins it (docks it when wide, holds the drawer open when narrow).
+   */
+  const [sidebarPinned, setSidebarPinned] = useState(() => readStoredManageSidebarPinned());
+  const [sidebarTransient, setSidebarTransient] = useState<'peek' | 'drawer'>();
   const [sidebarFloating, setSidebarFloating] = useState(() => window.innerWidth < MANAGE_FLOATING_SIDEBAR_MAX_WIDTH);
-  const sidebarVisible = !sidebarHidden || sidebarHoverExpanded;
-  const sidebarOverlay = sidebarFloating || sidebarHoverExpanded;
+  const sidebarDocked = sidebarPinned && !sidebarFloating;
+  const sidebarVisible = sidebarDocked || sidebarTransient !== undefined;
+  const sidebarOverlay = sidebarVisible && !sidebarDocked;
+  /**
+   * CDXC:Docs 2026-09-12 DECISION:
+   * User: the files sidebar animates in, and out, with the same speed and style as the app's floating sidebar reveal.
+   * Only the panel moves: the shell takes its new layout in one step and the panel slides across its own width, so neither the file tree nor the document reflows during the slide.
+   * The closing slide plays over the hidden layout as an overlay, which is why the panel stays mounted for the duration and the shell keeps its floating placement while it leaves.
+   * SEE-ALSO: apps/desktop/native/macos/GpuiSidebarReveal.m, apps/desktop/views/manage/styles.ts (`manage-sidebar-reveal-in`).
+   */
+  const [sidebarMotion, setSidebarMotion] = useState<'in' | 'out'>();
+  const sidebarWasVisibleRef = useRef(sidebarVisible);
+  const sidebarClosing = sidebarMotion === 'out';
+  const sidebarRendered = sidebarVisible || sidebarClosing;
+  const sidebarPeekOpenTimerRef = useRef<number | undefined>(undefined);
+  const sidebarPeekCloseTimerRef = useRef<number | undefined>(undefined);
+  const sidebarEdgeRevealArmedRef = useRef(true);
   const [collapsedDirectoryPaths, setCollapsedDirectoryPaths] = useState<Set<string>>(() => new Set());
   const [creatingArtifactKind, setCreatingArtifactKind] = useState<ManageArtifactKind>();
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
@@ -732,6 +762,10 @@ export function ManageApp() {
     window.localStorage.setItem(MANAGE_SIDEBAR_WIDTH_STORAGE_KEY, String(Math.round(sidebarWidth)));
   }, [sidebarWidth]);
 
+  useEffect(() => {
+    window.localStorage.setItem(MANAGE_SIDEBAR_PINNED_STORAGE_KEY, String(sidebarPinned));
+  }, [sidebarPinned]);
+
   useLayoutEffect(() => {
     const shell = shellRef.current;
     if (!shell) {
@@ -765,11 +799,126 @@ export function ManageApp() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!sidebarOverlay || !sidebarVisible) {
+  /*
+   * A layout effect so the entering panel is already parked off its edge in the frame it first paints.
+   * The ref starts at the initial visibility, which keeps a sidebar that is pinned on load from sliding in over a half-loaded page.
+   */
+  useLayoutEffect(() => {
+    if (sidebarWasVisibleRef.current === sidebarVisible) {
       return undefined;
     }
-    const hideFloatingSidebarOnOutsidePointerDown = (event: PointerEvent) => {
+    sidebarWasVisibleRef.current = sidebarVisible;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (!sidebarVisible) {
+        sidebarEdgeRevealArmedRef.current = false;
+      }
+      setSidebarMotion(undefined);
+      return undefined;
+    }
+    if (!sidebarVisible) {
+      sidebarEdgeRevealArmedRef.current = false;
+    }
+    setSidebarMotion(sidebarVisible ? 'in' : 'out');
+    const timer = window.setTimeout(() => setSidebarMotion(undefined), MANAGE_SIDEBAR_REVEAL_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [sidebarVisible]);
+
+  const cancelSidebarPeekTimers = useCallback(() => {
+    if (sidebarPeekOpenTimerRef.current !== undefined) {
+      window.clearTimeout(sidebarPeekOpenTimerRef.current);
+      sidebarPeekOpenTimerRef.current = undefined;
+    }
+    if (sidebarPeekCloseTimerRef.current !== undefined) {
+      window.clearTimeout(sidebarPeekCloseTimerRef.current);
+      sidebarPeekCloseTimerRef.current = undefined;
+    }
+  }, []);
+
+  const closeTransientSidebar = useCallback(() => {
+    cancelSidebarPeekTimers();
+    setSidebarTransient(undefined);
+  }, [cancelSidebarPeekTimers]);
+
+  const showSidebar = useCallback(() => {
+    cancelSidebarPeekTimers();
+    if (sidebarFloating) {
+      setSidebarTransient('drawer');
+      return;
+    }
+    setSidebarPinned(true);
+    setSidebarTransient(undefined);
+  }, [cancelSidebarPeekTimers, sidebarFloating]);
+
+  const hideSidebar = useCallback(() => {
+    cancelSidebarPeekTimers();
+    setSidebarPinned(false);
+    setSidebarTransient(undefined);
+  }, [cancelSidebarPeekTimers]);
+
+  const scheduleSidebarPeek = useCallback(() => {
+    /*
+     * Hiding the sidebar leaves the cursor on the corner button that replaces it, and the browser resolves that hover the moment the panel starts leaving.
+     * Ignoring it for the length of the closing slide keeps a deliberate hide from peeking straight back open under a cursor that never moved.
+     */
+    if (sidebarClosing) return;
+    if (sidebarPeekOpenTimerRef.current !== undefined) return;
+    sidebarPeekOpenTimerRef.current = window.setTimeout(() => {
+      sidebarPeekOpenTimerRef.current = undefined;
+      setSidebarTransient((current) => current ?? 'peek');
+    }, MANAGE_SIDEBAR_PEEK_OPEN_DELAY_MS);
+  }, [sidebarClosing]);
+
+  const cancelScheduledSidebarPeek = useCallback(() => {
+    if (sidebarPeekOpenTimerRef.current === undefined) return;
+    window.clearTimeout(sidebarPeekOpenTimerRef.current);
+    sidebarPeekOpenTimerRef.current = undefined;
+  }, []);
+
+  /**
+   * CDXC:Docs 2026-09-12 DECISION:
+   * User: the last 10px at the sidebar's edge of the Docs view reveal the files list, the same band the app sidebar uses while it is unpinned.
+   * The band reads a window pointermove instead of laying an invisible strip over the document, so it observes the pointer without owning any layout and without intercepting a click, a drag, or a scroll.
+   * Closing the sidebar disarms the band until the pointer leaves it, because the button that hides the sidebar sits inside the band and would otherwise reveal it again under a cursor that never left.
+   * SEE-ALSO: apps/desktop/native/macos/GpuiSidebarReveal.m (the sidebar edge rect).
+   */
+  useEffect(() => {
+    if (sidebarVisible) {
+      return undefined;
+    }
+    const revealSidebarFromEdgeHover = (event: PointerEvent) => {
+      const bounds = shellRef.current?.getBoundingClientRect();
+      if (!bounds) {
+        return;
+      }
+      const overRestoreButton =
+        event.target instanceof Element && event.target.closest('.manage-sidebar-restore-button') !== null;
+      const withinEdgeBand =
+        event.clientY >= bounds.top &&
+        event.clientY < bounds.bottom &&
+        (sidebarSide === 'right'
+          ? event.clientX >= bounds.right - MANAGE_SIDEBAR_EDGE_REVEAL_WIDTH && event.clientX < bounds.right
+          : event.clientX >= bounds.left && event.clientX < bounds.left + MANAGE_SIDEBAR_EDGE_REVEAL_WIDTH);
+      if (!withinEdgeBand && !overRestoreButton) {
+        sidebarEdgeRevealArmedRef.current = true;
+        cancelScheduledSidebarPeek();
+        return;
+      }
+      if (!sidebarEdgeRevealArmedRef.current || event.pointerType !== 'mouse' || event.buttons !== 0) {
+        return;
+      }
+      scheduleSidebarPeek();
+    };
+    window.addEventListener('pointermove', revealSidebarFromEdgeHover);
+    return () => window.removeEventListener('pointermove', revealSidebarFromEdgeHover);
+  }, [cancelScheduledSidebarPeek, scheduleSidebarPeek, sidebarSide, sidebarVisible]);
+
+  useEffect(() => cancelSidebarPeekTimers, [cancelSidebarPeekTimers]);
+
+  useEffect(() => {
+    if (sidebarTransient === undefined || renameDialog) {
+      return undefined;
+    }
+    const closeTransientSidebarOnOutsidePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (!(target instanceof Node)) {
         return;
@@ -780,39 +929,58 @@ export function ManageApp() {
       if (target instanceof Element && target.closest('.manage-file-context-menu')) {
         return;
       }
-      setSidebarHidden(true);
-      setSidebarHoverExpanded(false);
+      closeTransientSidebar();
     };
-    window.addEventListener('pointerdown', hideFloatingSidebarOnOutsidePointerDown, true);
+    const closeTransientSidebarOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) {
+        return;
+      }
+      closeTransientSidebar();
+    };
+    window.addEventListener('pointerdown', closeTransientSidebarOnOutsidePointerDown, true);
+    window.addEventListener('keydown', closeTransientSidebarOnEscape);
     return () => {
-      window.removeEventListener('pointerdown', hideFloatingSidebarOnOutsidePointerDown, true);
+      window.removeEventListener('pointerdown', closeTransientSidebarOnOutsidePointerDown, true);
+      window.removeEventListener('keydown', closeTransientSidebarOnEscape);
     };
-  }, [sidebarOverlay, sidebarVisible]);
+  }, [closeTransientSidebar, renameDialog, sidebarTransient]);
 
   useEffect(() => {
-    if (!sidebarHoverExpanded) return;
-    const closeHoverSidebar = () => setSidebarHoverExpanded(false);
-    const trackSidebarPointer = (event: PointerEvent) => {
+    if (sidebarTransient !== 'peek') return undefined;
+    const closePeek = () => closeTransientSidebar();
+    const pointerInsideSidebar = (x: number, y: number) => {
       const bounds = sidebarRef.current?.getBoundingClientRect();
-      if (
-        !bounds ||
-        event.clientX < bounds.left ||
-        event.clientX >= bounds.right ||
-        event.clientY < bounds.top ||
-        event.clientY >= bounds.bottom
-      ) {
-        closeHoverSidebar();
+      return bounds !== undefined && x >= bounds.left && x < bounds.right && y >= bounds.top && y < bounds.bottom;
+    };
+    const trackSidebarPointer = (event: PointerEvent) => {
+      const { clientX, clientY } = event;
+      if (pointerInsideSidebar(clientX, clientY)) {
+        if (sidebarPeekCloseTimerRef.current !== undefined) {
+          window.clearTimeout(sidebarPeekCloseTimerRef.current);
+          sidebarPeekCloseTimerRef.current = undefined;
+        }
+        return;
       }
+      if (sidebarPeekCloseTimerRef.current !== undefined) return;
+      sidebarPeekCloseTimerRef.current = window.setTimeout(() => {
+        sidebarPeekCloseTimerRef.current = undefined;
+        /*
+         * A measured rect follows the panel's slide, so a pointer that opened the peek from the edge band reads as outside until the panel reaches it.
+         * Re-reading the pointer against the settled panel keeps the grace period from closing a peek the cursor is actually sitting in.
+         */
+        if (pointerInsideSidebar(clientX, clientY)) return;
+        closePeek();
+      }, MANAGE_SIDEBAR_PEEK_CLOSE_GRACE_MS);
     };
     window.addEventListener('pointermove', trackSidebarPointer);
-    window.addEventListener('blur', closeHoverSidebar);
-    document.documentElement.addEventListener('pointerleave', closeHoverSidebar);
+    window.addEventListener('blur', closePeek);
+    document.documentElement.addEventListener('pointerleave', closePeek);
     return () => {
       window.removeEventListener('pointermove', trackSidebarPointer);
-      window.removeEventListener('blur', closeHoverSidebar);
-      document.documentElement.removeEventListener('pointerleave', closeHoverSidebar);
+      window.removeEventListener('blur', closePeek);
+      document.documentElement.removeEventListener('pointerleave', closePeek);
     };
-  }, [sidebarHoverExpanded]);
+  }, [closeTransientSidebar, sidebarTransient]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -888,7 +1056,6 @@ export function ManageApp() {
   }, [annotationsByPath, projectEditorId, projectId]);
 
   const switchSidebarSide = useCallback(() => {
-    setSidebarHidden(false);
     setSidebarSide((current) => (current === 'left' ? 'right' : 'left'));
   }, []);
 
@@ -1009,7 +1176,7 @@ export function ManageApp() {
 
   const handleSidebarResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (sidebarHidden) {
+      if (!sidebarDocked) {
         return;
       }
       event.preventDefault();
@@ -1026,7 +1193,7 @@ export function ManageApp() {
       window.addEventListener('pointerup', handlePointerUp);
       window.addEventListener('pointercancel', handlePointerUp);
     },
-    [sidebarHidden, updateSidebarWidthFromClientX]
+    [sidebarDocked, updateSidebarWidthFromClientX]
   );
 
   const handleSidebarResizeKeyDown = useCallback(
@@ -1802,11 +1969,26 @@ export function ManageApp() {
         }
         event.preventDefault();
         void saveFile();
+        return;
+      }
+      /*
+       * CDXC:Docs 2026-09-12 DECISION:
+       * User: the find shortcut shows the Docs search and focuses it.
+       * An open Markdown document claims the shortcut first for its own Find and Replace, stopping the event in the capture phase, so reaching here means the file search is the only search on screen.
+       * Revealing the list follows the ordinary show path, which docks it on a wide view and opens the drawer on a narrow one.
+       */
+      if (isManageFindShortcut(event)) {
+        event.preventDefault();
+        showSidebar();
+        window.requestAnimationFrame(() => {
+          searchInputRef.current?.focus({ preventScroll: true });
+          searchInputRef.current?.select();
+        });
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDirty, saveFile, selectedPath]);
+  }, [isDirty, saveFile, selectedPath, showSidebar]);
 
   const directoryPathsWithChildren = useMemo(() => {
     const paths = new Set<string>();
@@ -1866,12 +2048,15 @@ export function ManageApp() {
     (entry: ManageFileEntry) => {
       if (entry.kind === 'file') {
         void readFile(entry.path);
+        if (sidebarTransient === 'drawer') {
+          closeTransientSidebar();
+        }
         return;
       }
       prioritizeDirectory(entry.path);
       toggleDirectory(entry.path);
     },
-    [prioritizeDirectory, readFile, toggleDirectory]
+    [closeTransientSidebar, prioritizeDirectory, readFile, sidebarTransient, toggleDirectory]
   );
 
   /**
@@ -1931,16 +2116,53 @@ export function ManageApp() {
     [selectedPath]
   );
 
+  const HideSidebarIcon = sidebarSide === 'right' ? IconLayoutSidebarRightCollapse : IconLayoutSidebarLeftCollapse;
+  /*
+   * CDXC:Docs 2026-09-12 WHY:
+   * The peek replaces the corner button with the sidebar, so the header button on the window-edge side sits on the exact pixels the cursor is already over.
+   * One click there pins a peek, closes a drawer, or hides a docked sidebar, without the cursor moving and without a second overlapping control.
+   */
+  const sidebarEdgeButton =
+    sidebarTransient === 'peek' ? (
+      <button
+        aria-label='Pin file sidebar'
+        className='manage-sidebar-edge-button manage-icon-button'
+        onClick={showSidebar}
+        type='button'
+      >
+        <IconPin aria-hidden='true' size={15} stroke={1.8} />
+      </button>
+    ) : sidebarTransient === 'drawer' ? (
+      <button
+        aria-label='Close file sidebar'
+        className='manage-sidebar-edge-button manage-icon-button'
+        onClick={closeTransientSidebar}
+        type='button'
+      >
+        <HideSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
+      </button>
+    ) : (
+      <button
+        aria-label='Hide file sidebar'
+        className='manage-sidebar-edge-button manage-icon-button'
+        onClick={hideSidebar}
+        type='button'
+      >
+        <HideSidebarIcon aria-hidden='true' size={15} stroke={1.8} />
+      </button>
+    );
+
   return (
     <main
       className='manage-shell'
-      data-sidebar-floating={String(sidebarOverlay)}
+      data-sidebar-floating={String(sidebarOverlay || sidebarClosing)}
       data-sidebar-hidden={String(!sidebarVisible)}
+      data-sidebar-motion={sidebarMotion}
       data-sidebar-side={sidebarSide}
       ref={shellRef}
       style={{ '--manage-sidebar-width': `${sidebarWidth}px` } as CSSProperties}
     >
-      {sidebarVisible ? (
+      {sidebarRendered ? (
         <aside
           className='manage-sidebar'
           data-drag-active={String(Boolean(dragEntry))}
@@ -1948,10 +2170,10 @@ export function ManageApp() {
           onDragLeave={handleSidebarDragLeave}
           onDragOver={updateRootDropTarget}
           onDrop={dropOnRoot}
-          onPointerLeave={() => setSidebarHoverExpanded(false)}
           ref={sidebarRef}
         >
           <div className='manage-sidebar-header' data-root-drop-target={String(dropTarget?.kind === 'root')}>
+            {sidebarSide === 'left' ? sidebarEdgeButton : null}
             <ManageSidebarActions
               canRevealOpenFile={entries.some((entry) => entry.kind === 'file' && entry.path === selectedPath)}
               creatingKind={creatingArtifactKind}
@@ -1961,22 +2183,14 @@ export function ManageApp() {
               hasExpandedDirectories={hasExpandedDirectories}
               onCreate={(kind) => void createArtifactFile(kind)}
               onCreateFolder={() => void createFolder()}
-              onHideSidebar={() => {
-                setSidebarHidden(true);
-                setSidebarHoverExpanded(false);
-              }}
               onOpenDocsFoldersSettings={() => void openDocsFoldersSettings()}
-              onPinSidebar={() => {
-                setSidebarHidden(false);
-                setSidebarHoverExpanded(false);
-              }}
               onRefresh={() => void refreshFiles()}
               onRevealOpenFile={revealOpenFile}
               onSwitchSide={switchSidebarSide}
               onToggleAllDirectories={toggleAllDirectories}
-              sidebarPinned={!sidebarHidden}
               sidebarSide={sidebarSide}
             />
+            {sidebarSide === 'right' ? sidebarEdgeButton : null}
           </div>
           <div
             className='manage-search'
@@ -2042,14 +2256,12 @@ export function ManageApp() {
             onSelect={selectTreeEntry}
           />
         </aside>
-      ) : (
+      ) : null}
+      {sidebarVisible ? null : (
         <button
           aria-label='Show file sidebar'
           className='manage-sidebar-restore-button manage-icon-button'
-          onClick={() => setSidebarHidden(false)}
-          onPointerEnter={(event) => {
-            if (event.pointerType === 'mouse') setSidebarHoverExpanded(true);
-          }}
+          onClick={showSidebar}
           type='button'
         >
           {sidebarSide === 'right' ? (
@@ -2185,6 +2397,10 @@ export function requestManageFiles(
 
 export function readStoredManageSidebarSide(): ManageSidebarSide {
   return window.localStorage.getItem(MANAGE_SIDEBAR_SIDE_STORAGE_KEY) === 'left' ? 'left' : 'right';
+}
+
+export function readStoredManageSidebarPinned(): boolean {
+  return window.localStorage.getItem(MANAGE_SIDEBAR_PINNED_STORAGE_KEY) !== 'false';
 }
 
 export function readStoredManageSidebarWidth(): number {

@@ -24,6 +24,7 @@ import {
 import { sanitizeManageHref } from '../html-sanitize';
 import { createEditor as createMeoEditor } from '../../meo/editor';
 import '../../meo/styles.css';
+import { isManageFindShortcut } from '../keyboard';
 
 export function ManageMarkdownReviewViewer({
   annotations,
@@ -57,6 +58,7 @@ export function ManageMarkdownReviewViewer({
   const [contentMaxWidthEnabled, setContentMaxWidthEnabled] = useState(false);
   const [currentMode, setCurrentMode] = useState<ManageMeoMode>('live');
   const [findCaseSensitive, setFindCaseSensitive] = useState(false);
+  const [findFocusRequest, setFindFocusRequest] = useState(0);
   const [findOpen, setFindOpen] = useState(false);
   const [findQuery, setFindQuery] = useState('');
   const [findReplacement, setFindReplacement] = useState('');
@@ -175,9 +177,14 @@ export function ManageMarkdownReviewViewer({
         setFindStatusText('Enter text', true);
         return;
       }
+      /*
+       * CDXC:Docs 2026-09-12 WHY:
+       * The editor moves focus to itself when it selects a match, which sent the next Enter into the document and overwrote the match with a newline.
+       * Every find here is driven from the panel, so focus stays in the field and Enter keeps stepping through matches; the match is still scrolled to and painted with the active-match highlight, which does not depend on editor focus.
+       */
       const result = backward
-        ? editor.findPrevious?.(findQuery, findOptions)
-        : editor.findNext?.(findQuery, findOptions);
+        ? editor.findPrevious?.(findQuery, { ...findOptions, focusEditor: false })
+        : editor.findNext?.(findQuery, { ...findOptions, focusEditor: false });
       if (!result?.found) {
         setFindStatusText('No matches', true);
         return;
@@ -196,7 +203,8 @@ export function ManageMarkdownReviewViewer({
       setFindStatusText('Enter text', true);
       return;
     }
-    const result = editor.replaceCurrent?.(findQuery, findReplacement, findOptions);
+    /* Replace advances to the next match through the same find path, so it keeps focus in the panel for the same reason. */
+    const result = editor.replaceCurrent?.(findQuery, findReplacement, { ...findOptions, focusEditor: false });
     if (!result?.replaced) {
       if (result?.found) {
         setFindStatusText(`${result.current}/${result.total}`);
@@ -245,6 +253,35 @@ export function ManageMarkdownReviewViewer({
     }
     updateFindStatusSummary();
   }, [findOpen, findOptions, findQuery, updateFindStatusSummary]);
+
+  /**
+   * CDXC:Docs 2026-09-12 DECISION:
+   * User: Cmd+F, or Ctrl+F on Windows, shows the document search and focuses it, and Escape closes it again while Docs has focus.
+   * The listener runs in the capture phase so the shortcut reaches here from anywhere in the Docs view, including from inside the editor, and so an Escape that closes the panel does not also dismiss the files sidebar behind it.
+   * The Docs file search keeps its own Escape, which clears the query, so an Escape aimed at that field is left alone.
+   */
+  useEffect(() => {
+    const handleFindShortcut = (event: KeyboardEvent) => {
+      if (isManageFindShortcut(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        setFindOpen(true);
+        setFindFocusRequest((request) => request + 1);
+        return;
+      }
+      if (event.key !== 'Escape' || !findOpen) {
+        return;
+      }
+      if (event.target instanceof Element && event.target.closest('.manage-search')) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      closeFind();
+    };
+    window.addEventListener('keydown', handleFindShortcut, true);
+    return () => window.removeEventListener('keydown', handleFindShortcut, true);
+  }, [closeFind, findOpen]);
 
   useEffect(() => {
     setMeoSelectionState({ visible: false });
@@ -372,6 +409,7 @@ export function ManageMarkdownReviewViewer({
             contentMaxWidthEnabled={contentMaxWidthEnabled}
             currentMode={currentMode}
             findCaseSensitive={findCaseSensitive}
+            findFocusRequest={findFocusRequest}
             findOpen={findOpen}
             findQuery={findQuery}
             findReplacement={findReplacement}

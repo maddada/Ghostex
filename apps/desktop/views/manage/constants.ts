@@ -26,6 +26,26 @@ export const MANAGE_SIDEBAR_MAX_WIDTH = 560;
 export const MANAGE_FLOATING_SIDEBAR_MAX_WIDTH = 800;
 export const MANAGE_SIDEBAR_SIDE_STORAGE_KEY = 'ghostex.manage.sidebarSide';
 export const MANAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'ghostex.manage.sidebarWidth';
+export const MANAGE_SIDEBAR_PINNED_STORAGE_KEY = 'ghostex.manage.sidebarPinned';
+/**
+ * CDXC:Docs 2026-09-12 DECISION:
+ * User: hovering the corner button peeks the files list; a short open delay stops the list flashing open when the cursor merely crosses the corner, and a short close grace stops a slight overshoot from collapsing it.
+ */
+/**
+ * CDXC:Docs 2026-09-12 DECISION:
+ * User: the last 10px at the sidebar's edge of the Docs view reveal the files list, the same width as the app sidebar's reveal band while it is unpinned.
+ * SEE-ALSO: apps/desktop/native/macos/GpuiSidebarReveal.m (the sidebar edge rect).
+ */
+export const MANAGE_SIDEBAR_EDGE_REVEAL_WIDTH = 10;
+export const MANAGE_SIDEBAR_PEEK_OPEN_DELAY_MS = 150;
+export const MANAGE_SIDEBAR_PEEK_CLOSE_GRACE_MS = 200;
+/**
+ * CDXC:Docs 2026-09-12 DECISION:
+ * User: the files sidebar slides in with the same speed and style as the app's floating sidebar reveal, which animates over 220ms with an ease-out cubic curve.
+ * The curve itself is `--manage-sidebar-reveal-easing` in styles.ts; this constant only holds the element mounted while the closing slide plays.
+ * SEE-ALSO: apps/desktop/native/macos/GpuiSidebarReveal.m (`animateTo:`).
+ */
+export const MANAGE_SIDEBAR_REVEAL_DURATION_MS = 220;
 /*
  * CDXC:Docs 2026-06-28-04:56:
  * Manage Excalidraw uses Excalidraw's dark theme, where the visually dark canvas is serialized as viewBackgroundColor #ffffff. Default new drawings to that saved value so created artifacts open with the same dark-looking background users get after choosing a dark canvas inside Excalidraw.
