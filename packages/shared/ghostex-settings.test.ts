@@ -1365,7 +1365,7 @@ describe('normalizeghostexSettings', () => {
       promptEditorBackend: 'monaco',
     });
     expect(PROMPT_EDITOR_BACKEND_OPTIONS).toEqual([
-      { label: 'Monaco editor', value: 'monaco' },
+      { label: 'Ghostex editor', value: 'monaco' },
       { label: 'Use default from this machine', value: 'inherit' },
     ]);
   });
