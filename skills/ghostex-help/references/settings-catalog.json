@@ -5297,7 +5297,9 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "json",
       "default": {
-        "availableTargetIds": ["finder"],
+        "availableTargetIds": [
+          "finder"
+        ],
         "checkedAtMs": 0,
         "resolvedAppNames": {},
         "resolvedCommands": {}

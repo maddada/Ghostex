@@ -44,15 +44,12 @@ How to use this file:
 - **Park & Snooze with tags** `showTagMenuWhenParking` (boolean, default true): Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.
 - **Unpark after sending a message** `unparkAfterSendingMessage` (boolean, default true): Move a parked session out of the Parked section when you send it a message.
 - **Double-click session cards to rename** `renameSessionOnDoubleClick` (boolean, default false) [advanced]: Makes clicking on a session respond a bit slower so we can detect the double click
-
 #### Session Cards
 
 - **Session hover buttons (click to toggle, drag to reorder)** `sessionCardHoverButtons` (structured value; change it in Settings, not with `ghostex settings set`): Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close.
-
 #### Sidebar Tags
 
 - **Tag Filter List** `sidebarSessionTagListItems` (structured value; change it in Settings, not with `ghostex settings set`): Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.
-
 ### Appearance
 
 #### Theming
@@ -66,11 +63,9 @@ How to use this file:
 - **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
 - **Sidebar foreground color (derived)** `customSidebarTitlebarForegroundColor` (text, default #d8d8d8) [not agent-writable]: Derived from Background Contrast and Background Tint; change those instead.
 - **Sidebar background color (derived)** `customSidebarTitlebarBackgroundColor` (text, default #0b0b0b) [not agent-writable]: Derived from Background Contrast and Background Tint; change those instead.
-
 #### App Icon
 
 - **App Icon** `appIconSourceId` (text, default (empty)) [advanced]: Choose the macOS Dock and app-switcher icon. The app file icon may also change when macOS allows it.
-
 ### Chat
 
 #### Chat
@@ -82,35 +77,30 @@ How to use this file:
 - **Transcript width** `sessionChatTranscriptWidthPercent` (number 50 to 100 step 5 default 75): Set the centered transcript width without changing the prompt composer.
 - **Show file edit previews** `sessionChatFileEditPreviews` (boolean, default false): Show the first seven code lines in each file edit. Turn off to show only the path and change counts.
 - **Verbose mode** `sessionChatVerboseMode` (boolean, default false): Expand thinking blocks to show their tool calls by default. Each chat can override it from its composer.
-
 ### Tools
 
 #### Browser
 
 - **Open links in** `webLinkOpenTarget` (one of internal-browser | system-default-browser; default internal-browser): Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser. Option labels: internal-browser = Internal Browser, system-default-browser = System Default Browser.
-
 #### Dev Servers
 
 - **Detect running servers in terminals** `terminalDevServerDetectionEnabled` (boolean, default true): Detect localhost dev server URLs from terminal output.
 - **Ignored ports** `terminalDevServerIgnoredPortRules` (structured value; change it in Settings, not with `ghostex settings set`): Hide detected servers on specific ports or inclusive port ranges.
-
 #### Editor
 
 - **Use VS Code settings** `codeServerLinkVscodeUserConfig` (boolean, default false) [advanced]: Use the VS Code settings from the local VS Code install.
 - **Use VS Code Insiders settings** `codeServerUseVscodeInsidersUserConfig` (boolean, default false) [advanced]: Use the VS Code Insiders user settings directory.
 - **Show untracked lines without tracked changes** `showUntrackedProjectDiffWhenNoTrackedChanges` (boolean, default false) [advanced]: When tracked git diff is +0 -0, show untracked line counts in project headers (Starship-style prompts ignore untracked lines).
-
 #### File opening
 
 - **Markdown files** `markdownFileOpenView` (one of docs | code; default docs): Choose whether Markdown links from agent chat open in Docs or Code. Option labels: docs = Docs, code = Code.
 - **HTML files** `htmlFileOpenView` (one of docs | code; default docs): Choose whether HTML links from agent chat open in Docs or Code. Option labels: docs = Docs, code = Code.
-
 ### Terminal
 
 #### Terminal
 
 - **Ghostty settings actions** `ghosttySettingsActions` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: Recommended Ghostty settings, Ghostty config file, Ghostty docs, and Ghostty defaults.
-- **Theme** `terminalGhosttyTheme` (one of **ghostex_ghostty_theme_unmanaged** | 0x96f | 12-bit Rainbow | 3024 Day | 3024 Night | Aardvark Blue | Abernathy | Adventure | Adventure Time | Adwaita | Adwaita Dark | Afterglow | Aizen Dark | Aizen Light | Alabaster | Alien Blood | Andromeda | Apple Classic | Apple System Colors | Apple System Colors Light | Arcoiris | Ardoise | Argonaut | Arthur | Atelier Sulphurpool | Atom | Atom One Dark | Atom One Light | Aura | Aurora | Ayu | Ayu Light | Ayu Mirage | Banana Blueberry | Batman | Belafonte Day | Belafonte Night | Birds Of Paradise | Black Metal | Black Metal (Bathory) | Black Metal (Burzum) | Black Metal (Dark Funeral) | Black Metal (Gorgoroth) | Black Metal (Immortal) | Black Metal (Khold) | Black Metal (Marduk) | Black Metal (Mayhem) | Black Metal (Nile) | Black Metal (Venom) | Blazer | Blue Berry Pie | Blue Dolphin | Blue Matrix | Bluloco Dark | Bluloco Light | Borland | Box | Breadog | Breeze | Bright Lights | Broadcast | Brogrammer | Builtin Dark | Builtin Light | Builtin Pastel Dark | Builtin Tango Dark | Builtin Tango Light | C64 | CGA | CLRS | Calamity | Carbonfox | Catppuccin Frappe | Catppuccin Latte | Catppuccin Macchiato | Catppuccin Mocha | Chalk | Chalkboard | Challenger Deep | Chester | Ciapre | Citruszest | Cobalt Neon | Cobalt Next | Cobalt Next Dark | Cobalt Next Minimal | Cobalt2 | Coffee Theme | Crayon Pony Fish | Cursor Dark | Cursor Light | Cutie Pro | Cyberdyne | Cyberpunk | Cyberpunk Scarlet Protocol | Dalton Dark | Dark Modern | Dark Pastel | Dark+ | Darkermatrix | Darkmatrix | Darkside | Dawnfox | Dayfox | Deep | Desert | Detuned | Dimidium | Dimmed Monokai | Django | Django Reborn Again | Django Smooth | Dogxi Misty | Doom One | Doom Peacock | Dot Gov | Dracula | Dracula+ | Duckbones | Duotone Dark | Duskfox | ENCOM | Earthsong | Electron Highlighter | Elegant | Elemental | Elementary | Embark | Embers Dark | Espresso | Espresso Libre | Everblush | Everforest Dark Hard | Everforest Light Med | Fahrenheit | Fairyfloss | Farmhouse Dark | Farmhouse Light | Fideloper | Firefly Traditional | Firefox Dev | Firewatch | Fish Tank | Flat | Flatland | Flexoki Dark | Flexoki Light | Floraverse | Forest Blue | Framer | Front End Delight | Fun Forrest | Galaxy | Galizur | Ghostty Default Style Dark | GitHub | GitHub Dark | GitHub Dark Colorblind | GitHub Dark Default | GitHub Dark Dimmed | GitHub Dark High Contrast | GitHub Light Colorblind | GitHub Light Default | GitHub Light High Contrast | GitLab Dark | GitLab Dark Grey | GitLab Light | Glacier | Grape | Grass | Grey Green | Gruber Darker | Gruvbox Dark | Gruvbox Dark Hard | Gruvbox Light | Gruvbox Light Hard | Gruvbox Material | Gruvbox Material Dark | Gruvbox Material Light | Guezwhoz | HaX0R Blue | HaX0R Gr33N | HaX0R R3D | Hacktober | Hardcore | Harper | Havn Daggry | Havn Skumring | Heeler | Highway | Hipster Green | Hivacruz | Homebrew | Hopscotch | Hopscotch.256 | Horizon | Horizon Bright | Hot Dog Stand | Hot Dog Stand (Mustard) | Hurtado | Hybrid | IBM 5153 CGA | IBM 5153 CGA (Black) | IC Green PPL | IC Orange PPL | IR Black | IRIX Console | IRIX Terminal | Iceberg Dark | Iceberg Light | Idea | Idle Toes | Jackie Brown | Japanesque | Jellybeans | JetBrains Darcula | Jubi | Kanagawa Dragon | Kanagawa Lotus | Kanagawa Wave | Kanagawabones | Kanso Ink | Kanso Mist | Kanso Pearl | Kanso Zen | Kibble | Kitty Default | Kitty Low Contrast | Kolorit | Konsolas | Kurokula | Lab Fox | Laser | Later This Evening | Lavandula | Light Owl | Liquid Carbon | Liquid Carbon Transparent | Lovelace | Man Page | Mariana | Material | Material Dark | Material Darker | Material Design Colors | Material Ocean | Mathias | Matrix | Matte Black | Medallion | Melange Dark | Melange Light | Mellifluous | Mellow | Miasma | Midnight In Mojave | Mirage | Misterioso | Modus Operandi | Modus Operandi Tinted | Modus Vivendi | Modus Vivendi Tinted | Molokai | Mona Lisa | Monokai Classic | Monokai Pro | Monokai Pro Light | Monokai Pro Light Sun | Monokai Pro Machine | Monokai Pro Octagon | Monokai Pro Ristretto | Monokai Pro Spectrum | Monokai Remastered | Monokai Soda | Monokai Vivid | Monospace Dark | Monospace Light | Moonfly | N0Tch2K | Neobones Dark | Neobones Light | Neon | Neopolitan | Neutron | Night Lion V1 | Night Lion V2 | Night Owl | Night Owlish Light | Nightfox | Niji | No Clown Fiesta | No Clown Fiesta Light | Nocturnal Winter | Nord | Nord Light | Nord Wave | Nordfox | Novel | Nvim Dark | Nvim Light | Obsidian | Ocean | Oceanic Material | Oceanic Next | Ollie | One Dark Two | One Double Dark | One Double Light | One Half Dark | One Half Light | Onenord | Onenord Light | Operator Mono Dark | Overnight Slumber | Oxocarbon | Pale Night Hc | Pandora | Paraiso Dark | Paul Millr | Pencil Dark | Pencil Light | Peppermint | Phala Green Dark | Piatto Light | Pierre Dark | Pierre Light | Pnevma | Poimandres | Poimandres Darker | Poimandres Storm | Poimandres White | Popping And Locking | Powershell | Primary | Pro | Pro Light | Purple Rain | Purplepeter | Rapture | Raycast Dark | Raycast Light | Rebecca | Red Alert | Red Planet | Red Sands | Relaxed | Retro | Retro Legends | Rippedcasts | Rose Pine | Rose Pine Dawn | Rose Pine Moon | Rouge 2 | Royal | Ryuuko | Sakura | Scarlet Protocol | Sea Shells | Seafoam Pastel | SeedFlip Abyss | SeedFlip Amethyst | SeedFlip Canopy | SeedFlip Carbon | SeedFlip Coral | SeedFlip Ember | SeedFlip Glacier | SeedFlip Inkwell | SeedFlip Ivory | SeedFlip Nightfall | SeedFlip Phosphor | SeedFlip Pulse | SeedFlip Ultraviolet | SeedFlip Voltage | SeedFlip Wavelength | Selenized Black | Selenized Dark | Selenized Light | Seoulbones Dark | Seoulbones Light | Seti | Shades Of Purple | Shaman | Slate | Sleepy Hollow | Smyck | Snazzy | Snazzy Soft | Soft Server | Solarized Darcula | Solarized Dark Higher Contrast | Solarized Dark Patched | Solarized Osaka Night | Sonokai | Spacedust | Spacegray | Spacegray Bright | Spacegray Eighties | Spacegray Eighties Dull | Spiderman | Spring | Square | Squirrelsong Dark | Srcery | Starlight | Sublette | Subliminal | Sugarplum | Sundried | Sunset Drive | Symfonic | Synthwave | Synthwave Alpha | Synthwave Everything | Tango Adapted | Tango Half Adapted | Tearout | Teerb | Terafox | Terminal Basic | Terminal Basic Dark | Thayer Bright | The Hulk | Tinacious Design Dark | Tinacious Design Light | TokyoNight | TokyoNight Day | TokyoNight Moon | TokyoNight Night | TokyoNight Storm | Tomorrow | Tomorrow Night | Tomorrow Night Blue | Tomorrow Night Bright | Tomorrow Night Burns | Tomorrow Night Eighties | Toy Chest | Treehouse | Twilight | Ubuntu | Ultra Dark | Ultra Violent | Under The Sea | Unikitty | Urple | Vague | Vaughn | Vercel | Vesper | Vibrant Ink | Vimbones | Violet Dark | Violet Light | Violite | Warm Neon | Wez | Whimsy | Wild Cherry | Wilmersdorf | Wombat | Wryan | Xcode Dark | Xcode Dark hc | Xcode Light | Xcode Light hc | Xcode WWDC | Zenbones | Zenbones Dark | Zenbones Light | Zenburn | Zenburned | Zenwritten Dark | Zenwritten Light | branch | hazyland | iTerm2 Dark Background | iTerm2 Default | iTerm2 Light Background | iTerm2 Pastel Dark Background | iTerm2 Smoooooth | iTerm2 Solarized Dark | iTerm2 Solarized Light | iTerm2 Tango Dark | iTerm2 Tango Light | novmbr | owl | traffic | urban; default GitHub Dark): Choose a bundled Ghostty theme or leave the config unmanaged. Option labels: **ghostex_ghostty_theme_unmanaged** = Use existing Ghostty config.
+- **Theme** `terminalGhosttyTheme` (one of __ghostex_ghostty_theme_unmanaged__ | 0x96f | 12-bit Rainbow | 3024 Day | 3024 Night | Aardvark Blue | Abernathy | Adventure | Adventure Time | Adwaita | Adwaita Dark | Afterglow | Aizen Dark | Aizen Light | Alabaster | Alien Blood | Andromeda | Apple Classic | Apple System Colors | Apple System Colors Light | Arcoiris | Ardoise | Argonaut | Arthur | Atelier Sulphurpool | Atom | Atom One Dark | Atom One Light | Aura | Aurora | Ayu | Ayu Light | Ayu Mirage | Banana Blueberry | Batman | Belafonte Day | Belafonte Night | Birds Of Paradise | Black Metal | Black Metal (Bathory) | Black Metal (Burzum) | Black Metal (Dark Funeral) | Black Metal (Gorgoroth) | Black Metal (Immortal) | Black Metal (Khold) | Black Metal (Marduk) | Black Metal (Mayhem) | Black Metal (Nile) | Black Metal (Venom) | Blazer | Blue Berry Pie | Blue Dolphin | Blue Matrix | Bluloco Dark | Bluloco Light | Borland | Box | Breadog | Breeze | Bright Lights | Broadcast | Brogrammer | Builtin Dark | Builtin Light | Builtin Pastel Dark | Builtin Tango Dark | Builtin Tango Light | C64 | CGA | CLRS | Calamity | Carbonfox | Catppuccin Frappe | Catppuccin Latte | Catppuccin Macchiato | Catppuccin Mocha | Chalk | Chalkboard | Challenger Deep | Chester | Ciapre | Citruszest | Cobalt Neon | Cobalt Next | Cobalt Next Dark | Cobalt Next Minimal | Cobalt2 | Coffee Theme | Crayon Pony Fish | Cursor Dark | Cursor Light | Cutie Pro | Cyberdyne | Cyberpunk | Cyberpunk Scarlet Protocol | Dalton Dark | Dark Modern | Dark Pastel | Dark+ | Darkermatrix | Darkmatrix | Darkside | Dawnfox | Dayfox | Deep | Desert | Detuned | Dimidium | Dimmed Monokai | Django | Django Reborn Again | Django Smooth | Dogxi Misty | Doom One | Doom Peacock | Dot Gov | Dracula | Dracula+ | Duckbones | Duotone Dark | Duskfox | ENCOM | Earthsong | Electron Highlighter | Elegant | Elemental | Elementary | Embark | Embers Dark | Espresso | Espresso Libre | Everblush | Everforest Dark Hard | Everforest Light Med | Fahrenheit | Fairyfloss | Farmhouse Dark | Farmhouse Light | Fideloper | Firefly Traditional | Firefox Dev | Firewatch | Fish Tank | Flat | Flatland | Flexoki Dark | Flexoki Light | Floraverse | Forest Blue | Framer | Front End Delight | Fun Forrest | Galaxy | Galizur | Ghostty Default Style Dark | GitHub | GitHub Dark | GitHub Dark Colorblind | GitHub Dark Default | GitHub Dark Dimmed | GitHub Dark High Contrast | GitHub Light Colorblind | GitHub Light Default | GitHub Light High Contrast | GitLab Dark | GitLab Dark Grey | GitLab Light | Glacier | Grape | Grass | Grey Green | Gruber Darker | Gruvbox Dark | Gruvbox Dark Hard | Gruvbox Light | Gruvbox Light Hard | Gruvbox Material | Gruvbox Material Dark | Gruvbox Material Light | Guezwhoz | HaX0R Blue | HaX0R Gr33N | HaX0R R3D | Hacktober | Hardcore | Harper | Havn Daggry | Havn Skumring | Heeler | Highway | Hipster Green | Hivacruz | Homebrew | Hopscotch | Hopscotch.256 | Horizon | Horizon Bright | Hot Dog Stand | Hot Dog Stand (Mustard) | Hurtado | Hybrid | IBM 5153 CGA | IBM 5153 CGA (Black) | IC Green PPL | IC Orange PPL | IR Black | IRIX Console | IRIX Terminal | Iceberg Dark | Iceberg Light | Idea | Idle Toes | Jackie Brown | Japanesque | Jellybeans | JetBrains Darcula | Jubi | Kanagawa Dragon | Kanagawa Lotus | Kanagawa Wave | Kanagawabones | Kanso Ink | Kanso Mist | Kanso Pearl | Kanso Zen | Kibble | Kitty Default | Kitty Low Contrast | Kolorit | Konsolas | Kurokula | Lab Fox | Laser | Later This Evening | Lavandula | Light Owl | Liquid Carbon | Liquid Carbon Transparent | Lovelace | Man Page | Mariana | Material | Material Dark | Material Darker | Material Design Colors | Material Ocean | Mathias | Matrix | Matte Black | Medallion | Melange Dark | Melange Light | Mellifluous | Mellow | Miasma | Midnight In Mojave | Mirage | Misterioso | Modus Operandi | Modus Operandi Tinted | Modus Vivendi | Modus Vivendi Tinted | Molokai | Mona Lisa | Monokai Classic | Monokai Pro | Monokai Pro Light | Monokai Pro Light Sun | Monokai Pro Machine | Monokai Pro Octagon | Monokai Pro Ristretto | Monokai Pro Spectrum | Monokai Remastered | Monokai Soda | Monokai Vivid | Monospace Dark | Monospace Light | Moonfly | N0Tch2K | Neobones Dark | Neobones Light | Neon | Neopolitan | Neutron | Night Lion V1 | Night Lion V2 | Night Owl | Night Owlish Light | Nightfox | Niji | No Clown Fiesta | No Clown Fiesta Light | Nocturnal Winter | Nord | Nord Light | Nord Wave | Nordfox | Novel | Nvim Dark | Nvim Light | Obsidian | Ocean | Oceanic Material | Oceanic Next | Ollie | One Dark Two | One Double Dark | One Double Light | One Half Dark | One Half Light | Onenord | Onenord Light | Operator Mono Dark | Overnight Slumber | Oxocarbon | Pale Night Hc | Pandora | Paraiso Dark | Paul Millr | Pencil Dark | Pencil Light | Peppermint | Phala Green Dark | Piatto Light | Pierre Dark | Pierre Light | Pnevma | Poimandres | Poimandres Darker | Poimandres Storm | Poimandres White | Popping And Locking | Powershell | Primary | Pro | Pro Light | Purple Rain | Purplepeter | Rapture | Raycast Dark | Raycast Light | Rebecca | Red Alert | Red Planet | Red Sands | Relaxed | Retro | Retro Legends | Rippedcasts | Rose Pine | Rose Pine Dawn | Rose Pine Moon | Rouge 2 | Royal | Ryuuko | Sakura | Scarlet Protocol | Sea Shells | Seafoam Pastel | SeedFlip Abyss | SeedFlip Amethyst | SeedFlip Canopy | SeedFlip Carbon | SeedFlip Coral | SeedFlip Ember | SeedFlip Glacier | SeedFlip Inkwell | SeedFlip Ivory | SeedFlip Nightfall | SeedFlip Phosphor | SeedFlip Pulse | SeedFlip Ultraviolet | SeedFlip Voltage | SeedFlip Wavelength | Selenized Black | Selenized Dark | Selenized Light | Seoulbones Dark | Seoulbones Light | Seti | Shades Of Purple | Shaman | Slate | Sleepy Hollow | Smyck | Snazzy | Snazzy Soft | Soft Server | Solarized Darcula | Solarized Dark Higher Contrast | Solarized Dark Patched | Solarized Osaka Night | Sonokai | Spacedust | Spacegray | Spacegray Bright | Spacegray Eighties | Spacegray Eighties Dull | Spiderman | Spring | Square | Squirrelsong Dark | Srcery | Starlight | Sublette | Subliminal | Sugarplum | Sundried | Sunset Drive | Symfonic | Synthwave | Synthwave Alpha | Synthwave Everything | Tango Adapted | Tango Half Adapted | Tearout | Teerb | Terafox | Terminal Basic | Terminal Basic Dark | Thayer Bright | The Hulk | Tinacious Design Dark | Tinacious Design Light | TokyoNight | TokyoNight Day | TokyoNight Moon | TokyoNight Night | TokyoNight Storm | Tomorrow | Tomorrow Night | Tomorrow Night Blue | Tomorrow Night Bright | Tomorrow Night Burns | Tomorrow Night Eighties | Toy Chest | Treehouse | Twilight | Ubuntu | Ultra Dark | Ultra Violent | Under The Sea | Unikitty | Urple | Vague | Vaughn | Vercel | Vesper | Vibrant Ink | Vimbones | Violet Dark | Violet Light | Violite | Warm Neon | Wez | Whimsy | Wild Cherry | Wilmersdorf | Wombat | Wryan | Xcode Dark | Xcode Dark hc | Xcode Light | Xcode Light hc | Xcode WWDC | Zenbones | Zenbones Dark | Zenbones Light | Zenburn | Zenburned | Zenwritten Dark | Zenwritten Light | branch | hazyland | iTerm2 Dark Background | iTerm2 Default | iTerm2 Light Background | iTerm2 Pastel Dark Background | iTerm2 Smoooooth | iTerm2 Solarized Dark | iTerm2 Solarized Light | iTerm2 Tango Dark | iTerm2 Tango Light | novmbr | owl | traffic | urban; default GitHub Dark): Choose a bundled Ghostty theme or leave the config unmanaged. Option labels: __ghostex_ghostty_theme_unmanaged__ = Use existing Ghostty config.
 - **Terminal Background** `workspaceBackgroundColor` (text, default #010101) [advanced]: Color shown behind terminal panes.
 - **Background Image** `terminalBackgroundImage` (text, default (empty)) [advanced]: Absolute path to an image drawn behind terminal panes.
 - **Background Image Opacity** `terminalBackgroundImageOpacity` (number default 1) [advanced]: Blend the background image toward the terminal background color.
@@ -134,7 +124,6 @@ How to use this file:
 - **Show notification on terminal bell** `showNotificationOnTerminalBell` (boolean, default false): Treat terminal bell events as session attention.
 - **Ctrl+G prompt editor** `promptEditorBackend` (one of monaco | inherit; default monaco) [advanced]: Choose which editor Ctrl+G uses when a terminal prompt asks for $EDITOR. Option labels: monaco = Ghostex editor, inherit = Use default from this machine.
 - **WSL distribution** `windowsWslDistribution` (text, default (empty)): Windows only. Exact distro name from `wsl.exe --list --verbose`; blank uses automatic WSL2 discovery.
-
 #### Terminal Behavior
 
 - **Scrollback limit** `terminalScrollbackLimitMb` (number default 15) [advanced]: Set scrollback memory per terminal surface.
@@ -145,13 +134,11 @@ How to use this file:
 - **Paste previewable images** `terminalPastePreviewableImages` (boolean, default true) [advanced]: Paste clipboard images as previewable Markdown links with Cmd+V or Ctrl+V. Hold Cmd over the linked path to preview it in the terminal, and see the same image preview in the Ctrl+G Rich Prompt Editor.
 - **Hide mouse while typing** `terminalMouseHideWhileTyping` (boolean, default false) [advanced]: Hide the pointer while typing in the terminal.
 - **Scrollbar** `terminalScrollbar` (one of system | never; default system) [advanced]: Control whether Ghostty shows its native scrollback scrollbar. Option labels: system = System, never = Never.
-
 #### Terminal Scrolling
 
 - **Precision scroll multiplier** `terminalMouseScrollMultiplierPrecision` (number default 1) [advanced]: Trackpads and high-resolution scroll wheels. Ghostty default is 1.
 - **Discrete scroll multiplier** `terminalMouseScrollMultiplierDiscrete` (number default 1) [advanced]: Traditional notched mouse wheels. Ghostty default is 3.
 - **Scroll to bottom when typing** `terminalScrollToBottomWhenTyping` (boolean, default true) [advanced]: Keep the prompt visible while typing.
-
 ### System
 
 #### Auto Sleep
@@ -163,7 +150,6 @@ How to use this file:
 - **Agent Auto Sleep** `autoSleepAgentIdleMinutes` (number one of 0 | 5 | 10 | 15 | 30 | 60 | 120 | 300; default 0) [advanced]: Choose when eligible agent terminals sleep, or turn Auto Sleep off. Option labels: 0 = Off, 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours, 300 = 5 hours.
 - **Require resume command** `autoSleepRequireAgentResumeCommand` (boolean, default true) [advanced]: Only auto-sleep agent sessions Ghostex can wake with a resume command.
 - **Include favorite agents** `autoSleepFavoriteAgentSessions` (boolean, default false) [advanced]: Allow favorite agent sessions to auto-sleep.
-
 #### Power
 
 - **Hide title-bar keep-awake control** `hideKeepAwakeTitlebarControl` (boolean, default false) [advanced]: Hide the keep-awake control from the title bar.
@@ -176,7 +162,6 @@ How to use this file:
 - **Battery threshold** `keepAwakeBatteryThresholdPercent` (number one of 0 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 | 70 | 75 | 80 | 85 | 90; default 0) [advanced]: Stop preventing sleep below this battery level, or turn the rule off. Option labels: 0 = Off, 10 = 10%, 15 = 15%, 20 = 20%, 25 = 25%, 30 = 30%, 35 = 35%, 40 = 40%, 45 = 45%, 50 = 50%, 55 = 55%, 60 = 60%, 65 = 65%, 70 = 70%, 75 = 75%, 80 = 80%, 85 = 85%, 90 = 90%.
 - **Deactivate in Low Power Mode** `keepAwakeDeactivateOnLowPowerMode` (boolean, default false) [advanced]: Stop preventing sleep when macOS Low Power Mode is enabled.
 - **Deactivate on user switch** `keepAwakeDeactivateOnUserSwitch` (boolean, default false) [advanced]: Stop preventing sleep when this user session is no longer active.
-
 ### Notifications
 
 #### Sounds
@@ -185,30 +170,25 @@ How to use this file:
 - **macOS Attention Notifications** `showMacOSAttentionNotifications` (boolean, default true): Show a macOS banner when a session needs attention.
 - **Agent Completion Alert Test** `attentionNotificationActions` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: Test the current completion alert settings or open macOS Notification Settings.
 - **Action Completion Sound** `actionCompletionSound` (one of ping | pingdouble | glass | glimmer | shamisen | shamisenreverb | arcade | arcadeboost | confirmation-001 | confirmation-002 | confirmation-003 | confirmation-004 | notification-pop | success-chime | high-up | high-down | low-three-tone | tone-1 | three-tone-1 | three-tone-2 | two-tone-1 | two-tone-2 | power-up-5 | power-up-6 | power-up-8 | coin-collect | phaser-up-5 | zap-two-tone | voiceover-pack-male-mission-completed | voiceover-pack-female-mission-completed | voiceover-pack-male-you-win | voiceover-pack-female-congratulations | flawless-victory; default shamisen): Sound for action completions. Option labels: ping = Ping, pingdouble = Ping Double, glass = Glass, glimmer = Glimmer, shamisen = Shamisen, shamisenreverb = Shamisen Reverb, arcade = Arcade, arcadeboost = Arcade Boost, confirmation-001 = Confirmation 001, confirmation-002 = Confirmation 002, confirmation-003 = Confirmation 003, confirmation-004 = Confirmation 004, notification-pop = Notification Pop, success-chime = Success Chime, high-up = High Up, high-down = High Down, low-three-tone = Low Three Tone, tone-1 = Tone 1, three-tone-1 = Three Tone 1, three-tone-2 = Three Tone 2, two-tone-1 = Two Tone 1, two-tone-2 = Two Tone 2, power-up-5 = Power Up 5, power-up-6 = Power Up 6, power-up-8 = Power Up 8, coin-collect = Coin Collect, phaser-up-5 = Phaser Up 5, zap-two-tone = Zap Two Tone, voiceover-pack-male-mission-completed = Mission Completed (Male), voiceover-pack-female-mission-completed = Mission Completed (Female), voiceover-pack-male-you-win = You Win (Male), voiceover-pack-female-congratulations = Congratulations (Female), flawless-victory = Flawless Victory.
-
 ### Advanced
 
 #### Experimental
 
 - **Enable Experimental Features** `showBetaFeatures` (boolean, default false) [advanced]: Show experimental surfaces: OS Integration settings, Browser color scheme, and Keep Awake.
-
 #### Debugging
 
 - **Show debug UI controls** `debuggingMode` (boolean, default false) [advanced]: Show debug-only UI controls and allow enabled routine diagnostic logs.
 - **Diagnostic disk logging scenarios** `diagnosticLogging` (structured value; change it in Settings, not with `ghostex settings set`) [advanced]: Choose routine repro log areas while Show debug UI controls is on. Important warnings, errors, and crashes remain captured when it is off.
 - **Show command copy actions** `showSessionCommandCopyActions` (boolean, default false) [advanced]: Show Copy resume and Copy attach command in session context menus.
 - **Show Copy Details option** `showSessionDetailsCopyAction` (boolean, default false) [advanced]: Show Copy Details in session context menus.
-
 ### App Shots (beta)
 
 - **App Shots** `appShotsEnabled` (boolean, default false): Enable App Shots: press the App Shots hotkey to capture a window screenshot into the prompt.
 - **App Shots hotkey** `appShotsHotkey` (one of both-command | both-shift | both-option | double-left-shift | double-left-option; default both-command): Which modifier chord captures an App Shot. Option labels: both-command = Both Command keys, both-shift = Both Shift keys, both-option = Both Option keys, double-left-shift = Double-tap Left Shift, double-left-option = Double-tap Left Option.
 - **App Shots metadata** `appShotsMetadataEnabled` (boolean, default false): Also paste window metadata with the App Shot image link.
-
 ### Settings window
 
 - **Show Advanced settings** `showAdvancedSettings` (boolean, default false): Show the rows marked Advanced in Settings.
-
 ### Internal state (not user settings)
 
 - **gpuiTitlebarActionCommandByProject** `gpuiTitlebarActionCommandByProject` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
@@ -220,14 +200,12 @@ How to use this file:
 - **workspaceOpenTargetAvailability** `workspaceOpenTargetAvailability` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **workspaceOpenTargetHiddenIds** `workspaceOpenTargetHiddenIds` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
 - **remoteMachines** `remoteMachines` (structured value; change it in Settings, not with `ghostex settings set`): App-managed state saved with the settings; not a user preference.
-
 ### Status Indicators
 
 #### Status Indicators
 
 - **Pet overlay** `petOverlayEnabled` (boolean, default false): Show the draggable animated pet in the sidebar (also Wake Pet / Sleep Pet in Quick Access).
 - **Pet** `selectedPetId` (text, default boo): Which pet sprite the overlay shows.
-
 ## About (tab `about`)
 
 ### About
@@ -236,11 +214,9 @@ How to use this file:
 - **Join Discord** `discord` (Settings UI row without a settings key; use `ghostex settings open`): Chat with the community and get help.
 - **View on GitHub** `github` (Settings UI row without a settings key; use `ghostex settings open`): View the source, releases, and report issues.
 - **Sponsor Ghostex** `sponsor` (Settings UI row without a settings key; use `ghostex settings open`): Support the continued development of Ghostex.
-
 ### Privacy
 
 - **Anonymous analytics** `analyticsEnabled` (boolean, default true) [not agent-writable]: Send anonymous usage analytics. Ask the user before changing it.
-
 ## Actions (tab `actions`)
 
 ### Actions
@@ -251,14 +227,12 @@ How to use this file:
 - **Global Actions** `globalActions` (Settings UI row without a settings key; use `ghostex settings open`): Global actions apply to every project, are stored by the Ghostex daemon, and appear in the tab strip above your tabs.
 - **Hide New Terminal button** `hideTabStripNewTerminalButton` (boolean, default false): Hide the New Terminal button from the tab strip.
 - **Hide New Browser Tab button** `hideTabStripNewBrowserButton` (boolean, default false): Hide the New Browser Tab button from the tab strip.
-
 ## Accounts (tab `accounts`)
 
 ### Accounts
 
 - **Accounts, usage stats and automatic continuation** `accounts` (Settings UI row without a settings key; use `ghostex settings open`): Current CLI login, Claude cswap, Codex xswap, titlebar, status lines, usage limits and resets, account indicators, switching, hide emails, privacy, error recovery and retry settings.
 - **Hide account emails** `hideAccountEmails` (boolean, default false) [not agent-writable]: Hide account email addresses in the Accounts page and account switchers.
-
 ## Agents (tab `agents`)
 
 ### Config
@@ -271,13 +245,11 @@ How to use this file:
 - **Default Prompt Agent** `defaultPromptAgentId` (text, default codex): Agent id used when Ghostex sends a prompt on your behalf (for example PR review). Use an id from the configured agents.
 - **Title Generation Agent** `sessionTitleGenerationAgent` (one of codex | cursor | claude | grok | pi | antigravity | custom; default codex): Headless agent Ghostex uses for first-prompt session title generation. Option labels: codex = Codex, cursor = Cursor CLI, claude = Claude, grok = Grok Build, pi = Pi Agent, antigravity = Antigravity CLI, custom = Custom.
 - **Custom Title Command** `customSessionTitleGenerationCommand` (text, default (empty)): Custom command run with the title prompt on stdin when Title Generation Agent is custom. It should print only the title.
-
 ### Agents
 
 - **Add Agent** `addAgent` (Settings UI row without a settings key; use `ghostex settings open`): Add, reorder, edit, or delete agent launchers used to start new sessions.
 - **Agent Hooks** `agentResumeHooks` (Settings UI row without a settings key; use `ghostex settings open`): Agent resume hooks let Ghostex capture each agent's native session id and resume the exact conversation after sleep, reload, or app restart. Install a single agent's hook from its row, or install and remove every Ghostex-owned hook with Install All and Uninstall All.
 - **Default view per agent** `preferredAgentInterfaceOverrides` (structured value; change it in Settings, not with `ghostex settings set`): Agents that support Ghostex's Chat View are marked with a chat bubble and can open in Chat or Terminal regardless of the global Default Agent View. Inherit keeps following that global setting.
-
 ## Integrations (tab `integrations`)
 
 ### Integrations
@@ -286,7 +258,6 @@ How to use this file:
 - **Bundled Agent Skills** `bundledAgentSkills` (Settings UI row without a settings key; use `ghostex settings open`): Install the Ghostex skills you want agents to discover. Ghostex Computer Use and Ghostex Browser Use need Trycua installed first. Each skill is copied to ~/.agents/skills and can be updated or uninstalled independently, or removed together with Uninstall All.
 - **App Shots** `appShots` (Settings UI row without a settings key; use `ghostex settings open`): Capture the frontmost app window, then stage it in the focused or recent agent session as local image context.
 - **Trycua Permissions** `cuaPermissions` (Settings UI row without a settings key; use `ghostex settings open`): Trycua needs Accessibility to click and type in apps, and Screen Recording to understand what is visible on the desktop.
-
 ## Extensions (tab `extensions`)
 
 ### Titlebar views
@@ -306,7 +277,6 @@ How to use this file:
 - **Hide Git button** `gitActionsTitlebarButtonHidden` (boolean, default false): Hide the Git button from the titlebar.
 - **Hide Actions button** `quickActionsTitlebarButtonHidden` (boolean, default false): Hide the Actions button from the titlebar.
 - **Hide Open In button** `openInTitlebarButtonHidden` (boolean, default false): Hide the Open In button from the titlebar.
-
 ### Official Extensions
 
 - **Code editor** `code` (Settings UI row without a settings key; use `ghostex settings open`): Explore, edit, and search your project in a familiar, full-featured workspace without ever leaving Ghostex.
@@ -324,19 +294,15 @@ How to use this file:
 - **Open In** `openIn` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens the active project in another app.
 - **Extensions** `extensionsButton` (Settings UI row without a settings key; use `ghostex settings open`): Title bar button that opens this Extensions page.
 - **Chromium runtime (CEF)** `cef` (Settings UI row without a settings key; use `ghostex settings open`): Inspect or reinstall the Chromium runtime used by Ghostex web surfaces.
-
 ### Titlebar account usage
 
 - **Titlebar account usage** `accountTitlebarUsage` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide usage stats for saved Claude and Codex accounts in the desktop titlebar. Star accounts to pin their usage.
-
 ### Extensions Store
 
 - **Extension store** `store` (Settings UI row without a settings key; use `ghostex settings open`): Browse audited extensions, install them, and manage what is already installed.
-
 ### Your views
 
 - **Your views** `customViews` (structured value; change it in Settings, not with `ghostex settings set`): Project views, templates, Storybook, Linear, GitHub Issues, dev server commands, and HTML reports.
-
 ## Open In (tab `openTargets`)
 
 ### Open In
@@ -362,16 +328,13 @@ How to use this file:
 - **RustRover** `builtin:rustrover` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide this app on session Open In menus.
 - **WebStorm** `builtin:webstorm` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide this app on session Open In menus.
 - **Open Folder** `builtin:finder` (Settings UI row without a settings key; use `ghostex settings open`): Show or hide this app on session Open In menus.
-
 ### Custom Open Targets
 
 - **Add target** `addTarget` (Settings UI row without a settings key; use `ghostex settings open`): Add a custom command Ghostex uses to open workspaces.
-
 ### Default editor
 
 - **Default editor** `defaultEditorCommand` (one of code | code-insiders | zed | zeditor | cursor | windsurf | codium | subl | other; default code): Editor command used by Open In and `ghostex edit` when no other target is chosen. Option labels: code = VS Code (code), code-insiders = VS Code Insiders (code-insiders), zed = Zed (zed), zeditor = Zed alternate (zeditor), cursor = Cursor (cursor), windsurf = Windsurf (windsurf), codium = VSCodium (codium), subl = Sublime Text (subl), other = Other.
 - **Custom editor command** `customDefaultEditorCommand` (text, default (empty)): Command used when Default editor is set to other.
-
 ## OS Integration (tab `osIntegration`)
 
 ### Defaults
@@ -380,22 +343,18 @@ How to use this file:
 - **Set Terminal Links** `setTerminalLinks` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex the handler for ghostex:// terminal links.
 - **Set Script Runner** `setScriptRunner` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex the default macOS script runner.
 - **Set All** `setAll` (Settings UI row without a settings key; use `ghostex settings open`): Set Ghostex as default editor, terminal-link handler, and script runner.
-
 ### CLI
 
 - **ghostex command line** `cliCommands` (Settings UI row without a settings key; use `ghostex settings open`): Command-line examples: ghostex open, ghostex edit, ghostex terminal.
-
 ### Diagnostics
 
 - **macOS handler status** `handlerStatus` (Settings UI row without a settings key; use `ghostex settings open`): Check macOS Launch Services registration for editor defaults, script runner, and ghostex:// links.
-
 ## Projects (tab `projects`)
 
 ### Docs
 
 - **Docs folders** `docsFolders` (Settings UI row without a settings key; use `ghostex settings open`): Comma-separated project-relative folders to scan recursively in Docs.
 - **Additional docs folders** `manageAdditionalDocsFolders` (text, default (empty)): Extra folders (one per line) the Docs view lists in every project.
-
 ### Global Defaults
 
 - **Global worktree command** `globalWorktreeCommand` (text, default (empty)): Worktree command every project uses unless it sets its own.
@@ -403,19 +362,16 @@ How to use this file:
 - **Global Beads directory** `globalBeadsDirectory` (text, default (empty)): Beads directory every project uses unless it sets its own.
 - **Global Docs directory** `globalDocsDirectory` (text, default (empty)): Extra folder Docs shows in every project, alongside that project's own docs.
 - **Global ticket key** `globalBeadsDisplayKey` (text, default (empty)): Default ticket key prefix shown on Kanban cards when a project has none.
-
 ### Project settings
 
 - **Worktree command** `worktreeCommand` (Settings UI row without a settings key; use `ghostex settings open`): Runs in the new worktree folder before the project is added (useful for .envs, installing dependencies, etc.).
 - **Ticket key** `ticketKey` (Settings UI row without a settings key; use `ghostex settings open`): Three-letter prefix used for Linear-style ticket numbers on the Project board.
 - **Beads directory** `beadsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Absolute path the Project board reads its Beads workspace (.beads) from.
 - **Docs directory** `docsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Extra folder this project's Docs surface shows, in addition to its own docs.
-
 ### Portless
 
 - **Portless** `portlessEnabled` (boolean, default false): Route project dev servers through named local addresses instead of raw ports.
 - **Portless protocol** `portlessProtocol` (one of https | http; default https): Protocol Portless addresses use. Option labels: https = HTTPS, http = HTTP.
-
 ## Remote (tab `remote`)
 
 ### Easy Connect
@@ -424,14 +380,12 @@ How to use this file:
 - **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt.
 - **Pairing code** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.
 - **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers paired with this computer; remove one to unpair it.
-
 ### Tailscale
 
 - **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.
 - **Tailscale checklist** `tailscaleSteps` (Settings UI row without a settings key; use `ghostex settings open`): Reach this computer over your tailnet: Tailscale running, SSH access on, the app on your phone.
 - **Tailscale code** `tailscaleCode` (Settings UI row without a settings key; use `ghostex settings open`): Scan the Tailscale code with the Ghostex app, or type the host, IP and username.
 - **Tailscale on or off** `remoteTailscaleEnabled` (boolean, default true) [not agent-writable]: Offer the Tailscale path in Remote setup.
-
 ### Remote machines
 
 - **Add a machine** `addMachine` (Settings UI row without a settings key; use `ghostex settings open`): Add a computer by SSH details or an Easy Connect code; saved machines appear as sidebar sections.
@@ -442,7 +396,6 @@ How to use this file:
 - **Identity file** `identityFile` (Settings UI row without a settings key; use `ghostex settings open`): SSH identity file used to connect to the remote machine.
 - **Password** `password` (Settings UI row without a settings key; use `ghostex settings open`): SSH passwords are stored in the system keychain.
 - **Install / Connect gxserver** `installGxserver` (Settings UI row without a settings key; use `ghostex settings open`): Install, update, or connect gxserver on a saved remote machine.
-
 ### Advanced
 
 - **Easy Connect served ports** `servedPorts` (Settings UI row without a settings key; use `ghostex settings open`): Local ports Easy Connect exposes to paired phones.
@@ -451,7 +404,6 @@ How to use this file:
 - **Easy Connect binary** `binary` (Settings UI row without a settings key; use `ghostex settings open`): Path and version of the Easy Connect binary.
 - **gxserver** `gxserver` (Settings UI row without a settings key; use `ghostex settings open`): Local API the app and phones talk to.
 - **Raw Easy Connect status** `rawStatus` (Settings UI row without a settings key; use `ghostex settings open`): Raw Easy Connect status JSON for bug reports.
-
 ## Hotkeys (tab `hotkeys`)
 
 ### Projects
