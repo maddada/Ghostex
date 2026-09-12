@@ -22,7 +22,7 @@ import {
 } from './previous-session-search';
 import { SessionProjectFilter, type SessionProjectOption } from './session-project-filter';
 import { SessionHistoryCard } from './session-history-card';
-import { useSidebarStore, type SidebarGroupRecord } from './sidebar-store';
+import { useSidebarStore } from './sidebar-store';
 import { applyTextEditingKey, isEditableKeyboardTarget, isTextEditingKey } from './text-input-keyboard';
 import { useSidebarTooltipDelayMs } from './tooltip-delay';
 import { TooltipProvider } from './app-tooltip';
@@ -47,7 +47,11 @@ import {
   normalizeSidebarSessionTagListItems,
   sessionMatchesSidebarTagFilters,
 } from '../shared/session-tags';
-import { isQuickAccessSessionScopeHotkey, SESSIONS_SCOPE_TOGGLE_HOTKEY } from './quick-access-session-scope';
+import {
+  getQuickAccessSessionProjectId,
+  isQuickAccessSessionScopeHotkey,
+  SESSIONS_SCOPE_TOGGLE_HOTKEY,
+} from './quick-access-session-scope';
 import { formatSidebarHotkeyLabel } from './hotkey-label';
 
 const PREVIOUS_SESSIONS_PAGE_SIZE = 80;
@@ -83,6 +87,7 @@ type QuickAccessSessionDayGroup = {
 };
 
 export type PreviousSessionsModalProps = {
+  initialProjectId?: string;
   initialScope?: 'all' | 'closed' | 'external';
   openRequestSequence?: number;
   isOpen: boolean;
@@ -91,13 +96,6 @@ export type PreviousSessionsModalProps = {
   shouldPreload?: boolean;
   vscode: WebviewApi;
 };
-
-function groupProjectFilterId(group: SidebarGroupRecord | undefined): string | undefined {
-  const remote = group?.remoteMachineContext;
-  return remote?.projectId
-    ? `remote:${remote.machineId}:project:${remote.projectId}`
-    : group?.projectContext?.editor.projectId;
-}
 
 function mergePreviousSessionPages(
   current: readonly SidebarPreviousSessionItem[],
@@ -160,6 +158,7 @@ function groupQuickAccessSessionsByDay(sessions: readonly QuickAccessSessionItem
 }
 
 export function PreviousSessionsModal({
+  initialProjectId = '',
   initialScope = 'all',
   openRequestSequence = 0,
   isOpen,
@@ -198,7 +197,7 @@ export function PreviousSessionsModal({
   const [sessionScope, setSessionScope] = useState<string>(initialScope);
   const showClosedSessionsOnly = sessionScope === 'closed';
   const showExternalOnly = sessionScope === 'external';
-  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
   const [projectOptions, setProjectOptions] = useState<SessionProjectOption[]>([]);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [sessionFileSizesByKey, setSessionFileSizesByKey] = useState<Record<string, number | null>>({});
@@ -250,7 +249,7 @@ export function PreviousSessionsModal({
   const allProjectOptions = useMemo(() => {
     const options = new Map(projectOptions.map((project) => [project.projectId, project]));
     for (const group of Object.values(groupsById)) {
-      const projectId = groupProjectFilterId(group);
+      const projectId = getQuickAccessSessionProjectId(group);
       if (projectId && !options.has(projectId)) options.set(projectId, { projectId, name: group.title });
     }
     return [...options.values()].sort((a, b) => a.name.localeCompare(b.name) || a.projectId.localeCompare(b.projectId));
@@ -269,7 +268,7 @@ export function PreviousSessionsModal({
     return tagFilteredSessions.filter(
       (item) =>
         matchedSessions.has(item.session) &&
-        (!selectedProjectId || groupProjectFilterId(groupsById[item.groupId]) === selectedProjectId)
+        (!selectedProjectId || getQuickAccessSessionProjectId(groupsById[item.groupId]) === selectedProjectId)
     );
   }, [groupsById, hasTagFilters, openSessions, searchQuery, selectedSessionTagFilters, selectedProjectId]);
   const filteredClosedSessions = useMemo(
@@ -658,11 +657,11 @@ export function PreviousSessionsModal({
     if (!isOpen) return;
     setSessionScope(initialScope);
     setSelectedSessionTagFilters([]);
-    setSelectedProjectId('');
+    setSelectedProjectId(initialProjectId);
     setSearchQuery('');
     setIsProjectMenuOpen(false);
     setIsTagFilterMenuOpen(false);
-  }, [isOpen, initialScope, openRequestSequence]);
+  }, [isOpen, initialProjectId, initialScope, openRequestSequence]);
 
   useEffect(() => {
     if (!isOpen) {

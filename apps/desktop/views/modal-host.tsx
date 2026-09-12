@@ -235,6 +235,7 @@ type AppModalHostMessage =
       supportsSendWhenAgentStops?: boolean;
       initialTitle?: string;
       initialQuery?: string;
+      initialProjectId?: string;
       initialSessionScope?: 'all' | 'closed' | 'external';
       /** CDXC:SessionNotes 2026-08-24: see SessionNoteModalState. */
       initialNote?: string;
@@ -1233,6 +1234,7 @@ function AppModalHost() {
     worktreeRename,
     missingProjectFolder,
     browserHistory,
+    previousSessionsInitialProjectId,
     previousSessionsInitialScope,
     previousSessionsOpenRequestSequence,
     commandPaletteInitialQuery,
@@ -1839,6 +1841,7 @@ function AppModalHost() {
         <BrowserHistoryModal target={browserHistory} onClose={closeModal} />
       )}
       <PreviousSessionsModal
+        initialProjectId={previousSessionsInitialProjectId}
         initialScope={previousSessionsInitialScope}
         openRequestSequence={previousSessionsOpenRequestSequence}
         isOpen={activeModal === 'previousSessions'}
@@ -2999,6 +3002,7 @@ function useModalStateFromNative() {
   const [updateAvailable, setUpdateAvailable] = useState<UpdateAvailableModalState>();
   const [agentHookStatus, setAgentHookStatus] = useState<AgentHookStatusMessage>();
   const [browserHistory, setBrowserHistory] = useState<BrowserHistoryTarget>();
+  const [previousSessionsInitialProjectId, setPreviousSessionsInitialProjectId] = useState<string>();
   const [previousSessionsInitialScope, setPreviousSessionsInitialScope] = useState<'all' | 'closed' | 'external'>(
     'all'
   );
@@ -3631,6 +3635,7 @@ function useModalStateFromNative() {
             setBrowserHistory({ paneId: message.paneId, runtimeKey: message.runtimeKey });
           }
           if (message.modal === 'previousSessions') {
+            setPreviousSessionsInitialProjectId(message.initialProjectId);
             setPreviousSessionsInitialScope(
               message.initialSessionScope === 'external' || message.initialSessionScope === 'closed'
                 ? message.initialSessionScope
@@ -3892,6 +3897,7 @@ function useModalStateFromNative() {
     worktreeRename,
     missingProjectFolder,
     browserHistory,
+    previousSessionsInitialProjectId,
     previousSessionsInitialScope,
     previousSessionsOpenRequestSequence,
     commandPaletteInitialQuery,

@@ -49,7 +49,12 @@ export type AppModalKind =
 
 export type OpenAppModalMessage =
   | { modal: 'browserHistory'; paneId: number; runtimeKey: number; type: 'open' }
-  | { modal: 'previousSessions'; initialSessionScope?: 'all' | 'closed' | 'external'; type: 'open' }
+  | {
+      modal: 'previousSessions';
+      initialProjectId?: string;
+      initialSessionScope?: 'all' | 'closed' | 'external';
+      type: 'open';
+    }
   | { modal: 'mermaidDiagram'; source: string; type: 'open' }
   | { modal: 'markdownTable'; source: string; type: 'open' }
   | {
@@ -352,6 +357,7 @@ export function openAppModal(message: OpenAppModalMessage): void {
 export type QuickAccessPage = 'commands' | 'recentProjects' | 'recentSessions' | 'savedPrompts';
 
 type QuickAccessOpenOptions = {
+  projectId?: string;
   sessionScope?: 'all' | 'closed' | 'external';
   machineId?: string;
   machineName?: string;
@@ -373,7 +379,12 @@ export function openQuickAccess(page: QuickAccessPage, options: QuickAccessOpenO
     return;
   }
   if (page === 'recentSessions') {
-    openAppModal({ modal: 'previousSessions', initialSessionScope: options.sessionScope, type: 'open' });
+    openAppModal({
+      modal: 'previousSessions',
+      initialProjectId: options.projectId,
+      initialSessionScope: options.sessionScope,
+      type: 'open',
+    });
     return;
   }
   if (page === 'savedPrompts') {
