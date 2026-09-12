@@ -270,6 +270,14 @@ impl CefBrowser {
         */
     }
 
+    pub fn activate_session_chat(
+        &self,
+        _url: &str,
+        _generation: &str,
+        _bootstrap: SidebarGxserverBootstrap,
+    ) {
+    }
+
     pub fn refresh_session_chat_gxserver_bootstrap(
         &self,
         _gxserver_bootstrap: Option<SidebarGxserverBootstrap>,

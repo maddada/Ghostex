@@ -259,6 +259,7 @@ impl GhostexGpuiApp {
                 agents_chat_eviction_running: false,
                 agents_chat_eviction_requested: false,
                 agents_chat_surfaces: HashMap::new(),
+                reusable_chat_renderers: Vec::new(),
                 account_switch_progress: HashMap::new(),
                 agents_chat_surface_hidden_since: HashMap::new(),
                 session_chat_composer_ready_sessions: HashSet::new(),

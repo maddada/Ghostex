@@ -110,6 +110,7 @@ installed sidebar bridge, so chat surfaces use this dedicated message that
 installs exactly `window.ghostexGpui.gxserverBootstrap` on the bundled
 chat.html renderer.
 */
+const SESSION_CHAT_ACTIVATE_MESSAGE_NAME: &str = "ghostex.gpui.sessionChat.activate";
 const SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME: &str =
     "ghostex.gpui.sessionChat.gxserverBootstrap";
 const SIDEBAR_RUNTIME_SETTINGS_JS_OBJECT: &str = "runtimeSettings";
@@ -186,18 +187,22 @@ static SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
 // unchanged.
 mod browser;
 mod browser_appearance;
+mod browser_handlers;
 mod client;
 mod lifecycle;
 mod message_routing;
 mod native_view;
 mod remote_browser;
 mod request_handling;
+mod v8_bridges;
 
 pub(crate) use browser::*;
 pub(crate) use browser_appearance::*;
+pub(crate) use browser_handlers::*;
 pub(crate) use client::*;
 pub(crate) use lifecycle::*;
 pub(crate) use message_routing::*;
 pub(crate) use native_view::*;
 pub(crate) use remote_browser::*;
 pub(crate) use request_handling::*;
+pub(crate) use v8_bridges::*;

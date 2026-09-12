@@ -31,6 +31,12 @@ import type {
 
 export interface SessionChatTransport {
   accounts?: AccountsTransport;
+  /** Retained host state for synchronous hydration when this view is mounted again. */
+  getCachedSnapshot?(): GxserverReadSessionChatResult | undefined;
+  /** Initial hydration may reuse retained data; read() always requests authoritative state. */
+  seed?(params: { limit?: number }): Promise<GxserverReadSessionChatResult>;
+  /** Refresh a retained subscription without discarding the host's cached transcript. */
+  reconnect?(): void;
   read(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult>;
   readSubagent?(params: {
     subagent: string;

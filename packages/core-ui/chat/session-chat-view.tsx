@@ -1632,12 +1632,15 @@ export function SessionChatView({
                         nativeSelectionMenus ? (
                           <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                             <SessionChatMessageList
+                              key={sessionKey}
+                              sessionKey={sessionKey}
                               composerCollapsed={composerCollapsed}
                               scrollToBottomRequest={scrollToBottomRequest}
                               scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
                               hasMore={chat.hasMore}
                               isWorking={transcriptWorking}
                               loadingEarlier={chat.loadingEarlier}
+                              earlierPageCursor={chat.earlierPageCursor}
                               messages={chat.messages}
                               onRetryStartupSend={chat.queue.retryPrompt}
                               onRemoveStartupSend={chat.queue.removePrompt}
@@ -1674,12 +1677,15 @@ export function SessionChatView({
                               ref={transcriptRef}
                             >
                               <SessionChatMessageList
+                                key={sessionKey}
+                                sessionKey={sessionKey}
                                 composerCollapsed={composerCollapsed}
                                 scrollToBottomRequest={scrollToBottomRequest}
                                 scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
                                 hasMore={chat.hasMore}
                                 isWorking={transcriptWorking}
                                 loadingEarlier={chat.loadingEarlier}
+                                earlierPageCursor={chat.earlierPageCursor}
                                 messages={chat.messages}
                                 onRetryStartupSend={chat.queue.retryPrompt}
                                 onRemoveStartupSend={chat.queue.removePrompt}

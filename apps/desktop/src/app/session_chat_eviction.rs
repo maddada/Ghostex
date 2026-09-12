@@ -1,4 +1,3 @@
-use crate::app::consts::*;
 use crate::app::model::*;
 use crate::*;
 use futures::channel::oneshot;
@@ -23,24 +22,6 @@ impl GhostexGpuiApp {
         self.workspace_tab_drag_active
             || self.browser_tab_drag_active
             || self.command_tab_drag_active
-    }
-
-    fn hidden_chat_page_count(&self) -> usize {
-        self.agents_chat_surface_hidden_since
-            .keys()
-            .filter(|id| self.agents_chat_surfaces.contains_key(id))
-            .count()
-            + self
-                .parked_agents_chat_runtimes_by_project
-                .values()
-                .map(|parked| {
-                    parked
-                        .surface_hidden_since
-                        .keys()
-                        .filter(|id| parked.surfaces.contains_key(id))
-                        .count()
-                })
-                .sum::<usize>()
     }
 
     fn chat_eviction_candidates(&self) -> Vec<ChatEvictionCandidate> {
@@ -81,8 +62,6 @@ impl GhostexGpuiApp {
             .values()
             .any(|progress| progress.page_generation == Some(candidate.generation))
             || self.chat_eviction_drag_active()
-            || (candidate.hidden_since.elapsed() < GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER
-                && self.hidden_chat_page_count() <= GPUI_AGENTS_CHAT_SURFACE_HIDDEN_MAX)
         {
             return false;
         }
@@ -179,12 +158,14 @@ impl GhostexGpuiApp {
             return;
         }
         state.pending_probe = None;
+        let renderer_id = state.renderer_id;
+        let account_key = state.account_key.clone();
         if !eligible {
             return;
         }
         support_logs::append(
             support_logs::GpuiSupportLog::SessionChat,
-            "sessionChat.nativePageEvicted",
+            "sessionChat.nativePagePooled",
             serde_json::json!({
                 "projectId": candidate.project_id,
                 "sessionId": candidate.session_id.0,
@@ -196,8 +177,8 @@ impl GhostexGpuiApp {
         if active {
             self.record_session_chat_lifecycle(
                 candidate.session_id,
-                "sessionChat.nativePageEvicted",
-                "hiddenPageEviction",
+                "sessionChat.nativePagePooled",
+                "hiddenPageReuse",
             );
         }
         let surface = if active {
@@ -222,8 +203,17 @@ impl GhostexGpuiApp {
             parked.surfaces.remove(&candidate.session_id)
         };
         if let Some(surface) = surface {
-            surface.update(cx, |surface, _| surface.set_visible(false));
-            drop(surface);
+            surface.update(cx, |surface, _| {
+                surface.set_visible(false);
+                surface.set_session_chat_pane_focused(false, true);
+                surface.execute_app_owned_script(&format!(
+                    "window.ghostexGpui?.onSessionChatDeactivate?.('{}'); undefined;",
+                    candidate.generation
+                ));
+            });
+            self.reusable_chat_renderers
+                .push((surface, renderer_id, account_key, Instant::now()));
+            self.expire_reusable_chat_renderers();
             if active {
                 cx.notify();
             }
@@ -232,12 +222,13 @@ impl GhostexGpuiApp {
 
     /// CDXC:SessionChat 2026-09-05 WHY:
     /// A prior empty report can precede the final keystroke or blur, so elapsed time is not a safe substitute for a fresh reply.
-    /// Probe the exact hidden page after a fresh provider activity read, then recheck native guards and its hidden epoch before dropping it.
-    /// Serial probes preserve oldest-first eviction without simultaneous snapshot reads for every cached page; refusal, timeout and unknown state protect the page.
+    /// Probe the exact hidden page after a fresh provider activity read, then recheck native guards and its hidden epoch before releasing its binding into the reusable renderer pool.
+    /// Serial probes preserve oldest-first release without simultaneous snapshot reads for every cached page; refusal, timeout and unknown state protect the page.
     pub(crate) fn evict_expired_hidden_agents_chat_surfaces(
         &mut self,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.expire_reusable_chat_renderers();
         if self.chat_eviction_drag_active() {
             return;
         }
@@ -394,6 +385,9 @@ impl GhostexGpuiApp {
         {
             match action {
                 Some("composerReady") => {
+                    if let Some(state) = parked.page_states.get_mut(&session_id) {
+                        state.awaiting_activation = false;
+                    }
                     parked.composer_ready_sessions.insert(session_id);
                 }
                 Some("composerDraftState") => {

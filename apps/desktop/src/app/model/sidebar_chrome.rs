@@ -68,7 +68,7 @@ pub(crate) fn gpui_next_sidebar_side(side: GpuiSidebarSide) -> GpuiSidebarSide {
     }
 }
 
-#[allow(dead_code)] // no caller: the body row is laid out inline in the root render() in app/core.rs; kept as the CDXC:Sidebar ordering contract
+#[allow(dead_code)] // no caller: the body row is laid out inline in the root render() in app/render/root.rs; kept as the CDXC:Sidebar ordering contract
 pub(crate) fn gpui_sidebar_body_chrome_order(
     side: GpuiSidebarSide,
     sidebar_collapsed: bool,

@@ -8,7 +8,8 @@ import {
   IconTool,
   IconWorldSearch,
 } from '@tabler/icons-react';
-import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useContext, useRef, type ReactNode } from 'react';
+import { useSessionChatDisclosureState } from './session-chat-interaction-state';
 import type { SessionChatToolCallBlock, SessionChatToolResultBlock } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { diffFromSessionChatText, diffFromSessionChatToolCall, type SessionChatDiffLine } from './session-chat-diff';
@@ -107,19 +108,20 @@ function ToolBody({ error, label, text }: { error?: boolean; label?: string; tex
 }
 
 function ToolLine({
+  index,
   call,
   expandSignal,
   result,
 }: {
+  index: number;
   call?: SessionChatToolCallBlock;
   expandSignal: boolean;
   result?: SessionChatToolResultBlock;
 }) {
-  const [open, setOpen] = useState(expandSignal);
+  const [open, setOpen] = useSessionChatDisclosureState(`tool:${index}:${call?.name ?? 'result'}`, expandSignal);
   const subagentViewer = useContext(SessionChatSubagentContext);
   const subagent = subagentViewer ? sessionChatToolSubagent(call, result, subagentViewer.agentPath) : null;
   const triggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => setOpen(expandSignal), [expandSignal]);
 
   const name = call?.name ?? 'Result';
   const commandTool = isCommandTool(name);
@@ -188,8 +190,7 @@ export function SessionChatToolRun({
   questionPairsAsRows = false,
 }: SessionChatToolRunProps) {
   const pairs = pairSessionChatToolBlocks(blocks);
-  const [expanded, setExpanded] = useState(showAllRows || expandSignal);
-  useEffect(() => setExpanded(showAllRows || expandSignal), [expandSignal, showAllRows]);
+  const [expanded, setExpanded] = useSessionChatDisclosureState('tool-run', showAllRows || expandSignal);
 
   const exchanges = pairs.map((pair) => (questionPairsAsRows ? null : answeredSessionChatQuestionExchange(pair)));
   const renderItem = (index: number) => {
@@ -205,7 +206,7 @@ export function SessionChatToolRun({
         </div>
       );
     }
-    return <ToolLine call={pair.call} expandSignal={expandSignal} key={index} result={pair.result} />;
+    return <ToolLine index={index} call={pair.call} expandSignal={expandSignal} key={index} result={pair.result} />;
   };
 
   // An answered question is conversation, not work: its card never folds

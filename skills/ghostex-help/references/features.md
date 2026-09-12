@@ -199,8 +199,9 @@ Manual Generate Name and `/rename` in chat remain available for Claude and Codex
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.
-- Previous Sessions (More Options or Cmd+P) lists every past conversation from
-  every agent CLI with resume and fork. The History icon immediately to the
+- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions.
+  Previous Sessions in More Options lists past conversations from every agent
+  CLI with resume and fork. The History icon immediately to the
   right of Add Worktree on a project header opens Quick Access > Sessions with
   that project selected and Closed active, ready to search sessions you closed.
 - Search by Prompt (More Options, or `gx f` in a terminal) fuzzy-searches every
@@ -219,6 +220,14 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+
+Use Cmd+P (Recent Sessions) to jump between chats across projects, or
+Cmd+Ctrl+[ and Cmd+Ctrl+] to go back and forward through visited sessions.
+Recently visited chats show their loaded messages while catching up with the
+agent. Each chat remembers your reading position, expanded tool cards, and
+composer cursor. Older messages load as needed when returning to a place in
+the conversation's history. Shortcuts: `openSessionSearchPalette`,
+`navigateHistoryBack`, `navigateHistoryForward`.
 
 Star items in Context details to show them in the status line under the chat
 box. Items without a value are hidden until their data is available again;

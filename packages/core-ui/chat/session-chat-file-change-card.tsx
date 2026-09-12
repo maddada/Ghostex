@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useId, useRef, useState } from 'react';
+import { useSessionChatDisclosureState } from './session-chat-interaction-state';
 import { cn } from '@/packages/components/utils';
 import { AppTooltip } from '../app-tooltip';
 import type { SessionChatFileChange } from './session-chat-file-changes';
@@ -19,10 +20,21 @@ export const SessionChatFileChangeInteractionContext = createContext<((messageId
  * User: the header is a single line containing the file path, truncated from the start when necessary; this replaces the stacked filename and folder.
  * User: use styled action tooltips; the unified path now shares one tooltip instead of separate folder and filename tooltips.
  */
-function FileChangeCard({ change, messageId }: { change: SessionChatFileChange; messageId?: string }) {
+function FileChangeCard({
+  change,
+  messageId,
+  index,
+}: {
+  change: SessionChatFileChange;
+  messageId?: string;
+  index: number;
+}) {
   const previewEnabled = useContext(SessionChatFileChangePreviewContext);
   const reportInteraction = useContext(SessionChatFileChangeInteractionContext);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useSessionChatDisclosureState(
+    `file:${messageId ?? ''}:${index}:${change.path}`,
+    false
+  );
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const openFile = useSessionChatHostLinks()?.openFile;
   const bodyId = useId();
@@ -180,7 +192,7 @@ export function SessionChatFileChangeCards({
   return changes.length ? (
     <div className='ghostex-chat-file-changes'>
       {changes.map((change, index) => (
-        <FileChangeCard change={change} messageId={messageId} key={`${index}:${change.path}`} />
+        <FileChangeCard index={index} change={change} messageId={messageId} key={`${index}:${change.path}`} />
       ))}
     </div>
   ) : null;

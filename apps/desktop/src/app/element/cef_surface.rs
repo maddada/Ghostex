@@ -173,6 +173,17 @@ impl CefSurface {
             .refresh_sidebar_gxserver_bootstrap(gxserver_bootstrap);
     }
 
+    pub(crate) fn activate_session_chat(
+        &mut self,
+        url: &str,
+        generation: &str,
+        bootstrap: cef::SidebarGxserverBootstrap,
+    ) {
+        self.session_chat_pane_focused = None;
+        self.browser
+            .activate_session_chat(url, generation, bootstrap);
+    }
+
     pub(crate) fn refresh_session_chat_gxserver_bootstrap(
         &mut self,
         gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,

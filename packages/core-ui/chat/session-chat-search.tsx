@@ -1,3 +1,4 @@
+import { SESSION_CHAT_HISTORY_NAVIGATION_EVENT } from './use-session-chat-scroll-restoration';
 import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -109,6 +110,7 @@ function centerMatch(root: HTMLElement, range: Range): void {
     return;
   }
 
+  viewport.dispatchEvent(new Event(SESSION_CHAT_HISTORY_NAVIGATION_EVENT));
   const viewportRect = viewport.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
   viewport.scrollTo({

@@ -39,6 +39,13 @@ impl GhostexGpuiApp {
             placement: GpuiExtensionPlacement::ChatBar,
             start_session,
         };
+        let Some(generation) = self
+            .agents_chat_page_states
+            .get(&session_id)
+            .map(|state| state.generation)
+        else {
+            return;
+        };
         let response_app = cx.entity().downgrade();
         let response_async_cx = cx.to_async();
         let response_foreground = cx.foreground_executor().clone();
@@ -48,10 +55,11 @@ impl GhostexGpuiApp {
             response_foreground
                 .spawn(async move {
                     let _ = response_app.update_in(&mut response_async_cx, |this, _window, cx| {
-                        this.dispatch_chat_bar_extension_bridge_message(
-                            session_id,
+                        this.dispatch_session_chat_generation_response(
+                            generation,
                             "onSessionChatExtensionBridgeMessage",
                             &payload,
+                            false,
                             cx,
                         );
                     });
