@@ -108,8 +108,9 @@ session inside the project you are already in switches to Agents.
   until the chevron is clicked, which reveals them on every card in that
   project until the chevron (now pointing right) is clicked again. Each
   project remembers its choice across restarts. Turning the chevron off shows
-  every enabled button at once. Tag, Park, Sleep and Close are on by default,
-  right of the chevron. Hover an icon on a card to see its name; buttons flip
+  every enabled button at once. By default the strip is Tag, Park, Sleep,
+  chevron, Close, so a hovered card shows a chevron and Close until you open
+  it. Hover an icon on a card to see its name; buttons flip
   to the reverse action on an active row (Unpin, Wake, Unsnooze, Unpark,
   Cancel Close After Done). An enabled button is left out of the session's
   right-click menu (and its Advanced submenu), so turning Close off puts
@@ -180,13 +181,13 @@ sidebar or `ghostex`, a session can be focused, renamed, pinned, tagged,
 slept and woken (`ghostex sleep|wake <selector>`), forked, closed, or moved
 between panes and groups. A session carries one tag at a time, chosen from the
 Tag as menu (right-click the session): the built-in Priority, Progress, and
-Type tags, plus any custom tags you define. Create a custom tag with New tag at
-the bottom of the Tag as menu (it is applied to that session right away) or
-with Add tag in Settings > General > Sidebar > Sidebar Tags, where custom tags
-appear in the same drag list as the built-in ones: drag to reorder, use the
-switch or eye to hide them from menus and filters, and the trash button to
-delete one (sessions that carried it become untagged). Each custom tag has a
-name, an icon from the shared icon list, and a color from the preset list; the
+Type tags, plus any custom tags you define. Custom tags are created in one
+place, Settings > General > Sidebar > Sidebar Tags: choose Add tag, then give
+it a name, an icon from the shared icon list, and a color from the preset list.
+New tag at the bottom of the Tag as menu opens that same place with the form
+ready. Custom tags then appear in the same drag list as the built-in ones: drag
+to reorder, use the switch or eye to hide them from menus and filters, and the
+trash button to delete one (sessions that carried it become untagged). The
 mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
 custom tag by name. Claude and Codex name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
@@ -541,7 +542,9 @@ docs directory), `hideProjectHeaderDiffStats`,
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each
   button opens that login's live limits, reset times, and extra usage or rate
-  limit resets, with the Fable limit as a main bar for Claude. More model
+  limit resets, with the Fable limit as a main bar for Claude. Click the same
+  usage button again to close its dropdown. Clicking outside, including in
+  Session Chat, closes usage dropdowns and Tips. More model
   limits starts collapsed. Click the Codex reset
   count to see each reset's expiry date. Redeem a reset opens a Codex terminal
   in the active project's folder, shows it under that project in the sidebar,
