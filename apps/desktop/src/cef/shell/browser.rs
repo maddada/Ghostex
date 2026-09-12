@@ -559,41 +559,7 @@ pub(crate) fn apply_browser_page_appearance(browser: &cef::Browser) {
     let Some(host) = browser.host() else {
         return;
     };
-    /*
-    CDXC:Browser 2026-09-08 WHY:
-    macOS system detection must read the OS preference independently of NSApp's appearance, which can be pinned by the host.
-    Apply the preference per Browser renderer because the Default profile shares its request context with app UI.
-    On other platforms, an empty feature list restores Chromium's live system detection instead of overriding it with the old hardcoded light value.
-    */
-    let mut media_params = match cef::dictionary_value_create() {
-        Some(params) => params,
-        None => return,
-    };
-    media_params.set_string(Some(&CefString::from("media")), Some(&CefString::from("")));
-    let mut features = match cef::list_value_create() {
-        Some(features) => features,
-        None => return,
-    };
-    if let Some(value) = browser_page_appearance().media_value() {
-        let Some(mut feature) = cef::dictionary_value_create() else {
-            return;
-        };
-        feature.set_string(
-            Some(&CefString::from("name")),
-            Some(&CefString::from("prefers-color-scheme")),
-        );
-        feature.set_string(
-            Some(&CefString::from("value")),
-            Some(&CefString::from(value)),
-        );
-        features.set_dictionary(0, Some(&mut feature));
-    }
-    media_params.set_list(Some(&CefString::from("features")), Some(&mut features));
-    host.execute_dev_tools_method(
-        next_page_appearance_devtools_message_id(),
-        Some(&CefString::from("Emulation.setEmulatedMedia")),
-        Some(&mut media_params),
-    );
+    apply_page_color_scheme(browser, browser_page_appearance());
 
     let mut background_params = match cef::dictionary_value_create() {
         Some(params) => params,
@@ -930,6 +896,12 @@ impl CefBrowser {
                 uses_system_page_appearance,
                 keyboard_zoom_enabled,
             );
+            if profile == "session-chat" && !native_view.is_null() {
+                CHAT_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
+                    views.borrow_mut().insert(native_view as usize);
+                });
+                apply_page_color_scheme(&browser, BrowserPageAppearance::System);
+            }
         }
         if uses_system_page_appearance {
             apply_browser_page_appearance(&browser);
@@ -1078,6 +1050,7 @@ impl CefBrowser {
         on_right: bool,
         companion_hidden: bool,
         requested: bool,
+        keep_under_pointer: bool,
     ) -> (bool, bool) {
         self.native_view().map_or((false, false), |view| {
             platform::update_sidebar_hover_reveal(
@@ -1089,6 +1062,7 @@ impl CefBrowser {
                 on_right,
                 companion_hidden,
                 requested,
+                keep_under_pointer,
             )
         })
     }
@@ -1589,6 +1563,9 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
     SYSTEM_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
         views.borrow_mut().remove(&(native_view as usize));
     });
+    CHAT_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
+        views.borrow_mut().remove(&(native_view as usize));
+    });
     set_cef_native_view_hidden(native_view, false);
     clear_active_native_view_if_matching(native_view);
     let _ = SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW.compare_exchange(
@@ -1600,6 +1577,17 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
 }
 
 pub(crate) fn refresh_system_page_appearance_for_native_view(native_view: *mut c_void) -> c_int {
+    if !native_view.is_null()
+        && CHAT_PAGE_APPEARANCE_CEF_NATIVE_VIEWS
+            .with(|views| views.borrow().contains(&(native_view as usize)))
+    {
+        if let Some(browser) = CEF_BROWSERS_BY_NATIVE_VIEW
+            .with(|browsers| browsers.borrow().get(&(native_view as usize)).cloned())
+        {
+            apply_page_color_scheme(&browser, BrowserPageAppearance::System);
+            return 1;
+        }
+    }
     if native_view.is_null()
         || !SYSTEM_PAGE_APPEARANCE_CEF_NATIVE_VIEWS
             .with(|views| views.borrow().contains(&(native_view as usize)))

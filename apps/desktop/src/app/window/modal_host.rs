@@ -58,13 +58,13 @@ impl GpuiAppModalHostWindow {
         } else {
             (None, None)
         };
-        let find_theme = is_find_prompts.then(|| {
-            gpui_session_chat_theme_from_settings(
+        let find_theme_is_light = is_find_prompts.then(|| {
+            gpui_session_chat_uses_light_theme(
                 shared_settings::shared_sidebar_settings_snapshot().object(),
             )
         });
-        let (prepaint_background, background) = match find_theme.as_deref() {
-            Some("light") => (CEF_LIGHT_PREPAINT_BACKGROUND_COLOR, rgb(0xfdfdfd).into()),
+        let (prepaint_background, background) = match find_theme_is_light {
+            Some(true) => (CEF_LIGHT_PREPAINT_BACKGROUND_COLOR, rgb(0xfdfdfd).into()),
             Some(_) => (
                 CEF_FIND_PROMPTS_DARK_PREPAINT_BACKGROUND_COLOR,
                 rgb(0x111111).into(),

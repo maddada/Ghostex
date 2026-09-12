@@ -85,6 +85,7 @@ pub(crate) fn set_browser_page_appearance(
 }
 
 pub(crate) fn refresh_browser_page_appearances() {
+    refresh_chat_page_appearances();
     let browsers = SYSTEM_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
         CEF_BROWSERS_BY_NATIVE_VIEW.with(|browsers| {
             let browsers = browsers.borrow();
@@ -97,5 +98,72 @@ pub(crate) fn refresh_browser_page_appearances() {
     });
     for browser in browsers {
         apply_browser_page_appearance(&browser);
+    }
+}
+
+thread_local! {
+    /// CDXC:Theming 2026-09-12 WHY:
+    /// The native app pins its own dark appearance, so chat must read the OS preference independently and keep following it even when Browser appearance is overridden.
+    pub(crate) static CHAT_PAGE_APPEARANCE_CEF_NATIVE_VIEWS: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
+}
+
+pub(crate) fn system_page_color_scheme() -> Option<&'static str> {
+    BrowserPageAppearance::System.media_value()
+}
+
+pub(crate) fn apply_page_color_scheme(browser: &cef::Browser, appearance: BrowserPageAppearance) {
+    let Some(host) = browser.host() else {
+        return;
+    };
+    /*
+    CDXC:Browser 2026-09-08 WHY:
+    macOS system detection must read the OS preference independently of NSApp's appearance, which can be pinned by the host.
+    Apply the preference per Browser renderer because the Default profile shares its request context with app UI.
+    On other platforms, an empty feature list restores Chromium's live system detection instead of overriding it with the old hardcoded light value.
+    */
+    let mut media_params = match cef::dictionary_value_create() {
+        Some(params) => params,
+        None => return,
+    };
+    media_params.set_string(Some(&CefString::from("media")), Some(&CefString::from("")));
+    let mut features = match cef::list_value_create() {
+        Some(features) => features,
+        None => return,
+    };
+    if let Some(value) = appearance.media_value() {
+        let Some(mut feature) = cef::dictionary_value_create() else {
+            return;
+        };
+        feature.set_string(
+            Some(&CefString::from("name")),
+            Some(&CefString::from("prefers-color-scheme")),
+        );
+        feature.set_string(
+            Some(&CefString::from("value")),
+            Some(&CefString::from(value)),
+        );
+        features.set_dictionary(0, Some(&mut feature));
+    }
+    media_params.set_list(Some(&CefString::from("features")), Some(&mut features));
+    host.execute_dev_tools_method(
+        next_page_appearance_devtools_message_id(),
+        Some(&CefString::from("Emulation.setEmulatedMedia")),
+        Some(&mut media_params),
+    );
+}
+
+pub(crate) fn refresh_chat_page_appearances() {
+    let browsers = CHAT_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
+        CEF_BROWSERS_BY_NATIVE_VIEW.with(|browsers| {
+            let browsers = browsers.borrow();
+            views
+                .borrow()
+                .iter()
+                .filter_map(|view| browsers.get(view).cloned())
+                .collect::<Vec<_>>()
+        })
+    });
+    for browser in browsers {
+        apply_page_color_scheme(&browser, BrowserPageAppearance::System);
     }
 }

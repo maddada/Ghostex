@@ -1,4 +1,46 @@
 #import <AppKit/AppKit.h>
+#import <objc/runtime.h>
+
+extern void GhostexGpuiCEFFocusGpuiRootView(void *nativeView);
+extern void GhostexGpuiCEFFocusNativeView(void *nativeView);
+
+@interface GhostexUsageKeyboardFocus : NSObject
+@property(nonatomic, weak) NSResponder *previous;
+@property(nonatomic, weak) NSView *root;
+@end
+@implementation GhostexUsageKeyboardFocus
+@end
+
+static char GhostexUsageKeyboardFocusKey;
+
+// CDXC:AgentProviders 2026-09-12 WHY:
+// A non-activating usage popup needs keyboard input in GPUI, otherwise Tab and Space still reach Chromium's composer. Preserve its responder until the popup closes.
+void GhostexGpuiBeginUsageKeyboardFocus(void *nativeView) {
+  NSView *root = (__bridge NSView *)nativeView;
+  if (!root.window) return;
+  GhostexUsageKeyboardFocus *state = [GhostexUsageKeyboardFocus new];
+  state.previous = root.window.firstResponder;
+  state.root = root;
+  objc_setAssociatedObject(root.window, &GhostexUsageKeyboardFocusKey, state,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+  GhostexGpuiCEFFocusGpuiRootView(nativeView);
+}
+
+void GhostexGpuiEndUsageKeyboardFocus(void *nativeView) {
+  NSView *root = (__bridge NSView *)nativeView;
+  NSWindow *window = root.window;
+  if (!window) return;
+  GhostexUsageKeyboardFocus *state =
+      objc_getAssociatedObject(window, &GhostexUsageKeyboardFocusKey);
+  NSResponder *previous = state.previous;
+  if (window.firstResponder == state.root &&
+      [previous isKindOfClass:[NSView class]] &&
+      ((NSView *)previous).window == window) {
+    GhostexGpuiCEFFocusNativeView((__bridge void *)previous);
+  }
+  objc_setAssociatedObject(window, &GhostexUsageKeyboardFocusKey, nil,
+                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
 
 void GhostexGpuiRemoveToastPopupWindowChrome(void *nativeView) {
   @autoreleasepool {

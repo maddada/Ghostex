@@ -373,7 +373,7 @@ wrap_load_handler! {
     impl LoadHandler {
         fn on_load_end(
             &self,
-            _browser: Option<&mut cef::Browser>,
+            browser: Option<&mut cef::Browser>,
             frame: Option<&mut Frame>,
             _http_status_code: c_int,
         ) {
@@ -394,6 +394,9 @@ wrap_load_handler! {
             clients never attach this load handler. The page polls for the
             installed object, so load-end delivery cannot strand it.
             */
+            if let Some(browser) = browser {
+                apply_page_color_scheme(browser, BrowserPageAppearance::System);
+            }
             send_session_chat_gxserver_bootstrap_process_message(
                 frame,
                 self.gxserver_bootstrap.clone(),

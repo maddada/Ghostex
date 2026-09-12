@@ -13,6 +13,20 @@
 #import <stdlib.h>
 #import <string.h>
 
+// Read pointer state in the same top-left coordinates as GPUI pane bounds.
+// Native children consume mouse moves, so GPUI's last event position can be stale.
+bool GhostexGpuiCommandPanePointerActive(void *rootView, double x, double y,
+                                        double width, double height) {
+  NSView *root = (__bridge NSView *)rootView;
+  if (!root || !root.window) return true;
+  if (NSEvent.pressedMouseButtons != 0) return true;
+  NSPoint screenPoint = NSEvent.mouseLocation;
+  NSPoint windowPoint = [root.window convertPointFromScreen:screenPoint];
+  NSPoint point = [root convertPoint:windowPoint fromView:nil];
+  if (!root.isFlipped) point.y = NSMaxY(root.bounds) - point.y;
+  return NSPointInRect(point, NSMakeRect(x, y, width, height));
+}
+
 void GhostexGpuiCEFDoMessageLoopWork(void);
 int GhostexGpuiCEFHandleSelectAllForNativeView(void *nativeView);
 int GhostexGpuiCEFHandleSelectAllForActiveNativeView(void);

@@ -34,6 +34,7 @@ unsafe extern "C" {
         on_right: bool,
         companion_hidden: bool,
         requested: bool,
+        keep_under_pointer: bool,
         expand_companion: *mut bool,
     ) -> bool;
     fn GhostexGpuiSidebarRevealDispose(sidebar: *mut c_void);
@@ -97,6 +98,7 @@ pub(super) fn update_sidebar_hover_reveal(
     on_right: bool,
     companion_hidden: bool,
     requested: bool,
+    keep_under_pointer: bool,
 ) -> (bool, bool) {
     let mut expand_companion = false;
     let revealed = unsafe {
@@ -109,6 +111,7 @@ pub(super) fn update_sidebar_hover_reveal(
             on_right,
             companion_hidden,
             requested,
+            keep_under_pointer,
             &mut expand_companion,
         )
     };

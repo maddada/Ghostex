@@ -2230,7 +2230,12 @@ impl GhostexGpuiApp {
             &[
                 (
                     "theme",
-                    gpui_session_chat_theme_from_settings(settings.object()).to_string(),
+                    if gpui_session_chat_uses_light_theme(settings.object()) {
+                        "light"
+                    } else {
+                        "dark"
+                    }
+                    .to_string(),
                 ),
                 (
                     "fontFamily",
@@ -2357,15 +2362,15 @@ impl GhostexGpuiApp {
         let page_state = SessionChatPageState::new();
         let host_action_handler =
             self.session_chat_host_bridge_event_handler(session_id, page_state.generation, cx);
-        let chat_theme = gpui_session_chat_theme_from_settings(
+        let light_chat_theme = gpui_session_chat_uses_light_theme(
             shared_settings::shared_sidebar_settings_snapshot().object(),
         );
-        let prepaint_background = if chat_theme == "light" {
+        let prepaint_background = if light_chat_theme {
             CEF_LIGHT_PREPAINT_BACKGROUND_COLOR
         } else {
             CEF_SESSION_CHAT_DARK_PREPAINT_BACKGROUND_COLOR
         };
-        let background = if chat_theme == "light" {
+        let background = if light_chat_theme {
             rgb(0xfdfdfd).into()
         } else {
             rgb(0x0d0d0d).into()

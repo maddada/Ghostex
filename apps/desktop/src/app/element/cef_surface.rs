@@ -346,6 +346,7 @@ impl CefSurface {
         on_right: bool,
         companion_hidden: bool,
         requested: bool,
+        keep_under_pointer: bool,
     ) -> bool {
         let (revealed, expand_companion) = self.browser.update_sidebar_hover_reveal(
             root,
@@ -355,6 +356,7 @@ impl CefSurface {
             on_right,
             companion_hidden,
             requested,
+            keep_under_pointer,
         );
         self.set_visible(!collapsed || revealed);
         expand_companion
