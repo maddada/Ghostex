@@ -276,6 +276,15 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("openFindPrompts", "cmd+shift+f"),
     ("scrollTerminalToTop", ""),
     ("scrollTerminalToBottom", ""),
+    /*
+    CDXC:SessionChat 2026-09-12 WHY:
+    The table has to mirror packages/shared/ghostex-hotkeys.ts entry for entry,
+    but chat owns this chord inside its own capture handler so it also fires
+    while the composer has focus. Every native path therefore skips the id
+    instead of binding or resolving it: binding it natively would swallow the
+    page key and capture it in terminals.
+    */
+    ("scrollChatToBottom", "ctrl+shift+down"),
     ("forkSession", "ctrl+shift+f"),
     ("reloadSession", "ctrl+shift+r"),
     ("sleepFocusedSession", ""),
@@ -455,6 +464,11 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
         .get("hotkeys")
         .and_then(serde_json::Value::as_object);
     for (action_id, default_key) in GPUI_DEFAULT_GHOSTEX_HOTKEYS {
+        // Chat owns this chord (see GPUI_DEFAULT_GHOSTEX_HOTKEYS), so the key
+        // travels onward to the page instead of resolving to a native action.
+        if *action_id == "scrollChatToBottom" {
+            continue;
+        }
         let key = match persisted_hotkeys.and_then(|hotkeys| hotkeys.get(*action_id)) {
             Some(serde_json::Value::String(key)) => key.as_str(),
             _ => default_key,
@@ -777,6 +791,11 @@ pub(crate) fn gpui_configured_hotkey_unbinds_from_settings(
     let mut keys = GPUI_DEFAULT_GHOSTEX_HOTKEYS
         .iter()
         .filter_map(|(action_id, default_key)| {
+            // Chat owns this chord (see GPUI_DEFAULT_GHOSTEX_HOTKEYS): it is
+            // never bound natively, so there is nothing to unbind either.
+            if *action_id == "scrollChatToBottom" {
+                return None;
+            }
             let key = match persisted_hotkeys.and_then(|hotkeys| hotkeys.get(*action_id)) {
                 Some(serde_json::Value::String(key)) => key.as_str(),
                 _ => default_key,
