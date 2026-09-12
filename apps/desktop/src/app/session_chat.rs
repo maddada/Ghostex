@@ -255,45 +255,26 @@ impl GhostexGpuiApp {
     */
     pub(crate) fn session_chat_host_bridge_event_handler(
         &self,
-        session_id: TerminalSessionId,
-        generation: u64,
+        renderer_id: u64,
         cx: &mut gpui::Context<Self>,
     ) -> cef::AppModalHostBridgeEventHandler {
-        let account_key = self.workspace_terminal_key_for_shell_session(session_id);
         let app = cx.entity().downgrade();
         let async_cx = cx.to_async();
         let foreground = cx.foreground_executor().clone();
-
         Rc::new(move |event: cef::AppModalHostBridgeEvent| {
             let cef::AppModalHostBridgeEvent::Message(payload) = event else {
                 return;
             };
             let app = app.clone();
-            let account_key = account_key.clone();
             let mut async_cx = async_cx.clone();
             foreground
                 .spawn(async move {
                     let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        // CDXC:AgentProviders 2026-09-07 WHY:
-                        // A switch can finish after its project is parked. Its progress belongs to the captured server session, not whichever project now owns the numeric shell ID.
-                        if let (Some(key), Ok(message)) = (
-                            account_key,
-                            serde_json::from_str::<serde_json::Value>(&payload),
-                        ) {
-                            if message["type"] == "sessionChatHostAction"
-                                && message["action"] == "accountSwitchProgress"
-                            {
-                                this.set_session_account_switch_progress(
-                                    key,
-                                    &message["progress"],
-                                    Some(generation),
-                                    cx,
-                                );
-                                return;
-                            }
-                        }
-                        this.receive_owned_session_chat_host_action(
-                            session_id, generation, &payload, window, cx,
+                        this.receive_session_chat_renderer_action(
+                            renderer_id,
+                            &payload,
+                            window,
+                            cx,
                         );
                     });
                 })
@@ -428,6 +409,10 @@ impl GhostexGpuiApp {
             return;
         }
         if action == "composerReady" {
+            if let Some(state) = self.agents_chat_page_states.get_mut(&session_id) {
+                state.awaiting_activation = false;
+            }
+            self.reconcile_agents_chat_surfaces(cx);
             self.deliver_pending_session_chat_received_draft(session_id, cx);
             if self.agents_chat_mode_sessions.contains(&session_id)
                 && self.agents_chat_surfaces.contains_key(&session_id)
@@ -753,6 +738,9 @@ impl GhostexGpuiApp {
         request_id: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        let Some(generation) = self.begin_session_chat_native_request(session_id) else {
+            return;
+        };
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: true,
@@ -765,7 +753,8 @@ impl GhostexGpuiApp {
                 _ => Vec::new(),
             };
             let _ = this.update(cx, |this, cx| {
-                this.deliver_session_chat_attachment_picks(session_id, &request_id, picked, cx);
+                let payload = serde_json::json!({ "requestId": request_id, "paths": picked.iter().map(|path| path.to_string_lossy().to_string()).collect::<Vec<_>>() });
+                this.dispatch_session_chat_generation_response(generation, "onSessionChatAttachmentsPicked", &payload, true, cx);
             });
         })
         .detach();
@@ -803,6 +792,9 @@ impl GhostexGpuiApp {
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| "session-1.png".to_string());
         let downloads = home_dir().join("Downloads");
+        let Some(generation) = self.begin_session_chat_native_request(session_id) else {
+            return;
+        };
         cx.spawn(async move |this, cx| {
             let write_result = (|| -> Result<PathBuf, String> {
                 fs::create_dir_all(&downloads).map_err(|error| error.to_string())?;
@@ -822,7 +814,7 @@ impl GhostexGpuiApp {
                         &saved_name,
                         cx,
                     );
-                    this.deliver_session_chat_image_save(session_id, &request_id, None, cx);
+                    this.dispatch_session_chat_generation_response(generation, "onSessionChatImageSaved", &serde_json::json!({"requestId": request_id}), true, cx);
                 }
                 Err(error) => {
                     support_logs::append(
@@ -833,12 +825,7 @@ impl GhostexGpuiApp {
                             "stage": "write",
                         }),
                     );
-                    this.deliver_session_chat_image_save(
-                        session_id,
-                        &request_id,
-                        Some("The image could not be written."),
-                        cx,
-                    );
+                    this.dispatch_session_chat_generation_response(generation, "onSessionChatImageSaved", &serde_json::json!({"requestId": request_id, "error": "The image could not be written."}), true, cx);
                 }
             });
         })
@@ -865,38 +852,6 @@ impl GhostexGpuiApp {
             .replace('\u{2029}', "\\u2029");
         let script = format!(
             "(function(){{var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatImageSaved==='function'){{ns.onSessionChatImageSaved({literal});}}}})(); undefined;"
-        );
-        surface.update(cx, |surface, _| {
-            surface.execute_app_owned_script(&script);
-        });
-    }
-
-    pub(crate) fn deliver_session_chat_attachment_picks(
-        &mut self,
-        session_id: TerminalSessionId,
-        request_id: &str,
-        paths: Vec<PathBuf>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        self.cancel_session_chat_eviction_probe(session_id);
-        let Some(surface) = self.agents_chat_surfaces.get(&session_id).cloned() else {
-            return;
-        };
-        let payload = serde_json::json!({
-            "requestId": request_id,
-            "paths": paths
-                .iter()
-                .map(|path| path.to_string_lossy().to_string())
-                .collect::<Vec<_>>(),
-        });
-        // JSON is a valid JS literal except for U+2028/U+2029; escape them so
-        // a pathological file name cannot break the generated script.
-        let literal = payload
-            .to_string()
-            .replace('\u{2028}', "\\u2028")
-            .replace('\u{2029}', "\\u2029");
-        let script = format!(
-            "(function(){{var ns=window.ghostexGpui;if(ns&&typeof ns.onSessionChatAttachmentsPicked==='function'){{ns.onSessionChatAttachmentsPicked({literal});}}}})(); undefined;"
         );
         surface.update(cx, |surface, _| {
             surface.execute_app_owned_script(&script);

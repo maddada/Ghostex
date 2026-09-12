@@ -541,6 +541,25 @@ export function SessionChatSessionOptionPills({
     };
   }, []);
 
+  const detailStatus = useMemo(
+    () => contextDetailsStatus ?? resolveContextDetailStatus(contextDetailsAgent, detectedOptions),
+    [contextDetailsStatus, contextDetailsAgent, detectedOptions]
+  );
+  const contextDetails = useMemo(
+    () =>
+      detailStatus
+        ? resolveSessionChatContextDetailGroups(
+            detailStatus,
+            contextDetailsPreferences,
+            contextDetailsNow,
+            'shown',
+            contextDetailsSession ?? null,
+            contextDetailsAgent
+          )
+        : undefined,
+    [detailStatus, contextDetailsAgent, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
+  );
+
   const { catalog, optionDescriptors, beginDispatch, state } = controller;
   const queuedControls = catalog?.modelIcon === 'codex' || catalog?.modelIcon === 'claude';
   const quickPicker = modelPickerProvider(catalog?.modelIcon) !== undefined;
@@ -959,24 +978,6 @@ export function SessionChatSessionOptionPills({
   const terminalStatusLine = detectedOptions?.terminalStatusLine?.trim();
   const contextMeterUsage = resolveSessionChatContextMeterUsage(detectedOptions?.contextUsage, isCodex);
   const hasContextDetails = isCodex || catalog.modelIcon === 'claude';
-  const detailStatus = useMemo(
-    () => contextDetailsStatus ?? resolveContextDetailStatus(contextDetailsAgent, detectedOptions),
-    [contextDetailsStatus, contextDetailsAgent, detectedOptions]
-  );
-  const contextDetails = useMemo(
-    () =>
-      detailStatus
-        ? resolveSessionChatContextDetailGroups(
-            detailStatus,
-            contextDetailsPreferences,
-            contextDetailsNow,
-            'shown',
-            contextDetailsSession ?? null,
-            contextDetailsAgent
-          )
-        : undefined,
-    [detailStatus, contextDetailsAgent, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
-  );
   const modeButton = visibleOptions.find(isShiftTabModeCycler);
   const menuOptions = modeButton ? visibleOptions.filter((descriptor) => descriptor !== modeButton) : visibleOptions;
   /*

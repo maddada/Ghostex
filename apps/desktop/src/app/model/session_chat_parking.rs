@@ -40,7 +40,10 @@ impl ParkedAgentsChatRuntime {
         session_id: TerminalSessionId,
         require_empty: bool,
     ) -> bool {
-        self.composer_ready_sessions.contains(&session_id)
+        self.page_states
+            .get(&session_id)
+            .is_some_and(|state| state.pending_native_requests == 0)
+            && self.composer_ready_sessions.contains(&session_id)
             && (!require_empty || self.composer_empty_reports.get(&session_id) == Some(&true))
             && !self.protected_sessions.contains(&session_id)
             && !self.pending_composer_insert.contains_key(&session_id)
@@ -49,9 +52,13 @@ impl ParkedAgentsChatRuntime {
 
 /// CDXC:SessionChat 2026-09-05 WHY:
 /// Numeric shell session IDs collide across projects, and a browser can finish posting after its replacement exists.
-/// The generation travels with the exact page through parking; a hidden-page probe is cancelled whenever that page is shown again.
+/// The binding generation travels through parking and changes when its renderer is reused; a hidden-page probe is cancelled whenever that binding is shown again.
 pub(crate) struct SessionChatPageState {
     pub(crate) generation: u64,
+    pub(crate) renderer_id: u64,
+    pub(crate) awaiting_activation: bool,
+    pub(crate) pending_native_requests: usize,
+    pub(crate) account_key: Option<GpuiWorkspaceTerminalSessionKey>,
     pub(crate) pending_probe: Option<(u64, Option<futures::channel::oneshot::Sender<bool>>)>,
 }
 
@@ -62,8 +69,13 @@ impl SessionChatPageState {
     }
 
     pub(crate) fn new() -> Self {
+        let generation = Self::next_identity();
         Self {
-            generation: Self::next_identity(),
+            generation,
+            renderer_id: generation,
+            awaiting_activation: false,
+            pending_native_requests: 0,
+            account_key: None,
             pending_probe: None,
         }
     }

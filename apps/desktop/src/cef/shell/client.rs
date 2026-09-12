@@ -368,6 +368,7 @@ wrap_load_handler! {
 wrap_load_handler! {
     pub(crate) struct GhostexGpuiSessionChatGxserverBootstrapLoadHandler {
         gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
+        activation: StdRc<RefCell<Option<SessionChatActivation>>>,
     }
 
     impl LoadHandler {
@@ -396,6 +397,10 @@ wrap_load_handler! {
             */
             if let Some(browser) = browser {
                 apply_page_color_scheme(browser, BrowserPageAppearance::System);
+            }
+            if let Some(activation) = self.activation.borrow().as_ref() {
+                send_session_chat_activation_process_message(frame, &activation.url, &activation.generation, activation.bootstrap.clone());
+                return;
             }
             send_session_chat_gxserver_bootstrap_process_message(
                 frame,
@@ -499,6 +504,7 @@ wrap_render_process_handler! {
                 message_name == SIDEBAR_RUNTIME_SETTINGS_UPDATE_MESSAGE_NAME;
             let is_gxserver_bootstrap_update =
                 message_name == SIDEBAR_GXSERVER_BOOTSTRAP_UPDATE_MESSAGE_NAME;
+            let is_session_chat_activation_message = message_name == SESSION_CHAT_ACTIVATE_MESSAGE_NAME;
             let is_session_chat_gxserver_bootstrap_message =
                 message_name == SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME;
             let is_project_workarea_install_message =
@@ -509,6 +515,7 @@ wrap_render_process_handler! {
                 && !is_runtime_settings_update
                 && !is_gxserver_bootstrap_update
                 && !is_session_chat_gxserver_bootstrap_message
+                && !is_session_chat_activation_message
                 && !is_project_workarea_install_message
                 && !is_extension_bridge_install_message
             {
@@ -554,6 +561,13 @@ wrap_render_process_handler! {
             } else if is_runtime_settings_update {
                 let runtime_settings = sidebar_runtime_settings_from_install_message(message);
                 update_sidebar_runtime_settings_v8_bridge(Some(&mut context), runtime_settings);
+            } else if is_session_chat_activation_message {
+                let activation = message.argument_list()
+                    .filter(|arguments| arguments.size() == 1 && arguments.get_type(0) == ValueType::STRING)
+                    .map(|arguments| CefString::from(&arguments.string(0)).to_string());
+                if let Some(activation) = activation {
+                    install_session_chat_activation_v8_bridge(&mut context, &activation);
+                }
             } else if is_session_chat_gxserver_bootstrap_message {
                 /*
                 CDXC:SessionChat 2026-07-31:

@@ -220,6 +220,14 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
 
+Use Cmd+P (Recent Sessions) to jump between chats across projects, or
+Cmd+Ctrl+[ and Cmd+Ctrl+] to go back and forward through visited sessions.
+Recently visited chats show their loaded messages while catching up with the
+agent. Each chat remembers your reading position, expanded tool cards, and
+composer cursor. Older messages load as needed when returning to a place in
+the conversation's history. Shortcuts: `openSessionSearchPalette`,
+`navigateHistoryBack`, `navigateHistoryForward`.
+
 Star items in Context details to show them in the status line under the chat
 box. Items without a value are hidden until their data is available again;
 your starred selections stay saved.

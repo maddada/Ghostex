@@ -2356,6 +2356,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
     const visiblePlaceholder = collapsed ? inputPlaceholder.replace(/\s*\n\s*/g, ' ') : inputPlaceholder;
     const composerInput = useLexical ? (
       <SessionChatLexicalInput
+        sessionKey={sessionKey}
         collapsed={collapsed}
         fillHeight={maximized}
         initialValue={draft}

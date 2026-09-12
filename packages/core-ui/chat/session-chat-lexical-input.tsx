@@ -1,3 +1,4 @@
+import { readSessionChatCursor, saveSessionChatCursor } from './session-chat-interaction-state';
 import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
@@ -64,6 +65,7 @@ function composerKey(event: KeyboardEvent): string {
 }
 
 export function SessionChatLexicalInput({
+  sessionKey,
   initialValue,
   onCaretChange,
   onChange,
@@ -75,6 +77,7 @@ export function SessionChatLexicalInput({
   registerApi,
   theme,
 }: {
+  sessionKey?: string;
   initialValue: string;
   onCaretChange: (caret: number) => void;
   onChange: (value: string, caret: number) => void;
@@ -90,11 +93,14 @@ export function SessionChatLexicalInput({
   const rootRef = useRef<HTMLDivElement>(null);
   const caretRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<ComposerEditorControls | null>(null);
+  const [initialCursor] = useState(() => readSessionChatCursor(sessionKey, initialValue));
+  const initialAnchor = initialCursor?.anchor ?? initialValue.length;
+  const initialFocus = initialCursor?.focus ?? initialValue.length;
   const selectionRef = useRef<ComposerSelection>({
-    anchor: initialValue.length,
-    focus: initialValue.length,
-    start: initialValue.length,
-    end: initialValue.length,
+    anchor: initialAnchor,
+    focus: initialFocus,
+    start: Math.min(initialAnchor, initialFocus),
+    end: Math.max(initialAnchor, initialFocus),
   });
   const valueRef = useRef(initialValue.replace(/\r\n?/g, '\n'));
   const [panel, setPanel] = useState<ComposerEditorPanel | null>(null);
@@ -546,9 +552,13 @@ export function SessionChatLexicalInput({
     const resize = new ResizeObserver(scheduleVisuals);
     resize.observe(root);
     window.addEventListener('ghostex-session-chat-font-family-changed', scheduleVisuals);
+    const saveCursor = () => saveSessionChatCursor(sessionKey, valueRef.current, readSelection());
+    window.addEventListener('pagehide', saveCursor);
     callbacksRef.current.registerApi(controls);
     scheduleVisuals();
     return () => {
+      saveCursor();
+      window.removeEventListener('pagehide', saveCursor);
       disposed = true;
       cancelAnimationFrame(visualFrame);
       window.clearTimeout(scrollbarFadeTimeout);

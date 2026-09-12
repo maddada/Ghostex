@@ -29,23 +29,14 @@ pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_POLL_INTERVAL: Duration = Duratio
 
 pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT: Duration = Duration::from_secs(10);
 
-/*
-CDXC:SessionChat 2026-08-24:
-Every chat-mode session owns a full Chromium page, and those pages stay alive
-behind whatever pane is on screen. A workspace with many chat sessions therefore
-pays renderer RAM for surfaces nobody has looked at in a long time. A surface
-that has been continuously hidden this long is destroyed; the very next
-visibility reconcile rebuilds it through `ensure_agents_chat_surface`, and the
-page restores its transcript from gxserver and its draft from storage, so the
-eviction saves memory at the cost of a page load when the user returns.
-Five minutes keeps a short return window before reclaiming eligible pages.
-*/
+/// Confirmed idle, empty pages enter the reusable renderer pool immediately.
+/// Age and count limits apply to unused pooled renderers; protected session bindings stay mounted until their fresh release probe succeeds.
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER: Duration =
     Duration::from_secs(5 * 60);
 
-/// CDXC:SessionChat 2026-09-05 DECISION:
-/// User approved the reviewed RAM recommendation: three hidden pages as a soft global budget and five-minute expiry, preserving protected drafts and active work.
-/// The old twenty-minute timer limited retention time but allowed many visited pages to accumulate together; protected pages can still exceed this budget.
+/// CDXC:SessionChat 2026-09-12 DECISION:
+/// User approved persistent renderer reuse across sessions and projects, retaining the three unused pages and five-minute expiry from the September 5 RAM recommendation.
+/// Protected drafts and active work keep their bound pages until they can safely join the pool.
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_MAX: usize = 3;
 
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL: Duration = Duration::from_secs(60);
