@@ -8,6 +8,7 @@ use crate::*;
 
 pub(crate) struct GpuiResolvedSessionChatFile {
     pub(crate) file_path: PathBuf,
+    pub(crate) is_directory: bool,
     pub(crate) project_id: String,
     pub(crate) project_root: PathBuf,
 }
@@ -107,12 +108,16 @@ impl GhostexGpuiApp {
             if must_stay_in_project && !file_path.starts_with(&project_root) {
                 continue;
             }
-            if !fs::metadata(&file_path).is_ok_and(|metadata| metadata.is_file()) {
+            let Ok(metadata) = fs::metadata(&file_path) else {
+                continue;
+            };
+            if !metadata.is_file() && !metadata.is_dir() {
                 found_non_file = true;
                 continue;
             }
             return Ok(GpuiResolvedSessionChatFile {
                 file_path,
+                is_directory: metadata.is_dir(),
                 project_id: session_key.project_id,
                 project_root,
             });

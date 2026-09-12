@@ -1178,6 +1178,17 @@ impl GhostexGpuiApp {
             }
         };
         let file_path = resolved.file_path;
+        // CDXC:SessionChat 2026-09-12 DECISION:
+        // User: clicking a folder link in GPUI chat opens it in the system file explorer.
+        if resolved.is_directory {
+            if gpui_open_path(&file_path).is_err() {
+                self.report_session_chat_file_open_failure(
+                    &format!("Could not open that folder in {GPUI_FILE_MANAGER_NAME}."),
+                    cx,
+                );
+            }
+            return;
+        }
         let root = resolved.project_root;
         let session_project_id = Some(resolved.project_id);
         let project_relative_path = file_path
