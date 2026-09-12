@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { Button } from '@/packages/components/ui/button';
+import { Input } from '@/packages/components/ui/input';
 import { cn } from '@/packages/components/utils';
 import {
   DEFAULT_CUSTOM_SESSION_TAG_ICON,
@@ -7,8 +9,8 @@ import {
   type CustomSessionTagsState,
 } from '../shared/session-tags';
 import { isSidebarCommandIcon, type SidebarCommandIcon } from '../shared/sidebar-command-icons';
+import { AppTooltip } from './app-tooltip';
 import { CommandIconPicker } from './command-icon-picker';
-import { CustomSessionTagGlyph } from './session-tag-ui';
 
 export type CustomSessionTagEditorSubmit = {
   color: string;
@@ -17,22 +19,20 @@ export type CustomSessionTagEditorSubmit = {
 };
 
 /**
- * CDXC:Sessions 2026-09-11 DECISION:
- * User: a custom tag is created from both Settings (Sidebar Tags) and the Tag as menu, so the same small form (name, an icon from the shared icon allowlist, a color from the preset list) is rendered inline in both places instead of opening another window.
- * The form owns no catalog state: it reports the three field values and the host applies them to the catalog it holds at that moment, mirroring the Space editor.
+ * CDXC:Sessions 2026-09-12 DECISION:
+ * User: the New tag form lives only in Settings > Sidebar Tags, and it has to be built from the same rounded controls as the rest of Settings.
+ * So it is the Settings swatch button, Input, and Button primitives rather than hand-rolled CSS, and it is laid out as one more row of the tag list: the icon trigger doubles as the live preview by drawing the chosen glyph in the chosen color next to the name field.
+ * SEE-ALSO: packages/core-ui/settings-modal/fields.tsx (SidebarTagListSettingsField owns the catalog write).
  */
 export function CustomSessionTagEditorForm({
   autoFocus = true,
   className,
-  compact = false,
   onCancel,
   onSubmit,
   suggestedColorIndex = 0,
 }: {
   autoFocus?: boolean;
   className?: string;
-  /** Tighter spacing for the context-menu variant. */
-  compact?: boolean;
   onCancel: () => void;
   onSubmit: (tag: CustomSessionTagEditorSubmit) => void;
   /** Rotates the preselected swatch so consecutive new tags do not all start on the same color. */
@@ -44,7 +44,6 @@ export function CustomSessionTagEditorForm({
     SESSION_TAG_COLOR_PRESETS[Math.abs(suggestedColorIndex) % SESSION_TAG_COLOR_PRESETS.length]!.value
   );
   const inputRef = useRef<HTMLInputElement>(null);
-  const colorLabelId = useId();
   const trimmedName = name.trim();
 
   useEffect(() => {
@@ -53,79 +52,71 @@ export function CustomSessionTagEditorForm({
     }
   }, [autoFocus]);
 
-  const submit = (event?: FormEvent<HTMLFormElement>) => {
-    event?.preventDefault();
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!trimmedName) {
       return;
     }
     onSubmit({ color, icon, name: trimmedName });
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    /*
-     * The form can sit inside a context menu that treats Escape, arrows, and Enter as menu navigation, so it owns those keys while it is open.
-     */
-    event.stopPropagation();
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onCancel();
-    }
-  };
-
   return (
     <form
-      className={cn('custom-session-tag-editor', compact && 'custom-session-tag-editor-compact', className)}
-      data-empty-space-blocking='true'
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={handleKeyDown}
+      className={cn('flex w-full flex-col gap-2.5', className)}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          event.stopPropagation();
+          onCancel();
+        }
+      }}
       onSubmit={submit}
     >
-      <div className='custom-session-tag-editor-preview' aria-hidden='true'>
-        <CustomSessionTagGlyph color={color} icon={icon} size={16} stroke={1.8} tagId='custom-preview' />
-        <span className='custom-session-tag-editor-preview-name'>{trimmedName || 'New tag'}</span>
+      <div className='flex items-center gap-2'>
+        <CommandIconPicker color={color} compact icon={icon} onIconChange={setIcon} triggerLabel='Tag icon' />
+        <Input
+          aria-label='Tag name'
+          autoComplete='off'
+          className='h-8 min-w-0 flex-1'
+          maxLength={MAX_CUSTOM_SESSION_TAG_NAME_LENGTH}
+          onChange={(event) => setName(event.currentTarget.value)}
+          placeholder='Tag name'
+          ref={inputRef}
+          spellCheck={false}
+          value={name}
+        />
       </div>
-      <input
-        aria-label='Tag name'
-        autoComplete='off'
-        className='custom-session-tag-editor-input'
-        maxLength={MAX_CUSTOM_SESSION_TAG_NAME_LENGTH}
-        onChange={(event) => setName(event.currentTarget.value)}
-        placeholder='Tag name'
-        ref={inputRef}
-        spellCheck={false}
-        value={name}
-      />
-      <CommandIconPicker icon={icon} onIconChange={setIcon} />
-      <div aria-labelledby={colorLabelId} className='custom-session-tag-editor-swatches' role='radiogroup'>
-        <span className='sr-only' id={colorLabelId}>
-          Color
-        </span>
-        {SESSION_TAG_COLOR_PRESETS.map((preset) => (
-          <button
-            aria-checked={preset.value === color}
-            aria-label={preset.label}
-            className='custom-session-tag-editor-swatch'
-            data-selected={String(preset.value === color)}
-            key={preset.value}
-            onClick={() => setColor(preset.value)}
-            role='radio'
-            style={{ background: preset.value }}
-            title={preset.label}
-            type='button'
-          />
-        ))}
-      </div>
-      <div className='custom-session-tag-editor-actions'>
-        <button className='custom-session-tag-editor-button' onClick={onCancel} type='button'>
-          Cancel
-        </button>
-        <button
-          className='custom-session-tag-editor-button custom-session-tag-editor-button-primary'
-          disabled={!trimmedName}
-          type='submit'
-        >
-          Create tag
-        </button>
+      <div className='flex flex-wrap items-center gap-2'>
+        <div aria-label='Tag color' className='flex flex-wrap items-center gap-1.5' role='radiogroup'>
+          {SESSION_TAG_COLOR_PRESETS.map((preset) => {
+            const isSelected = preset.value === color;
+            return (
+              <AppTooltip content={preset.label} key={preset.value}>
+                <Button
+                  aria-checked={isSelected}
+                  aria-label={`Use ${preset.label}`}
+                  className={cn(
+                    'size-7 min-w-0 shrink-0 border p-0',
+                    isSelected ? 'border-ring ring-2 ring-ring/45' : 'border-border/80'
+                  )}
+                  onClick={() => setColor(preset.value)}
+                  role='radio'
+                  style={{ backgroundColor: preset.value }}
+                  type='button'
+                  variant='ghost'
+                />
+              </AppTooltip>
+            );
+          })}
+        </div>
+        <div className='ml-auto flex items-center gap-2'>
+          <Button onClick={onCancel} type='button' variant='ghost'>
+            Cancel
+          </Button>
+          <Button disabled={!trimmedName} type='submit' variant='outline'>
+            Create tag
+          </Button>
+        </div>
       </div>
     </form>
   );

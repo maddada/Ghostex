@@ -206,6 +206,12 @@ const GHOSTTY_THEME_UNMANAGED_VALUE = '__ghostex_ghostty_theme_unmanaged__';
 
 export type MainSettingsInitialSectionId = MainSettingsScrollTargetId;
 
+/**
+ * CDXC:Sessions 2026-09-12 DECISION:
+ * User: creating a session tag happens in one place only. The sidebar's New tag row deep-links into Settings > Sidebar Tags and asks for the create form to be open on arrival, instead of offering a second inline editor inside the Tag as menu.
+ */
+export type SettingsSidebarTagsAction = 'createTag';
+
 function getInitialSettingsModalTab(
   initialTab: SettingsModalTab,
   visibility: SettingsModalTabVisibilityOptions,
@@ -261,6 +267,7 @@ export type SettingsModalProps = {
   automateIsExperimental?: boolean;
   firstLaunchSetupVisibleSettings?: ReadonlySet<FirstLaunchSetupMainSettingKey>;
   initialSection?: MainSettingsInitialSectionId;
+  initialSidebarTagsAction?: SettingsSidebarTagsAction;
   initialSearchQuery?: string;
   initialRemoteMachineId?: string;
   /** CDXC:RemotePairing 2026-09-03: Remote tab card to scroll to (consumed by the Remote tab). */
@@ -349,6 +356,7 @@ export function SettingsModal({
   automateIsExperimental = true,
   firstLaunchSetupVisibleSettings,
   initialSection,
+  initialSidebarTagsAction,
   initialSearchQuery,
   initialRemoteMachineId,
   initialRemoteSection,
@@ -412,6 +420,10 @@ export function SettingsModal({
    * The custom tag catalog is daemon-owned, not a setting: Settings reads it from the hydrated sidebar store and writes each create, delete, or reorder straight through to the local daemon (optimistic store update first, then the host message), so it never rides the settings draft and a cancelled Settings edit cannot roll a created tag back.
    */
   const customSessionTags = useSidebarStore((state) => state.customSessionTags);
+  const [isCreatingCustomSessionTag, setIsCreatingCustomSessionTag] = useState(false);
+  useEffect(() => {
+    setIsCreatingCustomSessionTag(isOpen && initialSidebarTagsAction === 'createTag');
+  }, [initialSidebarTagsAction, isOpen]);
   const writeCustomSessionTags = (next: CustomSessionTagsState) => {
     useSidebarStore.getState().setCustomSessionTagsForMachine(undefined, next);
     onUpdateCustomSessionTags?.(next);
@@ -1491,7 +1503,7 @@ export function SettingsModal({
                           <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
                             {mainSettingVisible(settingsSearch.sessionCards, 'sessionCardHoverButtons') ? (
                               <SessionCardHoverActionsField
-                                description='Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. An enabled button leaves the session context menu.'
+                                description='Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close. An enabled button leaves the session context menu.'
                                 label='Session hover buttons (click to toggle, drag to reorder)'
                                 {...getSettingModificationProps('sessionCardHoverButtons')}
                                 isModified={
@@ -1512,6 +1524,8 @@ export function SettingsModal({
                             {mainSettingVisible(settingsSearch.sidebarTags, 'sidebarSessionTagListItems') ? (
                               <SidebarTagListSettingsField
                                 customSessionTags={onUpdateCustomSessionTags ? customSessionTags : undefined}
+                                isCreatingTag={isCreatingCustomSessionTag}
+                                onCreatingTagChange={setIsCreatingCustomSessionTag}
                                 onCreateCustomTag={(tag) =>
                                   writeCustomSessionTags(
                                     createCustomSessionTag(customSessionTags ?? EMPTY_CUSTOM_SESSION_TAGS_STATE, tag)

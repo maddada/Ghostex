@@ -1,7 +1,7 @@
 import type { AgentConfigDraft } from './agent-config-modal';
 import { logAppModalError } from './app-modal-error-log';
 import type { GitCommitModalDraft } from './git-commit-modal';
-import type { SettingsModalTab } from './settings-modal';
+import type { MainSettingsInitialSectionId, SettingsModalTab, SettingsSidebarTagsAction } from './settings-modal';
 import type { SidebarAgentIcon } from '../shared/sidebar-agents';
 
 /** The Settings → Remote cards a deep link can scroll to. */
@@ -253,6 +253,13 @@ export type OpenAppModalMessage =
        * Deep links use this instead of `initialSearchQuery: 'Agent Hooks'`, which filtered the page and used to land on an empty Integrations search.
        */
       initialAgentsSection?: SettingsAgentsSection;
+      /** Scrolls the General tab to one section, the way Power Settings deep-links to `power`. */
+      initialSection?: MainSettingsInitialSectionId;
+      /**
+       * CDXC:Sessions 2026-09-12 DECISION:
+       * User: the sidebar's New tag row opens Settings > Sidebar Tags with the create form already open, so session tags are created in exactly one place.
+       */
+      initialSidebarTagsAction?: SettingsSidebarTagsAction;
       initialTab?: SettingsModalTab;
       modal: 'settings';
       type: 'open';

@@ -61,13 +61,10 @@ import {
 import { SidebarAccountMenu } from './accounts/sidebar-account-menu';
 import { resolveSessionChatTranscriptAgent } from '../shared/session-chat';
 import {
-  createCustomSessionTag,
   getEnabledVisibleSidebarSessionTagSections,
-  EMPTY_CUSTOM_SESSION_TAGS_STATE,
   type CustomSessionTagsState,
   type SidebarSessionTagListItem,
 } from '../shared/session-tags';
-import { CustomSessionTagEditorForm, nextCustomSessionTagColorIndex } from './custom-session-tag-editor';
 import { buildSidebarSessionDetailsClipboardText } from '../shared/session-details-copy';
 import {
   getSessionCardTitleTooltip,
@@ -1031,8 +1028,12 @@ export function SortableSessionCard({
     (count, section) => count + section.options.length,
     0
   );
-  const [isNewTagFormOpen, setIsNewTagFormOpen] = useState(false);
-  const canCreateCustomTag = !isBulkContextMenu;
+  /*
+   * CDXC:Sessions 2026-09-12 DECISION:
+   * User: there is one place to create a tag. This row is a deep link into Settings > Sidebar Tags with the create form open, not a second editor.
+   * It is hidden for a remote session because Settings edits the LOCAL daemon's catalog, and a tag minted there would not exist on the daemon that stores that session's marker.
+   */
+  const canCreateCustomTag = !isBulkContextMenu && !isRemoteSession;
   const getTagMenuItemCount = (hasShelveRow: boolean) =>
     sessionTagSubmenuItemCount + Number(hasShelveRow) + Number(canCreateCustomTag);
   const getTagMenuDividerCount = (hasShelveRow: boolean) =>
@@ -1041,20 +1042,15 @@ export function SortableSessionCard({
     CONTEXT_MENU_VERTICAL_PADDING_PX +
     getTagMenuItemCount(hasShelveRow) * CONTEXT_MENU_ITEM_HEIGHT_PX +
     getTagMenuDividerCount(hasShelveRow) * 10;
-  const createCustomTagFromSubmenu = (tag: { color: string; icon: string; name: string }) => {
-    /*
-     * CDXC:Sessions 2026-09-11 DECISION:
-     * User: New tag at the bottom of the Tag as menu creates the tag and applies it to this session in one step. The catalog is written through to the owning daemon, and the store is updated first so the row shows the new glyph before the ack arrives.
-     */
-    const created = createCustomSessionTag(sessionTagCatalog ?? EMPTY_CUSTOM_SESSION_TAGS_STATE, tag);
-    useSidebarStore.getState().setCustomSessionTagsForMachine(sessionTagOwnerMachineId, created.state);
-    vscode.postMessage({
-      ...(sessionTagOwnerMachineId ? { remoteMachineId: sessionTagOwnerMachineId } : {}),
-      state: created.state,
-      type: 'updateCustomSessionTags',
+  const openCustomTagSettings = () => {
+    setTagSubmenuPosition(undefined);
+    setContextMenuPosition(undefined);
+    openAppModal({
+      initialSection: 'sidebarTags',
+      initialSidebarTagsAction: 'createTag',
+      modal: 'settings',
+      type: 'open',
     });
-    setIsNewTagFormOpen(false);
-    requestSetSessionTag(created.tagId);
   };
   const sessionTitleTooltip = getSessionCardTitleTooltip({
     alwaysShowStateTooltip: isRemoteSession,
@@ -2060,7 +2056,6 @@ export function SortableSessionCard({
     setSnoozeSubmenuPosition(undefined);
     const bounds = event.currentTarget.getBoundingClientRect();
     const submenuWidth = 204;
-    setIsNewTagFormOpen(false);
     const submenuHeight = getTagMenuHeight(Boolean(nextPendingShelve));
     setTagSubmenuPosition({
       x: getCenteredSidebarMenuX(submenuWidth),
@@ -2122,7 +2117,6 @@ export function SortableSessionCard({
     const nextPendingShelve: PendingShelve = { clearSelection: false, sessionIds: [session.sessionId], snoozedUntil };
     if (contextMenuVariant === 'snooze' && contextMenuPosition) {
       setPendingShelve(nextPendingShelve);
-      setIsNewTagFormOpen(false);
       setContextMenuVariant('tags');
       setContextMenuPosition(
         clampContextMenuPosition(
@@ -2174,7 +2168,6 @@ export function SortableSessionCard({
     setContextMenuSessionIdsBelow(EMPTY_SESSION_IDS);
     setContextMenuSleepableSessionIdsBelow(EMPTY_SESSION_IDS);
     setContextMenuSelectedSessionIds(EMPTY_SESSION_IDS);
-    setIsNewTagFormOpen(false);
     setPendingShelve(nextPendingShelve);
     setContextMenuVariant(variant);
     setContextMenuPosition(
@@ -2883,26 +2876,17 @@ export function SortableSessionCard({
         </div>
       ))}
       {canCreateCustomTag ? (
-        <div className='session-tag-menu-section session-tag-menu-new-tag-form'>
-          {isNewTagFormOpen ? (
-            <CustomSessionTagEditorForm
-              compact
-              onCancel={() => setIsNewTagFormOpen(false)}
-              onSubmit={createCustomTagFromSubmenu}
-              suggestedColorIndex={nextCustomSessionTagColorIndex(sessionTagCatalog)}
-            />
-          ) : (
-            <button
-              aria-label='New tag'
-              className='session-context-menu-item session-tag-menu-item'
-              onClick={() => setIsNewTagFormOpen(true)}
-              role='menuitem'
-              type='button'
-            >
-              <IconPlus aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
-              <span className='session-tag-menu-item-label'>New tag…</span>
-            </button>
-          )}
+        <div className='session-tag-menu-section'>
+          <button
+            aria-label='New tag'
+            className='session-context-menu-item session-tag-menu-item'
+            onClick={openCustomTagSettings}
+            role='menuitem'
+            type='button'
+          >
+            <IconPlus aria-hidden='true' className='session-context-menu-icon' size={16} stroke={1.8} />
+            <span className='session-tag-menu-item-label'>New tag…</span>
+          </button>
         </div>
       ) : null}
     </>

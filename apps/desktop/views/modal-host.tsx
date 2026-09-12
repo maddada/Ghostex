@@ -35,6 +35,7 @@ import {
   gpuiBootstrapTailcatRpc,
   type MainSettingsInitialSectionId,
   type SettingsModalTab,
+  type SettingsSidebarTagsAction,
 } from '@/packages/core-ui/settings-modal';
 import {
   ExportTranscriptModal,
@@ -259,6 +260,7 @@ type AppModalHostMessage =
       initialRemoteSection?: SettingsRemoteSection;
       initialAgentsSection?: SettingsAgentsSection;
       initialSection?: MainSettingsInitialSectionId;
+      initialSidebarTagsAction?: SettingsSidebarTagsAction;
       /** CDXC:SavedPrompts 2026-08-24: see StashedPromptsModalState. */
       initialScope?: StashedPromptsScope;
       initialSearchQuery?: string;
@@ -1263,6 +1265,7 @@ function AppModalHost() {
     appIconState,
     portlessSetup,
     settingsInitialSection,
+    settingsInitialSidebarTagsAction,
     settingsInitialRemoteMachineId,
     settingsInitialRemoteSection,
     settingsInitialAgentsSection,
@@ -2399,6 +2402,7 @@ function AppModalHost() {
         appIconPickerUnavailable={appIconPickerUnavailable}
         automateIsExperimental={window.__ghostex_APP_MODAL_HOST_ID__ !== 'gpui'}
         initialSection={settingsInitialSection}
+        initialSidebarTagsAction={settingsInitialSidebarTagsAction}
         initialRemoteMachineId={settingsInitialRemoteMachineId}
         initialRemoteSection={settingsInitialRemoteSection}
         initialAgentsSection={settingsInitialAgentsSection}
@@ -3017,6 +3021,7 @@ function useModalStateFromNative() {
   // CDXC:Icons 2026-06-25-21:50: Latest native App Icon state passed to Settings.
   const [appIconState, setAppIconState] = useState<AppIconStateMessage>();
   const [settingsInitialSection, setSettingsInitialSection] = useState<MainSettingsInitialSectionId>();
+  const [settingsInitialSidebarTagsAction, setSettingsInitialSidebarTagsAction] = useState<SettingsSidebarTagsAction>();
   const [settingsInitialRemoteMachineId, setSettingsInitialRemoteMachineId] = useState<string>();
   const [settingsInitialRemoteSection, setSettingsInitialRemoteSection] = useState<SettingsRemoteSection>();
   const [settingsInitialAgentsSection, setSettingsInitialAgentsSection] = useState<SettingsAgentsSection>();
@@ -3589,6 +3594,9 @@ function useModalStateFromNative() {
           if (message.modal === 'settings') {
             setGhostexFolderStats(undefined);
             setSettingsInitialSection(typeof message.initialSection === 'string' ? message.initialSection : undefined);
+            setSettingsInitialSidebarTagsAction(
+              message.initialSidebarTagsAction === 'createTag' ? 'createTag' : undefined
+            );
             /**
              * CDXC:Workarea 2026-06-04-02:52:
              * Titlebar Tips notices can open Settings directly to a searchable
@@ -3926,6 +3934,7 @@ function useModalStateFromNative() {
     // CDXC:Icons 2026-06-25-21:50: Expose App Icon state to the modal component.
     appIconState,
     settingsInitialSection,
+    settingsInitialSidebarTagsAction,
     settingsInitialRemoteMachineId,
     settingsInitialRemoteSection,
     settingsInitialAgentsSection,

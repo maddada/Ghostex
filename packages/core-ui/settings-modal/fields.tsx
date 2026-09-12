@@ -1876,20 +1876,25 @@ export function getDiagnosticLoggingScenarioStateForDuration(
 
 export function SidebarTagListSettingsField({
   customSessionTags,
+  isCreatingTag = false,
   isModified,
   items,
   onChange,
   onCreateCustomTag,
+  onCreatingTagChange,
   onCustomTagOrderChange,
   onDeleteCustomTag,
   onResetToDefault,
 }: {
   /** The local daemon's custom tag catalog; absent on hosts with no daemon connection, which hides Add tag. */
   customSessionTags?: CustomSessionTagsState;
+  /** Owned by the modal so a `New tag` deep link can open this form on arrival. */
+  isCreatingTag?: boolean;
   isModified: boolean;
   items: readonly SidebarSessionTagListItem[];
   onChange: (items: readonly SidebarSessionTagListItem[]) => void;
   onCreateCustomTag?: (tag: { color: string; icon: string; name: string }) => void;
+  onCreatingTagChange?: (isCreatingTag: boolean) => void;
   onCustomTagOrderChange?: (orderedTagIds: readonly string[]) => void;
   onDeleteCustomTag?: (tagId: string) => void;
   onResetToDefault: () => void;
@@ -1900,8 +1905,17 @@ export function SidebarTagListSettingsField({
    */
   const normalizedItems = normalizeSidebarSessionTagListItems(items, customSessionTags);
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const [isAddingTag, setIsAddingTag] = useState(false);
   const canAddTags = customSessionTags !== undefined && onCreateCustomTag !== undefined;
+  const isAddingTag = isCreatingTag && canAddTags;
+  useEffect(() => {
+    /*
+     * CDXC:Sessions 2026-09-12 WHY:
+     * The list is a collapsed disclosure, so arriving from the sidebar's New tag row has to expand it as well as open the form, or the deep link lands on a closed section.
+     */
+    if (isAddingTag && detailsRef.current) {
+      detailsRef.current.open = true;
+    }
+  }, [isAddingTag]);
   const emitChange = (nextItems: readonly SidebarSessionTagListItem[]) => {
     onChange(nextItems);
     if (onCustomTagOrderChange && customSessionTags) {
@@ -2010,10 +2024,7 @@ export function SidebarTagListSettingsField({
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                if (detailsRef.current) {
-                  detailsRef.current.open = true;
-                }
-                setIsAddingTag(true);
+                onCreatingTagChange?.(true);
               }}
               type='button'
               variant='outline'
@@ -2037,13 +2048,13 @@ export function SidebarTagListSettingsField({
         </div>
       </summary>
       <div className='pt-3'>
-        {isAddingTag && canAddTags ? (
-          <div className='settings-management-row mb-2 w-full border border-border bg-muted/20 p-3'>
+        {isAddingTag && onCreateCustomTag ? (
+          <div className='settings-management-row mb-2 w-full border border-border bg-muted/20' style={{ padding: 10 }}>
             <CustomSessionTagEditorForm
-              onCancel={() => setIsAddingTag(false)}
+              onCancel={() => onCreatingTagChange?.(false)}
               onSubmit={(tag) => {
                 onCreateCustomTag(tag);
-                setIsAddingTag(false);
+                onCreatingTagChange?.(false);
               }}
               suggestedColorIndex={nextCustomSessionTagColorIndex(customSessionTags)}
             />
