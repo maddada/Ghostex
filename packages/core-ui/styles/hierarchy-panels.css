@@ -455,8 +455,16 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 }
 
 /*
- * Compact project headers remain normal-flow rows with no resting surface.
+ * Project headers have no resting surface beyond the flat app background that
+ * keeps scrolled rows from showing through while the header is pinned.
+ * --sidebar-sticky-project-header-height is the pinned header's box (26px
+ * title row plus 2px padding on each side); group-panels.css keeps the scroll
+ * fade below it and session rows use it as their scroll margin.
  */
+.sidebar-reference-layout[data-reference-sidebar='true'] .session-groups-content {
+  --sidebar-sticky-project-header-height: 30px;
+}
+
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {
   border-radius: 5px;
   margin-left: 0;
@@ -531,6 +539,8 @@ section.project-collection[data-collapsed='true'][data-contains-active-session='
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .session-frame {
   --reference-session-leading-inset: 5px;
   --reference-session-title-inset: 15px;
+  /* Reveal scrolls (scrollIntoView) must land below the pinned Space row and project header. */
+  scroll-margin-top: calc(var(--sidebar-pinned-chrome-top, 0px) + var(--sidebar-sticky-project-header-height, 30px));
 }
 
 /* ------------------- level 4: kind labels ------------------- */

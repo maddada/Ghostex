@@ -3,6 +3,7 @@ import { createDefaultSidebarAgentButtons } from '../shared/sidebar-agents';
 import { createDefaultSidebarCommandButtons } from '../shared/sidebar-commands';
 import { createDefaultSidebarGitState } from '../shared/sidebar-git';
 import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings, type ghostexSettings } from '../shared/ghostex-settings';
+import { normalizeSessionCardHoverButtons } from '../shared/session-card-hover-actions';
 import type {
   SidebarHydrateMessage,
   SidebarHudState,
@@ -41,7 +42,6 @@ export type SidebarStoryArgs = {
   isFocusModeActive: boolean;
   renameSessionOnDoubleClick: boolean;
   showCloseButtonOnSessionCards: boolean;
-  showSessionCloseContextMenuAction: boolean;
   showSessionCommandCopyActions: boolean;
   showSessionDetailsCopyAction: boolean;
   theme: SidebarTheme;
@@ -144,10 +144,12 @@ export function createSidebarStoryMessage(
 ): SidebarHydrateMessage {
   const baseStorySettings = isCombinedReferenceFixture(args.fixture)
     ? createCombinedStorySettings(currentSettings)
-    : args.showSessionCloseContextMenuAction || args.showSessionCommandCopyActions || args.showSessionDetailsCopyAction
+    : !args.showCloseButtonOnSessionCards || args.showSessionCommandCopyActions || args.showSessionDetailsCopyAction
       ? normalizeghostexSettings({
           ...DEFAULT_ghostex_SETTINGS,
-          showSessionCloseContextMenuAction: args.showSessionCloseContextMenuAction,
+          sessionCardHoverButtons: normalizeSessionCardHoverButtons(
+            args.showCloseButtonOnSessionCards ? ['close'] : []
+          ),
           showSessionCommandCopyActions: args.showSessionCommandCopyActions,
           showSessionDetailsCopyAction: args.showSessionDetailsCopyAction,
         })
@@ -211,7 +213,6 @@ export function createSidebarStoryMessage(
     createSessionOnSidebarDoubleClick:
       storySettings?.createSessionOnSidebarDoubleClick ?? args.createSessionOnSidebarDoubleClick,
     renameSessionOnDoubleClick: storySettings?.renameSessionOnDoubleClick ?? args.renameSessionOnDoubleClick,
-    showCloseButtonOnSessionCards: storySettings?.showCloseButtonOnSessionCards ?? args.showCloseButtonOnSessionCards,
     theme: args.theme,
     viewMode: args.viewMode,
     visibleCount: args.visibleCount,

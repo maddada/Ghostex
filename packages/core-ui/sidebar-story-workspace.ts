@@ -53,7 +53,6 @@ type SidebarStoryWorkspaceOptions = {
    * lifecycle answers and its own settle window on the first re-render.
    */
   recentProjects: SidebarHydrateMessage['hud']['recentProjects'];
-  showCloseButtonOnSessionCards: boolean;
   settings?: ghostexSettings;
   theme: SidebarHydrateMessage['hud']['theme'];
 };
@@ -146,7 +145,6 @@ export function createSidebarStoryWorkspace(message: SidebarHydrateMessage): Sid
       completionSound: message.hud.completionSound,
       debuggingMode: message.hud.debuggingMode,
       recentProjects: message.hud.recentProjects,
-      showCloseButtonOnSessionCards: message.hud.showCloseButtonOnSessionCards,
       settings: message.hud.settings,
       theme: message.hud.theme,
     },
@@ -265,7 +263,6 @@ export function createSidebarStoryMessage(
     activeGroup?.snapshot ?? workspace.snapshot.groups[0]?.snapshot,
     workspace.options.theme,
     workspace.options.agentManagerZoomPercent,
-    workspace.options.showCloseButtonOnSessionCards,
     workspace.options.debuggingMode,
     workspace.options.completionBellEnabled,
     workspace.options.completionSound,

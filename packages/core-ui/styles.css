@@ -577,7 +577,7 @@ body {
 .ghostex-session-chat-scope
   :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
     .ghostex-chat-expansion-rail
-  ):not(.ghostex-chat-file-change-card button),
+  ):not(.ghostex-chat-file-change-card button):not(.ghostex-chat-terminal-search-button),
 .ghostex-session-chat-popup
   :is(
     button,
@@ -5013,6 +5013,73 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
   min-width: 0;
   position: relative;
   width: max-content;
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+/*
+ * CDXC:Sessions 2026-09-12 WHY:
+ * On and off have to read at a glance across ten small icons, so the two states differ in fill,
+ * border AND opacity rather than in one subtle tint. `data-enabled` drives it instead of
+ * `aria-pressed` so the styling cannot depend on how the tooltip trigger merges its props.
+ */
+.ghostex-settings-shadcn .session-card-hover-actions-field-item {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--settings-hairline) 80%, transparent);
+  border-radius: var(--settings-radius-control) !important;
+  color: var(--muted-foreground);
+  cursor: grab;
+  display: inline-flex;
+  height: var(--settings-control-height);
+  justify-content: center;
+  opacity: 0.5;
+  padding: 0;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+  width: var(--settings-control-height);
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field-item:hover {
+  background: var(--settings-raised-hover);
+  color: var(--foreground);
+  opacity: 0.85;
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field-item[data-enabled='true'] {
+  background: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 30%, var(--settings-raised));
+  border-color: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 70%, transparent);
+  border-style: solid;
+  color: var(--foreground);
+  opacity: 1;
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field-item[data-enabled='true']:hover {
+  background: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 42%, var(--settings-raised));
+  opacity: 1;
+}
+
+/* The chevron is a divider, not an action, so it keeps a neutral fill even when it is on. */
+.ghostex-settings-shadcn .session-card-hover-actions-field-chevron[data-enabled='true'] {
+  background: var(--settings-raised-hover);
+  border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field-chevron[data-enabled='true']:hover {
+  background: color-mix(in srgb, var(--foreground) 12%, var(--settings-raised-hover));
+}
+
+.ghostex-settings-shadcn .session-card-hover-actions-field-item[data-dragging='true'] {
+  cursor: grabbing;
+  opacity: 0.55;
 }
 
 /*

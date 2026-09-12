@@ -1,4 +1,5 @@
 import type { SidebarActiveSessionsSortMode, SidebarSessionItem } from './session-grid-contract-sidebar';
+import { isSidebarSessionSnoozed } from './session-snooze';
 
 export type SessionIdsByGroup = Record<string, string[]>;
 
@@ -106,9 +107,13 @@ function orderSessionKindForDisplay(
   const draftSessionIds: string[] = [];
   const otherSessionIds: string[] = [];
   const parkedSessionIds: string[] = [];
+  const snoozedSessionIds: string[] = [];
+  const nowMs = Date.now();
   for (const sessionId of sessionIds) {
     const session = sessionsById[sessionId];
-    if (session?.isPinned === true) {
+    if (isSidebarSessionSnoozed(session, nowMs)) {
+      snoozedSessionIds.push(sessionId);
+    } else if (session?.isPinned === true) {
       pinnedSessionIds.push(sessionId);
     } else if (options.enableSessionParking && session?.isParked === true) {
       parkedSessionIds.push(sessionId);
@@ -130,6 +135,7 @@ function orderSessionKindForDisplay(
       ? sortSessionIdsByLastActivity(otherSessionIds, sessionsById)
       : otherSessionIds),
     ...parkedSessionIds,
+    ...snoozedSessionIds,
   ];
 }
 

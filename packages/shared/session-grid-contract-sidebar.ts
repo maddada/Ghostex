@@ -332,6 +332,7 @@ export type SidebarSessionItem = {
   kind?: 'browser' | 'workspace';
   sessionKind?: 'browser' | 'terminal';
   activity: 'idle' | 'working' | 'attention';
+  pendingQuestionCount?: number;
   activityLabel?: string;
   agentIcon?: SidebarAgentIcon;
   /** Canonical or configured agent name used by native agent-session controls. */
@@ -965,7 +966,6 @@ export type SidebarHudState = {
   settings?: ghostexSettings;
   createSessionOnSidebarDoubleClick: boolean;
   renameSessionOnDoubleClick: boolean;
-  showCloseButtonOnSessionCards: boolean;
   theme:
     | 'dark-1'
     | 'dark-2'

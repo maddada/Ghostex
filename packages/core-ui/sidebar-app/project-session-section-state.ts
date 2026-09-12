@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react';
 import type { SidebarSessionItem } from '../../shared/session-grid-contract';
+import { isSidebarSessionSnoozed } from '../../shared/session-snooze';
 
-export type ProjectSessionSection = 'browser' | 'pinned' | 'sessions' | 'parked';
+export type ProjectSessionSection = 'browser' | 'pinned' | 'sessions' | 'parked' | 'snoozed';
 export type ProjectSessionSectionCollapseState = Readonly<Record<ProjectSessionSection, boolean>>;
 export type ProjectSessionSectionCollapseStateById = Record<string, ProjectSessionSectionCollapseState>;
 
@@ -10,6 +11,7 @@ export const DEFAULT_PROJECT_SESSION_SECTION_COLLAPSE_STATE: ProjectSessionSecti
   pinned: false,
   sessions: false,
   parked: true,
+  snoozed: true,
 };
 
 /**
@@ -65,6 +67,14 @@ export function getProjectSessionSection(
 ): ProjectSessionSection {
   if (session?.kind === 'browser' || session?.sessionKind === 'browser') {
     return 'browser';
+  }
+  /*
+   * CDXC:Sessions 2026-09-12 WHY:
+   * Snoozed outranks parked and pinned because the wake time is the stronger statement about when the row matters; the flags stay on the row, so an expired snooze returns the session to Parked or Pinned as it was.
+   * Snoozed starts collapsed like Parked, and is not persisted across restarts for the same reason.
+   */
+  if (isSidebarSessionSnoozed(session)) {
+    return 'snoozed';
   }
   if (enableSessionParking && session?.isParked === true) {
     return 'parked';

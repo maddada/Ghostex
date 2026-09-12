@@ -24,10 +24,9 @@ export function getGroupSessionSummary(sessions: readonly SidebarSessionItem[]):
     if (session.activity === 'working') {
       hasWorking = true;
       workingCount += 1;
-      continue;
     }
 
-    if (session.activity === 'attention') {
+    if (session.activity === 'attention' || (session.pendingQuestionCount ?? 0) > 0) {
       hasAttention = true;
       attentionCount += 1;
     }

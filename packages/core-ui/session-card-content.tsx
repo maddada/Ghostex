@@ -1,9 +1,22 @@
 import {
+  IconAlarm,
+  IconAlarmOff,
+  IconArchive,
+  IconArchiveOff,
+  IconChevronLeft,
+  IconChevronRight,
   IconClock,
+  IconClockCancel,
+  IconClockX,
   IconLoader2,
   IconMessageCircle,
+  IconMoon,
+  IconNote,
   IconPencil,
   IconPin,
+  IconPinnedOff,
+  IconPlayerPlay,
+  IconTag,
   IconTerminal2,
   IconWorld,
   IconX,
@@ -16,6 +29,7 @@ import {
   useState,
   type CSSProperties,
   type FocusEventHandler,
+  type MouseEvent as ReactMouseEvent,
   type MouseEventHandler,
   type ReactElement,
   type ReactNode,
@@ -25,6 +39,7 @@ import { createPortal } from 'react-dom';
 import { TOOLTIP_MOTION_CLASS_NAME } from '../components/ui/tooltip-config';
 import { cn } from '@/packages/components/utils';
 import { DEFAULT_TERMINAL_SESSION_TITLE, type SidebarSessionItem } from '../shared/session-grid-contract';
+import { type SessionCardHoverAction } from '../shared/session-card-hover-actions';
 import { getSidebarAgentNameByIcon, type SidebarAgentIcon } from '../shared/sidebar-agents';
 import { AGENT_LOGOS, COLORED_AGENT_LOGOS } from './agent-logos';
 import {
@@ -96,14 +111,27 @@ type SessionTooltipStateInput = Partial<
   >
 >;
 
+/** A hover button: a configured action, or the chevron that reveals/hides the other actions. */
+export type SessionCardHoverButton = SessionCardHoverAction | 'expand' | 'collapse';
+
+export type SessionCardHoverActionState = {
+  isCloseAfterDoneArmed: boolean;
+  isParked: boolean;
+  isPinned: boolean;
+  isSleeping: boolean;
+  isSnoozed: boolean;
+};
+
 export type SessionCardContentProps = {
   aliasHeadingRef?: RefObject<HTMLDivElement | null>;
   hideHeaderAgentIcon?: boolean;
+  /** Hover buttons to draw in the trailing title slot, in display order; empty means none. */
+  hoverActions?: readonly SessionCardHoverButton[];
+  hoverActionState?: SessionCardHoverActionState;
   onDelayedSendClick?: () => void;
-  onClose?: () => void;
+  onHoverAction?: (action: SessionCardHoverButton, event: ReactMouseEvent<HTMLButtonElement>) => void;
   session: SidebarSessionItem;
   showDebugSessionNumbers: boolean;
-  showCloseButton: boolean;
   showLastActiveTime?: boolean;
   showLastInteractionTime?: boolean;
   trailingPrefix?: ReactNode;
@@ -113,10 +141,11 @@ export type SessionCardContentProps = {
 export function SessionCardContent({
   aliasHeadingRef,
   hideHeaderAgentIcon = false,
+  hoverActions = NO_HOVER_ACTIONS,
+  hoverActionState = INACTIVE_HOVER_ACTION_STATE,
   onDelayedSendClick,
-  onClose,
+  onHoverAction,
   session,
-  showCloseButton,
   showDebugSessionNumbers,
   showLastActiveTime = true,
   showLastInteractionTime = false,
@@ -229,16 +258,24 @@ export function SessionCardContent({
    * it aligns to the established right-side title affordance and can hide those
    * competing indicators as a single hover state.
    */
-  const canCloseFromCard = showCloseButton && Boolean(onClose) && timerTrailingLabel === undefined;
+  const canShowHoverActions = hoverActions.length > 0 && Boolean(onHoverAction) && timerTrailingLabel === undefined;
   const hasSessionHeadTrailing =
     Boolean(trailingPrefix) ||
     Boolean(trailingSuffix) ||
     Boolean(trailingTimeLabel) ||
     hasHeaderAgentIcon ||
-    canCloseFromCard;
+    canShowHoverActions;
 
   return (
-    <div className='session-head' data-title-full-width={String(shouldAllowFullWidthTitle)}>
+    <div
+      className='session-head'
+      data-title-full-width={String(shouldAllowFullWidthTitle)}
+      style={
+        canShowHoverActions
+          ? ({ '--session-card-hover-action-count': hoverActions.length } as CSSProperties)
+          : undefined
+      }
+    >
       {/**
        * CDXC:Sessions 2026-05-09-17:44
        * Previous Sessions rows use this shared sidebar title row but must not
@@ -269,25 +306,89 @@ export function SessionCardContent({
               showTerminalIcon={showTerminalSessionIcon}
             />
           ) : null}
-          {canCloseFromCard ? (
-            <button
-              aria-label='Close session'
-              className='session-card-close-button'
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onClose?.();
-              }}
-              type='button'
-            >
-              <IconX aria-hidden='true' size={14} stroke={1.8} />
-            </button>
+          {canShowHoverActions ? (
+            <div className='session-card-hover-actions'>
+              {hoverActions.map((action) => {
+                const { icon, label } = describeSessionCardHoverAction(action, hoverActionState);
+                return (
+                  <AppTooltip content={label} key={action}>
+                    <button
+                      aria-label={`${label} session`}
+                      className='session-card-hover-action'
+                      data-hover-action={action}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onHoverAction?.(action, event);
+                      }}
+                      type='button'
+                    >
+                      {icon}
+                    </button>
+                  </AppTooltip>
+                );
+              })}
+            </div>
           ) : null}
           {trailingSuffix}
         </div>
       ) : null}
     </div>
   );
+}
+
+const NO_HOVER_ACTIONS: readonly SessionCardHoverButton[] = [];
+const INACTIVE_HOVER_ACTION_STATE: SessionCardHoverActionState = {
+  isCloseAfterDoneArmed: false,
+  isParked: false,
+  isPinned: false,
+  isSleeping: false,
+  isSnoozed: false,
+};
+
+/**
+ * CDXC:Sessions 2026-09-12 DECISION:
+ * User: hover buttons are icons only; the tooltip names the action. A button on a pinned, parked or snoozed row shows the reverse action (Unpin, Unpark, Unsnooze) so one slot toggles the state.
+ */
+function describeSessionCardHoverAction(
+  action: SessionCardHoverButton,
+  state: SessionCardHoverActionState
+): { icon: ReactNode; label: string } {
+  const iconProps = { 'aria-hidden': true, size: 14, stroke: 1.8 } as const;
+  switch (action) {
+    case 'expand':
+      return { icon: <IconChevronLeft {...iconProps} />, label: 'More actions' };
+    case 'collapse':
+      return { icon: <IconChevronRight {...iconProps} />, label: 'Fewer actions' };
+    case 'rename':
+      return { icon: <IconPencil {...iconProps} />, label: 'Rename' };
+    case 'tag':
+      return { icon: <IconTag {...iconProps} />, label: 'Tag' };
+    case 'note':
+      return { icon: <IconNote {...iconProps} />, label: 'Note' };
+    case 'sleep':
+      return state.isSleeping
+        ? { icon: <IconPlayerPlay {...iconProps} />, label: 'Wake' }
+        : { icon: <IconMoon {...iconProps} />, label: 'Sleep' };
+    case 'closeAfterDone':
+      return state.isCloseAfterDoneArmed
+        ? { icon: <IconClockCancel {...iconProps} />, label: 'Cancel Close After Done' }
+        : { icon: <IconClockX {...iconProps} />, label: 'Close After Done' };
+    case 'pin':
+      return state.isPinned
+        ? { icon: <IconPinnedOff {...iconProps} />, label: 'Unpin' }
+        : { icon: <IconPin {...iconProps} />, label: 'Pin' };
+    case 'snooze':
+      return state.isSnoozed
+        ? { icon: <IconAlarmOff {...iconProps} />, label: 'Unsnooze' }
+        : { icon: <IconAlarm {...iconProps} />, label: 'Snooze' };
+    case 'park':
+      return state.isParked
+        ? { icon: <IconArchiveOff {...iconProps} />, label: 'Unpark' }
+        : { icon: <IconArchive {...iconProps} />, label: 'Park' };
+    case 'close':
+      return { icon: <IconX {...iconProps} />, label: 'Close' };
+  }
 }
 
 function getSessionCardTimerTrailingLabel(
@@ -369,6 +470,8 @@ export function getSessionCardTitleTooltip({
   session: Pick<
     SidebarSessionItem,
     | 'activityLabel'
+    | 'pendingQuestionCount'
+    | 'activity'
     | 'agentIcon'
     | 'agentSessionId'
     | 'alias'
@@ -463,6 +566,9 @@ export function getSessionCardTitleTooltip({
     showDebugSessionNumbers && sessionIdTooltipValue ? `ID: ${sessionIdTooltipValue}` : undefined;
   const agentSessionIdTooltip = getCapturedAgentSessionIdTooltipText(session, showDebugSessionNumbers);
   const tooltipMetadata = [
+    (session.pendingQuestionCount ?? 0) > 0
+      ? `${session.activity === 'working' ? 'Working · ' : ''}Answer requested (${session.pendingQuestionCount})`
+      : undefined,
     /*
      * CDXC:DelayedSend 2026-05-21-12:21:
      * Session-row hover tooltips must surface an active Delayed Send countdown
@@ -484,9 +590,7 @@ export function getSessionCardTitleTooltip({
     /*
      * CDXC:SessionNotes 2026-08-24:
      * The note is the reason the user left this session, so it reads directly
-     * under the title — above the state and provider lines. Any extra metadata
-     * makes the tooltip `always`, which is what puts it on sleeping rows too,
-     * the exact rows a "come back to this" note is written for.
+     * under the title — above the state and provider lines, including on sleeping rows.
      */
     getSessionNoteTooltipText(session),
     getSessionStateTooltipText(session, showDebugSessionNumbers || alwaysShowStateTooltip),
@@ -817,8 +921,6 @@ function getSessionStateTooltipLabel(session: SessionTooltipStateInput): string 
 }
 
 export function getSessionTitleTooltipOptions({
-  alwaysShowTitleTooltip,
-  headingText,
   titleTooltip,
 }: {
   alwaysShowTitleTooltip: boolean;
@@ -828,17 +930,13 @@ export function getSessionTitleTooltipOptions({
   tooltip?: string;
   tooltipWhen: 'always' | 'overflow';
 } {
-  const hasTooltipMetadata = titleTooltip !== headingText;
-  if (alwaysShowTitleTooltip || hasTooltipMetadata) {
-    return {
-      tooltip: titleTooltip,
-      tooltipWhen: 'always',
-    };
-  }
-
+  /**
+   * CDXC:Tooltips 2026-09-12 DECISION:
+   * User: session-card title tooltips must always show on hover, even when the session name is short and the visible title is not truncated.
+   */
   return {
-    tooltip: undefined,
-    tooltipWhen: 'overflow',
+    tooltip: titleTooltip,
+    tooltipWhen: 'always',
   };
 }
 

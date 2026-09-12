@@ -514,7 +514,6 @@ export function createGpuiSidebarHudState({
     settings,
     createSessionOnSidebarDoubleClick: settings.createSessionOnSidebarDoubleClick,
     renameSessionOnDoubleClick: settings.renameSessionOnDoubleClick,
-    showCloseButtonOnSessionCards: settings.showCloseButtonOnSessionCards,
     theme: resolveSidebarTheme(settings.sidebarTheme, 'dark'),
     viewMode: 'grid',
     visibleCount: GPUI_DEFAULT_VISIBLE_COUNT,

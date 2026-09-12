@@ -1381,9 +1381,7 @@ export class GpuiSidebarRuntime {
         await this.runSessionLifecycleCommand(message.sessionId, '/api/unsettleSession', {});
         return;
       case 'snoozeSession':
-        await this.runSessionLifecycleCommand(message.sessionId, '/api/snoozeSession', {
-          snoozedUntil: message.snoozedUntil,
-        });
+        await this.snoozeSession(message.sessionId, message.snoozedUntil);
         return;
       case 'unsnoozeSession':
         await this.runSessionLifecycleCommand(message.sessionId, '/api/unsnoozeSession', {});

@@ -160,7 +160,7 @@ export function createSidebarSpaceSessionSummaries({
   groupsById: SidebarProjectGroupLookup;
   resolveProjectId: (groupId: string) => string | undefined;
   sessionIdsByGroup: Readonly<Record<string, readonly string[] | undefined>>;
-  sessionsById: Readonly<Record<string, Pick<SidebarSessionItem, 'activity'> | undefined>>;
+  sessionsById: Readonly<Record<string, Pick<SidebarSessionItem, 'activity' | 'pendingQuestionCount'> | undefined>>;
   spacesState: SidebarSpacesState;
 }): Record<string, SidebarSpaceSessionSummary> {
   const orderedSpaces = spacesState.order.flatMap((spaceId) =>
@@ -189,7 +189,8 @@ export function createSidebarSpaceSessionSummaries({
       const activity = sessionsById[sessionId]?.activity;
       if (activity === 'working') {
         workingCount += 1;
-      } else if (activity === 'attention') {
+      }
+      if (activity === 'attention' || (sessionsById[sessionId]?.pendingQuestionCount ?? 0) > 0) {
         attentionCount += 1;
       }
     }

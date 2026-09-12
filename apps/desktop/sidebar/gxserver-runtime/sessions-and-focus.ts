@@ -120,6 +120,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
     flags: { isFavorite?: boolean; isParked?: boolean; isPinned?: boolean; sessionTag?: SidebarSessionTag | null }
   ): Promise<void>;
   setSessionParked(sessionId: string, parked: boolean): Promise<void>;
+  snoozeSession(sessionId: string, snoozedUntil: string): Promise<void>;
   openSessionNoteEditor(sessionId: string): void;
   saveSessionNote(sessionId: string, note: string): Promise<void>;
   runSessionLifecycleCommand(
@@ -129,7 +130,7 @@ export interface GpuiSidebarRuntimeSessionFocusMethods {
       '/api/settleSession' | '/api/snoozeSession' | '/api/unsettleSession' | '/api/unsnoozeSession'
     >,
     params: Record<string, unknown>
-  ): Promise<void>;
+  ): Promise<boolean>;
   syncSessionOrder(groupId: string, sessionIds: readonly string[]): Promise<void>;
   focusProjectId(projectId: string): void;
   focusBrowserTabProject(projectId: string): void;
@@ -1047,6 +1048,18 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     }
   },
 
+  /**
+   * CDXC:Sessions 2026-09-12 DECISION:
+   * User: a snoozed session is always asleep. The wake time is recorded by gxserver first, and the sleep follows only when the daemon accepted the snooze, so a refused snooze (a wake time in the past) leaves the session running.
+   */
+  async snoozeSession(this: GpuiSidebarRuntime, sessionId: string, snoozedUntil: string): Promise<void> {
+    const accepted = await this.runSessionLifecycleCommand(sessionId, '/api/snoozeSession', { snoozedUntil });
+    if (!accepted) {
+      return;
+    }
+    await this.setSessionSleeping(sessionId, true);
+  },
+
   /*
   CDXC:SessionNotes 2026-08-25:
   Open the note editor for a session, as the session row's context menu does.
@@ -1156,7 +1169,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       '/api/settleSession' | '/api/snoozeSession' | '/api/unsettleSession' | '/api/unsnoozeSession'
     >,
     params: Record<string, unknown>
-  ): Promise<void> {
+  ): Promise<boolean> {
     const remoteSession = parseGpuiRemotePresentationSessionId(sessionId);
     try {
       if (remoteSession) {
@@ -1165,21 +1178,23 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
           projectId: remoteSession.projectId,
           sessionId: remoteSession.sessionId,
         });
-        return;
+        return true;
       }
       const reference = parseGxserverPresentationProjectSessionId(sessionId);
       if (!reference || !this.client) {
-        return;
+        return false;
       }
       await this.client.rpc(path, {
         ...params,
         projectId: reference.projectId,
         sessionId: reference.sessionId,
       });
+      return true;
     } catch {
       this.postSidebarActionToast('warning', SESSION_LIFECYCLE_FAILURE_TITLES[path], {
         description: 'gxserver refused the change. The session may be working or waiting on you.',
       });
+      return false;
     }
   },
 

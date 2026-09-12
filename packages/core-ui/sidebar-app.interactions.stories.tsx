@@ -663,7 +663,7 @@ export const EmptySidebarDoubleClickEnabled: Story = {
 
 export const SessionCardActions: Story = {
   args: {
-    showSessionCloseContextMenuAction: true,
+    showCloseButtonOnSessionCards: false,
     showSessionCommandCopyActions: true,
     showSessionDetailsCopyAction: true,
   },

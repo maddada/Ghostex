@@ -31,7 +31,7 @@ Concept mapping:
 Lifecycle decisions documented at their rule:
 - Auto-settle is persisted here. gxserver serves
   GPUI, web, mobile, and the CLI, so one server answer beats four derivations.
-- Snooze expiry is NOT an eager clear (see `SNOOZE_WAKE_RETENTION_MS`).
+- Snooze expiry IS an eager clear since 2026-09-12 (see `SNOOZE_WAKE_RETENTION_MS`).
 - Snoozing does not clear a settle: the client partition already ranks snoozed
   above settled, and the decider leaves the settle untouched, so a woken
   session returns to whichever shelf it came from.
@@ -53,15 +53,14 @@ pub const SIDEBAR_V2_VERSION: &str = "v2";
 pub const SESSION_LIFECYCLE_SWEEP_INTERVAL_SECONDS: u64 = 60;
 
 /*
-A snooze is not cleared the moment it expires. The wake itself is derived —
-clients (and `packages/shared/sidebar-v2-lifecycle.ts`) stop classifying a session as
-snoozed as soon as `snoozedUntil` is in the past, to the millisecond, and the
-retained fields are what drive the "Woke" indicator until the user visits the
-row. Clearing at the boundary would erase that signal within one sweep. The
-server therefore only garbage-collects spent snooze state a day after the wake
-time, once the indicator can no longer be useful.
+CDXC:Sessions 2026-09-12 WHY:
+Snooze used to keep `snoozedUntil` for a day after the wake time so a Sidebar V2 "Woke" indicator could read it; that
+inbox never shipped its UI. The sidebar's Snoozed section now needs a presentation delta when the wake time passes,
+because nothing on the client re-partitions sections on a timer: the sweep clearing the spent snooze at the boundary
+is that delta. Clients still classify by the clock, so the row leaves the section at the wake time to the millisecond
+and the sweep's minute of slack only affects the stored fields.
 */
-pub const SNOOZE_WAKE_RETENTION_MS: i64 = DAY_MS;
+pub const SNOOZE_WAKE_RETENTION_MS: i64 = 0;
 
 /// Upper bound on lifecycle writes per sweep pass. The first pass after an
 /// upgrade can find a large backlog of stale sessions; spreading it over passes
@@ -234,11 +233,14 @@ pub fn is_snoozed_by_clock(lifecycle: &SessionLifecycleFields, now_ms: i64) -> b
 }
 
 /*
-Guards. These are the server-side twins of `canSettleSidebarV2Session` /
-`canSnoozeSidebarV2Session`: a stale or raced client must not park work that is
-blocked on the user (attention) or in motion (working) behind a settle. Snooze
-only affects visibility and never pauses the agent, so a WORKING session is
-snoozable — only blocked-on-you work is refused.
+Guards. These are the server-side twins of `canSettleSidebarV2Session`: a stale
+or raced client must not park work that is blocked on the user (attention) or
+in motion (working) behind a settle.
+
+CDXC:Sessions 2026-09-12 DECISION:
+User: Snooze defers any session for 1 hour, 3 hours, tomorrow or next week and puts it to sleep. A session waiting on
+the user is exactly what people snooze ("deal with this tomorrow"), so snooze has no activity guard at all; only the
+wake time is validated.
 */
 fn reject_when_settle_is_blocked(
     session: &Value,
@@ -254,19 +256,6 @@ fn reject_when_settle_is_blocked(
         ))),
         _ => Ok(()),
     }
-}
-
-fn reject_when_snooze_is_blocked(
-    session: &Value,
-    now_iso: &str,
-    session_ref: &str,
-) -> Result<(), DomainStateError> {
-    if session_activity(session, now_iso) == "attention" {
-        return Err(DomainStateError::bad_request(format!(
-            "Session {session_ref} is waiting on you and cannot be snoozed."
-        )));
-    }
-    Ok(())
 }
 
 fn require_session(
@@ -376,8 +365,6 @@ pub fn snooze_session(
     now_iso: &str,
 ) -> Result<SessionLifecycleOutcome, DomainStateError> {
     let session = require_session(repository, project_id, session_id)?;
-    let session_ref = format!("{project_id}/{session_id}");
-    reject_when_snooze_is_blocked(&session, now_iso, &session_ref)?;
     let now_ms = parse_iso_ms(now_iso).ok_or_else(|| {
         DomainStateError::corrupt_state(format!("Invalid gxserver timestamp: {now_iso}."))
     })?;
@@ -766,15 +753,15 @@ mod tests {
     }
 
     #[test]
-    fn snooze_rejects_attention_but_allows_working() {
+    fn snooze_allows_attention_and_working_sessions() {
         let handle = test_db();
         let repository = repository(&handle);
         let project_id = create_project(&repository);
 
         let (project_id, attention_id) = create_session(&repository, &project_id, "attention", NOW);
-        let error = snooze_session(&repository, &project_id, &attention_id, &ahead(1.0), NOW)
-            .expect_err("blocked snooze");
-        assert_eq!(error.code, "badRequest");
+        let outcome = snooze_session(&repository, &project_id, &attention_id, &ahead(1.0), NOW)
+            .expect("attention sessions are snoozable");
+        assert!(outcome.changed);
 
         let (project_id, working_id) = create_session(&repository, &project_id, "working", NOW);
         let outcome = snooze_session(&repository, &project_id, &working_id, &ahead(1.0), NOW)
@@ -1040,7 +1027,7 @@ mod tests {
     }
 
     #[test]
-    fn sweep_collects_spent_snooze_state_only_after_the_woke_window() {
+    fn sweep_clears_spent_snooze_state_at_the_wake_time() {
         let handle = test_db();
         let repository = repository(&handle);
         let project_id = create_project(&repository);
@@ -1071,11 +1058,10 @@ mod tests {
         )
         .expect("sweep");
 
-        assert!(
-            lifecycle_of(&repository, &project_id, &just_woke_id)
-                .snoozed_until
-                .is_some(),
-            "a freshly woken session keeps its Woke signal"
+        assert_eq!(
+            lifecycle_of(&repository, &project_id, &just_woke_id).snoozed_until,
+            None,
+            "a session past its wake time is cleared on the next sweep so clients get a delta"
         );
         assert_eq!(
             lifecycle_of(&repository, &project_id, &long_woke_id).snoozed_until,

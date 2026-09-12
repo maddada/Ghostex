@@ -302,7 +302,7 @@ describe('session surface titles', () => {
 
 describe('sidebar HUD state', () => {
   test('should expose the session card chrome settings', () => {
-    const hud = createSidebarHudState(createDefaultSessionGridSnapshot(), 'dark-green', 95, true, false, true, 'glass');
+    const hud = createSidebarHudState(createDefaultSessionGridSnapshot(), 'dark-green', 95, false, true, 'glass');
 
     expect(hud.completionBellEnabled).toBe(true);
     expect(hud.completionSound).toBe('glass');
@@ -310,7 +310,6 @@ describe('sidebar HUD state', () => {
     expect(hud.agentManagerZoomPercent).toBe(95);
     expect(hud.createSessionOnSidebarDoubleClick).toBe(false);
     expect(hud.renameSessionOnDoubleClick).toBe(false);
-    expect(hud.showCloseButtonOnSessionCards).toBe(true);
     expect(hud.activeSessionsSortMode).toBe('lastActivity');
     expect(hud.isFocusModeActive).toBe(false);
   });
@@ -320,7 +319,6 @@ describe('sidebar HUD state', () => {
       createDefaultSessionGridSnapshot(),
       'dark-green',
       100,
-      false,
       false,
       false,
       'ping',
@@ -340,7 +338,6 @@ describe('sidebar HUD state', () => {
       createDefaultSessionGridSnapshot(),
       'dark-green',
       100,
-      false,
       false,
       false,
       'ping',

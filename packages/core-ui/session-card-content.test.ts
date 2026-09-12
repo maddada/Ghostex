@@ -66,7 +66,7 @@ describe('getSessionTitleTooltipOptions', () => {
     });
   });
 
-  test('should keep plain title-only tooltips overflow-triggered by default', () => {
+  test('should always show plain title-only tooltips even when the title is not truncated', () => {
     expect(
       getSessionTitleTooltipOptions({
         alwaysShowTitleTooltip: false,
@@ -74,8 +74,8 @@ describe('getSessionTitleTooltipOptions', () => {
         titleTooltip: 'A very long session title',
       })
     ).toEqual({
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'A very long session title',
+      tooltipWhen: 'always',
     });
   });
 });
@@ -166,8 +166,8 @@ describe('getSessionCardTitleTooltip', () => {
       })
     ).toEqual({
       headingText: 'Lost actions after migration',
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'Lost actions after migration',
+      tooltipWhen: 'always',
     });
   });
 
@@ -193,8 +193,8 @@ describe('getSessionCardTitleTooltip', () => {
       })
     ).toEqual({
       headingText: 'Fix restore',
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'Fix restore',
+      tooltipWhen: 'always',
     });
   });
 
@@ -353,8 +353,8 @@ describe('getSessionCardTitleTooltip', () => {
       })
     ).toEqual({
       headingText: 'A very long session title',
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'A very long session title',
+      tooltipWhen: 'always',
     });
   });
 
@@ -447,8 +447,8 @@ describe('getSessionCardTitleTooltip', () => {
       })
     ).toEqual({
       headingText: 'Fix restore',
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'Fix restore',
+      tooltipWhen: 'always',
     });
   });
 
@@ -470,8 +470,8 @@ describe('getSessionCardTitleTooltip', () => {
       })
     ).toEqual({
       headingText: 'Fix restore',
-      tooltip: undefined,
-      tooltipWhen: 'overflow',
+      tooltip: 'Fix restore',
+      tooltipWhen: 'always',
     });
 
     expect(
@@ -885,7 +885,6 @@ describe('SessionCardContent', () => {
           sessionKind: 'terminal',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
         showLastInteractionTime: false,
       })
@@ -915,7 +914,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
         showLastActiveTime: false,
       })
@@ -951,7 +949,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
       })
     );
@@ -984,7 +981,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
         showLastActiveTime: false,
       })
@@ -1015,7 +1011,8 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: true,
+        hoverActions: ['close'],
+        onHoverAction: () => {},
         showDebugSessionNumbers: false,
         showLastActiveTime: false,
       })
@@ -1025,7 +1022,7 @@ describe('SessionCardContent', () => {
     expect(markup).toContain('data-default-trailing-display="time"');
     expect(markup).toContain('>03:00</div>');
     expect(markup).not.toContain('session-header-agent-icon');
-    expect(markup).not.toContain('session-card-close-button');
+    expect(markup).not.toContain('session-card-hover-action');
   });
 
   test('should show active close-after-done countdown in the trailing timestamp slot', () => {
@@ -1047,7 +1044,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
       })
     );
@@ -1076,7 +1072,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
         showLastInteractionTime: true,
       })
@@ -1105,7 +1100,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
       })
     );
@@ -1132,7 +1126,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
       })
     );
@@ -1160,7 +1153,6 @@ describe('SessionCardContent', () => {
           sessionId: 'session-1',
           shortcutLabel: '1',
         },
-        showCloseButton: false,
         showDebugSessionNumbers: false,
       })
     );
@@ -1189,13 +1181,14 @@ describe('SessionCardContent', () => {
           sessionKind: 'terminal',
           shortcutLabel: '1',
         },
-        showCloseButton: true,
+        hoverActions: ['close'],
+        onHoverAction: () => {},
         showDebugSessionNumbers: false,
       })
     );
 
     expect(markup).toContain('aria-label="Close session"');
-    expect(markup).toContain('session-card-close-button');
+    expect(markup).toContain('session-card-hover-action');
   });
 });
 

@@ -165,8 +165,6 @@ function createCurrentProjectsSidebarMessage(
       recentProjects: createCurrentRecentProjects(projects),
       renameSessionOnDoubleClick: currentSettings?.renameSessionOnDoubleClick ?? args.renameSessionOnDoubleClick,
       settings: currentSettings,
-      showCloseButtonOnSessionCards:
-        currentSettings?.showCloseButtonOnSessionCards ?? args.showCloseButtonOnSessionCards,
       theme,
       viewMode: args.viewMode,
       visibleCount,

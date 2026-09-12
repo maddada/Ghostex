@@ -135,7 +135,6 @@ export function createInitialSidebarStoreDataState(): SidebarStoreDataState {
       settings: DEFAULT_ghostex_SETTINGS,
       createSessionOnSidebarDoubleClick: false,
       renameSessionOnDoubleClick: false,
-      showCloseButtonOnSessionCards: DEFAULT_ghostex_SETTINGS.showCloseButtonOnSessionCards,
       theme: getInitialSidebarTheme(),
       viewMode: 'grid',
       visibleCount: 1,

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { hashSidebarCollapseDebugId, summarizeSidebarCollapseDebugGroupIds } from '../sidebar-collapse-state-debug';
-import type { ProjectSessionListCollapsedState } from '../project-session-list-toggle';
+import type { ProjectSessionListExpandedState } from '../project-session-list-toggle';
 
 export type SidebarCollapseStateLogger = (
   event: string,
@@ -14,7 +14,8 @@ export type SidebarCollapseActionsOptions = {
   postSidebarCollapseStateLog: SidebarCollapseStateLogger;
   setCollapsedGroupsById: Dispatch<SetStateAction<Record<string, true>>>;
   setCollapsedProjectCollectionsByKey: Dispatch<SetStateAction<Record<string, true>>>;
-  setCollapsedProjectSessionListsById: Dispatch<SetStateAction<ProjectSessionListCollapsedState>>;
+  setExpandedProjectSessionListsById: Dispatch<SetStateAction<ProjectSessionListExpandedState>>;
+  setExpandedSessionCardHoverActionsById: Dispatch<SetStateAction<Record<string, true>>>;
 };
 
 /*
@@ -30,7 +31,8 @@ export function useSidebarCollapseActions({
   postSidebarCollapseStateLog,
   setCollapsedGroupsById,
   setCollapsedProjectCollectionsByKey,
-  setCollapsedProjectSessionListsById,
+  setExpandedProjectSessionListsById,
+  setExpandedSessionCardHoverActionsById,
 }: SidebarCollapseActionsOptions) {
   const setGroupCollapsed = (groupId: string, collapsed: boolean) => {
     const wasCollapsed = collapsedGroupsById[groupId] === true;
@@ -120,9 +122,23 @@ export function useSidebarCollapseActions({
     });
   };
 
-  const setProjectSessionListCollapsed = (projectId: string, collapsed: boolean) => {
-    setCollapsedProjectSessionListsById((previous) => {
-      if (collapsed) {
+  const setProjectSessionListExpanded = (projectId: string, expanded: boolean) => {
+    setExpandedProjectSessionListsById((previous) => {
+      if (expanded) {
+        return previous[projectId] ? previous : { ...previous, [projectId]: true };
+      }
+      if (!previous[projectId]) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[projectId];
+      return next;
+    });
+  };
+
+  const setSessionCardHoverActionsExpanded = (projectId: string, expanded: boolean) => {
+    setExpandedSessionCardHoverActionsById((previous) => {
+      if (expanded) {
         return previous[projectId] ? previous : { ...previous, [projectId]: true };
       }
       if (!previous[projectId]) {
@@ -138,6 +154,7 @@ export function useSidebarCollapseActions({
     setGroupCollapsed,
     setGroupsCollapsed,
     setProjectCollectionCollapsed,
-    setProjectSessionListCollapsed,
+    setProjectSessionListExpanded,
+    setSessionCardHoverActionsExpanded,
   };
 }

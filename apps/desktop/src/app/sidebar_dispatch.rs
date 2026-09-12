@@ -2143,10 +2143,15 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn update_sidebar_cef_surface_visibility(&mut self, cx: &mut gpui::Context<Self>) {
-        self.update_sidebar_reveal(false, cx);
+        self.update_sidebar_reveal(false, false, cx);
     }
 
-    pub(crate) fn update_sidebar_reveal(&mut self, requested: bool, cx: &mut gpui::Context<Self>) {
+    pub(crate) fn update_sidebar_reveal(
+        &mut self,
+        requested: bool,
+        keep_under_pointer: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
         #[cfg(target_os = "macos")]
         if self.companion_reveal.is_some() {
             if requested {
@@ -2159,7 +2164,7 @@ impl GhostexGpuiApp {
             }
         }
         #[cfg(not(target_os = "macos"))]
-        let _ = requested;
+        let _ = (requested, keep_under_pointer);
         /*
         CDXC:Sidebar 2026-07-05:
         Sidebar collapse still removes the sidebar and divider from normal GPUI layout on the next render, but the native CEF child view must hide/show immediately at the toggle boundary. This keeps the titlebar button visually instant without adding overlays, zero-width fallbacks, hit-test rerouting, or persisting a collapsed width.
@@ -2176,6 +2181,7 @@ impl GhostexGpuiApp {
                         self.active_mode.is_project_editor_mode()
                             && !self.project_editor_shell.left_companion_visible,
                         requested,
+                        keep_under_pointer,
                     )
                 }
                 #[cfg(not(target_os = "macos"))]

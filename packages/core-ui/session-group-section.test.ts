@@ -516,13 +516,13 @@ describe('getSidebarSessionGapContextMenuTarget', () => {
 });
 
 describe('reference sidebar group spacing styles', () => {
-  test('keeps project headers normal-flow for fast sidebar scrolling', () => {
+  test('pins project headers with a flat background and no gradient geometry', () => {
     /*
-     * CDXC:Sidebar 2026-06-30-01:59:
-     * Sidebar scrolling must prioritize throughput over sticky project context.
-     * Keep project headers in normal flow and do not keep the fixed-gradient
-     * geometry observer or sticky background contract that made scroll paint
-     * compositor-bound.
+     * CDXC:Projects 2026-09-12 DECISION:
+     * User: project headers stick to the top of the sidebar scroller. The
+     * 2026-06-30 fixed-gradient geometry observer and matched-gradient header
+     * backgrounds that made scroll paint compositor-bound must not return with
+     * them: the pinned header paints the flat app background token only.
      */
     const projectHeaderStart = sessionGroupStylesSource.indexOf(
       ".sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'] .group-head {"
@@ -530,8 +530,9 @@ describe('reference sidebar group spacing styles', () => {
     const projectHeaderSource = sessionGroupStylesSource.slice(projectHeaderStart, projectHeaderStart + 5200);
 
     expect(projectHeaderStart).toBeGreaterThan(-1);
-    expect(projectHeaderSource).toContain('position: relative;');
-    expect(projectHeaderSource).not.toContain('position: sticky;');
+    expect(projectHeaderSource).toContain('position: sticky;');
+    expect(projectHeaderSource).toContain('top: var(--sidebar-pinned-chrome-top, 0px);');
+    expect(projectHeaderSource).toContain('background: var(--app-background);');
     expect(projectHeaderSource).not.toContain('background-attachment:');
     expect(projectHeaderSource).not.toContain('background-position:');
     expect(projectHeaderSource).not.toContain('background-size:');
@@ -548,79 +549,41 @@ describe('reference sidebar group spacing styles', () => {
     expect(sessionGroupStylesSource).not.toContain('clip-path: inset(var(--reference-project');
   });
 
-  test('does not force the project to the top when Show less is selected', () => {
+  test('does not force the project to the top when the list mode changes', () => {
     /*
      * CDXC:Projects 2026-06-25-22:28:
-     * The project session-list toggle should preserve the outer sidebar scroll
-     * viewport. A local Show less state change must not call scrollIntoView and
+     * The Compact / Full toggle should preserve the outer sidebar scroll
+     * viewport. A local list-mode change must not call scrollIntoView and
      * snap the project header to the top of the sidebar.
      */
-    const toggleStart = sessionGroupSectionSource.indexOf('const toggleProjectSessionListCollapsed = () => {');
+    const toggleStart = sessionGroupSectionSource.indexOf('const toggleProjectSessionListExpanded = () => {');
     const toggleSource = sessionGroupSectionSource.slice(toggleStart, toggleStart + 1200);
 
     expect(toggleStart).toBeGreaterThan(-1);
-    expect(toggleSource).toContain('onProjectSessionListCollapsedChange?.(');
+    expect(toggleSource).toContain('onProjectSessionListExpandedChange?.(');
     expect(toggleSource).not.toContain('scrollIntoView');
   });
 
-  test('keeps expanded project session lists as plain bounded scroll surfaces', () => {
+  test('keeps project bodies in normal flow with no inner scroller', () => {
     /*
-     * CDXC:Projects 2026-06-25-12:20:
-     * The Show more state should keep rendering all project sessions, but the
-     * expanded body must become a bounded inner scroll area using plain vertical
-     * overflow.
-     *
-     * CDXC:Projects 2026-06-29-17:53:
-     * Inner project scrolling should chain to the main sidebar when the nested
-     * list reaches an edge, so this rule must not contain overscroll.
-     *
-     * CDXC:Sidebar 2026-06-30-01:59:
-     * The fast sidebar path removes per-scroll glow state from expanded project
-     * bodies.
-     *
-     * CDXC:Sidebar 2026-09-09 DECISION:
-     * User: the expanded inner scroller wears the chat transcript's scroll-edge
-     * fade (the shadcn scroll-fade-y utility), not the sidebar's snap-in
-     * vertical-scroll-fade-mask, and only while the body is expanded and
-     * scrollable.
+     * CDXC:Projects 2026-09-12 DECISION:
+     * User: a project list is Compact (first N rows plus a "Show all" row) or
+     * Full (every row at natural height); the sidebar is the only scroller.
+     * The bounded inner project scroller, its wheel handoff, drag lock,
+     * scrollbar, and edge fade must not come back.
      */
-    expect(sessionGroupSectionSource).toContain('shouldScrollExpandedProjectSessionList');
-    expect(sessionGroupSectionSource).toContain('getExpandedProjectSessionListScrollHeight');
-    expect(sessionGroupSectionSource).toContain(
-      'const projectSessionListRenderedSessionIdsKey = shouldClipProjectSessionList'
-    );
-    expect(sessionGroupSectionSource).not.toContain('setExpandedProjectSessionListScrollHeight');
-    expect(sessionGroupSectionSource).not.toContain('projectSessionListScrollBoundarySessionId');
-    expect(sessionGroupSectionSource).not.toContain('vertical-scroll-fade-mask');
-    expect(sessionGroupSectionSource).toContain(
-      "shouldScrollExpandedProjectSessionList && !isGroupSessionsBodyVisuallyCollapsed ? ' scroll-fade-y' : ''"
-    );
+    expect(sessionGroupSectionSource).toContain('const isProjectSessionListCompact =');
+    expect(sessionGroupSectionSource).not.toContain('shouldScrollExpandedProjectSessionList');
+    expect(sessionGroupSectionSource).not.toContain('getExpandedProjectSessionListScrollHeight');
+    expect(sessionGroupSectionSource).not.toContain('handleSessionsShellWheel');
+    expect(sessionGroupSectionSource).not.toContain('data-project-session-list-scrollable');
+    expect(sessionGroupSectionSource).not.toContain("' scroll-fade-y'");
     expect(sessionGroupSectionSource).not.toContain('data-scroll-glow');
-    expect(sessionGroupSectionSource).toContain(
-      'data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}'
-    );
-
-    /*
-     * CDXC:Sidebar 2026-08-19:
-     * The bounded inner scroll surface is scoped to the expanded body, so the
-     * collapsed rule's max-height is not overridden by a later rule at the same
-     * specificity. Match that exact selector; the unscoped prefix also appears
-     * on the drag-lock and ::-webkit-scrollbar rules below it.
-     */
-    const scrollableRuleStart = groupPanelStylesSource.indexOf(
-      ".group-sessions-shell[data-project-session-list-scrollable='true'][data-collapsed='false'] {"
-    );
-    const scrollableRuleEnd = groupPanelStylesSource.indexOf('\n}\n', scrollableRuleStart);
-    const scrollableRuleSource = groupPanelStylesSource.slice(scrollableRuleStart, scrollableRuleEnd);
-
-    expect(scrollableRuleStart).toBeGreaterThan(-1);
-    expect(scrollableRuleEnd).toBeGreaterThan(scrollableRuleStart);
-    expect(scrollableRuleSource).toContain('overflow-x: hidden;');
-    expect(scrollableRuleSource).toContain('overflow-y: auto;');
-    expect(scrollableRuleSource).toContain('overscroll-behavior: none;');
-    expect(scrollableRuleSource).not.toContain('--edge-fade-distance:');
-    expect(groupPanelStylesSource).not.toContain('--top-fade: var(--edge-fade-distance);');
-    expect(groupPanelStylesSource).not.toContain('--bottom-fade: var(--edge-fade-distance);');
+    expect(sessionGroupSectionSource).not.toContain('vertical-scroll-fade-mask');
+    expect(groupPanelStylesSource).not.toContain('data-project-session-list-scrollable');
+    expect(groupPanelStylesSource).not.toContain('data-project-session-list-clipped');
+    expect(groupPanelStylesSource).not.toContain('--project-session-list-scroll-height');
+    expect(groupPanelStylesSource).not.toContain('--edge-fade-distance:');
   });
 
   test('does not slice below-session arrays in the project row render loop', () => {

@@ -1872,12 +1872,10 @@ section.project-collection.project-collection-drag-ghost {
    * each project header so adjacent headers keep their scan spacing without
    * leaving blank context-menu space between buttons.
    *
-   * CDXC:Sidebar 2026-06-30-01:59:
-   * The sidebar must favor scroll throughput over sticky project context. Keep
-   * project headers in normal document flow and do not paint a fixed or matched
-   * gradient background on each row, because sticky headers plus scroll masks
-   * made the project list compositor-bound while scrolling.
+   * CDXC:Projects 2026-09-12 DECISION:
+   * User: project headers stick to the top of the sidebar scroller while the project's rows scroll under them, so a long Full-mode project keeps its name and actions in view. This supersedes the 2026-06-30 removal of sticky headers, which was made for scroll throughput: that version painted a matched gradient on every header and observed geometry from JS. This one paints the flat app background token only, like the pinned Space row, and adds no JS. The header pins below the pinned chrome (--sidebar-pinned-chrome-top, group-panels.css) and above session rows and drop surfaces.
    */
+  background: var(--app-background);
   border-radius: 0;
   box-sizing: border-box;
   margin-left: calc(-1 * var(--reference-sidebar-scroll-row-bleed-left, 7px));
@@ -1886,7 +1884,9 @@ section.project-collection.project-collection-drag-ghost {
   padding-left: calc(6px + var(--reference-sidebar-scroll-row-bleed-left, 7px));
   padding-right: calc(10px + var(--reference-sidebar-scroll-row-bleed-right, 0px));
   padding-top: 5.5px;
-  position: relative;
+  position: sticky;
+  top: var(--sidebar-pinned-chrome-top, 0px);
+  z-index: 8;
 }
 
 .sidebar-reference-layout[data-reference-sidebar='true'] .group[data-project-group='true'][data-dragging='true'] {

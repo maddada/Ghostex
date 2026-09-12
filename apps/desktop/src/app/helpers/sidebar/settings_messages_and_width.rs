@@ -189,7 +189,6 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
             "settings": settings,
             "createSessionOnSidebarDoubleClick": false,
             "renameSessionOnDoubleClick": false,
-            "showCloseButtonOnSessionCards": true,
             "theme": theme,
             "viewMode": "grid",
             "visibleCount": 1,
@@ -240,7 +239,18 @@ pub(crate) fn gpui_session_chat_theme_from_settings(
         .and_then(serde_json::Value::as_str)
     {
         Some("light") => "light",
-        _ => "dark",
+        Some("dark") => "dark",
+        _ => "system",
+    }
+}
+
+pub(crate) fn gpui_session_chat_uses_light_theme(
+    settings: &serde_json::Map<String, serde_json::Value>,
+) -> bool {
+    match gpui_session_chat_theme_from_settings(settings) {
+        "light" => true,
+        "system" => cef::system_page_color_scheme() == Some("light"),
+        _ => false,
     }
 }
 

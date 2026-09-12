@@ -29,12 +29,6 @@ export function createSidebarHudState(
   snapshot: SessionGridSnapshot,
   theme: SidebarTheme = 'dark-blue',
   agentManagerZoomPercent = DEFAULT_AGENT_MANAGER_ZOOM_PERCENT,
-  /**
-   * CDXC:Sessions 2026-05-09-17:00
-   * Fresh sidebar HUD snapshots default close-on-hover to enabled so normal
-   * project and chat session cards match the Settings default.
-   */
-  showCloseButtonOnSessionCards = true,
   debuggingMode = false,
   completionBellEnabled = false,
   completionSound: CompletionSoundSetting = DEFAULT_COMPLETION_SOUND,
@@ -82,7 +76,6 @@ export function createSidebarHudState(
     recentProjects: [],
     createSessionOnSidebarDoubleClick,
     renameSessionOnDoubleClick,
-    showCloseButtonOnSessionCards,
     theme,
     viewMode: snapshot.viewMode,
     visibleCount: snapshot.visibleCount,

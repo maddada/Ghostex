@@ -1,3 +1,4 @@
+import { SessionQuestionIndicator } from './session-question-indicator';
 import {
   IconAlertTriangle,
   IconCaretRightFilled,
@@ -12,6 +13,7 @@ import {
   IconEyeOff,
   IconGitBranch,
   IconGitPullRequest,
+  IconHistory,
   IconLink,
   IconMessageCircle,
   IconMoon,
@@ -43,7 +45,6 @@ import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type WheelEvent as ReactWheelEvent,
 } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { AppTooltip } from './app-tooltip';
@@ -95,13 +96,9 @@ import {
 } from './sidebar-app/project-session-section-state';
 import { useSidebarCollapsiblePresence } from './sidebar-collapse-animation';
 import type { WebviewApi } from './webview-api';
-import { openAppModal } from './app-modal-host-bridge';
-import {
-  getExpandedProjectSessionListScrollHeight,
-  getProjectSessionListCollapsedHeight,
-  getVisibleProjectSessionIds,
-  type ProjectSessionListCollapsedState,
-} from './project-session-list-toggle';
+import { openAppModal, openQuickAccess } from './app-modal-host-bridge';
+import { getQuickAccessSessionProjectId } from './quick-access-session-scope';
+import { getVisibleProjectSessionIds, type ProjectSessionListExpandedState } from './project-session-list-toggle';
 import {
   DEFAULT_WORKSPACE_THEME_COLOR,
   normalizeWorkspaceThemeColor,
@@ -488,7 +485,7 @@ export type SessionGroupSectionProps = {
   onFocusRequested?: (groupId: string, sessionId: string) => void;
   onCreateProjectCollection?: (projectId: string) => void;
   onMoveProjectToCollection?: (projectId: string, collectionId: string | undefined) => void;
-  onProjectSessionListCollapsedChange?: (projectId: string, collapsed: boolean) => void;
+  onProjectSessionListExpandedChange?: (projectId: string, expanded: boolean) => void;
   onProjectSessionSectionCollapsedChange: (
     projectId: string,
     section: ProjectSessionSection,
@@ -523,7 +520,10 @@ export type SessionGroupSectionProps = {
   projectHeaderActions?: 'all' | 'terminal-only';
   projectCollectionId?: string;
   projectCollectionOptions?: readonly { collectionId: string; color: string; title: string }[];
-  projectSessionListCollapsedState?: Readonly<ProjectSessionListCollapsedState>;
+  projectSessionListExpandedState?: Readonly<ProjectSessionListExpandedState>;
+  /** Projects whose cards show the full hover-button row (see the collapse chevron decision). */
+  sessionCardHoverActionsExpandedById?: Readonly<Record<string, true>>;
+  onSessionCardHoverActionsExpandedChange?: (projectId: string, expanded: boolean) => void;
   sessionTagListItems?: readonly SidebarSessionTagListItem[];
   showHeaderActions?: boolean;
   showSessionDropPositionIndicators?: boolean;
@@ -712,7 +712,7 @@ export function SessionGroupSection({
   onFocusRequested,
   onCreateProjectCollection,
   onMoveProjectToCollection,
-  onProjectSessionListCollapsedChange,
+  onProjectSessionListExpandedChange,
   onProjectSessionSectionCollapsedChange,
   projectSessionSectionCollapseStateById,
   onToggleSpaceMembership,
@@ -729,7 +729,9 @@ export function SessionGroupSection({
   projectHeaderActions = 'all',
   projectCollectionId,
   projectCollectionOptions = [],
-  projectSessionListCollapsedState = {},
+  projectSessionListExpandedState = {},
+  sessionCardHoverActionsExpandedById = {},
+  onSessionCardHoverActionsExpandedChange,
   sessionDropIndicator,
   sessionDraggingDisabled = false,
   sessionTagListItems,
@@ -817,8 +819,7 @@ export function SessionGroupSection({
   const [isEditing, setIsEditing] = useState(false);
   const [openControlMenu, setOpenControlMenu] = useState<GroupControlMenu>();
   const [primaryProjectAgentLauncherId, setPrimaryProjectAgentLauncherId] = useState(readPrimaryAgentLauncherId);
-  const [projectSessionListCollapsedHeight, setProjectSessionListCollapsedHeight] = useState<number>();
-  const { collapsibleStyle, contentRef, setContentElement } = useCollapsibleHeight<HTMLDivElement>();
+  const { collapsibleStyle, setContentElement } = useCollapsibleHeight<HTMLDivElement>();
   const menuRef = useRef<HTMLDivElement>(null);
   const controlMenuRef = useRef<HTMLDivElement>(null);
   const projectAgentButtonRef = useRef<HTMLButtonElement>(null);
@@ -827,38 +828,6 @@ export function SessionGroupSection({
   const groupSectionRef = useRef<HTMLElement | null>(null);
   const sessionsShellRef = useRef<HTMLDivElement | null>(null);
   const debugInstanceIdRef = useRef(createSessionGroupDebugInstanceId());
-
-  /*
-   * CDXC:Sidebar 2026-07-23:
-   * Boundary scroll handoff for the inner project session scroller. Both this
-   * shell and the main sidebar scroller use `overscroll-behavior: none` (no
-   * rubber-banding per explicit user request), but `none` also kills native
-   * scroll chaining, and CSS cannot express "chain but don't bounce". So when
-   * a wheel gesture hits this scroller's top or bottom edge, hand the delta to
-   * the enclosing `.session-groups-content` sidebar scroller manually. No
-   * preventDefault needed: at the boundary the browser's default action is
-   * already nothing.
-   */
-  const handleSessionsShellWheel = useCallback((event: ReactWheelEvent<HTMLDivElement>) => {
-    const shell = event.currentTarget;
-    if (shell.dataset.projectSessionListScrollable !== 'true') {
-      return;
-    }
-    const deltaY = event.deltaY;
-    // Ignore horizontal-dominant trackpad gestures so they never nudge the sidebar.
-    if (deltaY === 0 || Math.abs(deltaY) < Math.abs(event.deltaX)) {
-      return;
-    }
-    const atTop = shell.scrollTop <= 0;
-    const atBottom = shell.scrollTop + shell.clientHeight >= shell.scrollHeight - 1;
-    if (deltaY < 0 ? !atTop : !atBottom) {
-      return;
-    }
-    const sidebarScroller = shell.closest<HTMLElement>('.session-groups-content');
-    if (sidebarScroller) {
-      sidebarScroller.scrollTop += deltaY;
-    }
-  }, []);
 
   useEffect(() => {
     const refreshPrimaryAgentLauncher = (event: Event) => {
@@ -896,10 +865,25 @@ export function SessionGroupSection({
   const collapsedProjectSessionSections =
     projectSessionSectionCollapseStateById[projectSessionListStorageId] ??
     DEFAULT_PROJECT_SESSION_SECTION_COLLAPSE_STATE;
-  const isProjectSessionListCollapsed =
+  const areSessionCardHoverActionsExpanded =
+    projectSessionListStorageId !== undefined &&
+    sessionCardHoverActionsExpandedById[projectSessionListStorageId] === true;
+  const setSessionCardHoverActionsExpanded = (expanded: boolean) => {
+    if (projectSessionListStorageId !== undefined) {
+      onSessionCardHoverActionsExpandedChange?.(projectSessionListStorageId, expanded);
+    }
+  };
+  const isProjectSessionListExpanded =
     Boolean(projectContext) &&
     projectSessionListStorageId !== undefined &&
-    projectSessionListCollapsedState[projectSessionListStorageId] === true;
+    projectSessionListExpandedState[projectSessionListStorageId] === true;
+  const isSessionInCollapsedSection = (sessionId: string) => {
+    const section = getProjectSessionSection(sessionsById[sessionId], enableSessionParking);
+    return (
+      (Boolean(projectContext) || (isChatCollection && section === 'parked')) &&
+      collapsedProjectSessionSections[section] === true
+    );
+  };
   /**
    * CDXC:Sidebar 2026-05-13-08:11
    * Project groups stay draggable while session drag targets are disabled in
@@ -965,9 +949,9 @@ export function SessionGroupSection({
        */
       hideSessionAgentIconUntilHover:
         state.hud.settings?.hideSessionAgentIconUntilHover ?? DEFAULT_ghostex_SETTINGS.hideSessionAgentIconUntilHover,
+      hoverButtons: state.hud.settings?.sessionCardHoverButtons ?? DEFAULT_ghostex_SETTINGS.sessionCardHoverButtons,
       renameSessionOnDoubleClick:
         state.hud.settings?.renameSessionOnDoubleClick ?? state.hud.renameSessionOnDoubleClick,
-      showCloseButton: state.hud.showCloseButtonOnSessionCards,
       showDebugSessionNumbers: state.hud.debuggingMode,
       enableSessionParking: state.hud.settings?.enableSessionParking ?? DEFAULT_ghostex_SETTINGS.enableSessionParking,
       showTagMenuWhenParking:
@@ -976,14 +960,6 @@ export function SessionGroupSection({
         state.hud.settings?.hideLastActiveTimeOnSessionCards ??
         DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
       ),
-      /*
-       * CDXC:ContextMenus 2026-06-10-13:58:
-       * The destructive single-session Close item is hidden unless Settings
-       * explicitly enables close actions in session context menus.
-       */
-      showSessionCloseContextMenuAction:
-        state.hud.settings?.showSessionCloseContextMenuAction ??
-        DEFAULT_ghostex_SETTINGS.showSessionCloseContextMenuAction,
       /*
        * CDXC:ContextMenus 2026-06-09-23:17:
        * Copy resume and Copy attach command are opt-in context-menu utilities.
@@ -1001,20 +977,46 @@ export function SessionGroupSection({
         state.hud.settings?.showSessionDetailsCopyAction ?? DEFAULT_ghostex_SETTINGS.showSessionDetailsCopyAction,
     }))
   );
+  /*
+   * CDXC:Projects 2026-09-12 DECISION:
+   * User: a project list is Compact (first N visible rows plus a "Show all" row) or Full (every row); rows inside a collapsed section never count toward N.
+   * visibleSessionIds are the rows that own a card. In Compact mode renderedSessionIds also keep the sessions of collapsed sections and the first session of every section, because those carry the section headings; their cards are skipped in the row loop.
+   */
+  const countableSessionIds = orderedSessionIds.filter((sessionId) => !isSessionInCollapsedSection(sessionId));
   const visibleSessionIds = getVisibleProjectSessionIds({
-    collapsedCount: projectSessionListCollapsedCount,
-    isCollapsed: isProjectSessionListCollapsed,
+    compactCount: projectSessionListCollapsedCount,
+    isExpanded: isProjectSessionListExpanded,
     isProjectGroup: Boolean(projectContext),
+    isSessionInCollapsedSection,
     isToggleEnabled: enableProjectSessionListToggle,
     sessionIds: orderedSessionIds,
   });
+  const visibleSessionIdSet = new Set(visibleSessionIds);
   const shouldShowProjectSessionListToggle =
     Boolean(projectContext) &&
     !isCollapsed &&
     enableProjectSessionListToggle &&
-    orderedSessionIds.length > projectSessionListCollapsedCount;
-  const renderedSessionIds =
-    shouldShowProjectSessionListToggle && !isProjectSessionListCollapsed ? orderedSessionIds : visibleSessionIds;
+    countableSessionIds.length > projectSessionListCollapsedCount;
+  const isProjectSessionListCompact = shouldShowProjectSessionListToggle && !isProjectSessionListExpanded;
+  const sectionHeadingSessionIds = new Set<string>();
+  if (isProjectSessionListCompact) {
+    const seenSections = new Set<ProjectSessionSection>();
+    for (const sessionId of orderedSessionIds) {
+      const section = getProjectSessionSection(sessionsById[sessionId], enableSessionParking);
+      if (!seenSections.has(section)) {
+        seenSections.add(section);
+        sectionHeadingSessionIds.add(sessionId);
+      }
+    }
+  }
+  const renderedSessionIds = isProjectSessionListCompact
+    ? orderedSessionIds.filter(
+        (sessionId) =>
+          visibleSessionIdSet.has(sessionId) ||
+          sectionHeadingSessionIds.has(sessionId) ||
+          isSessionInCollapsedSection(sessionId)
+      )
+    : orderedSessionIds;
   const renderedBrowserSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'browser';
   });
@@ -1027,12 +1029,15 @@ export function SessionGroupSection({
   const renderedParkedSessionIds = renderedSessionIds.filter((sessionId) => {
     return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'parked';
   });
+  const renderedSnoozedSessionIds = renderedSessionIds.filter((sessionId) => {
+    return getProjectSessionSection(sessionsById[sessionId], enableSessionParking) === 'snoozed';
+  });
   const projectSessionSectionCounts = orderedSessionIds.reduce<Record<ProjectSessionSection, number>>(
     (counts, sessionId) => {
       counts[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)] += 1;
       return counts;
     },
-    { browser: 0, parked: 0, pinned: 0, sessions: 0 }
+    { browser: 0, parked: 0, pinned: 0, sessions: 0, snoozed: 0 }
   );
   const shouldRenderSessionKindLabels =
     renderedBrowserSessionIds.length > 0 && renderedBrowserSessionIds.length < renderedSessionIds.length;
@@ -1040,6 +1045,7 @@ export function SessionGroupSection({
   const firstPinnedSessionId = renderedPinnedSessionIds[0];
   const firstUnpinnedSessionId = renderedUnpinnedSessionIds[0];
   const firstParkedSessionId = renderedParkedSessionIds[0];
+  const firstSnoozedSessionId = renderedSnoozedSessionIds[0];
   const firstTerminalSessionId = renderedSessionIds.find((sessionId) => {
     const session = sessionsById[sessionId];
     return session?.kind !== 'browser' && session?.sessionKind !== 'browser';
@@ -1051,74 +1057,6 @@ export function SessionGroupSection({
       !collapsedProjectSessionSections[section]
     );
   };
-  const expandedVisibleSessionIds = projectContext
-    ? visibleSessionIds.filter(
-        (sessionId) =>
-          !collapsedProjectSessionSections[getProjectSessionSection(sessionsById[sessionId], enableSessionParking)]
-      )
-    : visibleSessionIds;
-  const projectSessionListLastVisibleSessionId =
-    expandedVisibleSessionIds.length > 0 ? expandedVisibleSessionIds[expandedVisibleSessionIds.length - 1] : undefined;
-  const shouldClipProjectSessionList = shouldShowProjectSessionListToggle && isProjectSessionListCollapsed;
-  const shouldScrollExpandedProjectSessionList = shouldShowProjectSessionListToggle && !isProjectSessionListCollapsed;
-  /*
-   * CDXC:Sidebar 2026-06-30-02:45:
-   * Expanded projects may contain hundreds of rows. Only build the DOM-measure
-   * dependency key for the collapsed clipped state, where the visible row set is
-   * capped by the Show less count.
-   */
-  const projectSessionListRenderedSessionIdsKey = shouldClipProjectSessionList
-    ? expandedVisibleSessionIds.join('\u0000')
-    : '';
-  const expandedProjectSessionListScrollHeight = shouldScrollExpandedProjectSessionList
-    ? getExpandedProjectSessionListScrollHeight({
-        rowCount: Math.min(projectSessionListCollapsedCount, orderedSessionIds.length),
-      })
-    : undefined;
-
-  useLayoutEffect(() => {
-    if (!shouldClipProjectSessionList) {
-      return;
-    }
-
-    const element = contentRef.current;
-    if (!element) {
-      return;
-    }
-
-    let animationFrameId = 0;
-
-    const updateCollapsedHeight = () => {
-      setProjectSessionListCollapsedHeight(
-        getProjectSessionListCollapsedHeight({
-          lastVisibleSessionId: projectSessionListLastVisibleSessionId,
-          sessionListElement: element,
-        })
-      );
-    };
-
-    const scheduleUpdate = () => {
-      window.cancelAnimationFrame(animationFrameId);
-      animationFrameId = window.requestAnimationFrame(updateCollapsedHeight);
-    };
-
-    updateCollapsedHeight();
-    const observer = new ResizeObserver(() => {
-      scheduleUpdate();
-    });
-    observer.observe(element);
-
-    return () => {
-      observer.disconnect();
-      window.cancelAnimationFrame(animationFrameId);
-    };
-  }, [
-    contentRef,
-    projectSessionListLastVisibleSessionId,
-    projectSessionListRenderedSessionIdsKey,
-    shouldClipProjectSessionList,
-  ]);
-
   const postGroupDebugLog = useEffectEvent((event: string, details: Record<string, unknown>) => {
     if (!debuggingMode) {
       return;
@@ -1208,13 +1146,16 @@ export function SessionGroupSection({
   const visibleGroupSessions = visibleSessionIds
     .map((sessionId) => sessionsById[sessionId])
     .filter((session): session is NonNullable<typeof session> => session !== undefined);
-  const visibleSessionIdSet = new Set(visibleSessionIds);
-  const projectSessionListHiddenCount = shouldClipProjectSessionList
-    ? Math.max(0, orderedSessionIds.length - visibleSessionIds.length)
+  const projectSessionListHiddenCount = isProjectSessionListCompact
+    ? Math.max(0, countableSessionIds.length - visibleSessionIds.length)
     : 0;
-  const projectSessionListToggleLabel = isProjectSessionListCollapsed ? 'Show more' : 'Show less';
+  const visibleSessionIndexById = new Map(visibleSessionIds.map((sessionId, index) => [sessionId, index]));
+  const projectSessionListToggleLabel = isProjectSessionListExpanded
+    ? `Show first ${projectSessionListCollapsedCount}`
+    : 'Show all sessions';
   const shouldScrubDisabledGroupDndAccessibility = isChatCollection || draggingDisabled;
   const sessionSummary = getGroupSessionSummary(groupSessions);
+  const hasPendingQuestion = groupSessions.some((session) => (session.pendingQuestionCount ?? 0) > 0);
   const awakeCount = getAwakeTerminalAndBrowserCount(groupSessions);
   const actualSessionCount = storedSessionIds.length;
   const hasRunningSessions = groupSessions.some((session) => getSidebarSessionLifecycleState(session) === 'running');
@@ -1279,24 +1220,6 @@ export function SessionGroupSection({
   const groupHeaderStyle = projectThemeStyle
     ? ({ ...groupHeaderAnchorStyle, ...projectThemeStyle } as CSSProperties)
     : groupHeaderAnchorStyle;
-  const hasExpandedProjectSessionListScrollHeight =
-    shouldScrollExpandedProjectSessionList && expandedProjectSessionListScrollHeight !== undefined;
-  const sessionsShellStyle =
-    (shouldClipProjectSessionList && projectSessionListCollapsedHeight !== undefined) ||
-    hasExpandedProjectSessionListScrollHeight
-      ? ({
-          ...(collapsibleStyle ?? {}),
-          ...(shouldClipProjectSessionList && projectSessionListCollapsedHeight !== undefined
-            ? { '--sidebar-collapse-content-height': `${projectSessionListCollapsedHeight}px` }
-            : {}),
-          ...(hasExpandedProjectSessionListScrollHeight
-            ? {
-                '--project-session-list-scroll-height': `${expandedProjectSessionListScrollHeight}px`,
-              }
-            : {}),
-        } as CSSProperties)
-      : collapsibleStyle;
-
   const sessionGroupDropPosition =
     sessionDropIndicator?.kind === 'group' && sessionDropIndicator.groupId === groupId
       ? sessionDropIndicator.position
@@ -1609,11 +1532,11 @@ export function SessionGroupSection({
     writePrimaryAgentLauncherId(agentId);
   };
 
-  const toggleProjectSessionListCollapsed = () => {
+  const toggleProjectSessionListExpanded = () => {
     if (!projectSessionListStorageId) {
       return;
     }
-    onProjectSessionListCollapsedChange?.(projectSessionListStorageId, !isProjectSessionListCollapsed);
+    onProjectSessionListExpandedChange?.(projectSessionListStorageId, !isProjectSessionListExpanded);
   };
 
   const requestCreateProjectTerminal = () => {
@@ -2308,6 +2231,7 @@ export function SessionGroupSection({
                   <div
                     aria-label={getCollapsedProjectCountsLabel(sessionSummary, awakeCount)}
                     className='group-collapsed-status-counts'
+                    data-pending-question={hasPendingQuestion}
                   >
                     {sessionSummary.workingCount > 0 ? (
                       <span className='group-collapsed-status-count' data-activity='working'>
@@ -2394,26 +2318,26 @@ export function SessionGroupSection({
                        * actions through their machine-scoped project identities.
                        *
                        * CDXC:Projects 2026-06-10-13:39:
-                       * Show more / Show less moved from the bottom of long project session lists into the project header action cluster. Keep it as an icon button with the same per-project collapsed-state storage, and only show it when the expanded project has more rows than the Settings-owned collapsed count.
+                       * The Compact / Full toggle lives in the project header action cluster as an icon button, and only shows when the project has more countable rows than the Compact Session Rows setting.
                        */
                       <>
                         {shouldShowProjectSessionListToggle ? (
                           <ProjectHeaderActionButton
                             aria-label={
-                              isProjectSessionListCollapsed
-                                ? `Show more sessions in ${group.title}`
-                                : `Show less sessions in ${group.title}`
+                              isProjectSessionListExpanded
+                                ? `Show the first ${projectSessionListCollapsedCount} sessions in ${group.title}`
+                                : `Show all sessions in ${group.title}`
                             }
                             className='group-add-button group-project-session-list-toggle-button'
                             onClick={(event) => {
                               event.preventDefault();
                               event.stopPropagation();
-                              toggleProjectSessionListCollapsed();
+                              toggleProjectSessionListExpanded();
                             }}
                             tooltip={projectSessionListToggleLabel}
                             type='button'
                           >
-                            {isProjectSessionListCollapsed ? (
+                            {!isProjectSessionListExpanded ? (
                               <IconChevronDown aria-hidden='true' className='group-add-icon' size={14} stroke={2} />
                             ) : (
                               <IconChevronUp aria-hidden='true' className='group-add-icon' size={14} stroke={2} />
@@ -2447,6 +2371,27 @@ export function SessionGroupSection({
                             type='button'
                           >
                             <IconGitBranch aria-hidden='true' className='group-add-icon' size={14} stroke={2} />
+                          </ProjectHeaderActionButton>
+                        ) : null}
+                        {/* CDXC:Sessions 2026-09-12 DECISION:
+                         * User: put a History icon immediately to the right of the worktree button, opening Sessions with this project preselected to search closed sessions.
+                         */}
+                        {projectHeaderActions === 'all' ? (
+                          <ProjectHeaderActionButton
+                            aria-label={`View session history for ${group.title}`}
+                            className='group-add-button group-project-history-button'
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              openQuickAccess('recentSessions', {
+                                projectId: getQuickAccessSessionProjectId(group),
+                                sessionScope: 'closed',
+                              });
+                            }}
+                            tooltip='History'
+                            type='button'
+                          >
+                            <IconHistory aria-hidden='true' className='group-add-icon' size={14} stroke={2} />
                           </ProjectHeaderActionButton>
                         ) : null}
                         {projectHeaderActions === 'all' && browserViewEnabled ? (
@@ -2577,25 +2522,27 @@ export function SessionGroupSection({
         </div>
         {isCollapsed && !projectContext && hasCollapsedSummary ? (
           <div
-            aria-label={collapsedSummaryLabel}
+            aria-label={hasPendingQuestion ? 'Answer requested' : collapsedSummaryLabel}
             className='group-collapsed-summary'
             data-activity={collapsedIndicatorActivity}
             style={getCollapsedGroupStatusStyle(group.groupId)}
           >
-            <div aria-hidden className='session-status-dot' />
+            {hasPendingQuestion ? (
+              <SessionQuestionIndicator working={sessionSummary.workingCount > 0} />
+            ) : (
+              <div aria-hidden className='session-status-dot' />
+            )}
           </div>
         ) : null}
         {shouldRenderGroupSessionsBody ? (
           <div
             aria-hidden={isGroupSessionsBodyVisuallyCollapsed}
-            className={`group-sessions-shell sidebar-collapse-shell${shouldScrollExpandedProjectSessionList && !isGroupSessionsBodyVisuallyCollapsed ? ' scroll-fade-y' : ''}`}
+            className='group-sessions-shell sidebar-collapse-shell'
             data-collapsed={String(isGroupSessionsBodyVisuallyCollapsed)}
             inert={isGroupSessionsBodyVisuallyCollapsed ? true : undefined}
-            data-project-session-list-clipped={String(shouldClipProjectSessionList)}
-            data-project-session-list-scrollable={String(shouldScrollExpandedProjectSessionList)}
-            onWheel={handleSessionsShellWheel}
+            data-project-session-list-compact={String(isProjectSessionListCompact)}
             ref={setSessionsShellElement}
-            style={sessionsShellStyle}
+            style={collapsibleStyle}
           >
             <div
               className='group-sessions sidebar-collapse-content'
@@ -2627,7 +2574,9 @@ export function SessionGroupSection({
                     const session = sessionsById[sessionId];
                     const projectSessionSection = getProjectSessionSection(session, enableSessionParking);
                     const isProjectSessionSectionCollapsed =
-                      (Boolean(projectContext) || (isChatCollection && projectSessionSection === 'parked')) &&
+                      (Boolean(projectContext) ||
+                        (isChatCollection &&
+                          (projectSessionSection === 'parked' || projectSessionSection === 'snoozed'))) &&
                       collapsedProjectSessionSections[projectSessionSection];
                     /*
                      * CDXC:Sessions 2026-09-10 WHY:
@@ -2641,9 +2590,8 @@ export function SessionGroupSection({
                         sessionsById[renderedSessionIds[sessionIndex - 1]],
                         enableSessionParking
                       ) === 'pinned';
-                    const isProjectSessionListOverflowRow =
-                      shouldClipProjectSessionList && !visibleSessionIdSet.has(sessionId);
-                    const sessionIdsBelowStartIndex = isProjectSessionListOverflowRow ? undefined : sessionIndex + 1;
+                    const isVisibleSessionRow = visibleSessionIdSet.has(sessionId);
+                    const sessionIdsBelowStartIndex = (visibleSessionIndexById.get(sessionId) ?? -1) + 1;
                     const sessionDropPosition =
                       sessionDropIndicator?.kind === 'session' &&
                       sessionDropIndicator.groupId === group.groupId &&
@@ -2700,13 +2648,21 @@ export function SessionGroupSection({
                             onToggle={() => toggleProjectSessionSection('parked')}
                           />
                         ) : null}
+                        {(projectContext || isChatCollection) && sessionId === firstSnoozedSessionId ? (
+                          <ProjectSessionSectionToggle
+                            count={projectSessionSectionCounts.snoozed}
+                            isCollapsed={collapsedProjectSessionSections.snoozed}
+                            label='Snoozed'
+                            onToggle={() => toggleProjectSessionSection('snoozed')}
+                          />
+                        ) : null}
                         {!projectContext && shouldRenderSessionKindLabels && sessionId === firstBrowserSessionId ? (
                           <div className='session-kind-label'>Browser</div>
                         ) : null}
                         {!projectContext && shouldRenderSessionKindLabels && sessionId === firstTerminalSessionId ? (
                           <div className='session-kind-label'>Sessions</div>
                         ) : null}
-                        {!isPinnedSectionEndGap && !isProjectSessionSectionCollapsed && shouldRenderSessionRowGaps ? (
+                        {!isPinnedSectionEndGap && isVisibleSessionRow && shouldRenderSessionRowGaps ? (
                           <div
                             aria-hidden
                             className='pinned-session-drop-gap'
@@ -2714,30 +2670,24 @@ export function SessionGroupSection({
                             data-edge={sessionIndex === 0 ? 'start' : undefined}
                           />
                         ) : null}
-                        {!isProjectSessionSectionCollapsed ? (
+                        {isVisibleSessionRow ? (
                           <SortableSessionCard
                             completionFlashNonce={completionFlashNonceBySessionId?.[sessionId] ?? 0}
                             dragDisabled={
-                              isProjectSessionListOverflowRow ||
                               draggingDisabled ||
                               (sessionDraggingDisabled &&
                                 !(allowPinnedSessionReorder && sessionsById[sessionId]?.isPinned === true))
                             }
-                            dropDisabled={
-                              isProjectSessionListOverflowRow ||
-                              draggingDisabled ||
-                              (sessionDraggingDisabled && !allowPinnedSessionReorder)
-                            }
+                            dropDisabled={draggingDisabled || (sessionDraggingDisabled && !allowPinnedSessionReorder)}
                             groupId={group.groupId}
                             forcedDropPosition={
-                              allowPinnedSessionReorder || isProjectSessionListOverflowRow
-                                ? undefined
-                                : (sessionDropPosition ?? pinnedSessionDropPosition)
+                              allowPinnedSessionReorder ? undefined : (sessionDropPosition ?? pinnedSessionDropPosition)
                             }
+                            hoverActionsExpanded={areSessionCardHoverActionsExpanded}
                             index={sessionIndex}
-                            isProjectSessionListOverflowRow={isProjectSessionListOverflowRow}
-                            isSearchSelected={!isProjectSessionListOverflowRow && selectedSearchSessionId === sessionId}
+                            isSearchSelected={selectedSearchSessionId === sessionId}
                             onFocusRequested={onFocusRequested}
+                            onHoverActionsExpandedChange={setSessionCardHoverActionsExpanded}
                             onSessionSelectionChange={onSessionSelectionChange}
                             sessionCardSettings={sessionCardSettings}
                             sessionGroup={group}
@@ -2752,13 +2702,9 @@ export function SessionGroupSection({
                               storedSessionIds.length === 1 &&
                               storedSessionIds[0] === sessionId
                             }
-                            showGroupDropTargetChrome={!allowPinnedSessionReorder && !isProjectSessionListOverflowRow}
-                            showGroupConnector={showSessionGroupConnector && !isProjectSessionListOverflowRow}
-                            showDropPositionIndicator={
-                              showSessionDropPositionIndicators &&
-                              !allowPinnedSessionReorder &&
-                              !isProjectSessionListOverflowRow
-                            }
+                            showGroupDropTargetChrome={!allowPinnedSessionReorder}
+                            showGroupConnector={showSessionGroupConnector}
+                            showDropPositionIndicator={showSessionDropPositionIndicators && !allowPinnedSessionReorder}
                             vscode={vscode}
                           />
                         ) : null}
@@ -2775,7 +2721,7 @@ export function SessionGroupSection({
                   {projectSessionListHiddenCount > 0 ? (
                     /*
                      * CDXC:Projects 2026-06-13-22:23:
-                     * The hidden-session count belongs below the last rendered project row. Render it through the regular session-card component so it has identical row geometry, but disable session-only chrome and actions; clicking the row restores the normal expanded project list, removes this row, and brings the header Show less action back.
+                     * The "Show all" row belongs below the last Compact row. Render it through the regular session-card component so it has identical row geometry, but disable session-only chrome and actions; clicking it switches the project to Full, which removes this row and flips the header toggle.
                      */
                     <SortableSessionCard
                       dragDisabled
@@ -2783,8 +2729,8 @@ export function SessionGroupSection({
                       groupId={group.groupId}
                       index={renderedSessionIds.length}
                       projectSessionListMoreRow={{
-                        count: projectSessionListHiddenCount,
-                        onReveal: toggleProjectSessionListCollapsed,
+                        count: countableSessionIds.length,
+                        onReveal: toggleProjectSessionListExpanded,
                       }}
                       sessionCardSettings={sessionCardSettings}
                       sessionGroup={group}
@@ -2858,6 +2804,7 @@ export function SessionGroupSection({
                     aria-hidden
                     className='session-status-dot session-status-dot-anchored'
                     data-activity={session.activity}
+                    data-pending-question={(session.pendingQuestionCount ?? 0) > 0}
                     data-lifecycle-state={getSidebarSessionLifecycleState(session)}
                     data-remote-session={String(Boolean(group.remoteMachineContext))}
                     key={`status-${session.sessionId}`}

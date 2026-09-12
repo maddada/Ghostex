@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { PROJECT_SESSION_LIST_COLLAPSED_COUNT } from './project-session-list-toggle';
+import { PROJECT_SESSION_LIST_COMPACT_COUNT } from './project-session-list-toggle';
 import {
   createRenderedSidebarSessionSlotIds,
   createRenderedSidebarSessionSlots,
@@ -42,7 +42,7 @@ function renderedSlotElement({
 describe('createVisibleSidebarSessionSlotIds', () => {
   test('flattens sessions in the same order as visible sidebar rows', () => {
     const longProjectSessions = Array.from(
-      { length: PROJECT_SESSION_LIST_COLLAPSED_COUNT + 2 },
+      { length: PROJECT_SESSION_LIST_COMPACT_COUNT + 2 },
       (_, index) => `project-session-${index + 1}`
     );
 
@@ -70,17 +70,11 @@ describe('createVisibleSidebarSessionSlotIds', () => {
         },
         isReferenceChatsCollapsed: false,
         isReferenceProjectsCollapsed: false,
-        projectSessionListCollapsedCount: PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-        projectSessionListCollapsedState: {
-          'project-id': true,
-        },
+        projectSessionListCompactCount: PROJECT_SESSION_LIST_COMPACT_COUNT,
+        projectSessionListExpandedState: {},
         remoteMachineIds: ['machine-1'],
       })
-    ).toEqual([
-      'quick-session',
-      ...longProjectSessions.slice(0, PROJECT_SESSION_LIST_COLLAPSED_COUNT),
-      'remote-session',
-    ]);
+    ).toEqual(['quick-session', ...longProjectSessions.slice(0, PROJECT_SESSION_LIST_COMPACT_COUNT), 'remote-session']);
   });
 });
 

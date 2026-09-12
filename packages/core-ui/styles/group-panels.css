@@ -275,102 +275,11 @@
   pointer-events: none;
 }
 
-.group-sessions-shell[data-project-session-list-clipped='true'][data-collapsed='false'] {
-  /*
-   * CDXC:Sidebar 2026-08-19:
-   * Show more / Show less and the inner scroll cap only describe an *expanded*
-   * project body. They used to match while collapsed too, and because they sit
-   * later in this file at the same specificity as the collapsed rule they beat
-   * `max-height: 0`. A project with enough sessions to own a Show more toggle
-   * therefore expanded and collapsed at full height, with no height animation
-   * in either direction.
-   *
-   * CDXC:Projects 2026-06-12-23:53:
-   * Show less uses the project expand/collapse max-height path. Clip only this header-toggle state because normal expanded project bodies allow visible overflow for anchored status affordances.
-   *
-   * CDXC:Projects 2026-06-13-19:49:
-   * The bottom hidden-session reveal row is the exact clipped edge for a collapsed project list. Do not use the expanded shell's 4px cushion here, because that can reveal a sliver of the first hidden session below the "Show N more" row.
-   *
-   * CDXC:Projects 2026-06-13-20:03:
-   * Collapsed project lists now render only the visible rows plus the count button. Keep the exact max-height so project headers and the separator define clear row boundaries without clipped overflow rows.
-   */
-  max-height: var(--sidebar-collapse-content-height);
-  overflow: hidden;
-}
-
-.group-sessions-shell[data-project-session-list-scrollable='true'][data-collapsed='false'] {
-  /*
-   * CDXC:Projects 2026-06-25-12:20:
-   * Keep the Show more / Show less interaction, but make the expanded project
-   * body a bounded inner scroll surface. Reuse the same core overflow contract
-   * as the main sidebar project scroll viewport: hidden horizontal overflow and
-   * vertical auto scrolling.
-   *
-   * CDXC:Sidebar 2026-07-22:
-   * Overscroll rubber-banding is disabled on this inner project scroller by
-   * explicit user request: reaching the top or bottom is a hard stop.
-   *
-   * CDXC:Sidebar 2026-07-23:
-   * `none` also kills native scroll chaining, but wheel gestures at this
-   * scroller's edges should still move the main sidebar scroller. That handoff
-   * is done in JS (handleSessionsShellWheel in session-group-section.tsx)
-   * because CSS cannot express "chain to parent but never rubber-band".
-   *
-   * CDXC:Sidebar 2026-09-09 DECISION:
-   * User: this inner project scroller shows the same scroll-edge fade as the chat transcript, so rows dim into the edges while more rows exist beyond them.
-   * This supersedes the 2026-06-30 removal of scroll masks from expanded project bodies.
-   * The fade is the shadcn scroll-fade-y utility, added in session-group-section.tsx only while the body is expanded and scrollable, because a mask on the overflow-visible body would clip the connector rail above it.
-   */
-  max-height: var(--project-session-list-scroll-height, calc(var(--sidebar-collapse-content-height) + 4px));
-  margin-right: calc(-1 * var(--reference-sidebar-scrollbar-shift-right, 0px));
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: none;
-  padding-right: var(--reference-sidebar-scrollbar-shift-right, 0px);
-  /*
-   * The global sidebar reset hides every scrollbar via `scrollbar-width:
-   * none`, and Chromium ignores ::-webkit-scrollbar styling unless the
-   * standard property is back at `auto`. This inner project scroller is the
-   * one surface that opts back in: a fixed 2px gutter is always reserved so
-   * rows never shift, and only the thumb fades in while the pointer is over
-   * the scroll area.
-   */
-  scrollbar-width: auto;
-}
-
 /*
- * CDXC:Projects 2026-07-22:
- * While a project or collection header drag is active, inner project session
- * scrollers must not scroll under the drag ghost. dnd-kit's auto-scroller only
- * targets ancestors whose computed overflow is auto/scroll/overlay, so hidden
- * takes this scroller out of the candidate set for the drag's duration (scroll
- * position is preserved). scrollbar-gutter keeps the 2px webkit scrollbar
- * gutter reserved so rows do not shift while the lock is on.
+ * CDXC:Projects 2026-09-12 DECISION:
+ * User: a project's session list is either Compact (the first N rows plus a "Show all" row) or Full (every row at natural height), and the sidebar is the only scroller.
+ * This removes the bounded inner project scroller from 2026-06-25 together with the measured Show less clip, the JS wheel handoff, the drag-time scroll lock, the 2px scrollbar, the 2026-07-22 no-rubber-band rule, and the 2026-09-09 scroll-edge fade, all of which existed only to make that nested scroller tolerable. Both modes leave the body in normal flow; the collapse shell's measured max-height already animates Compact / Full changes.
  */
-.sidebar-reference-layout[data-project-reorder-drag='true']
-  .group-sessions-shell[data-project-session-list-scrollable='true'] {
-  overflow-y: hidden;
-  scrollbar-gutter: stable;
-}
-
-.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar {
-  display: block;
-  height: 0;
-  width: 2px;
-}
-
-.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.group-sessions-shell[data-project-session-list-scrollable='true']::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 2px;
-}
-
-.group-sessions-shell[data-project-session-list-scrollable='true']:hover::-webkit-scrollbar-thumb {
-  background: #585858;
-}
 
 .sidebar-collapse-content {
   min-height: 0;
@@ -417,10 +326,18 @@
 .session-groups-content {
   /* 28px Space buttons plus the row's 12px bottom cushion; the sticky row below is sized from the same value. */
   --sidebar-space-filter-row-height: 40px;
+  /*
+   * CDXC:Projects 2026-09-12 DECISION:
+   * User: project headers stick to the top of the sidebar while their rows scroll (groups.css). --sidebar-pinned-chrome-top is the height of the chrome pinned above them (the Space row when present), which is the header's sticky top. The mask's opaque strip then also covers one pinned project header (--sidebar-sticky-project-header-height, set in hierarchy-panels.css) so the header never fades; the top fade starts under it.
+   */
+  --sidebar-pinned-chrome-top: 0px;
+  --sidebar-scroll-fade-pinned-top: calc(
+    var(--sidebar-pinned-chrome-top) + var(--sidebar-sticky-project-header-height, 0px)
+  );
 }
 
 .session-groups-content:has(> .sidebar-space-filter-row) {
-  --sidebar-scroll-fade-pinned-top: var(--sidebar-space-filter-row-height);
+  --sidebar-pinned-chrome-top: var(--sidebar-space-filter-row-height);
 }
 
 .session-groups-content.scroll-fade-y {
@@ -1939,8 +1856,7 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
    * extra scoped so Projects and remote sections keep their existing spacing.
    *
    * CDXC:Sidebar 2026-06-30-01:59:
-   * Project headers no longer use sticky positioning, so this viewport keeps
-   * only spacing variables.
+   * This viewport keeps only spacing variables; the sticky project header contract lives on the header rule in groups.css and the pinned-chrome variables on .session-groups-content above.
    */
   --reference-sidebar-quick-top-extra: -2px;
   --reference-sidebar-scroll-top-offset: 15px;
@@ -2178,11 +2094,15 @@ body[data-sidebar-tooltips-suppressed='true'] [data-slot='tooltip-content'] {
   interpolate-size: allow-keywords;
 }
 
+/*
+ * CDXC:Projects 2026-09-12 WHY:
+ * overflow: clip, not hidden. Project collection bodies wrap project groups, and a hidden-overflow ancestor is a scroll container that would pin the sticky project headers to the collection body instead of the sidebar scroller. clip still cuts the content during the height transition but creates no scroll container.
+ */
 .sidebar-animated-collapse-body {
   height: auto;
   min-height: 0;
   opacity: 1;
-  overflow: hidden;
+  overflow: clip;
   pointer-events: auto;
   transform: translateY(0) scaleY(1);
   transform-origin: top;

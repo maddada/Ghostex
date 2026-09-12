@@ -1,5 +1,6 @@
 //! CDXC:Sessions 2026-09-11 DECISION:
 //! User: add "Unpark after sending a message" (on by default), which unparks a parked session when the user sends an actual message there.
+//! 2026-09-12: the same message also ends a snooze, since a snoozed session the user is talking to again has no reason to stay in the Snoozed section.
 //! gxserver owns it because it is the one place that sees prompts from every surface: chat sends from the desktop, web and mobile clients all go through the chat queue runtime, and terminal-typed prompts arrive as agent hook events.
 //! Only explicit prompt-submit hook events count as a message. The first user message rides on every later hook event as cached sidecar state, so its presence says nothing about this event, and tool or turn events fire long after the user last typed.
 //! Option commands Ghostex types on the user's behalf and raw keys are not messages either.
@@ -9,7 +10,9 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use crate::domain::{DomainRepository, DomainStateError};
+use crate::domain::{DomainRepository, DomainStateError, SessionLifecycleFields};
+use crate::session_lifecycle::is_snoozed_by_clock;
+use crate::session_status::parse_iso_ms;
 
 const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 const SETTING_KEY: &str = "unparkAfterSendingMessage";
@@ -44,29 +47,43 @@ pub(crate) fn is_user_prompt_submit_hook_event(params: &Map<String, Value>) -> b
         })
 }
 
-/// Clears `isParked` on a session the user just sent a message to. Returns
-/// whether the row changed so the caller publishes a presentation delta. The
-/// parked flag is read before the settings file so the common case, a session
-/// that is not parked, costs no file read.
+/// Clears `isParked` and any live snooze on a session the user just sent a
+/// message to. Returns whether the row changed so the caller publishes a
+/// presentation delta. The flags are read before the settings file so the
+/// common case, a session that is neither parked nor snoozed, costs no file
+/// read.
 pub(crate) fn unpark_session_after_user_message(
     repository: &DomainRepository<'_>,
     app_config_dir: &Path,
     project_id: &str,
     session_id: &str,
+    now_iso: &str,
 ) -> Result<bool, DomainStateError> {
     let Some(session) = repository.get_session(project_id, session_id)? else {
         return Ok(false);
     };
-    if session.get("isParked").and_then(Value::as_bool) != Some(true) {
+    let is_parked = session.get("isParked").and_then(Value::as_bool) == Some(true);
+    let lifecycle = SessionLifecycleFields::from_session(&session);
+    let is_snoozed = parse_iso_ms(now_iso)
+        .map(|now_ms| is_snoozed_by_clock(&lifecycle, now_ms))
+        .unwrap_or(false);
+    if !is_parked && !is_snoozed {
         return Ok(false);
     }
     if !unpark_after_sending_message_enabled(app_config_dir) {
         return Ok(false);
     }
-    let mut update = Map::new();
-    update.insert("projectId".to_string(), json!(project_id));
-    update.insert("sessionId".to_string(), json!(session_id));
-    update.insert("isParked".to_string(), Value::Bool(false));
-    repository.update_session(&update)?;
+    if is_parked {
+        let mut update = Map::new();
+        update.insert("projectId".to_string(), json!(project_id));
+        update.insert("sessionId".to_string(), json!(session_id));
+        update.insert("isParked".to_string(), Value::Bool(false));
+        repository.update_session(&update)?;
+    }
+    if is_snoozed {
+        let mut next = lifecycle.clone();
+        next.clear_snooze();
+        repository.write_session_lifecycle(project_id, session_id, &next, now_iso)?;
+    }
     Ok(true)
 }

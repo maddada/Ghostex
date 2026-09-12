@@ -1,9 +1,6 @@
 import { KEEP_AWAKE_DURATION_OPTIONS, type KeepAwakeDurationMinutes } from '../../shared/ghostex-settings';
 import { readLegacyCollapsedSidebarProjectCollectionIds } from '../project-collections';
-import {
-  readProjectSessionListCollapsedState,
-  type ProjectSessionListCollapsedState,
-} from '../project-session-list-toggle';
+import type { ProjectSessionListExpandedState } from '../project-session-list-toggle';
 import type { SidebarKeepAwakeRuntimeState } from './types';
 import {
   normalizeProjectSessionSectionCollapseState,
@@ -46,7 +43,9 @@ export function readSidebarKeepAwakeRuntime(): SidebarKeepAwakeRuntimeState | un
 export type SidebarUiCollapseState = {
   collapsedGroupsById: Record<string, true>;
   collapsedProjectCollectionsByKey: Record<string, true>;
-  collapsedProjectSessionListsById: ProjectSessionListCollapsedState;
+  expandedProjectSessionListsById: ProjectSessionListExpandedState;
+  /** Projects (by the session-list storage id) whose cards currently show the full hover-button row. */
+  expandedSessionCardHoverActionsById: Record<string, true>;
   collapsedProjectSessionSectionsById: ProjectSessionSectionCollapseStateById;
   isReferenceChatsCollapsed: boolean;
   /*
@@ -131,7 +130,8 @@ export function createDefaultSidebarUiCollapseState(): SidebarUiCollapseState {
   return {
     collapsedGroupsById: {},
     collapsedProjectCollectionsByKey: {},
-    collapsedProjectSessionListsById: {},
+    expandedProjectSessionListsById: {},
+    expandedSessionCardHoverActionsById: {},
     collapsedProjectSessionSectionsById: {},
     isReferenceChatsCollapsed: false,
     recentSessionIdsBySpace: {},
@@ -164,7 +164,8 @@ export function normalizeSidebarUiCollapseState(candidate: unknown): SidebarUiCo
   return {
     collapsedGroupsById: normalizeStoredCollapsedGroupsById(state.collapsedGroupsById),
     collapsedProjectCollectionsByKey: normalizeStoredCollapsedGroupsById(state.collapsedProjectCollectionsByKey),
-    collapsedProjectSessionListsById: normalizeStoredCollapsedGroupsById(state.collapsedProjectSessionListsById),
+    expandedProjectSessionListsById: normalizeStoredCollapsedGroupsById(state.expandedProjectSessionListsById),
+    expandedSessionCardHoverActionsById: normalizeStoredCollapsedGroupsById(state.expandedSessionCardHoverActionsById),
     collapsedProjectSessionSectionsById: normalizeProjectSessionSectionCollapseState(
       state.collapsedProjectSessionSectionsById
     ),
@@ -284,7 +285,6 @@ export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiColl
           true,
         ])
       );
-      state.collapsedProjectSessionListsById = readProjectSessionListCollapsedState();
       return { reason: 'missing', state };
     }
 
@@ -295,7 +295,6 @@ export function readSidebarUiCollapseState(windowScopeId: string): SidebarUiColl
         true,
       ])
     );
-    migrated.collapsedProjectSessionListsById = readProjectSessionListCollapsedState();
     return { state: migrated, storedByteLength: legacyStoredValue?.length ?? 0 };
   } catch {
     return {
@@ -323,7 +322,8 @@ export function summarizeSidebarUiCollapseState(state: SidebarUiCollapseState): 
   return {
     collapsedGroupCount: Object.keys(state.collapsedGroupsById).length,
     collapsedProjectCollectionCount: Object.keys(state.collapsedProjectCollectionsByKey).length,
-    collapsedProjectSessionListCount: Object.keys(state.collapsedProjectSessionListsById).length,
+    expandedProjectSessionListCount: Object.keys(state.expandedProjectSessionListsById).length,
+    expandedSessionCardHoverActionCount: Object.keys(state.expandedSessionCardHoverActionsById).length,
     isReferenceChatsCollapsed: state.isReferenceChatsCollapsed,
     rememberedSpaceSectionCount: Object.keys(state.recentSessionIdsBySpace).length,
     selectedSpaceSectionCount: Object.keys(state.selectedSpaceIdBySectionKey).length,

@@ -115,8 +115,9 @@ import {
   readPrimaryAgentLauncherId,
   type PrimaryAgentLauncherChangedEvent,
 } from './primary-agent-launcher';
-import { type ProjectSessionListCollapsedState } from './project-session-list-toggle';
+import { getVisibleProjectSessionIds, type ProjectSessionListExpandedState } from './project-session-list-toggle';
 import {
+  DEFAULT_PROJECT_SESSION_SECTION_COLLAPSE_STATE,
   getProjectSessionSection,
   useProjectSessionSectionCollapseState,
 } from './sidebar-app/project-session-section-state';
@@ -333,8 +334,11 @@ export function SidebarApp({
   const [collapsedProjectCollectionsByKey, setCollapsedProjectCollectionsByKey] = useState<Record<string, true>>(
     initialUiCollapseState.collapsedProjectCollectionsByKey
   );
-  const [collapsedProjectSessionListsById, setCollapsedProjectSessionListsById] =
-    useState<ProjectSessionListCollapsedState>(initialUiCollapseState.collapsedProjectSessionListsById);
+  const [expandedProjectSessionListsById, setExpandedProjectSessionListsById] =
+    useState<ProjectSessionListExpandedState>(initialUiCollapseState.expandedProjectSessionListsById);
+  const [expandedSessionCardHoverActionsById, setExpandedSessionCardHoverActionsById] = useState<Record<string, true>>(
+    initialUiCollapseState.expandedSessionCardHoverActionsById
+  );
   const [projectCollections, setProjectCollections] = useState<SidebarProjectCollectionsState>(
     enableProjectCollections ? readSidebarProjectCollections : { collections: [], nextCollectionNumber: 1 }
   );
@@ -797,15 +801,21 @@ export function SidebarApp({
 
   const isSidebarInteractionBlocked = isStartupInteractionBlocked;
 
-  const { setGroupCollapsed, setGroupsCollapsed, setProjectCollectionCollapsed, setProjectSessionListCollapsed } =
-    useSidebarCollapseActions({
-      collapsedGroupsById,
-      groupOrder,
-      postSidebarCollapseStateLog,
-      setCollapsedGroupsById,
-      setCollapsedProjectCollectionsByKey,
-      setCollapsedProjectSessionListsById,
-    });
+  const {
+    setGroupCollapsed,
+    setGroupsCollapsed,
+    setProjectCollectionCollapsed,
+    setProjectSessionListExpanded,
+    setSessionCardHoverActionsExpanded,
+  } = useSidebarCollapseActions({
+    collapsedGroupsById,
+    groupOrder,
+    postSidebarCollapseStateLog,
+    setCollapsedGroupsById,
+    setCollapsedProjectCollectionsByKey,
+    setExpandedProjectSessionListsById,
+    setExpandedSessionCardHoverActionsById,
+  });
 
   const dismissAppModalForSidebarNavigation = (area: string) => {
     /*
@@ -2434,7 +2444,7 @@ export function SidebarApp({
     });
     setGroupCollapsed(detail.groupId, false);
     if (detail.showLessAfterExpand) {
-      setProjectSessionListCollapsed(detail.projectId, true);
+      setProjectSessionListExpanded(detail.projectId, false);
     }
     requestFocusedSessionReveal();
   });
@@ -2919,8 +2929,9 @@ export function SidebarApp({
     const nextCollapseState = {
       collapsedGroupsById,
       collapsedProjectCollectionsByKey,
-      collapsedProjectSessionListsById,
       collapsedProjectSessionSectionsById,
+      expandedProjectSessionListsById,
+      expandedSessionCardHoverActionsById,
       isReferenceChatsCollapsed,
       recentSessionIdsBySpace,
       selectedSpaceIdBySectionKey,
@@ -2936,8 +2947,9 @@ export function SidebarApp({
   }, [
     collapsedGroupsById,
     collapsedProjectCollectionsByKey,
-    collapsedProjectSessionListsById,
     collapsedProjectSessionSectionsById,
+    expandedProjectSessionListsById,
+    expandedSessionCardHoverActionsById,
     isReferenceChatsCollapsed,
     recentSessionIdsBySpace,
     selectedSpaceIdBySectionKey,
@@ -3318,14 +3330,34 @@ export function SidebarApp({
       setGroupCollapsed(groupId, false);
       const projectId = groupsById[groupId]?.projectContext?.editor.projectId;
       const sectionStateId = projectId ?? groupId;
+      const sectionStateKey = machineId ? `remote:${machineId}:${sectionStateId}` : sectionStateId;
+      const revealedSection = getProjectSessionSection(sessionsById[sessionId], effectiveSettings.enableSessionParking);
       // CDXC:Projects 2026-09-06 WHY: Consume reveals at sidebar lifetime so remounting a project after a Space switch cannot replay an old request and reopen a group the user collapsed.
-      setProjectSessionSectionCollapsed(
-        machineId ? `remote:${machineId}:${sectionStateId}` : sectionStateId,
-        getProjectSessionSection(sessionsById[sessionId], effectiveSettings.enableSessionParking),
-        false
-      );
+      setProjectSessionSectionCollapsed(sectionStateKey, revealedSection, false);
       if (projectId) {
-        setProjectSessionListCollapsed(machineId ? `remote:${machineId}:${projectId}` : projectId, false);
+        /*
+         * CDXC:Projects 2026-09-12 WHY:
+         * Compact is the default list mode, so a reveal must not flip every project it lands in to Full. Switch the project only when the revealed row sits past the Compact cap, judged with the section that was just expanded above counted as open.
+         */
+        const listStateKey = machineId ? `remote:${machineId}:${projectId}` : projectId;
+        const sectionCollapseState = {
+          ...(collapsedProjectSessionSectionsById[sectionStateKey] ?? DEFAULT_PROJECT_SESSION_SECTION_COLLAPSE_STATE),
+          [revealedSection]: false,
+        };
+        const compactVisibleSessionIds = getVisibleProjectSessionIds({
+          compactCount: effectiveSettings.projectSessionListCollapsedCount,
+          isExpanded: expandedProjectSessionListsById[listStateKey] === true,
+          isProjectGroup: true,
+          isSessionInCollapsedSection: (candidateSessionId) =>
+            sectionCollapseState[
+              getProjectSessionSection(sessionsById[candidateSessionId], effectiveSettings.enableSessionParking)
+            ] === true,
+          isToggleEnabled: !isSessionSearchFiltering,
+          sessionIds: displayedWorkspaceSessionIdsByGroup[groupId] ?? [],
+        });
+        if (!compactVisibleSessionIds.includes(sessionId)) {
+          setProjectSessionListExpanded(listStateKey, true);
+        }
       }
     }
 
@@ -3411,14 +3443,17 @@ export function SidebarApp({
     selectedMachineTabId,
     collapsedGroupsById,
     collapsedProjectCollectionsByKey,
-    collapsedProjectSessionListsById,
+    expandedProjectSessionListsById,
     displayedProjectCollectionItems,
     displayedWorkspaceSessionIdsByGroup,
     groupsById,
     sessionsById,
     effectiveSettings.enableSessionParking,
+    effectiveSettings.projectSessionListCollapsedCount,
+    isSessionSearchFiltering,
     collapsedProjectSessionSectionsById,
     setProjectSessionSectionCollapsed,
+    setProjectSessionListExpanded,
     sessionRevealRequest,
   ]);
 
@@ -3858,7 +3893,7 @@ export function SidebarApp({
         onCreateProjectCollection={enableProjectCollections ? createProjectCollectionForProject : undefined}
         onFocusRequested={focusSidebarSessionFromNavigation}
         onMoveProjectToCollection={enableProjectCollections ? moveProjectToCollection : undefined}
-        onProjectSessionListCollapsedChange={setProjectSessionListCollapsed}
+        onProjectSessionListExpandedChange={setProjectSessionListExpanded}
         onProjectSessionSectionCollapsedChange={setProjectSessionSectionCollapsed}
         projectSessionSectionCollapseStateById={collapsedProjectSessionSectionsById}
         onToggleSpaceMembership={
@@ -3876,7 +3911,9 @@ export function SidebarApp({
         pinnedSessionDropIndicator={pinnedSessionDropIndicator}
         projectCollectionId={projectId ? projectCollectionIdByProjectId.get(projectId) : undefined}
         projectCollectionOptions={enableProjectCollections ? projectCollections.collections : undefined}
-        projectSessionListCollapsedState={collapsedProjectSessionListsById}
+        projectSessionListExpandedState={expandedProjectSessionListsById}
+        sessionCardHoverActionsExpandedById={expandedSessionCardHoverActionsById}
+        onSessionCardHoverActionsExpandedChange={setSessionCardHoverActionsExpanded}
         selectedSearchSessionId={
           isSessionSearchSelectionVisible && selectedSessionSearchResult?.kind === 'session'
             ? selectedSessionSearchResult.sessionId
@@ -4256,7 +4293,7 @@ export function SidebarApp({
                                               )
                                           : undefined
                                       }
-                                      onProjectSessionListCollapsedChange={setProjectSessionListCollapsed}
+                                      onProjectSessionListExpandedChange={setProjectSessionListExpanded}
                                       onProjectSessionSectionCollapsedChange={setProjectSessionSectionCollapsed}
                                       projectSessionSectionCollapseStateById={collapsedProjectSessionSectionsById}
                                       onToggleSpaceMembership={
@@ -4278,7 +4315,9 @@ export function SidebarApp({
                                       orderedSessionIds={displayedWorkspaceSessionIdsByGroup[groupId] ?? []}
                                       enableProjectSessionListToggle={!isSessionSearchFiltering}
                                       projectHeaderActions='all'
-                                      projectSessionListCollapsedState={collapsedProjectSessionListsById}
+                                      projectSessionListExpandedState={expandedProjectSessionListsById}
+                                      sessionCardHoverActionsExpandedById={expandedSessionCardHoverActionsById}
+                                      onSessionCardHoverActionsExpandedChange={setSessionCardHoverActionsExpanded}
                                       projectCollectionId={
                                         groupsById[groupId]?.remoteMachineContext?.projectId
                                           ? machineCollectionIdByProjectId.get(

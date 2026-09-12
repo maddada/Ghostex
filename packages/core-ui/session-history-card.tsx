@@ -192,7 +192,6 @@ export function SessionHistoryCard({
             hideHeaderAgentIcon={true}
             session={displaySession}
             showDebugSessionNumbers={showDebugSessionNumbers}
-            showCloseButton={false}
             showLastInteractionTime={true}
             trailingPrefix={
               <>

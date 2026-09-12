@@ -1,7 +1,7 @@
 import {
-  PROJECT_SESSION_LIST_COLLAPSED_COUNT,
+  PROJECT_SESSION_LIST_COMPACT_COUNT,
   getVisibleProjectSessionIds,
-  type ProjectSessionListCollapsedState,
+  type ProjectSessionListExpandedState,
 } from './project-session-list-toggle';
 
 export type SidebarVisibleSlotGroup = {
@@ -18,8 +18,8 @@ export type SidebarVisibleSessionSlotOptions = {
   groupsById: Record<string, SidebarVisibleSlotGroup | undefined>;
   isReferenceChatsCollapsed: boolean;
   isReferenceProjectsCollapsed: boolean;
-  projectSessionListCollapsedCount?: number;
-  projectSessionListCollapsedState: ProjectSessionListCollapsedState;
+  projectSessionListCompactCount?: number;
+  projectSessionListExpandedState: ProjectSessionListExpandedState;
   remoteMachineIds: readonly string[];
 };
 
@@ -31,8 +31,8 @@ export function createVisibleSidebarSessionSlotIds({
   groupsById,
   isReferenceChatsCollapsed,
   isReferenceProjectsCollapsed,
-  projectSessionListCollapsedCount = PROJECT_SESSION_LIST_COLLAPSED_COUNT,
-  projectSessionListCollapsedState,
+  projectSessionListCompactCount = PROJECT_SESSION_LIST_COMPACT_COUNT,
+  projectSessionListExpandedState,
   remoteMachineIds,
 }: SidebarVisibleSessionSlotOptions): string[] {
   const visibleSessionIds: string[] = [];
@@ -47,8 +47,8 @@ export function createVisibleSidebarSessionSlotIds({
     const projectSessionListStorageId = group.projectContext?.editor?.projectId ?? groupId;
     visibleSessionIds.push(
       ...getVisibleProjectSessionIds({
-        collapsedCount: projectSessionListCollapsedCount,
-        isCollapsed: projectSessionListCollapsedState[projectSessionListStorageId] === true,
+        compactCount: projectSessionListCompactCount,
+        isExpanded: projectSessionListExpandedState[projectSessionListStorageId] === true,
         isProjectGroup: Boolean(group.projectContext),
         isToggleEnabled: enableProjectSessionListToggle,
         sessionIds,
