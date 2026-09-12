@@ -1650,9 +1650,16 @@ pub(crate) fn source_code_server_open_file_command(
     file_path: &std::path::Path,
     line: Option<u32>,
     column: Option<u32>,
+    workspace_folder: &std::path::Path,
     required_node_major: u64,
 ) -> Result<std::process::Command, String> {
-    platform::source_code_server_open_file_command(file_path, line, column, required_node_major)
+    platform::source_code_server_open_file_command(
+        file_path,
+        line,
+        column,
+        workspace_folder,
+        required_node_major,
+    )
 }
 
 #[cfg(target_os = "windows")]
