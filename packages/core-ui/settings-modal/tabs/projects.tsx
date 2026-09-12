@@ -528,7 +528,14 @@ export function ProjectsSettingsPanel({
                 </div>
               </SettingRow>
             </SettingsSection>
-            {selectedProject && onCustomViewsChange ? <ProjectViewSettings projectId={selectedProject.projectId} parentProjectId={selectedProject.worktreeParentProjectId} views={settings.customViews} onChange={onCustomViewsChange} /> : null}
+            {selectedProject && onCustomViewsChange ? (
+              <ProjectViewSettings
+                projectId={selectedProject.projectId}
+                parentProjectId={selectedProject.worktreeParentProjectId}
+                views={settings.customViews}
+                onChange={onCustomViewsChange}
+              />
+            ) : null}
           </>
         )}
       </div>

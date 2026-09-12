@@ -8,9 +8,7 @@ import { revealSessionChatFileChangeHeader } from './session-chat-file-change-sc
 import './session-chat-file-change-card.css';
 
 export const SessionChatFileChangePreviewContext = createContext(false);
-export const SessionChatFileChangeInteractionContext = createContext<
-  ((messageId: string) => void) | null
->(null);
+export const SessionChatFileChangeInteractionContext = createContext<((messageId: string) => void) | null>(null);
 
 /** CDXC:SessionChat 2026-09-10 DECISION:
  * User: clicking anywhere on a file-change path uses the reference pill's host Editor/Docs action, and right-clicking uses the same reference menu; this replaces the separate folder-copy action.

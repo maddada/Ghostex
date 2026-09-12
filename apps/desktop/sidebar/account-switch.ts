@@ -13,11 +13,14 @@ export function createAccountSwitchTransport(
 ): AccountsTransport {
   let accounts: AgentAccountsState | undefined;
   return async (params) => {
-    const account = params.operation === 'select'
-      ? accounts?.accounts.find((row) => row.id === params.accountId)
-      : undefined;
+    const account =
+      params.operation === 'select' ? accounts?.accounts.find((row) => row.id === params.accountId) : undefined;
     const progress = account
-      ? { provider: account.provider, email: account.email || account.name, indicator: account.indicator || account.selector }
+      ? {
+          provider: account.provider,
+          email: account.email || account.name,
+          indicator: account.indicator || account.selector,
+        }
       : null;
     const switching = params.operation === 'select' && progress && accounts?.session?.accountId !== params.accountId;
     if (switching) publish(progress);

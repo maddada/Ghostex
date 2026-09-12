@@ -173,8 +173,12 @@ export function SessionChatRewindDialog({
             <Button autoFocus disabled={rewinding || completed} type='submit' variant='outline'>
               {rewinding ? <IconLoader2 className='animate-spin' data-icon='inline-start' /> : null}
               {synchronizationPending
-                ? (rewinding ? 'Synchronizing' : 'Retry synchronization')
-                : (rewinding ? 'Rewinding' : 'Rewind')}
+                ? rewinding
+                  ? 'Synchronizing'
+                  : 'Retry synchronization'
+                : rewinding
+                  ? 'Rewinding'
+                  : 'Rewind'}
             </Button>
           </DialogFooter>
         </form>

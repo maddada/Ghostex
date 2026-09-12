@@ -411,10 +411,7 @@ export function FindPromptsView({ acceptAll, hostActions, onReady, transport }: 
         role='listbox'
         tabIndex={-1}
       >
-        <DelayedLoadingIndicator
-          label='Loading all your prompts...'
-          loading={find.loading && viewRows.length === 0}
-        />
+        <DelayedLoadingIndicator label='Loading all your prompts...' loading={find.loading && viewRows.length === 0} />
         {viewRows.length === 0 && !find.loading ? (
           <div className='px-2 py-6 text-center text-[13px] text-muted-foreground'>
             {find.total === 0 ? 'No agent prompt history was found on this machine.' : 'No prompts match this search.'}

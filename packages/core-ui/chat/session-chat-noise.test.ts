@@ -85,9 +85,7 @@ describe('noise filter (§9.1)', () => {
         textMsg(
           'long-output',
           'user',
-          `<bash-stdout data-ghostex-escaped="html">&lt;b&gt;${'x'.repeat(
-            321
-          )}&lt;/b&gt; &amp; done</bash-stdout>`
+          `<bash-stdout data-ghostex-escaped="html">&lt;b&gt;${'x'.repeat(321)}&lt;/b&gt; &amp; done</bash-stdout>`
         )
       )
     ).toEqual({ kind: 'collapsed', label: 'Local command output', text: longOutput });

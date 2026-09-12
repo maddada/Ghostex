@@ -44,13 +44,15 @@ export async function requestSharedAccounts(
   const existing = shared.reads.get(key);
   if (existing) return existing;
   const version = shared.version;
-  const operation = Promise.resolve().then(() => transport(params)).then(
-    (result) => version === shared.version ? result : requestSharedAccounts(transport, params, sessionAgentId),
-    (error: unknown) => {
-      if (version !== shared.version) return requestSharedAccounts(transport, params, sessionAgentId);
-      throw error;
-    }
-  );
+  const operation = Promise.resolve()
+    .then(() => transport(params))
+    .then(
+      (result) => (version === shared.version ? result : requestSharedAccounts(transport, params, sessionAgentId)),
+      (error: unknown) => {
+        if (version !== shared.version) return requestSharedAccounts(transport, params, sessionAgentId);
+        throw error;
+      }
+    );
   shared.reads.set(key, operation);
   try {
     return await operation;

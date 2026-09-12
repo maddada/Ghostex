@@ -27,7 +27,9 @@ export function SidebarAccountMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const [top, setTop] = useState(position.y);
   const [left, setLeft] = useState(position.x);
-  const accounts = data?.accounts.filter((account) => account.registered && account.provider === data.session?.provider);
+  const accounts = data?.accounts.filter(
+    (account) => account.registered && account.provider === data.session?.provider
+  );
   useLayoutEffect(() => {
     const menu = menuRef.current;
     if (menu) {
@@ -56,20 +58,36 @@ export function SidebarAccountMenu({
         const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
         if (buttons.length === 0) return;
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-        const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 :
-          (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
+        const next =
+          event.key === 'Home'
+            ? 0
+            : event.key === 'End'
+              ? buttons.length - 1
+              : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
         buttons[next]?.focus();
       }}
     >
       <div className='session-context-menu-section'>
         {error && (
           <>
-            <p className='session-saved-account-message' role='alert'><AccountText text={error} /></p>
-            <button className='session-context-menu-item' role='menuitem' disabled={busy}
-              onClick={() => void request({ operation: 'session', refresh: true })}>Try again</button>
+            <p className='session-saved-account-message' role='alert'>
+              <AccountText text={error} />
+            </p>
+            <button
+              className='session-context-menu-item'
+              role='menuitem'
+              disabled={busy}
+              onClick={() => void request({ operation: 'session', refresh: true })}
+            >
+              Try again
+            </button>
           </>
         )}
-        {!data && !error && <p className='session-saved-account-message' role='status'>Loading accounts…</p>}
+        {!data && !error && (
+          <p className='session-saved-account-message' role='status'>
+            Loading accounts…
+          </p>
+        )}
         {data && accounts?.length === 0 && <p className='session-saved-account-message'>No saved accounts.</p>}
         {accounts?.map((account) => {
           const current = account.id === data?.session?.accountId;
@@ -80,14 +98,22 @@ export function SidebarAccountMenu({
               role='menuitemradio'
               aria-checked={current}
               disabled={busy || working || current || account.status !== 'ready'}
-              title={working ? 'Stop the active turn before switching accounts.' : account.status !== 'ready' ? 'Reconnect this account in Settings.' : accountText(account.name)}
+              title={
+                working
+                  ? 'Stop the active turn before switching accounts.'
+                  : account.status !== 'ready'
+                    ? 'Reconnect this account in Settings.'
+                    : accountText(account.name)
+              }
               onClick={async () => {
                 if (await request({ operation: 'select', accountId: account.id })) close();
               }}
               type='button'
             >
               <AccountLogo provider={account.provider} slot={account.selector} />
-              <span className='session-tag-menu-item-label'><AccountText text={account.name} /></span>
+              <span className='session-tag-menu-item-label'>
+                <AccountText text={account.name} />
+              </span>
               {current && <IconCheck aria-hidden='true' className='session-context-menu-trailing-icon' size={16} />}
             </button>
           );
@@ -95,10 +121,18 @@ export function SidebarAccountMenu({
       </div>
       {/* CDXC:AgentProviders 2026-09-07 DECISION: Put Manage accounts beneath a separator in the sidebar account submenu; it opens the Accounts section in Settings. */}
       <div role='separator' className='session-context-menu-divider' />
-      <button type='button' className='session-context-menu-item' role='menuitem' onClick={() => {
-        openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' });
-        close();
-      }}><IconSettings aria-hidden='true' size={16} /><span>Manage accounts</span></button>
+      <button
+        type='button'
+        className='session-context-menu-item'
+        role='menuitem'
+        onClick={() => {
+          openAppModal({ type: 'open', modal: 'settings', initialTab: 'accounts' });
+          close();
+        }}
+      >
+        <IconSettings aria-hidden='true' size={16} />
+        <span>Manage accounts</span>
+      </button>
     </div>
   );
 }

@@ -64,9 +64,7 @@ export function createModelPickerRequest(
     // CDXC:SessionChat 2026-09-09 DECISION: User: keep only the selected models in the quick picker, exclude Cursor Composer too, and retain every other model under Legacy in the normal picker.
     .filter((model) => !model.group)
     .sort((a, b) =>
-      modelRank
-        ? (modelRank.get(a.value) ?? modelRank.size) - (modelRank.get(b.value) ?? modelRank.size)
-        : 0
+      modelRank ? (modelRank.get(a.value) ?? modelRank.size) - (modelRank.get(b.value) ?? modelRank.size) : 0
     )
     .map((model) => ({
       value: model.value,

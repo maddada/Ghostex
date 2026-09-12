@@ -69,7 +69,9 @@ export const Lexical: Story = {
       expect(pill.dataset.ghostexReferencePath?.startsWith('/Users/madda/')).toBe(true);
     }
 
-    expect(canvasElement.querySelector('.ghostex-chat-composer-lexical-content')?.textContent).not.toMatch(/[\ue000-\uf8ff]/u);
+    expect(canvasElement.querySelector('.ghostex-chat-composer-lexical-content')?.textContent).not.toMatch(
+      /[\ue000-\uf8ff]/u
+    );
 
     const sentDrafts = canvasElement.querySelector<HTMLOutputElement>('[data-testid="sent-reference-drafts"]');
     const sendButton = canvasElement.querySelector<HTMLButtonElement>('[aria-label="Send"]');

@@ -24,12 +24,7 @@ export function SessionChatDraftConflict({
           delay={150}
           closeDelay={150}
           render={
-            <Button
-              aria-label='Preview saved draft'
-              className='shrink-0 rounded-full'
-              size='icon-xs'
-              variant='ghost'
-            />
+            <Button aria-label='Preview saved draft' className='shrink-0 rounded-full' size='icon-xs' variant='ghost' />
           }
         >
           <IconFileText aria-hidden='true' size={15} stroke={1.8} />

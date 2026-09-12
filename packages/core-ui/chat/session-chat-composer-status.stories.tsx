@@ -81,7 +81,11 @@ function ComposerStatusStory({
           onSend={async () => {
             if (scenario === 'error') throw new Error('Connection interrupted. Your draft is kept.');
             if (scenario === 'notReady')
-              throw new GxserverRpcError('composerNotReady', 'The agent is waiting for setup to finish.', '/api/sendSessionChatMessage');
+              throw new GxserverRpcError(
+                'composerNotReady',
+                'The agent is waiting for setup to finish.',
+                '/api/sendSessionChatMessage'
+              );
             setNotice('Message sent.');
           }}
           onInterrupt={() => setNotice('Stop requested.')}

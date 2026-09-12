@@ -645,7 +645,12 @@ export const gpuiSidebarRuntimeSessionCreateMethods = {
     await this.createAgentSessionFromSidebarLaunch(message.agentId, message.groupId, message.accountId);
   },
 
-  async createAgentSession(this: GpuiSidebarRuntime, agentId: string, groupId = this.activeGroupId, accountId?: string): Promise<void> {
+  async createAgentSession(
+    this: GpuiSidebarRuntime,
+    agentId: string,
+    groupId = this.activeGroupId,
+    accountId?: string
+  ): Promise<void> {
     const remoteGroup = groupId ? parseGpuiRemotePresentationGroupId(groupId) : undefined;
     if (remoteGroup) {
       const normalizedAgentId = agentId.trim();

@@ -61,20 +61,12 @@ export function StashedPromptEditorTagSelect({
               ) : null}
               {!hasSelection ? (
                 <span className='ghostex-stashed-prompt-editor-tag-value'>
-                  <span
-                    aria-hidden='true'
-                    className='ghostex-stashed-prompt-select-tag-dot'
-                    data-tone='none'
-                  />
+                  <span aria-hidden='true' className='ghostex-stashed-prompt-select-tag-dot' data-tone='none' />
                   <span>No tag</span>
                 </span>
               ) : null}
             </span>
-            <IconSelector
-              aria-hidden='true'
-              className='ghostex-stashed-prompt-editor-tag-selector'
-              size={14}
-            />
+            <IconSelector aria-hidden='true' className='ghostex-stashed-prompt-editor-tag-selector' size={14} />
           </Button>
         }
       />
@@ -85,12 +77,7 @@ export function StashedPromptEditorTagSelect({
         sideOffset={4}
       >
         <Command>
-          <CommandInput
-            autoFocus
-            placeholder='Filter tags...'
-            aria-label='Filter tags'
-            clearOnEscape={false}
-          />
+          <CommandInput autoFocus placeholder='Filter tags...' aria-label='Filter tags' clearOnEscape={false} />
           <CommandList aria-multiselectable>
             <CommandEmpty>No tags found.</CommandEmpty>
             <CommandItem

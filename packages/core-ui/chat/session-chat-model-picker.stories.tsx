@@ -3,7 +3,11 @@ import { useState } from 'react';
 import catalogJson from '@/agent-model-catalog.json';
 import { parseAgentModelCatalog } from '@/packages/shared/agent-model-catalog';
 import { createModelPickerRequest } from './session-chat-model-picker-request';
-import { SessionChatModelPicker, type ModelPickerProvider, type ModelPickerSelection } from './session-chat-model-picker';
+import {
+  SessionChatModelPicker,
+  type ModelPickerProvider,
+  type ModelPickerSelection,
+} from './session-chat-model-picker';
 
 const catalog = parseAgentModelCatalog(catalogJson)!;
 

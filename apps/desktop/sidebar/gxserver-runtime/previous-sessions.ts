@@ -15,10 +15,7 @@ import {
 import { normalizeNonEmptyString } from './helpers/records';
 import type { GpuiGxserverCreatedSessionResult } from './types-and-protocol';
 import type { GxserverPresentationSearchResponse } from '@/packages/shared/gxserver-protocol';
-import type {
-  SidebarPreviousSessionItem,
-  SidebarToExtensionMessage,
-} from '@/packages/shared/session-grid-contract';
+import type { SidebarPreviousSessionItem, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
 /*
 CDXC:RepoStructure 2026-08-22:
@@ -157,9 +154,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
         projectId: reference.projectId,
         restoredFromSessionId: reference.sessionId,
         ...(previousSession?.sessionTag ? { sessionTag: previousSession.sessionTag } : {}),
-        ...(previousSession?.sidebarOrder !== undefined
-          ? { sidebarOrder: previousSession.sidebarOrder }
-          : {}),
+        ...(previousSession?.sidebarOrder !== undefined ? { sidebarOrder: previousSession.sidebarOrder } : {}),
         surface: 'workspace',
         title: previousSessionTitle(previousSession),
       });
@@ -210,9 +205,7 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
         projectId: reference.projectId,
         restoredFromSessionId: reference.sessionId,
         ...(previousSession?.sessionTag ? { sessionTag: previousSession.sessionTag } : {}),
-        ...(previousSession?.sidebarOrder !== undefined
-          ? { sidebarOrder: previousSession.sidebarOrder }
-          : {}),
+        ...(previousSession?.sidebarOrder !== undefined ? { sidebarOrder: previousSession.sidebarOrder } : {}),
         surface: 'workspace',
         title: previousSessionTitle(previousSession),
       });

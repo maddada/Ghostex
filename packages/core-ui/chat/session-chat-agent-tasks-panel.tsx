@@ -119,7 +119,10 @@ export function SessionChatAgentTasksPanel({ tasks }: SessionChatAgentTasksPanel
   return (
     <section
       aria-label='Agent tasks'
-      className={cn('ghostex-chat-prompt-card ghostex-chat-agent-tasks', collapsed && 'ghostex-chat-agent-tasks-collapsed')}
+      className={cn(
+        'ghostex-chat-prompt-card ghostex-chat-agent-tasks',
+        collapsed && 'ghostex-chat-agent-tasks-collapsed'
+      )}
       data-collapsed={collapsed ? 'true' : undefined}
     >
       <button
@@ -208,7 +211,9 @@ function TaskRow({
       </span>
       <span className='ghostex-chat-card-content ghostex-chat-agent-tasks-subject'>{task.subject}</span>
       {group === 'pending' && blockers.length > 0 ? (
-        <span className='ghostex-chat-card-hint [--chat-card-hint-base:0.6875rem] ghostex-chat-agent-tasks-blocked'>waits for #{blockers.join(', #')}</span>
+        <span className='ghostex-chat-card-hint [--chat-card-hint-base:0.6875rem] ghostex-chat-agent-tasks-blocked'>
+          waits for #{blockers.join(', #')}
+        </span>
       ) : null}
     </li>
   );

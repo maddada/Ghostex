@@ -35,7 +35,9 @@ function CodexTranscriptCardPreview() {
         {closed ? (
           <div className='flex items-center justify-between gap-3 text-sm text-muted-foreground'>
             <p role='status'>Chat restored in this preview.</p>
-            <Button onClick={() => setClosed(false)} size='sm' variant='outline'>Show card again</Button>
+            <Button onClick={() => setClosed(false)} size='sm' variant='outline'>
+              Show card again
+            </Button>
           </div>
         ) : (
           <SessionChatTerminalNoticeCard

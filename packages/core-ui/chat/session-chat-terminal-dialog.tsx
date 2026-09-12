@@ -72,18 +72,26 @@ export function SessionChatTerminalDialogCard({
   if (dialog.id === 'codex-transcript-pager') {
     return (
       /* CDXC:SessionChat 2026-09-07 DECISION: User: Restore chat uses the same 20px outer padding and additional 10px row spacing as the other notice cards. */
-      <section aria-label={dialog.title} className='flex min-w-0 flex-col gap-[10px] p-[20px]' data-slot='terminal-dialog'>
+      <section
+        aria-label={dialog.title}
+        className='flex min-w-0 flex-col gap-[10px] p-[20px]'
+        data-slot='terminal-dialog'
+      >
         <h3 className='ghostex-chat-card-title text-sm leading-snug font-medium text-foreground'>{dialog.title}</h3>
-        <p className='mt-1 whitespace-pre-line break-words text-sm leading-snug text-muted-foreground'>
-          {dialog.body}
-        </p>
+        <p className='mt-1 whitespace-pre-line break-words text-sm leading-snug text-muted-foreground'>{dialog.body}</p>
         <div className='mt-3 flex flex-wrap items-center gap-2'>
           <Button disabled={disabled} onClick={() => void run({ dialogAction: 'cancel' })} size='sm' variant='outline'>
             {pending ? 'Restoring chat…' : 'Restore chat'}
           </Button>
         </div>
-        {!canSend ? <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>Input is held by another device.</p> : null}
-        {error ? <p role='alert' className='mt-2 text-[11px] leading-snug text-destructive/80'>{error}</p> : null}
+        {!canSend ? (
+          <p className='mt-2 text-[11px] leading-snug text-muted-foreground'>Input is held by another device.</p>
+        ) : null}
+        {error ? (
+          <p role='alert' className='mt-2 text-[11px] leading-snug text-destructive/80'>
+            {error}
+          </p>
+        ) : null}
       </section>
     );
   }
@@ -103,7 +111,8 @@ export function SessionChatTerminalDialogCard({
                 : dialog.footer.includes('submit')
                   ? 'Submit'
                   : 'Save';
-  const multilineInput = dialog.input === 'text' &&
+  const multilineInput =
+    dialog.input === 'text' &&
     (dialog.title.startsWith('Tell us more (') ||
       dialog.title === 'Custom review instructions' ||
       dialog.title === 'Submit feedback / bug report');
@@ -125,7 +134,14 @@ export function SessionChatTerminalDialogCard({
         <div className='flex items-center justify-between gap-3'>
           <h3 className='ghostex-chat-card-title text-sm font-medium'>{dialog.title}</h3>
           {/* CDXC:SessionChat 2026-09-06 DECISION: User: top-right Cancel/Close controls use the same X button as the existing question cards. */}
-          <Button className='ghostex-chat-card-dismiss' aria-label={cancelLabel} disabled={disabled} onClick={() => void run({ dialogAction: 'cancel' })} size='icon-xs' variant='outline'>
+          <Button
+            className='ghostex-chat-card-dismiss'
+            aria-label={cancelLabel}
+            disabled={disabled}
+            onClick={() => void run({ dialogAction: 'cancel' })}
+            size='icon-xs'
+            variant='outline'
+          >
             <IconX aria-hidden='true' stroke={2} />
           </Button>
         </div>
@@ -208,7 +224,9 @@ export function SessionChatTerminalDialogCard({
             /* CDXC:SessionChat 2026-09-07 DECISION: User: textarea cards place their footer hint on the left of the submit button in the same row below the input. */
             <div className='flex items-center justify-between gap-3'>
               <p className='ghostex-chat-card-hint min-w-0 text-xs text-muted-foreground'>{dialog.footer}</p>
-              <Button type='submit' disabled={disabled} size='sm' variant='outline'>{submitLabel}</Button>
+              <Button type='submit' disabled={disabled} size='sm' variant='outline'>
+                {submitLabel}
+              </Button>
             </div>
           ) : (
             <Button type='submit' disabled={disabled} size='sm' variant='outline'>
@@ -217,8 +235,9 @@ export function SessionChatTerminalDialogCard({
           )}
         </form>
       ) : null}
-      {visibleActions.length > 0 ? <div className='flex flex-wrap gap-2'>
-        {visibleActions.map((action) => (
+      {visibleActions.length > 0 ? (
+        <div className='flex flex-wrap gap-2'>
+          {visibleActions.map((action) => (
             <Button
               key={action}
               disabled={disabled}
@@ -233,7 +252,8 @@ export function SessionChatTerminalDialogCard({
                   : (ACTION_LABELS[action] ?? action)}
             </Button>
           ))}
-      </div> : null}
+        </div>
+      ) : null}
       {!multilineInput ? <p className='ghostex-chat-card-hint text-xs text-muted-foreground'>{dialog.footer}</p> : null}
       {!canSend ? <p className='text-xs text-muted-foreground'>Input is currently controlled elsewhere.</p> : null}
       {error ? (

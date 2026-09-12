@@ -29,12 +29,7 @@ export const NOTIFICATION_FEED_BODY_MAX_CHARS = 280;
  */
 export type NotificationFeedKind = 'finished' | 'needsInput' | 'bell' | 'custom';
 
-export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = [
-  'finished',
-  'needsInput',
-  'bell',
-  'custom',
-];
+export const NOTIFICATION_FEED_KINDS: readonly NotificationFeedKind[] = ['finished', 'needsInput', 'bell', 'custom'];
 
 export type NotificationFeedItem = {
   id: string;
@@ -78,13 +73,7 @@ export const EMPTY_NOTIFICATION_FEED_STATE: NotificationFeedState = {
  * markAllRead and clearAll take nothing.
  */
 export type NotificationFeedUpdateAction =
-  | 'markRead'
-  | 'markUnread'
-  | 'dismiss'
-  | 'markSessionRead'
-  | 'deferUnread'
-  | 'markAllRead'
-  | 'clearAll';
+  'markRead' | 'markUnread' | 'dismiss' | 'markSessionRead' | 'deferUnread' | 'markAllRead' | 'clearAll';
 
 export type NotificationFeedUpdateParams = {
   action: NotificationFeedUpdateAction;

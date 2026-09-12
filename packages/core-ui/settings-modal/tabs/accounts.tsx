@@ -26,7 +26,9 @@ export function AccountsSettingsTab({
             hideEmails={hideAccountEmails}
             onHideEmailsChange={onHideAccountEmailsChange}
           />
-        ) : searchEmptyState}
+        ) : (
+          searchEmptyState
+        )}
       </div>
     </SettingsNativeScrollArea>
   );

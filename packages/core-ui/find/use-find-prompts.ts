@@ -374,18 +374,21 @@ export function useFindPrompts({ acceptAll, transport }: UseFindPromptsOptions):
     [transport]
   );
 
-  const resumeRow = useCallback(async (row: FindPromptRow) => {
-    try {
-      const plan = await transport.resolveLaunch({
-        action: 'resume',
-        key: row.key,
-        ...(acceptAll === undefined ? {} : { acceptAll }),
-      });
-      await applyLaunchPlan(plan);
-    } catch (error) {
-      setNotice({ detail: errorMessage(error), kind: 'error', message: 'Could not resume.' });
-    }
-  }, [acceptAll, applyLaunchPlan, transport]);
+  const resumeRow = useCallback(
+    async (row: FindPromptRow) => {
+      try {
+        const plan = await transport.resolveLaunch({
+          action: 'resume',
+          key: row.key,
+          ...(acceptAll === undefined ? {} : { acceptAll }),
+        });
+        await applyLaunchPlan(plan);
+      } catch (error) {
+        setNotice({ detail: errorMessage(error), kind: 'error', message: 'Could not resume.' });
+      }
+    },
+    [acceptAll, applyLaunchPlan, transport]
+  );
 
   const resumeSelected = useCallback(async () => {
     if (selectedRow) {

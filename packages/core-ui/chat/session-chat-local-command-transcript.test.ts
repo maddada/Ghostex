@@ -97,13 +97,10 @@ describe('archived slash commands', () => {
     };
 
     const live = sessionChatAppCommandsAsMessages([appCommand], []);
-    expect(live.map((message) => message.id)).toEqual([
-      'app-command-local:a1',
-      'app-command-local:a1:output',
-    ]);
-    expect(
-      live.map((message) => (message.blocks[0]?.type === 'text' ? message.blocks[0].text : ''))
-    ).toEqual(sessionChatLocalCommandTexts(appCommand.command, appCommand.output));
+    expect(live.map((message) => message.id)).toEqual(['app-command-local:a1', 'app-command-local:a1:output']);
+    expect(live.map((message) => (message.blocks[0]?.type === 'text' ? message.blocks[0].text : ''))).toEqual(
+      sessionChatLocalCommandTexts(appCommand.command, appCommand.output)
+    );
 
     // Once the archived envelope reaches the messages, the live row IS that
     // row: showing both would render one command twice.
@@ -138,9 +135,9 @@ describe('client markers for archived commands', () => {
       timestamp: 4,
       source: 'transcript',
     };
-    expect(
-      retireSessionChatMarkersCoveredByLocalCommands([marker('/rename pilot game work')], [], [archived])
-    ).toEqual([]);
+    expect(retireSessionChatMarkersCoveredByLocalCommands([marker('/rename pilot game work')], [], [archived])).toEqual(
+      []
+    );
   });
 
   test("an agent's own envelope does not retire them", () => {

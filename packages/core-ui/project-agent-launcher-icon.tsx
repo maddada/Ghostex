@@ -31,7 +31,7 @@ export function ProjectAgentLauncherIcon({
      * caller opts into brand color.
      */
     const iconStyle =
-      (colorMode === 'brand' || (accountIndicator !== undefined && (agent.icon === 'claude' || agent.icon === 'codex')))
+      colorMode === 'brand' || (accountIndicator !== undefined && (agent.icon === 'claude' || agent.icon === 'codex'))
         ? getBrandAgentLogoStyle(agent.icon)
         : {
             backgroundColor: 'currentColor',
@@ -39,11 +39,17 @@ export function ProjectAgentLauncherIcon({
             WebkitMaskImage: `url("${AGENT_LOGOS[agent.icon]}")`,
           };
 
-    return <span className='gx-account-mark' data-provider={agent.icon}>
-      <span aria-hidden='true' className='group-agent-launcher-icon group-agent-launcher-agent-icon' data-agent-icon={agent.icon} style={iconStyle} />
-      <AccountIndicator value={accountIndicator} />
-    </span>;
-
+    return (
+      <span className='gx-account-mark' data-provider={agent.icon}>
+        <span
+          aria-hidden='true'
+          className='group-agent-launcher-icon group-agent-launcher-agent-icon'
+          data-agent-icon={agent.icon}
+          style={iconStyle}
+        />
+        <AccountIndicator value={accountIndicator} />
+      </span>
+    );
   }
 
   return (

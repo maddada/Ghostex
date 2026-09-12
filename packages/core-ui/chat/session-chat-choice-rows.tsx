@@ -50,7 +50,13 @@ export function SessionChatChoiceRows({
     <div className={cn('max-h-[45vh] overflow-y-auto', dense ? 'grid grid-cols-2 gap-1.5' : 'space-y-1.5')}>
       {options.map((option, optionIndex) => {
         const isSelected = selected.includes(optionIndex);
-        const shortcutKey = !showShortcuts ? null : shortcutLabels ? shortcutLabels[optionIndex] ?? null : optionIndex < 9 ? optionIndex + 1 : null;
+        const shortcutKey = !showShortcuts
+          ? null
+          : shortcutLabels
+            ? (shortcutLabels[optionIndex] ?? null)
+            : optionIndex < 9
+              ? optionIndex + 1
+              : null;
         return (
           <button
             className={cn(
@@ -78,7 +84,9 @@ export function SessionChatChoiceRows({
             <span className='flex min-w-0 flex-1 flex-col gap-0.5'>
               <span className='ghostex-chat-card-option-label text-sm leading-snug font-normal'>{option.label}</span>
               {option.description && option.description !== option.label ? (
-                <span className='ghostex-chat-card-content text-xs leading-snug text-muted-foreground'>{option.description}</span>
+                <span className='ghostex-chat-card-content text-xs leading-snug text-muted-foreground'>
+                  {option.description}
+                </span>
               ) : null}
             </span>
             {isSelected ? (

@@ -1,12 +1,6 @@
 import { IconChevronDown } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/packages/components/ui/command';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/packages/components/ui/command';
 import { SearchableDropdownContent } from '@/packages/components/ui/searchable-dropdown';
 import { Popover, PopoverTrigger } from '@/packages/components/ui/popover';
 
@@ -46,12 +40,7 @@ export function SessionProjectFilter({
       </PopoverTrigger>
       <SearchableDropdownContent align='end' className='quick-access-session-project-menu'>
         <Command>
-          <CommandInput
-            autoFocus
-            placeholder='Filter projects...'
-            aria-label='Filter projects'
-            clearOnEscape={false}
-          />
+          <CommandInput autoFocus placeholder='Filter projects...' aria-label='Filter projects' clearOnEscape={false} />
           <CommandList>
             <CommandEmpty>No projects found.</CommandEmpty>
             <CommandItem

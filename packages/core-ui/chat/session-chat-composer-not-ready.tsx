@@ -96,7 +96,9 @@ export function SessionChatComposerNotReadyNotice({
   return (
     <SessionChatNoticeCard kind='composerNotReady' role='alert' severity='error'>
       <div className='flex min-w-0 flex-col px-3 py-2.5'>
-        <div className='ghostex-chat-card-title text-sm leading-snug font-medium text-foreground'>{NOT_READY_HEADLINE}</div>
+        <div className='ghostex-chat-card-title text-sm leading-snug font-medium text-foreground'>
+          {NOT_READY_HEADLINE}
+        </div>
         {reason && reason !== NOT_READY_HEADLINE ? (
           <div className='ghostex-chat-card-content mt-1 text-xs leading-snug text-muted-foreground'>{reason}</div>
         ) : null}

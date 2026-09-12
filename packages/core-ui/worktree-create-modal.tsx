@@ -11,13 +11,7 @@ import {
 } from 'react';
 import { IconFolderOpen, IconGitBranch, IconPhotoPlus } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/packages/components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/packages/components/ui/dialog';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/packages/components/ui/field';
 import {
   Select,
@@ -280,8 +274,7 @@ export function WorktreeCreateModal({
     }
 
     const links = files.map((file, index) => {
-      const path =
-        (file as File & { path?: string }).path?.trim() || file.webkitRelativePath?.trim() || file.name;
+      const path = (file as File & { path?: string }).path?.trim() || file.webkitRelativePath?.trim() || file.name;
       return `[Image #${imageCount + index + 1}](${path})`;
     });
     setImageCount((count) => count + files.length);
@@ -409,9 +402,7 @@ export function WorktreeCreateModal({
           setSelectedExistingWorktreeValue((current) =>
             worktrees.some((worktree) => existingWorktreeOptionValue(worktree) === current)
               ? current
-              : existingWorktreeOptionValue(
-                  worktrees.find((worktree) => !worktree.isRegistered) ?? worktrees[0]
-                )
+              : existingWorktreeOptionValue(worktrees.find((worktree) => !worktree.isRegistered) ?? worktrees[0])
           );
           return;
         }
@@ -559,9 +550,7 @@ export function WorktreeCreateModal({
                   </SelectContent>
                 </Select>
                 {!selectedBaseBranch ? (
-                  <FieldDescription>
-                    {isLoadingWorktrees ? 'Loading branches.' : 'No branches found.'}
-                  </FieldDescription>
+                  <FieldDescription>{isLoadingWorktrees ? 'Loading branches.' : 'No branches found.'}</FieldDescription>
                 ) : null}
               </Field>
             ) : null}
@@ -593,22 +582,16 @@ export function WorktreeCreateModal({
                 onChange={(event) => setPrompt(event.currentTarget.value)}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                placeholder={
-                  mode === 'openExisting' ? 'Optional prompt after opening' : 'Describe the worktree task'
-                }
+                placeholder={mode === 'openExisting' ? 'Optional prompt after opening' : 'Describe the worktree task'}
                 ref={inputRef}
                 value={prompt}
               />
-              <FieldDescription>
-                Paste images or pick files to insert image links into the prompt.
-              </FieldDescription>
+              <FieldDescription>Paste images or pick files to insert image links into the prompt.</FieldDescription>
             </Field>
           </FieldGroup>
           <DialogFooter>
             <Button
-              onClick={() =>
-                postAppModalHostMessage({ type: 'pickWorktreeImages' }, 'AppModals:pickWorktreeImages')
-              }
+              onClick={() => postAppModalHostMessage({ type: 'pickWorktreeImages' }, 'AppModals:pickWorktreeImages')}
               type='button'
               variant='secondary'
             >
@@ -626,11 +609,7 @@ export function WorktreeCreateModal({
 }
 
 function resolveInitialWorktreeAgentId(commandAgents: SidebarAgentButton[], defaultAgentId?: string): string {
-  return (
-    commandAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ??
-    commandAgents[0]?.agentId ??
-    ''
-  );
+  return commandAgents.find((agent) => agent.agentId === defaultAgentId)?.agentId ?? commandAgents[0]?.agentId ?? '';
 }
 
 function createDraft(

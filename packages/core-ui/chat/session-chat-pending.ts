@@ -451,7 +451,9 @@ export function sessionChatPendingSendsAsMessages(pending: readonly SessionChatP
     timestamp: entry.sentAt,
     ...(entry.startupDelivery || entry.queuedPromptId
       ? { startupDelivery: entry.startupDelivery ?? { promptId: entry.queuedPromptId!, state: 'queued' as const } }
-      : entry.sentWhileWorking ? { queued: true as const } : {}),
+      : entry.sentWhileWorking
+        ? { queued: true as const }
+        : {}),
   }));
 }
 

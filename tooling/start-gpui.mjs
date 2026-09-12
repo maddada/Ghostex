@@ -392,7 +392,9 @@ function validateStartArguments(args) {
       verbose = true;
       continue;
     }
-    throw new Error(`Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose and --profile flags.`);
+    throw new Error(
+      `Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose and --profile flags.`
+    );
   }
   return { verbose, profile };
 }

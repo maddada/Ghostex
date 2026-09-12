@@ -783,7 +783,7 @@ function MessageRow({
   questionPairsAsRows?: boolean;
   showAssistantCopy: boolean;
   verboseMode: boolean;
-  } & SessionChatStartupSendActions) {
+} & SessionChatStartupSendActions) {
   const { prose, tools: allTools } = splitSessionChatBlocks(message.blocks);
   const { tools, changes } = splitSessionChatFileChanges(allTools);
   const fileCards = hideFileChanges ? null : <SessionChatFileChangeCards changes={changes} messageId={message.id} />;
@@ -1741,91 +1741,91 @@ export function SessionChatMessageList({
             >
               {summaryMode
                 ? summaryTurns.map((turn) => (
-                  <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
-                    <MessageRow
-                      message={turn.user}
-                      onRetryStartupSend={onRetryStartupSend}
-                      onRemoveStartupSend={onRemoveStartupSend}
-                      onSavePrompt={onSavePrompt}
-                      {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
-                      showAssistantCopy={false}
-                      verboseMode={verboseMode}
-                    />
-                    {turn.final ? (
-                      <SessionChatDisclosure key='agent-reply' label='Agent reply' onExpand={anchorExpandedAreaTop}>
-                        <MessageRow
-                          message={turn.final}
-                          {...(saveMessageMarkdown && listMessageMarkdownPaths
-                            ? { onSaveMarkdown: setMarkdownToSave }
-                            : {})}
-                          showAssistantCopy={copyableAssistantMessageIds.has(turn.final.id)}
-                          verboseMode={verboseMode}
-                        />
-                      </SessionChatDisclosure>
-                    ) : turn.active ? (
-                      <SessionChatDisclosure key='active-work' label='Active work' onExpand={anchorExpandedAreaTop}>
-                        {turn.activeWork.map((message, index) => (
-                          <MessageRow
-                            isStreaming={index === turn.activeWork.length - 1}
-                            key={message.id}
-                            message={message}
-                            showAssistantCopy={false}
-                            verboseMode={verboseMode}
-                          />
-                        ))}
-                      </SessionChatDisclosure>
-                    ) : null}
-                  </MessageScrollerItem>
-                ))
-                : renderItems.map((item, index) => (
-                  <MessageScrollerItem
-                    key={item.kind === 'message' ? item.message.id : `completed-work:${item.turn.user.id}`}
-                    messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
-                    // No row is a scroll anchor: anchoring a message to the top of
-                    // the viewport makes message-scroller pad the transcript with a
-                    // spacer so that message can reach the top, which leaves a
-                    // viewport-sized scrollable gap between the newest row and the
-                    // composer until the reply grows tall enough to fill it.
-                    // Following the bottom keeps the newest row above the composer.
-                  >
-                    {item.kind === 'message' ? (
+                    <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
                       <MessageRow
-                        /*
-                         * Only the newest row can still be growing, and only while
-                         * the agent is working: transcript tailing appends to the
-                         * last message, and the synthetic streaming preview row is
-                         * always last when it exists. Earlier rows are settled, so
-                         * their code fences are safe to highlight and cache.
-                         * `completedWorkRenderItems` never folds the active
-                         * response while working, so a "completed-work" item is
-                         * settled by construction and keeps the default
-                         * `isStreaming={false}`.
-                         */
-                        isStreaming={isWorking && index === renderItems.length - 1}
-                        message={item.message}
+                        message={turn.user}
                         onRetryStartupSend={onRetryStartupSend}
                         onRemoveStartupSend={onRemoveStartupSend}
                         onSavePrompt={onSavePrompt}
                         {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
-                        {...(saveMessageMarkdown && listMessageMarkdownPaths
-                          ? { onSaveMarkdown: setMarkdownToSave }
-                          : {})}
-                        showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
+                        showAssistantCopy={false}
                         verboseMode={verboseMode}
                       />
-                    ) : (
-                      <CompletedWork
-                        onExpand={anchorExpandedAreaTop}
-                        {...(saveMessageMarkdown && listMessageMarkdownPaths
-                          ? { onSaveMarkdown: setMarkdownToSave }
-                          : {})}
-                        showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
-                        turn={item.turn}
-                        verboseMode={verboseMode}
-                      />
-                    )}
-                  </MessageScrollerItem>
-                ))}
+                      {turn.final ? (
+                        <SessionChatDisclosure key='agent-reply' label='Agent reply' onExpand={anchorExpandedAreaTop}>
+                          <MessageRow
+                            message={turn.final}
+                            {...(saveMessageMarkdown && listMessageMarkdownPaths
+                              ? { onSaveMarkdown: setMarkdownToSave }
+                              : {})}
+                            showAssistantCopy={copyableAssistantMessageIds.has(turn.final.id)}
+                            verboseMode={verboseMode}
+                          />
+                        </SessionChatDisclosure>
+                      ) : turn.active ? (
+                        <SessionChatDisclosure key='active-work' label='Active work' onExpand={anchorExpandedAreaTop}>
+                          {turn.activeWork.map((message, index) => (
+                            <MessageRow
+                              isStreaming={index === turn.activeWork.length - 1}
+                              key={message.id}
+                              message={message}
+                              showAssistantCopy={false}
+                              verboseMode={verboseMode}
+                            />
+                          ))}
+                        </SessionChatDisclosure>
+                      ) : null}
+                    </MessageScrollerItem>
+                  ))
+                : renderItems.map((item, index) => (
+                    <MessageScrollerItem
+                      key={item.kind === 'message' ? item.message.id : `completed-work:${item.turn.user.id}`}
+                      messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
+                      // No row is a scroll anchor: anchoring a message to the top of
+                      // the viewport makes message-scroller pad the transcript with a
+                      // spacer so that message can reach the top, which leaves a
+                      // viewport-sized scrollable gap between the newest row and the
+                      // composer until the reply grows tall enough to fill it.
+                      // Following the bottom keeps the newest row above the composer.
+                    >
+                      {item.kind === 'message' ? (
+                        <MessageRow
+                          /*
+                           * Only the newest row can still be growing, and only while
+                           * the agent is working: transcript tailing appends to the
+                           * last message, and the synthetic streaming preview row is
+                           * always last when it exists. Earlier rows are settled, so
+                           * their code fences are safe to highlight and cache.
+                           * `completedWorkRenderItems` never folds the active
+                           * response while working, so a "completed-work" item is
+                           * settled by construction and keeps the default
+                           * `isStreaming={false}`.
+                           */
+                          isStreaming={isWorking && index === renderItems.length - 1}
+                          message={item.message}
+                          onRetryStartupSend={onRetryStartupSend}
+                          onRemoveStartupSend={onRemoveStartupSend}
+                          onSavePrompt={onSavePrompt}
+                          {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
+                          {...(saveMessageMarkdown && listMessageMarkdownPaths
+                            ? { onSaveMarkdown: setMarkdownToSave }
+                            : {})}
+                          showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
+                          verboseMode={verboseMode}
+                        />
+                      ) : (
+                        <CompletedWork
+                          onExpand={anchorExpandedAreaTop}
+                          {...(saveMessageMarkdown && listMessageMarkdownPaths
+                            ? { onSaveMarkdown: setMarkdownToSave }
+                            : {})}
+                          showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
+                          turn={item.turn}
+                          verboseMode={verboseMode}
+                        />
+                      )}
+                    </MessageScrollerItem>
+                  ))}
             </MessageScrollerContent>
           </MessageScrollerViewport>
           {/* CDXC:SessionChat 2026-09-11 DECISION:

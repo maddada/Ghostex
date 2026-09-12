@@ -52,13 +52,15 @@ export function AccountConnectionGuide({
           <DialogHeader>
             <DialogTitle>Connect your accounts</DialogTitle>
             <DialogDescription>
-              Add an account for usage stats on the computer where your sessions run. This is optional, even for a single account.
+              Add an account for usage stats on the computer where your sessions run. This is optional, even for a
+              single account.
             </DialogDescription>
           </DialogHeader>
           <section>
             <h3>1. Save a login</h3>
             <p>
-              Enter the account email and allow shared conversations, then choose Add account. Finish signing in through your browser; Settings shows the progress automatically.
+              Enter the account email and allow shared conversations, then choose Add account. Finish signing in through
+              your browser; Settings shows the progress automatically.
             </p>
             <ul className='gx-account-guide-providers'>
               {(['claude', 'codex'] as const).map((id) => {
@@ -80,17 +82,26 @@ export function AccountConnectionGuide({
                         : 'Enter the new account’s email below and choose it in the browser. xswap verifies the login before saving a separate account home with shared session history. To refresh an existing login, use that account’s Reconnect action.'}
                     </p>
                     {helper && !helper.installed && <CopyCommand command={helper.installCommand} />}
-
                   </li>
                 );
               })}
             </ul>
-            {provider && helpers.find((helper) => helper.provider === provider)?.installed && <AccountConnectFlow machineId={machineId} provider={provider} />}
+            {provider && helpers.find((helper) => helper.provider === provider)?.installed && (
+              <AccountConnectFlow machineId={machineId} provider={provider} />
+            )}
           </section>
           <section>
             <h3>2. Your account is ready</h3>
-            <p>Ghostex verifies and adds the connected account automatically, then opens Settings &gt; Accounts with it highlighted. Star the account to show its usage in the titlebar. In chat context details, star Account limits to show usage in the status line.</p>
-            <p>Give the account a name or swap its slot with another account. A small label centered over the session’s agent icon identifies the account. Use its slot number or set up to two custom letters or numbers in the account’s settings.</p>
+            <p>
+              Ghostex verifies and adds the connected account automatically, then opens Settings &gt; Accounts with it
+              highlighted. Star the account to show its usage in the titlebar. In chat context details, star Account
+              limits to show usage in the status line.
+            </p>
+            <p>
+              Give the account a name or swap its slot with another account. A small label centered over the session’s
+              agent icon identifies the account. Use its slot number or set up to two custom letters or numbers in the
+              account’s settings.
+            </p>
           </section>
           <section>
             <h3>3. Start with an account</h3>
@@ -99,9 +110,9 @@ export function AccountConnectionGuide({
               session immediately. Custom agents keep their own settings.
             </p>
             <p>
-              Quick launch uses the account chosen under Account for new sessions in Settings. Choosing another
-              account from the launcher applies only to that new session. Until you add an account for a provider,
-              Ghostex uses its current CLI login without an account switcher.
+              Quick launch uses the account chosen under Account for new sessions in Settings. Choosing another account
+              from the launcher applies only to that new session. Until you add an account for a provider, Ghostex uses
+              its current CLI login without an account switcher.
             </p>
           </section>
           <section>

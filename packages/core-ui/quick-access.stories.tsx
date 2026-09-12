@@ -223,10 +223,7 @@ function useQuickAccessStoryHost(respondToRequests = true): WebviewApi {
         if (message.type === 'requestPreviousSessions') {
           dispatchStoryMessage({
             cursor: message.cursor ? undefined : 'older',
-            previousSessions: (message.cursor
-              ? STORY_OLDER_PREVIOUS_SESSIONS
-              : STORY_PREVIOUS_SESSIONS
-            ).filter(
+            previousSessions: (message.cursor ? STORY_OLDER_PREVIOUS_SESSIONS : STORY_PREVIOUS_SESSIONS).filter(
               (session) =>
                 (!message.projectId || session.projectId === message.projectId) &&
                 (!message.externalOnly || session.externalSession)
@@ -370,14 +367,7 @@ function RecentProjectsLoadingStory() {
 
 function RecentSessionsLoadingStory({ initialScope = 'all' }: { initialScope?: 'all' | 'external' }) {
   const vscode = useQuickAccessStoryHost(false);
-  return (
-    <PreviousSessionsModal
-      initialScope={initialScope}
-      isOpen={true}
-      onClose={() => undefined}
-      vscode={vscode}
-    />
-  );
+  return <PreviousSessionsModal initialScope={initialScope} isOpen={true} onClose={() => undefined} vscode={vscode} />;
 }
 
 const meta = {

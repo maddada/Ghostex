@@ -124,7 +124,9 @@ function CardHeader({
         </span>
       ) : null}
       {collapsed && collapsedSummary ? (
-        <span className='ghostex-chat-card-content min-w-0 flex-1 truncate text-xs text-muted-foreground'>{collapsedSummary}</span>
+        <span className='ghostex-chat-card-content min-w-0 flex-1 truncate text-xs text-muted-foreground'>
+          {collapsedSummary}
+        </span>
       ) : null}
     </>
   );
@@ -156,7 +158,13 @@ function CardHeader({
         <div className='flex min-w-0 flex-1 items-center gap-3 px-2.5 py-1.5'>{labelRow}</div>
       )}
       {onDismiss ? (
-        <Button className='ghostex-chat-card-dismiss' aria-label='Dismiss' onClick={onDismiss} size='icon-xs' variant='outline'>
+        <Button
+          className='ghostex-chat-card-dismiss'
+          aria-label='Dismiss'
+          onClick={onDismiss}
+          size='icon-xs'
+          variant='outline'
+        >
           <IconX aria-hidden='true' stroke={2} />
         </Button>
       ) : null}
@@ -388,11 +396,7 @@ export function SessionChatInteractiveCard({
     return (
       <CardShell kind='approval'>
         <CardPanel>
-          <CardHeader
-            label='Approval Request'
-            uppercase={false}
-            {...(readOnly ? {} : { onDismiss: dismiss })}
-          />
+          <CardHeader label='Approval Request' uppercase={false} {...(readOnly ? {} : { onDismiss: dismiss })} />
           <div className='min-w-0 px-5 pt-1 pb-3.5'>
             <p className='text-sm text-foreground/90'>Allow this command?</p>
             {prompt.summary ? (

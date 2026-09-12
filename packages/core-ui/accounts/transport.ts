@@ -16,7 +16,9 @@ export function notifyAccountsConnectionsChanged(): void {
 }
 export function subscribeAccountsConnections(listener: () => void): () => void {
   connectionListeners.add(listener);
-  return () => { connectionListeners.delete(listener); };
+  return () => {
+    connectionListeners.delete(listener);
+  };
 }
 export function getAccountsConnectionRevision(): number {
   return connectionRevision;
@@ -58,8 +60,11 @@ export function getAccountsConnections(): AccountsConnection[] {
 }
 
 export function showAccountFlowToast(title: string, description: string): void {
-  postAppModalHostMessage(createAppToastRequest('info', title, description, {
-    durationMs: 12000,
-    toastId: 'account-connection-flow',
-  }), 'Accounts:connectionFlow');
+  postAppModalHostMessage(
+    createAppToastRequest('info', title, description, {
+      durationMs: 12000,
+      toastId: 'account-connection-flow',
+    }),
+    'Accounts:connectionFlow'
+  );
 }

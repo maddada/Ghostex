@@ -27,10 +27,17 @@ export function SessionChatStartupSendStatus({
   };
   const failed = delivery.state === 'failed';
   return (
-    <div className='flex max-w-full flex-wrap items-center justify-end gap-1 self-end text-muted-foreground text-xs' role='status'>
-      <span>{error ?? (failed ? delivery.errorMessage ?? 'Message could not be delivered.' : 'Waiting for agent…')}</span>
+    <div
+      className='flex max-w-full flex-wrap items-center justify-end gap-1 self-end text-muted-foreground text-xs'
+      role='status'
+    >
+      <span>
+        {error ?? (failed ? (delivery.errorMessage ?? 'Message could not be delivered.') : 'Waiting for agent…')}
+      </span>
       {failed && onRetryStartupSend ? (
-        <Button disabled={busy} onClick={() => void run(onRetryStartupSend)} size='sm' variant='ghost'>Retry</Button>
+        <Button disabled={busy} onClick={() => void run(onRetryStartupSend)} size='sm' variant='ghost'>
+          Retry
+        </Button>
       ) : null}
       {failed && onRemoveStartupSend ? (
         <Button disabled={busy} onClick={() => void run(onRemoveStartupSend)} size='sm' variant='ghost'>

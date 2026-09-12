@@ -242,13 +242,7 @@ export function ExtensionsBrowserList({ state }: { state: ExtensionsBrowserState
       ) : state.error && !state.catalogSnapshot ? (
         <ExtensionEmptyState
           action={
-            <Button
-              className='font-normal'
-              onClick={() => void state.load()}
-              size='sm'
-              type='button'
-              variant='outline'
-            >
+            <Button className='font-normal' onClick={() => void state.load()} size='sm' type='button' variant='outline'>
               <IconRefresh data-icon='inline-start' />
               Try again
             </Button>
