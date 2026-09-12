@@ -607,12 +607,6 @@ export function SettingsModal({
     rememberActiveScrollPosition();
     rememberSettingsModalTab(visibleTab);
     persistSettingsModalNavigation(visibleTab);
-    if (visibleTab === 'settings' || visibleTab === 'hotkeys') {
-      setExpandedSettingsSidebarPages((expandedPages) => ({
-        ...expandedPages,
-        [visibleTab]: true,
-      }));
-    }
     setActiveTabState(visibleTab);
   };
 
@@ -3153,6 +3147,11 @@ function SettingsSearchNoMatchesNotice({
   );
 }
 
+/**
+ * CDXC:Settings 2026-09-12 DECISION:
+ * User: Settings table-of-contents titles only navigate; only the small chevron on the right expands or collapses their entries.
+ * This replaces the full-header toggle behavior.
+ */
 function SettingsSidebarNavigation({
   expandedPages,
   onShowAdvancedSettingsChange,
@@ -3195,20 +3194,7 @@ function SettingsSidebarNavigation({
               key={page.id}
             >
               <div className='settings-sidebar-page-row' data-expanded={String(expanded)}>
-                {/*
-                 * CDXC:Settings 2026-06-29-21:45:
-                 * Expandable Settings sidebar headers must expand and collapse from the full visible header, not only from the disclosure chevron, because the row highlight presents the icon, label, and chevron as one control.
-                 */}
-                <TabsTrigger
-                  aria-expanded={hasSections ? expanded : undefined}
-                  className='settings-sidebar-tab-trigger'
-                  onClick={() => {
-                    if (hasSections) {
-                      onTogglePage(page.id);
-                    }
-                  }}
-                  value={page.id}
-                >
+                <TabsTrigger className='settings-sidebar-tab-trigger' value={page.id}>
                   <PageIcon aria-hidden='true' data-icon='inline-start' />
                   <span className='settings-sidebar-page-title truncate'>{page.title}</span>
                 </TabsTrigger>
@@ -3241,17 +3227,10 @@ function SettingsSidebarNavigation({
                       <Fragment key={section.id}>
                         <div className='settings-sidebar-section-row'>
                           <Button
-                            aria-controls={hasSubsections ? subsectionListId : undefined}
                             aria-current={section.active ? 'location' : undefined}
-                            aria-expanded={hasSubsections ? sectionExpanded : undefined}
                             className='settings-section-sidebar-button settings-sidebar-subsection-button'
                             data-active={section.active ? 'true' : 'false'}
-                            onClick={() => {
-                              section.onSelect();
-                              if (hasSubsections) {
-                                toggleSection(sectionKey);
-                              }
-                            }}
+                            onClick={section.onSelect}
                             type='button'
                             variant='ghost'
                           >

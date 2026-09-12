@@ -320,6 +320,8 @@ session. Pick a specific account instead to always start
 with it. When the rule finds no account, new sessions use the current CLI login.
 Terminal notices in Claude and Codex chats also offer Switch account beside
 Open terminal, so you can choose another account directly from a usage-limit warning.
+In the chat's More actions menu, click Switch Account to open its submenu;
+hovering over it does not open it.
 Switching a running Claude or Codex session to another account, from More
 actions > Switch Account, a terminal notice, or automatically when its account hits a usage limit,
 exits the CLI inside its own terminal and resumes the same conversation there,
@@ -581,6 +583,8 @@ Advanced holds Enable Experimental Features and the Debugging rows (Show debug
 UI controls gates diagnostic disk logging; leave these to the user).
 Settings that depend on a setting above them have an indented ↳ before their
 name. They appear when the parent setting enables them.
+In the Settings table of contents, click a page or section title to go there.
+Only the small chevron on its right expands or collapses its entries.
 
 Related settings: `sidebarTheme`, `customSidebarTitlebarBackgroundDarknessPercent`,
 `customSidebarTitlebarBackgroundTintColor`, `accentColor`,
