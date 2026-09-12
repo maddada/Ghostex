@@ -5,7 +5,7 @@
 - New Features
 
   - A Notifications bell sits in the titlebar with an unread count. Open it for one row per session, newest first, saying whether the agent finished its turn or needs you, with the last thing it said. Click a row to jump to that session, hover a row to dismiss it, and use Next unread, Mark all read or Clear all in the header. Cmd+I opens the panel, Cmd+Shift+U jumps to the latest unread, and Cmd+Ctrl+U pushes the current session to the back of the queue and moves to the next one. Scripts and agent hooks can post their own rows with `ghostex notify --title "..."`.
-  - First run is a real walkthrough now: what lives next to your agents, the agent CLIs you already have (found for you and listed), and pairing your phone, and then it opens your first project. "I already know Ghostex" skips the whole thing.
+  - A new setup walkthrough, from Tips > Setup in the titlebar: what lives next to your agents, the agent CLIs you already have (found for you and listed), pairing your phone, and then opening your first project. "I already know Ghostex" leaves at any point. The automatic first run keeps the older setup screen for now, which lists the agents you have connected instead of every CLI it can find.
   - Make your own session tags. In Settings > General > Sidebar > Sidebar Tags choose Add tag, then give it a name, an icon and a color; New tag at the bottom of the Tag as menu opens the same form. Custom tags sit beside the built-in Priority, Progress and Type tags in menus and filters, can be reordered, hidden or deleted, show up in the mobile app, and work with `ghostex tag-session`.
   - Snooze a session until later: 1 hour, 3 hours, Tomorrow at 9:00, or Next week on Monday at 9:00. It sleeps in its own Snoozed section and returns to its usual place when the time comes. Unsnooze brings it back early.
   - Choose what a hovered session card shows. Settings > General > Session Cards has a strip of buttons (Rename, Pin, Note, Snooze, Close After Done, Tag, Park, Sleep, Close): click one to turn it on or off, drag to reorder them, and the chevron keeps everything before it hidden until you open it. Each project remembers whether its chevron is open.
@@ -31,6 +31,8 @@
 
   - Summary mode has its own button in the chat toolbar when there is room, and stays under More actions when the chat is narrow.
   - Settings rows that depend on the row above them are indented and appear only once their parent is on.
+  - In the Settings table of contents, a page or section title goes straight there; only the small chevron beside it expands or collapses the entries underneath.
+  - In the chat's More actions menu, Switch Account opens on a click, so passing the pointer over it no longer opens the account submenu.
   - The model picker orders Cursor and Antigravity models like the rest, and Pi and Antigravity can generate session titles.
   - Codex update cards name both versions and explain the update in words instead of printing a raw install command.
   - The History button on a project header opens Quick Access > Sessions for that project with Closed selected, ready to search what you closed.
