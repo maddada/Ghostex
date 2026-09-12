@@ -68,6 +68,7 @@ import {
 import { SessionChatSessionOptionPills, useSessionChatSessionOptions } from './session-chat-option-pills';
 import { modelPickerProvider } from './session-chat-model-picker-request';
 import {
+  orderedSessionChatStarredRows,
   resolveSessionChatStarredContextDetails,
   useSessionChatContextDetailsClock,
   useSessionChatContextDetailsPreferences,
@@ -1218,6 +1219,10 @@ export function SessionChatView({
       ),
     [contextDetailsStatus, contextDetailsAgent, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
   );
+  const hasConfiguredStatusLineItems = useMemo(
+    () => orderedSessionChatStarredRows(contextDetailsPreferences, contextDetailsAgent).length > 0,
+    [contextDetailsAgent, contextDetailsPreferences]
+  );
   const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching && !accountSwitch.busy;
   /*
   CDXC:SessionChat 2026-09-03:
@@ -1986,7 +1991,10 @@ export function SessionChatView({
                             fileHeading='Project files'
                             skillHeading={`${draftAgentRow?.name ?? displayAgentName(resolvedAgentLabel) ?? 'Agent'} skills`}
                           />
-                          <SessionChatStatusLine items={starredContextDetails} />
+                          <SessionChatStatusLine
+                            hasConfiguredItems={hasConfiguredStatusLineItems}
+                            items={starredContextDetails}
+                          />
                         </div>
                         <SessionChatContextDetailsDialog
                           onOpenChange={setContextDetailsOpen}

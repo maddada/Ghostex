@@ -1114,7 +1114,9 @@ the markdown block) rather than pinned to a tier of its own.
    that band and follows it when the box grows, collapses, or expands. */
 .ghostex-chat-scroll-bottom-button[data-direction='end'] {
   bottom: calc(var(--ghostex-chat-composer-overlay, 0px) + 0.25rem);
-  transition: opacity 200ms, bottom 200ms;
+  transition:
+    opacity 200ms,
+    bottom 200ms;
 }
 
 .ghostex-chat-scroll-bottom-button[data-active='false'] {
@@ -1267,8 +1269,28 @@ the markdown block) rather than pinned to a tier of its own.
   justify-self: center;
   line-height: 16px;
   max-width: 100%;
+  opacity: 0;
   padding: 0 0.25rem;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+  visibility: hidden;
   width: fit-content;
+}
+
+.ghostex-chat-status-line.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.ghostex-chat-status-line.is-reserved {
+  min-height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-status-line {
+    transition: none;
+  }
 }
 
 .ghostex-chat-status-line-separator {
