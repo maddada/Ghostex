@@ -289,6 +289,7 @@ export function IntegrationsSettingsTab({
                 <SettingRow
                   description='Which Command key press captures the frontmost app window.'
                   htmlFor={appShotsHotkeyId}
+                  dependent
                   label='App Shots hotkey'
                 >
                   <SettingsSelect
@@ -312,6 +313,7 @@ export function IntegrationsSettingsTab({
                 <SettingRow
                   description='Paste the window title and app name together with the image link.'
                   htmlFor={appShotsMetadataId}
+                  dependent
                   label='App Shots metadata'
                 >
                   <Switch

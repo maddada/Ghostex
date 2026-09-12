@@ -2,12 +2,11 @@
  * CDXC:RepoStructure 2026-08-23:
  * The SettingsModal effects that run after the sidebar page list is derived:
  * deep-link section scrolling, active-section tracking, settings-prop draft
- * sync, lazy storage stats, the one-shot app-icon list request, and pending
+ * sync, the one-shot app-icon list request, and pending
  * timeout cleanup. They are kept in one hook, in their original order, so the
  * component's hook sequence is unchanged.
  */
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { type SidebarGhostexFolderStatsMessage } from '../../shared/session-grid-contract';
 import { normalizeghostexSettings, type ghostexSettings } from '../../shared/ghostex-settings';
 import { type SettingsModalTab } from '../settings-modal-tabs';
 import { type WebviewApi } from '../webview-api';
@@ -29,17 +28,13 @@ export function useSettingsModalEffects({
   editorSectionRef,
   fileOpeningSectionRef,
   getMainSettingsSectionMeasurementItems,
-  ghostexFolderStats,
-  ghostexFolderStatsLoading,
   ghosttyBehaviorSectionRef,
   ghosttyScrollingSectionRef,
   ghosttyTerminalSectionRef,
   hasRequestedAppIconsRef,
-  hasRequestedStorageStatsRef,
   initialSection,
   isFirstLaunchSetup,
   isOpen,
-  onRequestGhostexFolderStats,
   pendingNavigationPersistTimeoutRef,
   pendingTimeoutRef,
   powerSectionRef,
@@ -53,7 +48,6 @@ export function useSettingsModalEffects({
   sidebarTagsSectionRef,
   soundsSectionRef,
   statusIndicatorsSectionRef,
-  storageSectionRef,
   terminalDevServersSectionRef,
   themingSectionRef,
   visibleMainSettingsSectionIds,
@@ -72,17 +66,13 @@ export function useSettingsModalEffects({
   editorSectionRef: RefObject<HTMLDivElement | null>;
   fileOpeningSectionRef: RefObject<HTMLDivElement | null>;
   getMainSettingsSectionMeasurementItems: () => SettingsSectionMeasurementItem<MainSettingsScrollTargetId>[];
-  ghostexFolderStats: SidebarGhostexFolderStatsMessage | undefined;
-  ghostexFolderStatsLoading: boolean;
   ghosttyBehaviorSectionRef: RefObject<HTMLDivElement | null>;
   ghosttyScrollingSectionRef: RefObject<HTMLDivElement | null>;
   ghosttyTerminalSectionRef: RefObject<HTMLDivElement | null>;
   hasRequestedAppIconsRef: RefObject<boolean>;
-  hasRequestedStorageStatsRef: RefObject<boolean>;
   initialSection: MainSettingsScrollTargetId | undefined;
   isFirstLaunchSetup: boolean;
   isOpen: boolean;
-  onRequestGhostexFolderStats: (() => void) | undefined;
   pendingNavigationPersistTimeoutRef: RefObject<ReturnType<typeof setTimeout> | undefined>;
   pendingTimeoutRef: RefObject<ReturnType<typeof setTimeout> | undefined>;
   powerSectionRef: RefObject<HTMLDivElement | null>;
@@ -96,7 +86,6 @@ export function useSettingsModalEffects({
   sidebarTagsSectionRef: RefObject<HTMLDivElement | null>;
   soundsSectionRef: RefObject<HTMLDivElement | null>;
   statusIndicatorsSectionRef: RefObject<HTMLDivElement | null>;
-  storageSectionRef: RefObject<HTMLDivElement | null>;
   terminalDevServersSectionRef: RefObject<HTMLDivElement | null>;
   themingSectionRef: RefObject<HTMLDivElement | null>;
   visibleMainSettingsSectionIds: string;
@@ -127,7 +116,6 @@ export function useSettingsModalEffects({
       sounds: soundsSectionRef,
       beta: betaSectionRef,
       statusIndicators: statusIndicatorsSectionRef,
-      storage: storageSectionRef,
       system: powerSectionRef,
       sidebarTags: sidebarTagsSectionRef,
       debugging: debuggingSectionRef,
@@ -171,7 +159,6 @@ export function useSettingsModalEffects({
   }, [activeTab, isOpen, settingsSearchQuery, visibleMainSettingsSectionIds]);
   useEffect(() => {
     if (!isOpen) {
-      hasRequestedStorageStatsRef.current = false;
       return;
     }
     if (isFirstLaunchSetup) {
@@ -189,52 +176,6 @@ export function useSettingsModalEffects({
      */
     setDraft(normalizeghostexSettings(settings));
   }, [isFirstLaunchSetup, isOpen, settings]);
-
-  useEffect(() => {
-    if (
-      !isOpen ||
-      activeTab !== 'settings' ||
-      ghostexFolderStats ||
-      ghostexFolderStatsLoading ||
-      !onRequestGhostexFolderStats ||
-      hasRequestedStorageStatsRef.current
-    ) {
-      return;
-    }
-    const sectionElement = storageSectionRef.current;
-    if (!sectionElement) {
-      return;
-    }
-
-    const requestStats = () => {
-      hasRequestedStorageStatsRef.current = true;
-      onRequestGhostexFolderStats();
-    };
-
-    /**
-     * CDXC:Settings 2026-05-09-15:25
-     * Folder-size scans can touch many files, so Settings waits until the
-     * bottom storage card is near the viewport before asking native for stats.
-     */
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          requestStats();
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '96px 0px' }
-    );
-    observer.observe(sectionElement);
-    return () => observer.disconnect();
-  }, [
-    activeTab,
-    isOpen,
-    onRequestGhostexFolderStats,
-    settingsSearchQuery,
-    ghostexFolderStats,
-    ghostexFolderStatsLoading,
-  ]);
 
   /**
    * CDXC:Icons 2026-06-25-21:50:

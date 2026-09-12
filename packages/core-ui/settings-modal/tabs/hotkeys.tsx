@@ -177,8 +177,9 @@ export function HotkeysSettingsTab({
               shouldShowSetting(sectionSearches.projects, 'showLessForExpandedProjectJumps') ? (
                 <ToggleField
                   checked={showLessForExpandedProjectJumps}
-                  description='After a project jump expands a collapsed project, switch that project session list to Show less.'
-                  label='Use Show less After Jump Expand'
+                  description='After a project jump expands a collapsed project, switch that project session list to Compact.'
+                  dependent
+                  label='Use Compact List After Jump Expand'
                   {...showLessForExpandedProjectJumpsModification}
                   onChange={onShowLessForExpandedProjectJumpsChange}
                 />

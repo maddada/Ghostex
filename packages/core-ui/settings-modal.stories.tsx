@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { SettingsModal, type TailcatSettingsRpc } from './settings-modal';
 import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
+import { normalizeSessionCardHoverButtons } from '../shared/session-card-hover-actions';
 import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
 import { encodeEasyConnectCode, encodeTailscaleCode } from '../shared/ghostex-remote-pairing';
 import type {
@@ -19,7 +20,7 @@ import type {
 const modalSettings: ghostexSettings = {
   ...DEFAULT_ghostex_SETTINGS,
   agentManagerZoomPercent: 95,
-  showCloseButtonOnSessionCards: true,
+  sessionCardHoverButtons: normalizeSessionCardHoverButtons(['close']),
   terminalFontSize: 16,
   terminalFontWeight: 400,
   terminalLineHeight: 1.35,

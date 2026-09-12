@@ -152,7 +152,6 @@ export type MainSettingsScrollTargetId =
   | 'autoSleep'
   | 'power'
   | 'sounds'
-  | 'storage'
   | 'beta';
 
 export type MainSettingsSectionRefs = Record<MainSettingsScrollTargetId, RefObject<HTMLDivElement | null>>;
@@ -220,7 +219,6 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'showProjectIcons',
     'hideSessionAgentIconUntilHover',
     'hideBrowserFaviconUntilHover',
-    'showCloseButtonOnSessionCards',
     'hideLastActiveTimeOnSessionCards',
     'hideProjectHeaderDiffStats',
     'showProjectEditorDiffFileCount',
@@ -231,6 +229,8 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'sidebarDefaultWidthPx',
     'commandsPanelDefaultHeightPx',
     'commandsPanelSide',
+    'commandsPanelAutoMinimize',
+    'commandsPanelAutoMinimizeDelaySeconds',
     'projectSessionListCollapsedCount',
     'agentManagerZoomPercent',
     'createSessionOnSidebarDoubleClick',
@@ -239,7 +239,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'showTagMenuWhenParking',
     'unparkAfterSendingMessage',
     'renameSessionOnDoubleClick',
-    'showSessionCloseContextMenuAction',
+    'sessionCardHoverButtons',
     'sidebarSessionTagListItems',
   ],
   /*
@@ -335,7 +335,6 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'keepAwakeBatteryThresholdPercent',
     'keepAwakeDeactivateOnLowPowerMode',
     'keepAwakeDeactivateOnUserSwitch',
-    'ghostexFolderStats',
   ],
   /*
    * CDXC:Diagnostics 2026-06-15-21:34:
@@ -357,7 +356,7 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
   // CDXC:Icons 2026-06-25-21:50: App Icon owns the persisted Dock icon source id selection.
   appIcon: ['appIconSourceId'],
   sidebarTags: ['sidebarSessionTagListItems'],
-  sessionCards: ['showSessionCloseContextMenuAction'],
+  sessionCards: ['sessionCardHoverButtons'],
   debugging: ['debuggingMode', ...DEBUGGING_MODE_DEPENDENT_SETTING_KEYS],
   terminalBehavior: [
     'terminalScrollbackLimitMb',
@@ -409,7 +408,6 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     'attentionNotificationActions',
     'actionCompletionSound',
   ],
-  storage: ['ghostexFolderStats'],
   beta: ['showBetaFeatures'],
 } satisfies Record<MainSettingsScrollTargetId, readonly string[]>;
 
@@ -425,7 +423,6 @@ export type MainSettingsSubsectionId =
   | 'sessionCards'
   | 'sidebar'
   | 'sidebarTags'
-  | 'storage'
   | 'terminal'
   | 'terminalBehavior'
   | 'terminalDevServers'
@@ -461,10 +458,14 @@ export const MAIN_SETTINGS_SUBSECTION_NAVIGATION: Partial<
     { id: 'sessionCards', title: 'Session Cards' },
     { id: 'sidebarTags', title: 'Sidebar Tags' },
   ],
+  /**
+   * CDXC:Settings 2026-09-12 DECISION:
+   * User: hide the Storage section in the main Settings screen and disable its functionality.
+   * Storage has no navigation/search entry or folder-size scan effect.
+   */
   system: [
     { id: 'autoSleep', title: 'Auto Sleep' },
     { id: 'power', title: 'Power' },
-    { id: 'storage', title: 'Storage' },
   ],
   terminal: [
     { id: 'terminal', title: 'Terminal' },
@@ -540,7 +541,7 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  * Show Advanced changes the density of the General Settings page, but the macOS Settings UI should still present it inside the same left sidebar as the section navigation rather than as separate header or footer chrome.
  *
  * CDXC:Settings 2026-06-16-08:12:
- * Browser feedback, Storage, session-card chrome, Workspace tuning, and Terminal Behavior controls are advanced-only browsing rows because the default General page should stay focused on common setup and daily preferences.
+ * Browser feedback, session-card chrome, Workspace tuning, and Terminal Behavior controls are advanced-only browsing rows because the default General page should stay focused on common setup and daily preferences.
  *
  * CDXC:Settings 2026-08-26:
  * The detailed presentation toggles changed by sidebar presets are advanced
@@ -582,10 +583,10 @@ export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] =
  *
  */
 export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
+  'sidebarVisibilityMemory',
   'showProjectIcons',
   'hideSessionAgentIconUntilHover',
   'hideBrowserFaviconUntilHover',
-  'showCloseButtonOnSessionCards',
   'hideLastActiveTimeOnSessionCards',
   'hideProjectHeaderDiffStats',
   'showProjectEditorDiffFileCount',
@@ -593,7 +594,6 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'projectSessionListCollapsedCount',
   'createSessionOnSidebarDoubleClick',
   'renameSessionOnDoubleClick',
-  'showSessionCloseContextMenuAction',
   'accentColor',
   'showActivePaneOutline',
   'workspaceActivePaneBorderColor',
@@ -650,7 +650,6 @@ export const ADVANCED_MAIN_SETTING_KEYS = new Set<string>([
   'keepAwakeDeactivateOnLowPowerMode',
   'keepAwakeDeactivateOnUserSwitch',
   'attentionNotificationActions',
-  'ghostexFolderStats',
   'showBetaFeatures',
   'debuggingMode',
   'diagnosticLogging',

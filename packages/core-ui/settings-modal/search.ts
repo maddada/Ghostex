@@ -89,8 +89,8 @@ export function getHotkeySettingsSectionSearches({
                     {
                       key: 'showLessForExpandedProjectJumps',
                       subtitle:
-                        'After a project jump expands a collapsed project, switch that project session list to Show less.',
-                      title: 'Use Show less after jump expand',
+                        'After a project jump expands a collapsed project, switch that project session list to Compact.',
+                      title: 'Use Compact list after jump expand',
                     },
                   ]
                 : []),

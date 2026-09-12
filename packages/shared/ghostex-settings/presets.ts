@@ -30,6 +30,7 @@ import {
  *
  * CDXC:Settings 2026-06-23-08:20:
  * Every sidebar preset must show session-card close buttons on hover. Presets may still tune density, icons, timestamps, project stats, and menu-bar indicators, but they should not remove the primary per-session close affordance.
+ * CDXC:Sessions 2026-09-12: the hover buttons moved to the `sessionCardHoverButtons` strip, which presets do not touch, so switching presets can no longer remove Close from hover.
  *
  * CDXC:Settings 2026-06-30-22:29:
  * Recommended should match the user's current preset-controlled sidebar configuration: visible session agent icons, visible browser favicons, close button on hover, hidden Last Active timestamps, visible project git stats, hidden changed-file counts, and visible menu-bar session indicators.
@@ -39,7 +40,6 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     showProjectIcons: true,
     hideSessionAgentIconUntilHover: true,
     hideBrowserFaviconUntilHover: false,
-    showCloseButtonOnSessionCards: true,
     hideLastActiveTimeOnSessionCards: false,
     hideProjectHeaderDiffStats: true,
     showProjectEditorDiffFileCount: false,
@@ -49,7 +49,6 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     showProjectIcons: false,
     hideSessionAgentIconUntilHover: true,
     hideBrowserFaviconUntilHover: true,
-    showCloseButtonOnSessionCards: true,
     hideLastActiveTimeOnSessionCards: true,
     hideProjectHeaderDiffStats: true,
     showProjectEditorDiffFileCount: false,
@@ -59,7 +58,6 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     showProjectIcons: true,
     hideSessionAgentIconUntilHover: false,
     hideBrowserFaviconUntilHover: false,
-    showCloseButtonOnSessionCards: true,
     hideLastActiveTimeOnSessionCards: false,
     hideProjectHeaderDiffStats: false,
     showProjectEditorDiffFileCount: false,
@@ -69,7 +67,6 @@ export const SIDEBAR_SETTINGS_PRESET_SETTINGS = {
     showProjectIcons: true,
     hideSessionAgentIconUntilHover: false,
     hideBrowserFaviconUntilHover: false,
-    showCloseButtonOnSessionCards: true,
     hideLastActiveTimeOnSessionCards: true,
     hideProjectHeaderDiffStats: false,
     showProjectEditorDiffFileCount: false,

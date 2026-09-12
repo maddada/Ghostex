@@ -1,11 +1,12 @@
 import { type SidebarThemeSetting } from '../session-grid-contract-core';
 import { DEFAULT_COMMANDS_PANEL_HEIGHT_PX } from '../session-grid-contract-session';
-import { type SessionChatTheme } from '../session-chat';
+import { type SessionChatThemeSetting } from '../session-chat';
 import { type CompletionSoundPreference, type CompletionSoundSetting } from '../completion-sound';
 import { type ghostexHotkeySettings } from '../ghostex-hotkeys';
 import { type CustomWorkspaceOpenTarget, type WorkspaceOpenTargetAvailability } from '../workspace-open-targets';
 import { type PetId } from '../pets';
 import { type SidebarSessionTagListItem } from '../session-tags';
+import { type SessionCardHoverButtonItem } from '../session-card-hover-actions';
 import type { ProjectViewTemplate } from './project-views';
 import { type GhostexCustomView } from './custom-views';
 import { type DiagnosticLoggingSettings } from './diagnostic-logging';
@@ -34,6 +35,7 @@ export type SidebarSide = 'left' | 'right';
 export type CommandsPanelSide = 'bottom' | 'right';
 export type SidebarProjectGroupStyle = 'quiet' | 'header' | 'branched';
 export type SidebarSpaceSwitchBehavior = 'restore' | 'keep';
+export type SidebarVisibilityMemory = 'shared' | 'perView';
 export const MIN_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 0;
 export const MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS = 1000;
 export const SIDEBAR_COLLAPSE_ANIMATION_DURATION_STEP_MS = 100;
@@ -114,7 +116,7 @@ export const MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX = 600;
 export const DEFAULT_SIDEBAR_DEFAULT_WIDTH_PX = 275;
 export const MIN_SIDEBAR_DEFAULT_WIDTH_PX = 150;
 export const MAX_SIDEBAR_DEFAULT_WIDTH_PX = 520;
-export const DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 10;
+export const DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 13;
 export const MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 1;
 export const MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT = 50;
 
@@ -355,9 +357,10 @@ export type ghostexSettings = {
    */
   sleepSessionWhenParking: boolean;
   /**
-   * Opens the Tag as menu when the user parks a session, so the parked session
-   * can be tagged in the same gesture. Off by default like the other park
-   * add-ons; parking stays a one-click action unless the user opts in.
+   * Opens the Tag as menu when the user parks or snoozes a session, so the
+   * session can be tagged in the same gesture. Shown in Settings as
+   * "Park & Snooze with tags"; the key keeps its original name so saved
+   * settings files carry over.
    */
   showTagMenuWhenParking: boolean;
   /**
@@ -390,16 +393,15 @@ export type ghostexSettings = {
   showProjectIcons: boolean;
   hideSessionAgentIconUntilHover: boolean;
   hideBrowserFaviconUntilHover: boolean;
-  showCloseButtonOnSessionCards: boolean;
+  /**
+   * CDXC:Sessions 2026-09-12 DECISION:
+   * User: the buttons a session card reveals on hover are an ordered strip chosen in Settings, with the chevron as one of its draggable items: buttons right of the chevron always show, buttons left of it hide until the chevron is clicked, and each project remembers whether it is revealed across restarts.
+   * An enabled button is hidden from the session's main context menu whichever side of the chevron it is on.
+   * Replaces the `showCloseButtonOnSessionCards` toggle and the "Show Close option in context menu" setting; the first is migrated into this list, the second is dropped because the list now decides where Close lives.
+   */
+  sessionCardHoverButtons: readonly SessionCardHoverButtonItem[];
   hideLastActiveTimeOnSessionCards: boolean;
   hideAccountEmails: boolean;
-  /**
-   * CDXC:ContextMenus 2026-06-10-13:58:
-   * The destructive single-session Close context-menu item is advanced chrome.
-   * Hide it by default and expose it through an explicit Session Cards setting
-   * so context menus stay focused unless users opt into close-from-menu actions.
-   */
-  showSessionCloseContextMenuAction: boolean;
   /**
    * CDXC:ContextMenus 2026-06-09-23:17:
    * Session context menus should hide Copy resume and Copy attach command by default because they expose raw shell-command utilities. Settings owns a single opt-in that reveals both actions for users who intentionally copy commands into external terminals.
@@ -495,8 +497,8 @@ export type ghostexSettings = {
    */
   sidebarDefaultWidthPx: number;
   /**
-   * CDXC:Projects 2026-06-13-01:06:
-   * The project header Show less action keeps a configurable number of project sessions visible. Default to ten visible sessions so active projects stay scannable before switching back to Show more.
+   * CDXC:Projects 2026-09-12 DECISION:
+   * User: a Compact project list shows 13 rows by default, configurable up to 50, before its "Show all" row. The key keeps its 2026-06-13 name (then the Show less count, default ten) so saved settings carry over.
    */
   projectSessionListCollapsedCount: number;
   /** Visual treatment for user-created project groups in the shared sidebar. */
@@ -524,6 +526,14 @@ export type ghostexSettings = {
    */
   sidebarSpaceFollowActiveSession: boolean;
   /**
+   * CDXC:Workarea 2026-09-12 DECISION:
+   * User: pane visibility is remembered for the whole app, never per project, so switching projects cannot toggle the sidebar on its own.
+   * The companion and the Commands pane always follow the kind of view (Agents versus the wide views: Browser, Code, Docs, Kanban, Automate, extensions).
+   * Whether the sessions sidebar also follows the view is this advanced dropdown; the default keeps one sidebar state everywhere while the per-view model is evaluated.
+   * This supersedes the 2026-09-09 decision to remember the sidebar, companion and Commands pane per project and view.
+   */
+  sidebarVisibilityMemory: SidebarVisibilityMemory;
+  /**
    * CDXC:Hotkeys 2026-06-15-11:12:
    * Jump to Project shortcuts should reveal the target project row when it was collapsed, because the keyboard action is also a navigation intent in the visible Projects sidebar area.
    */
@@ -535,7 +545,7 @@ export type ghostexSettings = {
   showLessForExpandedProjectJumps: boolean;
   sidebarTheme: SidebarThemeSetting;
   /** Theme for chat content only; the surrounding Ghostex chrome stays dark. */
-  sessionChatTheme: SessionChatTheme;
+  sessionChatTheme: SessionChatThemeSetting;
   /** CSS font-family used by chat messages and the prompt composer. */
   sessionChatFontFamily: string;
   /** Whether the transcript departs from the prompt composer's 48rem column. */
@@ -709,6 +719,8 @@ export type ghostexSettings = {
    * F12 open the pane on the configured side.
    */
   commandsPanelSide: CommandsPanelSide;
+  commandsPanelAutoMinimize: boolean;
+  commandsPanelAutoMinimizeDelaySeconds: number;
 };
 
 export type ghostexSettingsPatch = Partial<ghostexSettings>;
@@ -736,7 +748,6 @@ export const SIDEBAR_SETTINGS_PRESET_KEYS = [
   'showProjectIcons',
   'hideSessionAgentIconUntilHover',
   'hideBrowserFaviconUntilHover',
-  'showCloseButtonOnSessionCards',
   'hideLastActiveTimeOnSessionCards',
   'hideProjectHeaderDiffStats',
   'showProjectEditorDiffFileCount',

@@ -76,7 +76,7 @@ import {
   type SidebarProjectGroupStyle,
   type TerminalViewWidthMode,
 } from '../../shared/ghostex-settings';
-import { type SessionChatTheme } from '../../shared/session-chat';
+import { type SessionChatThemeSetting } from '../../shared/session-chat';
 import { PET_OPTIONS, type PetId } from '../../shared/pets';
 import {
   getCustomSessionTagOrderFromListItems,
@@ -247,7 +247,7 @@ export function SettingsSelectContent({ className, ...props }: ComponentProps<ty
  */
 export function setSettingsSortableRowElement(
   sortableRefs: Pick<ReturnType<typeof useSortable>, 'ref' | 'sourceRef'>,
-  element: HTMLDivElement | null
+  element: HTMLElement | null
 ): void {
   sortableRefs.ref(element);
   sortableRefs.sourceRef(element);
@@ -465,6 +465,7 @@ export function SettingsListItem({
 }
 
 export function SliderNumberField({
+  dependent,
   advanced,
   description,
   isModified,
@@ -477,6 +478,7 @@ export function SliderNumberField({
   step,
   value,
 }: {
+  dependent?: boolean;
   advanced?: boolean;
   description?: string;
   label: string;
@@ -526,6 +528,7 @@ export function SliderNumberField({
 
   return (
     <SettingRow
+      dependent={dependent}
       advanced={advanced}
       description={description}
       htmlFor={id}
@@ -641,6 +644,7 @@ export function ActionButtonPairField({
 }
 
 export function SelectField({
+  dependent,
   advanced,
   contentClassName,
   description,
@@ -656,6 +660,7 @@ export function SelectField({
   triggerWidth,
   value,
 }: {
+  dependent?: boolean;
   advanced?: boolean;
   contentClassName?: string;
   description?: string;
@@ -676,6 +681,7 @@ export function SelectField({
   const id = useId();
   return (
     <SettingRow
+      dependent={dependent}
       advanced={advanced}
       description={description}
       htmlFor={id}
@@ -974,6 +980,7 @@ export function SoundField({
 }
 
 export function TextField({
+  dependent,
   advanced,
   browseLabel,
   description,
@@ -985,6 +992,7 @@ export function TextField({
   placeholder,
   value,
 }: {
+  dependent?: boolean;
   advanced?: boolean;
   browseLabel?: string;
   description?: string;
@@ -1020,6 +1028,7 @@ export function TextField({
 
   return (
     <SettingRow
+      dependent={dependent}
       advanced={advanced}
       description={description}
       htmlFor={id}
@@ -1161,6 +1170,7 @@ export const SIDEBAR_TITLEBAR_TINT_SWATCHES: ReadonlyArray<{ label: string; valu
 ];
 
 export function WebColorPickerField({
+  dependent,
   advanced,
   description,
   isModified,
@@ -1170,6 +1180,7 @@ export function WebColorPickerField({
   onResetToDefault,
   value,
 }: {
+  dependent?: boolean;
   advanced?: boolean;
   description?: string;
   label: string;
@@ -1216,6 +1227,7 @@ export function WebColorPickerField({
 
   return (
     <SettingRow
+      dependent={dependent}
       advanced={advanced}
       description={description}
       htmlFor={id}
@@ -1645,8 +1657,8 @@ export function SessionChatThemeField({
 }: {
   description?: string;
   label: string;
-  onChange: (value: SessionChatTheme) => void;
-  value: SessionChatTheme;
+  onChange: (value: SessionChatThemeSetting) => void;
+  value: SessionChatThemeSetting;
 } & SettingModificationProps) {
   const id = useId();
   return (
@@ -1660,7 +1672,7 @@ export function SessionChatThemeField({
       <SegmentedControl
         aria-label={label}
         onValueChange={(nextValue) => {
-          onChange(nextValue as SessionChatTheme);
+          onChange(nextValue as SessionChatThemeSetting);
         }}
         value={value}
       >
@@ -1680,6 +1692,7 @@ export function SessionChatThemeField({
 }
 
 export function ToggleField({
+  dependent,
   advanced,
   checked,
   description,
@@ -1691,6 +1704,7 @@ export function ToggleField({
   onResetToDefault,
   subtitle,
 }: {
+  dependent?: boolean;
   advanced?: boolean;
   checked: boolean;
   description?: string;
@@ -1703,6 +1717,7 @@ export function ToggleField({
   const id = useId();
   return (
     <SettingRow
+      dependent={dependent}
       advanced={advanced}
       description={description}
       htmlFor={id}
@@ -1721,11 +1736,13 @@ export function ToggleField({
 }
 
 export function DiagnosticLoggingSettingsField({
+  dependent,
   isModified,
   onChange,
   onResetToDefault,
   value,
 }: {
+  dependent?: boolean;
   isModified?: boolean;
   onChange: (scenarioId: DiagnosticLoggingScenarioId, duration: DiagnosticLoggingDurationValue) => void;
   onResetToDefault?: () => void;
@@ -1734,6 +1751,7 @@ export function DiagnosticLoggingSettingsField({
   const idBase = useId();
   return (
     <SettingRow
+      dependent={dependent}
       description='Routine logs are off by default and write only when Show debug UI controls and their scenario are enabled. Enable only the repro area you need; important warnings, errors, and crashes remain captured.'
       htmlFor={`${idBase}-native-terminal-focus`}
       isModified={isModified}
@@ -1956,8 +1974,11 @@ export function SidebarTagListSettingsField({
   };
 
   return (
-    <details className='group w-full' ref={detailsRef}>
+    <details className='group/sidebar-tags w-full' ref={detailsRef}>
       {/*
+       * CDXC:Settings 2026-09-12 WHY:
+       * The named group keeps sidebar project-group grid gaps and bottom margins out of this disclosure, so the collapsed tag row has equal space above and below.
+       *
        * CDXC:Sessions 2026-06-13-17:50:
        * The bottom main Settings area starts collapsed and mirrors the
        * configurable-list chrome used by tab context menu item settings:
@@ -1972,7 +1993,7 @@ export function SidebarTagListSettingsField({
         <div className='flex min-w-0 flex-1 items-center gap-2.5'>
           <IconChevronRight
             aria-hidden='true'
-            className='size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-90'
+            className='size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open/sidebar-tags:rotate-90'
           />
           <span className='settings-row-label-line'>
             <span className='settings-list-row-label'>Tag filter list</span>
@@ -2203,6 +2224,7 @@ export function SettingRow({
   advanced,
   badge,
   children,
+  dependent,
   description,
   htmlFor,
   isModified,
@@ -2216,6 +2238,11 @@ export function SettingRow({
   /** Rows for newly shipped settings may carry a short label badge. */
   badge?: string;
   children: ReactNode;
+  /**
+   * CDXC:Settings 2026-09-12 DECISION:
+   * User: settings that cascade from a setting above them start their name with four spaces and the ↳ glyph.
+   */
+  dependent?: boolean;
   description?: string;
   htmlFor: string;
   isModified?: boolean;
@@ -2240,7 +2267,16 @@ export function SettingRow({
             <ModifiedSettingResetButton label={label} onResetToDefault={onResetToDefault} />
           ) : null}
           <FieldLabel className='settings-list-row-label' htmlFor={htmlFor}>
-            {label}
+            {dependent ? (
+              <span>
+                <span aria-hidden='true' style={{ whiteSpace: 'pre' }}>
+                  {'    ↳ '}
+                </span>
+                {label}
+              </span>
+            ) : (
+              label
+            )}
           </FieldLabel>
           {labelAddon}
           {badge ? (

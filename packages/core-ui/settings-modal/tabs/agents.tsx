@@ -397,6 +397,7 @@ export function AgentsSettingsTab({
                 isModified={
                   customSessionTitleGenerationCommand !== DEFAULT_ghostex_SETTINGS.customSessionTitleGenerationCommand
                 }
+                dependent
                 label='Custom Title Command'
                 onChange={onCustomSessionTitleGenerationCommandChange}
                 onResetToDefault={() =>

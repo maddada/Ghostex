@@ -5,6 +5,7 @@ import { DEFAULT_ghostex_HOTKEYS } from '../ghostex-hotkeys';
 import { DEFAULT_WORKSPACE_OPEN_TARGET_AVAILABILITY } from '../workspace-open-targets';
 import { DEFAULT_PET_ID } from '../pets';
 import { DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS } from '../session-tags';
+import { DEFAULT_SESSION_CARD_HOVER_BUTTONS } from '../session-card-hover-actions';
 import { DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS } from './diagnostic-logging';
 import { DEFAULT_CHAT_FILE_OPEN_VIEW, DEFAULT_WEB_LINK_OPEN_TARGET } from './option-tables';
 import { SIDEBAR_SETTINGS_PRESET_SETTINGS } from './presets';
@@ -204,7 +205,11 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   enableSessionParking: true,
   sleepSessionWhenParking: false,
-  showTagMenuWhenParking: false,
+  /**
+   * CDXC:Sessions 2026-09-12 DECISION:
+   * User: "Park & Snooze with tags" is on by default, so Park and Snooze open the tag menu unless the user turns it off. Supersedes the 2026-09-11 off-by-default choice for the park-only version of this setting.
+   */
+  showTagMenuWhenParking: true,
   /**
    * CDXC:Sessions 2026-09-11 DECISION:
    * User: "Unpark after sending a message" defaults to on.
@@ -250,7 +255,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Session-card close controls should be available out of the box. Users can
    * still turn the hover chrome off from Settings when they want quieter cards.
    */
-  showCloseButtonOnSessionCards: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showCloseButtonOnSessionCards,
+  sessionCardHoverButtons: DEFAULT_SESSION_CARD_HOVER_BUTTONS,
   /**
    * CDXC:Sessions 2026-06-13-15:42
    * Recommended is the default sidebar style and hides session-card Last Active
@@ -260,7 +265,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   hideLastActiveTimeOnSessionCards: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards,
   hideAccountEmails: false,
-  showSessionCloseContextMenuAction: false,
   showSessionCommandCopyActions: false,
   showSessionDetailsCopyAction: false,
   /**
@@ -391,6 +395,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   sidebarSpacesEnabled: false,
   sidebarSpaceSwitchBehavior: 'restore',
   sidebarSpaceFollowActiveSession: false,
+  sidebarVisibilityMemory: 'shared',
   expandCollapsedProjectsOnJump: true,
   showLessForExpandedProjectJumps: false,
   /**
@@ -399,7 +404,11 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    * Use Dark 2 as the active app theme and present it to users as Dark Gray.
    */
   sidebarTheme: 'dark-2',
-  sessionChatTheme: 'dark',
+  /**
+   * CDXC:Theming 2026-09-12 DECISION:
+   * User: add System to chat Appearance and make it the default.
+   */
+  sessionChatTheme: 'system',
   sessionChatFontFamily: '',
   sessionChatCustomTranscriptWidthEnabled: false,
   sessionChatTranscriptWidthPercent: DEFAULT_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT,
@@ -562,4 +571,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   remoteTailscaleEnabled: true,
   commandsPanelDefaultHeightPx: DEFAULT_COMMANDS_PANEL_HEIGHT_PX,
   commandsPanelSide: 'bottom',
+  commandsPanelAutoMinimize: true,
+  commandsPanelAutoMinimizeDelaySeconds: 60,
 };

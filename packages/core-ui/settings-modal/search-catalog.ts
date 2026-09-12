@@ -9,6 +9,7 @@ import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
   CHAT_FILE_OPEN_VIEW_OPTIONS,
   COMMANDS_PANEL_SIDE_OPTIONS,
+  COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS,
   DIAGNOSTIC_LOGGING_SCENARIOS,
   GHOSTTY_CONFIRM_CLOSE_SURFACE_OPTIONS,
   GHOSTTY_COPY_ON_SELECT_OPTIONS,
@@ -23,6 +24,7 @@ import {
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_SPACES_ENABLED_OPTIONS,
   SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS,
+  SIDEBAR_VISIBILITY_MEMORY_OPTIONS,
   TERMINAL_VIEW_WIDTH_MODE_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
   type ghostexSettings,
@@ -262,9 +264,10 @@ export function getSettingsSearchSectionDefinitions() {
          * Settings must not expose the card-hotkey visibility row; session-card shortcut visibility is no longer configurable from the modal.
          */
         {
-          key: 'showSessionCloseContextMenuAction',
-          subtitle: 'Show the Close item in session context menus.',
-          title: 'Show Close option in context menu',
+          key: 'sessionCardHoverButtons',
+          subtitle:
+            'Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. Tag, Park, Sleep and Close are on by default.',
+          title: 'Session hover buttons (click to toggle, drag to reorder)',
         },
       ],
     },
@@ -343,6 +346,13 @@ export function getSettingsSearchSectionDefinitions() {
           title: "Follow the active session's Space",
         },
         {
+          key: 'sidebarVisibilityMemory',
+          options: SIDEBAR_VISIBILITY_MEMORY_OPTIONS,
+          subtitle:
+            'Keep one sidebar state everywhere, or remember it separately for Agents and for the wide views (Browser, Code, Docs, Kanban, Automate).',
+          title: 'Sidebar visibility memory',
+        },
+        {
           key: 'showProjectIcons',
           subtitle: 'Show project artwork or a folder or worktree icon beside project names.',
           title: 'Show project icons',
@@ -362,11 +372,6 @@ export function getSettingsSearchSectionDefinitions() {
           key: 'hideBrowserFaviconUntilHover',
           subtitle: 'Hide browser page favicons until a session row is hovered.',
           title: 'Hide browser favicon until hover',
-        },
-        {
-          key: 'showCloseButtonOnSessionCards',
-          subtitle: 'Reveal the close control when hovering a card.',
-          title: 'Show close button on hover',
         },
         {
           key: 'hideLastActiveTimeOnSessionCards',
@@ -422,9 +427,25 @@ export function getSettingsSearchSectionDefinitions() {
           title: 'Command Pane Side',
         },
         {
+          key: 'commandsPanelAutoMinimize',
+          title: 'Auto-minimize Commands pane',
+          subtitle:
+            'Minimize the Commands pane after you stop using it and move focus elsewhere. Commands keep running.',
+        },
+        {
+          key: 'commandsPanelAutoMinimizeDelaySeconds',
+          title: 'Minimize after',
+          subtitle: 'How long the Commands pane stays open after focus and the pointer leave it.',
+          options: COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS.map((option) => ({
+            label: option.label,
+            value: String(option.value),
+          })),
+        },
+        {
           key: 'projectSessionListCollapsedCount',
-          subtitle: 'Number of project sessions kept visible after Show less.',
-          title: 'Show Less Count',
+          subtitle:
+            'Rows a project shows in Compact mode before its "Show all" row. Rows in collapsed sections do not count.',
+          title: 'Compact Session Rows',
         },
         {
           key: 'agentManagerZoomPercent',
@@ -448,8 +469,8 @@ export function getSettingsSearchSectionDefinitions() {
         },
         {
           key: 'showTagMenuWhenParking',
-          subtitle: 'Open the Tag as menu when a session is parked so it can be tagged right away.',
-          title: 'Show tag menu when parking',
+          subtitle: 'Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.',
+          title: 'Park & Snooze with tags',
         },
         {
           key: 'unparkAfterSendingMessage',
@@ -511,7 +532,8 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'sessionChatTheme',
           options: SESSION_CHAT_THEME_OPTIONS,
-          subtitle: 'Choose the palette used by chat messages, thinking, tools, edits, and Markdown.',
+          subtitle:
+            'Follow your computer’s appearance with System (the default), or choose Light or Dark for chat content.',
           title: 'Chat appearance',
         },
         {
@@ -587,21 +609,6 @@ export function getSettingsSearchSectionDefinitions() {
           options: COMPLETION_SOUND_OPTIONS,
           subtitle: 'Sound for action completions.',
           title: 'Action Completion Sound',
-        },
-      ],
-    },
-    storage: {
-      title: 'Storage',
-      settings: [
-        {
-          key: 'ghostexFolderStats',
-          options: [
-            { label: 'Open Ghostex folder', value: 'openGhostexFolder' },
-            { label: 'Folder sizes', value: 'folderSizes' },
-            { label: 'Disk usage', value: 'diskUsage' },
-          ],
-          subtitle: 'Show Ghostex data-folder sizes and open the resolved storage folder.',
-          title: 'Ghostex folder',
         },
       ],
     },
@@ -954,7 +961,7 @@ export const MAIN_SETTINGS_GROUP_SECTIONS: Record<
   tools: { sections: ['browser', 'terminalDevServers', 'editor'], title: 'Tools' },
   statusIndicators: { sections: ['statusIndicators'], title: 'Status Indicators' },
   notifications: { sections: ['sounds'], title: 'Notifications' },
-  system: { sections: ['autoSleep', 'power', 'storage'], title: 'System' },
+  system: { sections: ['autoSleep', 'power'], title: 'System' },
   advanced: { sections: ['beta', 'debugging'], title: 'Advanced' },
 };
 

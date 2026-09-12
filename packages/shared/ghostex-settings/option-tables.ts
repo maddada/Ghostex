@@ -1,5 +1,5 @@
 import { type SidebarThemeSetting } from '../session-grid-contract-core';
-import { type SessionChatTheme } from '../session-chat';
+import { type SessionChatThemeSetting } from '../session-chat';
 import { GHOSTTY_THEME_OPTIONS } from '../ghostty-theme-options';
 import {
   type AppShotsHotkey,
@@ -15,6 +15,7 @@ import {
   type PromptEditorBackend,
   type SidebarProjectGroupStyle,
   type SidebarSpaceSwitchBehavior,
+  type SidebarVisibilityMemory,
   type SidebarSide,
   type WebLinkOpenTarget,
 } from './types';
@@ -54,8 +55,9 @@ export const SIDEBAR_THEME_SETTING_OPTIONS: ReadonlyArray<{
 
 export const SESSION_CHAT_THEME_OPTIONS: ReadonlyArray<{
   label: string;
-  value: SessionChatTheme;
+  value: SessionChatThemeSetting;
 }> = [
+  { label: 'System', value: 'system' },
   { label: 'Light', value: 'light' },
   { label: 'Dark', value: 'dark' },
 ];
@@ -92,6 +94,17 @@ export const SIDEBAR_SIDE_OPTIONS: ReadonlyArray<{
 }> = [
   { label: 'Left', value: 'left' },
   { label: 'Right', value: 'right' },
+];
+
+export const COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: number;
+}> = [
+  { label: '15 seconds', value: 15 },
+  { label: '30 seconds', value: 30 },
+  { label: '1 minute', value: 60 },
+  { label: '2 minutes', value: 120 },
+  { label: '5 minutes', value: 300 },
 ];
 
 export const COMMANDS_PANEL_SIDE_OPTIONS: ReadonlyArray<{
@@ -135,6 +148,14 @@ export const SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS: ReadonlyArray<{
 }> = [
   { label: "Restore the Space's projects", value: 'restore' },
   { label: "Don't switch projects", value: 'keep' },
+];
+
+export const SIDEBAR_VISIBILITY_MEMORY_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: SidebarVisibilityMemory;
+}> = [
+  { label: 'Same in every view', value: 'shared' },
+  { label: 'Remembered per view', value: 'perView' },
 ];
 
 export const PREFERRED_AGENT_INTERFACE_OPTIONS: ReadonlyArray<{

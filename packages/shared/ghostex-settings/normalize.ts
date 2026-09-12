@@ -22,6 +22,7 @@ import { normalizeTitlebarViewOrder } from './titlebar-view-order';
 import { normalizeDiagnosticLoggingSettings } from './diagnostic-logging';
 import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
+  COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS,
   CHAT_FILE_OPEN_VIEW_SET,
   DEFAULT_CHAT_FILE_OPEN_VIEW,
   DEFAULT_WEB_LINK_OPEN_TARGET,
@@ -37,6 +38,7 @@ import {
 } from './session-title-generation';
 import { normalizeSettingsModalNavigationState } from './settings-modal-navigation';
 import { normalizeTerminalDevServerIgnoredPortRules } from './terminal-dev-servers';
+import { normalizeSessionCardHoverButtons, type SessionCardHoverButtonItem } from '../session-card-hover-actions';
 import {
   clampSidebarTitlebarBackgroundDarknessPercent,
   getSidebarTitlebarBackgroundDarknessForColor,
@@ -59,6 +61,7 @@ import {
   type PromptEditorBackend,
   type SidebarProjectGroupStyle,
   type SidebarSpaceSwitchBehavior,
+  type SidebarVisibilityMemory,
   type SidebarSettingsPresetId,
   type SidebarSide,
   type TerminalBackgroundImageFit,
@@ -400,11 +403,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'hideBrowserFaviconUntilHover',
       DEFAULT_ghostex_SETTINGS.hideBrowserFaviconUntilHover
     ),
-    showCloseButtonOnSessionCards: readBoolean(
-      source,
-      'showCloseButtonOnSessionCards',
-      DEFAULT_ghostex_SETTINGS.showCloseButtonOnSessionCards
-    ),
+    sessionCardHoverButtons: normalizeSessionCardHoverButtonsSetting(source),
     hideAccountEmails: readBoolean(source, 'hideAccountEmails', DEFAULT_ghostex_SETTINGS.hideAccountEmails),
     /**
      * CDXC:Sessions 2026-05-15-08:57
@@ -416,11 +415,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       'hideLastActiveTimeOnSessionCards',
       DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
-    ),
-    showSessionCloseContextMenuAction: readBoolean(
-      source,
-      'showSessionCloseContextMenuAction',
-      DEFAULT_ghostex_SETTINGS.showSessionCloseContextMenuAction
     ),
     showSessionCommandCopyActions: readBoolean(
       source,
@@ -606,10 +600,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     sidebarDefaultWidthPx: clampSidebarDefaultWidthPx(
       readNumber(source, 'sidebarDefaultWidthPx', DEFAULT_ghostex_SETTINGS.sidebarDefaultWidthPx)
     ),
-    /**
-     * CDXC:Projects 2026-06-13-01:06:
-     * Missing settings should use the current ten-session Show less behavior, while explicit numeric values tune how many project sessions remain visible before the header toggle offers Show more.
-     */
     projectSessionListCollapsedCount: clampProjectSessionListCollapsedCount(
       readNumber(source, 'projectSessionListCollapsedCount', DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount)
     ),
@@ -624,6 +614,9 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       source,
       'sidebarSpaceFollowActiveSession',
       DEFAULT_ghostex_SETTINGS.sidebarSpaceFollowActiveSession
+    ),
+    sidebarVisibilityMemory: normalizeSidebarVisibilityMemory(
+      readString(source, 'sidebarVisibilityMemory', DEFAULT_ghostex_SETTINGS.sidebarVisibilityMemory)
     ),
     expandCollapsedProjectsOnJump: readBoolean(
       source,
@@ -920,6 +913,15 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     commandsPanelDefaultHeightPx: clampCommandsPanelDefaultHeightPx(
       readNumber(source, 'commandsPanelDefaultHeightPx', DEFAULT_ghostex_SETTINGS.commandsPanelDefaultHeightPx)
     ),
+    commandsPanelAutoMinimize: readBoolean(
+      source,
+      'commandsPanelAutoMinimize',
+      DEFAULT_ghostex_SETTINGS.commandsPanelAutoMinimize
+    ),
+    commandsPanelAutoMinimizeDelaySeconds:
+      COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS.find(
+        (option) => option.value === source.commandsPanelAutoMinimizeDelaySeconds
+      )?.value ?? DEFAULT_ghostex_SETTINGS.commandsPanelAutoMinimizeDelaySeconds,
     commandsPanelSide: normalizeCommandsPanelSide(
       readString(source, 'commandsPanelSide', DEFAULT_ghostex_SETTINGS.commandsPanelSide)
     ),
@@ -978,6 +980,23 @@ export function normalizeGlobalBeadsDirectory(value: string | undefined): string
  */
 export function normalizeGlobalDocsDirectory(value: string | undefined): string {
   return (value ?? '').replace(/\0/gu, '').trim().slice(0, 1_000);
+}
+
+/**
+ * Settings files written before 2026-09-12 carry the `showCloseButtonOnSessionCards` boolean instead of the
+ * hover-button strip. A saved `false` there meant "no hover buttons at all", so every button starts disabled;
+ * anything else keeps the shipped default. The strip wins whenever it is present.
+ */
+function normalizeSessionCardHoverButtonsSetting(
+  source: Record<string, unknown>
+): readonly SessionCardHoverButtonItem[] {
+  if (Array.isArray(source.sessionCardHoverButtons)) {
+    return normalizeSessionCardHoverButtons(source.sessionCardHoverButtons);
+  }
+  if (source.showCloseButtonOnSessionCards === false) {
+    return normalizeSessionCardHoverButtons([]);
+  }
+  return DEFAULT_ghostex_SETTINGS.sessionCardHoverButtons;
 }
 
 function normalizeTerminalCursorStyle(value: string | undefined): TerminalCursorStyle {
@@ -1115,6 +1134,10 @@ function normalizeSidebarProjectGroupStyle(value: string | undefined): SidebarPr
 
 function normalizeSidebarSpaceSwitchBehavior(value: string | undefined): SidebarSpaceSwitchBehavior {
   return value === 'restore' || value === 'keep' ? value : DEFAULT_ghostex_SETTINGS.sidebarSpaceSwitchBehavior;
+}
+
+function normalizeSidebarVisibilityMemory(value: string | undefined): SidebarVisibilityMemory {
+  return value === 'shared' || value === 'perView' ? value : DEFAULT_ghostex_SETTINGS.sidebarVisibilityMemory;
 }
 
 /* Both spellings are real user choices: normalizing "terminal" to the default

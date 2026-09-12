@@ -40,7 +40,15 @@ companion toggle and project name. Hovering a view shows its positional shortcut
   back to the agent. Folders appear as they load, and search fills in while
   Updating files is shown. Expand a folder to load it sooner; a loading or error
   marker means its contents have not been confirmed yet. Use Refresh in the Docs
-  sidebar menu to check for changes immediately.
+  sidebar menu to check for changes immediately. The button at the sidebar's
+  window edge hides the files list; the same button in the corner brings it
+  back, and hovering it, or the last few pixels along that edge, peeks the list
+  without pinning it. Hidden or pinned is remembered. When the Docs view is narrower than 800px the list opens as a
+  temporary drawer over the document and closes when you open a file, press
+  Escape, or click outside it. Cmd+F, or Ctrl+F on Windows and Linux, opens the
+  search: inside a Markdown document it shows Find and Replace with the caret
+  ready, and anywhere else it reveals the files list and focuses its search.
+  Escape closes the document search.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
 `markdownFileOpenView`, `htmlFileOpenView`, the Auto Sleep rows
@@ -78,29 +86,91 @@ session inside the project you are already in switches to Agents.
 - Side and width: the sidebar sits left or right (`sidebarSide`, or
   `ghostex move-sidebar`); drag the divider to resize, double-click it to
   restore `sidebarDefaultWidthPx`. Cmd+B collapses it.
+- Pane memory: the companion and Commands panes are remembered for Agents and,
+  separately, for the wide views (Browser, Code, Docs, Kanban, Automate), the
+  same for every project, so switching projects never moves them. The sidebar
+  keeps one state everywhere by default; "Sidebar visibility memory"
+  (`sidebarVisibilityMemory`, Advanced) can remember it per view instead, and
+  then a project switch that hides it leaves it floating while you hover it.
+  While collapsed, hovering the 10px edge on the sidebar's side reveals it as
+  a floating panel; in a wide view with the companion hidden, the lower half
+  of that edge reveals the companion instead.
 - Presets: Settings > General > Sidebar > Preset switches groups of card
   details at once; the individual rows below it are marked Advanced.
-- Session cards: agent icon, favicon, close button, last-active time, git
-  stats, colored icons, and rename-on-double-click are all toggles.
+- Session cards: agent icon, favicon, last-active time, git stats, colored
+  icons, and rename-on-double-click are all toggles.
+- Session hover buttons (click to toggle, drag to reorder), under General >
+  Session Cards, is a strip
+  of icons: Rename, Pin, Note, Snooze, Close After Done, Tag, Park, Sleep,
+  Close, and a chevron. Click an icon to turn that hover button on or off;
+  drag icons to reorder them. Buttons to the right of the chevron always show
+  at the right end of a hovered session card; buttons to its left stay hidden
+  until the chevron is clicked, which reveals them on every card in that
+  project until the chevron (now pointing right) is clicked again. Each
+  project remembers its choice across restarts. Turning the chevron off shows
+  every enabled button at once. Tag, Park, Sleep and Close are on by default,
+  right of the chevron. Hover an icon on a card to see its name; buttons flip
+  to the reverse action on an active row (Unpin, Wake, Unsnooze, Unpark,
+  Cancel Close After Done). An enabled button is left out of the session's
+  right-click menu (and its Advanced submenu), so turning Close off puts
+  Close back in the menu. Browser tabs ignore the strip and always show Sleep
+  and Close. Setting: `sessionCardHoverButtons` (a list of `{ id, enabled }`
+  with ids `rename`, `pin`, `note`, `snooze`, `closeAfterDone`, `tag`,
+  `park`, `sleep`, `close`, `chevron`).
+- Long projects: a project with more sessions than Compact Session Rows (13
+  by default, up to 50) starts in Compact mode and shows only that many rows
+  plus a "Show all N sessions" row. Rows inside a collapsed Pinned, Browser,
+  Parked, or Snoozed section do not count. Click that row, or the chevron on
+  the project header, to switch the project to Full mode, which shows every
+  row; the chevron switches it back to Compact. Each project remembers its
+  mode. The sidebar is the only scroller, and a project's header stays pinned
+  at the top while you scroll through its rows. Setting:
+  `projectSessionListCollapsedCount`.
 - Parking is enabled by default. Right-click a session and choose Park, or
   select several sessions and choose Park selected, to move them into the
   collapsible Parked section at the bottom. Use Unpark or Unpark selected to
   bring them back. Parking keeps sessions running unless Sleep session when
-  parking is enabled (off by default). Show tag menu when parking (off by
-  default) makes Park open the Tag as menu: pick a tag to tag and park in one
-  step, or the Keep current tag row at the top to park as is. Closing that
-  menu without choosing does not park. Unpark
-  after sending a message (on by default) moves a parked session back out of
-  the Parked section as soon as you send it a message from chat or type a
-  prompt into its terminal; Codex only notices chat sends. All four settings
-  are in General > Sidebar without Show Advanced: `enableSessionParking`,
+  parking is enabled (off by default). Park & Snooze with tags (on by
+  default) makes Park and Snooze open the Tag as menu: pick a tag to tag and
+  park in one step, or the No tag change row at the top to park as is.
+  Closing that menu without choosing does not park. Unpark after sending a
+  message (on by default) moves a parked or snoozed session back out of its
+  section as soon as you send it a message from chat or type a prompt into
+  its terminal; Codex only notices chat sends. All four settings are in
+  General > Sidebar without Show Advanced: `enableSessionParking`,
   `sleepSessionWhenParking`, `showTagMenuWhenParking`,
   `unparkAfterSendingMessage`.
+- Snooze puts a session away until a chosen time: right-click it and choose
+  Snooze (or use the Snooze hover button), then pick 1 hour, 3 hours,
+  Tomorrow (9:00) or Next week (Monday 9:00). The session moves into a
+  collapsible Snoozed section below Parked and is put to sleep. When the time
+  passes it returns to its usual place, still asleep until you open it.
+  Unsnooze brings it back early. Snooze needs no setting; it is always
+  available.
 - Remote machines appear as their own sidebar sections when connected.
 
 Related settings: everything under General > Sidebar, `agentManagerZoomPercent`
 (sidebar interface size), `sidebarProjectGroupStyle`, `sidebarSpacesEnabled`,
 `sidebarSpaceSwitchBehavior`, `sidebarSpaceFollowActiveSession`.
+
+## Commands pane
+
+The Commands pane holds command terminals below the workspace, or on its right
+when Command Pane Side is set to Right. Open it with F12. Auto-minimize Commands
+pane is on by default: after you move focus elsewhere and leave the pointer
+outside the pane for 1 minute, it minimizes while commands keep running.
+Focusing, hovering, selecting text, scrolling, or resizing keeps it open and
+restarts the countdown. Background command output does not restart it.
+In Settings > General > Sidebar, turn auto-minimize off or set Minimize after
+to 15 seconds, 30 seconds, 1 minute, 2 minutes, or 5 minutes. When auto-minimize
+is enabled, the Keep open button appears beside the minimize chevron. It shows
+an open lock when off and a highlighted closed lock when on. Keep open pauses
+auto-minimize for the current project, useful for watching logs. Click
+it again to allow auto-minimize, or manually minimize to clear Keep open.
+Keep open survives project switches but resets when the app restarts.
+Related settings: `commandsPanelAutoMinimize`,
+`commandsPanelAutoMinimizeDelaySeconds`, `commandsPanelSide`,
+`commandsPanelDefaultHeightPx`.
 
 ## Sessions
 
@@ -129,7 +199,9 @@ Manual Generate Name and `/rename` in chat remain available for Claude and Codex
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.
 - Previous Sessions (More Options or Cmd+P) lists every past conversation from
-  every agent CLI with resume and fork.
+  every agent CLI with resume and fork. The History icon immediately to the
+  right of Add Worktree on a project header opens Quick Access > Sessions with
+  that project selected and Closed active, ready to search sessions you closed.
 - Search by Prompt (More Options, or `gx f` in a terminal) fuzzy-searches every
   prompt you ever sent to an agent; Enter resumes that session, and starred
   prompts stay on top. Ctrl+G is agents, Ctrl+J is projects inside the picker.
@@ -146,6 +218,21 @@ Session Chat renders the same agent session as a chat GUI: composer with
 image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session.
+
+Star items in Context details to show them in the status line under the chat
+box. Items without a value are hidden until their data is available again;
+your starred selections stay saved.
+
+Codex can ask questions while it keeps working. These appear above the composer,
+so you can keep writing your next message. Choose a suggested answer or write
+your own, then press Enter or Send answer; Shift+Enter adds a new line, and
+selecting an option alone sends nothing. An orange spinner with a blue dot in
+the sidebar means the agent is working and has an unanswered question. The dot
+stays visible until you answer or skip, even while that chat is focused; if the
+agent finishes first, the blue attention dot remains.
+Use the arrows to move between questions, collapse the panel to answer later,
+or Skip a question without interrupting the agent.
+
 Press Ctrl+Shift+Down to scroll the focused chat to the bottom, including while
 typing. The Scroll to bottom button shows your current shortcut. Both stop any
 ongoing scroll momentum so the conversation settles at the bottom. This takes
@@ -164,15 +251,18 @@ Claude children stay in the Subagents card while the terminal lists them, includ
 between monitor events. Idle children are labelled Idle and their clocks pause;
 click a child's name or task to open its transcript.
 For Codex and Claude, the Subagents card and popup title show the child's latest
-model and effort in compact form, such as Opus 5 High or Astra xHigh. Hover to see
-the agent type, such as Explore or general-purpose. Unrecorded model values are
-labelled Model not recorded.
+model and effort in compact form, such as Opus 5 High or Astra xHigh. Codex rows
+show the child's name/path beside the model and effort, after a ‣ separator.
+For Claude, hover to see the agent type, such as Explore or general-purpose.
+Unrecorded model values are labelled Model not recorded.
 Slash commands sent from chat stay in the conversation after a reload, together
 with any captured output. Long command output expands when clicked; model, effort,
 Fast mode, and compaction results keep their status rows.
 While Claude Code writes a reply, the chat shows the text as it appears in the
 terminal, updated about once a second, and swaps in the saved message the moment
 Claude records it; nothing to enable.
+Chat Appearance defaults to System, following your computer’s light or dark appearance as it changes. Choose Light or Dark to keep chat in one palette; the surrounding app stays dark. Set it in Settings > Chat with `sessionChatTheme`.
+
 Toggle chat and terminal for a session with one click on the pane header or
 the pane hotkey. Compatible agents can default to chat. File writes and code
 edits appear outside the tool groups while the agent works. When a turn shows
@@ -184,8 +274,9 @@ collapsed row with its path and green/red change counts. Enable Show file edit
 previews in Settings > Chat to show the first seven code lines by default.
 Long paths truncate from the start, keeping the filename visible. Click anywhere
 on the path or filename to open it in Editor or Docs, just like a file reference
-pill. Right-click anywhere on the path for the same Copy Path and Locate File
-options as file references. Hosts without an editor copy the path on click.
+pill. Folder links in desktop chat open the folder in your system file explorer.
+Right-click anywhere on a path for Copy Path, just like file references.
+Hosts without an editor copy the path on click.
 Click the card background, circle, or change counts to expand or collapse the full diff.
 Only clicks directly on the path or filename open the file. The
 circle's center turns white on hover. An open code preview and its left rail
@@ -226,10 +317,16 @@ reset the one whose limit resets first, Most used first keeps draining the
 account already in use, and Same as last session reuses the account of the last
 session. Pick a specific account instead to always start
 with it. When the rule finds no account, new sessions use the current CLI login.
+Terminal notices in Claude and Codex chats also offer Switch account beside
+Open terminal, so you can choose another account directly from a usage-limit warning.
 Switching a running Claude or Codex session to another account, from More
-actions > Switch Account or automatically when its account hits a usage limit,
+actions > Switch Account, a terminal notice, or automatically when its account hits a usage limit,
 exits the CLI inside its own terminal and resumes the same conversation there,
-so the terminal tab and the chat stay open. A manual switch waits for your next
+so the terminal tab and the chat stay open. A card in the middle of Session Chat
+shows the current and selected accounts, their usage percentages (including
+Claude's Fable limit), and the switch progress. It stays until the switch
+finishes, briefly confirms success, or shows a failure with Retry switch.
+A manual switch waits for your next
 message without sending anything. An automatic switch sends a "." to continue
 the interrupted work once the new account is ready. Configured recovery after
 errors can also continue work on the same account.
@@ -388,8 +485,9 @@ The Notifications bell sits in the titlebar right after the Next button and
 shows how many notifications are unread. Click it to open the Notifications
 panel: one row per session, newest first, saying whether the agent finished a
 turn or needs your input, with the last thing it said. Click a row to jump to
-that session and mark it read; hover a row to dismiss it; the header has Jump
-to Latest Unread, Mark All Read, and Clear All. Hotkeys: Cmd+I opens the panel,
+that session and mark it read; hover a row to dismiss it; the header has Next
+unread, Mark all read, and Clear all. Hover a header button to see its configured
+hotkey when one is available. Hotkeys: Cmd+I opens the panel,
 Cmd+Shift+U jumps to the latest unread notification, and Cmd+Ctrl+U pushes the
 current session to the back of the unread queue and jumps to the next one.
 Scripts and agent hooks can post their own rows with
@@ -475,9 +573,11 @@ docs directory), `hideProjectHeaderDiffStats`,
 
 Theme, background contrast and tint, accent color, active pane outline, and
 the app icon live under Settings > General > Appearance. Keep Awake (Power)
-prevents sleep while agents work. Storage shows the Ghostex data folders.
+prevents sleep while agents work.
 Advanced holds Enable Experimental Features and the Debugging rows (Show debug
 UI controls gates diagnostic disk logging; leave these to the user).
+Settings that depend on a setting above them have an indented ↳ before their
+name. They appear when the parent setting enables them.
 
 Related settings: `sidebarTheme`, `customSidebarTitlebarBackgroundDarknessPercent`,
 `customSidebarTitlebarBackgroundTintColor`, `accentColor`,

@@ -128,6 +128,31 @@
       "agentWritable": true
     },
     {
+      "key": "sidebarVisibilityMemory",
+      "title": "Sidebar visibility memory",
+      "subtitle": "Keep one sidebar state everywhere, or remember it separately for Agents and for the wide views (Browser, Code, Docs, Kanban, Automate).",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "enum",
+      "default": "shared",
+      "options": [
+        {
+          "label": "Same in every view",
+          "value": "shared"
+        },
+        {
+          "label": "Remembered per view",
+          "value": "perView"
+        }
+      ],
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "showProjectIcons",
       "title": "Show project icons",
       "subtitle": "Show project artwork or a folder or worktree icon beside project names.",
@@ -169,21 +194,6 @@
       "sectionTitle": "Sidebar",
       "type": "boolean",
       "default": false,
-      "advanced": true,
-      "agentWritable": true
-    },
-    {
-      "key": "showCloseButtonOnSessionCards",
-      "title": "Show close button on hover",
-      "subtitle": "Reveal the close control when hovering a card.",
-      "tab": "settings",
-      "tabTitle": "General",
-      "group": "sidebar",
-      "groupTitle": "Sidebar",
-      "section": "sidebar",
-      "sectionTitle": "Sidebar",
-      "type": "boolean",
-      "default": true,
       "advanced": true,
       "agentWritable": true
     },
@@ -363,9 +373,23 @@
       "agentWritable": true
     },
     {
-      "key": "projectSessionListCollapsedCount",
-      "title": "Show Less Count",
-      "subtitle": "Number of project sessions kept visible after Show less.",
+      "key": "commandsPanelAutoMinimize",
+      "title": "Auto-minimize Commands pane",
+      "subtitle": "Minimize the Commands pane after you stop using it and move focus elsewhere. Commands keep running.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "commandsPanelAutoMinimizeDelaySeconds",
+      "title": "Minimize after",
+      "subtitle": "How long the Commands pane stays open after focus and the pointer leave it.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "sidebar",
@@ -373,7 +397,43 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "number",
-      "default": 10,
+      "default": 60,
+      "options": [
+        {
+          "label": "15 seconds",
+          "value": "15"
+        },
+        {
+          "label": "30 seconds",
+          "value": "30"
+        },
+        {
+          "label": "1 minute",
+          "value": "60"
+        },
+        {
+          "label": "2 minutes",
+          "value": "120"
+        },
+        {
+          "label": "5 minutes",
+          "value": "300"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "projectSessionListCollapsedCount",
+      "title": "Compact Session Rows",
+      "subtitle": "Rows a project shows in Compact mode before its \"Show all\" row. Rows in collapsed sections do not count.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "number",
+      "default": 13,
       "min": 1,
       "max": 50,
       "advanced": true,
@@ -440,8 +500,8 @@
     },
     {
       "key": "showTagMenuWhenParking",
-      "title": "Show tag menu when parking",
-      "subtitle": "Open the Tag as menu when a session is parked so it can be tagged right away.",
+      "title": "Park & Snooze with tags",
+      "subtitle": "Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "sidebar",
@@ -449,7 +509,7 @@
       "section": "sidebar",
       "sectionTitle": "Sidebar",
       "type": "boolean",
-      "default": false,
+      "default": true,
       "agentWritable": true
     },
     {
@@ -482,19 +542,59 @@
       "agentWritable": true
     },
     {
-      "key": "showSessionCloseContextMenuAction",
-      "title": "Show Close option in context menu",
-      "subtitle": "Show the Close item in session context menus.",
+      "key": "sessionCardHoverButtons",
+      "title": "Session hover buttons (click to toggle, drag to reorder)",
+      "subtitle": "Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. Tag, Park, Sleep and Close are on by default.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "sidebar",
       "groupTitle": "Sidebar",
       "section": "sessionCards",
       "sectionTitle": "Session Cards",
-      "type": "boolean",
-      "default": false,
-      "advanced": true,
-      "agentWritable": true
+      "type": "json",
+      "default": [
+        {
+          "enabled": false,
+          "id": "rename"
+        },
+        {
+          "enabled": false,
+          "id": "pin"
+        },
+        {
+          "enabled": false,
+          "id": "note"
+        },
+        {
+          "enabled": false,
+          "id": "snooze"
+        },
+        {
+          "enabled": false,
+          "id": "closeAfterDone"
+        },
+        {
+          "enabled": true,
+          "id": "chevron"
+        },
+        {
+          "enabled": true,
+          "id": "tag"
+        },
+        {
+          "enabled": true,
+          "id": "park"
+        },
+        {
+          "enabled": true,
+          "id": "sleep"
+        },
+        {
+          "enabled": true,
+          "id": "close"
+        }
+      ],
+      "agentWritable": false
     },
     {
       "key": "sidebarSessionTagListItems",
@@ -881,7 +981,7 @@
     {
       "key": "sessionChatTheme",
       "title": "Chat appearance",
-      "subtitle": "Choose the palette used by chat messages, thinking, tools, edits, and Markdown.",
+      "subtitle": "Follow your computer’s appearance with System (the default), or choose Light or Dark for chat content.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "chat",
@@ -889,8 +989,12 @@
       "section": "chat",
       "sectionTitle": "Chat",
       "type": "enum",
-      "default": "dark",
+      "default": "system",
       "options": [
+        {
+          "label": "System",
+          "value": "system"
+        },
         {
           "label": "Light",
           "value": "light"
@@ -4242,34 +4346,6 @@
       "agentWritable": true
     },
     {
-      "key": "ghostexFolderStats",
-      "title": "Ghostex folder",
-      "subtitle": "Show Ghostex data-folder sizes and open the resolved storage folder.",
-      "tab": "settings",
-      "tabTitle": "General",
-      "group": "system",
-      "groupTitle": "System",
-      "section": "storage",
-      "sectionTitle": "Storage",
-      "type": "ui",
-      "options": [
-        {
-          "label": "Open Ghostex folder",
-          "value": "openGhostexFolder"
-        },
-        {
-          "label": "Folder sizes",
-          "value": "folderSizes"
-        },
-        {
-          "label": "Disk usage",
-          "value": "diskUsage"
-        }
-      ],
-      "advanced": true,
-      "agentWritable": false
-    },
-    {
       "key": "completionSound",
       "title": "Completion Sound",
       "subtitle": "Sound for terminal completions, or Off.",
@@ -7073,8 +7149,8 @@
     },
     {
       "key": "showLessForExpandedProjectJumps",
-      "title": "Show less after project jumps",
-      "subtitle": "Collapse the session list of a project expanded by a jump back to Show less.",
+      "title": "Compact list after project jumps",
+      "subtitle": "Switch the session list of a project expanded by a jump to Compact.",
       "tab": "hotkeys",
       "tabTitle": "Hotkeys",
       "section": "projects",

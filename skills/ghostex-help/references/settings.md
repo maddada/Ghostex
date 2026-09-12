@@ -20,10 +20,10 @@ How to use this file:
 - **Spaces** `sidebarSpacesEnabled` (boolean, default false): Show a row of Space filter buttons in each server's sidebar section.
 - **When switching to a Space** `sidebarSpaceSwitchBehavior` (one of restore | keep; default restore): Reopen the session you last had open in a Space when you switch to it, in the view its project was in. Requires Spaces. Option labels: restore = Restore the Space's projects, keep = Don't switch projects.
 - **Follow the active session's Space** `sidebarSpaceFollowActiveSession` (boolean, default false): Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward or Search by Prompt. Requires Spaces.
+- **Sidebar visibility memory** `sidebarVisibilityMemory` (one of shared | perView; default shared) [advanced]: Keep one sidebar state everywhere, or remember it separately for Agents and for the wide views (Browser, Code, Docs, Kanban, Automate). Option labels: shared = Same in every view, perView = Remembered per view.
 - **Show project icons** `showProjectIcons` (boolean, default true) [advanced]: Show project artwork or a folder or worktree icon beside project names.
 - **Hide agent icon until hover** `hideSessionAgentIconUntilHover` (boolean, default false) [advanced]: Hide session agent icons until a session row is hovered.
 - **Hide browser favicon until hover** `hideBrowserFaviconUntilHover` (boolean, default false) [advanced]: Hide browser page favicons until a session row is hovered.
-- **Show close button on hover** `showCloseButtonOnSessionCards` (boolean, default true) [advanced]: Reveal the close control when hovering a card.
 - **Hide last active time** `hideLastActiveTimeOnSessionCards` (boolean, default true) [advanced]: Hide Last Active timestamps from session-card title rows.
 - **Hide project git stats** `hideProjectHeaderDiffStats` (boolean, default false) [advanced]: Hide +added/-removed line counts in sidebar project rows.
 - **Show changed-file count** `showProjectEditorDiffFileCount` (boolean, default false) [advanced]: Show changed-file counts in sidebar project row git stats.
@@ -34,17 +34,19 @@ How to use this file:
 - **Default Width** `sidebarDefaultWidthPx` (number 150 to 520 default 275) [advanced]: Width restored when double-clicking the sidebar resize handle.
 - **Command Pane Default Height** `commandsPanelDefaultHeightPx` (number 40 to 600 default 125) [advanced]: Height used when opening the command pane and when double-clicking its top resize rail.
 - **Command Pane Side** `commandsPanelSide` (one of bottom | right; default bottom): Dock the command pane below the workspace or to its right. Option labels: bottom = Bottom, right = Right.
-- **Show Less Count** `projectSessionListCollapsedCount` (number 1 to 50 default 10) [advanced]: Number of project sessions kept visible after Show less.
+- **Auto-minimize Commands pane** `commandsPanelAutoMinimize` (boolean, default true): Minimize the Commands pane after you stop using it and move focus elsewhere. Commands keep running.
+- **Minimize after** `commandsPanelAutoMinimizeDelaySeconds` (number one of 15 | 30 | 60 | 120 | 300; default 60): How long the Commands pane stays open after focus and the pointer leave it. Option labels: 15 = 15 seconds, 30 = 30 seconds, 60 = 1 minute, 120 = 2 minutes, 300 = 5 minutes.
+- **Compact Session Rows** `projectSessionListCollapsedCount` (number 1 to 50 default 13) [advanced]: Rows a project shows in Compact mode before its "Show all" row. Rows in collapsed sections do not count.
 - **Sidebar Interface Size** `agentManagerZoomPercent` (number 50 to 200 default 100): Scale the sidebar interface.
 - **Double-click empty sidebar space to create a session** `createSessionOnSidebarDoubleClick` (boolean, default false) [advanced]: Create a session from empty sidebar space.
 - **Enable session parking** `enableSessionParking` (boolean, default true): Move deferred sessions into a collapsible Parked section at the bottom of the sidebar.
 - **Sleep session when parking** `sleepSessionWhenParking` (boolean, default false): Sleep a session automatically when it is moved into the Parked section.
-- **Show tag menu when parking** `showTagMenuWhenParking` (boolean, default false): Open the Tag as menu when a session is parked so it can be tagged right away.
+- **Park & Snooze with tags** `showTagMenuWhenParking` (boolean, default true): Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.
 - **Unpark after sending a message** `unparkAfterSendingMessage` (boolean, default true): Move a parked session out of the Parked section when you send it a message.
 - **Double-click session cards to rename** `renameSessionOnDoubleClick` (boolean, default false) [advanced]: Makes clicking on a session respond a bit slower so we can detect the double click
 #### Session Cards
 
-- **Show Close option in context menu** `showSessionCloseContextMenuAction` (boolean, default false) [advanced]: Show the Close item in session context menus.
+- **Session hover buttons (click to toggle, drag to reorder)** `sessionCardHoverButtons` (structured value; change it in Settings, not with `ghostex settings set`): Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. Tag, Park, Sleep and Close are on by default.
 #### Sidebar Tags
 
 - **Tag Filter List** `sidebarSessionTagListItems` (structured value; change it in Settings, not with `ghostex settings set`): Add your own tags, then reorder, hide, disable, or delete tags and their separators for the sidebar and the Tag as menu.
@@ -69,7 +71,7 @@ How to use this file:
 #### Chat
 
 - **Default view for compatible agents** `preferredAgentInterface` (one of terminal | chat; default chat): Automatically switch to chat as soon as Ghostex detects that an agent session supports it. Option labels: terminal = Terminal, chat = Chat.
-- **Chat appearance** `sessionChatTheme` (one of light | dark; default dark): Choose the palette used by chat messages, thinking, tools, edits, and Markdown. Option labels: light = Light, dark = Dark.
+- **Chat appearance** `sessionChatTheme` (one of system | light | dark; default system): Follow your computer’s appearance with System (the default), or choose Light or Dark for chat content. Option labels: system = System, light = Light, dark = Dark.
 - **Chat font family** `sessionChatFontFamily` (text, default (empty)): Use any installed font in chat messages and the prompt composer.
 - **Custom transcript width** `sessionChatCustomTranscriptWidthEnabled` (boolean, default false): Let the transcript use a different width from the prompt composer.
 - **Transcript width** `sessionChatTranscriptWidthPercent` (number 50 to 100 step 5 default 75): Set the centered transcript width without changing the prompt composer.
@@ -160,9 +162,6 @@ How to use this file:
 - **Battery threshold** `keepAwakeBatteryThresholdPercent` (number one of 0 | 10 | 15 | 20 | 25 | 30 | 35 | 40 | 45 | 50 | 55 | 60 | 65 | 70 | 75 | 80 | 85 | 90; default 0) [advanced]: Stop preventing sleep below this battery level, or turn the rule off. Option labels: 0 = Off, 10 = 10%, 15 = 15%, 20 = 20%, 25 = 25%, 30 = 30%, 35 = 35%, 40 = 40%, 45 = 45%, 50 = 50%, 55 = 55%, 60 = 60%, 65 = 65%, 70 = 70%, 75 = 75%, 80 = 80%, 85 = 85%, 90 = 90%.
 - **Deactivate in Low Power Mode** `keepAwakeDeactivateOnLowPowerMode` (boolean, default false) [advanced]: Stop preventing sleep when macOS Low Power Mode is enabled.
 - **Deactivate on user switch** `keepAwakeDeactivateOnUserSwitch` (boolean, default false) [advanced]: Stop preventing sleep when this user session is no longer active.
-#### Storage
-
-- **Ghostex folder** `ghostexFolderStats` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: Show Ghostex data-folder sizes and open the resolved storage folder.
 ### Notifications
 
 #### Sounds
@@ -410,4 +409,4 @@ How to use this file:
 ### Projects
 
 - **Expand collapsed projects on jump** `expandCollapsedProjectsOnJump` (boolean, default true): Expand a collapsed project when a project-jump hotkey lands on it.
-- **Show less after project jumps** `showLessForExpandedProjectJumps` (boolean, default false): Collapse the session list of a project expanded by a jump back to Show less.
+- **Compact list after project jumps** `showLessForExpandedProjectJumps` (boolean, default false): Switch the session list of a project expanded by a jump to Compact.

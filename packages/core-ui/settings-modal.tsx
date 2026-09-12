@@ -25,7 +25,7 @@ import {
   type SettingsModalTab,
   type SettingsModalTabVisibilityOptions,
 } from './settings-modal-tabs';
-import { IconChevronDown, IconChevronRight, IconFolderOpen, IconInfoCircle } from '@tabler/icons-react';
+import { IconChevronDown, IconChevronRight, IconInfoCircle } from '@tabler/icons-react';
 import { type CompletionSoundSetting } from '../shared/completion-sound';
 import { GHOSTEX_RECOMMENDED_GHOSTTY_CONFIG_LINES } from '../shared/ghostty-config-actions';
 import {
@@ -64,9 +64,11 @@ import {
   type PromptEditorBackend,
   SIDEBAR_SIDE_OPTIONS,
   SIDEBAR_SPACE_SWITCH_BEHAVIOR_OPTIONS,
+  SIDEBAR_VISIBILITY_MEMORY_OPTIONS,
   WEB_LINK_OPEN_TARGET_OPTIONS,
   areDiagnosticLoggingSettingsEqual,
   COMMANDS_PANEL_SIDE_OPTIONS,
+  COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS,
   MAX_COMMANDS_PANEL_DEFAULT_HEIGHT_PX,
   MAX_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   MAX_SIDEBAR_DEFAULT_WIDTH_PX,
@@ -89,6 +91,7 @@ import {
   type CommandsPanelSide,
   type SidebarSide,
   type SidebarSpaceSwitchBehavior,
+  type SidebarVisibilityMemory,
   type TerminalBackgroundImageFit,
   type WebLinkOpenTarget,
   type TerminalCursorStyle,
@@ -145,6 +148,8 @@ import {
   rememberSettingsModalTab,
 } from './settings-modal/navigation-memory';
 import { ChatFileOpenViewSetting } from './settings-modal/chat-file-open-view-field';
+import { SessionCardHoverActionsField } from './settings-modal/session-card-hover-actions-field';
+import { areSessionCardHoverButtonsEqual } from '../shared/session-card-hover-actions';
 import { getMostlyVisibleSettingsSectionId, isAdvancedMainSetting } from './settings-modal/search';
 import { AboutSettingsTab } from './settings-modal/tabs/about';
 import { ActionsSettingsTab } from './settings-modal/tabs/actions';
@@ -357,7 +362,6 @@ export function SettingsModal({
   onOpenAccessibilityPreferences,
   onOpenMacOSNotificationSettings,
   onOpenScreenRecordingPreferences,
-  onOpenGhostexFolder,
   onGhosttySettingsAction,
   onInstallCliSkill,
   onInstallBrowserControl,
@@ -378,7 +382,6 @@ export function SettingsModal({
   onUninstallBundledAgentSkills,
   onRequestAgentHookStatus,
   onRequestGhostexCliStatus,
-  onRequestGhostexFolderStats,
   onRequestOSIntegrationStatus,
   onRequestPluginSettingsStatus,
   onReinstallPlugin,
@@ -393,8 +396,6 @@ export function SettingsModal({
   vscode,
   ghostexCliStatus,
   ghostexCliStatusLoading = false,
-  ghostexFolderStats,
-  ghostexFolderStatsLoading = false,
   osIntegrationStatus,
   osIntegrationStatusLoading = false,
   pluginSettingsStatus,
@@ -475,14 +476,12 @@ export function SettingsModal({
   const appIconSectionRef = useRef<HTMLDivElement>(null);
   const sidebarTagsSectionRef = useRef<HTMLDivElement>(null);
   const soundsSectionRef = useRef<HTMLDivElement>(null);
-  const storageSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyActionsSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyGeneralSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyNavigationSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyPaneActionsSectionRef = useRef<HTMLDivElement>(null);
   const hotkeyProjectsSectionRef = useRef<HTMLDivElement>(null);
   const hotkeySessionSlotsSectionRef = useRef<HTMLDivElement>(null);
-  const hasRequestedStorageStatsRef = useRef(false);
   /**
    * CDXC:Icons 2026-06-25-21:50:
    * The App Icon picker is prop-driven: native pushes appIconState through the
@@ -794,7 +793,6 @@ export function SettingsModal({
     sidebarTags: sidebarTagsSectionRef,
     sounds: soundsSectionRef,
     statusIndicators: statusIndicatorsSectionRef,
-    storage: storageSectionRef,
     system: powerSectionRef,
     tools: browserSectionRef,
     terminal: ghosttyTerminalSectionRef,
@@ -873,17 +871,13 @@ export function SettingsModal({
     editorSectionRef,
     fileOpeningSectionRef,
     getMainSettingsSectionMeasurementItems,
-    ghostexFolderStats,
-    ghostexFolderStatsLoading,
     ghosttyBehaviorSectionRef,
     ghosttyScrollingSectionRef,
     ghosttyTerminalSectionRef,
     hasRequestedAppIconsRef,
-    hasRequestedStorageStatsRef,
     initialSection,
     isFirstLaunchSetup,
     isOpen,
-    onRequestGhostexFolderStats,
     pendingNavigationPersistTimeoutRef,
     pendingTimeoutRef,
     powerSectionRef,
@@ -897,7 +891,6 @@ export function SettingsModal({
     sidebarTagsSectionRef,
     soundsSectionRef,
     statusIndicatorsSectionRef,
-    storageSectionRef,
     terminalDevServersSectionRef,
     themingSectionRef,
     visibleMainSettingsSectionIds,
@@ -1178,6 +1171,7 @@ export function SettingsModal({
                             mainSettingVisible(settingsSearch.sidebar, 'sidebarSpaceSwitchBehavior') ? (
                               <SelectField
                                 description='Reopen the session you last had open in a Space when you switch to it, in the view its project was in. If that session is closed, the one before it is used; a Space with nothing remembered opens its first project.'
+                                dependent
                                 label='When switching to a Space'
                                 {...getSettingModificationProps('sidebarSpaceSwitchBehavior')}
                                 onChange={(value) =>
@@ -1193,9 +1187,23 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.sidebarSpaceFollowActiveSession}
                                 description='Switch the selected Space to the one that owns a session you open from outside it, such as through Back/Forward, Search by Prompt, a notification, or Previous Sessions.'
+                                dependent
                                 label="Follow the active session's Space"
                                 {...getSettingModificationProps('sidebarSpaceFollowActiveSession')}
                                 onChange={(checked) => updateDraft('sidebarSpaceFollowActiveSession', checked)}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'sidebarVisibilityMemory') ? (
+                              <SelectField
+                                description='Keep one sidebar state everywhere, or remember it separately for Agents and for the wide views (Browser, Code, Docs, Kanban, Automate). The companion and Commands panes always follow the view.'
+                                label='Sidebar visibility memory'
+                                {...getSettingModificationProps('sidebarVisibilityMemory')}
+                                onChange={(value) =>
+                                  updateDraft('sidebarVisibilityMemory', value as SidebarVisibilityMemory)
+                                }
+                                options={SIDEBAR_VISIBILITY_MEMORY_OPTIONS}
+                                triggerWidth='16rem'
+                                value={draft.sidebarVisibilityMemory}
                               />
                             ) : null}
                             {/*
@@ -1227,15 +1235,6 @@ export function SettingsModal({
                                 label='Hide browser favicon until hover'
                                 {...getSettingModificationProps('hideBrowserFaviconUntilHover')}
                                 onChange={(checked) => updateDraft('hideBrowserFaviconUntilHover', checked)}
-                              />
-                            ) : null}
-                            {mainSettingVisible(settingsSearch.sidebar, 'showCloseButtonOnSessionCards') ? (
-                              <ToggleField
-                                checked={draft.showCloseButtonOnSessionCards}
-                                description='Reveal the close control when hovering a card.'
-                                label='Show close button on hover'
-                                {...getSettingModificationProps('showCloseButtonOnSessionCards')}
-                                onChange={(checked) => updateDraft('showCloseButtonOnSessionCards', checked)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'hideLastActiveTimeOnSessionCards') ? (
@@ -1355,15 +1354,41 @@ export function SettingsModal({
                                 value={draft.commandsPanelSide}
                               />
                             ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'commandsPanelAutoMinimize') ? (
+                              <ToggleField
+                                checked={draft.commandsPanelAutoMinimize}
+                                description='Minimize the Commands pane after you stop using it and move focus elsewhere. Commands keep running.'
+                                label='Auto-minimize Commands pane'
+                                {...getSettingModificationProps('commandsPanelAutoMinimize')}
+                                onChange={(checked) => updateDraft('commandsPanelAutoMinimize', checked)}
+                              />
+                            ) : null}
+                            {draft.commandsPanelAutoMinimize &&
+                            mainSettingVisible(settingsSearch.sidebar, 'commandsPanelAutoMinimizeDelaySeconds') ? (
+                              <SelectField
+                                description='How long the Commands pane stays open after focus and the pointer leave it.'
+                                dependent
+                                label='Minimize after'
+                                {...getSettingModificationProps('commandsPanelAutoMinimizeDelaySeconds')}
+                                onChange={(value) =>
+                                  updateDraft('commandsPanelAutoMinimizeDelaySeconds', Number(value))
+                                }
+                                options={COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS.map((option) => ({
+                                  label: option.label,
+                                  value: String(option.value),
+                                }))}
+                                value={String(draft.commandsPanelAutoMinimizeDelaySeconds)}
+                              />
+                            ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'projectSessionListCollapsedCount') ? (
                               <>
                                 {/*
                                  * CDXC:Projects 2026-06-10-13:39:
-                                 * The project-header Show less button should preserve the old six-row default while letting users raise the collapsed project-session count, such as ten rows, without changing the per-project Show more / Show less state model.
+                                 * The Compact row count is Settings-owned so users can raise or lower how many rows a project shows before its "Show all" row, without changing the per-project Compact / Full state model.
                                  */}
                                 <SliderNumberField
-                                  description='Project sessions kept visible after Show less.'
-                                  label='Show Less Count'
+                                  description='Rows a project shows in Compact mode before its "Show all" row. Rows in collapsed sections do not count.'
+                                  label='Compact Session Rows'
                                   {...getSettingModificationProps('projectSessionListCollapsedCount')}
                                   max={MAX_PROJECT_SESSION_LIST_COLLAPSED_COUNT}
                                   min={MIN_PROJECT_SESSION_LIST_COLLAPSED_COUNT}
@@ -1421,17 +1446,19 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.sleepSessionWhenParking}
                                 description='Sleep a session through its normal lifecycle immediately after it is parked.'
+                                dependent
                                 label='Sleep session when parking'
                                 {...getSettingModificationProps('sleepSessionWhenParking')}
                                 onChange={(checked) => updateDraft('sleepSessionWhenParking', checked)}
                               />
                             ) : null}
-                            {draft.enableSessionParking &&
-                            mainSettingVisible(settingsSearch.sidebar, 'showTagMenuWhenParking') ? (
+                            {/* CDXC:Settings 2026-09-12 DECISION: User: Park & Snooze with tags also gets the indented ↳ prefix. It stays available when parking is off because Snooze uses it too. */}
+                            {mainSettingVisible(settingsSearch.sidebar, 'showTagMenuWhenParking') ? (
                               <ToggleField
                                 checked={draft.showTagMenuWhenParking}
-                                description='Open the Tag as menu when a session is parked so it can be tagged right away.'
-                                label='Show tag menu when parking'
+                                description='Open the Tag as menu when a session is parked or snoozed so it can be tagged right away.'
+                                dependent
+                                label='Park & Snooze with tags'
                                 {...getSettingModificationProps('showTagMenuWhenParking')}
                                 onChange={(checked) => updateDraft('showTagMenuWhenParking', checked)}
                               />
@@ -1441,6 +1468,7 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.unparkAfterSendingMessage}
                                 description='Move a parked session out of the Parked section when you send it a message from chat or its terminal.'
+                                dependent
                                 label='Unpark after sending a message'
                                 {...getSettingModificationProps('unparkAfterSendingMessage')}
                                 onChange={(checked) => updateDraft('unparkAfterSendingMessage', checked)}
@@ -1461,20 +1489,20 @@ export function SettingsModal({
 
                         {mainSubsectionVisible('sessionCards', settingsSearch.sessionCards) ? (
                           <SettingsSection sectionRef={sessionCardsSectionRef} title='Session Cards'>
-                            {mainSettingVisible(settingsSearch.sessionCards, 'showSessionCloseContextMenuAction') ? (
-                              <>
-                                {/*
-                                 * CDXC:ContextMenus 2026-06-10-13:58:
-                                 * Session context menus should hide the destructive Close item by default. Place this opt-in directly above the command-copy opt-in because both settings reveal advanced context-menu actions.
-                                 */}
-                                <ToggleField
-                                  checked={draft.showSessionCloseContextMenuAction}
-                                  description='Show the Close item in session context menus.'
-                                  label='Show Close option in context menu'
-                                  {...getSettingModificationProps('showSessionCloseContextMenuAction')}
-                                  onChange={(checked) => updateDraft('showSessionCloseContextMenuAction', checked)}
-                                />
-                              </>
+                            {mainSettingVisible(settingsSearch.sessionCards, 'sessionCardHoverButtons') ? (
+                              <SessionCardHoverActionsField
+                                description='Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. An enabled button leaves the session context menu.'
+                                label='Session hover buttons (click to toggle, drag to reorder)'
+                                {...getSettingModificationProps('sessionCardHoverButtons')}
+                                isModified={
+                                  !areSessionCardHoverButtonsEqual(
+                                    draft.sessionCardHoverButtons,
+                                    DEFAULT_ghostex_SETTINGS.sessionCardHoverButtons
+                                  )
+                                }
+                                onChange={(items) => updateDraft('sessionCardHoverButtons', items)}
+                                value={draft.sessionCardHoverButtons}
+                              />
                             ) : null}
                           </SettingsSection>
                         ) : null}
@@ -1629,6 +1657,7 @@ export function SettingsModal({
                             mainSettingVisible(settingsSearch.theming, 'workspaceActivePaneBorderColor') ? (
                               <WebColorPickerField
                                 description='Color of the outline around the currently focused pane.'
+                                dependent
                                 label='Active Pane Border'
                                 {...getSettingModificationProps('workspaceActivePaneBorderColor')}
                                 onChange={(value) => updateDraftDebounced('workspaceActivePaneBorderColor', value)}
@@ -1676,7 +1705,7 @@ export function SettingsModal({
                             ) : null}
                             {mainSettingVisible(settingsSearch.chat, 'sessionChatTheme') ? (
                               <SessionChatThemeField
-                                description='Changes chat content only; the surrounding Ghostex app remains dark.'
+                                description='System follows your computer’s light or dark appearance. Changes chat content only; the surrounding Ghostex app remains dark.'
                                 label='Appearance'
                                 {...getSettingModificationProps('sessionChatTheme')}
                                 onChange={(value) => updateDraft('sessionChatTheme', value)}
@@ -1706,6 +1735,7 @@ export function SettingsModal({
                             mainSettingVisible(settingsSearch.chat, 'sessionChatTranscriptWidthPercent') ? (
                               <SliderNumberField
                                 description='Set the centered transcript width on wide panes. The prompt composer keeps its standard width.'
+                                dependent
                                 label='Transcript Width (%)'
                                 {...getSettingModificationProps('sessionChatTranscriptWidthPercent')}
                                 max={MAX_SESSION_CHAT_TRANSCRIPT_WIDTH_PERCENT}
@@ -1852,6 +1882,7 @@ export function SettingsModal({
                                 advanced={isAdvancedMainSetting('codeServerUseVscodeInsidersUserConfig')}
                                 checked={draft.codeServerUseVscodeInsidersUserConfig}
                                 description='Use the VS Code Insiders user settings directory.'
+                                dependent
                                 label='Use VS Code Insiders settings'
                                 onChange={(checked) => updateDraft('codeServerUseVscodeInsidersUserConfig', checked)}
                               />
@@ -2099,6 +2130,7 @@ export function SettingsModal({
                             mainSettingVisible(settingsSearch.terminal, 'terminalViewWidthPercent') ? (
                               <SliderNumberField
                                 description='Set the centered terminal body width. Panes 1070px wide or narrower remain full-width.'
+                                dependent
                                 label='Terminal Width (%)'
                                 {...getSettingModificationProps('terminalViewWidthPercent')}
                                 max={MAX_TERMINAL_VIEW_WIDTH_PERCENT}
@@ -2114,6 +2146,7 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.terminalWidthApplyToCommandPaneTerminals}
                                 description='Use the same centered width for terminals in the command pane. Padding remains shared across terminal types.'
+                                dependent
                                 label='Apply Width to Command Pane Terminals'
                                 {...getSettingModificationProps('terminalWidthApplyToCommandPaneTerminals')}
                                 onChange={(checked) => updateDraft('terminalWidthApplyToCommandPaneTerminals', checked)}
@@ -2501,6 +2534,7 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.autoSleepRequireAgentResumeCommand}
                                 description='Only auto-sleep agent sessions Ghostex can wake with a resume command.'
+                                dependent
                                 label='Require resume command'
                                 {...getSettingModificationProps('autoSleepRequireAgentResumeCommand')}
                                 onChange={(checked) => updateDraft('autoSleepRequireAgentResumeCommand', checked)}
@@ -2511,6 +2545,7 @@ export function SettingsModal({
                               <ToggleField
                                 checked={draft.autoSleepFavoriteAgentSessions}
                                 description='Allow favorite agent sessions to auto-sleep.'
+                                dependent
                                 label='Include favorite agents'
                                 {...getSettingModificationProps('autoSleepFavoriteAgentSessions')}
                                 onChange={(checked) => updateDraft('autoSleepFavoriteAgentSessions', checked)}
@@ -2628,16 +2663,6 @@ export function SettingsModal({
                               />
                             ) : null}
                           </SettingsSection>
-                        ) : null}
-
-                        {mainSubsectionVisible('storage', settingsSearch.storage) ? (
-                          <div ref={storageSectionRef}>
-                            <GhostexFolderStatsSection
-                              isLoading={ghostexFolderStatsLoading}
-                              onOpenGhostexFolder={onOpenGhostexFolder}
-                              stats={ghostexFolderStats}
-                            />
-                          </div>
                         ) : null}
 
                         {mainSubsectionVisible('sounds', settingsSearch.sounds) ? (
@@ -2773,6 +2798,7 @@ export function SettingsModal({
                             ) : null}
                             {debuggingSettingVisible('diagnosticLogging') ? (
                               <DiagnosticLoggingSettingsField
+                                dependent
                                 isModified={
                                   !areDiagnosticLoggingSettingsEqual(
                                     draft.diagnosticLogging,
@@ -2798,6 +2824,7 @@ export function SettingsModal({
                                 <ToggleField
                                   checked={draft.showSessionCommandCopyActions}
                                   description='Show Copy resume and Copy attach command in session context menus.'
+                                  dependent
                                   label='Show command copy actions'
                                   {...getSettingModificationProps('showSessionCommandCopyActions')}
                                   onChange={(checked) => updateDraft('showSessionCommandCopyActions', checked)}
@@ -2816,6 +2843,7 @@ export function SettingsModal({
                                 <ToggleField
                                   checked={draft.showSessionDetailsCopyAction}
                                   description='Show Copy Details in session context menus.'
+                                  dependent
                                   label='Show Copy Details option'
                                   {...getSettingModificationProps('showSessionDetailsCopyAction')}
                                   onChange={(checked) => updateDraft('showSessionDetailsCopyAction', checked)}
@@ -3285,71 +3313,6 @@ function SettingsSidebarNavigation({
       </div>
     </aside>
   );
-}
-
-function GhostexFolderStatsSection({
-  isLoading,
-  onOpenGhostexFolder,
-  stats,
-}: {
-  isLoading: boolean;
-  onOpenGhostexFolder?: () => void;
-  stats?: SidebarGhostexFolderStatsMessage;
-}) {
-  const folders = stats?.folders ?? [];
-  return (
-    <SettingsSection title='Storage'>
-      <SettingsListItem detail={stats?.folderPath ?? '~/.local/share/ghostex'} title='Ghostex folder'>
-        <SettingButton
-          className='h-8 shrink-0 gap-2 px-3'
-          disabled={!onOpenGhostexFolder}
-          disabledReason='Folder access isn’t available here.'
-          onClick={onOpenGhostexFolder}
-          type='button'
-          variant='outline'
-        >
-          <IconFolderOpen aria-hidden='true' className='size-4' />
-          Open Folder
-        </SettingButton>
-      </SettingsListItem>
-
-      {isLoading && !stats ? <div className='text-sm text-muted-foreground'>Loading folder sizes...</div> : null}
-
-      {stats?.errorMessage ? <div className='text-sm text-destructive'>{stats.errorMessage}</div> : null}
-
-      {stats && !stats.errorMessage ? (
-        <>
-          {folders.length > 0 ? (
-            folders.map((folder) => (
-              <SettingsListItem key={folder.path} title={folder.name}>
-                <span className='text-sm tabular-nums text-muted-foreground'>{formatBytes(folder.sizeBytes)}</span>
-              </SettingsListItem>
-            ))
-          ) : (
-            <div className='text-sm text-muted-foreground'>No folders found.</div>
-          )}
-          <SettingsListItem title='Total'>
-            <span className='text-sm tabular-nums text-foreground'>{formatBytes(stats.totalBytes)}</span>
-          </SettingsListItem>
-        </>
-      ) : null}
-    </SettingsSection>
-  );
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  const decimals = value >= 10 || unitIndex === 0 ? 0 : 1;
-  return `${value.toFixed(decimals)} ${units[unitIndex] ?? 'B'}`;
 }
 
 function GhosttySettingsActions({

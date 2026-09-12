@@ -365,8 +365,8 @@ const SUPPLEMENTAL_SETTING_ROWS: Record<string, SupplementalRow> = {
     ...HOTKEYS_TAB,
     section: 'projects',
     sectionTitle: 'Projects',
-    subtitle: 'Collapse the session list of a project expanded by a jump back to Show less.',
-    title: 'Show less after project jumps',
+    subtitle: 'Switch the session list of a project expanded by a jump to Compact.',
+    title: 'Compact list after project jumps',
   },
   windowsWslDistribution: {
     ...GENERAL_TAB,

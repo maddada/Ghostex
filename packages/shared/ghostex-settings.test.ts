@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
+  DEFAULT_SESSION_CARD_HOVER_BUTTONS,
+  getEnabledSessionCardHoverActions,
+  splitSessionCardHoverButtons,
+} from './session-card-hover-actions';
+import {
   AUTO_SLEEP_IDLE_MINUTE_OPTIONS,
   APP_SHOTS_HOTKEY_OPTIONS,
   COMMANDS_PANEL_SIDE_OPTIONS,
@@ -425,15 +430,15 @@ describe('normalizeghostexSettings', () => {
     });
   });
 
-  test('normalizes the project session Show less count', () => {
+  test('normalizes the compact project session row count', () => {
     /*
-    CDXC:Projects 2026-06-13-01:06:
-    Settings owns how many project sessions remain visible after Show less. Use ten as the current default while continuing to clamp explicit user counts.
+    CDXC:Projects 2026-09-12 DECISION:
+    User: Compact project lists show 13 rows by default; explicit user counts are still clamped.
     */
     expect(DEFAULT_ghostex_SETTINGS.projectSessionListCollapsedCount).toBe(
       DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT
     );
-    expect(DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT).toBe(10);
+    expect(DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT).toBe(13);
     expect(normalizeghostexSettings({})).toMatchObject({
       projectSessionListCollapsedCount: DEFAULT_PROJECT_SESSION_LIST_COLLAPSED_COUNT,
     });
@@ -621,7 +626,6 @@ describe('normalizeghostexSettings', () => {
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.minimal.showProjectIcons).toBe(false);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.showProjectIcons).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards).toBe(true);
-    expect(SIDEBAR_SETTINGS_PRESETS.every((preset) => preset.settings.showCloseButtonOnSessionCards)).toBe(true);
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideMenuBarSessionStatusIndicators).toBe(false);
     expect(
       normalizeghostexSettings({
@@ -652,7 +656,7 @@ describe('normalizeghostexSettings', () => {
     expect(SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideProjectHeaderDiffStats).toBe(false);
     for (const preset of SIDEBAR_SETTINGS_PRESETS) {
       const appliedPreset = applySidebarSettingsPreset(DEFAULT_ghostex_SETTINGS, preset.id);
-      expect(appliedPreset.showCloseButtonOnSessionCards).toBe(true);
+      expect(appliedPreset.sessionCardHoverButtons).toEqual(DEFAULT_SESSION_CARD_HOVER_BUTTONS);
     }
     expect(
       getSidebarSettingsPresetId({
@@ -694,19 +698,31 @@ describe('normalizeghostexSettings', () => {
     });
   });
 
-  test('hides the session close context-menu option unless explicitly enabled', () => {
-    /**
-     * CDXC:ContextMenus 2026-06-10-13:58:
-     * The single-session Close context-menu item should be absent by default.
-     * Users can opt into it separately from the hover close button.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.showSessionCloseContextMenuAction).toBe(false);
-    expect(normalizeghostexSettings({})).toMatchObject({
-      showSessionCloseContextMenuAction: false,
-    });
-    expect(normalizeghostexSettings({ showSessionCloseContextMenuAction: true })).toMatchObject({
-      showSessionCloseContextMenuAction: true,
-    });
+  test('normalizes the session-card hover buttons and migrates the old close toggle', () => {
+    expect(DEFAULT_ghostex_SETTINGS.sessionCardHoverButtons).toEqual(DEFAULT_SESSION_CARD_HOVER_BUTTONS);
+    expect(normalizeghostexSettings({}).sessionCardHoverButtons).toEqual(DEFAULT_SESSION_CARD_HOVER_BUTTONS);
+    expect(
+      getEnabledSessionCardHoverActions(
+        normalizeghostexSettings({ showCloseButtonOnSessionCards: false }).sessionCardHoverButtons
+      )
+    ).toEqual([]);
+    const stored = normalizeghostexSettings({
+      sessionCardHoverButtons: [
+        { enabled: true, id: 'close' },
+        { enabled: true, id: 'bogus' },
+        { enabled: true, id: 'chevron' },
+        { enabled: false, id: 'close' },
+        { enabled: true, id: 'rename' },
+      ],
+    }).sessionCardHoverButtons;
+    expect(stored.slice(0, 3)).toEqual([
+      { enabled: true, id: 'close' },
+      { enabled: true, id: 'chevron' },
+      { enabled: true, id: 'rename' },
+    ]);
+    expect(stored).toHaveLength(DEFAULT_SESSION_CARD_HOVER_BUTTONS.length);
+    expect(stored.slice(3).every((item) => !item.enabled)).toBe(true);
+    expect(splitSessionCardHoverButtons(stored)).toEqual({ after: ['rename'], before: ['close'], chevron: true });
   });
 
   test('hides the session details copy context-menu option unless explicitly enabled', () => {
