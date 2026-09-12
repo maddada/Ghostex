@@ -14,12 +14,21 @@ reference_url() {
 	esac
 }
 
+# CDXC:Release 2026-09-12 WHY:
+# Duplicated revision constants fell behind the Zed gitlink and broke every desktop cache-warming job after a submodule bump.
+# Read the source checkout's committed pin so release builds and metadata verification use the same revision as the repository.
 reference_revision() {
 	case "$1" in
-	zed) printf '%s\n' "5775362fbd422f00ef7ca3e7a88b088a65d7c22b" ;;
-	cef-rs) printf '%s\n' "0ddbc2accc06a3ac7f18e1543f752c3fb65161f2" ;;
-	gpui-component) printf '%s\n' "ab906b14a4aef2ae45211b5211f161e2db3197b7" ;;
+	zed | cef-rs | gpui-component) ;;
+	*) return 0 ;;
 	esac
+	local revision
+	revision="$(git -c "safe.directory=$REPO_ROOT" -C "$REPO_ROOT" ls-tree HEAD -- ".dependencies/$1" | awk '$1 == "160000" && $2 == "commit" {print $3}')"
+	if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+		echo "Missing committed release reference: .dependencies/$1" >&2
+		return 1
+	fi
+	printf '%s\n' "$revision"
 }
 
 if [[ "${1:-}" == "--reference-metadata" ]]; then
