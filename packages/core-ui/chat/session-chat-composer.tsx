@@ -66,7 +66,9 @@ import {
   type RefObject,
 } from 'react';
 import './session-chat-composer-collapse.css';
+import { createPortal } from 'react-dom';
 import { useSessionChatComposerCollapse } from './use-session-chat-composer-collapse';
+import { SessionChatWorkingStrip, type SessionChatWorkingStripProps } from './session-chat-working-strip';
 import { cn } from '@/packages/components/utils';
 import type { GxserverReadSessionTerminalTailResult, GxserverRpcErrorCode } from '@/packages/shared/gxserver-protocol';
 import { gxserverRpcErrorCode } from '@/packages/shared/gxserver-rpc-error';
@@ -251,6 +253,10 @@ export interface SessionChatComposerProps {
    */
   sendBlockedReason?: string | null;
   isWorking: boolean;
+  /** Session activity may differ from the transcript's held working state. */
+  workingStatus?: SessionChatWorkingStripProps;
+  /** Places status above the host's cards; maximized composers keep it in their own overlay. */
+  workingStatusContainer?: HTMLElement | null;
   /** Whether plain Enter sends instead of inserting a newline. */
   sendOnEnter?: boolean;
   /**
@@ -422,6 +428,7 @@ export interface SessionChatComposerProps {
   nothing at all.
   */
   agentFleet?: SessionChatAgentFleet | null;
+  agentFleetProvider?: string | null;
   /*
   CDXC:SessionChat 2026-09-03:
   Claude's task list from its on-disk store. Also ABOVE the container, for the
@@ -579,6 +586,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
   function SessionChatComposer(
     {
       agentFleet,
+      agentFleetProvider,
       agentTasks,
       diagnosticLog,
       draftSync,
@@ -588,6 +596,8 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
       hostActions,
       renderAccountMenu,
       isWorking,
+      workingStatus,
+      workingStatusContainer,
       inputBackend = 'lexical',
       nativeContextMenu = false,
       onAttachFile,
@@ -2429,6 +2439,15 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           className={cn('relative min-w-0 gap-2', maximized && 'ghostex-chat-composer-maximized')}
           data-invalid={sendError !== null ? true : undefined}
         >
+          {/* CDXC:SessionChat 2026-09-12 DECISION: User corrected the earlier placement: the working indicator belongs at the very top, above all component cards. The host supplies the top slot; maximized and standalone composers put it before their own cards. */}
+          {!maximized && workingStatusContainer ? (
+            createPortal(
+              <SessionChatWorkingStrip {...(workingStatus ?? { working: isWorking, activity: null })} />,
+              workingStatusContainer
+            )
+          ) : (
+            <SessionChatWorkingStrip {...(workingStatus ?? { working: isWorking, activity: null })} />
+          )}
           {slashOpen ? (
             <div className='ghostex-chat-composer-picker absolute inset-x-0 bottom-full z-10 mb-2 overflow-hidden rounded-2xl border border-input bg-popover shadow-xl'>
               <div
@@ -2606,7 +2625,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
             </div>
           ) : null}
           <SessionChatAgentTasksPanel tasks={agentTasks ?? null} />
-          <SessionChatAgentFleetStrip fleet={agentFleet ?? null} />
+          <SessionChatAgentFleetStrip fleet={agentFleet ?? null} provider={agentFleetProvider} />
           {incomingDraft ? (
             <SessionChatDraftConflict
               draft={incomingDraft}

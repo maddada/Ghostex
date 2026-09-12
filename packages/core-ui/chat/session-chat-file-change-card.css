@@ -2,7 +2,7 @@
  * User: use the Activity rail design, with green added lines and red removed lines, on a #141414 background, replacing #262628.
  * User: use #747475 for the circle center and rail when not hovered, replacing the too-dark #0b0b0b.
  * User: match the spacing above the component below it when the following content is not another file-change component.
- * User: hover backgrounds must have padding around the hovered item; inline path links use an underline instead, and disclosure buttons have padded hover areas.
+ * User: hover backgrounds must have padding around the hovered item; inline path links use an underline instead, and the footer disclosure button has a padded hover area.
  * User: hovering expandable code must not change the color of the whole code area.
  * User: expanding a file must keep its header in place; spacing below the header must not change its internal alignment.
  * User: use 10px of padding on the left and right of the file-change section and 10px rounded corners, superseding the initial 5px spacing and radius.
@@ -21,6 +21,10 @@
   border-radius: 10px;
   margin-bottom: calc(0.375rem + 7px);
 }
+/* CDXC:SessionChat 2026-09-12 DECISION: User wants the whole chat diff component background to get slightly lighter on hover, replacing the line-count button's separate hover fill. The card uses the default cursor. */
+.ghostex-chat-file-changes:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+}
 .ghostex-chat-file-changes:has(+ .ghostex-chat-file-changes),
 [data-slot='message-content'] > .ghostex-chat-file-changes:last-child,
 [data-slot='message-scroller-item']:has(+ [data-slot='message-scroller-item'] > .ghostex-chat-file-changes:first-child)
@@ -35,6 +39,9 @@
   --file-change-removed: #e5a0a4;
   background: #141414;
 }
+[data-chat-theme='dark'] .ghostex-chat-file-changes:hover {
+  background: #1b1b1b;
+}
 .ghostex-chat-file-change-card {
   display: grid;
   grid-template-columns: 17px minmax(0, 1fr);
@@ -42,9 +49,7 @@
   min-width: 0;
   position: relative;
   font-size: 0.875rem;
-}
-.ghostex-chat-file-change-card.is-expandable {
-  cursor: pointer;
+  cursor: default;
 }
 .ghostex-chat-file-change-card::before {
   content: '';
@@ -236,8 +241,7 @@
   color: var(--muted-foreground);
   font-size: 0.75rem;
 }
-.ghostex-chat-file-change-card
-  :is(.ghostex-chat-file-change-toggle, .ghostex-chat-file-change-counts):not(:disabled):hover {
+.ghostex-chat-file-change-card .ghostex-chat-file-change-toggle:not(:disabled):hover {
   background: color-mix(in srgb, var(--muted-foreground) 16%, transparent);
 }
 .ghostex-chat-file-change-card:has(.ghostex-chat-file-change-code:not(:disabled):is(:hover, :focus-visible))

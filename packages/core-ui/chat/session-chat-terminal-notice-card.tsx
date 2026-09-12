@@ -51,13 +51,14 @@ User: no "Selected in terminal" badge on any picker row, in any state.
 User: picking an option is optimistic: the card disappears at once while the answer is sent in the background; it only comes back, with its failure line, when the daemon proves the answer did not land.
 */
 
-import { IconChevronRight, IconTerminal2, IconX } from '@tabler/icons-react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { IconChevronRight, IconSwitchHorizontal, IconTerminal2, IconX } from '@tabler/icons-react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { GxserverAnswerSessionChatPromptParams, SessionChatTerminalNotice } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { detectghostexHotkeyPlatform } from '@/packages/shared/ghostex-hotkeys';
 import { sessionChatKeyboardPopupOpen } from './session-chat-caret-navigation';
 import { Button } from '../../components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { SessionChatChoiceRows } from './session-chat-choice-rows';
 import { SessionChatNoticeCard } from './session-chat-notice-card';
 import { SessionChatTerminalDialogCard } from './session-chat-terminal-dialog';
@@ -197,6 +198,7 @@ export interface SessionChatTerminalNoticeCardProps {
   onAnswerDialog?: (params: Omit<GxserverAnswerSessionChatPromptParams, 'projectId' | 'sessionId'>) => Promise<void>;
   /** Host switch-back; `switchToTerminal` actions hide when the host has none. */
   onSwitchToTerminal?: () => void;
+  renderAccountMenu?: (close: () => void) => ReactNode;
   /**
    * Formatted effective shortcut for the host's Terminal/Chat view switch,
    * shown beside `switchToTerminal` actions so the card teaches the chord.
@@ -226,6 +228,7 @@ export function SessionChatTerminalNoticeCard({
   onSendKeys,
   onSwitchToTerminal,
   onVisibleChange,
+  renderAccountMenu,
   sessionKey,
   showShortcutLabels = true,
   switchToTerminalShortcut,
@@ -449,6 +452,9 @@ export function SessionChatTerminalNoticeCard({
     label: collapsed ? collapsedChoiceLabel(notice.dialog?.rows[choice.index]?.label ?? choice.label) : choice.label,
   }));
   const toggleExpanded = (): void => setExpanded((value) => !value);
+  const accountMenu = renderAccountMenu ? (
+    <NoticeAccountMenu key={sessionKey} renderMenu={renderAccountMenu} />
+  ) : null;
   return (
     <SessionChatNoticeCard ref={cardRef} kind={notice.kind} severity={notice.severity}>
       <div
@@ -514,7 +520,7 @@ export function SessionChatTerminalNoticeCard({
           ) : null}
           {notice.screenTail && !collapsed ? (
             <div className='mt-2'>
-              <div className='flex min-w-0 items-center justify-between gap-2'>
+              <div className='flex min-w-0 flex-wrap items-center justify-between gap-2'>
                 <Button
                   className='ghostex-chat-card-action group/tail'
                   size='sm'
@@ -532,8 +538,9 @@ export function SessionChatTerminalNoticeCard({
                     className={cn('ghostex-chat-disclosure-chevron', tailOpen && 'is-open')}
                   />
                 </Button>
-                {switchToTerminalActions.length > 0 ? (
-                  <div className='ml-auto flex shrink-0 items-center gap-2'>
+                {accountMenu || switchToTerminalActions.length > 0 ? (
+                  <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
+                    {accountMenu}
                     {switchToTerminalActions.map((action) => (
                       <Button key={action.id} onClick={onSwitchToTerminal} size='sm' variant='outline'>
                         <IconTerminal2 aria-hidden='true' stroke={2} />
@@ -568,7 +575,8 @@ export function SessionChatTerminalNoticeCard({
               {choiceError}
             </p>
           ) : null}
-          {!collapsed && (sendKeysActions.length > 0 || (!notice.screenTail && switchToTerminalActions.length > 0)) ? (
+          {!collapsed &&
+          (sendKeysActions.length > 0 || (!notice.screenTail && (accountMenu || switchToTerminalActions.length > 0))) ? (
             <div className='mt-3 flex flex-wrap items-center gap-2'>
               {sendKeysActions.map((action, sendKeysIndex) => (
                 <Button
@@ -587,9 +595,10 @@ export function SessionChatTerminalNoticeCard({
                   ) : null}
                 </Button>
               ))}
-              {!notice.screenTail && switchToTerminalActions.length > 0 ? (
+              {!notice.screenTail && (accountMenu || switchToTerminalActions.length > 0) ? (
                 // Without captured output, the escape hatch keeps its existing bottom-right position.
-                <div className='ml-auto flex items-center gap-2'>
+                <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
+                  {accountMenu}
                   {switchToTerminalActions.map((action) => (
                     <Button key={action.id} onClick={onSwitchToTerminal} size='sm' variant='outline'>
                       <IconTerminal2 aria-hidden='true' stroke={2} />
@@ -629,5 +638,21 @@ export function SessionChatTerminalNoticeCard({
         ) : null}
       </div>
     </SessionChatNoticeCard>
+  );
+}
+
+/** CDXC:AgentProviders 2026-09-12 DECISION: User: terminal notice cards offer a Switch account button to the left of Open terminal that opens the existing account picker. */
+function NoticeAccountMenu({ renderMenu }: { renderMenu: (close: () => void) => ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger render={<Button size='sm' variant='outline' />}>
+        <IconSwitchHorizontal aria-hidden='true' stroke={2} />
+        Switch account
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='end' className='gx-account-submenu' side='top'>
+        {renderMenu(() => setOpen(false))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

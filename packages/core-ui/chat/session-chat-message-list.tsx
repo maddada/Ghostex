@@ -8,8 +8,8 @@
 // "messages are missing".
 //
 // Scrolling is owned by the shadcn MessageScroller: autoScroll follows live
-// growth, preserveScrollOnPrepend anchors history loads, and the scroller
-// button replaces the hand-rolled "Jump to latest" control. The viewport is
+// growth and preserveScrollOnPrepend anchors history loads. The chat button
+// releases the streaming hold and jumps to the end. The viewport is
 // flipped to RTL (content back to LTR) so the scrollbar renders on the left
 // edge of the conversation.
 
@@ -61,7 +61,6 @@ import { Marker, MarkerContent, MarkerIcon } from '../../components/ui/marker';
 import { Message, MessageContent, MessageFooter } from '../../components/ui/message';
 import {
   MessageScroller,
-  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -80,6 +79,11 @@ import { SessionChatUserMessageLayout } from './session-chat-user-message-layout
 import { SessionChatMarkdown } from './session-chat-markdown';
 import { SessionChatMinimap } from './session-chat-minimap';
 import { SessionChatScrollCap } from './session-chat-scroll-cap';
+import {
+  FOLLOW_BOTTOM_ATTRIBUTE,
+  STREAM_HOLD_ATTRIBUTE,
+  SessionChatScrollBottomButton,
+} from './session-chat-scroll-bottom-button';
 import {
   SessionChatSaveMarkdownDialog,
   type ListSessionMessageMarkdownPaths,
@@ -118,25 +122,6 @@ import { countSessionChatToolCalls, summarizeSessionChatToolRun } from './sessio
 
 const LOAD_EARLIER_SCROLL_TOP_PX = 320;
 const AUTO_SCROLL_EDGE_THRESHOLD_PX = 10;
-/*
-CDXC:SessionChat 2026-09-04 WHY:
-The scroll-to-bottom button used to show whenever the scroller's own state
-said the end was out of reach, which it briefly is every time a row grows at
-the bottom (the pending tool row appearing, its label wrapping to a second
-line) before bottom-follow pins the viewport again. The reader never left the
-end, so the button appeared for nothing. The viewport now carries whether the
-LAST reader scroll ended within the follow threshold, and the button is hidden
-while it did; it shows only after the reader has actually scrolled away.
-*/
-const FOLLOW_BOTTOM_ATTRIBUTE = 'data-ghostex-follow-bottom';
-
-/**
- * Set on the viewport while the stream hold owns scrolling. The scroller only
- * activates its button after a reader scroll, so chat.css uses this to keep
- * the Scroll to bottom pill reachable while the hold keeps the end off screen.
- */
-const STREAM_HOLD_ATTRIBUTE = 'data-ghostex-stream-hold';
-
 /** Gap kept above the streaming row while the stream hold anchors it to the top. */
 const STREAM_HOLD_TOP_MARGIN_PX = 12;
 
@@ -1847,14 +1832,13 @@ export function SessionChatMessageList({
               User: the scroll-to-bottom pill shows the configured shortcut so the
               end is reachable from the keyboard at any time; keep it small, no icon,
               fully circular. */}
-          <MessageScrollerButton
-            behavior='instant'
-            className='ghostex-chat-scroll-bottom-button h-6 rounded-full px-2.5 text-[11px] font-medium'
-            onClick={jumpToBottom}
-            size='xs'
-          >
-            Scroll to bottom{scrollToBottomShortcutLabel ? ` (${scrollToBottomShortcutLabel})` : ''}
-          </MessageScrollerButton>
+          <SessionChatScrollBottomButton
+            contentRef={contentRef}
+            edgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
+            onJump={jumpToBottom}
+            shortcutLabel={scrollToBottomShortcutLabel}
+            viewportRef={viewportRef}
+          />
         </MessageScroller>
         {saveMessageMarkdown && listMessageMarkdownPaths ? (
           <SessionChatSaveMarkdownDialog

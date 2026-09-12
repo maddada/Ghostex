@@ -21,7 +21,7 @@ export const SessionChatSubagentContext = createContext<{
   agentPath?: string;
 } | null>(null);
 
-/** CDXC:Tooltips 2026-09-10 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references; show the agent type in the same regular font as "View subagent transcript", with no model name. */
+/** CDXC:Tooltips 2026-09-12 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references, with no model name; agent types use the regular action font. Codex fleet rows now show the name/path in the status column instead of the tooltip. */
 export function SessionChatSubagentLink({
   selector,
   name,
@@ -29,14 +29,15 @@ export function SessionChatSubagentLink({
   task,
   model,
   effort,
+  showAgentType = true,
   children,
-}: SessionChatSubagentTarget & { children?: ReactNode }) {
+}: SessionChatSubagentTarget & { children?: ReactNode; showAgentType?: boolean }) {
   const viewer = useContext(SessionChatSubagentContext);
   const [hovered, setHovered] = useState(false);
   const [info, setInfo] = useState<SessionChatSubagentInfo | null>(null);
   const readInfo = viewer?.readInfo;
   useEffect(() => {
-    if (!hovered || !readInfo) return;
+    if (!showAgentType || !hovered || !readInfo) return;
     let cancelled = false;
     setInfo(null);
     void readInfo(selector).then(
@@ -50,13 +51,13 @@ export function SessionChatSubagentLink({
     return () => {
       cancelled = true;
     };
-  }, [hovered, readInfo, selector]);
+  }, [hovered, readInfo, selector, showAgentType]);
   if (!viewer || selector === '/root' || selector === viewer.agentPath) return <>{children ?? name}</>;
   return (
     <AppTooltip
       content={
         <div className='space-y-2'>
-          <div>{info?.agentType ?? agentType ?? name}</div>
+          {showAgentType ? <div>{info?.agentType ?? agentType ?? name}</div> : null}
           <div>View subagent transcript</div>
         </div>
       }

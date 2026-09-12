@@ -1,3 +1,5 @@
+import { AccountSwitchCard } from '../accounts/account-switch-card';
+import { useAccountSwitchStatus } from '../accounts/use-account-switch-status';
 import type { SessionChatDraftHandoff } from '@/packages/shared/session-chat-queue';
 import { SessionChatFileChangePreviewContext } from './session-chat-file-change-card';
 import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
@@ -9,7 +11,7 @@ import { SessionAccountsPanel } from '@/packages/core-ui/accounts/session-panel'
 // the composer while showing. Hosts inject a SessionChatTransport; everything
 // else is derived by useSessionChat.
 
-import { IconBlockquote, IconBrowser, IconCopy, IconExternalLink, IconFolder } from '@tabler/icons-react';
+import { IconBlockquote, IconBrowser, IconCopy, IconExternalLink } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClipboardEvent, DragEvent, KeyboardEvent as ReactKeyboardEvent, MouseEvent, RefObject } from 'react';
 import {
@@ -21,7 +23,8 @@ import {
 } from '../../components/ui/context-menu';
 import { cn } from '@/packages/components/utils';
 import type { GxserverSessionForkBranch } from '../../shared/gxserver-protocol';
-import type { SessionChatTheme } from '../../shared/session-chat';
+import type { SessionChatThemeSetting } from '../../shared/session-chat';
+import { useSessionChatTheme } from './session-chat-theme';
 import { ghostexHotkeyTextFromKeyboardEvent, type ghostexHotkeySettings } from '../../shared/ghostex-hotkeys';
 import { useSessionChatScrollToBottom } from './use-session-chat-scroll-to-bottom';
 import { AppTooltip, TooltipProvider } from '../app-tooltip';
@@ -31,7 +34,7 @@ import { sessionChatKeyboardPopupOpen } from './session-chat-caret-navigation';
 import { sessionChatEditingShortcut, sessionChatHasTranscriptSelection } from './session-chat-edit-shortcuts';
 import { useSessionChatPaneFocus } from './use-session-chat-pane-focus';
 import { useSessionChatSkills } from './use-session-chat-skills';
-import { SessionChatWorkingStrip } from './session-chat-working-strip';
+import { SessionChatAsyncQuestions } from './session-chat-async-questions';
 import { sessionChatDataTransferHasFiles } from './session-chat-drop-attachments';
 import { sessionChatEmptyStateCopy } from './session-chat-empty-state';
 import { SESSION_CHAT_FILE_PATH_ATTRIBUTE } from './session-chat-file-paths';
@@ -264,7 +267,7 @@ export interface SessionChatViewProps {
   /** Defaults to the shared Lexical input on desktop, web, and mobile. */
   inputBackend?: 'lexical' | 'plain';
   /** Chat-only palette. It does not change the host application's chrome. */
-  theme?: SessionChatTheme;
+  theme?: SessionChatThemeSetting;
   /** Let the transcript use its configured percentage instead of the composer column. */
   customTranscriptWidthEnabled?: boolean;
   /** Reveal thinking-owned tool calls without requiring a click. */
@@ -468,12 +471,13 @@ export function SessionChatView({
   showNewSessionWelcomeTitle = true,
   showShortcutLabels = true,
   showVerbosePill = true,
-  theme = 'dark',
+  theme: themeSetting = 'system',
   transport,
   verboseMode = false,
   fileEditPreviews = false,
   working,
 }: SessionChatViewProps) {
+  const theme = useSessionChatTheme(themeSetting);
   useEffect(() => {
     // Chat dropdowns are portaled outside this root. Stamp the chat-only
     // palette on body so those explicitly scoped popup surfaces match.
@@ -558,6 +562,7 @@ export function SessionChatView({
     setReadAgentEntry({ agent: readStateAgent, transport });
   }, [readStateAgent, transport]);
   const composerRef = useRef<SessionChatComposerHandle | null>(null);
+  const [workingStatusContainer, setWorkingStatusContainer] = useState<HTMLDivElement | null>(null);
   const chatRootRef = useRef<HTMLDivElement | null>(null);
   const [paneFocused, setPaneFocused] = useSessionChatPaneFocus(
     chatRootRef,
@@ -650,7 +655,18 @@ export function SessionChatView({
     };
   }, [clearDraftAgentSwitchTimers, refreshAfterDraftSwitch, transport]);
   const accountState = useAccounts(accountsTransport, true, accountsEnabled, false, chat.sessionAgentId);
+  const accountSwitch = useAccountSwitchStatus(chat.accountSwitch, sessionKey);
+  const accountSwitchRefreshKey = chat.accountSwitch ? `${chat.accountSwitch.id}:${chat.accountSwitch.phase}` : null;
+  useEffect(() => {
+    if (accountSwitchRefreshKey && accountsEnabled) void accountState.request({ operation: 'session' });
+  }, [accountSwitchRefreshKey, accountsEnabled, accountState.request]);
   const activeAccount = accountState.data?.accounts.find((a) => a.id === accountState.data?.session?.accountId);
+  const renderAccountMenu =
+    accountsEnabled && transport.accounts
+      ? (close: () => void) => (
+          <SessionAccountsPanel {...accountState} contextUsage={detectedOptions?.contextUsage} close={close} />
+        )
+      : undefined;
   const initialTranscriptLoading = chat.view.kind === 'loading';
   /*
   How far the blank hold has been allowed to progress. Keyed to the moment
@@ -1202,7 +1218,7 @@ export function SessionChatView({
       ),
     [contextDetailsStatus, contextDetailsAgent, contextDetailsNow, contextDetailsPreferences, contextDetailsSession]
   );
-  const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching;
+  const composerEnabled = canSend && !terminalChoicePending && !sessionOptionSwitching && !accountSwitch.busy;
   /*
   CDXC:SessionChat 2026-09-03:
   `composerEnabled` gates only the actions that reach the agent (send, queue,
@@ -1212,13 +1228,15 @@ export function SessionChatView({
   */
   const composerSendBlockedReason = !canSend
     ? 'Input is held by another device.'
-    : terminalChoicePending
-      ? noticeCardVisible
-        ? 'Answer the question above first.'
-        : 'Your answer is still being applied. Try again in a moment.'
-      : sessionOptionSwitching
-        ? 'Claude is still switching mode. Try again in a moment.'
-        : null;
+    : accountSwitch.busy
+      ? 'Wait for the account switch to complete.'
+      : terminalChoicePending
+        ? noticeCardVisible
+          ? 'Answer the question above first.'
+          : 'Your answer is still being applied. Try again in a moment.'
+        : sessionOptionSwitching
+          ? 'Claude is still switching mode. Try again in a moment.'
+          : null;
   /*
   CDXC:SessionChat 2026-09-02:
   The transcript's "Rewind to here" action. Three gates, all of which have to
@@ -1676,18 +1694,10 @@ export function SessionChatView({
                             <ContextMenuContent>
                               <ContextMenuGroup>
                                 {transcriptFilePath !== null ? (
-                                  <>
-                                    <ContextMenuItem onClick={copyTranscriptFilePath}>
-                                      <IconCopy aria-hidden='true' />
-                                      Copy Path
-                                    </ContextMenuItem>
-                                    {hostLinks?.locateFile ? (
-                                      <ContextMenuItem onClick={() => hostLinks.locateFile?.(transcriptFilePath)}>
-                                        <IconFolder aria-hidden='true' />
-                                        Locate File
-                                      </ContextMenuItem>
-                                    ) : null}
-                                  </>
+                                  <ContextMenuItem onClick={copyTranscriptFilePath}>
+                                    <IconCopy aria-hidden='true' />
+                                    Copy Path
+                                  </ContextMenuItem>
                                 ) : null}
                                 {transcriptWebUrl !== null ? (
                                   <>
@@ -1758,6 +1768,33 @@ export function SessionChatView({
                         )
                       ) : null}
                     </div>
+                    {accountSwitch.visible && (
+                      <div className='gx-account-switch-overlay'>
+                        <div className='gx-account-switch-region'>
+                          <AccountSwitchCard
+                            progress={
+                              accountState.error && accountSwitch.visible.phase === 'failed'
+                                ? { ...accountSwitch.visible, reason: accountState.error }
+                                : accountSwitch.visible
+                            }
+                            accounts={accountState.data?.accounts ?? []}
+                            now={accountSwitch.now}
+                            retrying={accountState.busy}
+                            {...(accountSwitch.visible.phase === 'failed' &&
+                            accountSwitch.visible.toAccountId &&
+                            canSend
+                              ? {
+                                  onRetry: () =>
+                                    void accountState.request({
+                                      operation: 'select',
+                                      accountId: accountSwitch.visible!.toAccountId,
+                                    }),
+                                }
+                              : {})}
+                          />
+                        </div>
+                      </div>
+                    )}
                     {/* The composer band overlays the transcript; use-session-chat-composer-inset.ts keeps the transcript's end clear beneath it. */}
                     <div
                       className='ghostex-chat-composer-overlay absolute inset-x-0 bottom-0 z-20'
@@ -1765,7 +1802,7 @@ export function SessionChatView({
                       ref={composerInset.overlayRef}
                     >
                       <div className='mx-auto grid w-full max-w-3xl gap-2 px-4 pt-2 pb-3'>
-                        <SessionChatWorkingStrip activity={chat.terminalActivity} working={chat.sessionWorking} />
+                        <div className='contents' ref={setWorkingStatusContainer} />
                         <SessionChatTerminalNoticeCard
                           canSend={canSend}
                           notice={chat.terminalNotice}
@@ -1773,6 +1810,7 @@ export function SessionChatView({
                           onAnswerDialog={chat.answerPrompt}
                           onSendKeys={sendNoticeKeys}
                           onVisibleChange={setNoticeCardVisible}
+                          {...(renderAccountMenu ? { renderAccountMenu } : {})}
                           showShortcutLabels={showShortcutLabels}
                           {...(sessionKey !== undefined ? { sessionKey } : {})}
                           {...(hostActions?.onSwitchToTerminal
@@ -1781,6 +1819,17 @@ export function SessionChatView({
                           {...(hostActions?.switchViewShortcut
                             ? { switchToTerminalShortcut: hostActions.switchViewShortcut }
                             : {})}
+                        />
+                        <SessionChatAsyncQuestions
+                          key={`async-questions:${sessionKey}`}
+                          sessionKey={sessionKey}
+                          messages={chat.messages}
+                          canSend={
+                            composerEnabled && !questionActive && chat.status !== 'error' && chat.status !== 'loading'
+                          }
+                          working={chat.sessionWorking}
+                          onSend={chat.send}
+                          onDismiss={(questionId) => chat.answerPrompt({ kind: 'dismissAsyncQuestion', questionId })}
                         />
                         <SessionChatInteractiveCard
                           canSend={canSend}
@@ -1821,8 +1870,14 @@ export function SessionChatView({
                             />
                           ) : null}
                           <SessionChatComposer
+                            workingStatusContainer={workingStatusContainer}
+                            workingStatus={{
+                              working: !accountSwitch.busy && chat.sessionWorking,
+                              activity: accountSwitch.busy ? null : chat.terminalActivity,
+                            }}
                             paneFocused={paneFocused}
                             agentFleet={chat.agentFleet}
+                            agentFleetProvider={chat.agent}
                             agentTasks={chat.agentTasks}
                             {...(diagnosticLog ? { diagnosticLog } : {})}
                             sendBlockedReason={composerSendBlockedReason}
@@ -1833,7 +1888,10 @@ export function SessionChatView({
                             nativeContextMenu={nativeSelectionMenus}
                             queue={chat.queue}
                             scrollCollapseEnabled={
-                              chat.view.kind === 'ready' && !questionActive && !nativeSelectionMenus
+                              chat.view.kind === 'ready' &&
+                              !questionActive &&
+                              !nativeSelectionMenus &&
+                              !accountSwitch.visible
                             }
                             onScrollCollapsedChange={setComposerCollapsed}
                             transcriptRef={transcriptRef}
@@ -1849,17 +1907,7 @@ export function SessionChatView({
                             onSend={send}
                             sendOnEnter={sendOnEnter}
                             {...(draftAwareHostActions ? { hostActions: draftAwareHostActions } : {})}
-                            {...(accountsEnabled && transport.accounts
-                              ? {
-                                  renderAccountMenu: (close: () => void) => (
-                                    <SessionAccountsPanel
-                                      {...accountState}
-                                      contextUsage={detectedOptions?.contextUsage}
-                                      close={close}
-                                    />
-                                  ),
-                                }
-                              : {})}
+                            {...(renderAccountMenu ? { renderAccountMenu } : {})}
                             {...(onDelayedActions ? { onDelayedActions } : {})}
                             {...(sessionNoteAvailable ? { onSessionNote: toggleSessionNote } : {})}
                             sessionNoteActive={noteOpen}

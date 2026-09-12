@@ -41,14 +41,19 @@ export function useSessionChatComposerInset(collapsed: boolean) {
 
   useLayoutEffect(() => {
     if (!host || !overlay) return;
-    const update = () => publish(overlay.getBoundingClientRect().height);
+    const update = () => {
+      host.style.setProperty('--ghostex-chat-pane-height', `${host.getBoundingClientRect().height}px`);
+      publish(overlay.getBoundingClientRect().height);
+    };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(overlay);
+    observer.observe(host);
     return () => {
       observer.disconnect();
       host.style.removeProperty(SESSION_CHAT_COMPOSER_OVERLAY_VAR);
       host.style.removeProperty(SESSION_CHAT_COMPOSER_INSET_VAR);
+      host.style.removeProperty('--ghostex-chat-pane-height');
       overlayHeightRef.current = 0;
       insetRef.current = 0;
     };

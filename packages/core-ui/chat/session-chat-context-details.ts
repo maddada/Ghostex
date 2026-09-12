@@ -88,7 +88,7 @@ export interface SessionChatContextDetailRowDefinition {
   description: string;
   /** Shown in the popover on a fresh install. Starred is never a default. */
   recommended: boolean;
-  /** Null when the agent has not reported a value; popovers omit it and starred items show unavailable. */
+  /** Null when the agent has not reported a value; popovers and the status line omit it. */
   value: (input: SessionChatContextDetailRowInput) => string | null;
   /**
    * Text a click on the status line item copies, with the toast title. User:
@@ -806,9 +806,9 @@ export function orderedSessionChatStarredRows(
   return [...ordered, ...starred.filter((row) => !seen.has(row.id))];
 }
 
-/** CDXC:AgentProviders 2026-09-09 DECISION:
- * User: items starred in context details must always remain visible in the status line.
- * A missing value is labeled unavailable so refreshes cannot remove the item or imply zero usage.
+/** CDXC:AgentProviders 2026-09-12 DECISION:
+ * User: skip status-line items when their value is unavailable; never show an "unavailable" placeholder.
+ * This supersedes the 2026-09-09 decision to keep starred items visible without a value.
  */
 export function resolveSessionChatStarredContextDetails(
   status: ContextDetailStatus | undefined,
@@ -821,11 +821,12 @@ export function resolveSessionChatStarredContextDetails(
   const input = { status: status ?? {}, now, session };
   for (const row of orderedSessionChatStarredRows(preferences, agent)) {
     const value = row.value(input);
-    const copy = value == null ? null : (row.copy?.(input) ?? null);
+    if (value === null) continue;
+    const copy = row.copy?.(input) ?? null;
     items.push({
       id: row.id,
       label: row.label,
-      value: value ?? `${row.label}: unavailable`,
+      value,
       ...(copy ? { copy } : {}),
     });
   }

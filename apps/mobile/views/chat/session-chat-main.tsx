@@ -1,3 +1,4 @@
+import { resolveSessionChatTheme, subscribeSystemChatTheme } from '@/packages/core-ui/chat/session-chat-theme';
 import type { GxserverSetSessionChatDraftResult } from '@/packages/shared/session-chat-queue';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,7 +18,7 @@ import {
   type GxserverSessionChatRemoveQueuedPromptResult,
   type GxserverSessionChatSnapshotEvent,
   type SessionChatQueuedPrompt,
-  type SessionChatTheme,
+  type SessionChatThemeSetting,
 } from '@/packages/shared/session-chat';
 import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
 import type {
@@ -103,7 +104,7 @@ interface MobileChatConfig {
   projectId?: string;
   sessionId?: string;
   sessionKey?: string;
-  theme?: SessionChatTheme;
+  theme?: SessionChatThemeSetting;
   transcriptWidthPercent?: number;
   verboseMode?: boolean;
   fileEditPreviews?: boolean;
@@ -112,7 +113,7 @@ interface MobileChatConfig {
 interface MobileChatPresentation {
   customTranscriptWidthEnabled: boolean;
   fontFamily: string;
-  theme: SessionChatTheme;
+  theme: SessionChatThemeSetting;
   transcriptWidthPercent: number;
   verboseMode: boolean;
   fileEditPreviews: boolean;
@@ -441,8 +442,9 @@ function readPresentation(): MobileChatPresentation {
 }
 
 function applyDocumentPresentation(presentation: MobileChatPresentation): void {
-  const background = presentation.theme === 'light' ? '#fdfdfd' : '#0d0d0d';
-  document.documentElement.style.colorScheme = presentation.theme;
+  const theme = resolveSessionChatTheme(presentation.theme);
+  const background = theme === 'light' ? '#fdfdfd' : '#0d0d0d';
+  document.documentElement.style.colorScheme = theme;
   document.documentElement.style.backgroundColor = background;
   // CDXC:SessionChat 2026-08-22: unset, not a written-out fallback —
   // the shared sheet owns the default face (see chat-main.tsx).
@@ -466,7 +468,10 @@ window.ghostexMobileChatSetPresentation = (state) => {
         ? state.customTranscriptWidthEnabled
         : presentationState.customTranscriptWidthEnabled,
     fontFamily: typeof state?.fontFamily === 'string' ? state.fontFamily.trim() : presentationState.fontFamily,
-    theme: state?.theme === 'dark' || state?.theme === 'light' ? state.theme : presentationState.theme,
+    theme:
+      state?.theme === 'system' || state?.theme === 'dark' || state?.theme === 'light'
+        ? state.theme
+        : presentationState.theme,
     transcriptWidthPercent:
       typeof state?.transcriptWidthPercent === 'number'
         ? clampTranscriptWidthPercent(state.transcriptWidthPercent)
@@ -989,6 +994,9 @@ font) would otherwise leave the CSS custom properties unset and the stylesheet
 fallbacks — notably the desktop's 75% transcript width — in charge.
 */
 applyDocumentPresentation(presentationState);
+subscribeSystemChatTheme(() => {
+  if (presentationState.theme === 'system') applyDocumentPresentation(presentationState);
+});
 
 /*
 CDXC:Mobile 2026-08-21:

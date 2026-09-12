@@ -35,7 +35,19 @@ function clearHighlights(): void {
   api?.registry.delete(ACTIVE_HIGHLIGHT_NAME);
 }
 
-function transcriptMatches(root: HTMLElement, query: string): Range[] {
+interface TranscriptMatch {
+  key: string;
+  range: Range;
+}
+
+interface SearchResults {
+  matches: readonly TranscriptMatch[];
+  activeIndex: number;
+  query: string;
+  navigationRevision: number;
+}
+
+function transcriptMatches(root: HTMLElement, query: string): TranscriptMatch[] {
   const content = root.querySelector<HTMLElement>('[data-slot="message-scroller-content"]');
   const needle = query.trim();
   if (!content || !needle) {
@@ -44,7 +56,8 @@ function transcriptMatches(root: HTMLElement, query: string): Range[] {
 
   const textNodes: Array<{ end: number; node: Text; start: number }> = [];
   let transcriptText = '';
-  const matches: Range[] = [];
+  const matches: TranscriptMatch[] = [];
+  const messageOccurrences = new Map<string | null, number>();
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       const parent = node.parentElement;
@@ -80,7 +93,10 @@ function transcriptMatches(root: HTMLElement, query: string): Range[] {
     const range = document.createRange();
     range.setStart(first.node, matchStart - first.start);
     range.setEnd(last.node, matchEnd - last.start);
-    matches.push(range);
+    const messageId = first.node.parentElement?.closest('[data-message-id]')?.getAttribute('data-message-id') ?? null;
+    const occurrence = messageOccurrences.get(messageId) ?? 0;
+    messageOccurrences.set(messageId, occurrence + 1);
+    matches.push({ key: JSON.stringify([messageId, occurrence]), range });
   }
   return matches;
 }
@@ -129,14 +145,20 @@ export function SessionChatSearch({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<readonly Range[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [results, setResults] = useState<SearchResults>({
+    matches: [],
+    activeIndex: 0,
+    query: '',
+    navigationRevision: 0,
+  });
+  const { matches, activeIndex, navigationRevision } = results;
+  const scrolledRevisionRef = useRef(-1);
 
   const close = useCallback(() => {
     setOpen(false);
     setQuery('');
-    setMatches([]);
-    setActiveIndex(0);
+    setResults({ matches: [], activeIndex: 0, query: '', navigationRevision: 0 });
+    scrolledRevisionRef.current = -1;
     clearHighlights();
   }, []);
 
@@ -183,8 +205,25 @@ export function SessionChatSearch({
     }
     const root = rootRef.current;
     const nextMatches = root ? transcriptMatches(root, query) : [];
-    setMatches(nextMatches);
-    setActiveIndex(0);
+    /** CDXC:SessionChat 2026-09-12 WHY:
+     * Transcript refreshes used to reset search to result one and scroll it into view during navigation.
+     * Keep the selected occurrence within its message across refreshes and prepended history; only a new query or explicit navigation requests scrolling.
+     */
+    setResults((current) => {
+      const queryChanged = current.query !== query;
+      const selectedKey = current.matches[current.activeIndex]?.key;
+      const retainedIndex = nextMatches.findIndex((match) => match.key === selectedKey);
+      return {
+        matches: nextMatches,
+        activeIndex: queryChanged
+          ? 0
+          : retainedIndex >= 0
+            ? retainedIndex
+            : Math.max(0, Math.min(current.activeIndex, nextMatches.length - 1)),
+        query,
+        navigationRevision: current.navigationRevision + (queryChanged ? 1 : 0),
+      };
+    });
   }, [open, query, rootRef, searchRevision]);
 
   useEffect(() => {
@@ -196,10 +235,10 @@ export function SessionChatSearch({
     if (!api) {
       return;
     }
-    api.registry.set(MATCH_HIGHLIGHT_NAME, new api.HighlightClass(...matches));
+    api.registry.set(MATCH_HIGHLIGHT_NAME, new api.HighlightClass(...matches.map((match) => match.range)));
     const activeMatch = matches[activeIndex];
     if (activeMatch) {
-      api.registry.set(ACTIVE_HIGHLIGHT_NAME, new api.HighlightClass(activeMatch));
+      api.registry.set(ACTIVE_HIGHLIGHT_NAME, new api.HighlightClass(activeMatch.range));
     }
     return clearHighlights;
   }, [activeIndex, matches, open]);
@@ -207,22 +246,26 @@ export function SessionChatSearch({
   useEffect(() => {
     const root = rootRef.current;
     const activeMatch = matches[activeIndex];
-    if (open && root && activeMatch) {
-      centerMatch(root, activeMatch);
+    if (open && root && activeMatch && scrolledRevisionRef.current !== navigationRevision) {
+      scrolledRevisionRef.current = navigationRevision;
+      centerMatch(root, activeMatch.range);
     }
-  }, [activeIndex, matches, open, rootRef]);
+  }, [activeIndex, matches, navigationRevision, open, rootRef]);
 
   useEffect(() => clearHighlights, []);
 
-  const move = useCallback(
-    (offset: number): void => {
-      if (matches.length === 0) {
-        return;
+  const move = useCallback((offset: number): void => {
+    setResults((current) => {
+      if (current.matches.length === 0) {
+        return current;
       }
-      setActiveIndex((current) => (current + offset + matches.length) % matches.length);
-    },
-    [matches.length]
-  );
+      return {
+        ...current,
+        activeIndex: (current.activeIndex + offset + current.matches.length) % current.matches.length,
+        navigationRevision: current.navigationRevision + 1,
+      };
+    });
+  }, []);
 
   const handleInputKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLInputElement>): void => {

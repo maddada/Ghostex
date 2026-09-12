@@ -16,9 +16,10 @@ const FLEET_CLOCK_TICK_MS = 1_000;
 export interface SessionChatAgentFleetStripProps {
   /** Null or empty renders nothing: no sub-agents is not a state worth a box. */
   fleet: SessionChatAgentFleet | null;
+  provider?: string | null;
 }
 
-export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStripProps) {
+export function SessionChatAgentFleetStrip({ fleet, provider }: SessionChatAgentFleetStripProps) {
   const rowsRef = useRef<HTMLDivElement>(null);
   const [scrollable, setScrollable] = useState(false);
   const agentCount = fleet?.agents.length ?? 0;
@@ -83,6 +84,8 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
       ) : null}
       <div ref={rowsRef} className={`ghostex-chat-agent-fleet-rows${scrollable ? ' scroll-fade-y' : ''}`} role='list'>
         {agents.map((agent, index) => {
+          // CDXC:SessionChat 2026-09-12 DECISION: User: Codex rows show the child name/path beside the model and effort in the status column, moving it out of the tooltip; Claude keeps its task text.
+          const statusText = provider === 'codex' ? agent.name : agent.task;
           const idle = agent.status === 'idle';
           const working = !stale && !idle;
           const selector = agent.id ?? `fleet:${JSON.stringify({ agents: roster, index })}`;
@@ -116,7 +119,7 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                 }
               />
               <span className='ghostex-chat-card-content ghostex-chat-agent-fleet-name'>
-                <SessionChatSubagentLink {...transcriptTarget}>
+                <SessionChatSubagentLink {...transcriptTarget} showAgentType={provider !== 'codex'}>
                   <SessionChatSubagentModel info={agent} />
                 </SessionChatSubagentLink>
               </span>
@@ -125,15 +128,17 @@ export function SessionChatAgentFleetStrip({ fleet }: SessionChatAgentFleetStrip
                   a marked row aligned with every unmarked one. */}
               <span className='ghostex-chat-agent-fleet-work'>
                 {/* CDXC:SessionChat 2026-09-10 DECISION: User: put the ‣ separator at the start of the status cell so it aligns across subagent rows regardless of model label width. */}
-                {agent.task || (idle && !stale) || agent.nested ? (
+                {statusText || (idle && !stale) || agent.nested ? (
                   <span aria-hidden='true' className='ghostex-chat-card-content shrink-0'>
                     ‣
                   </span>
                 ) : null}
                 {idle && !stale ? <span className='ghostex-chat-card-hint'>Idle</span> : null}
                 <span className='ghostex-chat-card-content ghostex-chat-agent-fleet-task'>
-                  {agent.task ? (
-                    <SessionChatSubagentLink {...transcriptTarget}>{agent.task}</SessionChatSubagentLink>
+                  {statusText ? (
+                    <SessionChatSubagentLink {...transcriptTarget} showAgentType={provider !== 'codex'}>
+                      {statusText}
+                    </SessionChatSubagentLink>
                   ) : (
                     ''
                   )}

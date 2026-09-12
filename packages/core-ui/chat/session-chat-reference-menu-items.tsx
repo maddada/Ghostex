@@ -1,10 +1,11 @@
-import { IconBrowser, IconCopy, IconExternalLink, IconFolder } from '@tabler/icons-react';
+import { IconBrowser, IconCopy, IconExternalLink } from '@tabler/icons-react';
 import { ContextMenuItem } from '@/packages/components/ui/context-menu';
 import { classifySessionChatLinkHref, useSessionChatHostLinks } from './session-chat-links';
 
 /**
- * CDXC:SessionChat 2026-09-09 DECISION:
- * User: reference pills offer Copy Path and Locate File, while URLs offer Copy URL and opening in the embedded or external browser.
+ * CDXC:SessionChat 2026-09-12 DECISION:
+ * User: keep Copy Path and remove Locate File from reference menus, superseding the September 9 menu choice.
+ * URLs offer Copy URL and opening in the embedded or external browser.
  */
 export function SessionChatReferenceMenuItems({ href }: { href: string }) {
   const links = useSessionChatHostLinks();
@@ -38,17 +39,9 @@ export function SessionChatReferenceMenuItems({ href }: { href: string }) {
   }
   if (target.kind !== 'file') return null;
   return (
-    <>
-      <ContextMenuItem onClick={() => copy(target.path)}>
-        <IconCopy aria-hidden='true' />
-        Copy Path
-      </ContextMenuItem>
-      {links?.locateFile ? (
-        <ContextMenuItem onClick={() => links.locateFile?.(target.path)}>
-          <IconFolder aria-hidden='true' />
-          Locate File
-        </ContextMenuItem>
-      ) : null}
-    </>
+    <ContextMenuItem onClick={() => copy(target.path)}>
+      <IconCopy aria-hidden='true' />
+      Copy Path
+    </ContextMenuItem>
   );
 }

@@ -54,7 +54,7 @@ export function SessionChatChoiceRows({
         return (
           <button
             className={cn(
-              'group/option flex w-full items-center gap-3 rounded-lg border px-3 text-left outline-none transition-all duration-150 focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/30',
+              'group/option flex w-full items-center gap-3 rounded-lg border px-3 text-left outline-none transition-all duration-150 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/20',
               dense ? 'py-1.5' : 'py-2',
               isSelected
                 ? 'border-primary/30 bg-primary/10 text-foreground'
@@ -63,6 +63,7 @@ export function SessionChatChoiceRows({
             )}
             data-chat-answer-control=''
             data-selected={isSelected ? 'true' : undefined}
+            aria-pressed={isSelected}
             // The sidebar's legacy `button:where(:not([data-slot]))` base paints
             // a 1px app border on every bare button; naming the slot opts these
             // rows out so their Tailwind borders/fills are the only ones.

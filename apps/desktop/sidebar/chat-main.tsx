@@ -1,3 +1,4 @@
+import { resolveSessionChatTheme, subscribeSystemChatTheme } from '@/packages/core-ui/chat/session-chat-theme';
 import { importDraftRecovery } from '@/packages/core-ui/chat/session-chat-draft-recovery';
 import { replayDraftSaves } from '@/packages/core-ui/chat/session-chat-draft-outbox';
 import { reconcileSessionChatDraftsFromServer } from '@/packages/core-ui/chat/session-chat-draft-storage';
@@ -1668,7 +1669,8 @@ try {
 }
 let GPUI_SESSION_CHAT_HOST_ACTIONS = createGpuiSessionChatHostActions(hotkeysValue);
 let hideAccountEmails = searchParams.get('hideAccountEmails') === 'true';
-let chatTheme = normalizeSessionChatTheme(searchParams.get('theme'));
+let chatThemeSetting = normalizeSessionChatTheme(searchParams.get('theme'));
+let chatTheme = resolveSessionChatTheme(chatThemeSetting);
 let chatFontFamily = searchParams.get('fontFamily')?.trim() ?? '';
 let chatCustomTranscriptWidthEnabled = searchParams.get('customTranscriptWidthEnabled') === 'true';
 let chatTranscriptWidthPercent = clampSessionChatTranscriptWidthPercent(
@@ -1720,10 +1722,17 @@ window.ghostexSetHideAccountEmails = (value) => {
   renderReadyChat?.(chatTheme);
 };
 window.ghostexSetSessionChatTheme = (value) => {
-  chatTheme = normalizeSessionChatTheme(value);
+  chatThemeSetting = normalizeSessionChatTheme(value);
+  chatTheme = resolveSessionChatTheme(chatThemeSetting);
   applyDocumentChatTheme(chatTheme);
   renderReadyChat?.(chatTheme);
 };
+subscribeSystemChatTheme(() => {
+  if (chatThemeSetting !== 'system') return;
+  chatTheme = resolveSessionChatTheme(chatThemeSetting);
+  applyDocumentChatTheme(chatTheme);
+  if (renderReadyChat) renderReadyChat(chatTheme);
+});
 window.ghostexSetSessionChatFontFamily = (value) => {
   chatFontFamily = typeof value === 'string' ? value : '';
   applyDocumentChatFontFamily(chatFontFamily);

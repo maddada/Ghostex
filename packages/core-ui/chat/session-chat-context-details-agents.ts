@@ -1,5 +1,6 @@
 import type { AccountUsageWindow, AgentAccount } from '@/packages/shared/agent-accounts';
 import { accountUsageLabel } from '@/packages/shared/account-usage-label';
+import { isFiveHourWindow, isWeeklyWindow } from '@/packages/shared/account-usage-windows';
 import { formatResetCountdown } from '@/packages/shared/reset-countdown';
 import type {
   SessionChatClaudeStatus,
@@ -117,17 +118,21 @@ function formatWindowDuration(minutes: number): string {
 type UsageWindowKind = 'fiveHour' | 'sevenDay' | 'model';
 
 interface UsageWindowSample {
-  /** The app-wide compact window label (5h, 7d, Fable 7d). */
+  /** The app-wide compact window label (5h, 7d, Fable). */
   label: string;
   usedPercent: number;
   /** Epoch seconds; absent when the source reported no reset time. */
   resetsAt?: number;
 }
 
+/** CDXC:AgentProviders 2026-09-12 WHY:
+ * Codex can report a weekly limit as its primary window, so primary/secondary IDs do not identify duration.
+ * Use the shared account window rules so chat agrees with the titlebar and Accounts.
+ */
 function accountWindowKind(window: AccountUsageWindow): UsageWindowKind | 'spend' {
   if (window.model) return 'model';
-  if (window.id === 'fiveHour' || window.id === ':primary_window') return 'fiveHour';
-  if (window.id === 'sevenDay' || window.id === ':secondary_window') return 'sevenDay';
+  if (isFiveHourWindow(window)) return 'fiveHour';
+  if (isWeeklyWindow(window)) return 'sevenDay';
   return window.id === 'spend' ? 'spend' : 'model';
 }
 

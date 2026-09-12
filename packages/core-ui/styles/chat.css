@@ -180,12 +180,14 @@ companion pane that is 47 columns instead of 42 for a diff or a command dump.
   height: 100%;
 }
 
+/* CDXC:SessionChat 2026-09-12 DECISION: User: the chat search buttons have zero rounding. */
 .ghostex-chat-terminal-search-button {
   align-items: center;
   appearance: none;
   background: #000;
   border: 0;
   border-left: 1px solid #252525;
+  border-radius: 0;
   color: #cfcfcf;
   cursor: default;
   display: flex;
@@ -1112,7 +1114,12 @@ the markdown block) rather than pinned to a tier of its own.
    that band and follows it when the box grows, collapses, or expands. */
 .ghostex-chat-scroll-bottom-button[data-direction='end'] {
   bottom: calc(var(--ghostex-chat-composer-overlay, 0px) + 0.25rem);
-  transition-property: translate, scale, opacity, bottom;
+  transition: opacity 200ms, bottom 200ms;
+}
+
+.ghostex-chat-scroll-bottom-button[data-active='false'] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* --- Composer overlay ------------------------------------------------------- */
@@ -1142,25 +1149,6 @@ the markdown block) rather than pinned to a tier of its own.
     #000 calc(100% - var(--ghostex-chat-composer-overlay, 0px) - var(--scroll-fade-b, 0px)),
     transparent calc(100% - var(--ghostex-chat-composer-overlay, 0px))
   );
-}
-
-/* Hidden while the reader's last scroll ended at the bottom (see
-   FOLLOW_BOTTOM_ATTRIBUTE in session-chat-message-list.tsx). */
-/* While the stream hold parks the viewport at the top of the streamed reply,
-   the scroller has seen no reader scroll and leaves its button inactive; the
-   hold is exactly when the end is off screen, so the pill stays reachable. */
-.ghostex-session-chat-scope
-  [data-ghostex-stream-hold='true']
-  ~ .ghostex-chat-scroll-bottom-button[data-active='false'] {
-  opacity: 1;
-  pointer-events: auto;
-  scale: 1;
-  translate: -50% 0;
-}
-
-[data-ghostex-follow-bottom='true'] ~ .ghostex-chat-scroll-bottom-button {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .ghostex-session-chat-scope[data-chat-theme='dark'] .ghostex-chat-composer {
