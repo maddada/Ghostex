@@ -1498,8 +1498,16 @@ export class GpuiSidebarRuntime {
       case 'openSettings':
         this.openAppModal('settings');
         return;
+      /*
+       * CDXC:Onboarding 2026-09-12 DECISION:
+       * User: "i want setup button in the tips dropdown to open this new one instead of the old one". The
+       * Tips "Setup" button and the Quick Access "Setup" command share this one `openWorkspaceWelcome`
+       * message, so it opens the new Onboarding modal on every host that handles it. The old
+       * FirstLaunchSetup modal stays in the tree and still owns the automatic first run.
+       * SEE-ALSO: apps/desktop/src/app/delayed_send.rs handles the same message natively.
+       */
       case 'openWorkspaceWelcome':
-        this.openAppModal('firstLaunchSetup');
+        this.openAppModal('onboarding');
         return;
       case 'openHighlightedFeatures':
       case 'openGhostexTutorialVideo':

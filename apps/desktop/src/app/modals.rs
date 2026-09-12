@@ -1717,12 +1717,14 @@ impl GhostexGpuiApp {
     ) {
         let sidebar_state_message =
             self.with_gpui_command_pane_sidebar_indicators(base_sidebar_state);
-        // CDXC:Onboarding 2026-09-11 DECISION:
-        // User: "lots of changes on the onboarding so let's keep the old one for now"; first run and the
-        // Tips "Setup" button open the old FirstLaunchSetup modal until the new five-panel Onboarding
-        // modal (packages/core-ui/onboarding) is finished. When switching back, open `Onboarding` here
-        // with `"firstRun": true` added to the open message, because the user also decided that only the
-        // first run ever applies Browser + Docs as the enabled views, never a reopen from Tips > Setup.
+        // CDXC:Onboarding 2026-09-12 DECISION:
+        // User: "lots of changes on the onboarding so let's keep the old one for now", so the automatic
+        // first run still opens the old FirstLaunchSetup modal while the new five-panel Onboarding modal
+        // (packages/core-ui/onboarding) is being iterated on. The Tips dropdown's "Setup" button is the
+        // deliberate exception and opens the new one (see titlebar/settings_and_action_state.rs and
+        // delayed_send.rs). When first run switches over too, open `Onboarding` here with
+        // `"firstRun": true` added to the open message: the user decided only the first run ever applies
+        // Browser + Docs as the enabled views, never a reopen from Tips > Setup.
         let modal = GpuiAppModalKind::FirstLaunchSetup;
         self.open_gpui_app_modal_window(
             modal,

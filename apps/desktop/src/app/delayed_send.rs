@@ -2058,13 +2058,13 @@ impl GhostexGpuiApp {
                 }
                 self.open_gpui_browser_action_url(url, window, cx);
             }
+            // CDXC:Onboarding 2026-09-12 DECISION:
+            // The Tips dropdown's "Setup" button opens the new Onboarding modal; the old FirstLaunchSetup
+            // stays in the tree and still owns the automatic first run. This is the CEF titlebar-host twin
+            // of the native Tips header action in titlebar/settings_and_action_state.rs; both must match.
             "openWorkspaceWelcome" => {
                 self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-                self.open_gpui_app_modal_from_titlebar(
-                    GpuiAppModalKind::FirstLaunchSetup,
-                    window,
-                    cx,
-                );
+                self.open_gpui_app_modal_from_titlebar(GpuiAppModalKind::Onboarding, window, cx);
             }
             "openGhostexTutorialVideo" => {
                 self.set_gpui_titlebar_tips_panel_open(false, window, cx);
