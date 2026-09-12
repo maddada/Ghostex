@@ -239,6 +239,7 @@ export function SessionChatComposerActions({
     }
     hostActions?.onAction?.(action.id);
   };
+  /** CDXC:AgentProviders 2026-09-12 DECISION: User: opening Switch Account under the chat's More actions requires a click; hovering must not open either version of the account submenu. */
   const hostActionMenuItem = (action: SessionChatHostAction) =>
     action.items ? (
       /*
@@ -247,7 +248,7 @@ export function SessionChatComposerActions({
       "Switch Agent CLI" does; picking a row hands the row id back as the value.
       */
       <DropdownMenuSub key={action.id}>
-        <DropdownMenuSubTrigger>
+        <DropdownMenuSubTrigger openOnHover={action.id !== 'switchAccount'}>
           {hostActionIcon(action.id)}
           {action.label}
         </DropdownMenuSubTrigger>
@@ -347,7 +348,7 @@ export function SessionChatComposerActions({
   /** CDXC:AgentProviders 2026-09-06 DECISION: User requested the Claude and Codex account controls under More actions > Switch Account as a submenu, replacing the standalone composer Accounts button and the old account row. */
   const accountSubmenu = renderAccountMenu ? (
     <DropdownMenuSub>
-      <DropdownMenuSubTrigger>
+      <DropdownMenuSubTrigger openOnHover={false}>
         <IconSwitchHorizontal aria-hidden='true' />
         Switch Account
       </DropdownMenuSubTrigger>
