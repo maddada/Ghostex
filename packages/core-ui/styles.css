@@ -5027,6 +5027,8 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
  * On and off have to read at a glance across ten small icons, so the two states differ in fill,
  * border AND opacity rather than in one subtle tint. `data-enabled` drives it instead of
  * `aria-pressed` so the styling cannot depend on how the tooltip trigger merges its props.
+ * CDXC:Sessions 2026-09-12 DECISION:
+ * User: the enabled fill is the neutral raised tone every button shares, never the accent color.
  */
 .ghostex-settings-shadcn .session-card-hover-actions-field-item {
   align-items: center;
@@ -5055,26 +5057,16 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
 }
 
 .ghostex-settings-shadcn .session-card-hover-actions-field-item[data-enabled='true'] {
-  background: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 30%, var(--settings-raised));
-  border-color: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 70%, transparent);
+  background: var(--settings-raised-hover);
+  border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
   border-style: solid;
   color: var(--foreground);
   opacity: 1;
 }
 
 .ghostex-settings-shadcn .session-card-hover-actions-field-item[data-enabled='true']:hover {
-  background: color-mix(in srgb, var(--ghostex-accent, #86d3f8) 42%, var(--settings-raised));
-  opacity: 1;
-}
-
-/* The chevron is a divider, not an action, so it keeps a neutral fill even when it is on. */
-.ghostex-settings-shadcn .session-card-hover-actions-field-chevron[data-enabled='true'] {
-  background: var(--settings-raised-hover);
-  border-color: color-mix(in srgb, var(--foreground) 30%, transparent);
-}
-
-.ghostex-settings-shadcn .session-card-hover-actions-field-chevron[data-enabled='true']:hover {
   background: color-mix(in srgb, var(--foreground) 12%, var(--settings-raised-hover));
+  opacity: 1;
 }
 
 .ghostex-settings-shadcn .session-card-hover-actions-field-item[data-dragging='true'] {
