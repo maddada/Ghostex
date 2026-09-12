@@ -544,7 +544,7 @@
     {
       "key": "sessionCardHoverButtons",
       "title": "Session hover buttons (click to toggle, drag to reorder)",
-      "subtitle": "Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. Tag, Park, Sleep and Close are on by default.",
+      "subtitle": "Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close.",
       "tab": "settings",
       "tabTitle": "General",
       "group": "sidebar",
@@ -575,10 +575,6 @@
         },
         {
           "enabled": true,
-          "id": "chevron"
-        },
-        {
-          "enabled": true,
           "id": "tag"
         },
         {
@@ -588,6 +584,10 @@
         {
           "enabled": true,
           "id": "sleep"
+        },
+        {
+          "enabled": true,
+          "id": "chevron"
         },
         {
           "enabled": true,
@@ -5297,9 +5297,7 @@
       "sectionTitle": "Internal state (not user settings)",
       "type": "json",
       "default": {
-        "availableTargetIds": [
-          "finder"
-        ],
+        "availableTargetIds": ["finder"],
         "checkedAtMs": 0,
         "resolvedAppNames": {},
         "resolvedCommands": {}

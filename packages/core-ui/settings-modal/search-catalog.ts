@@ -266,7 +266,7 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'sessionCardHoverButtons',
           subtitle:
-            'Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. Tag, Park, Sleep and Close are on by default.',
+            'Buttons a session card shows when you hover it. Click an icon to turn it on or off; drag icons to reorder them. Buttons to the right of the chevron always show, buttons to its left hide until the chevron is clicked. By default the strip is Tag, Park, Sleep, chevron, Close.',
           title: 'Session hover buttons (click to toggle, drag to reorder)',
         },
       ],

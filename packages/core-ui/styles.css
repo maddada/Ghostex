@@ -5047,7 +5047,18 @@ body[data-session-chat-theme] .ghostex-session-chat-popup {
     border-color 120ms ease,
     color 120ms ease,
     opacity 120ms ease;
+  user-select: none;
   width: var(--settings-control-height);
+}
+
+/*
+ * CDXC:Sessions 2026-09-12 WHY:
+ * The glyph must not take the pointer: a press that lands on the icon has to reach the button, which
+ * is the drag source, or a drag started from the middle of a button does nothing at all. Same rule
+ * the shared Button and menu-item primitives apply to their own icons.
+ */
+.ghostex-settings-shadcn .session-card-hover-actions-field-item svg {
+  pointer-events: none;
 }
 
 .ghostex-settings-shadcn .session-card-hover-actions-field-item:hover {

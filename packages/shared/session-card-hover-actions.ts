@@ -2,7 +2,7 @@
  * CDXC:Sessions 2026-09-12 DECISION:
  * User: Settings gets a "Buttons to show on hover for sessions" strip with Rename, Pin, Note, Snooze, Close After Done, Tag, Park, Sleep and Close as icon toggles, plus the chevron as one more draggable item.
  * User: the strip is reordered by dragging; whatever sits to the right of the chevron is always shown on hover, whatever sits to its left is hidden until the chevron is clicked. Turning the chevron off shows every enabled button at once.
- * User: Tag, Park, Sleep and Close are on by default, to the right of the chevron, in that order. Fork, Split Right and Delayed Send are deliberately not offered (too rare to earn a slot).
+ * User: the default strip is Tag, Park, Sleep, chevron, Close: only Close shows at rest, and the chevron reveals the other three. Fork, Split Right and Delayed Send are deliberately not offered (too rare to earn a slot).
  * User: a button that is enabled here is hidden from the session's main context menu, whichever side of the chevron it is on, so each action lives in exactly one of the two places.
  * SEE-ALSO: packages/core-ui/session-card-content.tsx, packages/core-ui/sortable-session-card.tsx, packages/core-ui/settings-modal/session-card-hover-actions-field.tsx.
  */
@@ -40,10 +40,10 @@ export const DEFAULT_SESSION_CARD_HOVER_BUTTONS: readonly SessionCardHoverButton
   { enabled: false, id: 'note' },
   { enabled: false, id: 'snooze' },
   { enabled: false, id: 'closeAfterDone' },
-  { enabled: true, id: 'chevron' },
   { enabled: true, id: 'tag' },
   { enabled: true, id: 'park' },
   { enabled: true, id: 'sleep' },
+  { enabled: true, id: 'chevron' },
   { enabled: true, id: 'close' },
 ];
 
