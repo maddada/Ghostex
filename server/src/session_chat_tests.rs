@@ -38,6 +38,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         };
         let serialized = serde_json::to_value(&message).expect("serialize");
@@ -612,6 +613,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         };
         let result = SessionChatMessage {
@@ -625,6 +627,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         };
         let input = json!({
@@ -699,6 +702,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         };
         let result = SessionChatMessage {
@@ -712,6 +716,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         };
         let old_question = json!({

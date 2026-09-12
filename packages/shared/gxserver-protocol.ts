@@ -2713,6 +2713,8 @@ export interface GxserverPresentationSession {
   accountSlot?: string;
   actions: GxserverPresentationSessionActions;
   activity: GxserverPresentationSessionActivity;
+  /** Unanswered async questions, independent of working/completion activity. */
+  pendingQuestionCount?: number;
   agentIcon?: string;
   agentId?: string;
   agentName?: string;

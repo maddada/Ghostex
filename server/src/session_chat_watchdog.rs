@@ -1231,6 +1231,7 @@ fn user_submission_record(text: String) -> Option<WatchdogRecord> {
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
     (!is_noise_message(&probe)).then_some(WatchdogRecord::UserSubmission(text))

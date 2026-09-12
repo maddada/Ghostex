@@ -1,0 +1,84 @@
+.session-question-indicator {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  vertical-align: middle;
+}
+
+.session-question-indicator::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  top: 5px;
+  left: 5px;
+  border-radius: 50%;
+  background: var(--done-attention-color, #95d7f6);
+}
+
+.session-question-indicator[data-working='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid #d99a62;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: session-question-working-spin 0.82s linear infinite;
+}
+
+@keyframes session-question-working-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-question-indicator[data-working='true']::before {
+    animation: none;
+  }
+}
+
+/* The attention cue stays visible on focused/hovered rows, including layouts that hide ordinary working dots. */
+.session-frame[data-pending-question='true'] .session-status-dot-inline {
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  animation: none !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  height: 16px !important;
+  width: 16px !important;
+  right: var(--reference-session-trailing-inset, 4px) !important;
+  top: 50%;
+  translate: 0 -50%;
+}
+
+.session-status-dot-anchored[data-pending-question='true'] {
+  display: none !important;
+}
+
+.session-frame[data-pending-question='true'] .session-card-hover-actions {
+  inset-inline-end: 22px;
+}
+
+.session-frame[data-pending-question='true'] .session-head {
+  --session-card-hover-actions-width: calc(
+    var(--session-card-hover-action-count, 0) * (var(--session-card-hover-action-size, 26px) + 2px) + 22px
+  );
+}
+
+.session-frame[data-pending-question='true'] .session-head[data-title-full-width='true'] .session-alias-heading {
+  padding-inline-end: 22px;
+}
+
+.group-collapsed-status-counts[data-pending-question='true'] {
+  display: inline-flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  max-width: none !important;
+  gap: calc(6px * var(--sidebar-density-scale));
+  margin-left: auto;
+}

@@ -305,6 +305,7 @@ fn decode_claude_queued_command(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     })
 }
@@ -331,6 +332,7 @@ fn decode_claude_queued_prompt(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: true,
     })
 }
@@ -369,6 +371,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         });
     }
@@ -389,6 +392,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         });
     }
@@ -448,6 +452,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     })
 }

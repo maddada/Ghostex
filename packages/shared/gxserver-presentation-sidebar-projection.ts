@@ -383,6 +383,7 @@ export function createGxserverPresentationSidebarSession({
   const agentIcon = resolveAgentIcon(presentation.agentIcon ?? presentation.agentName ?? presentation.agentId);
   return {
     activity: presentation.activity,
+    pendingQuestionCount: presentation.pendingQuestionCount,
     agentIcon,
     agentName: presentation.agentName ?? presentation.agentId,
     accountId: presentation.accountId,

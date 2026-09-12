@@ -71,6 +71,7 @@ pub fn decode_antigravity_transcript_line(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
 

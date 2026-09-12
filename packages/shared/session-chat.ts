@@ -1,3 +1,4 @@
+import type { AccountSwitchProgress } from './agent-accounts';
 import type { SessionChatDraftVersion } from './session-chat-queue';
 // Session Chat — normalized chat projection of an agent terminal session.
 // Canonical wire types shared by gxserver (Rust mirror in server/src/session_chat.rs),
@@ -126,8 +127,10 @@ export type SessionChatSource = 'transcript' | 'hook' | 'client';
 /** Visual palette for the shared chat surface, independent of app chrome. */
 export type SessionChatTheme = 'light' | 'dark';
 
-export function normalizeSessionChatTheme(value: unknown): SessionChatTheme {
-  return value === 'light' ? 'light' : 'dark';
+export type SessionChatThemeSetting = SessionChatTheme | 'system';
+
+export function normalizeSessionChatTheme(value: unknown): SessionChatThemeSetting {
+  return value === 'light' || value === 'dark' ? value : 'system';
 }
 
 // Higher wins when the same message id/turn arrives from two sources.
@@ -166,11 +169,18 @@ export interface SessionChatImageRefBlock {
 export type SessionChatBlock =
   SessionChatTextBlock | SessionChatToolCallBlock | SessionChatToolResultBlock | SessionChatImageRefBlock;
 
+export interface SessionChatAsyncQuestion {
+  title: string;
+  options?: string[];
+}
+
 export interface SessionChatMessage {
   /** Stable across re-reads: record uuid/payload id, else `${filePath}:${byteOffset16}`. */
   id: string;
   role: SessionChatRole;
   blocks: SessionChatBlock[];
+  /** Codex questions answered as ordinary messages while work continues. */
+  asyncQuestions?: SessionChatAsyncQuestion[];
   /** Epoch ms; null sorts before any timestamp. */
   timestamp: number | null;
   source: SessionChatSource;
@@ -817,6 +827,7 @@ export interface GxserverReadSessionChatResult {
    * When present, it is authoritative and replaces the client's list.
    * See CDXC:SessionChat in ./session-chat-queue.
    */
+  accountSwitch?: AccountSwitchProgress | null;
   pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
@@ -1013,7 +1024,8 @@ export interface GxserverReadSessionChatImageResult {
 export interface GxserverAnswerSessionChatPromptParams {
   projectId: string;
   sessionId: string;
-  kind: 'question' | 'approval' | 'terminalChoice' | 'terminalDialog';
+  kind: 'question' | 'approval' | 'terminalChoice' | 'terminalDialog' | 'dismissAsyncQuestion';
+  questionId?: string;
   dialogId?: string;
   dialogAction?: string;
   keyModifiers?: number;
@@ -1160,6 +1172,7 @@ export interface GxserverSessionChatSnapshotEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  accountSwitch?: AccountSwitchProgress | null;
   pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
@@ -1241,6 +1254,7 @@ export interface GxserverSessionChatReplacedEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  accountSwitch?: AccountSwitchProgress | null;
   pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**
@@ -1295,6 +1309,7 @@ export interface GxserverSessionChatStateEvent extends SessionChatFrameBase {
    * every queue control. When present it is authoritative and replaces the
    * client's list. Never carried by `sessionChatAppended`.
    */
+  accountSwitch?: AccountSwitchProgress | null;
   pendingModelSelection?: SessionChatPendingModelSelection | null;
   queue?: SessionChatQueuedPrompt[];
   /**

@@ -75,6 +75,7 @@ pub fn decode_pi_transcript_line(line: &str, fallback_id: &str) -> Option<Sessio
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
 

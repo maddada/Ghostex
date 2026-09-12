@@ -163,10 +163,23 @@ pub enum SessionChatBlock {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SessionChatAsyncQuestion {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SessionChatMessage {
     pub id: String,
     pub role: SessionChatRole,
     pub blocks: Vec<SessionChatBlock>,
+    #[serde(
+        rename = "asyncQuestions",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub async_questions: Option<Vec<SessionChatAsyncQuestion>>,
     /// Epoch ms; serialized as `null` when absent (null sorts before any timestamp).
     pub timestamp: Option<i64>,
     pub source: SessionChatSource,

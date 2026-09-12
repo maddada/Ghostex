@@ -512,6 +512,7 @@ fn fork_boundary_message(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: Some(0),
+        async_questions: None,
         queued: false,
     }
 }

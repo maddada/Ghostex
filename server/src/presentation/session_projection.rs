@@ -145,6 +145,14 @@ pub(crate) fn project_presentation_session(
         presentation_actions(session, &activity),
     );
     output.insert("activity".to_string(), Value::String(activity.clone()));
+    output.insert(
+        "pendingQuestionCount".to_string(),
+        Value::from(if lifecycle_state == "running" {
+            crate::session_chat_async_questions::pending_question_count(session)
+        } else {
+            0
+        }),
+    );
     insert_optional_string(
         &mut output,
         "agentName",

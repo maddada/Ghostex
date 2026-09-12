@@ -1223,7 +1223,10 @@ impl SessionChatSendError {
     }
 }
 
+pub(crate) type SessionChatStepObserver = Arc<dyn Fn(&SessionChatSendStep) + Send + Sync>;
+
 struct SessionChatSendJob {
+    on_step: Option<SessionChatStepObserver>,
     completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
     /// Set only by `capture_session_chat_terminal_draft`: the standalone
     /// draft-handoff endpoint needs the draft its `PreserveTerminalDraft` step
@@ -1277,7 +1280,9 @@ pub fn enqueue_session_chat_send(
     source: &str,
     steps: Vec<SessionChatSendStep>,
 ) {
-    let _ = queue_session_chat_send(project_id, session_id, zmx_name, source, steps, None, None);
+    let _ = queue_session_chat_send(
+        project_id, session_id, zmx_name, source, steps, None, None, None,
+    );
 }
 
 /// The same fire-and-forget enqueue for a server-side writer that holds a
@@ -1305,6 +1310,7 @@ pub(crate) fn enqueue_session_write_sequence_with_completion(
     session_id: &str,
     source: &str,
     steps: Vec<SessionChatSendStep>,
+    on_step: Option<SessionChatStepObserver>,
 ) -> std::result::Result<oneshot::Receiver<Result<(), SessionChatSendError>>, DomainStateError> {
     let zmx_name = crate::zmx::provider_zmx_session_name(session)?;
     let (completion_tx, completion_rx) = oneshot::channel();
@@ -1316,6 +1322,7 @@ pub(crate) fn enqueue_session_write_sequence_with_completion(
         steps,
         Some(completion_tx),
         None,
+        on_step,
     )
     .map_err(|message| DomainStateError {
         code: "internalError",
@@ -1344,6 +1351,7 @@ pub async fn execute_session_chat_send(
         steps,
         Some(completion_tx),
         None,
+        None,
     )
     .map_err(SessionChatSendError::not_attempted)?;
     completion_rx.await.map_err(|_| {
@@ -1361,6 +1369,7 @@ fn queue_session_chat_send(
     steps: Vec<SessionChatSendStep>,
     completion: Option<oneshot::Sender<Result<(), SessionChatSendError>>>,
     captured_draft: Option<oneshot::Sender<CapturedTerminalDraft>>,
+    on_step: Option<SessionChatStepObserver>,
 ) -> Result<(), String> {
     if steps.is_empty() {
         return Ok(());
@@ -1378,6 +1387,7 @@ fn queue_session_chat_send(
             SessionChatSendQueue { tx, generation }
         });
     let job = SessionChatSendJob {
+        on_step,
         completion,
         captured_draft,
         project_id: project_id.to_string(),
@@ -1413,6 +1423,7 @@ async fn run_session_chat_send_worker(
 ) {
     while let Some(job) = rx.recv().await {
         let SessionChatSendJob {
+            on_step,
             mut completion,
             mut captured_draft,
             project_id,
@@ -1459,6 +1470,9 @@ async fn run_session_chat_send_worker(
                     }
                 }
                 clear_pending = false;
+            }
+            if let Some(observer) = &on_step {
+                observer(&step);
             }
             match step {
                 SessionChatSendStep::WaitForAccountReady {
@@ -2297,6 +2311,7 @@ pub async fn capture_session_chat_terminal_draft(
         }],
         Some(completion_tx),
         Some(draft_tx),
+        None,
     )?;
     completion_rx
         .await
@@ -3124,6 +3139,42 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         .get("kind")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    if kind == "dismissAsyncQuestion" {
+        let Some(question_id) = params
+            .get("questionId")
+            .and_then(Value::as_str)
+            .filter(|id| !id.is_empty() && id.len() <= 4096)
+        else {
+            return domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "invalidParams",
+                    message: "A question ID is required.".to_string(),
+                },
+            );
+        };
+        return match crate::session_chat_async_questions::dismiss(
+            state,
+            &target.project_id,
+            &target.session_id,
+            question_id,
+        ) {
+            Ok(()) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({ "queued": false })),
+            ),
+            Err(error) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: error.to_string(),
+                },
+            ),
+        };
+    }
     if kind == "terminalDialog" {
         let agent = crate::session_chat_options::session_chat_option_agent(
             session_chat_agent_for_session(&target.session).as_deref(),

@@ -43,6 +43,7 @@ pub mod session_chat_agent_fleet;
 pub mod session_chat_agent_tasks;
 pub mod session_chat_antigravity_mirror;
 pub mod session_chat_app_command;
+pub(crate) mod session_chat_async_questions;
 pub mod session_chat_branch;
 pub mod session_chat_claude_dialog;
 pub(crate) mod session_chat_claude_fleet;

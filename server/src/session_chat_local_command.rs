@@ -408,6 +408,7 @@ fn message(id: String, text: String, timestamp: i64) -> SessionChatMessage {
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     }
 }
@@ -867,6 +868,7 @@ mod tests {
             source: SessionChatSource::Transcript,
             turn_id: None,
             byte_offset: None,
+            async_questions: None,
             queued: false,
         }
     }

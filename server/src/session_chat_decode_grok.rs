@@ -98,6 +98,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
 

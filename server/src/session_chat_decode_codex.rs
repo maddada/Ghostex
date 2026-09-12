@@ -56,6 +56,7 @@ fn codex_response_item(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
     match payload.get("type").and_then(Value::as_str) {
@@ -176,6 +177,7 @@ fn codex_event_message(
         source: SessionChatSource::Transcript,
         turn_id: None,
         byte_offset: None,
+        async_questions: None,
         queued: false,
     };
     match payload.get("type").and_then(Value::as_str) {
@@ -239,6 +241,7 @@ fn codex_event_message(
                     source: SessionChatSource::Transcript,
                     turn_id: None,
                     byte_offset: None,
+                    async_questions: None,
                     queued: false,
                 });
             }
@@ -287,6 +290,7 @@ fn codex_event_message(
                     source: SessionChatSource::Transcript,
                     turn_id: None,
                     byte_offset: None,
+                    async_questions: None,
                     queued: false,
                 });
             }
@@ -312,6 +316,7 @@ fn codex_event_message(
                     source: SessionChatSource::Transcript,
                     turn_id: None,
                     byte_offset: None,
+                    async_questions: None,
                     queued: false,
                 });
             }
@@ -324,6 +329,28 @@ fn codex_event_message(
             if blocks.is_empty() {
                 return None;
             }
+            // CDXC:SessionChat 2026-09-12 WHY:
+            // Async questions complete their tool call immediately; only the AgentMessage item carries the question UI, and answering sends an ordinary user message while the turn keeps working.
+            let async_questions = if item_type == Some("AgentMessage") {
+                item.get("questions")
+                    .and_then(|value| {
+                        serde_json::from_value::<Vec<SessionChatAsyncQuestion>>(value.clone()).ok()
+                    })
+                    .filter(|questions| {
+                        !questions.is_empty()
+                            && questions.iter().all(|question| {
+                                !question.title.trim().is_empty()
+                                    && question.options.as_ref().is_none_or(|options| {
+                                        !options.is_empty()
+                                            && options
+                                                .iter()
+                                                .all(|option| !option.trim().is_empty())
+                                    })
+                            })
+                    })
+            } else {
+                None
+            };
             Some(SessionChatMessage {
                 id: extract_string(item.get("id")).unwrap_or(id),
                 role,
@@ -332,6 +359,7 @@ fn codex_event_message(
                 source: SessionChatSource::Transcript,
                 turn_id: None,
                 byte_offset: None,
+                async_questions,
                 queued: false,
             })
         }
