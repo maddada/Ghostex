@@ -2406,6 +2406,7 @@ dependencies = [
  "base64",
  "cc",
  "cef",
+ "chrono",
  "flate2",
  "futures",
  "ghostex-docs",

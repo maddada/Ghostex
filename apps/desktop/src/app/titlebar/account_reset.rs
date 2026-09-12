@@ -45,47 +45,7 @@ fn reset_project_id(active_project: Option<&str>, account_machine: &str) -> Resu
 }
 
 impl GhostexGpuiApp {
-    /// The account popup owns this one action; the account and machine are resolved from its current native generation.
-    pub(crate) fn account_reset_popup_handler(
-        &self,
-        generation: u64,
-        id: ExtensionId,
-        cx: &mut gpui::Context<Self>,
-    ) -> cef::BrowserPopupOpenHandler {
-        let app = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        let foreground = cx.foreground_executor().clone();
-        Rc::new(move |url, _| {
-            if url != "ghostex-account:redeem-reset" {
-                let _ = gpui_open_external_http_url(&url);
-                return;
-            }
-            let app = app.clone();
-            let mut async_cx = async_cx.clone();
-            foreground
-                .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        if !this.titlebar_extension_popup.as_ref().is_some_and(|popup| {
-                            popup.account && popup.generation == generation && popup.id == id
-                        }) {
-                            return;
-                        }
-                        let Some(account) = this
-                            .titlebar_accounts
-                            .iter()
-                            .find(|account| account["titlebarKey"] == id.as_str())
-                            .cloned()
-                        else {
-                            return;
-                        };
-                        this.start_account_reset(&account, window, cx);
-                    });
-                })
-                .detach();
-        })
-    }
-
-    fn start_account_reset(
+    pub(crate) fn start_account_reset(
         &mut self,
         account: &Value,
         window: &mut Window,
@@ -106,7 +66,7 @@ impl GhostexGpuiApp {
             .as_ref()
             .filter(|snapshot| !snapshot.is_quick_projectless);
         let project_id = reset_project_id(gpui_active_project_id_from_snapshot(snapshot), &machine);
-        self.close_titlebar_extension_popup(window, cx);
+        self.close_gpui_titlebar_popup(None, window, cx);
         let project_id = match project_id {
             Ok(project_id) => project_id,
             Err(error) => {

@@ -156,10 +156,13 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
         let extension_id = button.id;
-        let open = self
-            .titlebar_extension_popup
-            .as_ref()
-            .is_some_and(|state| state.id == extension_id && state.account == button.account);
+        let open = if button.account {
+            self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::AccountUsage(extension_id))
+        } else {
+            self.titlebar_extension_popup
+                .as_ref()
+                .is_some_and(|state| state.id == extension_id && state.account == button.account)
+        };
         let anchor_state = window.use_keyed_state(
             format!(
                 "ghostex-gpui-titlebar-extension-{}-anchor",

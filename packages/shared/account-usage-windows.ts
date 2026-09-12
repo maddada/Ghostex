@@ -13,7 +13,7 @@ export function fableWindow(usage: AccountUsageWindow[]): AccountUsageWindow | u
 /**
  * CDXC:AgentProviders 2026-09-11 DECISION:
  * User: for Claude accounts the Fable limit is the most important number and must never be hidden. Wherever a Claude account shows two percentages (titlebar buttons, launcher and picker rows, Settings figures), show the two tightest of the weekly, five-hour, and Fable limits, in that fixed order, so the number about to run out is always one of them. Codex keeps its weekly window and five-hour window.
- * SEE-ALSO: apps/desktop/src/app/titlebar/account_usage.rs `claude_headline_windows`, apps/desktop/assets/account-usage/popup.js.
+ * SEE-ALSO: apps/desktop/src/app/titlebar/account_usage.rs `claude_headline_windows`, apps/desktop/src/app/window/account_usage/limits.rs.
  */
 export function accountHeadlineWindows(account: AgentAccount): AccountUsageWindow[] {
   const main = account.usage.filter((window) => !window.model);

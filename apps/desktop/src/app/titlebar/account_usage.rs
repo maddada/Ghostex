@@ -1,6 +1,5 @@
 use super::extension_buttons::TitlebarBadgeButton;
 use crate::*;
-use base64::Engine as _;
 use serde_json::{Value, json};
 use std::{
     sync::{Arc, OnceLock},
@@ -82,7 +81,7 @@ pub(crate) fn account_display_text(value: &str) -> String {
         .collect()
 }
 
-fn popup_account(account: &Value) -> Value {
+pub(crate) fn popup_account(account: &Value) -> Value {
     let mut account = account.clone();
     account["displayName"] = json!(account_display_name(&account));
     if let Some(error) = account["usageError"].as_str() {
@@ -129,7 +128,7 @@ fn badge_lines(account: &Value) -> Vec<String> {
 }
 
 /// CDXC:AgentProviders 2026-09-11 DECISION:
-/// User: for Claude accounts the Fable limit is the most important number and must never be hidden. Wherever a Claude account shows two percentages, show the two tightest of the weekly, five-hour, and Fable limits, in that fixed order, so the number about to run out is always one of them. Port of `accountHeadlineWindows` in packages/shared/account-usage-windows.ts; the popup in apps/desktop/assets/account-usage/popup.js shows all three as main bars.
+/// User: for Claude accounts the Fable limit is the most important number and must never be hidden. Wherever a Claude account shows two percentages, show the two tightest of the weekly, five-hour, and Fable limits, in that fixed order, so the number about to run out is always one of them. Port of `accountHeadlineWindows` in packages/shared/account-usage-windows.ts; the popup in apps/desktop/src/app/window/account_usage/limits.rs shows all three as main bars.
 pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
     let main: Vec<&Value> = windows.iter().filter(|w| w["model"].is_null()).collect();
     let weekly = main.iter().copied().find(|w| {
@@ -166,32 +165,20 @@ pub(crate) fn claude_headline_windows(windows: &[Value]) -> Vec<&Value> {
 
 impl GhostexGpuiApp {
     pub(crate) fn sync_titlebar_account_privacy(&self, cx: &mut gpui::Context<Self>) {
-        let Some(state) = self
-            .titlebar_extension_popup
-            .as_ref()
-            .filter(|state| state.account)
+        let Some(GpuiTitlebarPopupKind::AccountUsage(id)) =
+            self.titlebar_popup_menu.as_ref().map(|state| state.kind)
         else {
             return;
         };
-        let Some(panel) = &state.panel else {
-            return;
-        };
-        let Some(account) = self
+        if let Some(account) = self
             .titlebar_accounts
             .iter()
-            .find(|account| text(account, "titlebarKey") == state.id.as_str())
-        else {
-            return;
-        };
-        let script = format!(
-            "window.ghostexUpdateAccountUsage?.({});",
-            popup_account(account)
-        );
-        panel.update(cx, |panel, cx| {
-            panel.surface.update(cx, |surface, _| {
-                surface.execute_app_owned_script(&script);
-            });
-        });
+            .find(|account| text(account, "titlebarKey") == id.as_str())
+            && let Some(popup) = self.titlebar_popup_window
+        {
+            let account = popup_account(account);
+            let _ = popup.update(cx, |popup, _, cx| popup.update_account_usage(account, cx));
+        }
     }
 
     pub(crate) fn update_titlebar_account_from_ui(
@@ -218,12 +205,8 @@ impl GhostexGpuiApp {
             .retain(|a| text(a, "titlebarKey") != id.as_str());
         if account["showInTitlebar"] == true {
             self.titlebar_accounts.push(account);
-        } else if self
-            .titlebar_extension_popup
-            .as_ref()
-            .is_some_and(|state| state.id == id)
-        {
-            self.close_titlebar_extension_popup(window, cx);
+        } else if self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::AccountUsage(id)) {
+            self.close_gpui_titlebar_popup(None, window, cx);
         }
         self.refresh_titlebar_accounts(cx);
         cx.notify();
@@ -301,15 +284,10 @@ impl GhostexGpuiApp {
                         this.titlebar_accounts.sort_by(|a, b| text(a,"titlebarMachine").cmp(text(b,"titlebarMachine"))
                             .then(text(a,"provider").cmp(text(b,"provider")))
                             .then(text(a,"selector").parse::<u64>().unwrap_or(0).cmp(&text(b,"selector").parse::<u64>().unwrap_or(0))));
-                        if let Some(state) = &this.titlebar_extension_popup {
-                            if state.account {
-                                if let Some(account) = this.titlebar_accounts.iter().find(|a| text(a,"titlebarKey") == state.id.as_str()) {
-                                    if let Some(panel) = state.panel.clone() {
-                                        let script = format!("window.ghostexUpdateAccountUsage?.({});", popup_account(account));
-                                        panel.update(cx, |panel, cx| panel.surface.update(cx, |surface, _| { surface.execute_app_owned_script(&script); }));
-                                    }
-                                } else { this.close_titlebar_extension_popup(window, cx); }
-                            }
+                        if let Some(GpuiTitlebarPopupKind::AccountUsage(id)) = this.titlebar_popup_menu.as_ref().map(|state| state.kind) {
+                            if this.titlebar_accounts.iter().any(|a| text(a, "titlebarKey") == id.as_str()) {
+                                this.sync_titlebar_account_privacy(cx);
+                            } else { this.close_gpui_titlebar_popup(None, window, cx); }
                         }
                         cx.notify();
                     }).is_err() {
@@ -378,78 +356,67 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self
-            .titlebar_extension_popup
-            .as_ref()
-            .is_some_and(|state| state.id == id)
-        {
-            self.close_titlebar_extension_popup(window, cx);
-            return;
-        }
-        let Some(account) = self
+        let kind = GpuiTitlebarPopupKind::AccountUsage(id);
+        if !self
             .titlebar_accounts
             .iter()
-            .find(|a| text(a, "titlebarKey") == id.as_str())
-            .cloned()
-        else {
+            .any(|account| text(account, "titlebarKey") == id.as_str())
+        {
             return;
-        };
-        self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-        self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-        self.close_titlebar_extension_popup(window, cx);
-        self.titlebar_extension_popup_generation =
-            self.titlebar_extension_popup_generation.wrapping_add(1);
-        let generation = self.titlebar_extension_popup_generation;
-        self.titlebar_dropdown_previous_focus_handle = window.focused(cx);
-        self.titlebar_dropdown_focus_handle.focus(window, cx);
-        self.titlebar_extension_popup = Some(GpuiTitlebarExtensionPopupState {
-            id,
-            account: true,
-            trigger_bounds,
-            size: GpuiExtensionPopupSize {
-                width: 380.0,
-                height: 640.0,
-            },
-            generation,
-            panel: None,
-            error: None,
-        });
-        let logo = if text(&account, "provider") == "codex" {
-            include_str!("../../../assets/account-usage/codex.svg")
-        } else {
-            include_str!("../../../assets/account-usage/claude.svg")
-        };
-        let template = include_str!("../../../assets/account-usage/popup.html");
-        let script = include_str!("../../../assets/account-usage/popup.js").replace(
-            "__ACCOUNT_JSON__",
-            &popup_account(&account).to_string().replace('<', "\\u003c"),
-        );
-        let html = template
-            .replace("__PROVIDER_LOGO__", logo)
-            .replace("__ACCOUNT_SCRIPT__", &script);
-        let url = format!(
-            "data:text/html;base64,{}",
-            base64::engine::general_purpose::STANDARD.encode(html)
-        );
-        let parent = self.parent_ns_view;
-        let popup_handler = self.account_reset_popup_handler(generation, id, cx);
-        let app = cx.entity().downgrade();
-        let mut async_cx = cx.to_async();
-        cx.foreground_executor()
-            .spawn(async move {
-                let result = GpuiTitlebarExtensionPanel::create_browser(
-                    parent,
-                    id,
-                    &url,
-                    None,
-                    None,
-                    Some(popup_handler),
-                );
-                let _ = app.update_in(&mut async_cx, |this, _window, cx| {
-                    this.attach_titlebar_extension_panel(generation, id, result, cx)
-                });
-            })
-            .detach();
-        cx.notify();
+        }
+        let opening = !self.titlebar_popup_menu_open(kind);
+        let previous_focus = window.focused(cx);
+        self.set_gpui_titlebar_popup_open(kind, opening, Some(trigger_bounds), window, cx);
+        if opening {
+            self.titlebar_dropdown_previous_focus_handle = previous_focus;
+            self.titlebar_dropdown_focus_handle.focus(window, cx);
+            #[cfg(target_os = "macos")]
+            {
+                self.begin_programmatic_focus();
+                unsafe extern "C" {
+                    fn GhostexGpuiBeginUsageKeyboardFocus(view: *mut std::ffi::c_void);
+                }
+                unsafe { GhostexGpuiBeginUsageKeyboardFocus(self.parent_ns_view) };
+            }
+            #[cfg(target_os = "windows")]
+            cef::focus_gpui_root_view(self.parent_ns_view);
+        }
+    }
+
+    pub(crate) fn restore_account_usage_keyboard_focus(&self) {
+        #[cfg(target_os = "macos")]
+        {
+            unsafe extern "C" {
+                fn GhostexGpuiEndUsageKeyboardFocus(view: *mut std::ffi::c_void);
+            }
+            unsafe { GhostexGpuiEndUsageKeyboardFocus(self.parent_ns_view) };
+        }
+    }
+
+    /// CDXC:AgentProviders 2026-09-12 WHY:
+    /// Native titlebar panels keep the main window active; route usage keyboard controls to their owning popup so Tab and Space cannot operate the underlying chat.
+    pub(crate) fn forward_account_usage_key(
+        &self,
+        event: &gpui::KeyDownEvent,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let modifiers = event.keystroke.modifiers;
+        if modifiers.platform
+            || modifiers.control
+            || modifiers.alt
+            || !matches!(
+                event.keystroke.key.as_str(),
+                "tab" | "enter" | "space" | "up" | "down" | "pageup" | "pagedown" | "home" | "end"
+            )
+        {
+            return;
+        }
+        if let Some(popup) = self.titlebar_popup_window {
+            let event = event.clone();
+            let _ = popup.update(cx, |_, window, cx| {
+                window.dispatch_event(gpui::PlatformInput::KeyDown(event), cx);
+            });
+            cx.stop_propagation();
+        }
     }
 }

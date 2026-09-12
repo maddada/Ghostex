@@ -168,7 +168,15 @@ fn matches_query(text: &str, normalized_query: &str) -> bool {
 }
 
 /// Port of `accountUsageLabel` in packages/shared/account-usage-label.ts.
+/// CDXC:AgentProviders 2026-09-12 SEE-ALSO:
+/// packages/shared/account-usage-label.ts owns the shared Fable percentage label decision.
 fn usage_window_label(window: &Value) -> Option<String> {
+    if window["model"]
+        .as_str()
+        .is_some_and(|model| model.eq_ignore_ascii_case("fable"))
+    {
+        return Some("Fable".to_string());
+    }
     let seconds = window["limitWindowSeconds"].as_i64().unwrap_or(0);
     let duration = if seconds > 0 {
         if seconds % 86_400 == 0 {

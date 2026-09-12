@@ -324,6 +324,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn titlebar_popup_content_height(&self, kind: GpuiTitlebarPopupKind) -> f32 {
         match kind {
+            GpuiTitlebarPopupKind::AccountUsage(_) => 640.0,
             GpuiTitlebarPopupKind::ContextMenu => self
                 .context_menu
                 .as_ref()

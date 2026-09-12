@@ -194,6 +194,23 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    pub(crate) fn cancel_gpui_titlebar_popup(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let Some(popup) = self.titlebar_popup_window
+            && popup
+                .update(cx, |popup, window, cx| {
+                    popup.dismiss_account_reset_menu(window, cx)
+                })
+                .unwrap_or(false)
+        {
+            return;
+        }
+        self.close_gpui_titlebar_popup(None, window, cx);
+    }
+
     pub(crate) fn close_gpui_titlebar_popup(
         &mut self,
         kind: Option<GpuiTitlebarPopupKind>,
@@ -220,6 +237,14 @@ impl GhostexGpuiApp {
         );
         if !should_close {
             return;
+        }
+
+        if self
+            .titlebar_popup_menu
+            .as_ref()
+            .is_some_and(|state| matches!(state.kind, GpuiTitlebarPopupKind::AccountUsage(_)))
+        {
+            self.restore_account_usage_keyboard_focus();
         }
 
         self.context_menu = None;
@@ -262,6 +287,9 @@ impl GhostexGpuiApp {
             }),
         );
         if should_clear {
+            if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
+                self.restore_account_usage_keyboard_focus();
+            }
             self.context_menu = None;
             self.titlebar_popup_menu = None;
             self.titlebar_popup_window = None;
@@ -298,6 +326,19 @@ impl GhostexGpuiApp {
                         menu_width,
                         menu_max_height,
                         menu_scrollable,
+                    )
+                }))
+            }
+            GpuiTitlebarPopupKind::AccountUsage(id) => {
+                let account = self
+                    .titlebar_accounts
+                    .iter()
+                    .find(|account| account["titlebarKey"] == id.as_str())
+                    .expect("account checked before opening usage popup")
+                    .clone();
+                GpuiTitlebarPopupContent::AccountUsage(cx.new(|cx| {
+                    crate::app::window::account_usage::AccountUsagePanel::new(
+                        main_app, id, account, cx,
                     )
                 }))
             }

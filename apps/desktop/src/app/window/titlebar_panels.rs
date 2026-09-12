@@ -25,6 +25,7 @@ impl Default for GpuiTitlebarAnchoredDropdownState {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiTitlebarPopupKind {
+    AccountUsage(ExtensionId),
     Actions,
     BrowserActions(BrowserPaneId),
     ContextMenu,
@@ -41,6 +42,7 @@ pub(crate) enum GpuiTitlebarPopupKind {
 impl GpuiTitlebarPopupKind {
     pub(crate) fn diagnostic_label(self) -> &'static str {
         match self {
+            Self::AccountUsage(_) => "accountUsage",
             Self::Actions => "actions",
             Self::BrowserActions(_) => "browserActions",
             Self::ContextMenu => "contextMenu",
@@ -145,6 +147,7 @@ impl Default for GpuiTitlebarPopupAnchorState {
 
 #[derive(Clone)]
 pub(crate) enum GpuiTitlebarPopupContent {
+    AccountUsage(Entity<super::account_usage::AccountUsagePanel>),
     Menu(Entity<PopupMenu>),
     Reading(Entity<GpuiTitlebarReadingPanel>),
     RemoteSites(Entity<crate::app::window::remote_sites::RemoteSitesPanel>),
@@ -167,6 +170,7 @@ impl GpuiTitlebarPopupWindow {
         cx: &mut App,
     ) -> Entity<Self> {
         let content_kind = match &content {
+            GpuiTitlebarPopupContent::AccountUsage(_) => "accountUsage",
             GpuiTitlebarPopupContent::Menu(_) => "menu",
             GpuiTitlebarPopupContent::Reading(_) => "reading",
             GpuiTitlebarPopupContent::RemoteSites(_) => "remoteSites",
@@ -189,6 +193,9 @@ impl GpuiTitlebarPopupWindow {
         if let GpuiTitlebarPopupContent::Menu(menu) = &content {
             menu.focus_handle(cx).focus(window, cx);
         }
+        if let GpuiTitlebarPopupContent::AccountUsage(panel) = &content {
+            panel.update(cx, |panel, cx| panel.focus(window, cx));
+        }
         cx.new(|cx| {
             let dismiss_subscription = match &content {
                 GpuiTitlebarPopupContent::Menu(menu) => Some(cx.subscribe_in(
@@ -200,6 +207,7 @@ impl GpuiTitlebarPopupWindow {
                 )),
                 GpuiTitlebarPopupContent::Reading(_) => None,
                 GpuiTitlebarPopupContent::RemoteSites(_) => None,
+                GpuiTitlebarPopupContent::AccountUsage(_) => None,
             };
             Self {
                 main_app,
@@ -232,6 +240,29 @@ impl GpuiTitlebarPopupWindow {
         update: impl FnOnce(&mut GhostexGpuiApp, &mut Window, &mut gpui::Context<GhostexGpuiApp>),
     ) {
         let _ = self.main_app.update_in(cx, update);
+    }
+
+    pub(crate) fn dismiss_account_reset_menu(
+        &mut self,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        match &self.content {
+            GpuiTitlebarPopupContent::AccountUsage(panel) => {
+                panel.update(cx, |panel, cx| panel.dismiss_reset_menu(window, cx))
+            }
+            _ => false,
+        }
+    }
+
+    pub(crate) fn update_account_usage(
+        &mut self,
+        account: serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if let GpuiTitlebarPopupContent::AccountUsage(panel) = &self.content {
+            panel.update(cx, |panel, cx| panel.update_account(account, cx));
+        }
     }
 
     pub(crate) fn update_tips_runtime_status(
@@ -291,6 +322,10 @@ impl Render for GpuiTitlebarPopupWindow {
             .overflow_hidden()
             .key_context(TITLEBAR_DROPDOWN_KEY_CONTEXT)
             .on_action(cx.listener(|this, _: &TitlebarDropdownCancel, window, cx| {
+                if this.dismiss_account_reset_menu(window, cx) {
+                    cx.stop_propagation();
+                    return;
+                }
                 this.close_from_popup_window(window, cx);
             }))
             .on_action(cx.listener(
@@ -484,6 +519,7 @@ impl Render for GpuiTitlebarPopupWindow {
                 }),
             )
             .child(match &self.content {
+                GpuiTitlebarPopupContent::AccountUsage(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::Menu(menu) => menu.clone().into_any_element(),
                 GpuiTitlebarPopupContent::Reading(panel) => panel.clone().into_any_element(),
                 GpuiTitlebarPopupContent::RemoteSites(panel) => panel.clone().into_any_element(),
