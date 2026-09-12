@@ -94,14 +94,28 @@ function installedHookStatus(): SidebarAgentHookStatusMessage {
 }
 
 function FirstLaunchSetupModalStory({
+  allAgentsInstalled = false,
   cliInstalled = true,
   initialPage = 'hooks',
 }: {
+  allAgentsInstalled?: boolean;
   cliInstalled?: boolean;
   initialPage?: FirstLaunchSetupPage;
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(DEFAULT_ghostex_SETTINGS);
-  const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>(initialHookStatus);
+  const [agentHookStatus, setAgentHookStatus] = useState<SidebarAgentHookStatusMessage>(() =>
+    allAgentsInstalled
+      ? {
+          ...initialHookStatus,
+          agents: initialHookStatus.agents.map((agent) => ({
+            ...agent,
+            cliInstalled: true,
+            hookInstalled: true,
+            status: 'installed',
+          })),
+        }
+      : initialHookStatus
+  );
   const [agentHookStatusLoading, setAgentHookStatusLoading] = useState(false);
   const [ghostexCliStatus, setGhostexCliStatus] = useState<SidebarGhostexCliStatusMessage>(
     cliInstalled ? installedCliStatus : missingCliStatus
@@ -239,7 +253,13 @@ const meta = {
   parameters: {
     layout: 'fullscreen',
   },
-  render: (args) => <FirstLaunchSetupModalStory cliInstalled={args.cliInstalled} initialPage={args.initialPage} />,
+  render: (args) => (
+    <FirstLaunchSetupModalStory
+      allAgentsInstalled={args.allAgentsInstalled}
+      cliInstalled={args.cliInstalled}
+      initialPage={args.initialPage}
+    />
+  ),
 } satisfies Meta;
 
 export default meta;
@@ -285,6 +305,14 @@ export const Preferences: Story = {
   args: {
     cliInstalled: true,
     initialPage: 'preferences',
+  },
+};
+
+export const GetStartedAllAgents: Story = {
+  args: {
+    allAgentsInstalled: true,
+    cliInstalled: true,
+    initialPage: 'project',
   },
 };
 

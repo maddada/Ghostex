@@ -8,6 +8,13 @@ export const PANEL_DIVIDER_X: readonly number[] = [759, 796, 727, 756, STAGE_WID
 /** x of the Ghostex lockup and the footer, per panel (`h5` in the prototype). */
 export const PANEL_LOCKUP_X: readonly number[] = [46, 48, 60, 46, 44];
 export const VEIL_LEFT = Math.min(...PANEL_DIVIDER_X);
+/**
+ * CDXC:Onboarding 2026-09-12 DECISION:
+ * User: "the bg behind the right side graphics is too blue please make it less saturated colors for the bg
+ * graphic/shader". The prototype ran the DarkVeil shader at full saturation; this keeps its shape and motion
+ * but pulls most of the colour out of it. 0 is greyscale, 1 is the shader's own colour.
+ */
+export const VEIL_SATURATION = 0.32;
 
 export function box(left: number, top: number, width?: number, height?: number): CSSProperties {
   return { position: 'absolute', left, top, width, height };

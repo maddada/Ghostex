@@ -162,16 +162,16 @@
 .gx-onboarding .counter {
   position: absolute;
   top: 28px;
+  right: 46px;
   width: 120px;
   text-align: right;
   font: 400 17px/1 'IBM Plex Mono';
   letter-spacing: 0.04em;
   z-index: 20;
-  transition: left 0.6s cubic-bezier(0.3, 0.7, 0.2, 1);
 }
 .gx-onboarding .counter b {
   font-weight: 400;
-  color: #29458f;
+  color: #6a739a;
 }
 .gx-onboarding .counter span {
   color: #d3d9e4;
@@ -203,61 +203,35 @@
 }
 .gx-onboarding .dots {
   position: absolute;
+  top: 27px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   gap: 4px;
+  z-index: 40;
 }
 .gx-onboarding .dots button {
-  padding: 10px 8px;
+  padding: 9px 5px;
 }
 .gx-onboarding .dots i {
   display: block;
   width: 6px;
   height: 6px;
   border-radius: 3px;
-  background: #3b4250;
+  background: #363c49;
   transition:
     width 0.3s,
-    background 0.3s,
-    box-shadow 0.3s;
+    background 0.3s;
 }
 .gx-onboarding .dots i.past {
-  background: #5a6272;
+  background: #565e72;
 }
 .gx-onboarding .dots button:hover i {
   background: #7c8598;
 }
 .gx-onboarding .dots i.on {
   width: 22px;
-  background: #2d55d4;
-  box-shadow: 0 0 10px rgba(60, 100, 255, 0.45);
-}
-.gx-onboarding .next {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  height: 48px;
-  padding: 0 20px;
-  border-radius: 10px;
-  background: rgba(10, 12, 17, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  font-size: 17px;
-  font-weight: 500;
-  transition: border-color 0.2s;
-}
-.gx-onboarding .next:hover:not(:disabled) {
-  border-color: rgba(255, 255, 255, 0.24);
-}
-.gx-onboarding .next:hover:not(:disabled) svg {
-  transform: translateX(2px);
-}
-.gx-onboarding .next svg {
-  transition: transform 0.2s;
-}
-.gx-onboarding .next:disabled {
-  opacity: 0.38;
+  background: #8c98c2;
 }
 .gx-onboarding .scene {
   position: absolute;
@@ -477,15 +451,22 @@
 .gx-onboarding .cta:active:not(:disabled) {
   transform: translateY(1px);
 }
+/*
+ * CDXC:Onboarding 2026-09-12 DECISION:
+ * User: "make the cta button to go to next page have less bluish color and less gradient and look more modern".
+ * Flat desaturated indigo (roughly half the saturation of the prototype's #2749c2 gradient), a hairline border and
+ * one soft neutral shadow instead of the blue glow.
+ */
 .gx-onboarding .cta.filled {
-  background: linear-gradient(180deg, #2749c2, #1c3799);
-  border: 1px solid rgba(120, 155, 255, 0.55);
+  background: #3c4570;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 8px 26px rgba(30, 70, 210, 0.26),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    0 2px 10px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 .gx-onboarding .cta.filled:hover:not(:disabled) {
-  filter: brightness(1.14);
+  background: #485282;
+  border-color: rgba(255, 255, 255, 0.22);
 }
 .gx-onboarding .cta.outline {
   background: rgba(8, 10, 14, 0.55);

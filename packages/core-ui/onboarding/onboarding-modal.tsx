@@ -12,7 +12,16 @@ import { MobilePanel } from './panels/mobile';
 import { WelcomePanel } from './panels/welcome';
 import { WorkspacePanel } from './panels/workspace';
 import { GhostexLogo, Icon } from './primitives';
-import { PANEL_COUNT, PANEL_DIVIDER_X, PANEL_LOCKUP_X, STAGE_HEIGHT, STAGE_WIDTH, VEIL_LEFT, box } from './stage';
+import {
+  PANEL_COUNT,
+  PANEL_DIVIDER_X,
+  PANEL_LOCKUP_X,
+  STAGE_HEIGHT,
+  STAGE_WIDTH,
+  VEIL_LEFT,
+  VEIL_SATURATION,
+  box,
+} from './stage';
 import './onboarding.css';
 
 export type OnboardingModalComponentProps = OnboardingModalProps & {
@@ -148,6 +157,7 @@ export function OnboardingModal(props: OnboardingModalComponentProps) {
             active={isOpen}
             hueShift={25}
             noiseIntensity={0.01}
+            saturation={VEIL_SATURATION}
             scanlineIntensity={1}
             speed={0.6}
             warpAmount={0.2}
@@ -158,8 +168,29 @@ export function OnboardingModal(props: OnboardingModalComponentProps) {
           <GhostexLogo size={34} />
           <span>Ghostex</span>
         </div>
-        <div className='counter' style={{ left: footRight - 120 }}>
+        {/* The dots own the centre of the header now, so the counter sits at the stage's right edge. */}
+        <div className='counter'>
           <b>{String(panel).padStart(2, '0')}</b> <span>/ 0{PANEL_COUNT}</span>
+        </div>
+        {/*
+         * CDXC:Onboarding 2026-09-12 DECISION:
+         * User: "please remove the stepper dots at the bottom to the top center", and "please make there only 1 next
+         * button on each page, i dont like how we have a cta then a next button". The dots are the stage's own header
+         * element now, and each panel's CTA is the only way forward; the footer keeps Back alone.
+         */}
+        <div className='dots' role='tablist' aria-label='Panels'>
+          {PANELS.map((_, index) => (
+            <button
+              key={index}
+              type='button'
+              role='tab'
+              aria-label={`Panel ${index + 1}`}
+              aria-selected={index + 1 === panel}
+              onClick={() => go(index + 1)}
+            >
+              <i className={index + 1 === panel ? 'on' : index + 1 < panel ? 'past' : ''} />
+            </button>
+          ))}
         </div>
         <div className='scene' key={`${epoch}-${panel}-${showFinished}`}>
           {showFinished ? <FinishedPanel {...panelProps} /> : <Panel {...panelProps} />}
@@ -168,24 +199,6 @@ export function OnboardingModal(props: OnboardingModalComponentProps) {
           <button type='button' className='back' disabled={panel === 1} onClick={() => go(panel - 1)}>
             <Icon n='arrowL' size={18} />
             Back
-          </button>
-          <div className='dots' role='tablist' aria-label='Panels'>
-            {PANELS.map((_, index) => (
-              <button
-                key={index}
-                type='button'
-                role='tab'
-                aria-label={`Panel ${index + 1}`}
-                aria-selected={index + 1 === panel}
-                onClick={() => go(index + 1)}
-              >
-                <i className={index + 1 === panel ? 'on' : index + 1 < panel ? 'past' : ''} />
-              </button>
-            ))}
-          </div>
-          <button type='button' className='next' disabled={panel === PANEL_COUNT} onClick={() => go(panel + 1)}>
-            Next
-            <Icon n='arrowR' size={18} />
           </button>
         </div>
         {toast && (

@@ -19,6 +19,7 @@ import type {
 } from '@/packages/shared/session-grid-contract';
 import { DEFAULT_SIDEBAR_AGENTS } from '@/packages/shared/sidebar-agents';
 import { DEFAULT_ghostex_SETTINGS, normalizeghostexSettings } from '@/packages/shared/ghostex-settings';
+import { normalizeSessionCardHoverButtons } from '@/packages/shared/session-card-hover-actions';
 import { createSidebarStoryMessage, type SidebarStoryArgs } from '@/packages/core-ui/sidebar-story-fixtures';
 import { PRIORITY_AGENT_IDS, SIM_AGENT_IDS, type SimAgentId, type SimEnvState } from '../state/types';
 
@@ -199,8 +200,7 @@ const SANDBOX_STORY_ARGS: SidebarStoryArgs = {
   highlightedVisibleCount: 1,
   isFocusModeActive: false,
   renameSessionOnDoubleClick: false,
-  showCloseButtonOnSessionCards: true,
-  showSessionCloseContextMenuAction: false,
+  sessionCardHoverButtons: normalizeSessionCardHoverButtons(['close']),
   showSessionCommandCopyActions: false,
   showSessionDetailsCopyAction: false,
   theme: 'dark-blue',

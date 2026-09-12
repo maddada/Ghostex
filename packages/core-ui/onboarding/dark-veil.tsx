@@ -17,6 +17,7 @@ uniform float uWarp;
 uniform vec2 uScale;
 uniform vec2 uOffset;
 uniform float uDim;
+uniform float uSat;
 
 vec4 buf[8];
 float rand(vec2 c){return fract(sin(dot(c,vec2(12.9898,78.233)))*43758.5453);}
@@ -66,6 +67,7 @@ void mainImage(out vec4 fragColor,in vec2 fragCoord){
 void main(){
     vec4 col;mainImage(col,gl_FragCoord.xy);
     col.rgb=hueShiftRGB(col.rgb,uHueShift);
+    col.rgb=mix(vec3(dot(col.rgb,vec3(0.2126,0.7152,0.0722))),col.rgb,uSat);
     col.rgb*=uDim;
     float scanline_val=sin(gl_FragCoord.y*uScanFreq)*0.5+0.5;
     col.rgb*=1.-(scanline_val*scanline_val)*uScan;
@@ -110,6 +112,12 @@ export type DarkVeilProps = {
   scanlineFrequency?: number;
   warpAmount?: number;
   resolutionScale?: number;
+  /**
+   * CDXC:Onboarding 2026-09-12 DECISION:
+   * User: "the bg behind the right side graphics is too blue please make it less saturated colors".
+   * 0 is greyscale and 1 is the shader's own colour; the modal passes VEIL_SATURATION.
+   */
+  saturation?: number;
 };
 
 /** The "DarkVeil" shader behind the preview column (the prototype's `Zm`). */
@@ -122,6 +130,7 @@ export function DarkVeil({
   scanlineFrequency = 0,
   warpAmount = 0,
   resolutionScale = 1,
+  saturation = 1,
 }: DarkVeilProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -152,6 +161,7 @@ export function DarkVeil({
     gl.uniform2f(uniform('uScale'), VEIL_SCALE[0], VEIL_SCALE[1]);
     gl.uniform2f(uniform('uOffset'), VEIL_OFFSET[0], VEIL_OFFSET[1]);
     gl.uniform1f(uniform('uDim'), VEIL_DIM);
+    gl.uniform1f(uniform('uSat'), saturation);
     gl.uniform1f(uniform('uHueShift'), hueShift);
     gl.uniform1f(uniform('uNoise'), noiseIntensity);
     gl.uniform1f(uniform('uScan'), scanlineIntensity);
@@ -171,6 +181,16 @@ export function DarkVeil({
       cancelAnimationFrame(frame);
       releaseWebGl(gl);
     };
-  }, [active, hueShift, noiseIntensity, scanlineIntensity, speed, scanlineFrequency, warpAmount, resolutionScale]);
+  }, [
+    active,
+    hueShift,
+    noiseIntensity,
+    scanlineIntensity,
+    speed,
+    scanlineFrequency,
+    warpAmount,
+    resolutionScale,
+    saturation,
+  ]);
   return <canvas ref={canvasRef} className='darkveil-canvas' aria-hidden='true' />;
 }

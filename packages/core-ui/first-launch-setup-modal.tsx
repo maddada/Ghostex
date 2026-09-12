@@ -1823,9 +1823,9 @@ function FirstLaunchProjectPage({
           </span>
         </span>
         {backgroundAgentId ? (
-          <SegmentedControl
-            aria-label='Default agent'
-            className='first-launch-onb-setting-control'
+          <Select
+            searchable
+            searchPlaceholder='Search agents...'
             onValueChange={(value) => {
               if (defaultAgentCandidates.some((agent) => agent.agentId === value)) {
                 onSelectBackgroundAgent(value);
@@ -1833,13 +1833,18 @@ function FirstLaunchProjectPage({
             }}
             value={backgroundAgentId}
           >
-            {defaultAgentCandidates.map((agent) => (
-              <SegmentedControlItem key={agent.agentId} value={agent.agentId}>
-                <FirstLaunchAgentLogo agent={agent} />
-                {getFirstLaunchAgentDisplayName(agent)}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
+            <SelectTrigger aria-label='Default agent' className='first-launch-onb-setting-control w-56 max-w-full'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {defaultAgentCandidates.map((agent) => (
+                <SelectItem key={agent.agentId} value={agent.agentId}>
+                  <FirstLaunchAgentLogo agent={agent} />
+                  {getFirstLaunchAgentDisplayName(agent)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         ) : (
           <span className='first-launch-onb-pill' data-tone='dim'>
             Install an agent first
