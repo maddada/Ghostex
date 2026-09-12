@@ -272,6 +272,9 @@ impl GpuiTitlebarReadingPanel {
             .child(title)
             .into_any_element()
     }
+    /// CDXC:Notifications 2026-09-12 DECISION:
+    /// User: keep the Notifications panel in native GPUI and match the Tips header buttons with full-height, equal-width, unfilled actions separated by thin borders, with an icon beside each label.
+    /// User: call the jump action "Next unread" and show each action's configured hotkey in its tooltip when one exists.
     fn render_notifications_header(
         &self,
         feed: &GpuiNotificationFeedState,
@@ -304,12 +307,12 @@ impl GpuiTitlebarReadingPanel {
                 h_flex()
                     .h_full()
                     .flex_shrink_0()
-                    .items_center()
-                    .gap(px(6.0))
-                    .pr(px(10.0))
-                    .child(Self::render_notification_header_chip(
+                    .items_stretch()
+                    .child(Self::render_notification_header_action(
                         "ghostex-gpui-titlebar-notifications-jump",
-                        "Jump to unread",
+                        "Next unread",
+                        "titlebar/chevron-right.svg",
+                        Some("jumpToLatestUnreadNotification"),
                         unread_count > 0,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
                             window.prevent_default();
@@ -318,9 +321,11 @@ impl GpuiTitlebarReadingPanel {
                             this.close_popup(window, cx);
                         }),
                     ))
-                    .child(Self::render_notification_header_chip(
+                    .child(Self::render_notification_header_action(
                         "ghostex-gpui-titlebar-notifications-mark-all-read",
                         "Mark all read",
+                        NOTIFICATION_PANEL_CHECK_ICON,
+                        None,
                         unread_count > 0,
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
                             window.prevent_default();
@@ -328,9 +333,11 @@ impl GpuiTitlebarReadingPanel {
                             this.mark_all_notifications_read(cx);
                         }),
                     ))
-                    .child(Self::render_notification_header_chip(
+                    .child(Self::render_notification_header_action(
                         "ghostex-gpui-titlebar-notifications-clear-all",
                         "Clear all",
+                        "titlebar/xmark.svg",
+                        None,
                         !feed.items.is_empty(),
                         cx.listener(|this, _: &MouseDownEvent, window, cx| {
                             window.prevent_default();
@@ -342,33 +349,55 @@ impl GpuiTitlebarReadingPanel {
             .into_any_element()
     }
 
-    fn render_notification_header_chip(
+    fn render_notification_header_action(
         id: &'static str,
         label: &'static str,
+        icon: &'static str,
+        hotkey_action: Option<&'static str>,
         enabled: bool,
         listener: impl Fn(&MouseDownEvent, &mut Window, &mut gpui::App) + 'static,
     ) -> AnyElement {
         h_flex()
             .id(id)
-            .h(px(22.0))
-            .px(px(8.0))
+            .h_full()
+            .w(px(144.0))
+            .px(px(15.0))
             .flex_shrink_0()
             .items_center()
-            .rounded(px(5.0))
-            .text_size(px(11.0))
-            .font_weight(FontWeight::MEDIUM)
+            .justify_center()
+            .gap(px(6.0))
+            .border_l_1()
+            .border_color(rgb(0xffffff).opacity(0.12))
+            .whitespace_nowrap()
+            .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
+            .font_weight(FontWeight::NORMAL)
+            .tooltip(move |window, cx| {
+                let tooltip = match hotkey_action.and_then(crate::gpui_configured_hotkey_label) {
+                    Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})"),
+                    _ => label.to_string(),
+                };
+                Tooltip::new(tooltip).build(window, cx)
+            })
             .when(enabled, |this| {
-                this.bg(rgb(0xffffff).opacity(0.10))
-                    .text_color(rgb(0xffffff).opacity(0.90))
+                this.text_color(rgb(0xffffff).opacity(0.78))
                     .cursor_pointer()
-                    .hover(|this| this.bg(rgb(0xffffff).opacity(0.16)))
+                    .hover(|this| {
+                        this.bg(rgb(0xffffff).opacity(0.14))
+                            .text_color(rgb(0xffffff).opacity(0.94))
+                    })
                     .on_mouse_down(MouseButton::Left, listener)
             })
             .when(!enabled, |this| {
-                this.bg(rgb(0xffffff).opacity(0.04))
-                    .text_color(rgb(0xffffff).opacity(0.38))
+                this.text_color(rgb(0xffffff).opacity(0.38))
                     .cursor_default()
             })
+            .child(titlebar_svg_icon(
+                icon,
+                TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE,
+                rgb(0xffffff)
+                    .opacity(if enabled { 0.78 } else { 0.38 })
+                    .into(),
+            ))
             .child(label)
             .into_any_element()
     }
