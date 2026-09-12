@@ -1,0 +1,13 @@
+/*
+ * CDXC:DesignSystem 2026-09-12 WHY:
+ * The app locks body scrolling because its panes own the viewport. Storybook also renders tall previews with controls above those panes; inheriting that lock clipped the async-question composer's bottom on smaller windows.
+ * Give the preview document its own scrollbar while keeping each component's internal scrolling intact.
+ */
+body.sb-show-main {
+  overflow: auto;
+  padding: 0;
+}
+
+#storybook-root {
+  min-height: 100%;
+}
