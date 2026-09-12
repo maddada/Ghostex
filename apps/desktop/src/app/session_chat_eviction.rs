@@ -385,6 +385,9 @@ impl GhostexGpuiApp {
         {
             match action {
                 Some("composerReady") => {
+                    if let Some(state) = parked.page_states.get_mut(&session_id) {
+                        state.awaiting_activation = false;
+                    }
                     parked.composer_ready_sessions.insert(session_id);
                 }
                 Some("composerDraftState") => {

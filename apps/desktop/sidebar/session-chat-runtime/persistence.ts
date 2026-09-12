@@ -16,14 +16,26 @@ export interface StoredSnapshot {
 let database: Promise<IDBDatabase> | undefined;
 function openDatabase(): Promise<IDBDatabase> {
   if (!database) {
-    database = new Promise((resolve, reject) => {
+    const opening = new Promise<IDBDatabase>((resolve, reject) => {
       const request = indexedDB.open(DATABASE, 1);
       request.onupgradeneeded = () => {
         request.result.createObjectStore(STORE, { keyPath: 'key' }).createIndex('savedAt', 'savedAt');
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => {
+          db.close();
+          if (database === cached) database = undefined;
+        };
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
     });
+    const cached = opening.catch((error: unknown) => {
+      if (database === cached) database = undefined;
+      throw error;
+    });
+    database = cached;
   }
   return database;
 }

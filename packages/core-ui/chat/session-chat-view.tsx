@@ -1632,6 +1632,7 @@ export function SessionChatView({
                         nativeSelectionMenus ? (
                           <div className='relative flex min-h-0 flex-1 select-text' ref={transcriptRef}>
                             <SessionChatMessageList
+                              key={sessionKey}
                               sessionKey={sessionKey}
                               composerCollapsed={composerCollapsed}
                               scrollToBottomRequest={scrollToBottomRequest}
@@ -1676,6 +1677,7 @@ export function SessionChatView({
                               ref={transcriptRef}
                             >
                               <SessionChatMessageList
+                                key={sessionKey}
                                 sessionKey={sessionKey}
                                 composerCollapsed={composerCollapsed}
                                 scrollToBottomRequest={scrollToBottomRequest}

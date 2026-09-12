@@ -768,6 +768,9 @@ impl GhostexGpuiApp {
         base64_data: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        let Some(generation) = self.begin_session_chat_native_request(session_id) else {
+            return;
+        };
         let bytes = match BASE64_STANDARD.decode(base64_data.as_bytes()) {
             Ok(bytes) => bytes,
             Err(error) => {
@@ -776,10 +779,11 @@ impl GhostexGpuiApp {
                     "gpui.sessionChat.imageSaveFailed",
                     serde_json::json!({ "error": error.to_string(), "stage": "decode" }),
                 );
-                self.deliver_session_chat_image_save(
-                    session_id,
-                    &request_id,
-                    Some("The image bytes could not be read."),
+                self.dispatch_session_chat_generation_response(
+                    generation,
+                    "onSessionChatImageSaved",
+                    &serde_json::json!({ "requestId": request_id, "error": "The image bytes could not be read." }),
+                    true,
                     cx,
                 );
                 return;
@@ -792,9 +796,6 @@ impl GhostexGpuiApp {
             .filter(|name| !name.is_empty())
             .unwrap_or_else(|| "session-1.png".to_string());
         let downloads = home_dir().join("Downloads");
-        let Some(generation) = self.begin_session_chat_native_request(session_id) else {
-            return;
-        };
         cx.spawn(async move |this, cx| {
             let write_result = (|| -> Result<PathBuf, String> {
                 fs::create_dir_all(&downloads).map_err(|error| error.to_string())?;

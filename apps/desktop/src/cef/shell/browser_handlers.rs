@@ -424,7 +424,7 @@ wrap_drag_handler! {
 
 wrap_permission_handler! {
     pub(crate) struct GhostexGpuiPermissionHandler {
-        allow_first_party_loopback_requests: bool,
+        trusted_loopback_entry_identity: Option<String>,
         trusted_clipboard_origin: Option<String>,
         media_access_handler: Option<BrowserMediaAccessHandler>,
     }
@@ -475,7 +475,7 @@ wrap_permission_handler! {
 
         fn on_show_permission_prompt(
             &self,
-            _browser: Option<&mut cef::Browser>,
+            browser: Option<&mut cef::Browser>,
             _prompt_id: u64,
             requesting_origin: Option<&CefString>,
             requested_permissions: u32,
@@ -498,7 +498,14 @@ wrap_permission_handler! {
                 PermissionRequestTypes::LOCAL_NETWORK_ACCESS.get_raw() as u32
                     | PermissionRequestTypes::LOCAL_NETWORK.get_raw() as u32
                     | PermissionRequestTypes::LOOPBACK_NETWORK.get_raw() as u32;
-            if self.allow_first_party_loopback_requests
+            let requesting_origin = requesting_origin.map(CefString::to_string).unwrap_or_default();
+            let trusted_loopback_request = self.trusted_loopback_entry_identity.as_deref().is_some_and(|entry_identity| {
+                browser.as_ref().and_then(|browser| browser.main_frame()).is_some_and(|frame| {
+                    let frame_url = CefString::from(&frame.url()).to_string();
+                    first_party_loopback_request_matches(entry_identity, &frame_url, &requesting_origin)
+                })
+            });
+            if trusted_loopback_request
                 && requested_permissions & local_network_permissions != 0
                 && requested_permissions & !local_network_permissions == 0
             {
@@ -534,9 +541,6 @@ wrap_permission_handler! {
             let Some(callback) = callback else {
                 return 0;
             };
-            let requesting_origin = requesting_origin
-                .map(CefString::to_string)
-                .unwrap_or_default();
             let unsupported_permissions = requested_permissions & !clipboard_permission;
             let should_accept = unsupported_permissions == 0
                 && cef_origins_match(&requesting_origin, trusted_clipboard_origin);

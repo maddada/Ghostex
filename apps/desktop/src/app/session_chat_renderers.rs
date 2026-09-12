@@ -16,6 +16,74 @@ impl GhostexGpuiApp {
         self.reusable_chat_renderers.drain(..excess);
     }
 
+    /// CDXC:SessionChat 2026-09-12 WHY:
+    /// A reused page that fails before composerReady stays hidden and cannot pass the release probe.
+    /// Retire only that binding after ten seconds, preserve the requested chat mode and pending drafts, and rebuild once through fresh page initialization instead of cycling pooled pages indefinitely.
+    pub(crate) fn watch_session_chat_activation(
+        &self,
+        generation: u64,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        cx.spawn(async move |this, cx| {
+            cx.background_executor()
+                .timer(Duration::from_secs(10))
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.recover_session_chat_activation(generation, cx)
+            });
+        })
+        .detach();
+    }
+
+    fn recover_session_chat_activation(&mut self, generation: u64, cx: &mut gpui::Context<Self>) {
+        let active_id = self
+            .agents_chat_page_states
+            .iter()
+            .find(|(_, state)| state.generation == generation && state.awaiting_activation)
+            .map(|(id, _)| *id);
+        let surface = if let Some(id) = active_id {
+            self.record_session_chat_lifecycle(
+                id,
+                "sessionChat.nativeActivationTimedOut",
+                "freshRendererRetry",
+            );
+            let state = self.agents_chat_page_states.get_mut(&id).unwrap();
+            *state = SessionChatPageState::new();
+            state.force_fresh_renderer = true;
+            self.session_chat_composer_ready_sessions.remove(&id);
+            self.session_chat_composer_empty_reports.remove(&id);
+            self.agents_chat_surface_hidden_since.remove(&id);
+            self.agents_chat_surfaces.remove(&id)
+        } else {
+            self.parked_agents_chat_runtimes_by_project
+                .values_mut()
+                .find_map(|parked| {
+                    let id = parked
+                        .page_states
+                        .iter()
+                        .find(|(_, state)| {
+                            state.generation == generation && state.awaiting_activation
+                        })
+                        .map(|(id, _)| *id)?;
+                    let state = parked.page_states.get_mut(&id).unwrap();
+                    *state = SessionChatPageState::new();
+                    state.force_fresh_renderer = true;
+                    parked.composer_ready_sessions.remove(&id);
+                    parked.composer_empty_reports.remove(&id);
+                    parked.surface_hidden_since.remove(&id);
+                    parked.surfaces.remove(&id)
+                })
+        };
+        if let Some(surface) = surface {
+            surface.update(cx, |surface, _| surface.set_visible(false));
+            drop(surface);
+            if active_id.is_some() {
+                self.reconcile_agents_chat_surfaces(cx);
+                cx.notify();
+            }
+        }
+    }
+
     pub(crate) fn begin_session_chat_native_request(
         &mut self,
         session_id: TerminalSessionId,

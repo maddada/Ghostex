@@ -242,9 +242,11 @@ class RetainedSession {
 
   private async fetchRead(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult> {
     const endpoint = this.server.endpoint;
+    if (!endpoint.baseUrl || !endpoint.authToken) throw new Error('The chat server connection is unavailable.');
     const path = '/api/readSessionChat';
     const response = await fetch(`${endpoint.baseUrl}${path}`, {
       method: 'POST',
+      redirect: 'error',
       signal: AbortSignal.timeout(25_000),
       headers: {
         authorization: `Bearer ${endpoint.authToken}`,
@@ -441,8 +443,8 @@ export function retainSessionChatTransport(
   return entry.transport;
 }
 
-export function updateSessionChatRuntimeEndpoint(machineId: string, endpoint: SessionChatRuntimeEndpoint): void {
-  retainSessionChatRuntimeEndpoint(machineId, endpoint);
+export function updateSessionChatRuntimeEndpoint(machineId: string, endpoint?: SessionChatRuntimeEndpoint): void {
+  retainSessionChatRuntimeEndpoint(machineId, endpoint ?? { baseUrl: '', authToken: '' });
 }
 
 export function disposeSessionChatRuntime(): void {

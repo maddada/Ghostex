@@ -68,7 +68,7 @@ declare global {
 }
 
 export interface ChatBridgeNamespace {
-  gxserverBootstrap?: ChatGxserverBootstrap;
+  gxserverBootstrap?: ChatGxserverBootstrap | null;
   sessionChatActivation?: SessionChatPageActivation;
   onSessionChatActivate?: (activation: SessionChatPageActivation) => void;
   onSessionChatDeactivate?: (generation: string) => void;
@@ -81,7 +81,7 @@ export interface ChatBridgeNamespace {
   sessionChatDropPaths?: unknown;
   sessionChatPaneFocused?: boolean;
   onSessionChatPaneFocusChanged?: (focused: boolean) => void;
-  onGxserverBootstrapChanged?: (bootstrap: ChatGxserverBootstrap) => void;
+  onGxserverBootstrapChanged?: (bootstrap: ChatGxserverBootstrap | null | undefined) => void;
   onSessionChatFocusComposerRequested?: () => void;
   onSessionChatEvictionProbeRequested?: (nonce: string) => void;
   onSessionChatHandoffToTerminalRequested?: () => void;
@@ -95,7 +95,7 @@ export interface ChatBridgeNamespace {
 export interface SessionChatPageActivation {
   url: string;
   generation: string;
-  bootstrap: ChatGxserverBootstrap;
+  bootstrap?: ChatGxserverBootstrap | null;
 }
 export function chatBridgeNamespace(): ChatBridgeNamespace {
   const target = window as unknown as { ghostexGpui?: ChatBridgeNamespace };
@@ -104,7 +104,7 @@ export function chatBridgeNamespace(): ChatBridgeNamespace {
 }
 
 export function validatedBootstrap(
-  candidate: ChatGxserverBootstrap | undefined
+  candidate: ChatGxserverBootstrap | null | undefined
 ): { authToken: string; baseUrl: string } | undefined {
   if (!candidate) {
     return undefined;
@@ -117,7 +117,23 @@ export function validatedBootstrap(
   if (!baseUrl || !authToken) {
     return undefined;
   }
-  return { authToken, baseUrl };
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    return undefined;
+  }
+  const loopback = url.hostname === '127.0.0.1' || url.hostname === '[::1]' || url.hostname === 'localhost';
+  if (
+    (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== '/'
+  )
+    return undefined;
+  return { authToken, baseUrl: url.origin };
 }
 
 async function rpc<TResult>(
@@ -126,7 +142,9 @@ async function rpc<TResult>(
   params: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<TResult> {
+  if (!bootstrap.baseUrl || !bootstrap.authToken) throw new Error('The chat server connection is unavailable.');
   const response = await fetch(`${bootstrap.baseUrl}${path}`, {
+    redirect: 'error',
     ...(signal ? { signal } : {}),
     body: JSON.stringify({
       params,

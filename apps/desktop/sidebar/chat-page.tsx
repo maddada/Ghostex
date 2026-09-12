@@ -170,7 +170,17 @@ export function createGpuiSessionChatPage({
     onChunk: (chunk: GhostexExecChunk) => void;
     reject: (error: GhostexBridgeError) => void;
     resolve: (result: unknown) => void;
+    timer: ReturnType<typeof setTimeout>;
+    refreshDeadline: () => void;
   }
+
+  const NATIVE_BRIDGE_TIMEOUT_MS = 180_000;
+  /**
+   * CDXC:Extensions 2026-09-12 WHY:
+   * Native exec and cli have no execution deadline or cancellation contract, so their bridge waiters allow a day of silence and streamed output renews that deadline.
+   * Expiry releases the unanswered bridge call; it does not cancel or report completion of the native command.
+   */
+  const NATIVE_COMMAND_IDLE_TIMEOUT_MS = 24 * 60 * 60 * 1_000;
 
   function nativeExtensionBridgeError(
     code: GhostexBridgeError['code'],
@@ -270,10 +280,12 @@ export function createGpuiSessionChatPage({
           (message.chunk.stream === 'stdout' || message.chunk.stream === 'stderr') &&
           typeof message.chunk.text === 'string'
         ) {
+          pending.refreshDeadline();
           pending.onChunk(message.chunk);
           return;
         }
         pendingNativeBridgeCallsRef.current.delete(message.requestId);
+        clearTimeout(pending.timer);
         if (message.ok === true) {
           pending.resolve(message.result);
           return;
@@ -309,6 +321,7 @@ export function createGpuiSessionChatPage({
           namespace.onSessionChatExtensionContextChanged = previousContextHandler;
         }
         for (const pending of pendingCalls.values()) {
+          clearTimeout(pending.timer);
           pending.reject(nativeExtensionBridgeError('operationFailed', 'The chat-bar extension host closed.'));
         }
         pendingCalls.clear();
@@ -548,7 +561,30 @@ export function createGpuiSessionChatPage({
         }
         const nativeRequestId = `chat-bar-${pageGeneration}-${Date.now().toString(36)}-${(++nativeBridgeSequenceRef.current).toString(36)}`;
         return new Promise((resolve, reject) => {
-          pendingNativeBridgeCallsRef.current.set(nativeRequestId, { onChunk, reject, resolve });
+          const command = request.method === 'exec' || request.method === 'cli';
+          const timeoutMs = command ? NATIVE_COMMAND_IDLE_TIMEOUT_MS : NATIVE_BRIDGE_TIMEOUT_MS;
+          const expire = (): void => {
+            if (!pendingNativeBridgeCallsRef.current.delete(nativeRequestId)) return;
+            reject(
+              nativeExtensionBridgeError(
+                'operationFailed',
+                command
+                  ? 'The native command stopped responding. The command may still be running.'
+                  : 'The native extension call timed out.'
+              )
+            );
+          };
+          const pending: PendingNativeExtensionBridgeCall = {
+            onChunk,
+            reject,
+            resolve,
+            timer: setTimeout(expire, timeoutMs),
+            refreshDeadline: () => {
+              clearTimeout(pending.timer);
+              pending.timer = setTimeout(expire, timeoutMs);
+            },
+          };
+          pendingNativeBridgeCallsRef.current.set(nativeRequestId, pending);
           try {
             const accepted = handler.postMessage(
               JSON.stringify({
@@ -564,10 +600,12 @@ export function createGpuiSessionChatPage({
             );
             if (accepted === false) {
               pendingNativeBridgeCallsRef.current.delete(nativeRequestId);
+              clearTimeout(pending.timer);
               reject(nativeExtensionBridgeError('operationFailed', 'Ghostex rejected the extension call.'));
             }
           } catch {
             pendingNativeBridgeCallsRef.current.delete(nativeRequestId);
+            clearTimeout(pending.timer);
             reject(nativeExtensionBridgeError('operationFailed', 'Ghostex could not send the extension call.'));
           }
         });

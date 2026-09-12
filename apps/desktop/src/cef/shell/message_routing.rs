@@ -360,7 +360,7 @@ pub struct SidebarGxserverBootstrap {
 pub(crate) struct SessionChatActivation {
     pub(crate) url: String,
     pub(crate) generation: String,
-    pub(crate) bootstrap: SidebarGxserverBootstrap,
+    pub(crate) bootstrap: Option<SidebarGxserverBootstrap>,
 }
 
 pub enum BrowserPageMetadataEvent {
@@ -704,8 +704,13 @@ pub(crate) fn send_session_chat_activation_process_message(
     frame: &mut Frame,
     url: &str,
     generation: &str,
-    bootstrap: SidebarGxserverBootstrap,
+    bootstrap: Option<SidebarGxserverBootstrap>,
 ) {
+    if !is_gpui_first_party_cef_entry_url(url, "chat.html")
+        || !trusted_gxserver_frame_matches(frame, &sidebar_page_entry_identity(url))
+    {
+        return;
+    }
     let Some(mut message) =
         cef::process_message_create(Some(&CefString::from(SESSION_CHAT_ACTIVATE_MESSAGE_NAME)))
     else {
@@ -716,13 +721,13 @@ pub(crate) fn send_session_chat_activation_process_message(
     };
     let activation = serde_json::json!({
         "url": url, "generation": generation,
-        "bootstrap": {
+        "bootstrap": bootstrap.map(|bootstrap| serde_json::json!({
             "baseUrl": bootstrap.base_url, "authToken": bootstrap.auth_token,
             "protocolVersion": bootstrap.protocol_version, "clientId": bootstrap.client_id,
             "initialActiveProjectId": bootstrap.initial_active_project_id,
             "focusedSessionId": bootstrap.focused_session_id,
             "visibleSessionIds": bootstrap.visible_session_ids,
-        },
+        })),
     });
     arguments.set_size(1);
     arguments.set_string(0, Some(&CefString::from(activation.to_string().as_str())));
@@ -731,8 +736,12 @@ pub(crate) fn send_session_chat_activation_process_message(
 
 pub(crate) fn send_session_chat_gxserver_bootstrap_process_message(
     frame: &mut Frame,
+    entry_identity: &str,
     gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
 ) {
+    if !trusted_gxserver_frame_matches(frame, entry_identity) {
+        return;
+    }
     let mut message = match cef::process_message_create(Some(&CefString::from(
         SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME,
     ))) {

@@ -52,6 +52,8 @@ pub struct CefBrowser {
     pub(crate) uses_system_page_appearance: bool,
     pub(crate) extension_bridge_installed: bool,
     session_chat_activation: StdRc<RefCell<Option<SessionChatActivation>>>,
+    session_chat_bootstrap: StdRc<RefCell<Option<SidebarGxserverBootstrap>>>,
+    trusted_gxserver_entry_identity: Option<String>,
 }
 
 impl CefBrowser {
@@ -144,6 +146,9 @@ impl CefBrowser {
             browser_settings.javascript_dom_paste = State::ENABLED;
         }
         let requested_url = url.to_string();
+        let trusted_gxserver_entry_identity = (allow_first_party_loopback_requests
+            && app_modal_host_bridge_surface_for_frame_url(&requested_url).is_some())
+        .then(|| sidebar_page_entry_identity(&requested_url));
         if let Some(expected_surface) = app_modal_host_bridge_surface
             && app_modal_host_bridge_surface_for_frame_url(&requested_url) != Some(expected_surface)
         {
@@ -193,7 +198,7 @@ impl CefBrowser {
             || media_access_handler.is_some())
         .then(|| {
             GhostexGpuiPermissionHandler::new(
-                allow_first_party_loopback_requests,
+                trusted_gxserver_entry_identity.clone(),
                 trusted_clipboard_origin.clone(),
                 media_access_handler,
             )
@@ -236,6 +241,7 @@ impl CefBrowser {
             surface_keyboard_handler(keyboard_zoom_enabled, page_metadata_handler.clone());
         let browser_lifecycle_handler = page_metadata_handler.clone();
         let session_chat_activation = StdRc::new(RefCell::new(None));
+        let session_chat_bootstrap = StdRc::new(RefCell::new(sidebar_gxserver_bootstrap.clone()));
         let load_handler = if let Some(surface) = extension_bridge_surface
             .clone()
             .filter(|_| extension_bridge_installed)
@@ -264,8 +270,9 @@ impl CefBrowser {
             no bootstrap at all.
             */
             Some(GhostexGpuiSessionChatGxserverBootstrapLoadHandler::new(
-                sidebar_gxserver_bootstrap,
+                session_chat_bootstrap.clone(),
                 session_chat_activation.clone(),
+                trusted_gxserver_entry_identity.clone(),
             ))
         } else if project_workarea_bridge_event_handler.is_some() {
             Some(GhostexGpuiProjectWorkareaBridgeLoadHandler::new(
@@ -373,6 +380,8 @@ impl CefBrowser {
             uses_system_page_appearance,
             extension_bridge_installed,
             session_chat_activation,
+            session_chat_bootstrap,
+            trusted_gxserver_entry_identity,
         })
     }
 
@@ -701,16 +710,23 @@ impl CefBrowser {
         generation: &str,
         bootstrap: SidebarGxserverBootstrap,
     ) {
+        if !is_gpui_first_party_cef_entry_url(url, "chat.html")
+            || self.trusted_gxserver_entry_identity.as_deref()
+                != Some(sidebar_page_entry_identity(url).as_str())
+        {
+            return;
+        }
+        *self.session_chat_bootstrap.borrow_mut() = Some(bootstrap.clone());
         *self.session_chat_activation.borrow_mut() = Some(SessionChatActivation {
             url: url.to_string(),
             generation: generation.to_string(),
-            bootstrap: bootstrap.clone(),
+            bootstrap: Some(bootstrap.clone()),
         });
         let browser = self.browser.borrow();
         let Some(mut frame) = browser.main_frame() else {
             return;
         };
-        send_session_chat_activation_process_message(&mut frame, url, generation, bootstrap);
+        send_session_chat_activation_process_message(&mut frame, url, generation, Some(bootstrap));
     }
 
     pub fn refresh_session_chat_gxserver_bootstrap(
@@ -724,16 +740,24 @@ impl CefBrowser {
         installed sidebar bridge. Same scope rules as the sidebar refresh:
         app-owned snapshot only, main frame only, never logged or persisted.
         */
-        if let Some(bootstrap) = gxserver_bootstrap.as_ref()
-            && let Some(activation) = self.session_chat_activation.borrow_mut().as_mut()
-        {
-            activation.bootstrap = bootstrap.clone();
+        // CDXC:SessionChat 2026-09-12 WHY:
+        // Revocation must replace the load-replay snapshot too; keeping its old token made a later reload silently reauthenticate.
+        *self.session_chat_bootstrap.borrow_mut() = gxserver_bootstrap.clone();
+        if let Some(activation) = self.session_chat_activation.borrow_mut().as_mut() {
+            activation.bootstrap = gxserver_bootstrap.clone();
         }
+        let Some(entry_identity) = self.trusted_gxserver_entry_identity.as_deref() else {
+            return;
+        };
         let browser = self.browser.borrow();
         let Some(mut frame) = browser.main_frame() else {
             return;
         };
-        send_session_chat_gxserver_bootstrap_process_message(&mut frame, gxserver_bootstrap);
+        send_session_chat_gxserver_bootstrap_process_message(
+            &mut frame,
+            entry_identity,
+            gxserver_bootstrap,
+        );
     }
 
     pub fn can_go_back(&self) -> bool {

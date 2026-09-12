@@ -415,6 +415,33 @@ pub(crate) fn sidebar_page_entry_identity(url: &str) -> String {
     get_url_without_query_or_fragment(url).to_string()
 }
 
+/// CDXC:SessionChat 2026-09-12 WHY:
+/// A renderer may navigate between an activation request and delivery; a first-party browser allocation alone does not make its current document trusted.
+/// Pin credential delivery to its original bundled entry, allowing only query and fragment changes and deferring about:blank until the real entry loads.
+pub(crate) fn trusted_gxserver_frame_matches(frame: &Frame, entry_identity: &str) -> bool {
+    let frame_url = CefString::from(&frame.url()).to_string();
+    frame.is_main() != 0
+        && app_modal_host_bridge_surface_for_frame_url(&frame_url).is_some()
+        && sidebar_page_entry_identity(&frame_url) == entry_identity
+}
+
+pub(crate) fn first_party_loopback_request_matches(
+    entry_identity: &str,
+    frame_url: &str,
+    requesting_origin: &str,
+) -> bool {
+    if app_modal_host_bridge_surface_for_frame_url(frame_url).is_none()
+        || sidebar_page_entry_identity(frame_url) != entry_identity
+    {
+        return false;
+    }
+    // Chromium serializes a hostless file permission origin as file:///.
+    // Pair that exact origin with the pinned main document, since ordinary
+    // HTTP origin normalization deliberately rejects hostless file URLs.
+    (entry_identity.starts_with("file:///") && matches!(requesting_origin, "file://" | "file:///"))
+        || sidebar_page_entry_identity(requesting_origin) == entry_identity
+}
+
 wrap_request_handler! {
     pub(crate) struct GhostexGpuiSidebarRendererRequestHandler {
         entry_identity: String,

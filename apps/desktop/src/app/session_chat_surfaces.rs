@@ -875,6 +875,10 @@ impl GhostexGpuiApp {
         // retries through the normal visibility reconciliation path.
         let bootstrap = self.agents_session_chat_gxserver_bootstrap(session_id)?;
         let url = self.agents_session_chat_runtime_url(session_id)?;
+        let force_fresh_renderer = self
+            .agents_chat_page_states
+            .get(&session_id)
+            .is_some_and(|state| state.force_fresh_renderer);
         let mut page_state = SessionChatPageState::new();
         page_state.account_key = self.workspace_terminal_key_for_shell_session(session_id);
         let url = append_url_query_params(
@@ -891,11 +895,12 @@ impl GhostexGpuiApp {
                     .rposition(|(_, _, previous_key, _)| previous_key.as_ref() == Some(key))
             })
             .or_else(|| self.reusable_chat_renderers.len().checked_sub(1));
-        if let Some(index) = preferred_renderer {
+        if !force_fresh_renderer && let Some(index) = preferred_renderer {
             let (surface, renderer_id, _, _) = self.reusable_chat_renderers.remove(index);
             page_state.renderer_id = renderer_id;
             page_state.awaiting_activation = true;
-            let generation = page_state.generation.to_string();
+            let activation_generation = page_state.generation;
+            let generation = activation_generation.to_string();
             self.agents_chat_page_states.insert(session_id, page_state);
             self.agents_chat_surfaces
                 .insert(session_id, surface.clone());
@@ -903,6 +908,7 @@ impl GhostexGpuiApp {
                 surface.set_session_chat_pane_focused(false, true);
                 surface.activate_session_chat(&url, &generation, bootstrap);
             });
+            self.watch_session_chat_activation(activation_generation, cx);
             self.record_session_chat_lifecycle(
                 session_id,
                 "sessionChat.nativePageReused",

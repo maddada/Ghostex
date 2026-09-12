@@ -371,6 +371,23 @@ pub(super) fn install_session_chat_activation_v8_bridge(
     let Some(mut activation) = parse_sidebar_json_v8_object(context, activation_json) else {
         return;
     };
+    let Some(frame) = context.frame() else {
+        return;
+    };
+    let frame_url = CefString::from(&frame.url()).to_string();
+    let activation_url = activation
+        .value_bykey(Some(&CefString::from("url")))
+        .filter(|value| value.is_string() != 0)
+        .map(|value| CefString::from(&value.string_value()).to_string());
+    if frame.is_main() == 0
+        || !is_gpui_first_party_cef_entry_url(&frame_url, "chat.html")
+        || activation_url
+            .as_deref()
+            .and_then(|url| url.split(['?', '#']).next())
+            != frame_url.split(['?', '#']).next()
+    {
+        return;
+    }
     let Some(mut bootstrap) = activation.value_bykey(Some(&CefString::from("bootstrap"))) else {
         return;
     };

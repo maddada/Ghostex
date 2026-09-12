@@ -394,6 +394,11 @@ wrap_render_process_handler! {
             if frame.is_main() == 0 {
                 return 1;
             }
+            if (is_session_chat_activation_message || is_session_chat_gxserver_bootstrap_message)
+                && app_modal_host_bridge_surface_for_frame_url(&CefString::from(&frame.url()).to_string()).is_none()
+            {
+                return 1;
+            }
             let Some(mut context) = frame.v8_context() else {
                 return 1;
             };
@@ -671,7 +676,12 @@ fn is_gpui_first_party_cef_entry_url(url: &str, entry_file_name: &str) -> bool {
     };
     base.starts_with("file://")
         && base.ends_with(&format!("/{entry_file_name}"))
-        && (base.contains("/Contents/Resources/sidebar/") || base.contains("/dist/sidebar/"))
+        && (base.contains("/dist/sidebar/")
+            || if cfg!(target_os = "macos") {
+                base.contains("/Contents/Resources/sidebar/")
+            } else {
+                base.contains("/resources/sidebar/")
+            })
 }
 
 fn app_modal_host_bridge_surface_for_frame_url(url: &str) -> Option<AppModalHostBridgeSurface> {

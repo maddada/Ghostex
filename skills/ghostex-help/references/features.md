@@ -199,8 +199,9 @@ Manual Generate Name and `/rename` in chat remain available for Claude and Codex
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.
-- Previous Sessions (More Options or Cmd+P) lists every past conversation from
-  every agent CLI with resume and fork. The History icon immediately to the
+- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions.
+  Previous Sessions in More Options lists past conversations from every agent
+  CLI with resume and fork. The History icon immediately to the
   right of Add Worktree on a project header opens Quick Access > Sessions with
   that project selected and Closed active, ready to search sessions you closed.
 - Search by Prompt (More Options, or `gx f` in a terminal) fuzzy-searches every

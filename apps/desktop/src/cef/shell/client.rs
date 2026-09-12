@@ -367,8 +367,9 @@ wrap_load_handler! {
 
 wrap_load_handler! {
     pub(crate) struct GhostexGpuiSessionChatGxserverBootstrapLoadHandler {
-        gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
+        gxserver_bootstrap: StdRc<RefCell<Option<SidebarGxserverBootstrap>>>,
         activation: StdRc<RefCell<Option<SessionChatActivation>>>,
+        entry_identity: Option<String>,
     }
 
     impl LoadHandler {
@@ -381,7 +382,8 @@ wrap_load_handler! {
             let Some(frame) = frame else {
                 return;
             };
-            if frame.is_main() == 0 {
+            let Some(entry_identity) = self.entry_identity.as_deref() else { return; };
+            if !trusted_gxserver_frame_matches(frame, entry_identity) {
                 return;
             }
 
@@ -404,7 +406,8 @@ wrap_load_handler! {
             }
             send_session_chat_gxserver_bootstrap_process_message(
                 frame,
-                self.gxserver_bootstrap.clone(),
+                entry_identity,
+                self.gxserver_bootstrap.borrow().clone(),
             );
         }
     }
@@ -525,6 +528,11 @@ wrap_render_process_handler! {
                 return 1;
             };
             if frame.is_main() == 0 {
+                return 1;
+            }
+            if (is_session_chat_activation_message || is_session_chat_gxserver_bootstrap_message)
+                && app_modal_host_bridge_surface_for_frame_url(&CefString::from(&frame.url()).to_string()).is_none()
+            {
                 return 1;
             }
             let Some(mut context) = frame.v8_context() else {
