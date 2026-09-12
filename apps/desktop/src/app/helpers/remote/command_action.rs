@@ -47,21 +47,33 @@ pub(crate) fn gpui_command_action_execution_text_for_current_backend(
     gpui_command_action_execution_text(command, run_id)
 }
 
+/// CDXC:CommandPane 2026-09-12 WHY:
+/// Reattaching an unmounted Action tab delivers startup text as terminal input to its surviving shell.
+/// Stage the wrapper just as mounted reruns do, or zsh echoes and edits the multiline status script as interactive input.
 pub(crate) fn gpui_command_action_startup_text(
     execution_text: &str,
     status_file_path: &Path,
-) -> String {
-    #[cfg(target_os = "windows")]
-    if matches!(
-        windows_terminal_backend::resolve_current(),
-        Ok(windows_terminal_backend::ResolvedWindowsTerminalBackend::PowerShell)
-    ) {
-        return format!("{execution_text}\r");
-    }
-    format!(
-        "{}\r",
-        gpui_command_action_mounted_terminal_script_text(execution_text, status_file_path)
+) -> Option<String> {
+    #[cfg(unix)]
+    return gpui_command_action_staged_mounted_script_source_command(
+        execution_text,
+        status_file_path,
     )
+    .map(|command| format!("{command}\r"));
+
+    #[cfg(target_os = "windows")]
+    {
+        if matches!(
+            windows_terminal_backend::resolve_current(),
+            Ok(windows_terminal_backend::ResolvedWindowsTerminalBackend::PowerShell)
+        ) {
+            return Some(format!("{execution_text}\r"));
+        }
+        Some(format!(
+            "{}\r",
+            gpui_command_action_mounted_terminal_script_text(execution_text, status_file_path)
+        ))
+    }
 }
 
 #[cfg(target_os = "windows")]
@@ -255,7 +267,7 @@ pub(crate) fn gpui_command_action_mounted_terminal_script_text(
 }
 
 // CDXC:PlatformSupport 2026-07-05: staged mounted-Action scripts are
-// plain POSIX (temp script + 0600/0700 permissions + `. path; rm path`), and
+// plain POSIX (temp script + 0600/0700 permissions + `. path`), and
 // the mounted GPUI-engine terminal branch that consumes them is
 // cross-platform, so the staging helpers are unix-wide rather than
 // macOS-only. main.rs already imports PermissionsExt unconditionally.
@@ -266,14 +278,19 @@ pub(crate) fn gpui_command_action_staged_mounted_script_source_command(
 ) -> Option<String> {
     /*
     CDXC:CommandPane 2026-06-27-07:54:
-    Native `writeTerminalScript` parity for mounted Action reuse stages the full wrapper in a temp script and submits `. script; rm script` through the current interactive shell. The staged command carries only the temp script path, not command text, run ids, status-file paths, cwd/env values, terminal output, or persisted shell metadata.
+    Native `writeTerminalScript` parity for mounted Action reuse stages the full wrapper in a temp script and submits `. script` through the current interactive shell. The staged command carries only the temp script path, not command text, run ids, status-file paths, cwd/env values, terminal output, or persisted shell metadata.
     */
     let script_path = gpui_command_action_staged_mounted_script_path();
     let directory = script_path.parent()?;
     fs::create_dir_all(directory).ok()?;
     fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).ok()?;
-    let script_text =
-        gpui_command_action_mounted_terminal_script_text(execution_text, status_file_path);
+    // CDXC:CommandPane 2026-09-12 WHY:
+    // The wrapper ends with exec, so cleanup after the source command is unreachable. Unlink the opened script before running the Action, including Actions that rebuild and close Ghostex.
+    let script_text = format!(
+        "/bin/rm -f -- {}\n{}",
+        gpui_shell_single_quote(script_path.to_string_lossy().as_ref()),
+        gpui_command_action_mounted_terminal_script_text(execution_text, status_file_path)
+    );
     let mut file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -318,7 +335,7 @@ pub(crate) fn gpui_command_action_staged_mounted_script_path() -> PathBuf {
 
 pub(crate) fn gpui_command_action_mounted_script_source_command(script_path: &Path) -> String {
     let path = gpui_shell_single_quote(script_path.to_string_lossy().as_ref());
-    format!(" . {path}; /bin/rm -f -- {path}")
+    format!(" . {path}")
 }
 
 pub(crate) fn gpui_command_action_should_insert_launch_payload(

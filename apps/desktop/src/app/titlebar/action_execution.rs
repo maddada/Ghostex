@@ -257,6 +257,31 @@ impl GhostexGpuiApp {
         };
         let run_id = create_gpui_command_action_run_id();
         let status_file_path = gpui_command_action_status_file_path(session_id);
+        let execution_text = gpui_command_action_execution_text_for_current_backend(
+            &command,
+            &run_id,
+            &status_file_path,
+        );
+        let mounted_reuse_surface_available = matches!(
+            selection.kind,
+            CommandPaneActionSessionSelectionKind::Reused
+        ) && self
+            .gpui_command_action_mounted_reuse_surface_available(slot_id);
+        let startup_text = if mounted_reuse_surface_available {
+            None
+        } else {
+            let Some(text) = gpui_command_action_startup_text(&execution_text, &status_file_path)
+            else {
+                self.dispatch_gpui_app_modal_toast(
+                    "warning",
+                    "Action unavailable",
+                    "Ghostex could not prepare the Action script.",
+                    cx,
+                );
+                return;
+            };
+            Some(text)
+        };
         let delayed_send_cleared = self.clear_gpui_command_delayed_send_timer(session_id);
         let action_started = self.command_pane.mark_action_session_run_started(
             session_id,
@@ -278,16 +303,6 @@ impl GhostexGpuiApp {
             cx,
         );
         self.refresh_sidebar_command_pane_sessions_if_changed(cx);
-        let execution_text = gpui_command_action_execution_text_for_current_backend(
-            &command,
-            &run_id,
-            &status_file_path,
-        );
-        let mounted_reuse_surface_available = matches!(
-            selection.kind,
-            CommandPaneActionSessionSelectionKind::Reused
-        ) && self
-            .gpui_command_action_mounted_reuse_surface_available(slot_id);
         let wrote_to_mounted_reuse = mounted_reuse_surface_available
             && self.send_gpui_command_action_script_to_mounted_terminal(
                 slot_id,
@@ -305,11 +320,10 @@ impl GhostexGpuiApp {
                 .session(session_id)
                 .map(|session| session.title.clone())
                 .unwrap_or_else(|| COMMAND_PANE_DEFAULT_SESSION_TITLE.to_string());
-            let startup_text = gpui_command_action_startup_text(&execution_text, &status_file_path);
             self.start_command_terminal_gxserver_attach_for_slot(
                 slot_id,
                 action_title.clone(),
-                Some(startup_text),
+                startup_text,
                 Some(command_id.clone()),
                 Some(action_title),
                 cx,
