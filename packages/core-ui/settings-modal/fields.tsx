@@ -2158,6 +2158,26 @@ export function SidebarTagListSettingsRow({
           </span>
         </span>
       </div>
+      {/* CDXC:Sessions 2026-09-12 DECISION: User: place the custom tag trash button leftmost, before the enabled switch and visibility button. */}
+      {onDelete ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                aria-label={`Delete ${label}`}
+                className='shrink-0'
+                onClick={onDelete}
+                size='icon'
+                type='button'
+                variant='ghost'
+              >
+                <IconTrash aria-hidden='true' size={16} stroke={1.9} />
+              </Button>
+            }
+          />
+          <TooltipContent sideOffset={6}>Delete tag</TooltipContent>
+        </Tooltip>
+      ) : null}
       <Switch
         aria-label={`${item.enabled ? 'Disable' : 'Enable'} ${label}`}
         checked={item.enabled}
@@ -2184,25 +2204,6 @@ export function SidebarTagListSettingsRow({
         />
         <TooltipContent sideOffset={6}>{item.visible ? 'Hide' : 'Show'}</TooltipContent>
       </Tooltip>
-      {onDelete ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                aria-label={`Delete ${label}`}
-                className='shrink-0'
-                onClick={onDelete}
-                size='icon'
-                type='button'
-                variant='ghost'
-              >
-                <IconTrash aria-hidden='true' size={16} stroke={1.9} />
-              </Button>
-            }
-          />
-          <TooltipContent sideOffset={6}>Delete tag</TooltipContent>
-        </Tooltip>
-      ) : null}
     </div>
   );
 }
