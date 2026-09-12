@@ -192,6 +192,19 @@
 .gx-account-error {
   color: var(--foreground);
 }
+/* CDXC:AgentProviders 2026-09-12 DECISION: Give the recovery message and Stop automatic recovery button clear spacing, and keep that button rounded. */
+.gx-account-recovery {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.gx-account-recovery > p {
+  margin: 0;
+}
+.gx-account-recovery > [data-slot='button'] {
+  border-radius: 8px;
+}
 .gx-account-preview {
   padding: 12px;
   border: 1px solid var(--border);

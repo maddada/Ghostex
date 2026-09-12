@@ -203,6 +203,7 @@ pub(crate) fn dispatch_agent_http_blocking(
                         &state.paths.app_config_dir,
                         project_id,
                         session_id,
+                        &now_iso(),
                     ) {
                         return domain_error_response(endpoint_path, request_id, error);
                     }

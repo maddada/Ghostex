@@ -125,6 +125,16 @@ fn save(
         .as_object()
         .cloned()
         .unwrap_or_default();
+    if recovery["status"] == "needsAttention"
+        && runtime.get("accountSwitch").is_some_and(|progress| {
+            matches!(
+                progress["phase"].as_str(),
+                Some("switching" | "resuming" | "continuing")
+            )
+        })
+    {
+        super::switch_progress::set_phase(&mut runtime, "failed", recovery["reason"].as_str());
+    }
     runtime.insert("accountRecovery".into(), recovery);
     endpoint::update_session(repo, session, runtime)?;
     endpoint::publish(state, repo, session)
@@ -249,6 +259,18 @@ fn restore_session(
         recovery["reason"] = json!("Ghostex restarted during a recovery attempt. Check the conversation before continuing.");
         recovery["updatedAt"] = json!(Utc::now().to_rfc3339());
         save(state, repo, &session, recovery)?;
+    } else if matches!(
+        session
+            .pointer("/runtimeSettings/accountSwitch/phase")
+            .and_then(Value::as_str),
+        Some("switching" | "resuming" | "continuing")
+    ) {
+        super::switch_progress::fail(
+            state,
+            repo,
+            &session,
+            "Ghostex restarted during the account switch. Retry when you are ready.",
+        );
     }
     Ok(())
 }
@@ -823,6 +845,7 @@ pub(crate) fn user_action(
         return Ok(());
     }
     runtime.remove("accountRecovery");
+    super::switch_progress::set_phase(&mut runtime, "cancelled", None);
     runtime.insert("accountRecoverySuppressed".into(), json!(stop));
     endpoint::update_session(&repo, &row, runtime)?;
     endpoint::publish(state, &repo, &row)

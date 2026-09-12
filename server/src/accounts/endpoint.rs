@@ -387,6 +387,7 @@ pub(crate) fn dispatch(
             } else if operation == "stopRecovery" {
                 runtime.remove("accountRecovery");
                 runtime.insert("accountRecoverySuppressed".into(), json!(true));
+                super::switch_progress::set_phase(&mut runtime, "cancelled", None);
                 update_session(&repository, &session, runtime)?;
                 crate::session_chat_send::cancel_session_chat_sends(
                     required(params, "projectId")?,
@@ -469,6 +470,7 @@ pub(crate) fn publish(
     repository: &DomainRepository<'_>,
     session: &Value,
 ) -> Result<(), DomainStateError> {
+    super::switch_progress::publish(state, session);
     crate::server::schedule_presentation_session_delta(
         state,
         repository.db,
@@ -504,7 +506,15 @@ pub(crate) fn select(
             "Wait for the current account switch to finish before choosing another account.",
         ));
     }
-    if current == id {
+    let retrying_failed_switch = session
+        .pointer("/runtimeSettings/accountSwitch/phase")
+        .and_then(Value::as_str)
+        == Some("failed")
+        && session
+            .pointer("/runtimeSettings/accountSwitch/toAccountId")
+            .and_then(Value::as_str)
+            == id;
+    if current == id && !retrying_failed_switch {
         return Ok(());
     }
     let mut runtime = session["runtimeSettings"]
@@ -598,6 +608,15 @@ pub(crate) fn select(
     if restarting_in_place {
         super::restart::retain_current_account(&mut runtime, session);
     }
+    runtime.insert("accountSwitch".into(), json!({
+        "id": uuid::Uuid::new_v4().to_string(),
+        "provider": provider,
+        "source": if source == SwitchSource::Manual { "manual" } else { "automatic" },
+        "phase": "switching",
+        "fromAccountId": super::session_identity::display_account_id(registry, provider, session, &state.paths.home_dir),
+        "toAccountId": id,
+        "updatedAt": chrono::Utc::now().to_rfc3339(),
+    }));
     let updated = repository.update_session(
         json!({
             "projectId": session["projectId"],
@@ -608,6 +627,7 @@ pub(crate) fn select(
         .as_object()
         .unwrap(),
     )?;
+    super::switch_progress::publish(state, &updated);
     if !restarting_in_place {
         crate::session_chat_notice::suppress_account_usage_notice(
             session["projectId"].as_str().unwrap_or_default(),
@@ -615,12 +635,18 @@ pub(crate) fn select(
             switched_at,
         );
     }
-    if let Some(command) = reuse_command {
-        super::drafts::switch_in_live_provider(repository, &updated, &command)?;
+    let restart_result = if let Some(command) = reuse_command {
+        super::drafts::switch_in_live_provider(repository, &updated, &command)
     } else if let Some(plan) = restart {
-        super::restart::start(state, repository, &updated, plan, source)?;
+        super::restart::start(state, repository, &updated, plan, source)
     } else if was_running {
-        cycle(state, repository, &updated, "/api/wakeSession")?;
+        cycle(state, repository, &updated, "/api/wakeSession")
+    } else {
+        Ok(())
+    };
+    if let Err(error) = restart_result {
+        super::switch_progress::fail(state, repository, &updated, &error.message);
+        return Err(error);
     }
     crate::session_chat_options::forget_session_chat_options(
         state,
@@ -728,7 +754,7 @@ fn state_value(
         if let Some(p) = launch::provider(&project, &session) {
             let account_id =
                 super::session_identity::display_account_id(registry, p, &session, home);
-            value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery")});
+            value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery"),"accountSwitch":session.pointer("/runtimeSettings/accountSwitch")});
         }
     }
     Ok(value)

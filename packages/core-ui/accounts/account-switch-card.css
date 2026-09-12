@@ -1,0 +1,375 @@
+.gx-account-switch-region {
+  container: account-switch / inline-size;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  flex: 1;
+}
+.gx-account-switch-region * {
+  box-sizing: border-box;
+}
+.gx-account-switch-card {
+  width: min(100%, 610px);
+  border-radius: 22px;
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  box-shadow: 0 8px 32px #0002;
+  overflow: hidden;
+}
+.gx-account-switch-card-heading {
+  padding: 25px 26px 22px;
+}
+.gx-account-switch-card h2 {
+  font-size: 18px;
+  line-height: 1.4;
+  font-weight: 550;
+  letter-spacing: -0.3px;
+  color: #e5e5e5;
+  margin: 0 0 7px;
+}
+.gx-account-switch-card-heading p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #929292;
+  margin: 0;
+  text-wrap: pretty;
+}
+.gx-account-switch-account-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+  margin: 0 26px;
+  padding: 18px 20px 20px;
+  border: 1px solid #282828;
+  border-radius: 14px;
+  background: #181818;
+}
+.gx-account-switch-account {
+  min-width: 0;
+}
+.gx-account-switch-account-role {
+  display: block;
+  margin-bottom: 13px;
+  color: #858585;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.gx-account-switch-account-to .gx-account-switch-account-role {
+  color: #a9b7b0;
+}
+.gx-account-switch-account-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-bottom: 23px;
+}
+.gx-account-switch-account-identity > div {
+  min-width: 0;
+}
+.gx-account-switch-account-identity strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #c2c2c2;
+  white-space: nowrap;
+}
+.gx-account-switch-account-to .gx-account-switch-account-identity strong {
+  color: #e3e3e3;
+}
+.gx-account-switch-account-identity > div > span {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+.gx-account-switch-agent-mark {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 27px;
+  flex-shrink: 0;
+  color: #777;
+}
+.gx-account-switch-agent-mark > span {
+  display: block;
+  width: 25px;
+  height: 25px;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+}
+.gx-account-switch-account-number {
+  color: #8a8a8a;
+  font-size: 11px;
+  margin-left: 2px;
+}
+.gx-account-switch-route-arrow {
+  color: #7d7d7d;
+  margin-top: 36px;
+}
+.gx-account-switch-verified {
+  margin-left: auto;
+  color: #a6c5ad;
+  flex-shrink: 0;
+}
+.gx-account-switch-usage-cards {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 7px;
+}
+.gx-account-switch-usage-card {
+  --usage-tone: #96bca5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 12px 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--usage-tone) 19%, #242424);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--usage-tone) 5%, #191919);
+  font-variant-numeric: tabular-nums;
+}
+.gx-account-switch-usage-card[data-level='moderate'] {
+  --usage-tone: #d3bd78;
+}
+.gx-account-switch-usage-card[data-level='high'] {
+  --usage-tone: #df9e70;
+}
+.gx-account-switch-usage-card[data-level='exhausted'] {
+  --usage-tone: #ed8585;
+}
+.gx-account-switch-usage-label {
+  color: #adadad;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.gx-account-switch-usage-value {
+  display: block;
+  font-size: 23px;
+  line-height: 1.2;
+  font-weight: 550;
+  letter-spacing: -0.7px;
+  color: var(--usage-tone);
+  margin-top: 8px;
+}
+.gx-account-switch-usage-value small {
+  font-size: 12px;
+  font-weight: 450;
+  margin-left: 1px;
+}
+.gx-account-switch-usage-reset {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #929292;
+  font-size: 9px;
+  white-space: nowrap;
+  margin-top: 12px;
+}
+.gx-account-switch-usage-reset svg {
+  flex-shrink: 0;
+}
+.gx-account-switch-progress {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 22px;
+  padding: 22px 26px 24px;
+  margin: 0;
+  list-style: none;
+}
+.gx-account-switch-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: #797979;
+  min-width: 0;
+}
+.gx-account-switch-step-marker {
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border: 1px solid #303030;
+  border-radius: 50%;
+  background: #191919;
+  flex-shrink: 0;
+}
+.gx-account-switch-step-number {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.gx-account-switch-step[data-state='active'] .gx-account-switch-step-marker {
+  background: #d0d8d2;
+  border-color: #d0d8d2;
+  color: #202722;
+}
+.gx-account-switch-step[data-state='done'] .gx-account-switch-step-marker {
+  background: #1f2922;
+  border-color: #354d3d;
+  color: #abcbb4;
+}
+.gx-account-switch-step[data-state='active'] {
+  color: #d3d3d3;
+}
+.gx-account-switch-step[data-state='done'] {
+  color: #a0b1a3;
+}
+.gx-account-switch-step-copy {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+.gx-account-switch-step-label {
+  line-height: 1.4;
+}
+.gx-account-switch-step-track {
+  display: block;
+  height: 2px;
+  width: 100%;
+  border-radius: 2px;
+  overflow: hidden;
+  background: #2d2d2d;
+}
+.gx-account-switch-step[data-state='done'] .gx-account-switch-step-track {
+  background: #708775;
+}
+.gx-account-switch-step-motion {
+  display: block;
+  width: 36%;
+  height: 100%;
+  border-radius: inherit;
+  background: #bbcbbf;
+  animation: gx-account-switch-step-progress 1.8s ease-in-out infinite;
+}
+.gx-account-switch-card[data-phase='success'] h2 {
+  color: #c5d9cc;
+}
+.gx-account-switch-card[data-phase='failed'] h2 {
+  color: #d7bda6;
+}
+.gx-account-switch-failure-detail {
+  margin: 20px 26px 24px;
+  color: #a59a91;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.gx-account-switch-failure-detail p {
+  margin: 0 0 14px;
+}
+.gx-account-switch-failure-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gx-account-switch-failure-actions [data-slot='button'] {
+  font-size: 11px;
+}
+@keyframes gx-account-switch-step-progress {
+  from {
+    transform: translateX(-105%);
+  }
+  to {
+    transform: translateX(285%);
+  }
+}
+@container account-switch (max-width: 600px) {
+  .gx-account-switch-card-heading {
+    padding: 22px 20px 20px;
+  }
+  .gx-account-switch-card h2 {
+    font-size: 17px;
+  }
+  .gx-account-switch-card-heading p {
+    font-size: 12px;
+  }
+  .gx-account-switch-account-route {
+    margin-inline: 20px;
+    padding: 16px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .gx-account-switch-route-arrow {
+    display: none;
+  }
+  .gx-account-switch-account-identity {
+    gap: 7px;
+  }
+  .gx-account-switch-account-identity strong {
+    font-size: 13px;
+  }
+  .gx-account-switch-account-identity {
+    margin-bottom: 16px;
+  }
+  .gx-account-switch-account + .gx-account-switch-account {
+    padding-top: 20px;
+    border-top: 1px solid #2a2a2a;
+  }
+  .gx-account-switch-progress {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    padding: 20px;
+    gap: 8px;
+  }
+  .gx-account-switch-step {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+    line-height: 1.4;
+    text-wrap: balance;
+  }
+  .gx-account-switch-step-copy {
+    width: 100%;
+  }
+  .gx-account-switch-step-label {
+    min-height: 2.8em;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gx-account-switch-step-motion {
+    animation: none;
+    margin-inline: auto;
+  }
+}
+
+.gx-account-switch-account-identity strong,
+.gx-account-switch-account-identity > div > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gx-account-switch-usage-card[data-level='unknown'] {
+  --usage-tone: #999;
+}
+.gx-account-switch-failure-detail {
+  overflow-wrap: anywhere;
+}
+
+.gx-account-switch-overlay {
+  position: absolute;
+  inset: 0 0 var(--ghostex-chat-composer-overlay, 0px);
+  z-index: 15;
+  display: flex;
+  pointer-events: none;
+}
+.gx-account-switch-overlay .gx-account-switch-region {
+  align-items: safe center;
+}
+.gx-account-switch-overlay .gx-account-switch-card {
+  pointer-events: auto;
+}

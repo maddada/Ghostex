@@ -611,6 +611,7 @@ pub(crate) fn switch_draft_agent(
         "accountProvider",
         "accountBaseCommand",
         "accountCommand",
+        "accountSwitch",
         "accountRecovery",
         "accountRecoverySuppressed",
         "accountPolicyDefault",

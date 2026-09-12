@@ -16,3 +16,4 @@ pub(crate) mod runtime;
 pub(crate) mod session_identity;
 pub(crate) mod setup;
 pub(crate) mod store;
+pub(crate) mod switch_progress;

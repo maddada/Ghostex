@@ -166,7 +166,11 @@ pub(crate) fn start(
         .as_object()
         .cloned()
         .unwrap_or_default();
-    let attempt = uuid::Uuid::new_v4().to_string();
+    let attempt = session
+        .pointer("/runtimeSettings/accountSwitch/id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
     runtime.insert("accountSwitchAttempt".into(), json!(attempt));
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
     runtime.insert(
@@ -212,12 +216,26 @@ pub(crate) fn start(
         previous_process_id: plan.previous_process_id,
         timeout_ms: 30_000,
     });
+    let progress_state = state.clone();
+    let progress_project = project_id.clone();
+    let progress_session = session_id.clone();
+    let progress_attempt = attempt.clone();
     let completion = crate::session_chat_send::enqueue_session_write_sequence_with_completion(
         session,
         &project_id,
         &session_id,
         SOURCE,
         steps,
+        Some(Arc::new(move |step| {
+            if matches!(step, SessionChatSendStep::WaitForAccountReady { .. }) {
+                super::switch_progress::resuming(
+                    &progress_state,
+                    &progress_project,
+                    &progress_session,
+                    &progress_attempt,
+                );
+            }
+        })),
     );
     let completion = match completion {
         Ok(completion) => completion,
@@ -292,6 +310,15 @@ async fn finish(
             runtime.remove("accountSwitchAttempt");
             runtime.remove("accountRecovery");
             apply_account_settings(&mut runtime, &account_settings);
+            super::switch_progress::set_phase(
+                &mut runtime,
+                if continue_turn && source == SwitchSource::Automatic {
+                    "continuing"
+                } else {
+                    "success"
+                },
+                None,
+            );
             let Ok(row) = endpoint::update_session(&repo, &row, runtime) else {
                 return;
             };
@@ -354,6 +381,7 @@ fn fail(state: &AppState, repo: &DomainRepository<'_>, row: &Value, error: &str)
         .cloned()
         .unwrap_or_default();
     runtime.remove("accountSwitchAttempt");
+    super::switch_progress::set_phase(&mut runtime, "failed", Some(error));
     runtime.insert("accountRecoverySuppressed".into(), json!(true));
     runtime.insert(
         "accountRecovery".into(),

@@ -1345,6 +1345,7 @@ fn unpark_session_after_send(state: &AppState, project_id: &str, session_id: &st
             &state.paths.app_config_dir,
             project_id,
             session_id,
+            &crate::server::now_iso(),
         ),
         Ok(true)
     ) {

@@ -22,9 +22,6 @@ pub(crate) fn start(
     session: &Value,
     source: SwitchSource,
 ) -> Result<(), DomainStateError> {
-    if source == SwitchSource::Manual {
-        return Ok(());
-    }
     let project = session["projectId"]
         .as_str()
         .unwrap_or_default()
@@ -36,7 +33,14 @@ pub(crate) fn start(
     let session = repo
         .get_session(&project, &id)?
         .ok_or_else(|| DomainStateError::not_found("Session not found."))?;
-    if crate::agents::session_is_draft(&session) {
+    if source == SwitchSource::Manual || crate::agents::session_is_draft(&session) {
+        let mut runtime = session["runtimeSettings"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default();
+        super::switch_progress::set_phase(&mut runtime, "success", None);
+        endpoint::update_session(repo, &session, runtime)?;
+        super::switch_progress::publish(state, &session);
         return Ok(());
     }
     let claim = uuid::Uuid::new_v4();
@@ -44,6 +48,7 @@ pub(crate) fn start(
         .as_object()
         .cloned()
         .unwrap_or_default();
+    super::switch_progress::set_phase(&mut runtime, "continuing", None);
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
     runtime.insert(
         "accountRecovery".into(),
@@ -54,6 +59,7 @@ pub(crate) fn start(
         }),
     );
     endpoint::update_session(repo, &session, runtime)?;
+    super::switch_progress::publish(state, &session);
     let state = Arc::new(state.clone());
     tokio::spawn(async move {
         deliver(state, project, id, claim).await;
@@ -142,6 +148,11 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
         .as_object()
         .cloned()
         .unwrap_or_default();
+    super::switch_progress::set_phase(
+        &mut runtime,
+        if result.is_ok() { "success" } else { "failed" },
+        result.as_ref().err().map(|error| error.message.as_str()),
+    );
     runtime["accountRecovery"]["status"] = json!(if result.is_ok() {
         "resumed"
     } else {

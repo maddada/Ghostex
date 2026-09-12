@@ -93,6 +93,7 @@ state frames, never `appended`. Their omission semantics differ:
 pub struct SessionChatQueueSnapshot {
     pub queue: Vec<SessionChatQueuedPrompt>,
     pub draft: Option<SessionChatDraft>,
+    pub account_switch: Option<Value>,
     pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
 }
 
@@ -100,6 +101,10 @@ impl SessionChatQueueSnapshot {
     /// Writes `queue` (always) and `draft` (only when stored) onto a frame or
     /// read result.
     pub fn insert_into(&self, target: &mut Map<String, Value>) {
+        target.insert(
+            "accountSwitch".to_string(),
+            self.account_switch.clone().unwrap_or(Value::Null),
+        );
         target.insert(
             "pendingModelSelection".to_string(),
             serde_json::to_value(&self.pending_model_selection).unwrap_or(Value::Null),
@@ -124,6 +129,7 @@ impl SessionChatQueueSnapshot {
     */
     pub fn revision(&self) -> String {
         let mut revision = serde_json::to_string(&self.pending_model_selection).unwrap_or_default();
+        revision.push_str(&serde_json::to_string(&self.account_switch).unwrap_or_default());
         for prompt in &self.queue {
             revision.push_str(&prompt.id);
             revision.push(':');
@@ -603,6 +609,7 @@ fn read_snapshot(
         .map_err(sql_error)?;
     let draft = crate::session_chat_draft_versions::read(db, project_id, session_id)?;
     Ok(SessionChatQueueSnapshot {
+        account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
         queue,
         draft,
         pending_model_selection: crate::session_chat_model_selection::read_pending(

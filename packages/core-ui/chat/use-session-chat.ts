@@ -1,3 +1,4 @@
+import type { AccountSwitchProgress } from '@/packages/shared/agent-accounts';
 import type { SessionChatDraftVersion } from '@/packages/shared/session-chat-queue';
 import type { SessionChatPendingModelSelection } from '@/packages/shared/session-chat';
 // useSessionChat — host-agnostic session-chat state machine.
@@ -377,6 +378,7 @@ export interface UseSessionChatResult {
   retry: () => void;
   /** Ghostex prompt queue: rows the agent has never seen (plan 016). */
   queue: SessionChatQueueController;
+  accountSwitch: AccountSwitchProgress | null;
   pendingModelSelection: SessionChatPendingModelSelection | null | undefined;
   /** Cross-client composer draft sync. */
   draft: SessionChatDraftController;
@@ -573,6 +575,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   control. An empty array means supported-and-empty. Once present it is
   authoritative and replaces the list wholesale.
   */
+  const [accountSwitch, setAccountSwitch] = useState<AccountSwitchProgress | null>(null);
   const [pendingModelSelection, setPendingModelSelection] = useState<
     SessionChatPendingModelSelection | null | undefined
   >(undefined);
@@ -715,8 +718,10 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     (carrier: {
       queue?: SessionChatQueuedPrompt[];
       draft?: SessionChatDraft;
+      accountSwitch?: AccountSwitchProgress | null;
       pendingModelSelection?: SessionChatPendingModelSelection | null;
     }): void => {
+      if (carrier.accountSwitch !== undefined) setAccountSwitch(carrier.accountSwitch);
       if (carrier.pendingModelSelection !== undefined) setPendingModelSelection(carrier.pendingModelSelection);
       if (carrier.queue !== undefined) {
         setQueuePrompts(carrier.queue);
@@ -762,6 +767,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         /** gxserver has read the screen; latched, never cleared by omission. */
         screenProbed?: boolean;
         /** Ghostex prompt queue; PRESENT (even empty) is the capability probe. */
+        accountSwitch?: AccountSwitchProgress | null;
         pendingModelSelection?: SessionChatPendingModelSelection | null;
         queue?: SessionChatQueuedPrompt[];
         /** Synced composer draft; omitted ⇒ unchanged, never cleared. */
@@ -1020,6 +1026,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
       // Nor its queue or its draft: both are per-session, and re-probing the
       // capability from scratch is what keeps a mixed old/new daemon honest.
       setQueuePrompts(null);
+      setAccountSwitch(null);
       setPendingModelSelection(undefined);
       setSyncedDraft(null);
       // CDXC:Drafts 2026-08-28: another session's draft agent list must
@@ -1417,7 +1424,9 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const messages = useMemo(() => {
     const transcript = reconcileSessionChatLocalCommandOutput(boundaried, appCommands);
     const startupPending = sessionChatPendingWithStartupSends(pending, queuePrompts ?? []);
-    const pendingMessages = sessionChatPendingSendsAsMessages(visibleSessionChatPendingSends(startupPending, boundaried));
+    const pendingMessages = sessionChatPendingSendsAsMessages(
+      visibleSessionChatPendingSends(startupPending, boundaried)
+    );
     const authoritativeText = new Set(
       boundaried
         .filter((message) => message.source === 'transcript')
@@ -1758,8 +1767,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const queue = useMemo<SessionChatQueueController>(
     () => ({
       capabilities: queueCapabilities,
-      prompts: (queuePrompts ?? []).filter((prompt) =>
-        !prompt.startupSend && !pending.some((entry) => entry.queuedPromptId === prompt.id)
+      prompts: (queuePrompts ?? []).filter(
+        (prompt) => !prompt.startupSend && !pending.some((entry) => entry.queuedPromptId === prompt.id)
       ),
       queuePrompt,
       removePrompt,
@@ -1829,6 +1838,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     messages,
     prompt,
     queue,
+    accountSwitch,
     pendingModelSelection,
     refresh: requestResync,
     retry: reconnect,

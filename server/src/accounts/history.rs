@@ -42,7 +42,7 @@ struct Scan {
 impl HistoryRuntime {
     /// CDXC:AgentProviders 2026-09-11 DECISION:
     /// User keeps separate account buttons but shares conversations across accounts of each provider. History is therefore provider-wide on each computer, while live limits remain per login.
-    /// SEE-ALSO: apps/desktop/assets/account-usage/popup.js consumes only this server snapshot.
+    /// SEE-ALSO: apps/desktop/src/app/window/account_usage/history.rs consumes only this server snapshot.
     pub fn snapshot(self: &Arc<Self>) -> Value {
         let mut scan = self.scan.lock().unwrap_or_else(|e| e.into_inner());
         if !scan.running

@@ -68,6 +68,18 @@ export interface AccountHelper {
   installCommand: string;
   loginCommand: string;
 }
+/** Real account-switch stages carried by chat reads, snapshots and state frames. Omission leaves the last value; null clears it. */
+export interface AccountSwitchProgress {
+  id: string;
+  provider: AccountProvider;
+  source: 'manual' | 'automatic';
+  phase: 'switching' | 'resuming' | 'continuing' | 'success' | 'failed' | 'cancelled';
+  accountReady?: boolean;
+  fromAccountId: string | null;
+  toAccountId: string | null;
+  updatedAt: string;
+  reason?: string;
+}
 export interface AccountRecovery {
   status: 'waiting' | 'retrying' | 'resumed' | 'needsAttention';
   reason: string;
@@ -102,6 +114,7 @@ export interface AgentAccountsState {
     policy: AccountPolicy;
     override: AccountPolicy | null;
     recovery?: AccountRecovery;
+    accountSwitch?: AccountSwitchProgress | null;
   };
 }
 

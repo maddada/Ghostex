@@ -237,6 +237,7 @@ pub(crate) fn switch_session_agent(
         "accountProvider",
         "accountBaseCommand",
         "accountCommand",
+        "accountSwitch",
         "accountRecovery",
         "accountRecoverySuppressed",
         "accountPolicyOverride",
