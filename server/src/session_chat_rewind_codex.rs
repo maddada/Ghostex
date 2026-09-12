@@ -298,28 +298,45 @@ async fn capture_vt(driver: &RewindDriver<'_>) -> Option<String> {
     (!capture.truncated).then_some(capture.text)
 }
 
+/// CDXC:SessionChat 2026-09-12 WHY:
+/// Loading older Codex history moves the current highlight to another screen row before the requested prompt is selected.
+/// Wait for the expected prompt and for history loading to finish; a changed screen position alone cannot prove a Left press completed.
 async fn selection(
     driver: &RewindDriver<'_>,
     previous: Option<&(usize, String)>,
+    expected: &str,
 ) -> Result<(usize, String), DomainStateError> {
     let deadline = std::time::Instant::now() + Duration::from_secs(6);
+    let expected = collapse_spaces(expected);
+    let mut mismatched = false;
     loop {
         if (driver.cancelled)() {
             return Err(agent_busy("The rewind was cancelled by another action."));
         }
         if let Some(screen) = capture_vt(driver).await {
+            let loading = screen.lines().next().is_some_and(|header| {
+                crate::session_chat_options::strip_ansi_sgr(header)
+                    .contains("loading older history")
+            });
             let selected = if previous.is_none() {
                 initial_prompt(&screen)
             } else {
                 selected_prompt(&screen)
             };
             if let Some(selected) = selected {
-                if previous != Some(&selected) {
+                mismatched = selected.1 != expected;
+                if !loading && !mismatched && previous != Some(&selected) {
                     return Ok(selected);
                 }
             }
         }
         if std::time::Instant::now() >= deadline {
+            if mismatched {
+                return Err(dialog_mismatch(
+                    "selection",
+                    "The highlighted prompt does not match the transcript.",
+                ));
+            }
             return Err(rewind_timeout("selection"));
         }
         tokio::time::sleep(Duration::from_millis(REWIND_POLL_MS)).await;
@@ -458,18 +475,10 @@ async fn drive_picker(
     driver.write(ESCAPE).await?;
     tokio::time::sleep(Duration::from_millis(120)).await;
     driver.write(ESCAPE).await?;
-    let mut selected = selection(driver, None).await?;
-    for index in 0..=plan.presses {
-        if selected.1 != collapse_spaces(&codex.prompts[index].1) {
-            return Err(dialog_mismatch(
-                "selection",
-                "The highlighted prompt does not match the transcript.",
-            ));
-        }
-        if index < plan.presses {
-            driver.write(LEFT).await?;
-            selected = selection(driver, Some(&selected)).await?;
-        }
+    let mut selected = selection(driver, None, &codex.prompts[0].1).await?;
+    for index in 1..=plan.presses {
+        driver.write(LEFT).await?;
+        selected = selection(driver, Some(&selected), &codex.prompts[index].1).await?;
     }
     check_idle()?;
     if (driver.cancelled)() {
