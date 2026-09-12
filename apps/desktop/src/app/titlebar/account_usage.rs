@@ -349,6 +349,8 @@ impl GhostexGpuiApp {
             .collect()
     }
 
+    /// CDXC:Titlebar 2026-09-12 DECISION:
+    /// User: clicking an open usage button again closes its dropdown; clicking away, including in Session Chat, dismisses Usage and Tips.
     pub(crate) fn open_titlebar_account_usage(
         &mut self,
         id: ExtensionId,
@@ -377,6 +379,9 @@ impl GhostexGpuiApp {
                     fn GhostexGpuiBeginUsageKeyboardFocus(view: *mut std::ffi::c_void);
                 }
                 unsafe { GhostexGpuiBeginUsageKeyboardFocus(self.parent_ns_view) };
+                // CDXC:FocusRouting 2026-09-12 WHY:
+                // Leaving this guard active suppresses later real CEF clicks, preventing chat clicks from dismissing Usage and Tips.
+                self.end_programmatic_focus();
             }
             #[cfg(target_os = "windows")]
             cef::focus_gpui_root_view(self.parent_ns_view);

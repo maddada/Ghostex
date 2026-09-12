@@ -258,10 +258,10 @@ impl GhostexGpuiApp {
                         window.request_animation_frame();
                         return;
                     };
-                    this.close_gpui_titlebar_popup(None, window, cx);
                     if button.account {
                         this.open_titlebar_account_usage(extension_id, trigger_bounds, window, cx);
                     } else {
+                        this.close_gpui_titlebar_popup(None, window, cx);
                         this.launch_extension_from_titlebar(
                             extension_id.as_str(),
                             trigger_bounds,
