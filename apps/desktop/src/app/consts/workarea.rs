@@ -216,7 +216,9 @@ pub(crate) const OPEN_IN_TITLEBAR_BUTTON_HIDDEN_SETTINGS_KEY: &str = "openInTitl
 
 pub(crate) const SOURCE_CODE_SERVER_INSTALL_PROMPT: &str = "The VS Code IDE component is a 150mb optional install (one-time).\nWould you like to install it?";
 
-pub(crate) const SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR: u64 = 22;
+/// CDXC:CodeEditor 2026-09-13 SEE-ALSO:
+/// Match .dependencies/code-server/.node-version and its package.json engines: on-demand installation and Windows/WSL launches validate the bundled runtime against this major.
+pub(crate) const SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR: u64 = 24;
 
 pub(crate) const SOURCE_CODE_SERVER_LOADING_PLACEHOLDER_DELAY: Duration = Duration::from_secs(3);
 
