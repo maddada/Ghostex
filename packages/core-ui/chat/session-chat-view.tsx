@@ -165,6 +165,7 @@ export interface SessionChatComposerHandoff extends SessionChatDraftHandoff {
 export interface SessionChatHostComposerActions {
   setPaneFocused: (focused: boolean) => void;
   canRelease: () => boolean;
+  prepareRelease: () => Promise<import('./session-chat-draft-outbox').PendingDraft[] | null>;
   /** Clears only when the composer still holds this exact acknowledged send. */
   clearDraft: (expectedContent: string) => boolean;
   focus: () => void;
@@ -893,6 +894,8 @@ export function SessionChatView({
     return hostComposerBridge.register({
       setPaneFocused,
       canRelease: () => !noteOpenRef.current && composerRef.current?.canRelease() === true,
+      prepareRelease: () =>
+        noteOpenRef.current ? Promise.resolve(null) : (composerRef.current?.prepareRelease() ?? Promise.resolve(null)),
       clearDraft: (expectedContent) => composerRef.current?.clearDraft(expectedContent) ?? false,
       focus: () => composerRef.current?.focus(),
       handoffToTerminal: handoffComposerDraft,

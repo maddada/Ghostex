@@ -53,6 +53,7 @@ pub(crate) mod session_chat_image_save;
 mod session_chat_launch;
 pub(crate) mod session_chat_model_picker;
 mod session_chat_renderers;
+mod session_chat_runtime;
 mod session_chat_surfaces;
 pub(crate) mod sidebar_dispatch;
 pub(crate) mod stashed_prompt_jump;

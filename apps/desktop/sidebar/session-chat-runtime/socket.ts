@@ -93,6 +93,7 @@ export class SessionChatSocket {
     const url = new URL(`${this.endpoint.baseUrl}/api/events`);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     url.searchParams.set('protocolVersion', String(GXSERVER_PROTOCOL_VERSION));
+    url.searchParams.set('stream', 'sessionChat');
     url.searchParams.set('authToken', this.endpoint.authToken);
     // Browser WebSocket handshakes reject redirects (WHATWG opening handshake, step 2).
     const socket = new WebSocket(url.toString());

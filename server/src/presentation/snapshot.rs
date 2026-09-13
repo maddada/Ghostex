@@ -1,5 +1,5 @@
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::delayed_sends::{
     insert_delayed_send_presentation_payload, insert_delayed_send_session_projection,
@@ -31,7 +31,7 @@ pub fn read_presentation_snapshot(
     on. Families therefore come from the narrow fork-row read over the whole
     registry, exactly as the per-session delta below derives them.
     */
-    let families = SessionForkFamilies::build(&repository.list_session_fork_rows()?);
+    let families = read_session_fork_families(db, server_id)?;
     let mut snapshot = project_snapshot_with_families(
         repository.list_projects()?,
         sessions,
@@ -172,18 +172,11 @@ pub fn build_presentation_session_delta(
     CDXC:SessionFork 2026-08-28:
     A delta must carry the branch shape too, or the first update after a fork
     would silently strip the badge the snapshot had just published. The family
-    derivation needs the whole registry, which is one indexed read of the same
-    table the snapshot pass already walks.
-
-    CDXC:StateSync 2026-09-01:
-    Every createSession/updateSession pays for that read while holding the
-    presentation event sequencer, so it uses the narrow fork-row statement
-    rather than a full `list_sessions` hydration. The projected fields are
-    byte-identical to the ones family derivation reads off a full row; the
-    snapshot pass keeps building families from the list it already holds.
+    derivation needs the whole registry, including closed ancestors. The
+    snapshot and delta share the lineage-revision cache in fork_family_cache.
     */
     if let Some(output) = presentation_session.as_object_mut() {
-        SessionForkFamilies::build(&repository.list_session_fork_rows()?)
+        read_session_fork_families(db, &repository.server_id)?
             .insert_fork_fields(session_id, output);
     }
     Ok(json!({

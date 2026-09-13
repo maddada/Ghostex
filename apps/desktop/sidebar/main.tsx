@@ -6,6 +6,7 @@ import { dismissAllSidebarContextMenus } from '@/packages/core-ui/sidebar-contex
 import { reportSidebarNativeScrollGestureBegan } from '@/packages/core-ui/space-filter-row';
 import { createGpuiSidebarRuntime } from './gxserver-runtime';
 import './sidebar.css';
+import { installSessionChatRuntimeBroker } from './session-chat-runtime/broker';
 
 /*
 CDXC:StateSync 2026-06-24-11:00:
@@ -81,6 +82,7 @@ window.ghostexGpui.onNativeScrollGestureBegan = () => {
   reportSidebarNativeScrollGestureBegan();
 };
 
+installSessionChatRuntimeBroker();
 const gpuiSidebarRuntime = createGpuiSidebarRuntime();
 const root = createRoot(rootElement);
 

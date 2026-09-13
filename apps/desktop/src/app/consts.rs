@@ -34,9 +34,9 @@ pub(crate) const GPUI_SESSION_CHAT_QUEUE_COUNT_TIMEOUT: Duration = Duration::fro
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_EVICT_AFTER: Duration =
     Duration::from_secs(5 * 60);
 
-/// CDXC:SessionChat 2026-09-12 DECISION:
-/// User approved persistent renderer reuse across sessions and projects, retaining the three unused pages and five-minute expiry from the September 5 RAM recommendation.
-/// Protected drafts and active work keep their bound pages until they can safely join the pool.
+/// CDXC:SessionChat 2026-09-13 DECISION:
+/// User approved app-wide shared chat state and renderer ownership tied to visible panes, retaining the three spare pages and five-minute expiry.
+/// Durable drafts and active streams outlive mounted pages; only unfinished UI operations and unconfirmed draft transfers protect a hidden binding.
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_HIDDEN_MAX: usize = 3;
 
 pub(crate) const GPUI_AGENTS_CHAT_SURFACE_EVICT_POLL_INTERVAL: Duration = Duration::from_secs(60);

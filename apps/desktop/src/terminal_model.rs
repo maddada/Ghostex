@@ -6,7 +6,8 @@ no gpui types; consumers (P1c element, P1e integration) observe it through
 TerminalEventSink and pull TerminalSnapshot values.
 
 Threading (four plain std threads per model; pty-read/wakeup/child-wait exit
-when the child dies, pty-write exits once its channel senders are gone):
+when the child dies, pty-write exits after viewer retirement or once its
+channel senders are gone):
 - pty-read: blocking PTY reads, feeds bytes into the shared VtTerminal under
   a SHORT lock (feed only), then requests a wakeup.
 - pty-write: owns the PTY write half and drains a channel of byte payloads
@@ -50,7 +51,15 @@ use std::{
     time::{Duration, Instant},
 };
 
-use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
+
+#[path = "terminal_model/child_lifecycle.rs"]
+pub(crate) mod child_lifecycle;
+use child_lifecycle::TerminalChild;
+#[path = "terminal_model/viewer_detach.rs"]
+mod viewer_detach;
+pub(crate) use viewer_detach::ViewerDetachPreparation;
+use viewer_detach::{ViewerDetachParser, ViewerDetachState};
 
 use crate::ghostty_vt::{
     self, VtCellWide, VtClearScreen, VtDirty, VtError, VtHostCallbacks, VtKeyEncoder, VtKeyInput,
@@ -365,16 +374,19 @@ pub fn zmx_client_hidden_sequence(rows: u16, cols: u16) -> String {
 /// A live terminal: spawned child on a PTY, libghostty-vt state, background
 /// pump threads, and snapshot access. Owned by the UI-side consumer.
 pub struct TerminalModel {
-    terminal: Arc<Mutex<VtTerminal>>,
-    render_state: VtRenderState,
+    terminal: Arc<Mutex<Option<VtTerminal>>>,
+    render_state: Option<VtRenderState>,
     /// Feeds the pty-write thread; sends never block, the thread owns the
     /// PTY write half and performs the actual (possibly blocking) writes.
-    write_tx: mpsc::Sender<PtyWriteRequest>,
+    write_tx: mpsc::Sender<Option<PtyWriteRequest>>,
+    wakeup_tx: mpsc::Sender<Option<()>>,
+    pending_input: Arc<AtomicU64>,
+    viewer_detach: Arc<Mutex<ViewerDetachState>>,
+    event_sink: Arc<Mutex<Option<TerminalEventSink>>>,
     master: Box<dyn MasterPty + Send>,
-    killer: Box<dyn ChildKiller + Send + Sync>,
+    child: TerminalChild,
     /// OS pid of the spawned child, for foreground-process liveness checks.
     child_pid: Option<u32>,
-    exit: Arc<OnceLock<TerminalExit>>,
     size: (u16, u16),
     cell_size_px: (u32, u32),
     /// Key/mouse encoders (P1d input path). Options re-sync from the live
@@ -394,6 +406,17 @@ impl TerminalModel {
     /// Spawn the configured process on a fresh PTY and start the pump
     /// threads. Events flow to `events` from background threads immediately.
     pub fn spawn(config: TerminalSpawnConfig, events: TerminalEventSink) -> anyhow::Result<Self> {
+        let event_sink = Arc::new(Mutex::new(Some(events)));
+        let gated_sink = Arc::clone(&event_sink);
+        let events: TerminalEventSink = Arc::new(move |event| {
+            if let Some(sink) = gated_sink
+                .lock()
+                .expect("terminal event lock poisoned")
+                .as_ref()
+            {
+                sink(event);
+            }
+        });
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(pty_size(
             config.cols,
@@ -419,7 +442,6 @@ impl TerminalModel {
         // Drop our slave handle so the master sees EOF once the child exits.
         drop(pair.slave);
 
-        let killer = child.clone_killer();
         let child_pid = child.process_id();
         let mut reader = pair.master.try_clone_reader()?;
         let mut pty_writer = pair.master.take_writer()?;
@@ -431,12 +453,16 @@ impl TerminalModel {
         // the VT reply sender held by the terminal callbacks (dropped once
         // the model and the pty-read thread release the terminal) — and its
         // exit drops the PTY write half.
-        let (write_tx, write_rx) = mpsc::channel::<PtyWriteRequest>();
+        let (write_tx, write_rx) = mpsc::channel::<Option<PtyWriteRequest>>();
+        let pending_input = Arc::new(AtomicU64::new(0));
+        let viewer_detach = Arc::new(Mutex::new(ViewerDetachState::default()));
+        let writer_pending_input = Arc::clone(&pending_input);
+        let writer_events = Arc::clone(&events);
         let writer_child_pid = child_pid;
         thread::Builder::new()
             .name("ghostex-terminal-pty-write".into())
             .spawn(move || {
-                while let Ok(request) = write_rx.recv() {
+                while let Ok(Some(request)) = write_rx.recv() {
                     let started_at = Instant::now();
                     if let Some(trace_id) = request.paste_trace_id {
                         emit_paste_diagnostic(TerminalPasteDiagnostic::PtyWriteStarted {
@@ -460,6 +486,9 @@ impl TerminalModel {
                             error_kind: result.as_ref().err().map(std::io::Error::kind),
                         });
                     }
+                    if writer_pending_input.fetch_sub(1, Ordering::AcqRel) == 1 {
+                        writer_events(TerminalEvent::Wakeup);
+                    }
                 }
             })?;
 
@@ -473,16 +502,30 @@ impl TerminalModel {
             // only queues text; the UI-side consumer performs the actual
             // clipboard access when it handles ClipboardWriteRequested.
             let reply_tx = write_tx.clone();
+            let reply_pending_input = Arc::clone(&pending_input);
+            let reply_viewer_detach = Arc::clone(&viewer_detach);
             let bell_events = Arc::clone(&events);
             let title_events = Arc::clone(&events);
             let clipboard_events = Arc::clone(&events);
             let clipboard_write_queue = Arc::clone(&clipboard_writes);
             vt.set_host_callbacks(VtHostCallbacks {
                 write_pty: Some(Box::new(move |bytes| {
-                    let _ = reply_tx.send(PtyWriteRequest {
-                        bytes: bytes.to_vec(),
-                        paste_trace_id: None,
-                    });
+                    let detach = reply_viewer_detach
+                        .lock()
+                        .expect("terminal detach lock poisoned");
+                    if detach.retiring {
+                        return;
+                    }
+                    reply_pending_input.fetch_add(1, Ordering::AcqRel);
+                    if reply_tx
+                        .send(Some(PtyWriteRequest {
+                            bytes: bytes.to_vec(),
+                            paste_trace_id: None,
+                        }))
+                        .is_err()
+                    {
+                        reply_pending_input.fetch_sub(1, Ordering::AcqRel);
+                    }
                 })),
                 bell: Some(Box::new(move || bell_events(TerminalEvent::Bell))),
                 title_changed: Some(Box::new(move || title_events(TerminalEvent::TitleChanged))),
@@ -497,14 +540,14 @@ impl TerminalModel {
                 })),
             })?;
         }
-        let terminal = Arc::new(Mutex::new(vt));
-        let exit: Arc<OnceLock<TerminalExit>> = Arc::new(OnceLock::new());
+        let terminal = Arc::new(Mutex::new(Some(vt)));
 
         // Wakeup coalescing: `pending` is true while a wakeup is owed but
         // not yet delivered; only the false→true transition signals the
         // notifier, so a whole burst costs one channel send + one event.
         let pending = Arc::new(AtomicBool::new(false));
-        let (wakeup_tx, wakeup_rx) = mpsc::channel::<()>();
+        let (wakeup_tx, wakeup_rx) = mpsc::channel::<Option<()>>();
+        let model_wakeup_tx = wakeup_tx.clone();
 
         {
             let pending = Arc::clone(&pending);
@@ -512,7 +555,7 @@ impl TerminalModel {
             thread::Builder::new()
                 .name("ghostex-terminal-wakeup".into())
                 .spawn(move || {
-                    while wakeup_rx.recv().is_ok() {
+                    while let Ok(Some(())) = wakeup_rx.recv() {
                         thread::sleep(WAKEUP_COALESCE_WINDOW);
                         // Clear BEFORE delivering: bytes fed after the clear
                         // re-arm the window instead of being folded into a
@@ -526,19 +569,35 @@ impl TerminalModel {
         {
             let terminal = Arc::clone(&terminal);
             let pending = Arc::clone(&pending);
+            let reader_viewer_detach = Arc::clone(&viewer_detach);
+            let reader_events = Arc::clone(&events);
             thread::Builder::new()
                 .name("ghostex-terminal-pty-read".into())
                 .spawn(move || {
                     let mut buffer = vec![0u8; PTY_READ_BUFFER_LEN];
+                    let mut detach_parser = ViewerDetachParser::default();
                     loop {
                         match reader.read(&mut buffer) {
                             // EOF, or EIO once the child side is gone.
                             Ok(0) | Err(_) => break,
                             Ok(len) => {
-                                terminal
-                                    .lock()
-                                    .expect("terminal lock poisoned")
-                                    .feed(&buffer[..len]);
+                                let changed = detach_parser.feed(
+                                    &buffer[..len],
+                                    &mut reader_viewer_detach
+                                        .lock()
+                                        .expect("terminal detach lock poisoned"),
+                                );
+                                if changed {
+                                    reader_events(TerminalEvent::Wakeup);
+                                }
+                                {
+                                    let mut terminal =
+                                        terminal.lock().expect("terminal lock poisoned");
+                                    let Some(terminal) = terminal.as_mut() else {
+                                        continue;
+                                    };
+                                    terminal.feed(&buffer[..len]);
+                                }
                                 if pending
                                     .compare_exchange(
                                         false,
@@ -548,52 +607,178 @@ impl TerminalModel {
                                     )
                                     .is_ok()
                                 {
-                                    let _ = wakeup_tx.send(());
+                                    let _ = wakeup_tx.send(Some(()));
                                 }
                             }
                         }
                     }
-                    // wakeup_tx drops here; the notifier drains any pending
-                    // signal (delivering the final wakeup) and exits.
+                    // Deliver the final pending wakeup, then stop even while
+                    // the exited model stays available for readback.
+                    let _ = wakeup_tx.send(None);
                 })?;
         }
 
-        {
-            let events = Arc::clone(&events);
-            let exit = Arc::clone(&exit);
-            let mut child = child;
-            thread::Builder::new()
-                .name("ghostex-terminal-child-wait".into())
-                .spawn(move || {
-                    let status = match child.wait() {
-                        Ok(status) => TerminalExit {
-                            code: Some(status.exit_code()),
-                            success: status.success(),
-                        },
-                        Err(_) => TerminalExit {
-                            code: None,
-                            success: false,
-                        },
-                    };
-                    let _ = exit.set(status);
-                    events(TerminalEvent::Exited(status));
-                })?;
-        }
+        let child =
+            TerminalChild::spawn(child, move |status| events(TerminalEvent::Exited(status)))?;
 
         Ok(Self {
             terminal,
-            render_state: VtRenderState::new()?,
+            render_state: Some(VtRenderState::new()?),
             write_tx,
+            wakeup_tx: model_wakeup_tx,
+            pending_input,
+            viewer_detach,
+            event_sink,
             master: pair.master,
-            killer,
+            child,
             child_pid,
-            exit,
             size: (config.cols, config.rows),
             cell_size_px: (config.cell_width_px, config.cell_height_px),
             key_encoder: VtKeyEncoder::new()?,
             mouse_encoder: VtMouseEncoder::new()?,
             option_as_alt: VtOptionAsAlt::default(),
             clipboard_writes,
+        })
+    }
+
+    fn queue_input(&self, request: PtyWriteRequest) -> std::io::Result<()> {
+        let mut detach = self
+            .viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned");
+        if self.child.is_detached() || detach.retiring {
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        detach.accepted_input = true;
+        self.pending_input.fetch_add(1, Ordering::AcqRel);
+        if self.write_tx.send(Some(request)).is_err() {
+            self.pending_input.fetch_sub(1, Ordering::AcqRel);
+            return Err(std::io::ErrorKind::BrokenPipe.into());
+        }
+        Ok(())
+    }
+
+    /// Includes bytes queued on the UI thread and the active PTY write.
+    /// A drained queue reports local kernel acceptance, not daemon receipt.
+    pub fn has_pending_input(&self) -> bool {
+        self.pending_input.load(Ordering::Acquire) != 0
+    }
+
+    /// Read-only preflight before creating a replacement display claim.
+    pub fn viewer_detach_supported(&self) -> bool {
+        if !cfg!(unix) {
+            return false;
+        }
+        let detach = self
+            .viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned");
+        detach.capable
+            || detach.acknowledged
+            || !detach.accepted_input
+            || self.child.exit_status().is_some()
+    }
+
+    /// Begin ordered retirement after a replacement display claim is ready.
+    pub fn prepare_viewer_detach(&mut self) -> ViewerDetachPreparation {
+        #[cfg(not(unix))]
+        return ViewerDetachPreparation::Unsupported;
+        if self.has_pending_input() {
+            return if self
+                .viewer_detach
+                .lock()
+                .expect("terminal detach lock poisoned")
+                .retiring
+            {
+                ViewerDetachPreparation::Pending
+            } else {
+                ViewerDetachPreparation::Unsupported
+            };
+        }
+        if self.child.exit_status().is_some() {
+            return ViewerDetachPreparation::Ready;
+        }
+        let mut detach = self
+            .viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned");
+        if detach.acknowledged || !detach.accepted_input {
+            detach.retiring = true;
+            return ViewerDetachPreparation::Ready;
+        }
+        if detach.nonce.is_some() {
+            return ViewerDetachPreparation::Pending;
+        }
+        if !detach.capable {
+            return ViewerDetachPreparation::Unsupported;
+        }
+        let Ok(bytes) = detach.request() else {
+            return ViewerDetachPreparation::Unsupported;
+        };
+        detach.retiring = true;
+        self.pending_input.fetch_add(1, Ordering::AcqRel);
+        if self
+            .write_tx
+            .send(Some(PtyWriteRequest {
+                bytes,
+                paste_trace_id: None,
+            }))
+            .is_err()
+        {
+            self.pending_input.fetch_sub(1, Ordering::AcqRel);
+            detach.nonce = None;
+            detach.retiring = false;
+            return ViewerDetachPreparation::Unsupported;
+        }
+        ViewerDetachPreparation::Pending
+    }
+
+    /// Free emulator and readback memory after this viewer leaves all input/render routes.
+    /// The PTY reader keeps draining only the bounded detach-control parser until ACK.
+    pub fn release_viewer_emulator(&mut self) {
+        self.viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned")
+            .retiring = true;
+        self.terminal.lock().expect("terminal lock poisoned").take();
+        self.render_state.take();
+        let _ = self.wakeup_tx.send(None);
+        self.clipboard_writes
+            .lock()
+            .expect("terminal clipboard lock poisoned")
+            .clear();
+    }
+
+    /// Retire a confirmed daemon-backed attach viewer, not an owning shell PTY.
+    /// The caller removes its event subscription first and waits for pending input.
+    pub fn detach_viewer(&mut self) -> std::io::Result<()> {
+        if self.child.is_detached() {
+            return Ok(());
+        }
+        if !cfg!(unix) {
+            return Err(std::io::ErrorKind::Unsupported.into());
+        }
+        let detach = self
+            .viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned");
+        if self.has_pending_input()
+            || (detach.accepted_input && !detach.acknowledged && self.child.exit_status().is_none())
+        {
+            return Err(std::io::ErrorKind::WouldBlock.into());
+        }
+        drop(detach);
+        self.event_sink
+            .lock()
+            .expect("terminal event lock poisoned")
+            .take();
+        #[cfg(unix)]
+        let foreground_group = self.master.process_group_leader();
+        #[cfg(not(unix))]
+        let foreground_group = None;
+        let write_tx = self.write_tx.clone();
+        self.child.detach_viewer(foreground_group, move || {
+            let _ = write_tx.send(None);
         })
     }
 
@@ -611,12 +796,10 @@ impl TerminalModel {
     /// actual write happens on the pty-write thread, so callers (main-thread
     /// input handlers) never block on a stalled PTY.
     pub fn write_input(&self, bytes: &[u8]) -> std::io::Result<()> {
-        self.write_tx
-            .send(PtyWriteRequest {
-                bytes: bytes.to_vec(),
-                paste_trace_id: None,
-            })
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        self.queue_input(PtyWriteRequest {
+            bytes: bytes.to_vec(),
+            paste_trace_id: None,
+        })
     }
 
     /// Encode a key event against the terminal's live keyboard modes and
@@ -626,8 +809,11 @@ impl TerminalModel {
     pub fn send_key(&mut self, input: &VtKeyInput<'_>) -> bool {
         {
             let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+            let Some(terminal) = terminal.as_mut() else {
+                return false;
+            };
             self.key_encoder
-                .sync_from_terminal(&mut terminal, self.option_as_alt);
+                .sync_from_terminal(terminal, self.option_as_alt);
         }
         let mut bytes = Vec::new();
         if self.key_encoder.encode(input, &mut bytes).is_err() || bytes.is_empty() {
@@ -647,7 +833,8 @@ impl TerminalModel {
             .terminal
             .lock()
             .expect("terminal lock poisoned")
-            .clear_screen(true)
+            .as_mut()
+            .and_then(|terminal| terminal.clear_screen(true).ok())
             .unwrap_or(VtClearScreen::NotCleared);
         match outcome {
             VtClearScreen::NotCleared => false,
@@ -664,7 +851,7 @@ impl TerminalModel {
         self.terminal
             .lock()
             .ok()
-            .and_then(|mut terminal| terminal.kitty_keyboard_flags().ok())
+            .and_then(|mut terminal| terminal.as_mut()?.kitty_keyboard_flags().ok())
     }
 
     /// Encode a mouse event against the terminal's live tracking mode and
@@ -675,7 +862,10 @@ impl TerminalModel {
     pub fn send_mouse(&mut self, input: &VtMouseInput, any_button_pressed: bool) -> bool {
         {
             let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
-            self.mouse_encoder.sync_from_terminal(&mut terminal);
+            let Some(terminal) = terminal.as_mut() else {
+                return false;
+            };
+            self.mouse_encoder.sync_from_terminal(terminal);
         }
         let (cols, rows) = self.size;
         let (cell_width_px, cell_height_px) = self.cell_size_px;
@@ -710,13 +900,10 @@ impl TerminalModel {
             source_contains_non_ascii: !text.is_ascii(),
             encoded_byte_length: bytes.len(),
         });
-        let result = self
-            .write_tx
-            .send(PtyWriteRequest {
-                bytes,
-                paste_trace_id: Some(trace_id),
-            })
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::BrokenPipe));
+        let result = self.queue_input(PtyWriteRequest {
+            bytes,
+            paste_trace_id: Some(trace_id),
+        });
         emit_paste_diagnostic(TerminalPasteDiagnostic::ChannelQueued {
             trace_id,
             child_pid: self.child_pid,
@@ -750,8 +937,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .mouse_tracking()
-            .unwrap_or(false)
+            .as_mut()
+            .is_some_and(|terminal| terminal.mouse_tracking().unwrap_or(false))
     }
 
     /// Current value of a terminal mode (`ffi::GHOSTTY_MODE_*`).
@@ -759,14 +946,17 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .mode(mode)
-            .unwrap_or(false)
+            .as_mut()
+            .is_some_and(|terminal| terminal.mode(mode).unwrap_or(false))
     }
 
     /// How a wheel tick should be delivered given the current terminal
     /// modes, resolved under one terminal lock.
     pub fn wheel_route(&mut self) -> WheelRoute {
         let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+        let Some(terminal) = terminal.as_mut() else {
+            return WheelRoute::None;
+        };
         if terminal.mouse_tracking().unwrap_or(false) {
             return WheelRoute::Report;
         }
@@ -789,7 +979,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .scroll_viewport(behavior);
+            .as_mut()
+            .map(|terminal| terminal.scroll_viewport(behavior));
     }
 
     /// Current OSC 0/2 title, if the running program set one.
@@ -797,9 +988,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .title()
-            .ok()
-            .flatten()
+            .as_mut()
+            .and_then(|terminal| terminal.title().ok().flatten())
     }
 
     /// Current OSC 7 working directory, if the running program reported one.
@@ -807,9 +997,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .pwd()
-            .ok()
-            .flatten()
+            .as_mut()
+            .and_then(|terminal| terminal.pwd().ok().flatten())
     }
 
     /// OSC 8 hyperlink URI at a viewport cell, if any. Cheap enough for
@@ -818,9 +1007,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
-            .hyperlink_uri_at_viewport(col, row)
-            .ok()
-            .flatten()
+            .as_mut()
+            .and_then(|terminal| terminal.hyperlink_uri_at_viewport(col, row).ok().flatten())
     }
 
     /// Configure how the macOS option key participates in key encoding.
@@ -838,6 +1026,10 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
+            .as_mut()
+            .ok_or(VtError {
+                code: ffi::GHOSTTY_INVALID_VALUE,
+            })?
             .set_default_colors(foreground, background, cursor, palette)
     }
 
@@ -857,8 +1049,8 @@ impl TerminalModel {
                 .terminal
                 .lock()
                 .expect("terminal lock poisoned")
-                .cursor_at_prompt()
-                .unwrap_or(false),
+                .as_mut()
+                .is_some_and(|terminal| terminal.cursor_at_prompt().unwrap_or(false)),
         }
     }
 
@@ -897,6 +1089,8 @@ impl TerminalModel {
         self.terminal
             .lock()
             .expect("terminal lock poisoned")
+            .as_mut()
+            .ok_or_else(|| anyhow::anyhow!("terminal viewer retired"))?
             .resize(cols, rows, cell_width_px, cell_height_px)?;
         self.master
             .resize(pty_size(cols, rows, cell_width_px, cell_height_px))?;
@@ -926,13 +1120,13 @@ impl TerminalModel {
 
     /// Exit status once the child has exited.
     pub fn exit_status(&self) -> Option<TerminalExit> {
-        self.exit.get().copied()
+        self.child.exit_status()
     }
 
     /// Terminate the child process (SIGHUP/kill semantics per platform).
     #[allow(dead_code)] // public TerminalModel API kept complete alongside foreground_process_active()
     pub fn kill(&mut self) -> std::io::Result<()> {
-        self.killer.kill()
+        self.child.kill()
     }
 
     /// Move the viewport to an absolute scrollbar row. This is the same row
@@ -940,12 +1134,15 @@ impl TerminalModel {
     /// search navigation and the interactive scrollbar.
     pub fn scroll_viewport_to_row(&mut self, row: u64) {
         let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+        let Some(terminal) = terminal.as_mut() else {
+            return;
+        };
         let Ok(scrollbar) = terminal.scrollbar() else {
             return;
         };
         let target = row.min(scrollbar.total.saturating_sub(scrollbar.len));
         let delta = i128::from(target) - i128::from(scrollbar.offset);
-        scroll_terminal_delta(&mut terminal, delta);
+        scroll_terminal_delta(terminal, delta);
     }
 
     /// Read every scrollback row without changing the user's final viewport.
@@ -954,6 +1151,12 @@ impl TerminalModel {
     /// top to bottom, then restore the exact original offset.
     pub fn read_scrollback_rows(&mut self) -> Result<Vec<TerminalTextRow>, VtError> {
         let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+        let terminal = terminal.as_mut().ok_or(VtError {
+            code: ffi::GHOSTTY_INVALID_VALUE,
+        })?;
+        let render_state = self.render_state.as_mut().ok_or(VtError {
+            code: ffi::GHOSTTY_INVALID_VALUE,
+        })?;
         let original = terminal.scrollbar()?;
         terminal.scroll_viewport(VtScrollViewport::Top);
 
@@ -961,10 +1164,10 @@ impl TerminalModel {
             let mut output = Vec::with_capacity(original.total.min(usize::MAX as u64) as usize);
             let mut next_absolute_row = 0_u64;
             loop {
-                self.render_state.update(&mut terminal)?;
+                render_state.update(terminal)?;
                 let scrollbar = terminal.scrollbar()?;
                 let mut viewport_index = 0_u64;
-                let mut rows = self.render_state.rows()?;
+                let mut rows = render_state.rows()?;
                 while let Some(mut row) = rows.next_row() {
                     let absolute_row = scrollbar.offset.saturating_add(viewport_index);
                     viewport_index = viewport_index.saturating_add(1);
@@ -1019,8 +1222,8 @@ impl TerminalModel {
         })();
 
         terminal.scroll_viewport(VtScrollViewport::Top);
-        scroll_terminal_delta(&mut terminal, i128::from(original.offset));
-        let _ = self.render_state.update(&mut terminal);
+        scroll_terminal_delta(terminal, i128::from(original.offset));
+        let _ = render_state.update(terminal);
         result
     }
 
@@ -1028,21 +1231,27 @@ impl TerminalModel {
     /// render-state update; row/cell copy-out and dirty clearing run outside
     /// it. Consumes both dirty layers per the ghostty_vt contract.
     pub fn snapshot(&mut self) -> Result<TerminalSnapshot, VtError> {
+        let render_state = self.render_state.as_mut().ok_or(VtError {
+            code: ffi::GHOSTTY_INVALID_VALUE,
+        })?;
         let scrollbar = {
             let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
-            self.render_state.update(&mut terminal)?;
+            let terminal = terminal.as_mut().ok_or(VtError {
+                code: ffi::GHOSTTY_INVALID_VALUE,
+            })?;
+            render_state.update(terminal)?;
             terminal.scrollbar()?
         };
 
-        let (cols, rows) = self.render_state.size()?;
-        let dirty = self.render_state.dirty()?;
-        let colors = self.render_state.colors()?;
-        let cursor = self.render_state.cursor_viewport()?;
-        let cursor_visible = self.render_state.cursor_visible()?;
+        let (cols, rows) = render_state.size()?;
+        let dirty = render_state.dirty()?;
+        let colors = render_state.colors()?;
+        let cursor = render_state.cursor_viewport()?;
+        let cursor_visible = render_state.cursor_visible()?;
 
         let mut snapshot_rows: Vec<SnapshotRow> = Vec::with_capacity(rows as usize);
         let mut codepoints: Vec<u32> = Vec::new();
-        let mut row_iter = self.render_state.rows()?;
+        let mut row_iter = render_state.rows()?;
         while let Some(mut row) = row_iter.next_row() {
             let row_dirty = row.is_dirty()?;
             let mut cells: Vec<SnapshotCell> = Vec::with_capacity(cols as usize);
@@ -1093,7 +1302,7 @@ impl TerminalModel {
             });
         }
         drop(row_iter);
-        self.render_state.clear_dirty()?;
+        render_state.clear_dirty()?;
 
         Ok(TerminalSnapshot {
             cols,
@@ -1110,19 +1319,47 @@ impl TerminalModel {
     }
 }
 
+impl Drop for TerminalModel {
+    fn drop(&mut self) {
+        if self.child.is_detached() {
+            return;
+        }
+        let retiring = self
+            .viewer_detach
+            .lock()
+            .expect("terminal detach lock poisoned")
+            .retiring;
+        if retiring {
+            #[cfg(unix)]
+            let foreground_group = self.master.process_group_leader();
+            #[cfg(not(unix))]
+            let foreground_group = None;
+            let write_tx = self.write_tx.clone();
+            if self
+                .child
+                .detach_viewer(foreground_group, move || {
+                    let _ = write_tx.send(None);
+                })
+                .is_err()
+            {
+                // Keep the writer from injecting newline/VEOF if disposal cannot
+                // be scheduled. Ordinary single-child cleanup still runs below.
+                std::mem::forget(self.write_tx.clone());
+                let _ = self.child.kill();
+            }
+        } else {
+            // portable-pty's writer Drop writes newline/VEOF. Preserve the
+            // original ordering: terminate the child before dropping senders.
+            let _ = self.child.kill();
+        }
+    }
+}
+
 fn scroll_terminal_delta(terminal: &mut ghostty_vt::VtTerminal, mut delta: i128) {
     while delta != 0 {
         let step = delta.clamp(-(isize::MAX as i128), isize::MAX as i128) as isize;
         terminal.scroll_viewport(VtScrollViewport::Delta(step));
         delta -= step as i128;
-    }
-}
-
-impl Drop for TerminalModel {
-    fn drop(&mut self) {
-        // Best-effort teardown: killing the child EOFs the PTY, which winds
-        // down all three pump threads.
-        let _ = self.killer.kill();
     }
 }
 

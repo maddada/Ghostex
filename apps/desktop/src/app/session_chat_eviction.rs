@@ -202,6 +202,7 @@ impl GhostexGpuiApp {
             parked.protected_sessions.remove(&candidate.session_id);
             parked.surfaces.remove(&candidate.session_id)
         };
+        self.release_session_chat_runtime_subscription(candidate.generation, cx);
         if let Some(surface) = surface {
             surface.update(cx, |surface, _| {
                 surface.set_visible(false);
@@ -222,7 +223,7 @@ impl GhostexGpuiApp {
 
     /// CDXC:SessionChat 2026-09-05 WHY:
     /// A prior empty report can precede the final keystroke or blur, so elapsed time is not a safe substitute for a fresh reply.
-    /// Probe the exact hidden page after a fresh provider activity read, then recheck native guards and its hidden epoch before releasing its binding into the reusable renderer pool.
+    /// Ask the exact hidden editor to commit its draft and transfer pending revisions to the shared broker, then recheck native guards and its hidden epoch before releasing the binding.
     /// Serial probes preserve oldest-first release without simultaneous snapshot reads for every cached page; refusal, timeout and unknown state protect the page.
     pub(crate) fn evict_expired_hidden_agents_chat_surfaces(
         &mut self,
@@ -360,6 +361,11 @@ impl GhostexGpuiApp {
                 .and_then(|id| self.parked_agents_chat_runtimes_by_project.get_mut(id))
             {
                 parked.composer_empty_reports.insert(session_id, allowed);
+            }
+            if allowed {
+                if let Some(snapshot) = message.get("snapshot") {
+                    self.cache_session_chat_runtime_snapshot(generation, snapshot);
+                }
             }
             if let Some(sender) = sender {
                 let _ = sender.send(allowed);

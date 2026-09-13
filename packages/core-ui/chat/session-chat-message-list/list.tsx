@@ -7,9 +7,8 @@
 // markers that expand to their full text — hiding them is what reads as
 // "messages are missing".
 //
-// Scrolling is owned by the shadcn MessageScroller: autoScroll follows live
-// growth and preserveScrollOnPrepend anchors history loads. The chat button
-// releases the streaming hold and jumps to the end. The viewport is
+// TanStack owns measured row positions and keyed history prepends. The chat
+// controller retains explicit streaming holds and navigation. The viewport is
 // flipped to RTL (content back to LTR) so the scrollbar renders on the left
 // edge of the conversation.
 
@@ -22,10 +21,12 @@ import {
   MessageScroller,
   MessageScrollerContent,
   MessageScrollerItem,
-  MessageScrollerProvider,
+  SessionChatVirtualScrollerContext,
   MessageScrollerViewport,
-  useMessageScroller,
-} from '../../../components/ui/message-scroller';
+  useSessionChatVirtualScroller,
+} from '../session-chat-virtual-scroller';
+import { useSessionChatVirtualTranscript } from '../use-session-chat-virtual-transcript';
+import { transcriptRowElements } from '../session-chat-transcript-mode';
 import { Separator } from '../../../components/ui/separator';
 import { normalizeghostexHotkeySettings } from '../../../shared/ghostex-hotkeys';
 import { type SessionChatMessage, type SessionChatTheme } from '../../../shared/session-chat';
@@ -564,7 +565,7 @@ function ScrollToLatestSend({
   pendingMessageId: string | null;
   restored: boolean;
 }): null {
-  const { scrollToEnd } = useMessageScroller();
+  const { scrollToEnd } = useSessionChatVirtualScroller();
   const handledRef = useRef<string | null>(restored ? pendingMessageId : null);
 
   useEffect(() => {
@@ -644,6 +645,7 @@ export function SessionChatMessageList({
   const viewportRef = useRef<HTMLDivElement>(null);
   const cancelScrollMomentum = useSessionChatScrollMomentum(viewportRef);
   const shouldFollowBottomRef = useRef(restoredScroll?.followBottom ?? true);
+  const [, refreshScrollPolicy] = useState(0);
   // A collapsed composer means the reader scrolled into history; streaming growth must not pull them back to the end.
   const composerCollapsedRef = useRef(composerCollapsed);
   composerCollapsedRef.current = composerCollapsed;
@@ -656,7 +658,7 @@ export function SessionChatMessageList({
   So the hold anchors the streaming row's top to the top of the viewport and
   keeps it there as the text grows (each growth re-anchors until the row can
   reach the top), instead of leaving it two lines above the composer.
-  Both follow paths (the ResizeObserver below and the scroller's autoScroll)
+  Both follow paths (the ResizeObserver below and the virtualizer's end anchoring)
   hold while the synthetic streaming row is in the list. A reader scroll during
   the hold ends the anchoring, and the viewport then stays wherever they put it
   when the transcript's row replaces the stream. Scroll to bottom (the pill or
@@ -671,6 +673,7 @@ export function SessionChatMessageList({
   streamHoldRef.current = streamOnScreen && !streamHoldReleased;
   const readerScrolledInHoldRef = useRef(restoredScroll?.readerScrolledInHold ?? false);
   const programmaticScrollTopRef = useRef<number | null>(null);
+  const virtualScrollToEndRef = useRef<(() => void) | null>(null);
   const setViewportScrollTop = useCallback((top: number): void => {
     const viewport = viewportRef.current;
     if (!viewport) {
@@ -702,6 +705,7 @@ export function SessionChatMessageList({
       viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'true');
       viewport.removeAttribute(STREAM_HOLD_ATTRIBUTE);
       setViewportScrollTop(viewport.scrollHeight);
+      virtualScrollToEndRef.current?.();
       cancelScrollMomentum();
     }
   }, [cancelScrollMomentum, resumeFileScrolling, setViewportScrollTop]);
@@ -758,6 +762,8 @@ export function SessionChatMessageList({
   const navigateHistory = useCallback((): void => {
     cancelScrollRestoration();
     shouldFollowBottomRef.current = false;
+    if (streamHoldRef.current) readerScrolledInHoldRef.current = true;
+    refreshScrollPolicy((revision) => revision + 1);
     viewportRef.current?.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, 'false');
   }, [cancelScrollRestoration]);
 
@@ -829,8 +835,8 @@ export function SessionChatMessageList({
     }
   }, [hasMore, loadingEarlier, loadEarlierIfNearTop, messages.length]);
 
-  // Auto-load older history before the reader reaches the top; the viewport's
-  // preserveScrollOnPrepend keeps the visible rows in place when the earlier
+  // Auto-load older history before the reader reaches the top; the virtualizer's
+  // keyed prepend compensation keeps the visible rows in place when the earlier
   // page lands. Every scroll also stamps the viewport so the scrollbar shows
   // while scrolling and fades out afterwards (chat.css).
   const handleScroll = useCallback(
@@ -848,9 +854,13 @@ export function SessionChatMessageList({
       if (streamHoldRef.current) {
         readerScrolledInHoldRef.current = true;
       }
-      shouldFollowBottomRef.current =
+      const followBottom =
         !fileNavigationActiveRef.current &&
         viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= AUTO_SCROLL_EDGE_THRESHOLD_PX;
+      if (shouldFollowBottomRef.current !== followBottom) {
+        shouldFollowBottomRef.current = followBottom;
+        refreshScrollPolicy((revision) => revision + 1);
+      }
       viewport.setAttribute(FOLLOW_BOTTOM_ATTRIBUTE, shouldFollowBottomRef.current ? 'true' : 'false');
       viewport.setAttribute('data-user-scrolling', 'true');
       if (scrollbarFadeTimeoutRef.current !== undefined) {
@@ -907,6 +917,36 @@ export function SessionChatMessageList({
     previousPendingMessageIdRef.current = pendingMessageId;
   }, [pendingMessageId, resumeFileScrolling]);
 
+  const virtualRows = useMemo(
+    () =>
+      summaryMode
+        ? summaryTurns.map((turn) => ({ key: `summary:${turn.user.id}`, messageId: turn.user.id }))
+        : renderItems.map((item) =>
+            item.kind === 'message'
+              ? { key: item.message.id, messageId: item.message.id }
+              : { key: `completed-work:${item.turn.user.id}`, messageId: item.turn.final.id }
+          ),
+    [renderItems, summaryMode, summaryTurns]
+  );
+  const virtualTranscript = useSessionChatVirtualTranscript({
+    rows: virtualRows,
+    viewportRef,
+    contentRef,
+    snapshot: restoredScroll,
+    programmaticScrollTopRef,
+    canFollow:
+      shouldFollowBottomRef.current &&
+      scrollRestorationControlRef.current.finished &&
+      !composerCollapsed &&
+      !fileNavigationActive &&
+      (!streamOnScreen || streamHoldReleased),
+    pinnedMessageIds: [
+      ...(!scrollRestorationControlRef.current.finished && restoredScroll?.anchorId ? [restoredScroll.anchorId] : []),
+      ...(streamHoldRef.current && !readerScrolledInHoldRef.current ? [SESSION_CHAT_STREAMING_ID] : []),
+    ],
+  });
+  virtualScrollToEndRef.current = virtualTranscript.scrollToEnd;
+
   useSessionChatScrollRestoration({
     snapshot: restoredScroll,
     viewportRef,
@@ -915,7 +955,9 @@ export function SessionChatMessageList({
     controlRef: scrollRestorationControlRef,
     earlierPageCursor,
     oldestMessageId: messages[0]?.id,
-    messagesRevision: messages,
+    messagesRevision: virtualTranscript.virtualItems,
+    loadedMessageIds: virtualTranscript.rowIndexes,
+    revealMessage: virtualTranscript.scrollToMessage,
     hasMore,
     loadingEarlier,
     onLoadEarlier,
@@ -930,7 +972,7 @@ export function SessionChatMessageList({
     if (!viewport || !content) return;
     const capture = () => {
       if (viewport.clientHeight === 0 || !scrollRestorationControlRef.current.finished) return;
-      const rows = content.children;
+      const rows = transcriptRowElements(content);
       const top = viewport.getBoundingClientRect().top;
       let low = 0;
       let high = rows.length;
@@ -983,16 +1025,7 @@ export function SessionChatMessageList({
   return (
     <SessionChatInteractionProvider state={interactionState}>
       <SessionChatFileChangeInteractionContext value={reportFileInteraction}>
-        <MessageScrollerProvider
-          autoScroll={
-            scrollRestorationControlRef.current.finished &&
-            !composerCollapsed &&
-            !fileNavigationActive &&
-            (!streamOnScreen || streamHoldReleased)
-          }
-          defaultScrollPosition={restoredScroll && !restoredScroll.followBottom ? 'start' : 'end'}
-          scrollEdgeThreshold={AUTO_SCROLL_EDGE_THRESHOLD_PX}
-        >
+        <SessionChatVirtualScrollerContext value={virtualTranscript}>
           <ScrollToLatestSend pendingMessageId={pendingMessageId} restored={Boolean(restoredScroll)} />
           <MessageScroller className={cn('flex-1', summaryTurns.length >= 2 && 'ghostex-chat-has-minimap')}>
             <SessionChatMinimap onNavigate={navigateHistory} turns={summaryTurns} />
@@ -1010,120 +1043,140 @@ export function SessionChatMessageList({
                 )
                   navigateHistory();
               }}
-              onWheel={resumeFileScrolling}
-              onTouchMove={resumeFileScrolling}
+              onWheel={(event) => {
+                resumeFileScrolling();
+                if (event.deltaY < 0) navigateHistory();
+              }}
+              onTouchMove={() => {
+                resumeFileScrolling();
+                navigateHistory();
+              }}
               onPointerDown={(event) => {
                 if (event.target === event.currentTarget) resumeFileScrolling();
               }}
               onKeyDown={(event) => {
+                if (
+                  !event.shiftKey &&
+                  !(
+                    event.target instanceof Element && event.target.closest('input, textarea, [contenteditable="true"]')
+                  ) &&
+                  (event.key === 'Home' || event.key === 'End')
+                ) {
+                  event.preventDefault();
+                  resumeFileScrolling();
+                  if (event.key === 'End') jumpToBottom();
+                  else {
+                    navigateHistory();
+                    virtualTranscript.virtualizer.scrollToOffset(0, { behavior: 'auto' });
+                  }
+                  return;
+                }
                 if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key))
                   resumeFileScrolling();
               }}
               onScroll={handleScroll}
-              preserveScrollOnPrepend
               ref={viewportRef}
             >
-              <MessageScrollerContent
-                className='mx-auto w-full max-w-3xl gap-0 px-4 pt-8 [direction:ltr]'
-                ref={contentRef}
-              >
+              <MessageScrollerContent className='mx-auto w-full max-w-3xl [direction:ltr]' ref={contentRef}>
                 {summaryMode
-                  ? summaryTurns.map((turn) => (
-                      <MessageScrollerItem key={`summary:${turn.user.id}`} messageId={turn.user.id}>
-                        <MessageRow
-                          message={turn.user}
-                          onRetryStartupSend={onRetryStartupSend}
-                          onRemoveStartupSend={onRemoveStartupSend}
-                          onSavePrompt={onSavePrompt}
-                          {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
-                          showAssistantCopy={false}
-                          verboseMode={verboseMode}
-                        />
-                        {turn.final ? (
-                          <SessionChatDisclosure
-                            stateKey={`summary-reply:${turn.user.id}`}
-                            key='agent-reply'
-                            label='Agent reply'
-                            onExpand={anchorExpandedAreaTop}
-                          >
-                            <MessageRow
-                              message={turn.final}
-                              {...(saveMessageMarkdown && listMessageMarkdownPaths
-                                ? { onSaveMarkdown: setMarkdownToSave }
-                                : {})}
-                              showAssistantCopy={copyableAssistantMessageIds.has(turn.final.id)}
-                              verboseMode={verboseMode}
-                            />
-                          </SessionChatDisclosure>
-                        ) : turn.active ? (
-                          <SessionChatDisclosure
-                            stateKey={`summary-work:${turn.user.id}`}
-                            key='active-work'
-                            label='Active work'
-                            onExpand={anchorExpandedAreaTop}
-                          >
-                            {turn.activeWork.map((message, index) => (
-                              <MessageRow
-                                isStreaming={index === turn.activeWork.length - 1}
-                                key={message.id}
-                                message={message}
-                                showAssistantCopy={false}
-                                verboseMode={verboseMode}
-                              />
-                            ))}
-                          </SessionChatDisclosure>
-                        ) : null}
-                      </MessageScrollerItem>
-                    ))
-                  : renderItems.map((item, index) => (
-                      <MessageScrollerItem
-                        key={item.kind === 'message' ? item.message.id : `completed-work:${item.turn.user.id}`}
-                        messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
-                        // No row is a scroll anchor: anchoring a message to the top of
-                        // the viewport makes message-scroller pad the transcript with a
-                        // spacer so that message can reach the top, which leaves a
-                        // viewport-sized scrollable gap between the newest row and the
-                        // composer until the reply grows tall enough to fill it.
-                        // Following the bottom keeps the newest row above the composer.
-                      >
-                        {item.kind === 'message' ? (
+                  ? virtualTranscript.virtualItems.map((virtualItem) => {
+                      const turn = summaryTurns[virtualItem.index]!;
+                      return (
+                        <MessageScrollerItem key={virtualItem.key} messageId={turn.user.id} virtualItem={virtualItem}>
                           <MessageRow
-                            /*
-                             * Only the newest row can still be growing, and only while
-                             * the agent is working: transcript tailing appends to the
-                             * last message, and the synthetic streaming preview row is
-                             * always last when it exists. Earlier rows are settled, so
-                             * their code fences are safe to highlight and cache.
-                             * `completedWorkRenderItems` never folds the active
-                             * response while working, so a "completed-work" item is
-                             * settled by construction and keeps the default
-                             * `isStreaming={false}`.
-                             */
-                            isStreaming={isWorking && index === renderItems.length - 1}
-                            message={item.message}
+                            message={turn.user}
                             onRetryStartupSend={onRetryStartupSend}
                             onRemoveStartupSend={onRemoveStartupSend}
                             onSavePrompt={onSavePrompt}
                             {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
-                            {...(saveMessageMarkdown && listMessageMarkdownPaths
-                              ? { onSaveMarkdown: setMarkdownToSave }
-                              : {})}
-                            showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
+                            showAssistantCopy={false}
                             verboseMode={verboseMode}
                           />
-                        ) : (
-                          <CompletedWork
-                            onExpand={anchorExpandedAreaTop}
-                            {...(saveMessageMarkdown && listMessageMarkdownPaths
-                              ? { onSaveMarkdown: setMarkdownToSave }
-                              : {})}
-                            showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
-                            turn={item.turn}
-                            verboseMode={verboseMode}
-                          />
-                        )}
-                      </MessageScrollerItem>
-                    ))}
+                          {turn.final ? (
+                            <SessionChatDisclosure
+                              stateKey={`summary-reply:${turn.user.id}`}
+                              key='agent-reply'
+                              label='Agent reply'
+                              onExpand={anchorExpandedAreaTop}
+                            >
+                              <MessageRow
+                                message={turn.final}
+                                {...(saveMessageMarkdown && listMessageMarkdownPaths
+                                  ? { onSaveMarkdown: setMarkdownToSave }
+                                  : {})}
+                                showAssistantCopy={copyableAssistantMessageIds.has(turn.final.id)}
+                                verboseMode={verboseMode}
+                              />
+                            </SessionChatDisclosure>
+                          ) : turn.active ? (
+                            <SessionChatDisclosure
+                              stateKey={`summary-work:${turn.user.id}`}
+                              key='active-work'
+                              label='Active work'
+                              onExpand={anchorExpandedAreaTop}
+                            >
+                              {turn.activeWork.map((message, index) => (
+                                <MessageRow
+                                  isStreaming={index === turn.activeWork.length - 1}
+                                  key={message.id}
+                                  message={message}
+                                  showAssistantCopy={false}
+                                  verboseMode={verboseMode}
+                                />
+                              ))}
+                            </SessionChatDisclosure>
+                          ) : null}
+                        </MessageScrollerItem>
+                      );
+                    })
+                  : virtualTranscript.virtualItems.map((virtualItem) => {
+                      const index = virtualItem.index;
+                      const item = renderItems[index]!;
+                      return (
+                        <MessageScrollerItem
+                          virtualItem={virtualItem}
+                          key={item.kind === 'message' ? item.message.id : `completed-work:${item.turn.user.id}`}
+                          messageId={item.kind === 'message' ? item.message.id : item.turn.final.id}
+                        >
+                          {item.kind === 'message' ? (
+                            <MessageRow
+                              /*
+                               * Only the newest row can still be growing, and only while
+                               * the agent is working: transcript tailing appends to the
+                               * last message, and the synthetic streaming preview row is
+                               * always last when it exists. Earlier rows are settled, so
+                               * their code fences are safe to highlight and cache.
+                               * `completedWorkRenderItems` never folds the active
+                               * response while working, so a "completed-work" item is
+                               * settled by construction and keeps the default
+                               * `isStreaming={false}`.
+                               */
+                              isStreaming={isWorking && index === renderItems.length - 1}
+                              message={item.message}
+                              onRetryStartupSend={onRetryStartupSend}
+                              onRemoveStartupSend={onRemoveStartupSend}
+                              onSavePrompt={onSavePrompt}
+                              {...(rewindToMessage && canRewind ? { onRewind: setRewindRequest } : {})}
+                              {...(saveMessageMarkdown && listMessageMarkdownPaths
+                                ? { onSaveMarkdown: setMarkdownToSave }
+                                : {})}
+                              showAssistantCopy={copyableAssistantMessageIds.has(item.message.id)}
+                              verboseMode={verboseMode}
+                            />
+                          ) : (
+                            <CompletedWork
+                              onExpand={anchorExpandedAreaTop}
+                              {...(saveMessageMarkdown && listMessageMarkdownPaths
+                                ? { onSaveMarkdown: setMarkdownToSave }
+                                : {})}
+                              showAssistantCopy={copyableAssistantMessageIds.has(item.turn.final.id)}
+                              turn={item.turn}
+                              verboseMode={verboseMode}
+                            />
+                          )}
+                        </MessageScrollerItem>
+                      );
+                    })}
               </MessageScrollerContent>
             </MessageScrollerViewport>
             {/* CDXC:SessionChat 2026-09-11 DECISION:
@@ -1167,7 +1220,7 @@ export function SessionChatMessageList({
               theme={theme}
             />
           ) : null}
-        </MessageScrollerProvider>
+        </SessionChatVirtualScrollerContext>
       </SessionChatFileChangeInteractionContext>
     </SessionChatInteractionProvider>
   );

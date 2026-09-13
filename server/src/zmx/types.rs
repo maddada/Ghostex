@@ -16,6 +16,7 @@ pub struct ZmxProcessIdentity {
     pub agent_session_path: Option<String>,
     pub(crate) process_id: Option<i64>,
     pub(crate) terminal_name: Option<String>,
+    pub(crate) open_file_paths: Option<std::sync::Arc<[std::path::PathBuf]>>,
 }
 
 #[derive(Clone)]

@@ -8,6 +8,7 @@
 // call sites instead.
 pub mod fork_branches;
 pub mod fork_family;
+mod fork_family_cache;
 pub mod payload_inserts;
 pub mod search;
 pub mod session_attributes;
@@ -20,6 +21,7 @@ pub mod util;
 
 pub(crate) use fork_branches::*;
 pub(crate) use fork_family::*;
+pub(crate) use fork_family_cache::*;
 pub(crate) use payload_inserts::*;
 pub(crate) use search::*;
 pub(crate) use session_attributes::*;

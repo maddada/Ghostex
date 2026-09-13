@@ -1048,15 +1048,12 @@ impl GhostexGpuiApp {
         re-attaches the reused tab to the freshly respawned provider.
         */
         if message.force_remount {
-            if self
-                .local_workspace_session_mappings
-                .get(&key)
-                .copied()
-                .and_then(|shell_session_id| {
-                    self.agents_gpui_engine_terminals.remove(&shell_session_id)
-                })
-                .is_some()
+            if let Some(shell_session_id) = self.local_workspace_session_mappings.get(&key).copied()
             {
+                self.agents_gpui_terminal_viewer_recipes
+                    .remove(&shell_session_id);
+                self.agents_terminal_chat_claims.remove(&shell_session_id);
+                self.agents_gpui_engine_terminals.remove(&shell_session_id);
                 cx.notify();
             }
         } else if self.focus_existing_gpui_local_workspace_terminal(&key, cx) {

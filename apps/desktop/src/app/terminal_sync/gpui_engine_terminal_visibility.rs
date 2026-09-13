@@ -29,9 +29,10 @@ pub(crate) struct GpuiEngineTerminalAnnouncedVisibility {
 impl GhostexGpuiApp {
     /*
     CDXC:Terminal 2026-09-05 WHY:
-    Agent sessions run inside zmx, and every Agents engine terminal keeps its
-    `zmx attach` client alive while parked (background tab, chat mode, another
-    titlebar mode, collapsed companion). A parked client used to keep its last
+    Agent sessions run inside zmx. Viewers pinned by pending input or native
+    operations can remain attached while hidden; other viewers release through
+    gpui_engine_terminal_viewers, with visible Chat retaining a lightweight claim.
+    A parked client used to keep its last
     narrow width and stay the daemon's sizing client, so the agent CLI kept
     rendering narrow and the chat view, which reads the zmx screen, showed
     truncated lines. This pass runs after every engine reconcile (once per
@@ -94,7 +95,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Terminal 2026-09-06 WHY:
-    /// A project switch keeps attach clients alive outside the active workspace; release their claims before moving them, then discard the active project's cache so incoming terminals announce their current layout.
+    /// A project switch releases claims before detaching unused viewers or parking direct PTY owners and pinned viewers; incoming terminals must announce their current layout.
     pub(crate) fn park_agents_gpui_engine_terminal_zmx_clients(
         &mut self,
         cx: &mut gpui::Context<Self>,
@@ -219,8 +220,18 @@ impl GhostexGpuiApp {
             .is_some_and(|session| session.zmx_session_name.is_some())
             || self
                 .remote_attach_sessions
-                .values()
-                .any(|remote_session_id| *remote_session_id == session_id)
+                .iter()
+                .any(|(key, remote_session_id)| {
+                    *remote_session_id == session_id
+                        && self.agents_workspace_project_id.as_deref()
+                            == Some(
+                                gpui_remote_scoped_project_id(
+                                    &key.remote_machine_id,
+                                    &key.project_id,
+                                )
+                                .as_str(),
+                            )
+                })
     }
 
     /// Whether a `refresh-if-stale` may carry this engine terminal's grid:

@@ -1,34 +1,42 @@
-import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
-import { SESSION_CHAT_INITIAL_LIMIT, SESSION_CHAT_MAX_LIMIT } from '@/packages/core-ui/chat/session-chat-pagination';
-import { mergeSessionChatMessagesWith } from '@/packages/core-ui/chat/session-chat-merge';
+import type { PendingDraft } from '@/packages/core-ui/chat/session-chat-draft-outbox';
 import { GXSERVER_PROTOCOL_VERSION } from '@/packages/shared/gxserver-protocol';
-import { gxserverRpcErrorFromResponseBody } from '@/packages/shared/gxserver-rpc-error';
+import { mergeSessionChatMessagesWith } from '@/packages/core-ui/chat/session-chat-merge';
+import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
 import type { GxserverReadSessionChatResult, GxserverSessionChatEvent } from '@/packages/shared/session-chat';
 import { foldSessionChatAppend, foldSessionChatState } from './session-chat-runtime/fold';
-import { persistSessionChat, readPersistedSessionChat } from './session-chat-runtime/persistence';
-import { SessionChatSocket, type SessionChatRuntimeEndpoint } from './session-chat-runtime/socket';
-
-export interface SessionChatRuntimeIdentity {
-  machineId: string;
-  projectId: string;
-  sessionId: string;
-}
+import type { SessionChatRuntimeEndpoint } from './session-chat-runtime/socket';
+export type { SessionChatRuntimeIdentity } from './session-chat-runtime/store';
+import type { SessionChatRuntimeIdentity } from './session-chat-runtime/store';
 
 type Listener = Parameters<SessionChatTransport['subscribe']>[0];
-type RawTransport = Omit<SessionChatTransport, 'subscribe'>;
-const MAX_RETAINED_SESSIONS = 12;
-const IDLE_RETENTION_MS = 5 * 60 * 1_000;
-const MAX_RETAINED_MESSAGES = 1_200;
-const MAX_RETAINED_BYTES = 4 * 1024 * 1024;
-const entries = new Map<string, RetainedSession>();
-const servers = new Map<string, SessionChatSocket>();
+type Message = {
+  kind: 'response' | 'event' | 'reset' | 'chunk';
+  transferId?: string;
+  index?: number;
+  total?: number;
+  data?: string;
+  ok?: boolean;
+  requestId?: string;
+  snapshot?: GxserverReadSessionChatResult;
+  event?: GxserverSessionChatEvent;
+  error?: string;
+};
+interface Host {
+  generation: string;
+  initialSnapshot?: GxserverReadSessionChatResult;
+  send: (payload: Record<string, unknown>) => void;
+}
 const endpoints = new Map<string, SessionChatRuntimeEndpoint>();
+const clients = new Map<
+  string,
+  {
+    machineId: string;
+    endpointChanged: () => void;
+    adopt: (drafts: PendingDraft[]) => Promise<void>;
+    dispose: () => void;
+  }
+>();
 
-/**
- * CDXC:SessionChat 2026-09-12 WHY:
- * Draft outbox writers survive their mounted chat, so every activation on one machine shares its mutable RPC endpoint while native callbacks retain their original activation generation.
- * Socket endpoints remain immutable connection snapshots, allowing reads from replaced credentials or tunnels to be rejected.
- */
 export function retainSessionChatRuntimeEndpoint(
   machineId: string,
   candidate: SessionChatRuntimeEndpoint
@@ -39,417 +47,301 @@ export function retainSessionChatRuntimeEndpoint(
     endpoint = { ...candidate };
     endpoints.set(machineId, endpoint);
   }
-  servers.get(machineId)?.update(endpoint);
   return endpoint;
 }
-
-function serverFor(machineId: string, endpoint: SessionChatRuntimeEndpoint): SessionChatSocket {
-  let server = servers.get(machineId);
-  if (!server) {
-    server = new SessionChatSocket(endpoint);
-    servers.set(machineId, server);
-  } else server.update(endpoint);
-  return server;
-}
-
-function prune(): void {
-  const idle = [...entries.values()].filter((entry) => !entry.listeners.size).sort((a, b) => a.touchedAt - b.touchedAt);
-  while (entries.size > MAX_RETAINED_SESSIONS && idle.length) idle.shift()!.dispose();
-}
-
-/**
- * CDXC:SessionChat 2026-09-12 DECISION:
- * User approved retaining chat data and live subscriptions independently of mounted views for fast session switching.
- * The server subscribes snapshot-first and has no afterSeq replay contract; short switches retain their subscription, while reconnects replace from an authoritative snapshot without clearing the cached view.
- */
-class RetainedSession {
-  readonly key: string;
-  readonly streamKey: string;
-  readonly transport: SessionChatTransport;
-  readonly listeners = new Set<Listener>();
-  touchedAt = Date.now();
-  private snapshot?: GxserverReadSessionChatResult;
-  private confirmed = false;
-  private serverId?: string;
-  private disposed = false;
-  private unfollow?: () => void;
-  private expiry?: ReturnType<typeof setTimeout>;
-  private persistTimer?: ReturnType<typeof setTimeout>;
-  private resyncTimer?: ReturnType<typeof setTimeout>;
-  private resyncAttempt = 0;
-  private revision = 0;
-  private connectionGeneration = 0;
-  private readFlight?: Promise<GxserverReadSessionChatResult>;
-  private readFlightLimit = 0;
-  private requestedWindow = SESSION_CHAT_INITIAL_LIMIT;
-  private readAt = 0;
-  private updatedAt = 0;
-  private byteSizeCheckedAt = 0;
-  private commandKeys = new Set<string>();
-  private hydration: Promise<void>;
-
-  constructor(
-    readonly identity: SessionChatRuntimeIdentity,
-    raw: RawTransport,
-    readonly server: SessionChatSocket
-  ) {
-    this.key = JSON.stringify([identity.machineId, identity.projectId, identity.sessionId]);
-    this.streamKey = JSON.stringify([identity.projectId, identity.sessionId]);
-    this.transport = {
-      ...raw,
-      read: (params) => this.read(params),
-      seed: async (params) => {
-        await this.hydration;
-        const cached = this.snapshot;
-        if (!cached || cached.status === 'starting' || cached.status === 'loading' || cached.status === 'error')
-          return this.read(params);
-        if (Date.now() - this.readAt > 30_000) void this.read(params).catch(() => this.requestResync());
-        return cached;
-      },
-      getCachedSnapshot: () => this.snapshot,
-      subscribe: (listener) => this.subscribe(listener),
-      reconnect: () => this.server.refresh(this.streamKey),
-    };
-    this.hydration = readPersistedSessionChat(this.key).then((stored) => {
-      if (!this.disposed && !this.snapshot && stored) {
-        this.snapshot = stored.snapshot;
-        this.updatedAt = stored.savedAt;
-        this.requestedWindow = Math.max(
-          SESSION_CHAT_INITIAL_LIMIT,
-          stored.requestedWindow ?? stored.snapshot.messages.length
-        );
-        this.emitSnapshot();
-      }
-    });
-    this.update(raw);
-    this.scheduleExpiry();
-  }
-
-  update(raw: RawTransport): void {
-    // Activation callbacks belong to that activation. Future commands use the
-    // new delegates; promises already started keep their captured callbacks.
-    const { read: _read, seed: _seed, getCachedSnapshot: _cached, reconnect: _reconnect, ...commands } = raw;
-    for (const key of this.commandKeys) {
-      if (!(key in commands)) Reflect.deleteProperty(this.transport, key);
-    }
-    this.commandKeys = new Set(Object.keys(commands));
-    Object.assign(this.transport, commands);
-    this.touchedAt = Date.now();
-  }
-
-  private limit(): number {
-    let limit = Math.max(this.requestedWindow, this.snapshot?.messages.length ?? 0);
-    for (const listener of this.listeners) limit = Math.max(limit, listener.currentLimit?.() ?? 0);
-    return Math.min(limit, SESSION_CHAT_MAX_LIMIT);
-  }
-
-  private subscribe(listener: Listener): () => void {
-    if (this.disposed) throw new Error('This chat runtime has been disposed.');
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = undefined;
-    this.touchedAt = Date.now();
-    this.listeners.add(listener);
-    if (this.snapshot) listener.onEvent(this.snapshotEvent());
-    if (!this.unfollow) {
-      this.unfollow = this.server.follow(this.streamKey, {
-        ...this.identity,
-        limit: () => this.limit(),
-        receive: (event) => this.receive(event),
-        reconnect: () => {
-          this.confirmed = false;
-          this.connectionGeneration += 1;
-        },
-      });
-    }
-    prune();
-    return () => {
-      this.listeners.delete(listener);
-      this.touchedAt = Date.now();
-      if (!this.listeners.size) {
-        this.scheduleExpiry();
-        this.compactIfNeeded();
-        prune();
-      }
-    };
-  }
-
-  private snapshotEvent(): Extract<GxserverSessionChatEvent, { type: 'sessionChatSnapshot' }> {
-    return {
-      ...this.snapshot!,
-      // Own-properties also clear the read-only draft metadata on promotion.
-      availableAgents: this.snapshot!.availableAgents,
-      switchableAgents: this.snapshot!.switchableAgents,
-      sessionAgentId: this.snapshot!.sessionAgentId,
-      type: 'sessionChatSnapshot',
-      projectId: this.identity.projectId,
-      sessionId: this.identity.sessionId,
-      serverId: this.serverId ?? '',
-      protocolVersion: GXSERVER_PROTOCOL_VERSION,
-    };
-  }
-
-  private emitSnapshot(): void {
-    if (!this.snapshot) return;
-    const event = this.snapshotEvent();
-    for (const listener of this.listeners) listener.onEvent(event);
-  }
-
-  private receive(event: GxserverSessionChatEvent): void {
-    if (this.disposed) return;
-    if (event.type === 'sessionChatSnapshot' || event.type === 'sessionChatReplaced') {
-      if (
-        this.confirmed &&
-        event.serverId === this.serverId &&
-        this.snapshot &&
-        (event.epoch < this.snapshot.epoch || (event.epoch === this.snapshot.epoch && event.seq < this.snapshot.seq))
-      )
-        return;
-      const previous = this.serverId && this.serverId !== event.serverId ? undefined : this.snapshot;
-      this.snapshot = foldSessionChatState(previous, event);
-      this.serverId = event.serverId;
-      this.confirmed = true;
-    } else {
-      const previous = this.snapshot;
-      if (
-        this.confirmed &&
-        previous &&
-        event.serverId === this.serverId &&
-        event.epoch === previous.epoch &&
-        event.seq <= previous.seq
-      )
-        return;
-      if (
-        !this.confirmed ||
-        !previous ||
-        event.serverId !== this.serverId ||
-        event.epoch !== previous.epoch ||
-        event.seq !== previous.seq + 1
-      ) {
-        this.requestResync();
-        return;
-      }
-      this.snapshot =
-        event.type === 'sessionChatAppended'
-          ? foldSessionChatAppend(previous, event)
-          : foldSessionChatState(previous, event);
-    }
-    this.revision += 1;
-    this.resyncAttempt = 0;
-    for (const listener of this.listeners) listener.onEvent(event);
-    this.schedulePersistence();
-    this.compactIfNeeded();
-  }
-
-  private async fetchRead(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult> {
-    const endpoint = this.server.endpoint;
-    if (!endpoint.baseUrl || !endpoint.authToken) throw new Error('The chat server connection is unavailable.');
-    const path = '/api/readSessionChat';
-    const response = await fetch(`${endpoint.baseUrl}${path}`, {
-      method: 'POST',
-      redirect: 'error',
-      signal: AbortSignal.timeout(25_000),
-      headers: {
-        authorization: `Bearer ${endpoint.authToken}`,
-        'content-type': 'application/json',
-        'x-gxserver-protocol-version': String(GXSERVER_PROTOCOL_VERSION),
-      },
-      body: JSON.stringify({
-        protocolVersion: GXSERVER_PROTOCOL_VERSION,
-        params: {
-          ...params,
-          projectId: this.identity.projectId,
-          sessionId: this.identity.sessionId,
-        },
-      }),
-    });
-    const body: unknown = await response.json();
-    const envelope = body as { ok?: boolean; result?: GxserverReadSessionChatResult };
-    if (!response.ok || envelope.ok !== true || !envelope.result) {
-      throw gxserverRpcErrorFromResponseBody(path, body) ?? new Error(`Conversation read failed (${response.status}).`);
-    }
-    return envelope.result;
-  }
-
-  private read(params: { limit?: number; beforeOffset?: number }): Promise<GxserverReadSessionChatResult> {
-    if (params.beforeOffset !== undefined) {
-      const endpoint = this.server.endpoint;
-      const generation = this.connectionGeneration;
-      return this.fetchRead(params).then((result) => {
-        const previous = this.snapshot;
-        if (
-          endpoint !== this.server.endpoint ||
-          generation !== this.connectionGeneration ||
-          (previous && previous.epoch !== result.epoch)
-        ) {
-          throw new Error('The conversation changed while loading earlier history.');
-        }
-        if (
-          !this.disposed &&
-          endpoint === this.server.endpoint &&
-          generation === this.connectionGeneration &&
-          previous?.epoch === result.epoch &&
-          previous.beforeOffset === params.beforeOffset
-        ) {
-          // Filtered or duplicate-only pages still consume history. Raise the
-          // requested window before refreshing, even when row count is unchanged.
-          this.requestedWindow = Math.min(
-            SESSION_CHAT_MAX_LIMIT,
-            this.limit() + (params.limit ?? SESSION_CHAT_INITIAL_LIMIT)
-          );
-          this.snapshot = {
-            ...previous,
-            messages: mergeSessionChatMessagesWith(
-              result.messages,
-              previous.messages
-            ) as GxserverReadSessionChatResult['messages'],
-            beforeOffset: result.beforeOffset,
-            hasMore: result.hasMore,
-            hasMoreExact: result.hasMoreExact,
-          };
-          this.server.refresh(this.streamKey);
-          this.schedulePersistence();
-        }
-        return result;
-      });
-    }
-    const requestedLimit = Math.max(params.limit ?? SESSION_CHAT_INITIAL_LIMIT, this.requestedWindow);
-    this.requestedWindow = Math.min(SESSION_CHAT_MAX_LIMIT, Math.max(this.requestedWindow, requestedLimit));
-    if (this.readFlight) {
-      if (requestedLimit <= this.readFlightLimit) return this.readFlight;
-      return this.readFlight.then(() => this.read(params));
-    }
-    this.readFlightLimit = requestedLimit;
-    const revision = this.revision;
-    const generation = this.connectionGeneration;
-    const endpoint = this.server.endpoint;
-    const flight = this.fetchRead({ ...params, limit: requestedLimit })
-      .then((result) => {
-        if (this.disposed) return result;
-        if (endpoint !== this.server.endpoint || generation !== this.connectionGeneration) {
-          this.requestResync();
-          return this.snapshot ?? result;
-        }
-        const previous = this.snapshot;
-        const stale =
-          previous &&
-          this.confirmed &&
-          (result.epoch < previous.epoch || (result.epoch === previous.epoch && result.seq < previous.seq));
-        if (stale || (revision !== this.revision && !this.confirmed)) {
-          // A read never rolls a newer live tail back. Read-only metadata is
-          // accepted only for the generation that still owns the conversation.
-          if (previous && result.epoch === previous.epoch) {
-            this.snapshot = foldSessionChatState(previous, {
-              ...result,
-              ...previous,
-              agent: result.agent ?? previous.agent,
-              selectedOptions: result.selectedOptions,
-              availableAgents: result.availableAgents,
-              switchableAgents: result.switchableAgents,
-              sessionAgentId: result.sessionAgentId,
-            });
-            this.readAt = Date.now();
-            this.emitSnapshot();
-            this.schedulePersistence();
-          }
-          return this.snapshot!;
-        }
-        this.snapshot = foldSessionChatState(previous, result);
-        this.readAt = Date.now();
-        this.snapshot.availableAgents = result.availableAgents;
-        this.snapshot.switchableAgents = result.switchableAgents;
-        this.snapshot.sessionAgentId = result.sessionAgentId;
-        this.revision += 1;
-        this.emitSnapshot();
-        this.schedulePersistence();
-        return this.snapshot;
-      })
-      .finally(() => {
-        if (this.readFlight === flight) this.readFlight = undefined;
-      });
-    this.readFlight = flight;
-    return flight;
-  }
-
-  private requestResync(): void {
-    if (this.resyncTimer || this.disposed) return;
-    this.resyncTimer = setTimeout(
-      () => {
-        this.resyncTimer = undefined;
-        this.server.refresh(this.streamKey);
-        void this.read({ limit: this.limit() }).catch(() => {
-          this.resyncAttempt += 1;
-          this.requestResync();
-        });
-      },
-      Math.min(250 * 2 ** this.resyncAttempt, 10_000)
-    );
-  }
-
-  private compactIfNeeded(): void {
-    if (this.listeners.size || !this.snapshot) return;
-    const checkBytes = Date.now() - this.byteSizeCheckedAt > 5_000;
-    if (checkBytes) this.byteSizeCheckedAt = Date.now();
-    if (
-      this.snapshot.messages.length > MAX_RETAINED_MESSAGES ||
-      (checkBytes && JSON.stringify(this.snapshot).length * 2 > MAX_RETAINED_BYTES)
-    ) {
-      // Evict oversized tails instead of slicing them with an invalid cursor.
-      // A later activation restores its persisted tail and requests a fresh window.
-      this.dispose();
-    }
-  }
-
-  private schedulePersistence(): void {
-    this.updatedAt = Date.now();
-    if (this.persistTimer) return;
-    this.persistTimer = setTimeout(() => {
-      this.persistTimer = undefined;
-      if (this.snapshot) void persistSessionChat(this.key, this.snapshot, this.updatedAt, this.requestedWindow);
-    }, 1_000);
-  }
-
-  private scheduleExpiry(): void {
-    if (this.expiry) clearTimeout(this.expiry);
-    this.expiry = setTimeout(() => this.dispose(), IDLE_RETENTION_MS);
-  }
-
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    if (this.snapshot) void persistSessionChat(this.key, this.snapshot, this.updatedAt, this.requestedWindow);
-    this.unfollow?.();
-    if (this.expiry) clearTimeout(this.expiry);
-    if (this.persistTimer) clearTimeout(this.persistTimer);
-    if (this.resyncTimer) clearTimeout(this.resyncTimer);
-    this.listeners.clear();
-    entries.delete(this.key);
-    this.snapshot = undefined;
-  }
-}
-
-export function retainSessionChatTransport(
-  identity: SessionChatRuntimeIdentity,
-  raw: RawTransport,
-  endpoint: SessionChatRuntimeEndpoint
-): SessionChatTransport {
-  const server = serverFor(identity.machineId, endpoint);
-  const key = JSON.stringify([identity.machineId, identity.projectId, identity.sessionId]);
-  let entry = entries.get(key);
-  if (entry) entry.update(raw);
-  else {
-    entry = new RetainedSession(identity, raw, server);
-    entries.set(key, entry);
-  }
-  return entry.transport;
-}
-
 export function updateSessionChatRuntimeEndpoint(machineId: string, endpoint?: SessionChatRuntimeEndpoint): void {
   retainSessionChatRuntimeEndpoint(machineId, endpoint ?? { baseUrl: '', authToken: '' });
+  for (const client of clients.values()) if (client.machineId === machineId) client.endpointChanged();
 }
 
+/** Only the mounted conversation lives here; the sidebar owns inactive snapshots and subscriptions. */
+export function retainSessionChatTransport(
+  identity: SessionChatRuntimeIdentity,
+  raw: Omit<SessionChatTransport, 'subscribe'>,
+  endpoint: SessionChatRuntimeEndpoint,
+  host: Host
+): SessionChatTransport {
+  retainSessionChatRuntimeEndpoint(identity.machineId, endpoint);
+  let snapshot = host.initialSnapshot;
+  let sequence = 0;
+  let disposed = false;
+  let recovering = false;
+  let serverId = '';
+  let confirmed = false;
+  let streamRevision = 0;
+  const listeners = new Set<Listener>();
+  const pending = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+      beforeOffset?: number;
+      revision: number;
+    }
+  >();
+  const namespace = window.ghostexGpui as typeof window.ghostexGpui & {
+    onSessionChatRuntimeMessage?: (message: Message) => void;
+  };
+  const send = (method: string, params?: Record<string, unknown>, requestId?: string): void => {
+    if (!disposed) host.send({ method, params, requestId });
+  };
+  const subscribe = (): void =>
+    send('subscribe', { limit: Math.max(120, ...[...listeners].map((listener) => listener.currentLimit?.() ?? 0)) });
+  const rejectPending = (reason: string): void => {
+    for (const request of pending.values()) {
+      clearTimeout(request.timer);
+      request.reject(new Error(reason));
+    }
+    pending.clear();
+  };
+  const transfers = new Map<
+    string,
+    { parts: string[]; total: number; length: number; timer: ReturnType<typeof setTimeout> }
+  >();
+  const clearTransfers = (): void => {
+    for (const transfer of transfers.values()) clearTimeout(transfer.timer);
+    transfers.clear();
+  };
+  const recoverStream = (): void => {
+    if (recovering || disposed || !listeners.size) return;
+    recovering = true;
+    void request('read', { limit: Math.max(120, snapshot?.messages.length ?? 0) })
+      .then(
+        (next) => {
+          for (const listener of listeners)
+            listener.onEvent({
+              ...next,
+              type: 'sessionChatSnapshot',
+              projectId: identity.projectId,
+              sessionId: identity.sessionId,
+              serverId,
+              protocolVersion: GXSERVER_PROTOCOL_VERSION,
+            });
+        },
+        (error: unknown) => {
+          const next = {
+            messages: [],
+            hasMore: false,
+            beforeOffset: 0,
+            epoch: 0,
+            seq: 0,
+            ...snapshot,
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : String(error),
+          };
+          for (const listener of listeners)
+            listener.onEvent({
+              ...next,
+              type: 'sessionChatSnapshot',
+              projectId: identity.projectId,
+              sessionId: identity.sessionId,
+              serverId,
+              protocolVersion: GXSERVER_PROTOCOL_VERSION,
+            });
+        }
+      )
+      .finally(() => {
+        recovering = false;
+      });
+  };
+  const receive = (message: Message): void => {
+    if (disposed) return;
+    if (message.kind === 'chunk') {
+      const { transferId, index, total, data } = message;
+      if (
+        !transferId ||
+        !Number.isInteger(index) ||
+        !Number.isInteger(total) ||
+        total! < 1 ||
+        total! > 683 ||
+        typeof data !== 'string' ||
+        data.length > 96 * 1024
+      ) {
+        rejectPending('Invalid shared chat transfer.');
+        clearTransfers();
+        recoverStream();
+        return;
+      }
+      let transfer = transfers.get(transferId);
+      if (!transfer && index === 0 && transfers.size < 1) {
+        transfer = {
+          parts: [],
+          total: total!,
+          length: 0,
+          timer: setTimeout(() => {
+            transfers.delete(transferId);
+            rejectPending('The shared chat transfer timed out.');
+            recoverStream();
+          }, 30_000),
+        };
+        transfers.set(transferId, transfer);
+      }
+      if (!transfer || transfer.total !== total || transfer.parts.length !== index) {
+        rejectPending('The shared chat transfer was interrupted.');
+        clearTransfers();
+        recoverStream();
+        return;
+      }
+      transfer.length += data.length;
+      if (transfer.length > 64 * 1024 * 1024) {
+        rejectPending('The shared chat transfer is too large.');
+        clearTransfers();
+        recoverStream();
+        return;
+      }
+      transfer.parts.push(data);
+      if (transfer.parts.length === transfer.total) {
+        clearTimeout(transfer.timer);
+        transfers.delete(transferId);
+        try {
+          receive(JSON.parse(transfer.parts.join('')) as Message);
+        } catch {
+          rejectPending('Invalid shared chat transfer.');
+          recoverStream();
+        }
+      }
+      return;
+    }
+    if (message.kind === 'reset') {
+      clearTransfers();
+      confirmed = false;
+      streamRevision++;
+      rejectPending('The shared chat service reconnected.');
+      if (listeners.size) subscribe();
+      return;
+    }
+    if (message.kind === 'event' && message.event) {
+      const event = message.event;
+      if (event.type === 'sessionChatSnapshot' || event.type === 'sessionChatReplaced') {
+        if (
+          confirmed &&
+          serverId === event.serverId &&
+          snapshot &&
+          (event.epoch < snapshot.epoch || (event.epoch === snapshot.epoch && event.seq < snapshot.seq))
+        )
+          return;
+        snapshot = foldSessionChatState(serverId && serverId !== event.serverId ? undefined : snapshot, event);
+        serverId = event.serverId;
+        confirmed = true;
+      } else {
+        if (
+          !confirmed ||
+          !snapshot ||
+          event.serverId !== serverId ||
+          event.epoch !== snapshot.epoch ||
+          event.seq > snapshot.seq + 1
+        ) {
+          recoverStream();
+          return;
+        }
+        if (event.seq <= snapshot.seq) return;
+        snapshot =
+          event.type === 'sessionChatAppended'
+            ? foldSessionChatAppend(snapshot, event)
+            : foldSessionChatState(snapshot, event);
+      }
+      streamRevision++;
+      for (const listener of listeners) listener.onEvent(event);
+      return;
+    }
+    const request = pending.get(message.requestId ?? '');
+    if (!request) {
+      if (message.error && !message.requestId) recoverStream();
+      return;
+    }
+    pending.delete(message.requestId!);
+    clearTimeout(request.timer);
+    if (message.ok) {
+      request.resolve(undefined);
+      return;
+    }
+    if (message.error || !message.snapshot)
+      request.reject(new Error(message.error ?? 'The shared chat service returned no conversation.'));
+    else {
+      if (request.revision !== streamRevision && request.beforeOffset === undefined && snapshot) {
+        request.resolve(snapshot);
+        return;
+      }
+      snapshot =
+        request.beforeOffset !== undefined && snapshot && snapshot.epoch === message.snapshot.epoch
+          ? {
+              ...snapshot,
+              messages: [...mergeSessionChatMessagesWith(message.snapshot.messages, snapshot.messages)],
+              hasMore: message.snapshot.hasMore,
+              hasMoreExact: message.snapshot.hasMoreExact,
+              beforeOffset: message.snapshot.beforeOffset,
+            }
+          : message.snapshot;
+      request.resolve(message.snapshot);
+    }
+  };
+  namespace.onSessionChatRuntimeMessage = receive;
+  const request = <T = GxserverReadSessionChatResult>(method: string, params: Record<string, unknown>): Promise<T> =>
+    new Promise((resolve, reject) => {
+      if (disposed) {
+        reject(new Error('The chat view was released.'));
+        return;
+      }
+      const requestId = `${host.generation}:${++sequence}`;
+      const timer = setTimeout(() => {
+        pending.delete(requestId);
+        reject(new Error('The shared chat service did not answer.'));
+      }, 30_000);
+      pending.set(requestId, {
+        resolve: (value) => resolve(value as T),
+        reject,
+        timer,
+        revision: streamRevision,
+        beforeOffset: typeof params.beforeOffset === 'number' ? params.beforeOffset : undefined,
+      });
+      send(method, params, requestId);
+    });
+  clients.set(host.generation, {
+    machineId: identity.machineId,
+    endpointChanged: () => send('endpoint'),
+    adopt: (drafts) => request<void>('adoptDrafts', { drafts }),
+    dispose: () => {
+      if (disposed) return;
+      send('unsubscribe');
+      disposed = true;
+      clearTransfers();
+      rejectPending('The chat view was released.');
+      listeners.clear();
+      snapshot = undefined;
+      if (namespace.onSessionChatRuntimeMessage === receive) delete namespace.onSessionChatRuntimeMessage;
+    },
+  });
+  return {
+    ...raw,
+    getCachedSnapshot: () => snapshot,
+    seed: (params) => (snapshot ? Promise.resolve(snapshot) : request('seed', params)),
+    read: (params) => request('read', params),
+    reconnect: () => {
+      send('reconnect');
+      if (listeners.size) subscribe();
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      subscribe();
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) send('unsubscribe');
+      };
+    },
+  };
+}
+export function disposeSessionChatActivation(generation: string): void {
+  clients.get(generation)?.dispose();
+  clients.delete(generation);
+}
 export function disposeSessionChatRuntime(): void {
-  for (const entry of entries.values()) entry.dispose();
-  for (const server of servers.values()) server.dispose();
-  servers.clear();
+  for (const client of clients.values()) client.dispose();
+  clients.clear();
   endpoints.clear();
+}
+
+export function adoptSessionChatDrafts(generation: string, drafts: PendingDraft[]): Promise<void> {
+  const client = clients.get(generation);
+  return client ? client.adopt(drafts) : Promise.reject(new Error('The chat view was released.'));
 }

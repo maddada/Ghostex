@@ -1,5 +1,5 @@
 import { useState, type MouseEvent } from 'react';
-import { useMessageScroller, useMessageScrollerVisibility } from '@/packages/components/ui/message-scroller';
+import { useSessionChatVirtualScroller } from './session-chat-virtual-scroller';
 import type { SessionChatMessage } from '@/packages/shared/session-chat';
 import './session-chat-minimap.css';
 
@@ -29,8 +29,7 @@ export function SessionChatMinimap({
   turns: readonly SessionChatMinimapTurn[];
   onNavigate: () => void;
 }) {
-  const { scrollToMessage } = useMessageScroller();
-  const { visibleMessageIds } = useMessageScrollerVisibility();
+  const { scrollToMessage, visibleMessageIds } = useSessionChatVirtualScroller();
   const [activeId, setActiveId] = useState<string | null>(null);
   const activeIndex = turns.findIndex((turn) => turn.user.id === activeId);
   const activeTurn = turns[activeIndex];

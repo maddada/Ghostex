@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    read_zmx_existing_session_names, read_zmx_session_process_identities, ZmxEndpointError,
-    ZmxEndpointResult, ZmxProcessIdentity,
+    ZmxEndpointError, ZmxEndpointResult, ZmxProcessIdentity, read_zmx_existing_session_names,
+    read_zmx_session_process_identities,
 };
 
 /*
@@ -59,6 +59,7 @@ struct CachedProcessIdentities {
 
 #[derive(Default)]
 struct ProcessIdentitiesCache {
+    generation: u64,
     /// Every name requested recently, with the time it was last requested.
     recent_names: HashMap<String, Instant>,
     snapshot: Option<CachedProcessIdentities>,
@@ -67,11 +68,13 @@ struct ProcessIdentitiesCache {
 static EXISTING_SESSION_NAMES_CACHE: OnceLock<Mutex<Option<CachedExistingSessionNames>>> =
     OnceLock::new();
 static PROCESS_IDENTITIES_CACHE: OnceLock<Mutex<ProcessIdentitiesCache>> = OnceLock::new();
+static PROCESS_IDENTITIES_PROBE: Mutex<()> = Mutex::new(());
 
 pub(crate) fn invalidate_zmx_process_identity_cache() {
     if let Some(cache) = PROCESS_IDENTITIES_CACHE.get() {
         if let Ok(mut cache) = cache.lock() {
             cache.snapshot = None;
+            cache.generation = cache.generation.wrapping_add(1);
         }
     }
 }
@@ -111,41 +114,70 @@ pub fn read_cached_zmx_session_process_identities(
     }
     let cache =
         PROCESS_IDENTITIES_CACHE.get_or_init(|| Mutex::new(ProcessIdentitiesCache::default()));
-    let probe_names = {
-        let Ok(mut guard) = cache.lock() else {
-            return read_zmx_session_process_identities(session_names, home_dir);
-        };
+    {
+        let mut guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let now = Instant::now();
         for name in session_names {
             guard.recent_names.insert(name.clone(), now);
         }
-        guard.recent_names.retain(|_, requested_at| {
-            now.duration_since(*requested_at) < ZMX_PROBE_RECENT_NAMES_WINDOW
-        });
-        if let Some(snapshot) = guard.snapshot.as_ref().filter(|snapshot| {
-            snapshot.fetched_at.elapsed() < ZMX_PROBE_CACHE_TTL
-                && snapshot.home_dir == home_dir
-                && session_names
-                    .iter()
-                    .all(|name| snapshot.names.contains(name))
-        }) {
+        guard
+            .recent_names
+            .retain(|_, at| now.duration_since(*at) < ZMX_PROBE_RECENT_NAMES_WINDOW);
+        if let Some(snapshot) = fresh_process_snapshot(&guard, session_names, home_dir) {
+            return Ok(select_identities(&snapshot.identities, session_names));
+        }
+    }
+    // CDXC:Zmx 2026-09-13 WHY:
+    // Concurrent misses used to spawn identical process scans. Serialize only misses and recheck after waiting, while fresh readers keep using the short-held cache mutex.
+    let _probe = PROCESS_IDENTITIES_PROBE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let (probe_names, generation) = {
+        let guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(snapshot) = fresh_process_snapshot(&guard, session_names, home_dir) {
             return Ok(select_identities(&snapshot.identities, session_names));
         }
         let mut names = guard.recent_names.keys().cloned().collect::<Vec<_>>();
+        // A request can outlive the recent-name window while waiting for a probe.
+        names.extend(session_names.iter().cloned());
         names.sort();
-        names
+        names.dedup();
+        (names, guard.generation)
     };
     let identities = read_zmx_session_process_identities(&probe_names, home_dir)?;
     let selected = select_identities(&identities, session_names);
-    if let Ok(mut guard) = cache.lock() {
-        guard.snapshot = Some(CachedProcessIdentities {
-            fetched_at: Instant::now(),
-            home_dir: home_dir.to_path_buf(),
-            names: probe_names.into_iter().collect(),
-            identities,
-        });
+    {
+        let mut guard = cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if guard.generation == generation {
+            guard.snapshot = Some(CachedProcessIdentities {
+                fetched_at: Instant::now(),
+                home_dir: home_dir.to_path_buf(),
+                names: probe_names.into_iter().collect(),
+                identities,
+            });
+        }
     }
     Ok(selected)
+}
+
+fn fresh_process_snapshot<'a>(
+    cache: &'a ProcessIdentitiesCache,
+    session_names: &[String],
+    home_dir: &Path,
+) -> Option<&'a CachedProcessIdentities> {
+    cache.snapshot.as_ref().filter(|snapshot| {
+        snapshot.fetched_at.elapsed() < ZMX_PROBE_CACHE_TTL
+            && snapshot.home_dir == home_dir
+            && session_names
+                .iter()
+                .all(|name| snapshot.names.contains(name))
+    })
 }
 
 fn select_identities(

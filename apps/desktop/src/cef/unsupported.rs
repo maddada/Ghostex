@@ -275,6 +275,7 @@ impl CefBrowser {
         _url: &str,
         _generation: &str,
         _bootstrap: SidebarGxserverBootstrap,
+        _initial_snapshot: Option<serde_json::Value>,
     ) {
     }
 

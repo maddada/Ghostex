@@ -916,11 +916,17 @@ impl GhostexGpuiApp {
             SystemTime::now(),
         );
         self.park_agents_gpui_engine_terminal_zmx_clients(cx);
+        self.release_unused_agents_gpui_terminal_viewers(true, cx);
         let zmx_session_names = self
             .agents_workspace
             .terminal_sessions
             .iter()
-            .filter(|session| self.agents_gpui_engine_terminals.contains_key(&session.id))
+            .filter(|session| {
+                self.agents_gpui_engine_terminals.contains_key(&session.id)
+                    || self
+                        .agents_gpui_terminal_viewer_recipes
+                        .contains_key(&session.id)
+            })
             .filter_map(|session| {
                 session
                     .zmx_session_name
@@ -945,6 +951,15 @@ impl GhostexGpuiApp {
                     old_project_id.clone(),
                     ParkedAgentsTerminalRuntime {
                         zmx_session_names,
+                        protected_viewer_sessions: self
+                            .agents_gpui_engine_terminals
+                            .keys()
+                            .copied()
+                            .filter(|id| self.agents_terminal_viewer_has_pending_work(*id))
+                            .collect(),
+                        viewer_recipes: std::mem::take(
+                            &mut self.agents_gpui_terminal_viewer_recipes,
+                        ),
                         runtime_sessions: std::mem::take(
                             &mut self.agents_terminal_runtime_sessions,
                         ),
@@ -959,13 +974,20 @@ impl GhostexGpuiApp {
                         ),
                     },
                 );
-                self.parked_agents_chat_runtimes_by_project
-                    .insert(old_project_id, parked_chat_runtime);
+                if let Some(replaced) = self
+                    .parked_agents_chat_runtimes_by_project
+                    .insert(old_project_id, parked_chat_runtime)
+                {
+                    self.release_parked_session_chat_runtime_subscriptions(&replaced, cx);
+                }
             }
             // No owning project id means there is nothing to park these pages
             // under and nothing that could ever restore them, so they are
             // destroyed here exactly as the pre-parking teardown did.
-            None => drop(parked_chat_runtime),
+            None => {
+                self.release_parked_session_chat_runtime_subscriptions(&parked_chat_runtime, cx);
+                drop(parked_chat_runtime);
+            }
         }
 
         let restored_state = new_project_id.as_ref().and_then(|project_id| {
@@ -1013,6 +1035,7 @@ impl GhostexGpuiApp {
         }
         self.agents_terminal_runtime_sessions = restored_terminal_runtime.runtime_sessions;
         self.agents_gpui_engine_terminals = restored_terminal_runtime.gpui_engine_terminals;
+        self.agents_gpui_terminal_viewer_recipes = restored_terminal_runtime.viewer_recipes;
         self.agents_terminal_runtime_osc_states = restored_terminal_runtime.runtime_osc_states;
         self.agents_gpui_engine_close_confirms =
             restored_terminal_runtime.gpui_engine_close_confirms;
@@ -1209,6 +1232,7 @@ impl GhostexGpuiApp {
         self.command_terminal_launch_payload_source
             .remove_all_payloads();
         self.command_gpui_engine_terminals.clear();
+        self.command_gpui_terminal_viewer_recipes.clear();
         self.command_gpui_engine_close_confirms.clear();
         #[cfg(target_os = "macos")]
         {

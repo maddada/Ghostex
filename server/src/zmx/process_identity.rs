@@ -279,10 +279,12 @@ fn resolve_agent_process_invocation(
             agent_session_path: None,
             process_id: None,
             terminal_name: None,
+            open_file_paths: None,
         },
     })
 }
 
+#[cfg(test)]
 pub(crate) fn read_codex_process_session_identity(
     process_id: Option<i64>,
 ) -> Option<(String, String)> {
@@ -290,7 +292,7 @@ pub(crate) fn read_codex_process_session_identity(
     codex_process_session_identity_from_paths(process_open_file_paths(process_id))
 }
 
-fn codex_process_session_identity_from_paths(
+pub(crate) fn codex_process_session_identity_from_paths(
     paths: impl IntoIterator<Item = PathBuf>,
 ) -> Option<(String, String)> {
     let mut identities = HashMap::<String, PathBuf>::new();

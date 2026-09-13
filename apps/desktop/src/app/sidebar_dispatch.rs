@@ -140,10 +140,12 @@ impl GhostexGpuiApp {
             self.local_workspace_latest_focus_key.as_ref(),
         );
         if !force_replay && self.sidebar_gxserver_bootstrap == next_bootstrap {
+            self.refresh_session_chat_runtime_endpoints(false, cx);
             return false;
         }
 
         self.sidebar_gxserver_bootstrap = next_bootstrap.clone();
+        self.refresh_session_chat_runtime_endpoints(false, cx);
         if let Some(handle) = self.app_modal_window {
             let _ = handle.update(cx, |host, _, cx| {
                 host.refresh_gxserver_bootstrap(next_bootstrap.clone(), cx);

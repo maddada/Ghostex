@@ -1,3 +1,8 @@
+import {
+  SessionChatInteractionSubscope,
+  useSessionChatDisclosureState,
+  useSessionChatWidgetState,
+} from './session-chat-interaction-state';
 // Markdown body for chat bubbles: react-markdown + remark-gfm (per the
 // client-integration map both are in the root package.json for this purpose).
 //
@@ -404,7 +409,12 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<'pre'> & ExtraProp
    * reflows the blocks the reader is already looking at, and the blocks that
    * mount next follow the preference.
    */
-  const [wrapped, setWrapped] = useState(readSessionChatCodeWrapDefault);
+  const [wrapped, setWrapped] = useSessionChatDisclosureState(
+    `code-wrap:${node?.position?.start.offset ?? 0}`,
+    readSessionChatCodeWrapDefault(),
+    false
+  );
+  const diagramState = useSessionChatWidgetState(`diagram:${node?.position?.start.offset ?? 0}`);
   const codeNode = Children.toArray(children)[0];
   const className = isValidElement<{ className?: string }>(codeNode) ? codeNode.props.className : undefined;
   const fenceInfo = className?.match(/language-([^\s]+)/)?.[1];
@@ -448,7 +458,7 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<'pre'> & ExtraProp
       opening !== undefined &&
       closing !== undefined &&
       new RegExp(`^${opening[1][0]}{${opening[1].length},}$`).test(closing);
-    return <MermaidDiagram source={text} pending={isStreaming && !closed} />;
+    return <MermaidDiagram source={text} pending={isStreaming && !closed} viewState={diagramState} />;
   }
 
   return (
@@ -596,13 +606,19 @@ export function SessionChatTableModal({ source, onClose }: { source: string; onC
   );
 }
 
-function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'table'> & ExtraProps) {
+function MarkdownTable({ children, node, ...props }: ComponentProps<'table'> & ExtraProps) {
   const inPreview = useContext(TablePreviewContext);
   const [previewSource, setPreviewSource] = useState<string>();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
-  const userCollapsedRef = useRef(false);
-  const [expanded, setExpanded] = useState(false);
+  const [userCollapsed, setUserCollapsed] = useSessionChatDisclosureState(
+    `table-collapsed:${node?.position?.start.offset ?? 0}`,
+    false
+  );
+  const [expanded, setExpanded] = useSessionChatDisclosureState(
+    `table-expanded:${node?.position?.start.offset ?? 0}`,
+    false
+  );
   /*
    * Whether this table has anything the toggle can change. A 2x2 table of
    * short cells has nothing clipped and nothing off-screen, so it stays
@@ -625,7 +641,7 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
       );
       const needsToggle = clipped || scroller.scrollWidth > scroller.clientWidth + 1;
       setExpandable(needsToggle);
-      if (needsToggle && !userCollapsedRef.current) {
+      if (needsToggle && !userCollapsed) {
         pinMarkdownTableColumnWidths(table);
         setExpanded(true);
       }
@@ -637,7 +653,7 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
     observer.observe(scroller);
     observer.observe(table);
     return () => observer.disconnect();
-  }, [expanded]);
+  }, [expanded, setExpanded, setUserCollapsed, userCollapsed]);
 
   const toggleExpanded = useCallback((): void => {
     const table = tableRef.current;
@@ -645,10 +661,10 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
     if (!expanded) {
       pinMarkdownTableColumnWidths(table);
     } else {
-      userCollapsedRef.current = true;
+      setUserCollapsed(true);
     }
     setExpanded(!expanded);
-  }, [expanded]);
+  }, [expanded, setExpanded, setUserCollapsed, userCollapsed]);
 
   const copyTable = useCallback((format: 'csv' | 'markdown'): void => {
     const table = tableRef.current;
@@ -666,7 +682,11 @@ function MarkdownTable({ children, node: _node, ...props }: ComponentProps<'tabl
   return (
     // data-expanded drives the cell cap in chat.css; the wrapper, not the
     // table, is what the actions sit under and what the scroller lives in.
-    <div className='ghostex-chat-markdown-table' data-expanded={expanded ? 'true' : 'false'}>
+    <div
+      className='ghostex-chat-markdown-table'
+      data-expanded={expanded ? 'true' : 'false'}
+      data-session-chat-retain={previewSource !== undefined || undefined}
+    >
       <div className='ghostex-chat-markdown-table-scroll' ref={scrollRef}>
         <table {...props} ref={tableRef}>
           {children}
@@ -757,8 +777,11 @@ function MarkdownTableCell({
  * uncontrolled `<details>` would be at the mercy of whether reconciliation
  * happens to touch the attribute the reader just toggled.
  */
-function MarkdownDetails({ children, node: _node, open, ...props }: ComponentProps<'details'> & ExtraProps) {
-  const [isOpen, setIsOpen] = useState(open === true);
+function MarkdownDetails({ children, node, open, ...props }: ComponentProps<'details'> & ExtraProps) {
+  const [isOpen, setIsOpen] = useSessionChatDisclosureState(
+    `details:${node?.properties?.dataSessionChatDisclosureId ?? node?.properties?.['data-session-chat-disclosure-id'] ?? node?.position?.start.offset ?? 0}`,
+    open === true
+  );
   return (
     <details
       {...props}
@@ -996,6 +1019,7 @@ function markdownComponents(
 export function SessionChatMarkdown({
   chatText = false,
   isStreaming = false,
+  interactionKey = 'body',
   markdown,
 }: {
   /**
@@ -1006,6 +1030,7 @@ export function SessionChatMarkdown({
    * else about the render — GFM, fences, links, chips — is identical.
    */
   chatText?: boolean;
+  interactionKey?: string;
   /**
    * True while this body is still being appended to by a working agent. Only
    * syntax highlighting and Mermaid rendering use it to avoid work on unfinished fences.
@@ -1022,14 +1047,16 @@ export function SessionChatMarkdown({
   const listSafe = sessionChatListInterruptSource(markdown);
   const source = chatText ? sessionChatUserMarkdownSource(listSafe) : listSafe;
   return (
-    <SessionChatMarkdownStreamingContext value={isStreaming}>
-      <SessionChatMarkdownSourceContext value={source}>
-        <div className='ghostex-chat-markdown'>
-          <ReactMarkdown components={components} remarkPlugins={chatText ? CHAT_TEXT_REMARK_PLUGINS : REMARK_PLUGINS}>
-            {source}
-          </ReactMarkdown>
-        </div>
-      </SessionChatMarkdownSourceContext>
-    </SessionChatMarkdownStreamingContext>
+    <SessionChatInteractionSubscope id={interactionKey}>
+      <SessionChatMarkdownStreamingContext value={isStreaming}>
+        <SessionChatMarkdownSourceContext value={source}>
+          <div className='ghostex-chat-markdown'>
+            <ReactMarkdown components={components} remarkPlugins={chatText ? CHAT_TEXT_REMARK_PLUGINS : REMARK_PLUGINS}>
+              {source}
+            </ReactMarkdown>
+          </div>
+        </SessionChatMarkdownSourceContext>
+      </SessionChatMarkdownStreamingContext>
+    </SessionChatInteractionSubscope>
   );
 }

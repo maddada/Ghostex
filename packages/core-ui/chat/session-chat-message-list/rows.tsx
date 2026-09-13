@@ -519,7 +519,7 @@ export function ReasoningRow({
 
   const renderBody = (value: string) => (
     <SessionChatScrollCap className='ghostex-chat-thinking-body'>
-      <SessionChatMarkdown isStreaming={isStreaming} markdown={value} />
+      <SessionChatMarkdown interactionKey='reasoning' isStreaming={isStreaming} markdown={value} />
     </SessionChatScrollCap>
   );
 

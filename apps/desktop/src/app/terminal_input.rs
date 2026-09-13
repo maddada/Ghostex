@@ -130,13 +130,16 @@ impl GhostexGpuiApp {
             return false;
         };
 
-        // Engine terminals keep their own runtime identity, so the upload can
-        // land in that exact terminal even if focus moved. The ghostty path has
-        // no runtime handle here, so it re-checks focus instead.
+        // Runtime IDs are project-local, so async uploads also retain the
+        // originating viewer identity before they can paste their result.
         let runtime_session_id = self
             .agents_gpui_engine_terminals
             .get(&session_id)
             .map(|record| record.runtime_session_id);
+        let originating_view_id = self
+            .agents_gpui_engine_terminals
+            .get(&session_id)
+            .map(|record| record.view.entity_id());
         let target = GpuiEngineTerminalEventTarget::Agents(session_id);
         let settings = shared_settings::shared_sidebar_settings_snapshot();
         let Some(config) =
@@ -169,7 +172,12 @@ impl GhostexGpuiApp {
             cx,
         );
         let background = cx.background_executor().clone();
+        let viewer_lease = self
+            .agents_gpui_engine_terminals
+            .get(&session_id)
+            .map(|record| record.pin_viewer());
         cx.spawn(async move |this, cx| {
+            let _viewer_lease = viewer_lease;
             let result = background
                 .spawn(async move {
                     gpui_upload_terminal_clipboard_image_to_remote(
@@ -183,6 +191,9 @@ impl GhostexGpuiApp {
                 let destination_is_live = match runtime_session_id {
                     Some(runtime_session_id) => {
                         this.gpui_engine_terminal_target_matches_runtime(target, runtime_session_id)
+                            && originating_view_id.is_some_and(|view_id| {
+                                this.gpui_terminal_viewer_matches_entity(target, view_id)
+                            })
                     }
                     None => this.focused_terminal_shell_session_id() == Some(session_id),
                 };
@@ -654,9 +665,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let chat_view_session_ids = self
-            .agents_gpui_engine_terminals
-            .keys()
-            .copied()
+            .agents_workspace
+            .terminal_sessions
+            .iter()
+            .map(|session| session.id)
+            .filter(|session_id| self.agents_terminal_runtime_is_live_for_chat_launch(*session_id))
             .filter(|session_id| self.agents_session_chat_eligible(*session_id))
             .collect::<HashSet<_>>();
         self.reconcile_automatic_agents_chat_modes(&chat_view_session_ids, cx);

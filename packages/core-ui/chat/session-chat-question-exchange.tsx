@@ -17,7 +17,7 @@ all keeps the generic tool row (the caller decides that via
 */
 
 import { IconCheck, IconChevronRight } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useSessionChatDisclosureState } from './session-chat-interaction-state';
 import type { SessionChatQuestion } from '../../shared/session-chat';
 import { cn } from '@/packages/components/utils';
 import { SessionChatChoiceRows } from './session-chat-choice-rows';
@@ -618,7 +618,10 @@ function QuestionSection({
   question: SessionChatQuestion;
   total: number;
 }) {
-  const [showOptions, setShowOptions] = useState(false);
+  const [showOptions, setShowOptions] = useSessionChatDisclosureState(
+    `question-options:${index}:${question.question}`,
+    false
+  );
   const selectedIndices = answer?.selectedIndices ?? [];
   const selectedOptions = selectedIndices
     .map((optionIndex) => question.options[optionIndex])

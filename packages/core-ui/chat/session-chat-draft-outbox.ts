@@ -9,7 +9,13 @@ import { SessionChatStorageIndex } from './session-chat-storage-index';
  */
 const PREFIX = 'ghostex.sessionChat.outbox.';
 const EVENT = 'ghostex-draft-save-status';
-export type PendingDraft = { sessionKey: string; content: string; version: SessionChatDraftVersion; updatedAt: number };
+export type PendingDraft = {
+  clientId?: string;
+  sessionKey: string;
+  content: string;
+  version: SessionChatDraftVersion;
+  updatedAt: number;
+};
 const pendingIndex = new SessionChatStorageIndex<PendingDraft>(
   PREFIX,
   (raw) => {
@@ -19,7 +25,13 @@ const pendingIndex = new SessionChatStorageIndex<PendingDraft>(
   (entry) => entry.sessionKey
 );
 type Writer = (draft: PendingDraft) => Promise<void>;
-type Worker = { write: Writer; running?: Promise<void>; timer?: ReturnType<typeof setTimeout>; failures: number };
+type Worker = {
+  stopped?: boolean;
+  write: Writer;
+  running?: Promise<void>;
+  timer?: ReturnType<typeof setTimeout>;
+  failures: number;
+};
 const workers = new Map<string, Worker>();
 const statuses = new Map<string, string>();
 const unsaved = new Map<string, PendingDraft>();
@@ -158,6 +170,7 @@ export function flushDraftSaves(sessionKey: string): Promise<void> {
         reportDraftStorageFailure(sessionKey);
       }
       for (;;) {
+        if (worker.stopped) break;
         const entry = pendingDrafts(sessionKey)[0];
         if (!entry) break;
         await worker.write(entry);
@@ -167,6 +180,7 @@ export function flushDraftSaves(sessionKey: string): Promise<void> {
       status(sessionKey, '');
     })
     .catch((error: unknown) => {
+      if (worker.stopped) throw error;
       worker.failures++;
       worker.timer = setTimeout(
         () => {
@@ -200,4 +214,31 @@ export function replayDraftSaves(
   void loadDisk()
     .then(replay)
     .catch(() => {});
+}
+
+/** Resolve only after these exact revisions are durable, independently of remote availability. */
+export async function persistDraftsForRelease(sessionKey: string): Promise<PendingDraft[]> {
+  const persistence = diskTail
+    .catch(() => {})
+    .then(async () => {
+      await loadDisk();
+      for (const revision of pendingDrafts(sessionKey)) await saveDraftToDisk(revision);
+    });
+  diskTail = persistence;
+  await persistence;
+  let observed: Promise<void>;
+  do {
+    observed = diskTail;
+    await observed;
+  } while (observed !== diskTail);
+  return pendingDrafts(sessionKey);
+}
+
+/** The shared host has adopted pending revisions; retire only this page's retry worker. */
+export function releaseDraftWriter(sessionKey: string): void {
+  const worker = workers.get(sessionKey);
+  if (!worker) return;
+  worker.stopped = true;
+  if (worker.timer) clearTimeout(worker.timer);
+  workers.delete(sessionKey);
 }

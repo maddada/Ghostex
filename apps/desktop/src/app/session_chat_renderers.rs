@@ -1,9 +1,7 @@
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// CDXC:SessionChat 2026-09-12 DECISION:
-    /// User: reuse persistent CEF chat pages across sessions and projects, preserving independent state and native actions.
-    /// This supersedes per-session browser ownership; the three-page, five-minute unused budget and protected draft/work rules remain.
+    /// Unused pages share one app-wide spare budget; conversation state belongs to the sidebar broker.
     pub(crate) fn expire_reusable_chat_renderers(&mut self) {
         self.reusable_chat_renderers
             .retain(|(_, _, _, hidden_since)| {
@@ -75,6 +73,7 @@ impl GhostexGpuiApp {
                 })
         };
         if let Some(surface) = surface {
+            self.release_session_chat_runtime_subscription(generation, cx);
             surface.update(cx, |surface, _| surface.set_visible(false));
             drop(surface);
             if active_id.is_some() {
@@ -206,6 +205,10 @@ impl GhostexGpuiApp {
         let Some((session_id, account_key)) = binding else {
             return;
         };
+        if message["type"] == "sessionChatHostAction" && message["action"] == "runtimeRequest" {
+            self.relay_session_chat_runtime_request(generation, &message, cx);
+            return;
+        }
         if message["type"] == "sessionChatHostAction"
             && message["action"] == "accountSwitchProgress"
         {

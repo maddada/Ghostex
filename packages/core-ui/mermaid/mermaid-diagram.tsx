@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { IconArrowsMaximize, IconCheck, IconCopy, IconFocusCentered, IconMinus, IconPlus } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
@@ -53,15 +53,33 @@ export interface MermaidDiagramProps {
   expanded?: boolean;
   onExpand?: (source: string) => void;
   onResize?: () => void;
+  /** Optional owner-held preferences survive a virtualized transcript row unmount. */
+  viewState?: { mode?: string; zoom?: number };
 }
 
-export function MermaidDiagram({ source, pending = false, expanded = false, onExpand, onResize }: MermaidDiagramProps) {
+export function MermaidDiagram({
+  source,
+  pending = false,
+  expanded = false,
+  onExpand,
+  onResize,
+  viewState,
+}: MermaidDiagramProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const theme = useMermaidTheme(rootRef);
   const [nearViewport, setNearViewport] = useState(false);
-  const [mode, setMode] = useState('diagram');
-  const [zoom, setZoom] = useState(1);
+  const [mode, setMode] = useState(viewState?.mode === 'source' ? 'source' : 'diagram');
+  const [zoom, setZoom] = useState(
+    typeof viewState?.zoom === 'number' ? Math.max(0.5, Math.min(4, viewState.zoom)) : 1
+  );
+  const previousSource = useRef(source);
+  useLayoutEffect(() => {
+    if (viewState) {
+      viewState.mode = mode;
+      viewState.zoom = zoom;
+    }
+  }, [mode, viewState, zoom]);
   const [imageRatio, setImageRatio] = useState(1);
   const [frame, setFrame] = useState({ width: 0, height: 416 });
   const [copied, setCopied] = useState(false);
@@ -123,6 +141,8 @@ export function MermaidDiagram({ source, pending = false, expanded = false, onEx
   }, [nearViewport, pending, renderKey, source, theme]);
 
   useEffect(() => {
+    if (previousSource.current === source) return;
+    previousSource.current = source;
     setZoom(1);
     viewportRef.current?.scrollTo(0, 0);
   }, [source]);
@@ -145,7 +165,12 @@ export function MermaidDiagram({ source, pending = false, expanded = false, onEx
   };
 
   return (
-    <div className='ghostex-mermaid' data-expanded={expanded} ref={rootRef}>
+    <div
+      className='ghostex-mermaid'
+      data-expanded={expanded}
+      data-session-chat-retain={localExpanded || undefined}
+      ref={rootRef}
+    >
       <div className='ghostex-mermaid-toolbar' aria-label='Diagram controls' role='toolbar'>
         <SegmentedControl aria-label='Diagram display' size='sm' value={mode} onValueChange={setMode}>
           <SegmentedControlItem value='diagram'>Diagram</SegmentedControlItem>

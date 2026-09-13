@@ -21,6 +21,7 @@ mod plugins_modal;
 mod profiling;
 mod shared_settings;
 mod support_logs;
+mod terminal_chat_claim;
 mod terminal_element;
 mod terminal_environment;
 mod terminal_ghostty_surface;

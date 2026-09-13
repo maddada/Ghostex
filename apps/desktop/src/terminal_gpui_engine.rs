@@ -231,6 +231,29 @@ pub(crate) struct GpuiEngineTerminalRecord {
     pub(crate) wait_after_command: bool,
     pub(crate) confirm_close_behavior: TerminalConfirmCloseBehavior,
     pub(crate) _subscription: gpui::Subscription,
+    pub(crate) viewer_leases: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+}
+
+pub(crate) struct GpuiTerminalViewerLease(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for GpuiTerminalViewerLease {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+impl GpuiEngineTerminalRecord {
+    pub(crate) fn pin_viewer(&self) -> GpuiTerminalViewerLease {
+        self.viewer_leases
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel);
+        GpuiTerminalViewerLease(self.viewer_leases.clone())
+    }
+
+    pub(crate) fn viewer_is_pinned(&self) -> bool {
+        self.viewer_leases
+            .load(std::sync::atomic::Ordering::Acquire)
+            > 0
+    }
 }
 
 /// Register the vendored JetBrains Mono Nerd Font faces the ghostty tree

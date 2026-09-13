@@ -290,5 +290,13 @@ export function remarkSessionChatDetails(this: MarkdownParser) {
       node.children = foldDisclosures(node.children, parse);
     };
     visit(tree);
+    let ordinal = 0;
+    const identify = (node: MarkdownAstNode): void => {
+      if (node.data?.hName === 'details') {
+        node.data.hProperties = { ...node.data.hProperties, 'data-session-chat-disclosure-id': ordinal++ };
+      }
+      node.children?.forEach(identify);
+    };
+    identify(tree);
   };
 }

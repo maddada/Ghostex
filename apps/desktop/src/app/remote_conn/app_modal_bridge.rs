@@ -565,6 +565,11 @@ impl GhostexGpuiApp {
             return;
         };
 
+        if message_type == "sessionChatRuntimeBroker" {
+            self.receive_session_chat_runtime_broker(&message, cx);
+            return;
+        }
+
         match message_type {
             "sidebarDiagnosticLog" => {
                 let Some(scenario_id) = message

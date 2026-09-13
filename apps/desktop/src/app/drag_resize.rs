@@ -766,6 +766,14 @@ impl GhostexGpuiApp {
             );
         }
 
+        if let Some(mut recipe) = self
+            .command_gpui_terminal_viewer_recipes
+            .remove(&source_session_id)
+        {
+            recipe.runtime_session_id = agents_runtime_session_id;
+            self.agents_gpui_terminal_viewer_recipes
+                .insert(inserted_session_id, recipe);
+        }
         if let Some(record) = record {
             // Destructure rather than drop: `view` moves out intact, so the
             // child process is never released, while the old subscription
@@ -776,6 +784,7 @@ impl GhostexGpuiApp {
                 wait_after_command,
                 confirm_close_behavior,
                 _subscription,
+                viewer_leases,
             } = record;
             drop(_subscription);
             if let Some(osc_state) = self
@@ -785,9 +794,17 @@ impl GhostexGpuiApp {
                 self.agents_terminal_runtime_osc_states
                     .insert(agents_runtime_session_id, osc_state);
             }
+            let view_id = view.entity_id();
             let subscription = cx.subscribe(
                 &view,
                 move |this: &mut Self, _view, event: &terminal_element::TerminalViewEvent, cx| {
+                    if this
+                        .agents_gpui_engine_terminals
+                        .get(&inserted_session_id)
+                        .is_none_or(|record| record.view.entity_id() != view_id)
+                    {
+                        return;
+                    }
                     this.handle_gpui_engine_terminal_view_event(
                         GpuiEngineTerminalEventTarget::Agents(inserted_session_id),
                         event,
@@ -803,6 +820,7 @@ impl GhostexGpuiApp {
                     wait_after_command,
                     confirm_close_behavior,
                     _subscription: subscription,
+                    viewer_leases,
                 },
             );
         }

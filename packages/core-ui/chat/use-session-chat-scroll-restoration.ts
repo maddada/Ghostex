@@ -28,6 +28,8 @@ export function useSessionChatScrollRestoration({
   hasMore,
   loadingEarlier,
   onLoadEarlier,
+  loadedMessageIds,
+  revealMessage,
   setViewportScrollTop,
 }: {
   snapshot: SessionChatScrollSnapshot | undefined;
@@ -41,6 +43,8 @@ export function useSessionChatScrollRestoration({
   hasMore: boolean;
   loadingEarlier: boolean;
   onLoadEarlier: () => void;
+  loadedMessageIds?: ReadonlyMap<string, number>;
+  revealMessage?: (id: string) => boolean;
   setViewportScrollTop: (top: number) => void;
 }) {
   const requestedPageRef = useRef<number | string | null>(null);
@@ -56,6 +60,11 @@ export function useSessionChatScrollRestoration({
         ) as HTMLElement | undefined)
       : undefined;
     const followsEnd = snapshot.followBottom && !snapshot.streamOnScreen;
+    if (!followsEnd && !anchor && snapshot.anchorId && loadedMessageIds?.has(snapshot.anchorId)) {
+      restoringRef.current = true;
+      revealMessage?.(snapshot.anchorId);
+      return;
+    }
     const historyAnchor =
       snapshot.anchorId &&
       snapshot.anchorId !== SESSION_CHAT_STREAMING_ID &&
@@ -135,6 +144,8 @@ export function useSessionChatScrollRestoration({
     earlierPageCursor,
     hasMore,
     loadingEarlier,
+    loadedMessageIds,
+    revealMessage,
     messagesRevision,
     oldestMessageId,
     onLoadEarlier,

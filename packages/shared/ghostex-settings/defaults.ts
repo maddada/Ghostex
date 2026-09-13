@@ -275,6 +275,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   sidebarSessionTagListItems: DEFAULT_SIDEBAR_SESSION_TAG_LIST_ITEMS,
   /**
+   * CDXC:SessionSleep 2026-09-13 DECISION:
+   * User: keep Agent Auto Sleep off by default because remote Claude requires its terminal to remain running.
+   *
    * CDXC:SessionSleep 2026-05-28-08:06:
    * Background VS Code, Project, and Git panes originally auto-slept after
    * fifteen minutes of idle time by default. Agent terminal auto-sleep starts

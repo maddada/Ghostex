@@ -591,6 +591,7 @@ pub struct TerminalView {
     focused: bool,
     last_modifiers: Modifiers,
     input_suppressed: bool,
+    viewer_retired: bool,
     cursor_blink_visible: bool,
     /// Local selection drag in progress (left button held, no reporting).
     drag: Option<SelectionDrag>,
@@ -682,7 +683,10 @@ impl TerminalView {
                 cx.background_executor()
                     .timer(TERMINAL_CURSOR_BLINK_INTERVAL)
                     .await;
-                let Ok(()) = this.update(cx, |view, cx| {
+                let Ok(keep_running) = this.update(cx, |view, cx| {
+                    if view.viewer_retired {
+                        return false;
+                    }
                     if view.settings.cursor_blink && view.focused {
                         view.cursor_blink_visible = !view.cursor_blink_visible;
                         cx.notify();
@@ -690,9 +694,13 @@ impl TerminalView {
                         view.cursor_blink_visible = true;
                         cx.notify();
                     }
+                    true
                 }) else {
                     break;
                 };
+                if !keep_running {
+                    break;
+                }
             }
         })
         .detach();
@@ -715,6 +723,7 @@ impl TerminalView {
             focused: false,
             last_modifiers: Modifiers::default(),
             input_suppressed: false,
+            viewer_retired: false,
             cursor_blink_visible: true,
             drag: None,
             reporting_drag: false,
@@ -741,6 +750,26 @@ impl TerminalView {
 
     pub fn model_mut(&mut self) -> &mut TerminalModel {
         &mut self.model
+    }
+
+    /// Release rendering memory after native routing moves this viewer to retirement.
+    pub(crate) fn release_viewer_emulator(&mut self) {
+        self.viewer_retired = true;
+        self.input_suppressed = true;
+        self.focused = false;
+        self.pending_zmx_visible_announce = false;
+        self.zmx_visibility_claims_enabled = false;
+        self.frame = None;
+        self.row_cache = Vec::new();
+        self.cached_metrics = None;
+        self.search = None;
+        self.selection = None;
+        self.marked_text = None;
+        self.marked_selection_utf16 = None;
+        self.hover_cell = None;
+        self.hovered_link = None;
+        self.drag = None;
+        self.model.release_viewer_emulator();
     }
 
     /// Enable ordered size claims for this live zmx attachment, including
@@ -900,6 +929,15 @@ impl TerminalView {
     }
 
     fn handle_event(&mut self, event: TerminalEvent, cx: &mut Context<Self>) {
+        if self.viewer_retired {
+            if let TerminalEvent::Exited(exit) = event {
+                self.exit = Some(exit);
+            }
+            if matches!(event, TerminalEvent::Wakeup | TerminalEvent::Exited(_)) {
+                cx.notify();
+            }
+            return;
+        }
         match event {
             TerminalEvent::Wakeup => {
                 self.refresh_snapshot();

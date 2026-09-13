@@ -1,3 +1,7 @@
+use crate::app::terminal_sync::{
+    GpuiRetiringTerminalViewer, GpuiTerminalChatClaimState, GpuiTerminalViewerOwner,
+    GpuiTerminalViewerRecipe,
+};
 // C1 wave-4 extraction: the `GhostexGpuiApp` god object itself -- its 301
 // (now `pub(crate)`) fields plus the three trait impls that only it can own:
 // `Drop`, `EntityInputHandler`, and `Render`. Every other `impl GhostexGpuiApp`
@@ -439,6 +443,10 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_chat_eviction_running: bool,
     pub(crate) agents_chat_eviction_requested: bool,
     pub(crate) agents_chat_surfaces: HashMap<TerminalSessionId, Entity<CefSurface>>,
+    pub(crate) session_chat_broker_endpoints: HashMap<String, (String, String)>,
+    pub(crate) session_chat_broker_epoch: Option<String>,
+    pub(crate) session_chat_shared_snapshots:
+        Vec<(GpuiWorkspaceTerminalSessionKey, serde_json::Value)>,
     pub(crate) reusable_chat_renderers: Vec<(
         Entity<CefSurface>,
         u64,
@@ -897,6 +905,14 @@ pub struct GhostexGpuiApp {
     */
     pub(crate) agents_gpui_engine_terminals:
         HashMap<TerminalSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
+    pub(crate) agents_terminal_chat_claims: HashMap<TerminalSessionId, GpuiTerminalChatClaimState>,
+    pub(crate) terminal_viewer_reconcile_pending: bool,
+    pub(crate) retiring_gpui_terminal_viewers:
+        HashMap<GpuiTerminalViewerOwner, GpuiRetiringTerminalViewer>,
+    pub(crate) agents_gpui_terminal_viewer_recipes:
+        HashMap<TerminalSessionId, GpuiTerminalViewerRecipe>,
+    pub(crate) command_gpui_terminal_viewer_recipes:
+        HashMap<CommandSessionId, GpuiTerminalViewerRecipe>,
     pub(crate) command_gpui_engine_terminals:
         HashMap<CommandSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
     /// Last zmx visibility claim (visible/hidden plus the announced grid)

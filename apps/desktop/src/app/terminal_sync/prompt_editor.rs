@@ -150,6 +150,18 @@ impl GhostexGpuiApp {
             );
             return;
         }
+        let Some((viewer_lease, originating_view_id)) = (match target {
+            GpuiEngineTerminalEventTarget::Agents(session_id) => {
+                self.agents_gpui_engine_terminals.get(&session_id)
+            }
+            GpuiEngineTerminalEventTarget::Command(session_id) => {
+                self.command_gpui_engine_terminals.get(&session_id)
+            }
+        })
+        .filter(|record| record.runtime_session_id == runtime_session_id)
+        .map(|record| (record.pin_viewer(), record.view.entity_id())) else {
+            return;
+        };
         let remote_context = match target {
             GpuiEngineTerminalEventTarget::Agents(shell_session_id) => self
                 .remote_prompt_editor_context_for_shell_session(shell_session_id)
@@ -158,7 +170,11 @@ impl GhostexGpuiApp {
         };
         if let Some((shell_session_id, key, connection_generation)) = remote_context {
             cx.spawn(async move |this, cx| {
+                let _viewer_lease = viewer_lease;
                 let _ = this.update_in(cx, |this, window, cx| {
+                    if !this.gpui_terminal_viewer_matches_entity(target, originating_view_id) {
+                        return;
+                    }
                     this.queue_remote_prompt_editor_request(
                         shell_session_id,
                         &key,
@@ -188,6 +204,7 @@ impl GhostexGpuiApp {
         };
 
         cx.spawn(async move |this, cx| {
+            let _viewer_lease = viewer_lease;
             let fronted = cx
                 .background_executor()
                 .spawn(
@@ -195,6 +212,9 @@ impl GhostexGpuiApp {
                 )
                 .await;
             let _ = this.update(cx, |this, cx| {
+                if !this.gpui_terminal_viewer_matches_entity(target, originating_view_id) {
+                    return;
+                }
                 if fronted {
                     if !this.prompt_editor_daemon_open {
                         this.prompt_editor_daemon_open = true;

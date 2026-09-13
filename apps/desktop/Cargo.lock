@@ -2416,6 +2416,7 @@ dependencies = [
  "gpui-component-assets",
  "gpui_platform",
  "image",
+ "libc",
  "percent-encoding",
  "portable-pty",
  "raw-window-handle",

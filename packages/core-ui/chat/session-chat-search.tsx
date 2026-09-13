@@ -1,7 +1,8 @@
+import { materializeSessionChatTranscript, TRANSCRIPT_RENDERED_EVENT } from './session-chat-transcript-mode';
 import { SESSION_CHAT_HISTORY_NAVIGATION_EVENT } from './use-session-chat-scroll-restoration';
 import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
 import { IconChevronDown, IconChevronUp, IconX } from '@tabler/icons-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from 'react';
 import {
   InputGroup,
@@ -155,6 +156,41 @@ export function SessionChatSearch({
   });
   const { matches, activeIndex, navigationRevision } = results;
   const scrolledRevisionRef = useRef(-1);
+  const [renderRevision, setRenderRevision] = useState(0);
+
+  useLayoutEffect(() => {
+    materializeSessionChatTranscript(rootRef.current, 'search', open);
+    return () => materializeSessionChatTranscript(rootRef.current, 'search', false);
+  }, [open, rootRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    const root = rootRef.current;
+    if (!root) return;
+    let frame = 0;
+    let observedContent: Element | null = null;
+    const refresh = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        materializeSessionChatTranscript(root, 'search', true);
+        const content = root.querySelector('[data-slot="message-scroller-content"]');
+        if (content !== observedContent) {
+          observer.disconnect();
+          observedContent = content;
+          if (content) observer.observe(content, { childList: true, subtree: true, characterData: true });
+        }
+        setRenderRevision((revision) => revision + 1);
+      });
+    };
+    const observer = new MutationObserver(refresh);
+    root.addEventListener(TRANSCRIPT_RENDERED_EVENT, refresh);
+    refresh();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      root.removeEventListener(TRANSCRIPT_RENDERED_EVENT, refresh);
+    };
+  }, [open, rootRef]);
 
   const close = useCallback(() => {
     setOpen(false);
@@ -169,8 +205,8 @@ export function SessionChatSearch({
       if (
         event.isComposing ||
         shortcutKeyFromKeyboardEvent(event) !== 'f' ||
-        !event.metaKey ||
-        event.ctrlKey ||
+        !(event.metaKey || event.ctrlKey) ||
+        (event.metaKey && event.ctrlKey) ||
         event.altKey
       ) {
         return;
@@ -226,7 +262,7 @@ export function SessionChatSearch({
         navigationRevision: current.navigationRevision + (queryChanged ? 1 : 0),
       };
     });
-  }, [open, query, rootRef, searchRevision]);
+  }, [open, query, renderRevision, rootRef, searchRevision]);
 
   useEffect(() => {
     clearHighlights();

@@ -52,6 +52,7 @@ gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["fo
 gpui-component = { path = "../../.dependencies/gpui-component/crates/ui" }
 gpui-component-assets = { path = "../../.dependencies/gpui-component/crates/assets" }
 image = { version = "0.25", default-features = false, features = ["png"] }
+libc = "0.2"
 portable-pty = "0.9"
 percent-encoding = "2"
 raw-window-handle = "0.6"

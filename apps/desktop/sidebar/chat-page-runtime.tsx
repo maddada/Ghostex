@@ -1,3 +1,5 @@
+import { releaseDraftWriter } from '@/packages/core-ui/chat/session-chat-draft-outbox';
+import { sessionChatDraftClientId } from '@/packages/core-ui/chat/session-chat-queue';
 import { createSessionChatDiagnosticRecorder } from '@/packages/core-ui/chat/session-chat-diagnostics';
 import { resolveSessionChatTheme, subscribeSystemChatTheme } from '@/packages/core-ui/chat/session-chat-theme';
 import type { SessionChatTransport } from '@/packages/core-ui/chat/session-chat-transport';
@@ -46,7 +48,12 @@ import { createRoot } from 'react-dom/client';
 import { createAccountSwitchTransport } from './account-switch';
 
 import { createGpuiSessionChatPage } from './chat-page';
-import { retainSessionChatRuntimeEndpoint, retainSessionChatTransport } from './session-chat-runtime';
+import {
+  adoptSessionChatDrafts,
+  disposeSessionChatActivation,
+  retainSessionChatRuntimeEndpoint,
+  retainSessionChatTransport,
+} from './session-chat-runtime';
 export interface ChatGxserverBootstrap {
   authToken?: string;
   baseUrl?: string;
@@ -95,6 +102,7 @@ export interface ChatBridgeNamespace {
 export interface SessionChatPageActivation {
   url: string;
   generation: string;
+  initialSnapshot?: import('@/packages/shared/session-chat').GxserverReadSessionChatResult;
   bootstrap?: ChatGxserverBootstrap | null;
 }
 export function chatBridgeNamespace(): ChatBridgeNamespace {
@@ -197,6 +205,7 @@ export function activateSessionChatPage(root: ReturnType<typeof createRoot>, act
   const sessionId = searchParams.get('sessionId')?.trim() ?? '';
   const agentId = searchParams.get('agentId')?.trim() ?? '';
   const remote = searchParams.get('remote') === 'true';
+  let draftsAdopted = false;
   let hotkeysValue: unknown;
   try {
     hotkeysValue = JSON.parse(searchParams.get('hotkeys') ?? '{}');
@@ -665,46 +674,34 @@ first-responder log they are meant to be correlated with.
         /**
          * CDXC:SessionChat 2026-09-05 WHY:
          * An old empty report cannot authorize destroying a page after a final edit or pending attachment operation.
-         * Read current provider activity through this page's own bootstrap, then sample the live composer after the await; unknown or unreachable state protects the page.
+         * Commit the live editor and transfer pending revisions to the app-owned broker, then recheck the exact editor revision after the acknowledgement.
          */
         const requestEvictionProbe = (nonce: string): void => {
           evictionRequest?.abort();
-          const reply = (allowed: boolean): void => {
-            if (registered) {
-              postSessionChatHostAction('composerEvictionState', { allowed, nonce });
-            }
-          };
-          if (!actions.canRelease()) {
-            reply(false);
-            return;
-          }
           const request = new AbortController();
           evictionRequest = request;
-          const timeout = window.setTimeout(() => request.abort(), 2_500);
-          void rpc<{ snapshot: GxserverPresentationSnapshot }>(
-            bootstrap,
-            '/api/readPresentationSnapshot',
-            {},
-            request.signal
-          )
-            .then(({ snapshot }) => {
-              const session = snapshot.sessions.find(
-                (candidate) => candidate.projectId === projectId && candidate.sessionId === sessionId
-              );
-              reply(
-                session?.activity === 'idle' &&
-                  session.delayedSendDeadlineAt === undefined &&
-                  session.delayedSendRemainingMs === undefined &&
-                  (session.queuedPromptCount ?? 0) === 0 &&
-                  actions.canRelease()
-              );
+          void actions
+            .prepareRelease()
+            .then(async (drafts) => {
+              if (drafts === null || request.signal.aborted) return false;
+              const adopted = drafts.map((draft) => ({
+                ...draft,
+                clientId: draft.clientId ?? sessionChatDraftClientId(),
+              }));
+              if (JSON.stringify(adopted).length > 512 * 1024) return false;
+              await adoptSessionChatDrafts(activation.generation, adopted);
+              draftsAdopted = !request.signal.aborted && actions.canRelease();
+              return draftsAdopted;
             })
-            .catch(() => reply(false))
-            .finally(() => {
-              window.clearTimeout(timeout);
-              if (evictionRequest === request) {
-                evictionRequest = undefined;
-              }
+            .catch(() => false)
+            .then((allowed) => {
+              if (!registered || request.signal.aborted) return;
+              const snapshot = transport.getCachedSnapshot?.();
+              const warmSnapshot =
+                snapshot && new TextEncoder().encode(JSON.stringify(snapshot)).length <= 768 * 1024
+                  ? snapshot
+                  : undefined;
+              postSessionChatHostAction('composerEvictionState', { allowed, nonce, snapshot: warmSnapshot ?? null });
             });
         };
         const requestFocus = (): void => actions.focus();
@@ -1086,7 +1083,13 @@ setting is off.
   const transport = retainSessionChatTransport(
     { machineId, projectId, sessionId },
     createGpuiSessionChatTransport(bootstrap, projectId, sessionId, remote),
-    bootstrap
+    bootstrap,
+    {
+      generation: activation.generation,
+      initialSnapshot: activation.initialSnapshot,
+      send: (payload) =>
+        postSessionChatHostAction('runtimeRequest', { ...payload, clientId: sessionChatDraftClientId() }),
+    }
   );
   const composerBridge = createGpuiSessionChatComposerBridge(bootstrap, projectId, sessionId);
   const agentLabel = agentId ? (resolveSessionChatDisplayAgent(agentId) ?? agentId) : null;
@@ -1109,6 +1112,9 @@ setting is off.
     bootstrap,
     dispose: () => {
       renderReadyChat = null;
+      disposeSessionChatActivation(activation.generation);
+      if (draftsAdopted)
+        releaseDraftWriter(`${machineId === 'local' ? '' : `remote-${machineId}:`}${projectId}:${sessionId}`);
       unsubscribeTheme();
     },
   };

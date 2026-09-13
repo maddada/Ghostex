@@ -26,7 +26,7 @@ pub(crate) struct GpuiTerminalSearchState {
 }
 
 /// Which pane family a GPUI-engine terminal view reports events for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum GpuiEngineTerminalEventTarget {
     Agents(TerminalSessionId),
     Command(CommandSessionId),

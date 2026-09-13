@@ -201,6 +201,7 @@ impl GhostexGpuiApp {
         if state == GpuiRemoteGxserverConnectState::Connected.wire_status_state() {
             self.attach_surfaced_remote_workspace_terminals(remote_machine_id, cx);
         }
+        self.refresh_session_chat_runtime_endpoints(false, cx);
         let mut payload = serde_json::json!({
             "machineId": remote_machine_id,
             "state": state,

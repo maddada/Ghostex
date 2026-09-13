@@ -1,8 +1,8 @@
 use std::{fs, path::Path, time::Duration};
 
 use anyhow::{Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Value};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
 use crate::{
     config::write_default_config_if_missing,
@@ -1654,6 +1654,10 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
       PRAGMA user_version = 36;
     "#,
     },
+    Migration {
+        id: "0037_session_fork_revision",
+        sql: include_str!("storage/migrations/0037_session_fork_revision.sql"),
+    },
 ];
 
 #[cfg(unix)]
@@ -1702,10 +1706,10 @@ mod tests {
         let journal_mode: String = db
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
             .expect("journal_mode");
-        assert_eq!(user_version, 36);
+        assert_eq!(user_version, 37);
         assert_eq!(foreign_keys, 1);
         assert_eq!(journal_mode, "wal");
-        assert_eq!(schema_migration_count(&db), 36);
+        assert_eq!(schema_migration_count(&db), 37);
         assert_eq!(
             explicit_index_names(&db),
             vec![

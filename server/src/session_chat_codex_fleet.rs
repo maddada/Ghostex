@@ -19,15 +19,20 @@ fn live_rollout_paths(
     session: &Value,
     root_rollout: &Path,
 ) -> anyhow::Result<(HashSet<PathBuf>, i64)> {
-    let (pid, started_at) = crate::session_chat_fleet_process::current_process(session, "codex")?;
-    let paths: HashSet<_> = crate::zmx::process_open_file_paths(pid)
-        .into_iter()
-        .collect();
+    let process = crate::session_chat_fleet_process::current_process_with_files(session, "codex")?;
+    // CDXC:SessionStatus 2026-09-13 WHY:
+    // Process discovery already enumerates Codex's open rollouts. Reuse that bounded, two-second observation instead of spawning lsof again for the same fleet probe.
+    let paths: HashSet<_> = match process.open_file_paths {
+        Some(paths) => paths.iter().cloned().collect(),
+        None => crate::zmx::process_open_file_paths(process.pid)
+            .into_iter()
+            .collect(),
+    };
     anyhow::ensure!(
         paths.contains(root_rollout),
         "Codex process does not own the expected root rollout"
     );
-    Ok((paths, started_at))
+    Ok((paths, process.started_at))
 }
 
 /// `Err` is unreadable evidence, so callers show the last roster as unavailable, with no running animation.

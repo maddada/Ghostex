@@ -178,10 +178,11 @@ impl CefSurface {
         url: &str,
         generation: &str,
         bootstrap: cef::SidebarGxserverBootstrap,
+        initial_snapshot: Option<serde_json::Value>,
     ) {
         self.session_chat_pane_focused = None;
         self.browser
-            .activate_session_chat(url, generation, bootstrap);
+            .activate_session_chat(url, generation, bootstrap, initial_snapshot);
     }
 
     pub(crate) fn refresh_session_chat_gxserver_bootstrap(

@@ -12,6 +12,7 @@ use gpui::Pixels;
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
+use crate::app::terminal_sync::GpuiTerminalViewerRecipe;
 use crate::*;
 
 impl GhostexGpuiApp {
@@ -457,9 +458,40 @@ impl GhostexGpuiApp {
                     .project_editor_companion_terminal_launch_payload_source
                     .take_explicit_payload_for_mount_slot(runtime_session_id, slot_id)
                 else {
-                    self.request_project_editor_companion_terminal_attach_payload(slot_id, cx);
+                    let chat_only = self.agents_chat_mode_sessions.contains(&slot_id.session_id)
+                        && !self.terminal_bell_notifications_enabled();
+                    if !(chat_only
+                        && self.agents_terminal_has_detachable_viewer(slot_id.session_id))
+                        && (chat_only
+                            || !self
+                                .ensure_agents_gpui_engine_terminal_view(slot_id.session_id, cx))
+                    {
+                        self.request_project_editor_companion_terminal_attach_payload(slot_id, cx);
+                    }
                     continue;
                 };
+                if self.agents_chat_mode_sessions.contains(&slot_id.session_id)
+                    && !self.terminal_bell_notifications_enabled()
+                    && self.terminal_viewer_target_is_daemon_backed(
+                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
+                    )
+                    && payload.initial_input.as_deref().is_none_or(str::is_empty)
+                    && payload.command.is_some()
+                {
+                    self.remember_gpui_terminal_viewer_recipe(
+                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
+                        GpuiTerminalViewerRecipe {
+                            runtime_session_id,
+                            working_directory: payload.working_directory,
+                            command: payload.command,
+                            env_vars: payload.env_vars,
+                            wait_after_command: payload.wait_after_command,
+                        },
+                    );
+                    self.sync_agents_terminal_chat_claims(cx);
+                    cx.notify();
+                    continue;
+                }
                 if let Some(record) = self.spawn_gpui_engine_terminal_record(
                     GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
                     runtime_session_id,

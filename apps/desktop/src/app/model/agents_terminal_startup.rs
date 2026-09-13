@@ -1,3 +1,4 @@
+use crate::app::terminal_sync::GpuiTerminalViewerRecipe;
 // C1 wave-3 re-cluster: Agents terminal startup runtime identity, launch-plan derivation, the startup coordinator, and Ghostty surface owner reconciliation, moved verbatim out of the
 // types1.rs..types6.rs chunk split (docs/2026-08-22/repo-restructure/SPLITS.md
 // C1) into this descriptively named module per its FOLLOW-UPS.md note (pure
@@ -20,16 +21,15 @@ pub(crate) struct AgentsTerminalRuntimeSessionRegistry {
 
 /*
 CDXC:Workarea 2026-08-05:
-Inactive project workspaces keep their live composited terminal owners beside
-their parked shell models. The entities own the local shell/SSH attach clients,
-so dropping them during a project or machine switch forces a fresh zmx attach
-even though the persisted tab still says Running. Runtime ids, terminal
-entities, OSC state, and close-confirm intent stay process-local and return only
-to the exact project that parked them; none of this state is serialized.
+Inactive projects keep direct PTY owners and pending native operations beside their parked shell models.
+Daemon-backed viewers retain only attach recipes and recreate the local client when a Terminal pane returns.
+Project-local runtime ids, recipes, remaining entities, OSC state, and close-confirm intent travel together so colliding numeric ids cannot restore another project's client; none of this state is serialized.
 */
 #[derive(Default)]
 pub(crate) struct ParkedAgentsTerminalRuntime {
     pub(crate) runtime_sessions: AgentsTerminalRuntimeSessionRegistry,
+    pub(crate) protected_viewer_sessions: HashSet<TerminalSessionId>,
+    pub(crate) viewer_recipes: HashMap<TerminalSessionId, GpuiTerminalViewerRecipe>,
     pub(crate) gpui_engine_terminals:
         HashMap<TerminalSessionId, terminal_gpui_engine::GpuiEngineTerminalRecord>,
     /// CDXC:Terminal 2026-09-06 WHY:

@@ -3,9 +3,10 @@ use std::{fs, path::PathBuf, time::SystemTime};
 use serde_json::Value;
 
 use crate::resume_lookup::{
-    codex_homes, codex_transcript_paths, expand_home, home_dir, parse_json_line, read_lines_lossy,
-    text_from_message,
+    expand_home, home_dir, parse_json_line, read_lines_lossy, text_from_message,
 };
+
+mod codex_lookup;
 
 /*
 CDXC:SessionTitles 2026-07-29:
@@ -124,15 +125,7 @@ pub(crate) fn find_claude_transcript(session_id: &str) -> Option<PathBuf> {
 }
 
 pub(crate) fn find_codex_transcript(session_id: &str) -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    for codex_home in codex_homes() {
-        candidates.extend(
-            codex_transcript_paths(&codex_home, session_id, None)
-                .into_iter()
-                .filter(|path| path.is_file()),
-        );
-    }
-    newest_file(candidates)
+    codex_lookup::find(session_id)
 }
 
 fn find_cursor_transcript(session_id: &str) -> Option<PathBuf> {

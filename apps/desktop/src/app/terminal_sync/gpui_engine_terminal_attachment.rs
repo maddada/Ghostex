@@ -44,6 +44,16 @@ impl GhostexGpuiApp {
         runtime_session_id: AgentsTerminalRuntimeSessionId,
         cx: &mut gpui::Context<Self>,
     ) {
+        let Some((origin_view_id, lease)) = (match target.engine_target() {
+            GpuiEngineTerminalEventTarget::Agents(id) => self.agents_gpui_engine_terminals.get(&id),
+            GpuiEngineTerminalEventTarget::Command(id) => {
+                self.command_gpui_engine_terminals.get(&id)
+            }
+        })
+        .filter(|record| record.runtime_session_id == runtime_session_id)
+        .map(|record| (record.view.entity_id(), record.pin_viewer())) else {
+            return;
+        };
         let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
             files: true,
             directories: true,
@@ -51,6 +61,7 @@ impl GhostexGpuiApp {
             prompt: Some("Attach File or Folder".into()),
         });
         cx.spawn(async move |this, cx| {
+            let _lease = lease;
             let Ok(Ok(Some(paths))) = receiver.await else {
                 return;
             };
@@ -58,6 +69,10 @@ impl GhostexGpuiApp {
                 return;
             };
             let _ = this.update(cx, |this, cx| {
+                if !this.gpui_terminal_viewer_matches_entity(target.engine_target(), origin_view_id)
+                {
+                    return;
+                }
                 this.attach_selected_path_to_gpui_engine_terminal(
                     target,
                     runtime_session_id,
@@ -149,8 +164,18 @@ impl GhostexGpuiApp {
             "Uploading the selected item to the remote machine.",
             cx,
         );
+        let Some((origin_view_id, lease)) = (match target.engine_target() {
+            GpuiEngineTerminalEventTarget::Agents(id) => self.agents_gpui_engine_terminals.get(&id),
+            GpuiEngineTerminalEventTarget::Command(id) => {
+                self.command_gpui_engine_terminals.get(&id)
+            }
+        })
+        .map(|record| (record.view.entity_id(), record.pin_viewer())) else {
+            return;
+        };
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
+            let _lease = lease;
             let result = background
                 .spawn(async move {
                     gpui_upload_terminal_attachment_to_remote(
@@ -161,8 +186,11 @@ impl GhostexGpuiApp {
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
-                if !this
-                    .gpui_terminal_attachment_target_matches_runtime(&target, runtime_session_id)
+                if !this.gpui_terminal_viewer_matches_entity(target.engine_target(), origin_view_id)
+                    || !this.gpui_terminal_attachment_target_matches_runtime(
+                        &target,
+                        runtime_session_id,
+                    )
                 {
                     return;
                 }
@@ -353,6 +381,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
         }
+        self.ensure_agents_gpui_engine_terminal_view(shell_session_id, cx);
         if let Some(view) = self
             .agents_gpui_engine_terminals
             .get(&shell_session_id)
@@ -440,6 +469,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
         }
+        self.ensure_agents_gpui_engine_terminal_view(shell_session_id, cx);
         if let Some(view) = self
             .agents_gpui_engine_terminals
             .get(&shell_session_id)

@@ -1,3 +1,5 @@
+import { persistDraftsForRelease, type PendingDraft } from './session-chat-draft-outbox';
+import { readSessionChatComposerSelection, saveSessionChatComposerSelection } from './session-chat-composer-parking';
 import type { SessionChatDraftHandoff } from '@/packages/shared/session-chat-queue';
 import {
   registerDraftWriter,
@@ -149,6 +151,7 @@ import type {
 export interface SessionChatComposerHandle {
   /** Fresh release guard for hosts reclaiming a hidden chat page. */
   canRelease: () => boolean;
+  prepareRelease: () => Promise<PendingDraft[] | null>;
   /** Append text after the current draft, separated as its own Markdown block. */
   appendText: (text: string) => boolean;
   /** Clear the draft only when it still matches the supplied snapshot. */
@@ -210,6 +213,7 @@ export interface SessionChatComposerKeyEvent {
  */
 export interface SessionChatComposerInputApi {
   applyValue: (next: string, caret: number) => void;
+  setSelection?: (start: number, end: number) => void;
   focus: () => void;
   getSelection: () => { end: number; start: number };
   getValue: () => string;
@@ -960,28 +964,70 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
      * Hidden-page eviction must read the live editor because React draft state can lag input, and an empty field can still own an upload or a queued prompt being moved back into the composer.
      * Synchronous counters keep that work protected before React commits its next render.
      */
+    const releasePreparedTextRef = useRef<string | null>(null);
+    const releasePreparedVersionRef = useRef<string | undefined>(undefined);
     const canRelease = (): boolean => {
       const input = getInputApi();
-      return (
+      const allowed =
         input !== null &&
-        input.getValue().trim() === '' &&
-        draftEmptyRef.current &&
+        releasePreparedTextRef.current === input.getValue() &&
+        releasePreparedVersionRef.current === JSON.stringify(draftVersionRef.current) &&
         pendingImagePastesRef.current === 0 &&
         pendingComposerOperationsRef.current === 0 &&
         pendingDraftTransfersRef.current === 0 &&
-        !hasPendingDraftSaves(sessionKey) &&
-        draftSaveStatus(sessionKey) === '' &&
         !composingRef.current &&
         !sendInFlightRef.current &&
         !pendingFocusRef.current &&
         pendingInsertTextRef.current === '' &&
         pendingSavedPromptRef.current === '' &&
-        incomingDraft === null
-      );
+        incomingDraft === null;
+      if (allowed && sessionKey && input) {
+        try {
+          saveSessionChatComposerSelection(sessionKey, { text: input.getValue(), ...input.getSelection() });
+        } catch {
+          return false;
+        }
+      }
+      return allowed;
+    };
+
+    useEffect(() => {
+      const input = getInputApi();
+      const selection = readSessionChatComposerSelection(sessionKey, draftRef.current);
+      if (input && selection) {
+        input.applyValue(selection.text, selection.end);
+        input.setSelection?.(selection.start, selection.end);
+      }
+    }, [sessionKey, useLexical]);
+
+    const prepareRelease = async (): Promise<PendingDraft[] | null> => {
+      const input = getInputApi();
+      if (!sessionKey || !input) return null;
+      const content = input.getValue();
+      releasePreparedTextRef.current = content;
+      releasePreparedVersionRef.current = JSON.stringify(draftVersionRef.current);
+      if (!canRelease()) {
+        releasePreparedTextRef.current = null;
+        return null;
+      }
+      if (pastedImages.some((image) => !linkedImageReferenceHrefs(content).includes(image.path))) return null;
+      const stored = readStoredSessionChatDraftEntry(sessionKey);
+      if (stored?.text !== content) persistComposerDraft(content);
+      releasePreparedVersionRef.current = JSON.stringify(draftVersionRef.current);
+      try {
+        const revisions = await persistDraftsForRelease(sessionKey);
+        if (!canRelease() || readStoredSessionChatDraftEntry(sessionKey)?.text !== content) return null;
+        saveSessionChatComposerSelection(sessionKey, { text: content, ...input.getSelection() });
+        return revisions;
+      } catch {
+        releasePreparedTextRef.current = null;
+        return null;
+      }
     };
 
     useImperativeHandle(ref, () => ({
       canRelease,
+      prepareRelease,
       attachDroppedFiles: (data: DataTransfer): boolean => consumeDroppedAttachments(data),
       appendText: (text: string): boolean => {
         if (text === '') {

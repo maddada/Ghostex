@@ -1,3 +1,4 @@
+use crate::app::terminal_sync::GpuiTerminalViewerRecipe;
 // C1 wave-4 re-cluster: further split out of app/terminal_sync.rs (~5,603
 // lines, itself moved verbatim out of main.rs) into descriptively named
 // modules; pure move, no logic changes. Cluster: GPUI-engine terminal reconciliation (agents + command), startup spawn, and engine terminal view/agent action event handling.
@@ -24,6 +25,7 @@ impl GhostexGpuiApp {
     back to Running because the composited element needs no native remount.
     */
     pub(crate) fn sync_agents_gpui_engine_terminals(&mut self, cx: &mut gpui::Context<Self>) {
+        self.release_unused_agents_gpui_terminal_viewers(false, cx);
         // Prune records whose shell session or runtime identity is gone;
         // dropping a record kills the child through the model. Sleeping
         // sessions drop their record too (mirroring the command pane): a
@@ -44,11 +46,27 @@ impl GhostexGpuiApp {
                 });
         }
         #[cfg(target_os = "macos")]
-        self.remote_attach_askpass_scripts.retain(|key, _| {
-            self.remote_attach_sessions
-                .get(key)
-                .is_some_and(|session_id| self.agents_workspace.has_session(*session_id))
-        });
+        {
+            let retained_askpass = self
+                .agents_gpui_terminal_viewer_recipes
+                .values()
+                .chain(
+                    self.parked_agents_terminal_runtimes_by_project
+                        .values()
+                        .flat_map(|runtime| runtime.viewer_recipes.values()),
+                )
+                .flat_map(|recipe| recipe.env_vars.iter())
+                .filter(|(key, _)| key == "SSH_ASKPASS")
+                .map(|(_, value)| value.clone())
+                .collect::<HashSet<_>>();
+            self.remote_attach_askpass_scripts.retain(|key, script| {
+                retained_askpass.contains(&script.script.to_string_lossy().to_string())
+                    || self
+                        .remote_attach_sessions
+                        .get(key)
+                        .is_some_and(|session_id| self.agents_workspace.has_session(*session_id))
+            });
+        }
 
         {
             let workspace = &self.agents_workspace;
@@ -140,8 +158,31 @@ impl GhostexGpuiApp {
                     .agents_terminal_launch_payload_source
                     .take_explicit_payload_for_mount_slot(runtime_session_id, slot_id)
                 else {
+                    if self.agents_terminal_viewer_is_visible(slot_id.session_id) {
+                        self.ensure_agents_gpui_engine_terminal_view(slot_id.session_id, cx);
+                    }
                     continue;
                 };
+                if !self.agents_terminal_viewer_is_visible(slot_id.session_id)
+                    && !self.terminal_bell_notifications_enabled()
+                    && self.terminal_viewer_target_is_daemon_backed(
+                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
+                    )
+                    && payload.initial_input.as_deref().is_none_or(str::is_empty)
+                    && payload.command.is_some()
+                {
+                    self.remember_gpui_terminal_viewer_recipe(
+                        GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
+                        GpuiTerminalViewerRecipe {
+                            runtime_session_id,
+                            working_directory: payload.working_directory,
+                            command: payload.command,
+                            env_vars: payload.env_vars,
+                            wait_after_command: payload.wait_after_command,
+                        },
+                    );
+                    continue;
+                }
                 if let Some(record) = self.spawn_gpui_engine_terminal_record(
                     GpuiEngineTerminalEventTarget::Agents(slot_id.session_id),
                     runtime_session_id,
@@ -169,6 +210,7 @@ impl GhostexGpuiApp {
             }
         }
 
+        self.sync_agents_terminal_chat_claims(cx);
         self.sync_gpui_engine_first_prompt_input_suppression(cx);
         self.sync_gpui_engine_search_totals(cx);
         self.sync_agents_gpui_engine_terminal_zmx_visibility(cx);
@@ -230,6 +272,30 @@ impl GhostexGpuiApp {
                     // engine spawn config resolves the user's default shell.
                     None => (None, None, Vec::new(), None, false),
                 };
+            if self.terminal_viewer_target_is_daemon_backed(GpuiEngineTerminalEventTarget::Agents(
+                plan.shell_session_id,
+            )) && !self.agents_terminal_viewer_is_visible(plan.shell_session_id)
+                && !self.terminal_bell_notifications_enabled()
+                && initial_input.as_deref().is_none_or(str::is_empty)
+                && command.is_some()
+            {
+                self.remember_gpui_terminal_viewer_recipe(
+                    GpuiEngineTerminalEventTarget::Agents(plan.shell_session_id),
+                    GpuiTerminalViewerRecipe {
+                        runtime_session_id: plan.runtime_session_id,
+                        working_directory,
+                        command,
+                        env_vars,
+                        wait_after_command,
+                    },
+                );
+                if self.apply_agents_terminal_startup_result(AgentsTerminalStartupResult::Ready {
+                    completion_intent,
+                }) {
+                    cx.notify();
+                }
+                continue;
+            }
             let result = if let Some(record) = self.spawn_gpui_engine_terminal_record(
                 GpuiEngineTerminalEventTarget::Agents(plan.shell_session_id),
                 plan.runtime_session_id,
@@ -264,6 +330,7 @@ impl GhostexGpuiApp {
         if GPUI_APP_QUIT_IN_PROGRESS.load(Ordering::Acquire) {
             return;
         }
+        self.release_unused_command_gpui_terminal_viewers(cx);
         {
             /*
             CDXC:Terminal 2026-07-04-12:40:
@@ -364,6 +431,9 @@ impl GhostexGpuiApp {
                 .command_terminal_launch_payload_source
                 .take_explicit_payload_for_mount_slot(slot_id)
             else {
+                if self.ensure_command_gpui_engine_terminal_view(slot_id.session_id, cx) {
+                    continue;
+                }
                 if !self
                     .command_gxserver_attach_pending
                     .contains(&slot_id.session_id)
@@ -557,6 +627,13 @@ impl GhostexGpuiApp {
         engine_config.view.scroll_to_bottom_when_typing = settings.scroll_to_bottom_when_typing;
         engine_config.view.background_image =
             terminal_gpui_engine::terminal_background_image_from_settings(settings);
+        let viewer_recipe = GpuiTerminalViewerRecipe {
+            runtime_session_id,
+            working_directory: working_directory.clone(),
+            command: command.clone(),
+            env_vars: env_vars.clone(),
+            wait_after_command,
+        };
         let spawn_config = terminal_gpui_engine::gpui_engine_terminal_spawn_config(
             working_directory,
             command,
@@ -622,18 +699,32 @@ impl GhostexGpuiApp {
             }
             view
         });
+        let view_id = view.entity_id();
         let subscription = cx.subscribe(
             &view,
             move |this: &mut Self, _view, event: &terminal_element::TerminalViewEvent, cx| {
+                let current = match target {
+                    GpuiEngineTerminalEventTarget::Agents(id) => {
+                        this.agents_gpui_engine_terminals.get(&id)
+                    }
+                    GpuiEngineTerminalEventTarget::Command(id) => {
+                        this.command_gpui_engine_terminals.get(&id)
+                    }
+                };
+                if current.is_none_or(|record| record.view.entity_id() != view_id) {
+                    return;
+                }
                 this.handle_gpui_engine_terminal_view_event(target, event, cx);
             },
         );
+        self.remember_gpui_terminal_viewer_recipe(target, viewer_recipe);
         Some(terminal_gpui_engine::GpuiEngineTerminalRecord {
             view,
             runtime_session_id,
             wait_after_command,
             confirm_close_behavior,
             _subscription: subscription,
+            viewer_leases: Default::default(),
         })
     }
 

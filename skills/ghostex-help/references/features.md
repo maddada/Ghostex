@@ -274,7 +274,12 @@ Claude records it; nothing to enable.
 Chat Appearance defaults to System, following your computer’s light or dark appearance as it changes. Choose Light or Dark to keep chat in one palette; the surrounding app stays dark. Set it in Settings > Chat with `sessionChatTheme`.
 
 Toggle chat and terminal for a session with one click on the pane header or
-the pane hotkey. Compatible agents can default to chat. File writes and code
+the pane hotkey. Compatible agents can default to chat. On macOS and Linux,
+Ghostex can release unused terminal viewers for persistent sessions and load them
+again when needed. The agent keeps running while you use Chat or another project;
+returning to Terminal reconnects to the same running session. This does not sleep
+the agent.
+File writes and code
 edits appear outside the tool groups while the agent works. When a turn shows
 "Worked for", all its file changes are grouped in a collapsed "N files changed"
 section directly below it. The count includes each file once, even if it was

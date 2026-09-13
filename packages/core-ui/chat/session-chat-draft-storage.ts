@@ -1,3 +1,4 @@
+import { sessionChatDraftClientId } from './session-chat-queue';
 import type { SessionChatDraftVersion, SessionChatDraft } from '@/packages/shared/session-chat-queue';
 /**
  * Local cache for composer drafts and the Recovered list. Every edit carries a
@@ -139,7 +140,13 @@ export function writeStoredSessionChatDraft(
       preserveDraftRevision({ ...previous, sessionKey, updatedAt: previous.updatedAt ?? Date.now() });
     }
     if (updatedAt === undefined && !submitted && !parked && entry.version) {
-      queueDraftSave({ sessionKey, content: draft, version: entry.version, updatedAt: entry.updatedAt! });
+      queueDraftSave({
+        clientId: sessionChatDraftClientId(),
+        sessionKey,
+        content: draft,
+        version: entry.version,
+        updatedAt: entry.updatedAt!,
+      });
     }
     if (submitted && entry.version) {
       acknowledgeDraftSave(sessionKey, entry.version);

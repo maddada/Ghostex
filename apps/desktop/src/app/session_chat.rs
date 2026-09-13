@@ -647,11 +647,10 @@ impl GhostexGpuiApp {
                 self.focus_agents_pane(pane_id, cx);
             }
         }
-        // Prompt Editor and Attach File or Folder are separate TerminalView
-        // events, not TerminalAgentActionRequest variants; both take explicit
-        // targets and write to the warm PTY, so they work while the terminal
-        // body is parked under the chat surface.
+        // Prompt Editor and Attach File or Folder need terminal input even
+        // while Chat is visible, so create their viewer on demand.
         if action == "promptEditor" || action == "attachPath" {
+            self.ensure_agents_gpui_engine_terminal_view(session_id, cx);
             let Some(runtime_session_id) = self
                 .agents_gpui_engine_terminals
                 .get(&session_id)

@@ -85,6 +85,7 @@
     "@tabler/icons-react": "^3.40.0",
     "@tanstack/react-hotkeys": "^0.10.0",
     "@tanstack/react-router": "^1.170.17",
+    "@tanstack/react-virtual": "3.14.10",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
     "@xterm/addon-webgl": "^0.19.0",

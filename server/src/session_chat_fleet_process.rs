@@ -3,10 +3,25 @@
 
 use serde_json::Value;
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub(crate) fn current_process(session: &Value, agent: &str) -> anyhow::Result<(i64, i64)> {
+    let process = current_process_with_files(session, agent)?;
+    Ok((process.pid, process.started_at))
+}
+
+pub(crate) struct CurrentProcess {
+    pub pid: i64,
+    pub started_at: i64,
+    pub open_file_paths: Option<Arc<[PathBuf]>>,
+}
+
+pub(crate) fn current_process_with_files(
+    session: &Value,
+    agent: &str,
+) -> anyhow::Result<CurrentProcess> {
     let name = session
         .get("zmxName")
         .and_then(Value::as_str)
@@ -43,7 +58,11 @@ pub(crate) fn current_process(session: &Value, agent: &str) -> anyhow::Result<(i
             .filter(|(at, _)| at.elapsed() < Duration::from_secs(5))
             .map(|(_, start)| *start)
     }) {
-        return Ok((pid, start));
+        return Ok(CurrentProcess {
+            pid,
+            started_at: start,
+            open_file_paths: identity.open_file_paths.clone(),
+        });
     }
     let result = crate::zmx::run_zmx_probe_script(
         format!("LC_ALL=C TZ=UTC ps -p {pid} -o lstart="),
@@ -65,5 +84,9 @@ pub(crate) fn current_process(session: &Value, agent: &str) -> anyhow::Result<(i
         }
         cache.insert(key, (Instant::now(), start));
     }
-    Ok((pid, start))
+    Ok(CurrentProcess {
+        pid,
+        started_at: start,
+        open_file_paths: identity.open_file_paths.clone(),
+    })
 }

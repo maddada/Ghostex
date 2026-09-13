@@ -34,11 +34,10 @@ impl GhostexGpuiApp {
         if let Some(session_id) = leaf.tab_group.active_session_id() {
             /*
             CDXC:SessionChat 2026-07-31:
-            Chat mode swaps this tab's body for the per-session chat CEF
-            surface in the same slot. The terminal mount is not
-            destroyed: skipping the mount-slot render parks the Ghostty
-            surface exactly like selecting a different tab, and toggling back
-            reattaches through the normal parked-owner path.
+            Chat mode swaps this tab's body for its chat CEF page in the same slot.
+            Daemon-backed terminal viewers release through the lazy-viewer policy;
+            toggling back reattaches to the same running session. Direct PTY owners
+            remain retained because they own the process.
             */
             if self.agents_chat_mode_sessions.contains(&session_id) {
                 return self.render_agents_session_chat_body(leaf.pane_id, session_id, cx);

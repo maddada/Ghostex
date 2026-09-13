@@ -259,6 +259,13 @@ export function SessionChatPlainInput({
   useEffect(() => {
     const api: SessionChatComposerInputApi = {
       applyValue,
+      setSelection: (start, end) => {
+        const editor = editorRef.current;
+        if (editor) {
+          setEditorSelection(editor, start, end);
+          selectionRef.current = { start, end, focus: end };
+        }
+      },
       focus,
       getSelection: () => {
         const editor = editorRef.current;

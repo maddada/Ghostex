@@ -25,6 +25,7 @@ export interface SessionChatScrollSnapshot {
 interface InteractionState {
   disclosures: Record<string, { open: boolean; defaultOpen: boolean }>;
   scroll?: SessionChatScrollSnapshot;
+  widgets?: Record<string, { mode?: string; zoom?: number }>;
   cursor?: { fingerprint: string; anchor: number; focus: number };
 }
 
@@ -98,12 +99,32 @@ export function SessionChatInteractionScope({ id, children }: { id: string; chil
   return <ScopeContext value={id}>{children}</ScopeContext>;
 }
 
-export function useSessionChatDisclosureState(name: string, defaultOpen: boolean) {
+export function SessionChatInteractionSubscope({ id, children }: { id: string; children: ReactNode }) {
+  const scope = useContext(ScopeContext);
+  return <ScopeContext value={JSON.stringify([scope, id])}>{children}</ScopeContext>;
+}
+
+export function useSessionChatWidgetState(name: string): { mode?: string; zoom?: number } {
+  const state = useContext(StateContext);
+  const scope = useContext(ScopeContext);
+  const local = useRef({});
+  if (!state) return local.current;
+  const key = JSON.stringify([scope, name]);
+  state.widgets ??= {};
+  state.widgets[key] ??= {};
+  const keys = Object.keys(state.widgets);
+  if (keys.length > 2000) delete state.widgets[keys[0]!];
+  return state.widgets[key]!;
+}
+
+export function useSessionChatDisclosureState(name: string, defaultOpen: boolean, resetOnDefaultChange = true) {
   const state = useContext(StateContext);
   const scope = useContext(ScopeContext);
   const key = useMemo(() => JSON.stringify([scope, name]), [name, scope]);
   const stored = state?.disclosures[key];
-  const [open, setOpen] = useState(stored?.defaultOpen === defaultOpen ? stored.open : defaultOpen);
+  const [open, setOpen] = useState(
+    stored && (!resetOnDefaultChange || stored.defaultOpen === defaultOpen) ? stored.open : defaultOpen
+  );
   const previousDefault = useRef(defaultOpen);
   const openRef = useRef(open);
   const update = useCallback(
@@ -120,11 +141,11 @@ export function useSessionChatDisclosureState(name: string, defaultOpen: boolean
     [defaultOpen, key, state]
   );
   useEffect(() => {
-    if (previousDefault.current !== defaultOpen) {
+    if (resetOnDefaultChange && previousDefault.current !== defaultOpen) {
       previousDefault.current = defaultOpen;
       update(defaultOpen);
     }
-  }, [defaultOpen, update]);
+  }, [defaultOpen, resetOnDefaultChange, update]);
   return [open, update] as const;
 }
 

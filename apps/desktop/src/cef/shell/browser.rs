@@ -709,6 +709,7 @@ impl CefBrowser {
         url: &str,
         generation: &str,
         bootstrap: SidebarGxserverBootstrap,
+        initial_snapshot: Option<serde_json::Value>,
     ) {
         if !is_gpui_first_party_cef_entry_url(url, "chat.html")
             || self.trusted_gxserver_entry_identity.as_deref()
@@ -721,12 +722,19 @@ impl CefBrowser {
             url: url.to_string(),
             generation: generation.to_string(),
             bootstrap: Some(bootstrap.clone()),
+            initial_snapshot: initial_snapshot.clone(),
         });
         let browser = self.browser.borrow();
         let Some(mut frame) = browser.main_frame() else {
             return;
         };
-        send_session_chat_activation_process_message(&mut frame, url, generation, Some(bootstrap));
+        send_session_chat_activation_process_message(
+            &mut frame,
+            url,
+            generation,
+            Some(bootstrap),
+            initial_snapshot,
+        );
     }
 
     pub fn refresh_session_chat_gxserver_bootstrap(

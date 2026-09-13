@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::{
     constants::GXSERVER_PROTOCOL_VERSION,
@@ -587,12 +587,20 @@ pub fn read_zmx_session_process_identities(
             transcript recency. This gives title reconciliation the canonical
             session_index identity after desktop restore as well as first run.
             */
+            let paths = identity
+                .process_id
+                .filter(|pid| *pid > 0)
+                .map(process_open_file_paths)
+                .unwrap_or_default();
             if let Some((agent_session_id, agent_session_path)) =
-                read_codex_process_session_identity(identity.process_id)
+                codex_process_session_identity_from_paths(paths.iter().cloned())
             {
                 // CDXC:SessionIdentity 2026-09-11 WHY: Codex keeps its original resume argv after rewind. The live rollout must replace both fields together, or polling restores the old ID beside the new branch's path.
                 identity.agent_session_id = Some(agent_session_id);
                 identity.agent_session_path = Some(agent_session_path);
+            }
+            if paths.len() <= 4096 {
+                identity.open_file_paths = Some(paths.into());
             }
         }
         if identity.agent_id.as_deref() != Some("omp")

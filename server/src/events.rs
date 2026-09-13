@@ -1,28 +1,69 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::Duration,
 };
 
-use serde_json::{json, Map, Value};
-use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
+use serde_json::{Map, Value, json};
+use tokio::sync::{Mutex, broadcast, mpsc, oneshot, watch};
 use uuid::Uuid;
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 
 const EVENT_STREAM_QUEUE_CAPACITY: usize = 256;
 
+/// CDXC:StateSync 2026-09-13 WHY:
+/// Every renderer used to clone each broadcast's JSON tree and serialize it again.
+/// Share the immutable value and its lazy wire encoding across bounded client queues.
+#[derive(Clone, Debug)]
+pub struct EventPayload(Arc<EventPayloadInner>);
+
+#[derive(Debug)]
+struct EventPayloadInner {
+    value: Value,
+    text: OnceLock<axum::extract::ws::Utf8Bytes>,
+}
+
+impl From<Value> for EventPayload {
+    fn from(value: Value) -> Self {
+        Self(Arc::new(EventPayloadInner {
+            value,
+            text: OnceLock::new(),
+        }))
+    }
+}
+
+impl std::ops::Deref for EventPayload {
+    type Target = Value;
+
+    fn deref(&self) -> &Value {
+        &self.0.value
+    }
+}
+
+impl EventPayload {
+    pub(crate) fn text(&self) -> axum::extract::ws::Utf8Bytes {
+        self.0
+            .text
+            .get_or_init(|| format!("{}\n", self.0.value).into())
+            .clone()
+    }
+}
+
 #[derive(Clone)]
 pub struct EventClientSender {
-    sender: mpsc::Sender<Value>,
+    sender: mpsc::Sender<EventPayload>,
     overflow_tx: watch::Sender<bool>,
 }
 
-pub type EventClientReceiver = mpsc::Receiver<Value>;
+pub type EventClientReceiver = mpsc::Receiver<EventPayload>;
 
 impl EventClientSender {
-    pub fn try_send(&self, event: Value) -> Result<(), mpsc::error::TrySendError<Value>> {
-        match self.sender.try_send(event) {
+    pub fn try_send(
+        &self,
+        event: impl Into<EventPayload>,
+    ) -> Result<(), mpsc::error::TrySendError<EventPayload>> {
+        match self.sender.try_send(event.into()) {
             Ok(()) => Ok(()),
             Err(error @ mpsc::error::TrySendError::Full(_)) => {
                 self.signal_overflow();
@@ -56,7 +97,7 @@ pub struct GxserverEventHub {
 }
 
 struct EventHubInner {
-    broadcast_tx: broadcast::Sender<Value>,
+    broadcast_tx: broadcast::Sender<EventPayload>,
     pending_renderer_commands: Mutex<HashMap<String, oneshot::Sender<Value>>>,
     renderer_clients: Mutex<VecDeque<RendererClient>>,
     server_id: String,
@@ -95,10 +136,10 @@ impl GxserverEventHub {
     }
 
     pub fn broadcast(&self, event: Value) {
-        let _ = self.inner.broadcast_tx.send(event);
+        let _ = self.inner.broadcast_tx.send(event.into());
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<Value> {
+    pub fn subscribe(&self) -> broadcast::Receiver<EventPayload> {
         self.inner.broadcast_tx.subscribe()
     }
 
@@ -278,7 +319,7 @@ fn now_iso() -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{Duration, timeout};
 
     #[tokio::test]
     async fn renderer_commands_use_first_open_renderer_client() {

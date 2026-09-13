@@ -526,7 +526,15 @@ impl GhostexGpuiApp {
         &self,
         session_id: TerminalSessionId,
     ) -> bool {
-        if self.agents_gpui_engine_terminals.contains_key(&session_id) {
+        if self.agents_gpui_engine_terminals.contains_key(&session_id)
+            || (self.agents_terminal_has_detachable_viewer(session_id)
+                && self
+                    .agents_workspace
+                    .session(session_id)
+                    .is_some_and(|session| {
+                        session.presentation_state == TerminalSessionPresentationState::Running
+                    }))
+        {
             return true;
         }
         #[cfg(target_os = "macos")]
@@ -881,6 +889,9 @@ impl GhostexGpuiApp {
             .is_some_and(|state| state.force_fresh_renderer);
         let mut page_state = SessionChatPageState::new();
         page_state.account_key = self.workspace_terminal_key_for_shell_session(session_id);
+        let initial_snapshot =
+            self.cached_session_chat_runtime_snapshot(page_state.account_key.as_ref());
+        let generation = page_state.generation.to_string();
         let url = append_url_query_params(
             url,
             &[("pageGeneration", page_state.generation.to_string())],
@@ -906,7 +917,7 @@ impl GhostexGpuiApp {
                 .insert(session_id, surface.clone());
             surface.update(cx, |surface, _| {
                 surface.set_session_chat_pane_focused(false, true);
-                surface.activate_session_chat(&url, &generation, bootstrap);
+                surface.activate_session_chat(&url, &generation, bootstrap, initial_snapshot);
             });
             self.watch_session_chat_activation(activation_generation, cx);
             self.record_session_chat_lifecycle(
@@ -951,7 +962,7 @@ impl GhostexGpuiApp {
                 page_state.renderer_id
             ),
             chat_parent,
-            url,
+            url.clone(),
             "session-chat".to_string(),
             prepaint_background,
             false,
@@ -962,7 +973,7 @@ impl GhostexGpuiApp {
             None,
             None,
             None,
-            Some(bootstrap),
+            Some(bootstrap.clone()),
             None,
             None,
             None,
@@ -983,6 +994,9 @@ impl GhostexGpuiApp {
                 return None;
             }
         };
+        surface.update(cx, |surface, _| {
+            surface.activate_session_chat(&url, &generation, bootstrap, initial_snapshot)
+        });
         self.agents_chat_page_states.insert(session_id, page_state);
         self.agents_chat_surfaces
             .insert(session_id, surface.clone());
@@ -1035,7 +1049,9 @@ impl GhostexGpuiApp {
                 .remove(&session_id);
             self.session_chat_composer_empty_reports.remove(&session_id);
             self.agents_chat_surface_hidden_since.remove(&session_id);
-            self.agents_chat_page_states.remove(&session_id);
+            if let Some(state) = self.agents_chat_page_states.remove(&session_id) {
+                self.release_session_chat_runtime_subscription(state.generation, cx);
+            }
             if let Some(surface) = self.agents_chat_surfaces.remove(&session_id) {
                 surface.update(cx, |surface, _| surface.set_visible(false));
             }
@@ -1119,17 +1135,14 @@ impl GhostexGpuiApp {
         session_id: TerminalSessionId,
         require_empty: bool,
     ) -> bool {
-        // Only an idle agent is evictable. A working or attention session is
-        // producing output the user is coming back to, and a session the shell
-        // no longer knows about has an unknown status rather than an idle one.
-        let Some(session) = self.agents_workspace.session(session_id) else {
+        // Provider work is retained by the shared broker. Only page-owned operations pin the hidden renderer.
+        let Some(_session) = self.agents_workspace.session(session_id) else {
             return false;
         };
-        if session.activity != AgentTerminalActivity::Idle
-            || self
-                .agents_chat_page_states
-                .get(&session_id)
-                .is_none_or(|state| state.pending_native_requests != 0)
+        if self
+            .agents_chat_page_states
+            .get(&session_id)
+            .is_none_or(|state| state.pending_native_requests != 0)
             || self
                 .pending_session_chat_image_saves
                 .keys()
@@ -1138,14 +1151,8 @@ impl GhostexGpuiApp {
         {
             return false;
         }
-        // A composer with typed text or attached images is unsent user content
-        // that lives in the page. The page reports its emptiness on mount, on
-        // every empty↔non-empty transition, and again on composer blur (the
-        // moment the surface is hidden). Eviction requires an explicit "empty"
-        // report: a missing entry means the report was lost or the page never
-        // finished loading, and unknown must never read as "empty" to a pass
-        // that destroys pages. The ready check keeps the page's bridge
-        // registration as a second precondition.
+        // A fresh probe replaces the ordinary empty report with a confirmed durable-release receipt.
+        // The readiness guard prevents reclaiming a page whose composer has not registered.
         if !self
             .session_chat_composer_ready_sessions
             .contains(&session_id)
@@ -1233,7 +1240,9 @@ impl GhostexGpuiApp {
             .remove(&session_id);
         self.session_chat_composer_empty_reports.remove(&session_id);
         self.agents_chat_surface_hidden_since.remove(&session_id);
-        self.agents_chat_page_states.remove(&session_id);
+        if let Some(state) = self.agents_chat_page_states.remove(&session_id) {
+            self.release_session_chat_runtime_subscription(state.generation, cx);
+        }
         self.drop_pending_keyboard_handoff_for_session(session_id);
         self.pending_session_chat_composer_insert
             .remove(&session_id);

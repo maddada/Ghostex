@@ -2,6 +2,7 @@ use super::*;
 use crate::session_chat_follower::{
     subscribe_session_chat_follower, unsubscribe_session_chat_follower,
 };
+use std::sync::RwLock;
 
 pub(crate) async fn handle_events(
     State(state): State<Arc<AppState>>,
@@ -58,7 +59,8 @@ pub(crate) async fn handle_events(
             protocol_mismatch_error(protocol_version, Some(request_id)),
         );
     }
-    ws.on_upgrade(move |socket| handle_event_socket(socket, state))
+    let chat_only = query_value(&uri, "stream").as_deref() == Some("sessionChat");
+    ws.on_upgrade(move |socket| handle_event_socket(socket, state, chat_only))
 }
 
 pub(crate) async fn handle_terminal(
@@ -98,10 +100,11 @@ pub(crate) async fn handle_terminal(
     ws.on_upgrade(move |socket| handle_terminal_socket(socket, uri, terminal_state))
 }
 
-pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>) {
+pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>, chat_only: bool) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (outbound_tx, mut outbound_rx) = state.event_hub.client_channel();
     let mut broadcast_rx = state.event_hub.subscribe();
+    let chat_filter = chat_only.then(|| Arc::new(RwLock::new(HashSet::new())));
     if outbound_tx
         .try_send(json!({
             "protocolVersion": GXSERVER_PROTOCOL_VERSION,
@@ -121,10 +124,16 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>)
     later revision cannot enter this queue first.
     */
     let broadcast_outbound_tx = outbound_tx.clone();
+    let broadcast_filter = chat_filter.clone();
     let broadcast_task = tokio::spawn(async move {
         loop {
             match broadcast_rx.recv().await {
                 Ok(event) => {
+                    if let Some(filter) = &broadcast_filter {
+                        if !chat_event_matches(filter, &event) {
+                            continue;
+                        }
+                    }
                     if broadcast_outbound_tx.try_send(event).is_err() {
                         break;
                     }
@@ -167,6 +176,7 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>)
             &outbound_tx,
             &mut renderer_client_id,
             &mut session_chat_subscriptions,
+            chat_filter.as_deref(),
             message,
         )
         .await
@@ -191,11 +201,9 @@ pub(crate) async fn handle_event_socket(socket: WebSocket, state: Arc<AppState>)
 
 pub(crate) async fn send_event_message(
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
-    event: Value,
+    event: crate::events::EventPayload,
 ) -> std::result::Result<(), axum::Error> {
-    sender
-        .send(Message::Text(format!("{event}\n").into()))
-        .await
+    sender.send(Message::Text(event.text())).await
 }
 
 pub(crate) async fn handle_event_client_message(
@@ -203,6 +211,7 @@ pub(crate) async fn handle_event_client_message(
     outbound_tx: &EventClientSender,
     renderer_client_id: &mut Option<String>,
     session_chat_subscriptions: &mut HashSet<(String, String)>,
+    chat_filter: Option<&RwLock<HashSet<(String, String)>>>,
     message: Message,
 ) -> bool {
     let Some(parsed) = parse_event_client_message(message) else {
@@ -244,6 +253,12 @@ pub(crate) async fn handle_event_client_message(
                 // (and can still raise the follower's window).
                 let new_subscriber =
                     session_chat_subscriptions.insert((project_id.clone(), session_id.clone()));
+                if let Some(filter) = chat_filter {
+                    let Ok(mut subscriptions) = filter.write() else {
+                        return false;
+                    };
+                    subscriptions.insert((project_id.clone(), session_id.clone()));
+                }
                 subscribe_session_chat_follower(
                     state,
                     &project_id,
@@ -256,6 +271,12 @@ pub(crate) async fn handle_event_client_message(
         }
         Some("unsubscribeSessionChat") => {
             if let Some((project_id, session_id)) = event_message_session_ids(&parsed) {
+                if let Some(filter) = chat_filter {
+                    let Ok(mut subscriptions) = filter.write() else {
+                        return false;
+                    };
+                    subscriptions.remove(&(project_id.clone(), session_id.clone()));
+                }
                 if session_chat_subscriptions.remove(&(project_id.clone(), session_id.clone())) {
                     unsubscribe_session_chat_follower(state, &project_id, &session_id);
                 }
@@ -264,6 +285,29 @@ pub(crate) async fn handle_event_client_message(
         }
         _ => true,
     }
+}
+
+/// CDXC:StateSync 2026-09-13 WHY:
+/// Dedicated chat brokers opt into `stream=sessionChat` so unrelated transcripts and presentation events never enter their socket queue.
+/// Legacy event sockets retain their full stream; a chat filter is installed before starting its snapshot-first follower.
+fn chat_event_matches(filter: &RwLock<HashSet<(String, String)>>, event: &Value) -> bool {
+    if !matches!(
+        event.get("type").and_then(Value::as_str),
+        Some(
+            "sessionChatSnapshot"
+                | "sessionChatReplaced"
+                | "sessionChatAppended"
+                | "sessionChatState"
+        )
+    ) {
+        return false;
+    }
+    let Some(ids) = event.as_object().and_then(event_message_session_ids) else {
+        return false;
+    };
+    filter
+        .read()
+        .is_ok_and(|subscriptions| subscriptions.contains(&ids))
 }
 
 pub(crate) fn event_message_session_ids(parsed: &Map<String, Value>) -> Option<(String, String)> {
