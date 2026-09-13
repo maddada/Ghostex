@@ -291,10 +291,13 @@ pub(crate) fn gpui_command_terminal_attach_startup_not_ready(message: &str) -> b
         message,
         "gxserver auth token is unavailable."
             | "gxserver auth token is empty."
-            | "gxserver is not reachable on 127.0.0.1:58744."
             | "Could not send gxserver request."
             | "Could not read gxserver response."
-    )
+    ) || message
+        == format!(
+            "gxserver is not reachable on {GPUI_GXSERVER_LOCAL_API_HOST}:{}.",
+            gpui_local_gxserver_api_port()
+        )
 }
 
 pub(crate) fn gpui_prepare_command_terminal_attach_plan_for_key(

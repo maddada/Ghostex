@@ -138,7 +138,10 @@ describe('phased macOS code-server prerequisite contract', () => {
     const orchestratorWorkflow = workflow('release-gpui.yml');
     const prerequisiteScript = repoFile('tooling/release-gpui/macos-prerequisite.sh');
     const localReleaseScript = repoFile('tooling/release-gpui/macos.sh');
-    const prepareRuntimeScript = repoFile('apps/desktop/scripts/prepare-macos-runtime.sh');
+    const prepareRuntimeScript = [
+      repoFile('apps/desktop/scripts/prepare-macos-runtime.sh'),
+      repoFile('apps/desktop/scripts/prepare-macos-code-server.sh'),
+    ].join('\n');
     const windowsBuildScript = repoFile('apps/desktop/scripts/build-windows-app.ps1');
 
     for (const arch of ['x64', 'arm64']) {
@@ -197,7 +200,10 @@ describe('phased macOS code-server prerequisite contract', () => {
   });
 
   test('publishes and authenticates the exact Darwin component archive before reuse', () => {
-    const prepareRuntimeScript = repoFile('apps/desktop/scripts/prepare-macos-runtime.sh');
+    const prepareRuntimeScript = [
+      repoFile('apps/desktop/scripts/prepare-macos-runtime.sh'),
+      repoFile('apps/desktop/scripts/prepare-macos-code-server.sh'),
+    ].join('\n');
     const localReleaseScript = repoFile('tooling/release-gpui/macos.sh');
     const downloadIndex = prepareRuntimeScript.indexOf('gh release download "$component_tag"');
     const verifierIndex = prepareRuntimeScript.indexOf(
@@ -335,7 +341,7 @@ describe('active WSL2 code-server consumer contract', () => {
 
   test('authenticates every configured, bundled, and on-demand archive before WSL extraction or reuse', () => {
     const componentStore = repoFile('apps/desktop/src/component_store.rs');
-    const sourceServer = repoFile('apps/desktop/src/app/helpers/source_server.rs');
+    const sourceServer = repoFile('apps/desktop/src/app/helpers/source_server/code_server.rs');
     const windowsConsumer = repoFile('apps/desktop/src/windows_terminal_backend.rs');
     const verifyIndex = windowsConsumer.indexOf('crate::component_store::verify_code_server_archive(');
     const extractIndex = windowsConsumer.indexOf('tar -xzf - -C', verifyIndex);

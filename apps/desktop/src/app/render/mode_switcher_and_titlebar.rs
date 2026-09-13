@@ -477,7 +477,7 @@ impl GhostexGpuiApp {
                 cx.listener(|this, event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    this.show_gpui_titlebar_customize_menu(event.position, window, cx);
+                    this.show_gpui_titlebar_view_menu(this.active_mode, event.position, window, cx);
                 }),
             )
             .when_some(shortcut, |this, shortcut| {
@@ -576,7 +576,7 @@ impl GhostexGpuiApp {
                             return;
                         }
                     }
-                    this.show_gpui_titlebar_customize_menu(event.position, window, cx);
+                    this.show_gpui_titlebar_view_menu(mode, event.position, window, cx);
                 }),
             )
             .when_some(shortcut, |this, shortcut| {

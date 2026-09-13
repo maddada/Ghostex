@@ -56,9 +56,10 @@ pub(crate) fn gxserver_post_typed_operation(
         return Err("Invalid gxserver API path.".to_string());
     }
     let token = read_gpui_gxserver_auth_token()?;
-    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}");
+    let port = gpui_local_gxserver_api_port();
+    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
     let mut stream = TcpStream::connect(&address)
-        .map_err(|_| "gxserver is not reachable on 127.0.0.1:58744.".to_string())?;
+        .map_err(|_| format!("gxserver is not reachable on {address}."))?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "Could not configure gxserver read timeout.".to_string())?;
@@ -107,12 +108,11 @@ pub(crate) fn gxserver_get_typed_operation(
         return Err("Invalid gxserver API path.".to_string());
     }
     let token = read_gpui_gxserver_auth_token()?;
-    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}");
-    let mut stream = TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], GPUI_GXSERVER_LOCAL_API_PORT)),
-        timeout,
-    )
-    .map_err(|error| format!("gxserver connection to {address} failed: {error}"))?;
+    let port = gpui_local_gxserver_api_port();
+    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
+    let mut stream =
+        TcpStream::connect_timeout(&std::net::SocketAddr::from(([127, 0, 0, 1], port)), timeout)
+            .map_err(|error| format!("gxserver connection to {address} failed: {error}"))?;
     stream
         .set_read_timeout(Some(timeout))
         .map_err(|_| "Could not configure gxserver read timeout.".to_string())?;
@@ -331,7 +331,10 @@ pub(crate) fn gpui_sidebar_gxserver_bootstrap(
         .or(focus_state.active_project_id.as_deref())
         .map(str::to_string);
     Some(cef::SidebarGxserverBootstrap {
-        base_url: format!("http://{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}"),
+        base_url: format!(
+            "http://{GPUI_GXSERVER_LOCAL_API_HOST}:{}",
+            gpui_local_gxserver_api_port()
+        ),
         auth_token: read_gpui_gxserver_auth_token().ok()?,
         protocol_version: GPUI_GXSERVER_PROTOCOL_VERSION as i32,
         client_id: GPUI_SIDEBAR_GXSERVER_CLIENT_ID.to_string(),

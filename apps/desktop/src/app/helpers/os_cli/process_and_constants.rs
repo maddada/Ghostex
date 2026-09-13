@@ -355,6 +355,16 @@ pub(crate) const PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES: usize = 12 * 1024 * 10
 pub(crate) const PROJECT_BOARD_IMAGE_PREVIEW_MAX_BYTES: usize = 12 * 1024 * 1024;
 pub(crate) const GPUI_GXSERVER_LOCAL_API_HOST: &str = "127.0.0.1";
 pub(crate) const GPUI_GXSERVER_LOCAL_API_PORT: u16 = 58_744;
+/// CDXC:ServerDaemon 2026-09-13 WHY:
+/// Isolated desktop instances must use the same alternate listener as gxserver and the CLI.
+/// Remote SSH destinations still use the product port, not this local override.
+pub(crate) fn gpui_local_gxserver_api_port() -> u16 {
+    std::env::var("GHOSTEX_GXSERVER_DEV_PORT")
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port != 0)
+        .unwrap_or(GPUI_GXSERVER_LOCAL_API_PORT)
+}
 pub(crate) const GPUI_GXSERVER_PRODUCT: &str = "gxserver";
 pub(crate) const GPUI_GXSERVER_PROTOCOL_HEADER: &str = "x-gxserver-protocol-version";
 pub(crate) const GPUI_GXSERVER_PROTOCOL_VERSION: u64 = 1;

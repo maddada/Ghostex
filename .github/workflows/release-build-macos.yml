@@ -99,7 +99,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with: { bun-version: 1.4.0 }
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with: { node-version: 22.22.1, cache: npm, cache-dependency-path: .dependencies/code-server/package-lock.json }
+        with:
+          {
+            node-version-file: .dependencies/code-server/.node-version,
+            cache: npm,
+            cache-dependency-path: .dependencies/code-server/package-lock.json,
+          }
       - name: Verify staged remote runtime prerequisites
         env:
           GXSERVER_ARM64_RUN_ID: ${{ inputs.gxserver_arm64_run_id }}

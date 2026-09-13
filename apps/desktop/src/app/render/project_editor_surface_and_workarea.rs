@@ -36,10 +36,7 @@ impl GhostexGpuiApp {
             let _ = self.set_active_mode(TitlebarMode::Agents, window, cx);
             return self.render_agents_workspace(window, cx);
         }
-        if mode.is_project_editor_mode()
-            && !matches!(mode, TitlebarMode::Extension(_))
-            && !self.project_editor_shell.is_mode_awake(mode)
-        {
+        if mode.is_project_editor_mode() && !self.project_editor_shell.is_mode_awake(mode) {
             return self.render_project_editor_sleeping_placeholder(mode, cx);
         }
 

@@ -304,6 +304,18 @@ pub(crate) struct SelectGpuiTitlebarMode {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct ReloadGpuiTitlebarView {
+    pub(crate) mode_index: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct SleepGpuiTitlebarView {
+    pub(crate) mode_index: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct RunGpuiTitlebarAction {
     pub(crate) action_index: u64,
 }

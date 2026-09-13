@@ -6,18 +6,23 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   openSync,
   readFileSync,
   readSync,
   rmSync,
   statSync,
-  writeFileSync,
   writeSync,
 } from 'node:fs';
-import { homedir, tmpdir } from 'node:os';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  formatCommand,
+  resolveLocalStartCodeSignIdentity,
+  resolveLocalStartCodeSignTimestampFlag,
+  withoutColorDisablingEnvironment,
+} from './local-start-utils.mjs';
+import { isolatedGpuiConfiguration, prepareIsolatedGpui } from './isolated-gpui.mjs';
 
 import {
   codeServerComponentIdentity,
@@ -28,8 +33,9 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), '..');
 const appVersion = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
 const gpuiDir = path.join(repoRoot, 'apps', 'desktop');
-const appName = 'Ghostex';
-const bundleId = 'com.madda.ghostex.gpui';
+const isolatedInstance = process.argv.slice(2).includes('--isolated') ? isolatedGpuiConfiguration() : undefined;
+const appName = isolatedInstance?.appName ?? 'Ghostex';
+const bundleId = isolatedInstance?.bundleId ?? 'com.madda.ghostex.gpui';
 const isDarwin = process.platform === 'darwin';
 const isWindows = process.platform === 'win32';
 const isWsl =
@@ -38,9 +44,9 @@ const isWsl =
     readFileSync('/proc/sys/kernel/osrelease', 'utf8').toLowerCase().includes('microsoft'));
 const targetsWindows = isWindows || isWsl;
 const windowsProgramFilesPaths = targetsWindows ? resolveWindowsProgramFilesPaths() : undefined;
-const installDir = windowsProgramFilesPaths?.hostPath ?? resolveGpuiInstallDir();
+const installDir = isolatedInstance?.installDir ?? windowsProgramFilesPaths?.hostPath ?? resolveGpuiInstallDir();
 const protocolVersion = 1;
-const gxserverBaseUrl = 'http://127.0.0.1:58744';
+const gxserverBaseUrl = `http://127.0.0.1:${isolatedInstance?.environment.GHOSTEX_GXSERVER_DEV_PORT ?? '58744'}`;
 const gxserverExplicitLaunchEnvironmentKeys = ['GHOSTEX_GXSERVER_CLI', 'GHOSTEX_GXSERVER_BIN'];
 const quietLogTailBytes = 256 * 1024;
 const quietLogTailLines = 220;
@@ -83,7 +89,7 @@ const localStartLockFile = path.join(repoRoot, 'build', 'ghostex-gpui-local-star
 const dependenciesRoot = path.join(repoRoot, '.dependencies');
 const startOptions = validateStartArguments(process.argv.slice(2));
 const startVerbose = startOptions.verbose;
-const startEnvironment = withoutColorDisablingEnvironment(process.env);
+const startEnvironment = withoutColorDisablingEnvironment({ ...process.env, ...isolatedInstance?.environment });
 const windowsArch = process.arch === 'arm64' ? 'arm64' : 'x64';
 const explicitWindowsWslArchive = process.env.GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE?.trim();
 const explicitWindowsWslCodeServerArchive = process.env.GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE?.trim();
@@ -123,6 +129,7 @@ const localStartCodeSignIdentity = isDarwin ? resolveLocalStartCodeSignIdentity(
 const localStartCodeSignTimestampFlag = isDarwin ? resolveLocalStartCodeSignTimestampFlag(startEnvironment) : undefined;
 const buildEnvironment = {
   ...startEnvironment,
+  ...(isolatedInstance ? { GHOSTEX_GPUI_ISOLATED_START: '1' } : {}),
   ...(isDarwin
     ? {
         CONFIGURATION: configuration,
@@ -156,6 +163,7 @@ let startStep = 0;
 let activeStartStep;
 
 ensureSupportedHost();
+if (isolatedInstance) prepareIsolatedGpui(isolatedInstance);
 if (isWindows) {
   acquireWindowsLocalStartLock();
 } else {
@@ -384,6 +392,9 @@ function validateStartArguments(args) {
     if (arg === '--') {
       continue;
     }
+    if (arg === '--isolated') {
+      continue;
+    }
     if (arg === '--profile') {
       profile = true;
       continue;
@@ -393,7 +404,7 @@ function validateStartArguments(args) {
       continue;
     }
     throw new Error(
-      `Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose and --profile flags.`
+      `Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose, --profile, and --isolated flags.`
     );
   }
   return { verbose, profile };
@@ -922,7 +933,7 @@ async function installAndOpenMacosApp(stagedAppPath) {
   ensureInstalledAppCodeSignature(installedAppPath);
   ensureMacosInstalledAppBundleBit(installedAppPath);
   logStartStep('Preparing LaunchServices environment...');
-  const explicitGxserverCount = publishLaunchServicesGxserverExplicitEnvironment();
+  const explicitGxserverCount = isolatedInstance ? 0 : publishLaunchServicesGxserverExplicitEnvironment();
   logStartDetail(
     explicitGxserverCount > 0
       ? `Published ${explicitGxserverCount} explicit gxserver daemon override${explicitGxserverCount === 1 ? '' : 's'}.`
@@ -1128,7 +1139,7 @@ function readBundledGxserverBuildIdentity(stagedAppPath) {
 }
 
 function readGxserverToken() {
-  const configuredHome = process.env.GHOSTEX_HOME?.trim();
+  const configuredHome = startEnvironment.GHOSTEX_HOME?.trim();
   const configuredStateHome = process.env.XDG_STATE_HOME?.trim();
   const explicitHome = configuredHome && path.isAbsolute(configuredHome) ? configuredHome : undefined;
   const absoluteStateHome =
@@ -1430,7 +1441,9 @@ function reportQuietCommandFailure(label, status, logPath) {
   const relativeLogPath = path.relative(repoRoot, logPath);
   console.error(`${label} failed with exit code ${status}.`);
   console.error(`Full log: ${relativeLogPath}`);
-  console.error('Rerun with `bun run start --verbose` for live output.');
+  console.error(
+    `Rerun with ${isolatedInstance ? 'bun run start:isolated' : 'bun run start'} --verbose for live output.`
+  );
   const tail = readQuietLogTail(logPath);
   if (tail) {
     console.error(
@@ -1473,18 +1486,6 @@ function formatQuietLogLineForTerminal(line) {
   return `${prefix} ... [shortened ${omittedCharacterCount} characters from one log line; full line remains in the log file] ... ${suffix}`;
 }
 
-function formatCommand(command, args) {
-  return [command, ...args].map(shellQuote).join(' ');
-}
-
-function shellQuote(value) {
-  const text = String(value);
-  if (/^[A-Za-z0-9_./:=@%+-]+$/.test(text)) {
-    return text;
-  }
-  return `'${text.replaceAll("'", "'\\''")}'`;
-}
-
 function resolveLocalMacosArch(explicitArch) {
   const normalized = explicitArch?.trim();
   if (normalized) {
@@ -1515,105 +1516,4 @@ function resolveLocalMacosArch(explicitArch) {
     throw machine.error;
   }
   return machine.stdout.trim() || 'x86_64';
-}
-
-function resolveLocalStartCodeSignIdentity(environment) {
-  if (Object.hasOwn(environment, 'GHOSTEX_GPUI_SIGN_IDENTITY')) {
-    return environment.GHOSTEX_GPUI_SIGN_IDENTITY ?? '';
-  }
-  const identities = listCodeSigningIdentities(environment);
-  const preferredIdentity = preferredLocalStartCodeSignIdentities(identities).find((identity) =>
-    identityCanSign(identity.name, environment)
-  );
-  if (preferredIdentity) {
-    return preferredIdentity.name;
-  }
-  console.warn(
-    identities.length > 0
-      ? 'Found code-signing identities, but none could sign; falling back to ad-hoc GPUI signing. macOS may ask for permissions again after GPUI rebuilds.'
-      : 'No Apple code-signing identity was found; falling back to ad-hoc GPUI signing. macOS may ask for permissions again after GPUI rebuilds.'
-  );
-  return '-';
-}
-
-function preferredLocalStartCodeSignIdentities(identities) {
-  const prefixes = ['Apple Development: ', 'Mac Developer: ', 'Developer ID Application: ', 'Apple Distribution: '];
-  const seen = new Set();
-  const preferred = [];
-  for (const prefix of prefixes) {
-    for (const identity of identities) {
-      if (!identity.name.startsWith(prefix) || seen.has(identity.name)) {
-        continue;
-      }
-      seen.add(identity.name);
-      preferred.push(identity);
-    }
-  }
-  return preferred;
-}
-
-function identityCanSign(identityName, environment) {
-  /*
-  CDXC:Build 2026-08-25:
-  `security find-identity -v -p codesigning` can list Apple Development certs
-  that `codesign --sign` then rejects with "no identity found" (missing private
-  key, locked keychain, or a stale listing). Probe with a throwaway file so
-  local start falls back to ad-hoc instead of failing after the full rebuild.
-  */
-  const probeDir = mkdtempSync(path.join(tmpdir(), 'ghostex-gpui-sign-'));
-  const probePath = path.join(probeDir, 'probe');
-  try {
-    writeFileSync(probePath, 'ghostex-gpui-codesign-probe\n');
-    const result = spawnSync('codesign', ['--force', '--sign', identityName, '--timestamp=none', probePath], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      env: environment,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return result.status === 0;
-  } finally {
-    rmSync(probeDir, { force: true, recursive: true });
-  }
-}
-
-function resolveLocalStartCodeSignTimestampFlag(environment) {
-  if (Object.hasOwn(environment, 'GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG')) {
-    return environment.GHOSTEX_GPUI_SIGN_TIMESTAMP_FLAG ?? '';
-  }
-  return '--timestamp=none';
-}
-
-function listCodeSigningIdentities(environment) {
-  const result = spawnSync('security', ['find-identity', '-v', '-p', 'codesigning'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    env: environment,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  });
-  if (result.error || result.status !== 0) {
-    return [];
-  }
-  const identities = [];
-  for (const line of result.stdout.split(/\r?\n/)) {
-    const match = line.match(/^\s*\d+\)\s+([A-Fa-f0-9]+)\s+"([^"]+)"/);
-    if (match) {
-      identities.push({ hash: match[1], name: match[2] });
-    }
-  }
-  return identities;
-}
-
-function withoutColorDisablingEnvironment(environment) {
-  const sanitized = { ...environment };
-  for (const key of ['ANSI_COLORS_DISABLED', 'NO_COLOR', 'NODE_DISABLE_COLORS']) {
-    delete sanitized[key];
-  }
-  if (isColorDisablingForceColor(sanitized.FORCE_COLOR)) {
-    delete sanitized.FORCE_COLOR;
-  }
-  return sanitized;
-}
-
-function isColorDisablingForceColor(value) {
-  return typeof value === 'string' && ['0', 'false'].includes(value.trim().toLowerCase());
 }

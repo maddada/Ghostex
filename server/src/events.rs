@@ -4,8 +4,8 @@ use std::{
     time::Duration,
 };
 
-use serde_json::{Map, Value, json};
-use tokio::sync::{Mutex, broadcast, mpsc, oneshot, watch};
+use serde_json::{json, Map, Value};
+use tokio::sync::{broadcast, mpsc, oneshot, watch, Mutex};
 use uuid::Uuid;
 
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
@@ -319,7 +319,7 @@ fn now_iso() -> String {
 mod tests {
     use super::*;
     use serde_json::json;
-    use tokio::time::{Duration, timeout};
+    use tokio::time::{timeout, Duration};
 
     #[tokio::test]
     async fn renderer_commands_use_first_open_renderer_client() {

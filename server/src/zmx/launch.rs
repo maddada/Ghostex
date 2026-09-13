@@ -215,7 +215,11 @@ impl MacosZmxLaunchdJob {
     fn new(session_name: &str) -> ZmxEndpointResult<Self> {
         let uid = unsafe { libc::getuid() };
         let key = macos_zmx_launchd_session_key(session_name);
-        let label = format!("com.madda.ghostex.zmx.{key}");
+        let prefix = ghostex_paths::launchd_label_prefix(
+            crate::config::read_selected_local_api_port()
+                .map_err(|error| ZmxEndpointError::DependencyUnavailable(error.to_string()))?,
+        );
+        let label = format!("{prefix}zmx.{key}");
         let runtime_dir = get_gxserver_paths(None).runtime_dir.join("zmx-launchd");
         fs::create_dir_all(&runtime_dir).map_err(|error| {
             ZmxEndpointError::DependencyUnavailable(format!(

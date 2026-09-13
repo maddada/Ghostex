@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    ZmxEndpointError, ZmxEndpointResult, ZmxProcessIdentity, read_zmx_existing_session_names,
-    read_zmx_session_process_identities,
+    read_zmx_existing_session_names, read_zmx_session_process_identities, ZmxEndpointError,
+    ZmxEndpointResult, ZmxProcessIdentity,
 };
 
 /*

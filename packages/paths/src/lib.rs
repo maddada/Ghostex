@@ -12,6 +12,18 @@ const LEGACY_MIGRATION_MARKER: &str = "legacy-storage-v4.complete";
 const PREVIOUS_LEGACY_MIGRATION_MARKERS: &[&str] =
     &["legacy-storage-v2.complete", "legacy-storage-v3.complete"];
 
+/// CDXC:ServerDaemon 2026-09-13 WHY:
+/// Isolated app and zmx launchd jobs share a namespace outside the production prefix.
+/// This keeps either app's Quit and BG Service action from stopping the other instance.
+/// SEE-ALSO: apps/desktop/src/app/helpers/board_gxserver/gxserver_health_and_daemon.rs, server/src/zmx/launch.rs.
+pub fn launchd_label_prefix(local_api_port: u16) -> String {
+    if nonempty_env_path("GHOSTEX_HOME").is_some() {
+        format!("com.madda.ghostex-isolated.{local_api_port}.")
+    } else {
+        "com.madda.ghostex.".to_string()
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GhostexPaths {
     pub cache_dir: PathBuf,

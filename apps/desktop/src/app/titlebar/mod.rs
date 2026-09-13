@@ -31,3 +31,4 @@ pub(crate) mod session_reveal;
 pub(crate) mod settings_and_action_state;
 pub(crate) mod titlebar_buttons;
 pub(crate) mod titlebar_buttons_misc;
+pub(crate) mod view_lifecycle;

@@ -64,7 +64,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let mut menu = crate::app::context_menu::GpuiContextMenu::new();
+        let mut menu = self.titlebar_view_lifecycle_menu(TitlebarMode::Extension(id));
         for (label, operation) in [
             ("Start / Restart", "restart"),
             ("Stop", "stop"),
@@ -79,7 +79,9 @@ impl GhostexGpuiApp {
                 }),
             );
         }
-        menu.show(position, window, cx);
+        menu.separator()
+            .menu("Extensions", Box::new(OpenGpuiExtensionsModal))
+            .show(position, window, cx);
     }
     fn project_view_key(&self, id: ExtensionId) -> Option<String> {
         let project = self

@@ -387,11 +387,13 @@ pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> Stri
         .join(":")
 }
 
-/// The gxserver launchd agent label is client-agnostic on purpose: one
-/// per-user gxserver serves the Swift app, GPUI, and the CLI, so whichever
-/// client bootstraps it owns the same job definition.
 #[cfg(target_os = "macos")]
-pub(crate) const GPUI_GXSERVER_LAUNCH_AGENT_LABEL: &str = "com.madda.ghostex.gxserver";
+pub(crate) fn gpui_gxserver_launch_agent_label() -> String {
+    format!(
+        "{}gxserver",
+        ghostex_paths::launchd_label_prefix(gpui_local_gxserver_api_port())
+    )
+}
 
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_launchd_plist_xml_escape(value: &str) -> String {
@@ -434,7 +436,8 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
         .ok_or_else(|| LAUNCH_FAILURE.to_string())?;
     let agents_dir = PathBuf::from(&home).join("Library/LaunchAgents");
     std::fs::create_dir_all(&agents_dir).map_err(|_| LAUNCH_FAILURE.to_string())?;
-    let plist_path = agents_dir.join(format!("{GPUI_GXSERVER_LAUNCH_AGENT_LABEL}.plist"));
+    let label = gpui_gxserver_launch_agent_label();
+    let plist_path = agents_dir.join(format!("{label}.plist"));
 
     let current_path = env::var("PATH").ok();
     let mut environment_entries = vec![
@@ -443,6 +446,10 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
             gpui_normalized_user_tool_path(current_path.as_deref()),
         ),
         ("CLICOLOR".to_string(), "1".to_string()),
+        (
+            "GHOSTEX_GXSERVER_DEV_PORT".to_string(),
+            gpui_local_gxserver_api_port().to_string(),
+        ),
     ];
     for variable in [
         "GHOSTEX_HOME",
@@ -501,7 +508,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
 </dict>
 </plist>
 "#,
-        label = gpui_launchd_plist_xml_escape(GPUI_GXSERVER_LAUNCH_AGENT_LABEL),
+        label = gpui_launchd_plist_xml_escape(&label),
         binary = gpui_launchd_plist_xml_escape(binary_path),
         environment_xml = environment_xml,
         launch_log = gpui_launchd_plist_xml_escape(launch_log_path),
@@ -518,7 +525,7 @@ pub(crate) fn gpui_spawn_local_gxserver_daemon(binary: &Path) -> Result<(), Stri
     if uid.is_empty() {
         return Err(LAUNCH_FAILURE.to_string());
     }
-    let job_target = format!("gui/{uid}/{GPUI_GXSERVER_LAUNCH_AGENT_LABEL}");
+    let job_target = format!("gui/{uid}/{label}");
     let domain_target = format!("gui/{uid}");
 
     let run_launchctl = |arguments: &[&str]| -> bool {
@@ -639,7 +646,7 @@ Full teardown behind the "Quit Ghostex & BG Service" menu item. Plain Quit
 leaves gxserver, the zmx session daemons, and the GhostexEditor daemon alive
 on purpose; this path is the explicit opposite: gxserver kills every tracked
 zmx session and stops itself (`/api/control/stopAll`), then every
-`com.madda.ghostex.*` launchd job is booted out (covering gxserver's own
+launchd job in the selected instance's namespace is booted out (covering gxserver's own
 LaunchAgent plus any zmx job the server lost track of), and the standalone
 editor daemon is asked to exit over its socket. Every step is best-effort and
 bounded so quitting can never hang on a wedged daemon.
@@ -675,13 +682,6 @@ pub(crate) fn gpui_stop_all_ghostex_background_services() {
     }
 }
 
-/// Every launchd job Ghostex registers carries this label prefix (the gxserver
-/// LaunchAgent and the per-session zmx jobs). The app's own Finder-launched
-/// process is labeled `application.com.madda.ghostex.…` by launchd, so the
-/// prefix cannot match the running app itself.
-#[cfg(target_os = "macos")]
-const GPUI_GHOSTEX_LAUNCHD_LABEL_PREFIX: &str = "com.madda.ghostex.";
-
 #[cfg(target_os = "macos")]
 fn gpui_bootout_all_ghostex_launchd_jobs() {
     let Ok(uid_output) = std::process::Command::new("/usr/bin/id").arg("-u").output() else {
@@ -697,7 +697,8 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
     // even after `/api/control/stopAll` exits the process, and it must also
     // go when the server was already stopped and `launchctl list` still
     // reports it without a PID.
-    let mut labels = vec![GPUI_GXSERVER_LAUNCH_AGENT_LABEL.to_string()];
+    let prefix = ghostex_paths::launchd_label_prefix(gpui_local_gxserver_api_port());
+    let mut labels = vec![gpui_gxserver_launch_agent_label()];
     if let Ok(list_output) = std::process::Command::new("/bin/launchctl")
         .arg("list")
         .output()
@@ -706,9 +707,7 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
             let Some(label) = line.split_whitespace().nth(2) else {
                 continue;
             };
-            if label.starts_with(GPUI_GHOSTEX_LAUNCHD_LABEL_PREFIX)
-                && !labels.iter().any(|known| known == label)
-            {
+            if label.starts_with(&prefix) && !labels.iter().any(|known| known == label) {
                 labels.push(label.to_string());
             }
         }
@@ -765,10 +764,11 @@ pub(crate) fn gpui_gxserver_startup_failure_report(probes: &[String]) -> String 
     let output = gpui_recent_gxserver_launch_output()
         .unwrap_or_else(|| "No readable, non-empty launcher output.".into());
     let mut report = format!(
-        "Ghostex gxserver startup diagnostics\nApp: {}\nPlatform: {} / {}\nCaptured at (Unix seconds): {captured_at}\nHealth endpoint: 127.0.0.1:58744/api/health/server\nExpected protocol: {}\n\n{}\n\nLauncher log tail (may predate this attempt; modified Unix seconds: {log_modified}):\n{output}",
+        "Ghostex gxserver startup diagnostics\nApp: {}\nPlatform: {} / {}\nCaptured at (Unix seconds): {captured_at}\nHealth endpoint: 127.0.0.1:{}/api/health/server\nExpected protocol: {}\n\n{}\n\nLauncher log tail (may predate this attempt; modified Unix seconds: {log_modified}):\n{output}",
         GPUI_APP_MARKETING_VERSION,
         std::env::consts::OS,
         std::env::consts::ARCH,
+        gpui_local_gxserver_api_port(),
         GPUI_GXSERVER_PROTOCOL_VERSION,
         probes.join("\n"),
     );
@@ -796,7 +796,7 @@ pub(crate) fn gpui_gxserver_startup_failure_report(probes: &[String]) -> String 
                 let target = format!(
                     "gui/{}/{}",
                     uid.stdout.trim(),
-                    GPUI_GXSERVER_LAUNCH_AGENT_LABEL
+                    gpui_gxserver_launch_agent_label()
                 );
                 report.push_str("\n\nlaunchd job at failure:\n");
                 match gpui_run_command_with_captured_output_timeout(

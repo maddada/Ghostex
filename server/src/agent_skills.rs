@@ -132,7 +132,7 @@ fn install_agent_skills_blocking(
         ));
     }
     let agent_ids = normalize_agent_skill_agent_ids(read_string_array(params, "agentIds")?);
-    let target_roots = agent_skill_install_target_roots(&paths.home_dir, &agent_ids)?;
+    let target_roots = agent_skill_install_target_roots(paths.agent_config_home_dir(), &agent_ids)?;
     let remote_requested = params
         .get("remote")
         .and_then(Value::as_bool)
@@ -464,22 +464,26 @@ pub fn create_gxserver_agent_skill_discovery_sources(
 ) -> Vec<AgentSkillDiscoveryRoot> {
     let mut sources = vec![
         AgentSkillDiscoveryRoot {
-            path: paths.home_dir.join(".codex").join("skills"),
+            path: paths.agent_config_home_dir().join(".codex").join("skills"),
             providers: vec!["codex".to_string()],
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths.home_dir.join(".agents").join("skills"),
+            path: paths.agent_config_home_dir().join(".agents").join("skills"),
             providers: vec!["agent-skills".to_string()],
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths.home_dir.join(".claude").join("skills"),
+            path: paths.agent_config_home_dir().join(".claude").join("skills"),
             providers: vec!["claude".to_string()],
             source_kind: "global",
         },
         AgentSkillDiscoveryRoot {
-            path: paths.home_dir.join(".codex").join("plugins").join("cache"),
+            path: paths
+                .agent_config_home_dir()
+                .join(".codex")
+                .join("plugins")
+                .join("cache"),
             providers: vec!["codex".to_string(), "agent-skills".to_string()],
             source_kind: "pluginCache",
         },
@@ -592,7 +596,7 @@ fn read_agent_skill_status_for_names(
         .collect::<Vec<_>>();
     Ok(json!({
         "generatedAt": now_iso(),
-        "homeDir": path_string(&paths.home_dir),
+        "homeDir": path_string(paths.agent_config_home_dir()),
         "roots": roots.iter().map(root_to_value).collect::<Vec<_>>(),
         "skills": skills,
         "type": "agentSkillStatus",
@@ -1015,9 +1019,9 @@ fn retired_skill_dir_is_unmodified_shipped_copy(skill_dir: &Path) -> bool {
 /// from the global agent skill roots. Returns the removed directory paths.
 pub fn remove_retired_ghostex_agent_skills(paths: &GxserverPaths) -> Vec<String> {
     let roots = [
-        paths.home_dir.join(".agents").join("skills"),
-        paths.home_dir.join(".codex").join("skills"),
-        paths.home_dir.join(".claude").join("skills"),
+        paths.agent_config_home_dir().join(".agents").join("skills"),
+        paths.agent_config_home_dir().join(".codex").join("skills"),
+        paths.agent_config_home_dir().join(".claude").join("skills"),
     ];
     let mut removed = Vec::new();
     let mut seen_canonical: HashSet<PathBuf> = HashSet::new();

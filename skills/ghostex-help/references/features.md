@@ -19,6 +19,13 @@ The full view tabs stay centered in the titlebar. When space is tight, they
 become a dropdown on the left immediately after Next (Forward), before the
 companion toggle and project name. Hovering a view shows its positional shortcut.
 
+Right-click Code, Browser, Kanban, Automate, Docs, or another web-based view's
+titlebar button for **Reload** and **Sleep**, followed by **Extensions**. Reload
+refreshes the clicked view (the focused tab in Browser); a sleeping view opens
+again. Sleep unloads the view while keeping its place, and Code also stops its
+editor server. Select the view again to wake it. Resources can stop Code too,
+without closing Ghostex.
+
 - **Agents**: the terminal grid. Panes and tabs run agent CLIs or plain shells,
   split horizontally or vertically, in one or more groups. Each pane can show
   the raw terminal or Session Chat. Cmd+T creates a session, Cmd+D splits.

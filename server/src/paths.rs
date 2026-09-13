@@ -28,6 +28,17 @@ pub struct GxserverPaths {
     pub zmx_dir: PathBuf,
 }
 
+impl GxserverPaths {
+    /// CDXC:ServerDaemon 2026-09-13 WHY:
+    /// Hook installation already isolates provider configuration for explicit profiles.
+    /// Skill installation and startup refresh must use the same root to avoid rewriting the main user's agent configuration.
+    pub fn agent_config_home_dir(&self) -> &std::path::Path {
+        self.isolated_agent_home_dir
+            .as_deref()
+            .unwrap_or(&self.home_dir)
+    }
+}
+
 /*
 CDXC:ServerDaemon 2026-06-14-20:37:
 The Rust daemon must use the shared Ghostex XDG/GHOSTEX_HOME path contract: daemon state stays in the resolved state directory, while support-bundle-safe JSONL diagnostics stay in the resolved logs directory.

@@ -1330,6 +1330,27 @@ cat >"$APP_PATH/Contents/Info.plist" <<EOF_PLIST
 </plist>
 EOF_PLIST
 
+if [[ "${GHOSTEX_GPUI_ISOLATED_START:-0}" == "1" ]]; then
+	# Persist the profile for Finder/Dock launches, without changing launchctl's global environment.
+	python3 - "$APP_PATH/Contents/Info.plist" <<'PY_ISOLATED_PLIST'
+import os
+import plistlib
+import sys
+
+plist_path = sys.argv[1]
+with open(plist_path, "rb") as file:
+    info = plistlib.load(file)
+info["LSEnvironment"] = {key: os.environ[key] for key in (
+    "GHOSTEX_HOME", "GHOSTEX_GXSERVER_DEV_PORT", "GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT", "GHOSTEX_CODE_SERVER_PORT", "CODE_SERVER_CONFIG",
+    "GHOSTEX_GXSERVER_CLI", "GHOSTEX_GXSERVER_BIN",
+)}
+# The separate app must not become a candidate for the production URL scheme.
+info.pop("CFBundleURLTypes", None)
+with open(plist_path, "wb") as file:
+    plistlib.dump(info, file)
+PY_ISOLATED_PLIST
+fi
+
 helper_names=(
 	"$APP_NAME Helper"
 	"$APP_NAME Helper (Alerts)"

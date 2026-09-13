@@ -92,7 +92,7 @@ jobs:
         run: node tooling/release-gpui/code-server-component-identity.mjs --root .dependencies/code-server --platform linux-x64 --github-output >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .dependencies/code-server/.node-version
           cache: npm
           cache-dependency-path: .dependencies/code-server/package-lock.json
       # CDXC:ReleaseChangeAwarePlanning 2026-08-13: the runtime artifacts used to

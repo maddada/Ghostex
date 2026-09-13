@@ -698,6 +698,12 @@ impl SourceCodeServerRuntimeSettings {
     }
 
     pub(crate) fn linked_vscode_user_config_dir(&self) -> Option<&str> {
+        // CDXC:CodeEditor 2026-09-13 DECISION:
+        // User: the separate Ghostex-3 instance may share hooks, but its configuration must be isolated.
+        // A linked settings.json would otherwise let either editor change the other's settings.
+        if gpui_uses_isolated_storage() {
+            return None;
+        }
         self.link_vscode_user_config
             .then_some(self.vscode_user_config_dir.as_str())
     }

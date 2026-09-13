@@ -57,6 +57,9 @@ pub(crate) fn gpui_finish_desktop_control_setup(
 }
 
 pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
+    if gpui_uses_isolated_storage() {
+        return Err("This isolated app does not replace the shared ghostex or gx commands. Use bun run gx:isolated from its checkout.".to_string());
+    }
     /*
     CDXC:Cli 2026-06-24-12:56:
     CLI repair is real only when GPUI is running from a packaged app that ships the native `Contents/Resources/CLI/ghostex` binary. Development binaries must report unavailable status instead of synthesizing wrappers to a source checkout, while packaged repair writes public wrappers outside the app and replaces only marked Ghostex wrappers, app-owned CLI symlinks, or broken symlinks.
@@ -113,6 +116,9 @@ fn gpui_describe_cli_install_dirs(install_dirs: &[PathBuf]) -> String {
 }
 
 pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
+    if gpui_uses_isolated_storage() {
+        return;
+    }
     /*
     CDXC:Cli 2026-08-30:
     Sparkle and DMG updates replace the app bundle but never touch the public
@@ -157,6 +163,13 @@ pub(crate) fn gpui_auto_repair_stale_ghostex_cli_wrappers() {
     if let Err(message) = gpui_repair_ghostex_cli_commands() {
         eprintln!("ghostex-gpui could not refresh stale Ghostex CLI wrappers: {message}");
     }
+}
+
+/// CDXC:Build 2026-09-13 WHY:
+/// A separately installed app would otherwise repair the user's public CLI wrappers to its own bundle on startup.
+pub(crate) fn gpui_uses_isolated_storage() -> bool {
+    env::var_os("GHOSTEX_HOME")
+        .is_some_and(|value| !value.is_empty() && Path::new(&value).is_absolute())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

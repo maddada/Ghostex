@@ -174,7 +174,8 @@ fn post_gpui_client_event_body(body: &str) {
     let Ok(token) = read_gpui_gxserver_auth_token() else {
         return;
     };
-    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{GPUI_GXSERVER_LOCAL_API_PORT}");
+    let port = gpui_local_gxserver_api_port();
+    let address = format!("{GPUI_GXSERVER_LOCAL_API_HOST}:{port}");
     let Ok(socket_address) = address.parse::<SocketAddr>() else {
         return;
     };

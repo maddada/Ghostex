@@ -404,7 +404,7 @@ pub fn refresh_installed_bundled_skills(paths: &GxserverPaths) -> Result<Value, 
     }
     let catalog = RemoteSkillsCatalog::fetch()?;
     let cache_root = remote_skills_cache_root(paths);
-    let roots = installed_skill_roots(&paths.home_dir);
+    let roots = installed_skill_roots(paths.agent_config_home_dir());
     let mut refreshed_names = HashSet::new();
     let mut updated = Vec::new();
     let mut failed = Vec::new();

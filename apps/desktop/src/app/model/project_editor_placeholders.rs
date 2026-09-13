@@ -111,7 +111,8 @@ impl ProjectEditorSleepingPlaceholderSignature {
                 "Docs is sleeping",
                 "Docs shell state is retained. Activate this surface to restore it.",
             ),
-            TitlebarMode::Agents | TitlebarMode::Extension(_) => return None,
+            TitlebarMode::Extension(_) => ("View is sleeping", "Select this view to wake it."),
+            TitlebarMode::Agents => return None,
         };
 
         Some(Self {

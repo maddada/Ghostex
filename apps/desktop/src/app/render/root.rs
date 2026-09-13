@@ -684,6 +684,20 @@ impl Render for GhostexGpuiApp {
                 }),
             )
             .on_action(
+                cx.listener(|this, action: &ReloadGpuiTitlebarView, window, cx| {
+                    if let Some(mode) = this.titlebar_view_mode_for_index(action.mode_index) {
+                        this.reload_titlebar_view(mode, window, cx);
+                    }
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &SleepGpuiTitlebarView, _window, cx| {
+                    if let Some(mode) = this.titlebar_view_mode_for_index(action.mode_index) {
+                        this.sleep_titlebar_view(mode, cx);
+                    }
+                }),
+            )
+            .on_action(
                 cx.listener(|this, action: &RunGpuiTitlebarAction, window, cx| {
                     this.run_gpui_titlebar_action_index(action.action_index as usize, window, cx);
                 }),

@@ -27,9 +27,14 @@ pub(crate) fn source_code_server_spawn_runtime(
     }
     if source_code_server_health_check() {
         let remaining = startup_deadline.saturating_duration_since(Instant::now());
-        let _ = source_code_server_wait_until_not_responsive(
+        if !source_code_server_wait_until_not_responsive(
             SOURCE_CODE_SERVER_PORT_BUSY_WAIT_INTERVAL.min(remaining),
-        );
+        ) {
+            return Err(format!(
+                "Code editor port {} is already in use by another runtime.",
+                source_code_server_editor_port()
+            ));
+        }
     }
 
     let repo_root = source_code_server_resolve_repo_root()?;
@@ -63,7 +68,8 @@ pub(crate) fn source_code_server_spawn_runtime(
         .arg("--bind-addr")
         .arg(format!(
             "{}:{}",
-            SOURCE_CODE_SERVER_EDITOR_HOST, SOURCE_CODE_SERVER_EDITOR_PORT
+            SOURCE_CODE_SERVER_EDITOR_HOST,
+            source_code_server_editor_port()
         ))
         .arg("--disable-telemetry")
         .arg("--disable-update-check")
@@ -86,7 +92,7 @@ pub(crate) fn source_code_server_spawn_runtime(
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
-        runtime_origin: SOURCE_CODE_SERVER_EDITOR_ORIGIN.to_string(),
+        runtime_origin: source_code_server_editor_origin(),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
         http_runtime_ready: readiness.http_runtime_ready,
@@ -110,9 +116,14 @@ pub(crate) fn source_code_server_spawn_runtime(
     */
     if source_code_server_health_check() {
         let remaining = startup_deadline.saturating_duration_since(Instant::now());
-        let _ = source_code_server_wait_until_not_responsive(
+        if !source_code_server_wait_until_not_responsive(
             SOURCE_CODE_SERVER_PORT_BUSY_WAIT_INTERVAL.min(remaining),
-        );
+        ) {
+            return Err(format!(
+                "Code editor port {} is already in use by another runtime.",
+                source_code_server_editor_port()
+            ));
+        }
     }
 
     if Instant::now() >= startup_deadline {
@@ -120,7 +131,8 @@ pub(crate) fn source_code_server_spawn_runtime(
     }
     let bind_address = format!(
         "{}:{}",
-        SOURCE_CODE_SERVER_EDITOR_HOST, SOURCE_CODE_SERVER_EDITOR_PORT
+        SOURCE_CODE_SERVER_EDITOR_HOST,
+        source_code_server_editor_port()
     );
     let mut command = windows_terminal_backend::source_code_server_command(
         &target.project_path,
@@ -143,7 +155,7 @@ pub(crate) fn source_code_server_spawn_runtime(
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
-        runtime_origin: SOURCE_CODE_SERVER_EDITOR_ORIGIN.to_string(),
+        runtime_origin: source_code_server_editor_origin(),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
         http_runtime_ready: readiness.http_runtime_ready,

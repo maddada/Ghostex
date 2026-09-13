@@ -141,6 +141,7 @@ pub(crate) struct ProjectEditorShellModel {
     pub(crate) automate_lifecycle: ProjectEditorModeLifecycle,
     pub(crate) manage_lifecycle: ProjectEditorModeLifecycle,
     pub(crate) next_lifecycle_recency: u64,
+    extension_lifecycles: HashMap<ExtensionId, ProjectEditorModeLifecycle>,
 }
 
 impl ProjectEditorShellModel {
@@ -187,6 +188,7 @@ impl ProjectEditorShellModel {
             automate_lifecycle: ProjectEditorModeLifecycle::sleeping(),
             manage_lifecycle: ProjectEditorModeLifecycle::sleeping(),
             next_lifecycle_recency: 2,
+            extension_lifecycles: HashMap::new(),
         }
     }
 
@@ -197,10 +199,14 @@ impl ProjectEditorShellModel {
             TitlebarMode::Kanban => Some(self.kanban_lifecycle),
             TitlebarMode::Automate => Some(self.automate_lifecycle),
             TitlebarMode::Manage => Some(self.manage_lifecycle),
-            TitlebarMode::Extension(_) => Some(ProjectEditorModeLifecycle {
-                state: ProjectEditorLifecycleState::Awake,
-                recency: u64::MAX,
-            }),
+            TitlebarMode::Extension(id) => {
+                Some(self.extension_lifecycles.get(&id).copied().unwrap_or(
+                    ProjectEditorModeLifecycle {
+                        state: ProjectEditorLifecycleState::Awake,
+                        recency: u64::MAX,
+                    },
+                ))
+            }
             TitlebarMode::Agents => None,
         }
     }
@@ -215,7 +221,13 @@ impl ProjectEditorShellModel {
             TitlebarMode::Kanban => Some(&mut self.kanban_lifecycle),
             TitlebarMode::Automate => Some(&mut self.automate_lifecycle),
             TitlebarMode::Manage => Some(&mut self.manage_lifecycle),
-            TitlebarMode::Agents | TitlebarMode::Extension(_) => None,
+            TitlebarMode::Extension(id) => Some(self.extension_lifecycles.entry(id).or_insert(
+                ProjectEditorModeLifecycle {
+                    state: ProjectEditorLifecycleState::Awake,
+                    recency: u64::MAX,
+                },
+            )),
+            TitlebarMode::Agents => None,
         }
     }
 
