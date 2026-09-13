@@ -33,6 +33,7 @@ import { SessionChatComposer, type SessionChatComposerHandle } from './session-c
 import { sessionChatKeyboardPopupOpen } from './session-chat-caret-navigation';
 import { sessionChatEditingShortcut, sessionChatHasTranscriptSelection } from './session-chat-edit-shortcuts';
 import { useSessionChatPaneFocus } from './use-session-chat-pane-focus';
+import { sessionChatCardButtonAllowsTyping, useSessionChatCardFocus } from './use-session-chat-card-focus';
 import { useSessionChatSkills } from './use-session-chat-skills';
 import { SessionChatAsyncQuestions } from './session-chat-async-questions';
 import { sessionChatDataTransferHasFiles } from './session-chat-drop-attachments';
@@ -1054,6 +1055,7 @@ export function SessionChatView({
     });
   }, [hostSessionNoteBridge, sessionNoteAvailable]);
   const [questionActive, setQuestionActive] = useState(false);
+  useSessionChatCardFocus(chatRootRef, composerRef, !questionActive, sessionKey);
   const diagnosticLogRef = useRef(diagnosticLog);
   diagnosticLogRef.current = diagnosticLog;
   // Track transcript and question transitions alongside composer focus events.
@@ -1389,18 +1391,22 @@ export function SessionChatView({
   }, [chat.switchableAgents, hostActions, isDraft]);
 
   // Background typing and caret navigation resume the composer at its saved
-  // selection. Interactive controls and open pickers retain their keys.
+  // selection. Card buttons keep activation keys; inputs and open pickers own theirs.
   const handleKeyDownCapture = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>): void => {
       if (event.defaultPrevented || questionActive || event.nativeEvent.isComposing) {
         return;
       }
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.(INTERACTIVE_TARGET_SELECTOR)) {
-        return;
+      const interactiveTarget = target?.closest?.(INTERACTIVE_TARGET_SELECTOR);
+      const editingShortcut = sessionChatEditingShortcut(event.nativeEvent);
+      if (interactiveTarget) {
+        if (!sessionChatCardButtonAllowsTyping(interactiveTarget)) return;
+        // Enter, Space, Tab and arrows still activate or navigate the card.
+        const typing = event.key.length === 1 && event.key !== ' ' && !event.metaKey && !event.ctrlKey;
+        if (!typing && !editingShortcut) return;
       }
       if (sessionChatKeyboardPopupOpen(event.currentTarget)) return;
-      const editingShortcut = sessionChatEditingShortcut(event.nativeEvent);
       if (editingShortcut === 'copy' || editingShortcut === 'cut' || editingShortcut === 'paste') {
         if (editingShortcut === 'paste' || !sessionChatHasTranscriptSelection(event.currentTarget)) {
           composerRef.current?.focus();
@@ -1448,7 +1454,8 @@ export function SessionChatView({
         return;
       }
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.(INTERACTIVE_TARGET_SELECTOR)) {
+      const interactiveTarget = target?.closest?.(INTERACTIVE_TARGET_SELECTOR);
+      if (interactiveTarget && !sessionChatCardButtonAllowsTyping(interactiveTarget)) {
         return;
       }
       if (sessionChatKeyboardPopupOpen(event.currentTarget)) return;
@@ -1464,7 +1471,8 @@ export function SessionChatView({
     (event: ClipboardEvent<HTMLDivElement>): void => {
       if (event.defaultPrevented || questionActive) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest?.(INTERACTIVE_TARGET_SELECTOR)) return;
+      const interactiveTarget = target?.closest?.(INTERACTIVE_TARGET_SELECTOR);
+      if (interactiveTarget && !sessionChatCardButtonAllowsTyping(interactiveTarget)) return;
       if (sessionChatKeyboardPopupOpen(event.currentTarget) || sessionChatHasTranscriptSelection(event.currentTarget))
         return;
       if (composerRef.current?.copyClipboard(event.clipboardData, event.type === 'cut')) {
@@ -1636,7 +1644,7 @@ export function SessionChatView({
                               sessionKey={sessionKey}
                               composerCollapsed={composerCollapsed}
                               scrollToBottomRequest={scrollToBottomRequest}
-                              scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
+                              scrollToBottomShortcutLabel={showShortcutLabels ? scrollToBottomShortcutLabel : ''}
                               hasMore={chat.hasMore}
                               isWorking={transcriptWorking}
                               loadingEarlier={chat.loadingEarlier}
@@ -1681,7 +1689,7 @@ export function SessionChatView({
                                 sessionKey={sessionKey}
                                 composerCollapsed={composerCollapsed}
                                 scrollToBottomRequest={scrollToBottomRequest}
-                                scrollToBottomShortcutLabel={scrollToBottomShortcutLabel}
+                                scrollToBottomShortcutLabel={showShortcutLabels ? scrollToBottomShortcutLabel : ''}
                                 hasMore={chat.hasMore}
                                 isWorking={transcriptWorking}
                                 loadingEarlier={chat.loadingEarlier}

@@ -400,63 +400,63 @@ body {
 }
 
 /*
- * CDXC:Theming 2026-05-29:
- * The app chrome now uses squared controls everywhere. Keep this as a final
- * theme override so shadcn/Base UI primitives and older bespoke sidebar
- * controls share the same zero-radius treatment. Select popups and their rows
- * are deliberately excluded: they are portaled outside modal scopes, so their
- * shared primitive must retain the app's rounded dropdown geometry everywhere.
+ * CDXC:DesignSystem 2026-09-13 WHY:
+ * The May square-theme reset was unlayered, so it overrode every Tailwind rounded utility regardless of specificity or import order.
+ * Keep legacy square geometry only as a base-layer default; components and utilities own their explicit corners.
+ * This supersedes the 2026-05-29 blanket square override. The matching radius token lives in styles/shadcn.css.
  */
-:is(
-  button,
-  input,
-  textarea,
-  select,
-  [role='button'],
-  [data-slot='button'],
-  [data-slot='button-group'],
-  [data-slot='button-group-text'],
-  [data-slot='card'],
-  [data-slot='command'],
-  [data-slot='command-item'],
-  [data-slot='dialog-content'],
-  [data-slot='dropdown-menu-content'],
-  [data-slot='dropdown-menu-item'],
-  [data-slot='dropdown-menu-checkbox-item'],
-  [data-slot='dropdown-menu-radio-item'],
-  [data-slot='dropdown-menu-sub-content'],
-  [data-slot='dropdown-menu-sub-trigger'],
-  [data-slot='empty'],
-  [data-slot='empty-icon'],
-  [data-slot='field-label'],
-  [data-slot='input-group'],
-  [data-slot='popover-content'],
-  [data-slot='select-trigger'],
-  [data-slot='slider-thumb'],
-  [data-slot='slider-track'],
-  [data-slot='switch'],
-  [data-slot='switch-thumb'],
-  [data-slot='tabs-list'],
-  [data-slot='tabs-trigger'],
-  [data-slot='textarea'],
-  [data-slot='toggle'],
-  [data-slot='toggle-group'],
-  [data-slot='tooltip-content'],
-  .app-modal-host-body,
-  .command-icon-picker-menu,
-  .command-icon-picker-option,
-  .git-action-menu,
-  .git-action-menu-item,
-  .group-agent-menu-item,
-  .group-control-menu-item,
-  .quick-action-menu,
-  .quick-action-menu-item,
-  .session-context-menu,
-  .session-context-menu-item,
-  .session-context-menu-split-item,
-  .workspace-theme-menu-item
-) {
-  border-radius: 0;
+@layer base {
+  :is(
+    button,
+    input,
+    textarea,
+    select,
+    [role='button'],
+    [data-slot='button'],
+    [data-slot='button-group'],
+    [data-slot='button-group-text'],
+    [data-slot='card'],
+    [data-slot='command'],
+    [data-slot='command-item'],
+    [data-slot='dialog-content'],
+    [data-slot='dropdown-menu-content'],
+    [data-slot='dropdown-menu-item'],
+    [data-slot='dropdown-menu-checkbox-item'],
+    [data-slot='dropdown-menu-radio-item'],
+    [data-slot='dropdown-menu-sub-content'],
+    [data-slot='dropdown-menu-sub-trigger'],
+    [data-slot='empty'],
+    [data-slot='empty-icon'],
+    [data-slot='field-label'],
+    [data-slot='input-group'],
+    [data-slot='popover-content'],
+    [data-slot='select-trigger'],
+    [data-slot='slider-thumb'],
+    [data-slot='slider-track'],
+    [data-slot='switch'],
+    [data-slot='switch-thumb'],
+    [data-slot='tabs-list'],
+    [data-slot='tabs-trigger'],
+    [data-slot='textarea'],
+    [data-slot='toggle'],
+    [data-slot='toggle-group'],
+    [data-slot='tooltip-content'],
+    .app-modal-host-body,
+    .command-icon-picker-menu,
+    .command-icon-picker-option,
+    .git-action-menu,
+    .git-action-menu-item,
+    .group-agent-menu-item,
+    .group-control-menu-item,
+    .quick-action-menu,
+    .quick-action-menu-item,
+    .session-context-menu,
+    .session-context-menu-item,
+    .session-context-menu-split-item,
+    .workspace-theme-menu-item
+  ) {
+    border-radius: 0;
+  }
 }
 
 /*
@@ -506,11 +506,8 @@ body {
  * Dropdown menus, submenus, popovers, and the chat surface's right-click
  * context menu share the select popup's geometry: an
  * 8px panel with 6px rows, so a hovered row's highlight sits inside the panel's
- * 4px padding. The square-theme reset above still lists these slots for the
- * rest of its chrome family, and Tailwind's `rounded-[8px]`/`rounded-[6px]` on
- * the shared primitives lives in the utilities layer, which unlayered CSS
- * outranks. Re-assert the radius here, after that reset, so the computed value
- * is rounded in the sidebar, the modal host, and portaled menus alike.
+ * 4px padding. Keep the shared geometry consistent in the sidebar, modal host,
+ * and portaled menus alike.
  */
 [data-slot='context-menu-content'],
 [data-slot='context-menu-sub-content'],
@@ -563,32 +560,30 @@ body {
 }
 
 /*
- * CDXC:SessionChat 2026-08-02:
- * The Session Chat surface keeps rounded controls even though the shared
- * Button primitive and app chrome are square by default. Apply the chat radius
- * explicitly instead of reverting to the primitive's rounded-none layer. The
- * popup marker class covers chat-owned dropdown menus portalled outside the
- * chat root. Collapse rails and the terminal/agent floating strip keep their
- * purpose-built geometry. File-change cards also own their link, code pane,
- * and padded disclosure-button shapes.
+ * CDXC:SessionChat 2026-09-13 WHY:
+ * Chat defaults to rounded controls, including its portaled menus, but component classes must be able to choose their own radius.
+ * The base layer replaces the 2026-08-02 unlayered override so rounded-sm, rounded-full and rounded-none work on newly added controls.
+ * Collapse rails, floating terminal controls and file-change cards retain their own geometry.
  */
-.ghostex-session-chat-scope :is(input, textarea),
-.ghostex-session-chat-popup,
-.ghostex-session-chat-scope
-  :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
-    .ghostex-chat-expansion-rail
-  ):not(.ghostex-chat-file-change-card button):not(.ghostex-chat-terminal-search-button),
-.ghostex-session-chat-popup
-  :is(
-    button,
-    [role='button'],
-    [data-slot='dropdown-menu-item'],
-    [data-slot='dropdown-menu-checkbox-item'],
-    [data-slot='dropdown-menu-radio-item'],
-    [data-slot='dropdown-menu-sub-trigger'],
-    [data-slot='dropdown-menu-sub-content']
-  ):not(.ghostex-chat-file-change-card button) {
-  border-radius: calc(var(--radius, 0.625rem) - 2px);
+@layer base {
+  .ghostex-session-chat-scope :is(input, textarea),
+  .ghostex-session-chat-popup,
+  .ghostex-session-chat-scope
+    :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
+      .ghostex-chat-expansion-rail
+    ):not(.ghostex-chat-file-change-card button):not(.ghostex-chat-terminal-search-button),
+  .ghostex-session-chat-popup
+    :is(
+      button,
+      [role='button'],
+      [data-slot='dropdown-menu-item'],
+      [data-slot='dropdown-menu-checkbox-item'],
+      [data-slot='dropdown-menu-radio-item'],
+      [data-slot='dropdown-menu-sub-trigger'],
+      [data-slot='dropdown-menu-sub-content']
+    ):not(.ghostex-chat-file-change-card button) {
+    border-radius: calc(var(--radius, 0.625rem) - 2px);
+  }
 }
 
 .ghostex-session-chat-scope :is(input, textarea),

@@ -1,3 +1,35 @@
+.ghostex-chat-compacting-loop {
+  width: 35%;
+  animation: ghostex-chat-compacting-loop 1.8s ease-in-out infinite;
+}
+
+@keyframes ghostex-chat-compacting-loop {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ghostex-chat-compacting-loop {
+    animation: none;
+    margin-inline: auto;
+  }
+}
+
+/* CDXC:SessionChat 2026-09-13 DECISION:
+ * User: always hide the terminal-output disclosure in narrow chats.
+ * Use the shared narrow-chat breakpoint and hide already-expanded output as well.
+ */
+@container ghostex-session-chat (max-width: 1070px) {
+  .ghostex-chat-terminal-notice [data-slot='session-chat-notice-tail-toggle'],
+  .ghostex-chat-terminal-notice .ghostex-chat-notice-tail {
+    display: none;
+  }
+}
+
 .ghostex-chat-terminal-tool-card {
   font-family: inherit;
   font-size: 0.875rem;
@@ -20,7 +52,8 @@
   color: #b4b8bf;
 }
 
-.ghostex-chat-prompt-card :is(p, pre, input, textarea, .ghostex-chat-card-content):not(.ghostex-chat-card-title):not(.ghostex-chat-card-hint) {
+.ghostex-chat-prompt-card
+  :is(p, pre, input, textarea, .ghostex-chat-card-content):not(.ghostex-chat-card-title):not(.ghostex-chat-card-hint) {
   color: #b4b8bf;
   font-size: var(--chat-card-text-size);
   font-weight: 400;

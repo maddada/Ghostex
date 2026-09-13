@@ -155,7 +155,7 @@ describe('noise filter (§9.1)', () => {
     );
     expect(sessionChatSuppressedTurnLabel(effortCommand)).toBeNull();
     // The effort id is rendered through the shared catalog's display label.
-    expect(sessionChatSuppressedTurnLabel(effortOutput)).toBe('Set effort level to Extra High');
+    expect(sessionChatSuppressedTurnLabel(effortOutput)).toBe('Set effort level to xHigh');
     // Prose that merely mentions compaction is untouched.
     expect(
       sessionChatSuppressedTurnLabel(

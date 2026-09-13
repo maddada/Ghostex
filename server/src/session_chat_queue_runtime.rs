@@ -1139,11 +1139,12 @@ pub(crate) async fn send_session_chat_message_with_draft(
             draft_before_send.as_ref(),
         );
     }
-    // A `/compact` is NOT re-read here: the follower's transcript-keyed probe
-    // burst covers it for chat-sent and terminal-typed commands alike
-    // (CDXC:AgentScreenDetection), and a second publisher of the same
-    // activity only let a later follower frame overwrite what this one showed.
-    if is_option_readback_command || capture_local_output {
+    // Claude's transcript-keyed burst discovers /compact. Codex does not
+    // record the command until completion, so its send needs a screen probe.
+    if is_option_readback_command
+        || capture_local_output
+        || (terminal_agent.as_deref() == Some("codex") && is_option_command)
+    {
         schedule_session_chat_option_redetect(
             state,
             &target.project_id,

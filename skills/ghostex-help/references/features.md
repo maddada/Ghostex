@@ -130,7 +130,12 @@ session inside the project you are already in switches to Agents.
 - Parking is enabled by default. Right-click a session and choose Park, or
   select several sessions and choose Park selected, to move them into the
   collapsible Parked section at the bottom. Use Unpark or Unpark selected to
-  bring them back. Parking keeps sessions running unless Sleep session when
+  bring them back. On mobile, long-press a session and choose Park or Unpark;
+  each project has its own Parked section, which starts collapsed. Parked
+  sessions are always ordered from most recently active to oldest on desktop,
+  mobile, and web, including when ordinary sessions use manual sorting.
+  Mobile parking needs a connected computer with the `ghostex park-session
+<selector> true|false --json` command. Parking keeps sessions running unless Sleep session when
   parking is enabled (off by default). Park & Snooze with tags (on by
   default) makes Park and Snooze open the Tag as menu: pick a tag to tag and
   park in one step, or the No tag change row at the top to park as is.
@@ -244,10 +249,17 @@ Use the arrows to move between questions, collapse the panel to answer later,
 or Skip a question without interrupting the agent.
 
 Press Ctrl+Shift+Down to scroll the focused chat to the bottom, including while
-typing. The Scroll to bottom button shows your current shortcut. Both stop any
+typing. The Scroll to bottom button shows your current shortcut on desktop and web;
+mobile shows the button without a keyboard shortcut. Both stop any
 ongoing scroll momentum so the conversation settles at the bottom. This takes
 priority over paragraph selection or adding a cursor in the composer; rebind or
 clear Scroll Chat to Bottom in Settings > Hotkeys (`scrollChatToBottom`).
+On mobile, choose Codex models and effort directly from the chat box dropdowns,
+including before sending the first message in a new draft. Mobile does not offer
+the Quick picker. Model, effort, and mode choices wait until the agent can apply
+them. The connected computer needs a Ghostex version with
+`ghostex select-session-chat-model <selector> --model <model> --effort <effort> --defer --json`;
+the same command accepts `--mode <mode>` and `--fast-mode on|off`.
 Codex rewind continues in a new conversation before the selected prompt and
 returns that prompt for editing. If the chat cannot reconnect after the rewind,
 choose Retry synchronization in the dialog to reconnect without rewinding again
@@ -268,13 +280,27 @@ Unrecorded model values are labelled Model not recorded.
 Slash commands sent from chat stay in the conversation after a reload, together
 with any captured output. Long command output expands when clicked; model, effort,
 Fast mode, and compaction results keep their status rows.
+During `/compact`, Claude and Codex show a compaction card above the input.
+Claude shows its reported progress; Codex shows a looping bar. Messages sent or
+queued during compaction wait until it finishes without a delivery warning.
+In narrow chats, notice cards hide Show terminal output; Open terminal remains available.
 While Claude Code writes a reply, the chat shows the text as it appears in the
 terminal, updated about once a second, and swaps in the saved message the moment
 Claude records it; nothing to enable.
+The live tool card at the bottom of chat shows current work until the same tool
+is available in the conversation. It clears when the turn ends, you stop the
+agent, or the agent asks for input. Completed searches and commands stay in
+that turn's expandable work details; changing model or effort does not bring
+them back. Background commands that are still running, compaction, and
+requests for approval keep their own status cards.
 Chat Appearance defaults to System, following your computer’s light or dark appearance as it changes. Choose Light or Dark to keep chat in one palette; the surrounding app stays dark. Set it in Settings > Chat with `sessionChatTheme`.
 
 Toggle chat and terminal for a session with one click on the pane header or
-the pane hotkey. Compatible agents can default to chat. File writes and code
+the pane hotkey. Compatible agents can default to chat. When an assistant message
+has tool calls, click its text or the chevron beside it to expand the tools directly
+under that message. Its full text and formatting stay visible when collapsed;
+links and code controls keep their own actions. Verbose mode opens these tools
+by default (`sessionChatVerboseMode`). File writes and code
 edits appear outside the tool groups while the agent works. When a turn shows
 "Worked for", all its file changes are grouped in a collapsed "N files changed"
 section directly below it. The count includes each file once, even if it was
@@ -471,7 +497,18 @@ sessions, so any client can control agents on any machine.
   Remote). Easy Connect installs the Tailcat helper, turns on SSH access with
   one admin prompt, and shows a pairing QR code; scan it with the Ghostex
   mobile app (Android ships today). A Tailscale path is offered for tailnets.
-  Paired devices are listed and can be removed.
+  Paired devices are listed and can be removed. On the phone, open Web Preview
+  from the machine menu and enter a website address or a port such as `3000`
+  immediately, or choose a listening port from the list. The address bar stays
+  editable while browsing. The list groups Web pages, Development tools,
+  Services, and Other ports into collapsible sections; services and unidentified
+  ports start collapsed. Search by page title, process, or port. With a computer
+  supporting `ghostex ports --json --web`, responding pages show their title,
+  HTTP status, and supported favicons. Common-port labels such as Storybook on
+  6006 are marked “likely” until identified by the page or process.
+  Localhost links in chat, terminals, and browser
+  actions open in Web Preview through the connected computer, including their
+  path and query, instead of the phone's external browser.
 - **From another computer**: Settings > Remote > Remote machines > Add a
   machine with SSH details or an Easy Connect code, then Install / Connect
   gxserver on it. The machine appears as a sidebar section with its own

@@ -25,15 +25,9 @@ Claude's wording:
     "until the agent's next transcript entry" and needs no knowledge of what
     the row was.
 
-Tool-call rows (`claude-tool`) never become reasoning history: the transcript
-writes the call with its result, and the screen paints the description in a
-different form ("Reading …" for "Read …") than the transcript stores. They are
-the pending tool row instead, below, and the transcript never retires that
-row: most tools finish within a second, so their transcript row has usually
-landed before gxserver even samples the painted one, and retiring on it made
-the row vanish after one read while Claude kept it painted through the
-thinking that followed. The row mirrors the terminal instead: it lives while
-the screen shows it, is replaced by a newer one, and goes on the hold below.
+Tool-call rows (`claude-tool`) are temporary pending tool rows, never reasoning
+history. The transcript owns the saved calls and their results; the terminal
+row fills the gap only until the same activity is available there.
 */
 
 import type { SessionChatMessage, SessionChatTerminalActivity } from '../../shared/session-chat';
@@ -45,14 +39,30 @@ export const SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX = 'terminal-tool:';
 const TERMINAL_TOOL_ID_PREFIX = SESSION_CHAT_TERMINAL_TOOL_ID_PREFIX;
 
 /*
-CDXC:SessionChatTerminalActivity 2026-09-04 DECISION:
-User: show the live tool card at the very bottom of the chat transcript
-instead of above the chat box, where it replaced the animated working spinner
-and text; keep the last card until a newer status replaces it or no Claude
-tool has been on screen for 5 seconds, because a card that came and went
-every second kept pushing the chat up and back down.
+CDXC:SessionChat 2026-09-13 DECISION:
+User: show one live tool card at the transcript bottom only while work is current and absent from chat, regardless of the selected model.
+Completed tool counts belong with the turn's expandable work, not beside the composer or model and effort confirmations.
+Keep the five-second anti-flicker hold only during active work; a newer status, a transcript replacement, a blocking prompt, or the end of the turn clears the card immediately.
+This supersedes the 2026-09-04 hold that kept completed terminal rows visible after the work ended.
 */
 export const SESSION_CHAT_TERMINAL_TOOL_HOLD_MS = 5_000;
+
+/** Claude's count-only completed-tool label, not a description of a running tool. */
+export function isSessionChatCompletedToolSummary(text: string): boolean {
+  const parts = text
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[.!]$/, '')
+    .split(/,\s*(?:and\s+)?|\s+and\s+/i);
+  return (
+    parts.length > 0 &&
+    parts.every((part) =>
+      /^(?:searched for \d+ patterns?|ran \d+ shell commands?|read \d+ files?|listed \d+ (?:directories|directory))$/i.test(
+        part
+      )
+    )
+  );
+}
 
 /**
  * Text as the terminal would paint it: markdown decoration gone, whitespace
@@ -168,7 +178,7 @@ export function unreconciledSessionChatTerminalStatuses(
 /** The pending tool row: one `claude-tool` activity as a transcript row. */
 export function sessionChatTerminalToolMessage(activity: SessionChatTerminalActivity): SessionChatMessage | null {
   const text = activity.label.trim();
-  if (activity.kind !== CLAUDE_TERMINAL_TOOL_KIND || !text) {
+  if (activity.kind !== CLAUDE_TERMINAL_TOOL_KIND || !text || isSessionChatCompletedToolSummary(text)) {
     return null;
   }
   const timestamp = Date.parse(activity.detectedAt);
@@ -196,6 +206,58 @@ export function isSessionChatTerminalToolMessage(message: SessionChatMessage): b
 function terminalToolDetail(message: SessionChatMessage): string {
   const block = message.blocks.find((candidate) => candidate.type === 'tool-result');
   return block?.type === 'tool-result' ? block.output : '';
+}
+
+/** A terminal preview is redundant once its call is recorded or the transcript advances beyond it. */
+export function sessionChatTerminalToolRetired(
+  tool: SessionChatMessage,
+  transcript: readonly SessionChatMessage[]
+): boolean {
+  const label = tool.blocks
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join(' ');
+  const command = terminalToolDetail(tool)
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('$ '))
+    ?.slice(2);
+  const matches = (painted: string, saved: string): boolean => {
+    const normalized = (value: string): string => value.replace(/\s+/g, ' ').trim();
+    const preview = normalized(painted);
+    const full = normalized(saved);
+    if (!preview || !full) return false;
+    return (
+      preview === full ||
+      (/(?:…|\.{3})$/.test(preview) && full.startsWith(preview.replace(/(?:…|\.{3})$/, '').trimEnd()))
+    );
+  };
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const message = transcript[index];
+    if (message.source !== 'transcript') continue;
+    if (message.timestamp !== null && tool.timestamp !== null && message.timestamp > tool.timestamp) return true;
+    if (message.role === 'user') break;
+    let hasCall = false;
+    for (const block of message.blocks) {
+      if (block.type !== 'tool-call') continue;
+      hasCall = true;
+      if (typeof block.input !== 'object' || block.input === null) continue;
+      const input = block.input as Record<string, unknown>;
+      if (typeof input.description === 'string' && matches(label, input.description)) return true;
+      const savedCommand = input.command ?? input.cmd;
+      if (command && typeof savedCommand === 'string' && matches(command, savedCommand)) return true;
+      const argument = input.file_path ?? input.path ?? input.pattern;
+      if (
+        typeof argument === 'string' &&
+        (matches(label, `${block.name}(${argument})`) || matches(label, `${block.name} ${argument}`))
+      )
+        return true;
+    }
+    // Only the newest batch can describe the pending tool. Older identical
+    // commands may be earlier attempts in the same turn.
+    if (!hasCall && message.blocks.some((block) => block.type === 'text' && block.text.trim())) break;
+  }
+  return false;
 }
 
 /** The activity card a pending tool row renders as. */

@@ -27,6 +27,7 @@ import type {
   GxserverSaveStashedPromptResult,
   GxserverSaveStashedPromptTagResult,
   GxserverSetStashedPromptTagsResult,
+  GxserverSelectSessionChatModelResult,
 } from '@/packages/shared/gxserver-protocol';
 import { createGxserverPresentationProjectSessionId } from '@/packages/shared/gxserver-presentation-sidebar-projection';
 import {
@@ -57,7 +58,7 @@ all chat behavior lives in shared code.
 Bridge contract (mirrored by mobile/src/chat/session-chat-bridge.ts):
 - page → RN: window.ReactNativeWebView.postMessage(JSON.stringify(
     { id, op: "read" | "readSkills" | "readFiles" | "send" | "sendKey"
-        | "switchDraftAgent"
+        | "switchDraftAgent" | "selectModel"
         | "switchToTerminalForAgentPicker" | "answerPrompt" | "interrupt"
         | "saveImage" | "saveAttachment" | "loadImage"
         | "queuePrompt" | "updateQueuedPrompt"
@@ -137,6 +138,7 @@ interface MobileChatHostState {
 }
 
 type BridgeOp =
+  | 'selectModel'
   | 'read'
   | 'readSkills'
   | 'readFiles'
@@ -750,6 +752,7 @@ function snapshotEventFromRead(result: GxserverReadSessionChatResult): GxserverS
     // Detected model/effort: this host's only live channel is the synthesized
     // snapshot, so dropping it here would hide the pills' real values.
     ...(result.selectedOptions !== undefined ? { selectedOptions: result.selectedOptions } : {}),
+    ...(result.pendingModelSelection !== undefined ? { pendingModelSelection: result.pendingModelSelection } : {}),
     // CDXC:AgentScreenDetection 2026-08-19: terminal-screen state the
     // transcript can never show. Omitted means cleared, and this synthesized
     // snapshot is the host's only frame, so the omission has to survive too.
@@ -853,6 +856,9 @@ function createMobileSessionChatTransport(): SessionChatTransport {
     },
     async sendKey(key) {
       await bridgeCall('sendKey', { key });
+    },
+    selectSessionChatModel(params) {
+      return bridgeCall<GxserverSelectSessionChatModelResult>('selectModel', { ...params });
     },
     /*
     Ghostex's prompt queue and the cross-client composer draft (plan 016).
@@ -1089,6 +1095,7 @@ function MobileSessionChat({
         sendOnEnter={false}
         sessionKey={sessionKey}
         showNewSessionWelcomeTitle={false}
+        // CDXC:Mobile 2026-09-12 DECISION: User: do not show the Ctrl+Shift+Down shortcut on the mobile Scroll to bottom button.
         showShortcutLabels={false}
         searchLayout='overlay'
         theme={theme}

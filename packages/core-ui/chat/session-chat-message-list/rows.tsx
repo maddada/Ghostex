@@ -11,7 +11,7 @@ import {
   IconPhoto,
   IconSparkles,
 } from '@tabler/icons-react';
-import { memo, useRef } from 'react';
+import { memo, useId, useRef } from 'react';
 import {
   Attachment,
   AttachmentContent,
@@ -46,7 +46,6 @@ import { SESSION_CHAT_CODEX_GOAL_ID_PREFIX, isSessionChatPendingMessageId } from
 import {
   SessionChatQuestionExchangeCard,
   answeredSessionChatQuestionExchange,
-  isSessionChatQuestionToolName,
   type SessionChatQuestionExchange,
 } from '../session-chat-question-exchange';
 import { type SessionChatRewindRequest } from '../session-chat-rewind-dialog';
@@ -57,8 +56,8 @@ import { isSessionChatTerminalToolMessage, sessionChatTerminalToolActivity } fro
 import { SessionChatTerminalToolRow } from '../session-chat-terminal-tool-row';
 import { pairSessionChatToolBlocks, splitSessionChatBlocks } from '../session-chat-tool-fold';
 import { SessionChatToolRun } from '../session-chat-tool-run';
-import { countSessionChatToolCalls, summarizeSessionChatToolRun } from '../session-chat-tool-summary';
 import { SessionChatUserMessageLayout } from '../session-chat-user-message-layout';
+import '../session-chat-agent-tools-disclosure.css';
 export const PASTED_IMAGE_NAME = /^ghostex-paste-.+\.png$/i;
 export function isPastedImagePath(path: string | undefined): boolean {
   if (!path) {
@@ -189,10 +188,10 @@ export function CopyFooter({
           <IconArrowBackUp aria-hidden='true' data-icon='inline-start' stroke={1.9} />
         </Button>
       ) : null}
-      {anchoredToAssistantMarker && onSaveMarkdown && canSaveMarkdown ? (
+      {onSaveMarkdown && canSaveMarkdown ? (
         <Button
           aria-label='Save message to Markdown'
-          className='ghostex-chat-final-action ghostex-chat-final-action-save'
+          className={anchoredToAssistantMarker ? 'ghostex-chat-final-action ghostex-chat-final-action-save' : undefined}
           onClick={() => onSaveMarkdown(markdown)}
           size='icon-xs'
           title='Save to md'
@@ -441,60 +440,75 @@ export function QuestionExchangeCards({ exchanges }: { exchanges: readonly Sessi
 }
 
 /**
- * Tool activity owned by a plain agent message, collapsed behind one summary
- * row — the same reading the thinking lane gives its tools, so a turn's answer
- * is never pushed off screen by the work that produced it.
+ * CDXC:SessionChat 2026-09-13 DECISION:
+ * User: use assistant commentary itself as the expandable heading for its tool calls, preserving the full Markdown formatting, before adding Simple mode.
+ * The chevron and Markdown are siblings so links, file pills, and code controls remain independent interactive elements.
  */
 export function AgentToolsDisclosure({
+  isStreaming,
+  markdown,
   questionPairsAsRows,
   tools,
   verboseMode,
 }: {
+  isStreaming: boolean;
+  markdown: string;
   questionPairsAsRows: boolean;
   tools: ReturnType<typeof splitSessionChatBlocks>['tools'];
   verboseMode: boolean;
 }) {
   const [open, setOpen] = useSessionChatDisclosureState('tools', verboseMode);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const bodyId = useId();
+  const toggle = () => {
+    if (!open) centerSessionChatExpansion(triggerRef.current);
+    setOpen((value) => !value);
+  };
 
   const exchanges = questionPairsAsRows ? [] : questionExchangesFromTools(tools);
-  const count = countSessionChatToolCalls(tools);
-  const label = count === 0 ? 'Tool output' : count === 1 ? '1 tool call' : `${count} tool calls`;
-  // A question's JSON input is noise in the preview: its card carries it.
-  const summary = summarizeSessionChatToolRun(
-    tools.filter((block) => block.type !== 'tool-call' || !isSessionChatQuestionToolName(block.name))
-  );
 
   return (
     <>
-      <div className='ghostex-chat-tool-run'>
-        <button
-          aria-expanded={open}
-          className='ghostex-chat-tool-run-toggle'
-          onClick={() => {
-            if (!open) {
-              centerSessionChatExpansion(triggerRef.current);
-            }
-            setOpen((value) => !value);
+      <div className='ghostex-chat-agent-tools'>
+        <div
+          className='ghostex-chat-agent-message ghostex-chat-agent-tools-heading'
+          onClick={(event) => {
+            if (
+              event.defaultPrevented ||
+              !(event.target instanceof Element) ||
+              event.target.closest(
+                'a, button, input, textarea, select, summary, pre, [role="button"], [contenteditable]'
+              ) ||
+              event.currentTarget.ownerDocument.getSelection()?.isCollapsed === false
+            )
+              return;
+            toggle();
           }}
-          ref={triggerRef}
-          type='button'
         >
-          <span className='ghostex-chat-work-icon'>
-            <IconChevronRight aria-hidden='true' className={cn('ghostex-chat-disclosure-chevron', open && 'is-open')} />
-          </span>
-          <span className='shrink-0'>{label}</span>
-          {!open && summary ? <span className='ghostex-chat-work-preview'>{summary}</span> : null}
-        </button>
-        {open ? (
-          <SessionChatExpansion
-            bodyClassName='ghostex-chat-tool-run-expanded'
-            label='Collapse tool calls'
-            onCollapse={() => setOpen(false)}
+          <button
+            aria-controls={bodyId}
+            aria-expanded={open}
+            aria-label={`${open ? 'Hide' : 'Show'} tool calls for this message`}
+            className='ghostex-chat-thinking-icon ghostex-chat-agent-tools-toggle'
+            onClick={toggle}
+            ref={triggerRef}
+            type='button'
           >
-            <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
-          </SessionChatExpansion>
-        ) : null}
+            <IconChevronRight aria-hidden='true' className={cn('ghostex-chat-disclosure-chevron', open && 'is-open')} />
+          </button>
+          <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
+        </div>
+        <div hidden={!open} id={bodyId}>
+          {open ? (
+            <SessionChatExpansion
+              className='ghostex-chat-thinking-detail'
+              label='Collapse tool calls'
+              onCollapse={() => setOpen(false)}
+            >
+              <SessionChatToolRun blocks={tools} questionPairsAsRows showAllRows />
+            </SessionChatExpansion>
+          ) : null}
+        </div>
       </div>
       <QuestionExchangeCards exchanges={exchanges} />
     </>
@@ -898,26 +912,30 @@ export function MessageRowBody({
     <Message align='start' className='pb-4' data-role={message.role}>
       <MessageContent>
         <ImageAttachments blocks={images} />
-        {markdown.length > 0 ? (
+        {markdown.length > 0 && tools.length > 0 ? (
+          <AgentToolsDisclosure
+            isStreaming={isStreaming}
+            markdown={markdown}
+            questionPairsAsRows={questionPairsAsRows}
+            tools={tools}
+            verboseMode={verboseMode}
+          />
+        ) : markdown.length > 0 ? (
           <div className='ghostex-chat-agent-message'>
             <SessionChatMarkdown isStreaming={isStreaming} markdown={markdown} />
           </div>
         ) : null}
-        {/*
-         * Tools owned by a prose turn collapse behind a summary row, matching
-         * the thinking lane's treatment of its tool activity. A tool-only
-         * message keeps the open run: with no prose above it, the disclosure
-         * would collapse the turn to nothing.
-         */}
-        {tools.length > 0 ? (
-          markdown.length > 0 ? (
-            <AgentToolsDisclosure questionPairsAsRows={questionPairsAsRows} tools={tools} verboseMode={verboseMode} />
-          ) : (
-            <SessionChatToolRun blocks={tools} questionPairsAsRows={questionPairsAsRows} />
-          )
+        {tools.length > 0 && markdown.length === 0 ? (
+          <SessionChatToolRun blocks={tools} questionPairsAsRows={questionPairsAsRows} />
         ) : null}
         {fileCards}
-        {showCopy ? <CopyFooter anchoredToAssistantMarker markdown={markdown} onSaveMarkdown={onSaveMarkdown} /> : null}
+        {showCopy ? (
+          <CopyFooter
+            anchoredToAssistantMarker={tools.length === 0}
+            markdown={markdown}
+            onSaveMarkdown={onSaveMarkdown}
+          />
+        ) : null}
       </MessageContent>
     </Message>
   );

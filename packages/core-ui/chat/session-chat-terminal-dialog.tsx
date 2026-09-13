@@ -172,6 +172,7 @@ export function SessionChatTerminalDialogCard({
       ) : null}
       {dialog.input === 'key' ? (
         <Button
+          data-session-chat-typing-redirect-ignore='true'
           disabled={disabled}
           variant='outline'
           onKeyDown={(event) => {

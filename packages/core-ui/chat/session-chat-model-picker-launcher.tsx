@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from 'react';
 import { useSidebarStore } from '@/packages/core-ui/sidebar-store';
 import {
   normalizeghostexHotkeySettings,
@@ -10,11 +10,14 @@ import { createModelPickerRequest, modelPickerProvider } from './session-chat-mo
 import type { SessionChatSessionOptionPillsProps } from './session-chat-option-pills';
 import type { SessionChatOptionDispatchReceipt } from './session-chat-option-state';
 import type { SessionChatSelectionOptions } from '@/packages/shared/session-chat';
-import {
-  SessionChatModelPicker,
-  type ModelPickerRequest,
-  type ModelPickerSelection,
-} from './session-chat-model-picker';
+import type { ModelPickerRequest, ModelPickerSelection } from './session-chat-model-picker';
+import { QUICK_MODEL_PICKER_ENABLED } from './session-chat-model-picker-platform';
+
+// Keep the build-time condition at the import so esbuild never traverses the mobile picker asset graph.
+const SessionChatModelPicker =
+  typeof __GHOSTEX_MOBILE_CHAT__ === 'undefined' || !__GHOSTEX_MOBILE_CHAT__
+    ? lazy(() => import('./session-chat-model-picker').then((module) => ({ default: module.SessionChatModelPicker })))
+    : null;
 
 const deliveries = new Map<string, Promise<unknown>>();
 
@@ -131,6 +134,7 @@ export function SessionChatModelPickerLauncher(
 
   useEffect(() => {
     const open = () => {
+      if (!QUICK_MODEL_PICKER_ENABLED) return;
       const current = latest.current;
       const provider = modelPickerProvider(current.controller.catalog?.modelIcon);
       if (requestRef.current || !provider) return;
@@ -193,6 +197,11 @@ export function SessionChatModelPickerLauncher(
       selectOptions: (options) =>
         persist({ model: latestOutbox.current?.model ?? '', effort: latestOutbox.current?.effort ?? '' }, options),
     };
+    if (!QUICK_MODEL_PICKER_ENABLED) {
+      return () => {
+        props.actionsRef.current = null;
+      };
+    }
     window.addEventListener('keydown', keydown, true);
     window.addEventListener('ghostex-open-model-picker', toggle);
     if (document.documentElement.dataset.ghostexModelPickerRequested === 'true') open();
@@ -227,18 +236,20 @@ export function SessionChatModelPickerLauncher(
   return (
     <>
       <span ref={anchor} className='model-picker-launcher-anchor' />
-      {request && container && (
-        <SessionChatModelPicker
-          key={request.requestId}
-          request={request}
-          container={container}
-          cancelRequested={cancelRequested}
-          onSave={save}
-          onClose={() => {
-            requestRef.current = null;
-            setRequest(null);
-          }}
-        />
+      {SessionChatModelPicker && request && container && (
+        <Suspense fallback={null}>
+          <SessionChatModelPicker
+            key={request.requestId}
+            request={request}
+            container={container}
+            cancelRequested={cancelRequested}
+            onSave={save}
+            onClose={() => {
+              requestRef.current = null;
+              setRequest(null);
+            }}
+          />
+        </Suspense>
       )}
     </>
   );

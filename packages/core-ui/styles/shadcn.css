@@ -133,7 +133,11 @@
   --chart-3: oklch(0.609 0.126 221.723);
   --chart-4: oklch(0.52 0.105 223.128);
   --chart-5: oklch(0.45 0.085 224.283);
-  --radius: 0;
+  /* CDXC:DesignSystem 2026-09-13 DECISION:
+   * User: fix the shared styling that makes newly added controls square, rather than patching the compaction info button.
+   * A zero token made every token-based rounded utility zero and clamped the chat's radius-minus-2px rule to zero too.
+   */
+  --radius: 0.625rem;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.715 0.143 215.221);
@@ -174,7 +178,7 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 28%);
   --ring: oklch(0.556 0 0);
-  --radius: 0;
+  --radius: 8px;
   letter-spacing: 0;
 }
 

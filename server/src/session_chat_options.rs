@@ -469,7 +469,10 @@ Automatic compaction announces itself to nobody, so it is still discovered by
 the working-tier probe; that is the case this cannot help with.
 */
 pub fn is_session_chat_activity_command_text(agent: Option<&str>, text: &str) -> bool {
-    if session_chat_option_agent(agent) != Some(SessionChatOptionAgent::Claude) {
+    if !matches!(
+        session_chat_option_agent(agent),
+        Some(SessionChatOptionAgent::Claude | SessionChatOptionAgent::Codex)
+    ) {
         return false;
     }
     let Some(first) = text.trim_start().split_whitespace().next() else {

@@ -508,7 +508,6 @@ body {
    keep their shadcn bg-input/30 fill. */
 button:where(:not([data-slot])) {
   border: 1px solid var(--app-border);
-  border-radius: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;

@@ -81,10 +81,12 @@ import { sessionChatFullQueueOrder, sessionChatPendingWithStartupSends } from '.
 import { deriveSessionChatStreamingText, sessionChatStreamingMessage } from '../session-chat-streaming';
 import {
   SESSION_CHAT_TERMINAL_TOOL_HOLD_MS,
+  isSessionChatCompletedToolSummary,
   mergeSessionChatTerminalStatus,
   sameSessionChatTerminalTool,
   sessionChatTerminalStatusMessage,
   sessionChatTerminalToolMessage,
+  sessionChatTerminalToolRetired,
   unreconciledSessionChatTerminalStatuses,
   withSessionChatTerminalToolDetail,
   withoutSessionChatTerminalStatus,
@@ -402,6 +404,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
 
   const applyTerminalActivity = useCallback(
     (activity: SessionChatTerminalActivity | undefined): void => {
+      if (
+        activity &&
+        ['claude-tool', 'claude-status', 'agent-stream'].includes(activity.kind) &&
+        isSessionChatCompletedToolSummary(activity.text ?? activity.label)
+      ) {
+        clearTerminalToolHold();
+        setTerminalTool(null);
+        setTerminalStream((current) => (current?.live ? { ...current, live: false } : current));
+        setTerminalActivity(null);
+        return;
+      }
       const stream = activity ? sessionChatTerminalStreamFromActivity(activity) : null;
       if (stream) {
         setTerminalStream(stream);
@@ -423,9 +436,16 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
         setTerminalActivity(null);
         return;
       }
-      // No tool on this frame: the last pending tool row stays for the hold
-      // and goes only if no tool has been painted by the time it elapses.
-      if (terminalToolHoldRef.current === null) {
+      // A newer status replaces the tool immediately. Only a missing sample
+      // gets the short hold that bridges the terminal's repaint gaps.
+      if (activity) {
+        clearTerminalToolHold();
+        // Claude can repaint the same tool without its gutter. That is still
+        // this tool, not a newer prose status replacing it.
+        setTerminalTool((current) =>
+          current && stream && sessionChatTerminalStreamIsTool(stream, current) ? current : null
+        );
+      } else if (terminalToolHoldRef.current === null) {
         terminalToolHoldRef.current = setTimeout(() => {
           terminalToolHoldRef.current = null;
           setTerminalTool(null);
@@ -1153,6 +1173,17 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
   const working = (optimisticWorking || workingOverride === 'working') && !interrupted;
   workingRef.current = working;
 
+  const visibleTerminalTool =
+    terminalTool && working && !prompt && !error && !sessionChatTerminalToolRetired(terminalTool, transcript)
+      ? terminalTool
+      : null;
+  useEffect(() => {
+    if (terminalTool && !visibleTerminalTool) {
+      clearTerminalToolHold();
+      setTerminalTool(null);
+    }
+  }, [clearTerminalToolHold, terminalTool, visibleTerminalTool]);
+
   // Clear the Stop suppression once the live signal settles (§10.5).
   useEffect(() => {
     if (!workingSignal && interrupted) {
@@ -1205,6 +1236,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     const terminalStreamText =
       terminalStream &&
       (terminalStream.live || working) &&
+      !(visibleTerminalTool && sessionChatTerminalStreamIsTool(terminalStream, visibleTerminalTool)) &&
       !sessionChatTerminalStreamRetired(terminalStream, boundaried)
         ? terminalStream.text
         : null;
@@ -1218,8 +1250,8 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     if (streamingText) {
       tail.push(sessionChatStreamingMessage(streamingText));
     }
-    if (terminalTool) {
-      tail.push(terminalTool);
+    if (visibleTerminalTool) {
+      tail.push(visibleTerminalTool);
     }
     tail.push(...pendingMessages);
     return [...transcript, ...tail];
@@ -1233,7 +1265,7 @@ export function useSessionChat(options: UseSessionChatOptions): UseSessionChatRe
     previewText,
     terminalStatusMessages,
     terminalStream,
-    terminalTool,
+    visibleTerminalTool,
     working,
   ]);
 

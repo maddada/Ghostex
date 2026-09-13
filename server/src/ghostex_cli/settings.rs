@@ -127,7 +127,7 @@ fn settings_file_path() -> PathBuf {
     rpc::ghostex_config_home().join(SETTINGS_FILE_NAME)
 }
 
-fn read_settings_file() -> CliResult<Map<String, Value>> {
+pub(super) fn read_settings_file() -> CliResult<Map<String, Value>> {
     let path = settings_file_path();
     match std::fs::read_to_string(&path) {
         Ok(text) => {

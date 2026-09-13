@@ -18,7 +18,7 @@ for the whole run. The bar only moves when a probe brings a new percentage
 (every few seconds), so a clock that also only moved then would read as a frozen
 UI; interpolating between samples costs one interval and is the difference
 between "working" and "stuck". Nothing here estimates the PERCENTAGE — that
-comes off the screen or is not drawn at all.
+comes off the screen; compaction without a percentage uses a looping bar.
 */
 
 import { useEffect, useState } from 'react';
@@ -90,6 +90,7 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
 
   const elapsed = sessionChatActivityElapsedSeconds(activity, now);
   const percent = activity.percent === undefined ? null : Math.min(100, Math.max(0, Math.round(activity.percent)));
+  const indeterminate = activity.kind === 'compacting' && percent === null;
 
   return (
     <div
@@ -133,17 +134,21 @@ export function SessionChatActivityRow({ activity, className }: SessionChatActiv
           </span>
         ) : null}
       </div>
-      {percent !== null ? (
+      {percent !== null || indeterminate ? (
         <div
+          aria-label={activity.label}
           aria-valuemax={100}
           aria-valuemin={0}
-          aria-valuenow={percent}
+          aria-valuenow={percent ?? undefined}
           className='h-1 min-w-0 overflow-hidden rounded-full bg-foreground/10'
           role='progressbar'
         >
           <div
-            className={cn('h-full rounded-full bg-primary transition-[width] duration-500')}
-            style={{ width: `${percent}%` }}
+            className={cn(
+              'h-full rounded-full bg-primary',
+              indeterminate ? 'ghostex-chat-compacting-loop' : 'transition-[width] duration-500'
+            )}
+            style={indeterminate ? undefined : { width: `${percent}%` }}
           />
         </div>
       ) : null}

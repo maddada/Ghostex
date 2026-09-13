@@ -578,6 +578,22 @@ async fn escalate_undelivered_send(
     let typed_into_terminal = reason != UndeliveredSendReason::WriteFailed;
     let reasoning_from_silence = reason == UndeliveredSendReason::TranscriptSilent;
     let screen = crate::session_chat_send::capture_session_terminal_text(&probe.zmx_name).await;
+    // CDXC:AgentScreenDetection 2026-09-13 DECISION:
+    // User: do not show a delivery warning for a message waiting behind compaction.
+    // This only explains transcript silence; failed writes and mismatched submissions still report their evidence.
+    if reasoning_from_silence
+        && screen.as_deref().is_some_and(|screen| {
+            crate::session_chat_terminal_activity::is_session_chat_compacting_activity(
+                crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+                    probe.agent.as_deref(),
+                    screen,
+                )
+                .as_ref(),
+            )
+        })
+    {
+        return;
+    }
     if let Some(screen) = screen.as_deref().filter(|_| typed_into_terminal) {
         // A queue banner explains a silent transcript; it explains nothing about
         // a message the terminal never accepted.

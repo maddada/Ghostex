@@ -48,7 +48,8 @@ import { DEFAULT_TERMINAL_SESSION_TITLE } from '@/packages/shared/session-grid-c
 import { normalizeWorkspaceProjectIconDataUrl } from '@/packages/shared/workspace-project-appearance';
 
 export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
-  groups: readonly SidebarSessionGroup[]
+  groups: readonly SidebarSessionGroup[],
+  enableSessionParking = false
 ): GpuiSessionStatusIndicatorCandidate[] {
   /*
   CDXC:StatusPet 2026-06-26-04:38:
@@ -65,6 +66,7 @@ export function createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
     const sessionsById = Object.fromEntries(group.sessions.map((session) => [session.sessionId, session]));
     const manualSessionIds = group.sessions.map((session) => session.sessionId);
     const displayLayout = createDisplaySessionLayout({
+      enableSessionParking,
       sessionIdsByGroup: { [group.groupId]: manualSessionIds },
       sessionsById,
       sortMode: 'lastActivity',

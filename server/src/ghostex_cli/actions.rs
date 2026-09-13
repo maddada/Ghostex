@@ -92,6 +92,7 @@ pub enum Parser {
     SessionChatDraftAgent,
     /// session selector plus one serialized Session Chat key name.
     SessionChatKey,
+    SessionChatModel,
     /*
     CDXC:PromptSearch 2026-08-20:
     Find over SSH for Ghostex mobile. `AgentPromptSearch` carries the query and
@@ -318,6 +319,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/saveSessionAgentNote", &params, flags)
         }
+        "parkSession" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            super::session_parking::set_parked(&params, flags)
+        }
         "pinSession" => {
             let mut object = payload.as_object().cloned().unwrap_or_default();
             set_or_remove(&mut object, "isPinned", payload.get("pinned").cloned());
@@ -357,6 +362,10 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         "readSessionChatFiles" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/readSessionChatFiles", &params, flags)
+        }
+        "selectSessionChatModel" => {
+            let params = with_resolved_gxserver_session_params(payload, flags)?;
+            rpc::call_gxserver_rpc("/api/selectSessionChatModel", &params, flags)
         }
         "sendSessionChatMessage" => {
             let params = with_resolved_gxserver_session_params(payload, flags)?;
@@ -1167,6 +1176,9 @@ fn evaluate_parser(parser: Parser, rest: &[String], flags: &Flags) -> CliResult<
         Parser::SessionChatRead => parse_session_chat_read(rest, flags),
         Parser::SessionChatDraftAgent => parse_session_chat_draft_agent(rest, flags)?,
         Parser::SessionChatKey => parse_session_chat_key(rest, flags)?,
+        Parser::SessionChatModel => {
+            super::session_chat_model::parse(parse_session_selector(rest, flags), flags)?
+        }
         Parser::AgentPromptSearch => parse_agent_prompt_search(flags)?,
         Parser::AgentPromptRef => parse_agent_prompt_ref(flags)?,
         Parser::AgentPromptLaunch => parse_agent_prompt_launch(flags)?,

@@ -458,7 +458,12 @@ export function SessionChatTerminalNoticeCard({
   const toggleExpanded = (): void => setExpanded((value) => !value);
   const accountMenu = renderAccountMenu ? <NoticeAccountMenu key={sessionKey} renderMenu={renderAccountMenu} /> : null;
   return (
-    <SessionChatNoticeCard ref={cardRef} kind={notice.kind} severity={notice.severity}>
+    <SessionChatNoticeCard
+      className='ghostex-chat-terminal-notice'
+      ref={cardRef}
+      kind={notice.kind}
+      severity={notice.severity}
+    >
       <div
         className={cn(
           'relative flex items-start gap-2',
@@ -570,7 +575,7 @@ export function SessionChatTerminalNoticeCard({
                 ) : null}
               </div>
               {tailOpen ? (
-                <div className='mt-2 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3'>
+                <div className='ghostex-chat-notice-tail mt-2 min-w-0 rounded-lg border border-border/65 bg-background/70 p-3'>
                   <pre
                     className='max-h-40 min-w-0 overflow-auto font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]'
                     ref={screenTailRef}

@@ -702,7 +702,10 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
 
   postGpuiStatusPetState(this: GpuiSidebarRuntime): void {
     const settings = createGpuiSidebarSettings(this.runtimeSettings);
-    const candidates = createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(this.latestGroups);
+    const candidates = createGpuiSessionStatusIndicatorCandidatesFromSidebarGroups(
+      this.latestGroups,
+      settings.enableSessionParking
+    );
     const statusPayload = createGpuiSessionStatusIndicatorsPayload(candidates, settings);
     const petPayload = createGpuiPetOverlayStatePayload(candidates, settings);
     /*

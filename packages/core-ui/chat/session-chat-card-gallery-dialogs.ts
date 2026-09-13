@@ -80,7 +80,7 @@ export const DIALOG_EXAMPLES = [
     'This session runs Codex 0.153.4. Update now installs 0.154.0 with the official Codex installer. Codex quits to install it, so start it again in this session afterwards.'
   ),
   picker('Select model', ['Default model (recommended)', 'Fast model', 'Reasoning model']),
-  picker('Select reasoning effort', ['Low', 'Medium (recommended)', 'High', 'Extra high']),
+  picker('Select reasoning effort', ['Low', 'Medium (recommended)', 'High', 'xHigh']),
   picker('Choose an import source', ['Local file', 'Previous conversation']),
   picker('Choose what to import', ['Messages', 'Messages and settings']),
   ...[

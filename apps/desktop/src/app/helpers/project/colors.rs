@@ -487,6 +487,8 @@ pub(crate) fn terminal_search_bar_button_hover_color() -> Hsla {
     rgb(0x343434).into()
 }
 
+/// CDXC:Theming 2026-09-13 DECISION:
+/// User: change the #090b0f background behind the terminals and Agents pane to #0d0d0d.
 pub(crate) fn workspace_terminal_body_color(
     presentation_state: Option<TerminalSessionPresentationState>,
 ) -> Hsla {
@@ -497,7 +499,7 @@ pub(crate) fn workspace_terminal_body_color(
         Some(TerminalSessionPresentationState::StartupFailed) => rgb(0x140908).into(),
         Some(TerminalSessionPresentationState::RestoredUnmounted) => rgb(0x08110d).into(),
         Some(TerminalSessionPresentationState::PoppedOutPlaceholder) => rgb(0x13090f).into(),
-        None => rgb(0x090b0f).into(),
+        None => rgb(0x0d0d0d).into(),
     }
 }
 

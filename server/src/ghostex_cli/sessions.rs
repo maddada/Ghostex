@@ -1102,7 +1102,12 @@ fn to_cli_session(
     insert_js(
         &mut map,
         "lastInteractionAt",
-        &[p("lastActiveAt"), s("lastActiveAt"), s("updatedAt")],
+        &[
+            p("meaningfulActivityAt"),
+            p("lastActiveAt"),
+            s("lastActiveAt"),
+            s("updatedAt"),
+        ],
     );
     map.insert("lifecycleState".to_string(), json!(lifecycle_state));
     map.insert("ownership".to_string(), json!("gxserver"));

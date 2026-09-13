@@ -32,7 +32,7 @@ export function createDisplaySessionLayout({
   if (sortMode === 'manual') {
     /*
     CDXC:Sessions 2026-06-05-12:30:
-    Manual Sorting preserves the saved non-draft order inside each session kind. Browser
+    Manual Sorting preserves the saved non-draft, unparked order inside each session kind. Browser
     tabs are the first section, so they stay above terminals even when
     either kind contains pinned rows.
     */
@@ -113,10 +113,10 @@ function orderSessionKindForDisplay(
     const session = sessionsById[sessionId];
     if (isSidebarSessionSnoozed(session, nowMs)) {
       snoozedSessionIds.push(sessionId);
-    } else if (session?.isPinned === true) {
-      pinnedSessionIds.push(sessionId);
     } else if (options.enableSessionParking && session?.isParked === true) {
       parkedSessionIds.push(sessionId);
+    } else if (session?.isPinned === true) {
+      pinnedSessionIds.push(sessionId);
     } else if (session?.isDraft === true) {
       draftSessionIds.push(sessionId);
     } else {
@@ -134,9 +134,25 @@ function orderSessionKindForDisplay(
     ...(options.sortUnpinnedByLastActivity
       ? sortSessionIdsByLastActivity(otherSessionIds, sessionsById)
       : otherSessionIds),
-    ...parkedSessionIds,
+    ...sortParkedSessionIdsByLastActivity(parkedSessionIds, sessionsById),
     ...snoozedSessionIds,
   ];
+}
+
+/** CDXC:Sessions 2026-09-12 DECISION:
+ * User: every sidebar and session list on GPUI, mobile and web shows parked sessions from latest active to oldest, regardless of the active-session sort mode.
+ * Parked rows use the activity timestamp alone, without attention or working priority.
+ * SEE-ALSO: apps/mobile/app/src/contract/grouping.ts mirrors this ordering.
+ */
+function sortParkedSessionIdsByLastActivity(
+  sessionIds: readonly string[],
+  sessionsById: Record<string, SidebarSessionItem>
+): string[] {
+  return [...sessionIds].sort(
+    (leftId, rightId) =>
+      getSessionLastActivityTime(sessionsById[rightId]) - getSessionLastActivityTime(sessionsById[leftId]) ||
+      leftId.localeCompare(rightId)
+  );
 }
 
 function sortSessionIdsByLastActivity(

@@ -625,6 +625,20 @@ body[data-session-chat-bullets='off'] .ghostex-session-chat-popup {
   margin-block-start: var(--chat-marker-bullet-offset);
 }
 
+/* CDXC:SessionChat 2026-09-13 WHY:
+   A leading Markdown list already supplies its own marker; the row dot otherwise doubles it.
+   Keep the transparent marker box so final-reply actions retain their gutter anchor. */
+.ghostex-chat-agent-message:has(> .ghostex-chat-markdown > :is(ul, ol):first-child)::before,
+.ghostex-chat-thinking-line:has(
+    > [data-ghostex-thinking-text]
+      > .ghostex-chat-thinking-body
+      > .ghostex-chat-scroll-cap
+      > .ghostex-chat-markdown
+      > :is(ul, ol):first-child
+  )::before {
+  background: transparent;
+}
+
 /* A final reply's action rail belongs to the marker gutter, not to a footer row
    beneath the prose. Its first action replaces the bullet and the save action
    continues directly below it, all outside layout. The nearest preceding marker

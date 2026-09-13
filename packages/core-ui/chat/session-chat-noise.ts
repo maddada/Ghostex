@@ -54,8 +54,8 @@ const COMPACTION_COMPLETED_LABEL = 'Compaction completed';
 /*
  * Codex: the row gxserver decodes from the rollout's `ContextCompaction` thread
  * item (`CONTEXT_COMPACTED_STATUS_TEXT` in server/src/session_chat.rs — keep the
- * two spellings in step). Codex has no compaction output line to parse and no
- * progress screen, so that transcript item is the ONLY evidence a compaction
+ * two spellings in step). Codex has no compaction completion output to parse,
+ * so that transcript item is the ONLY durable evidence a compaction
  * happened. Matched exactly, and only on a transcript-decoded system turn, so a
  * user typing the same words still reads as their own message.
  */

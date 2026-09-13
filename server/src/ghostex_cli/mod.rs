@@ -15,10 +15,13 @@ pub mod output;
 pub mod paired_device;
 pub mod picker;
 pub mod ports;
+mod port_web_metadata;
 pub mod resources;
 pub mod rpc;
 pub mod saved_prompts;
 pub mod selector;
+mod session_chat_model;
+mod session_parking;
 pub mod sessions;
 pub mod settings;
 pub mod skills;
@@ -234,6 +237,7 @@ fn is_known_command(name: &str) -> bool {
         "saved-prompts",
         "paired-device-seen",
         "pin-session",
+        "park-session",
         "delayed-send",
         "close-after-done",
         "send-text",
@@ -252,6 +256,7 @@ fn is_known_command(name: &str) -> bool {
         "read-session-chat",
         "switch-draft-agent",
         "send-session-chat-key",
+        "select-session-chat-model",
         "read-session-chat-skills",
         "read-session-chat-files",
         "send-session-chat-message",
@@ -553,6 +558,12 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "pin-session" => {
             run_bridge_action("pinSession", Parser::SessionBoolean("pinned"), plain, args)
         }
+        "park-session" => run_bridge_action(
+            "parkSession",
+            Parser::SessionBoolean("parked"),
+            fail_on_not_ok,
+            args,
+        ),
         "delayed-send" => {
             // `--cancel` clears the armed automation; otherwise the parser
             // accepts the timer and both agent-completion trigger modes.
@@ -620,6 +631,12 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "send-session-chat-key" => run_bridge_action(
             "sendSessionChatMessage",
             Parser::SessionChatKey,
+            fail_on_not_ok,
+            args,
+        ),
+        "select-session-chat-model" => run_bridge_action(
+            "selectSessionChatModel",
+            Parser::SessionChatModel,
             fail_on_not_ok,
             args,
         ),

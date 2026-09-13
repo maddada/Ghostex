@@ -325,6 +325,7 @@ pub fn usage() -> String {
         format_help_command("read-session-chat <selector> [--subagent name-or-id] [--limit n] [--before-offset n] [--wait-ms n --fingerprint f] --json", "Read a session or subagent transcript; --wait-ms long-polls the main chat"),
         format_help_command("switch-draft-agent <selector> --agent-id <id> --json", "Switch an unprompted draft session to another project agent"),
         format_help_command("send-session-chat-key <selector> --key <key> --json", "Queue Enter or a shifted option key behind this session's pending chat writes"),
+        format_help_command("select-session-chat-model <selector> [--model <model> --effort <effort>] [--mode <mode>] [--fast-mode on|off] [--defer] --json", "Change chat model, effort or mode; --defer queues the choice until the agent is ready"),
         format_help_command("read-session-chat-skills <selector> --json", "List skills available to the session's agent"),
         format_help_command("read-session-chat-files <selector> --json", "List the session project's files for @ mentions"),
         format_help_command("send-session-chat-message <selector> <text>", "Send a chat message into an agent session"),
@@ -369,6 +370,10 @@ pub fn usage() -> String {
         format_help_command(
             "sleep-session|pin-session <id> [true|false]",
             "Set raw session flags",
+        ),
+        format_help_command(
+            "park-session <selector> [true|false] --json",
+            "Park or unpark a session, honoring Sleep session when parking",
         ),
         format_help_command(
             "tag-session <id> <tag|none>",
@@ -616,12 +621,14 @@ pub fn ports_usage() -> String {
     "Ghostex ports - list the TCP ports listening on this machine
 
 Usage:
-  ghostex ports [--json]
+  ghostex ports [--json] [--web]
 
 Output:
   Without --json, prints a PORT/ADDRESS/PID/COMMAND table.
   With --json, prints { \"ports\": [{ \"port\", \"address\", \"pid\", \"command\" }] },
   one entry per port and bind address, sorted by port and then address.
+  Add --web with --json to inspect HTTP/HTTPS page titles, service details,
+  and small favicons. Unresponsive ports remain listed without web metadata.
 
 Notes:
   Every listening TCP socket is listed, not only the ones Ghostex started.

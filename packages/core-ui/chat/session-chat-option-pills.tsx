@@ -1,4 +1,5 @@
 import { modelPickerProvider } from './session-chat-model-picker-request';
+import { QUICK_MODEL_PICKER_ENABLED } from './session-chat-model-picker-platform';
 import { resolveContextDetailStatus, type ContextDetailStatus } from './session-chat-context-details-agents';
 import type { AccountIconColor } from '@/packages/shared/agent-accounts';
 import type { SessionChatPendingModelSelection } from '@/packages/shared/session-chat';
@@ -1185,7 +1186,7 @@ export function SessionChatSessionOptionPills({
         />
         <DropdownMenuContent align='end' className='ghostex-session-chat-popup w-64 rounded-xl [--radius:0.625rem]'>
           {agentsSection}
-          {quickPicker && (
+          {QUICK_MODEL_PICKER_ENABLED && quickPicker && (
             <DropdownMenuItem closeOnClick className='rounded-md' onClick={() => modelPickerActions.current?.open()}>
               Quick picker <span className='ml-auto text-xs text-muted-foreground'>⌥P</span>
             </DropdownMenuItem>

@@ -50,7 +50,7 @@ const CURSOR_ACTIVITY_SCAN_LINES: usize = 15;
 /// next line; two leaves room for a wrap.
 const ACTIVITY_PERCENT_LOOKAHEAD: usize = 2;
 
-/// Activity kind for Claude Code's `/compact` (manual and automatic).
+/// Activity kind for Claude Code and Codex compaction (manual and automatic).
 pub const SESSION_CHAT_ACTIVITY_COMPACTING: &str = "compacting";
 
 /// Claude Code's current assistant status, not yet flushed to transcript JSONL.
@@ -534,6 +534,26 @@ fn compacting_activity_from_line(line: &str) -> Option<SessionChatTerminalActivi
     None
 }
 
+/// CDXC:AgentScreenDetection 2026-09-13 DECISION:
+/// User: Codex compaction uses Claude's status card, with a looping bar because Codex reports no percentage.
+/// Its live status row also holds the prompt queue through the shared compaction marker.
+fn codex_compacting_activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
+    let status = line.trim().strip_prefix('•')?.trim_start();
+    let metadata = status
+        .strip_prefix("Compacting context (")?
+        .strip_suffix(')')?;
+    let (elapsed, interrupt) = metadata.split_once('•')?;
+    if interrupt.trim() != "esc to interrupt" {
+        return None;
+    }
+    let mut activity = SessionChatTerminalActivity::new(
+        SESSION_CHAT_ACTIVITY_COMPACTING,
+        "Compacting conversation",
+    );
+    activity.elapsed_seconds = Some(parse_elapsed_seconds(elapsed.trim())?);
+    Some(activity)
+}
+
 fn activity_from_line(line: &str) -> Option<SessionChatTerminalActivity> {
     if let Some(activity) = compacting_activity_from_line(line) {
         return Some(activity);
@@ -894,8 +914,12 @@ pub fn detect_session_chat_terminal_activity(
             .take(CURSOR_ACTIVITY_SCAN_LINES)
             .find_map(|line| cursor_activity_from_line(line));
     }
-    // Claude Code is the only remaining CLI whose compaction paints this row;
-    // codex compacts without a progress screen, so it would only false-match.
+    if agent == SessionChatOptionAgent::Codex {
+        return crate::session_chat_agent_fleet::normalized_screen_lines(screen_text)
+            .iter()
+            .rev()
+            .find_map(|line| codex_compacting_activity_from_line(line));
+    }
     if agent != SessionChatOptionAgent::Claude {
         return None;
     }

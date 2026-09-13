@@ -38,8 +38,18 @@ pub fn ports_command(args: &[String]) -> CliResult<()> {
         .map_err(|error| CliError::Other(format!("{error:#}")))
         .map(dedupe_listeners)?;
     if parsed.flags.truthy("json") {
+        let metadata = if parsed.flags.truthy("web") {
+            super::port_web_metadata::inspect_ports(&listeners)
+        } else {
+            Default::default()
+        };
         print_json(&json!({
-            "ports": listeners.iter().map(listener_json).collect::<Vec<Value>>(),
+            "ports": listeners.iter().map(|listener| {
+                let mut row = listener_json(listener);
+                if let Some(web) = metadata.get(&listener.port) { row["web"] = web.clone(); }
+                row
+            }).collect::<Vec<Value>>(),
+            "webMetadataSupported": true,
         }));
         return Ok(());
     }

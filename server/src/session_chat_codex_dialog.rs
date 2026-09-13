@@ -740,6 +740,8 @@ pub(crate) async fn answer_codex_dialog(
 }
 
 /// Local commands print results outside Codex's conversation JSONL.
+/// CDXC:AgentScreenDetection 2026-09-13 SEE-ALSO:
+/// Compaction is intentionally excluded: session_chat_terminal_activity.rs owns its live card, and ContextCompaction records its result.
 pub(crate) fn command_has_local_output(text: &str) -> bool {
     matches!(
         text.split_whitespace().next().unwrap_or_default(),
@@ -791,7 +793,6 @@ pub(crate) fn command_has_local_output(text: &str) -> bool {
             | "/clear"
             | "/fork"
             | "/init"
-            | "/compact"
             | "/recap"
             | "/side"
             | "/btw"

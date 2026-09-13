@@ -242,7 +242,7 @@ describe('session chat session-option catalogs', () => {
       'Low',
       'Medium',
       'High',
-      'Extra High',
+      'xHigh',
     ]);
     expect(catalog.model.choices?.find((choice) => choice.value === 'claude-opus-5')?.label).toBe('Opus 5');
     expect(catalog.model.dispatch.build('claude-opus-5')).toBe('/model Claude Opus 5');
@@ -333,7 +333,7 @@ describe('session chat session-option catalogs', () => {
     const descriptors = catalog.optionsForModel('opus');
     expect(sessionChatOptionsPillLabel(descriptors, state)).toBeNull();
     state = setSessionChatOptionValue(state, 'effort', 'xhigh', 'dispatched');
-    expect(sessionChatOptionsPillLabel(descriptors, state)).toBe('Extra High');
+    expect(sessionChatOptionsPillLabel(descriptors, state)).toBe('xHigh');
     // Nothing known → the pill falls back to its own name.
     expect(sessionChatOptionsPillLabel(descriptors, {})).toBeNull();
   });
@@ -408,7 +408,7 @@ describe('session chat detected options', () => {
     // A catalog id echoed verbatim renders with the catalog's label…
     expect(sessionChatOptionValueLabel(catalog.model, next)).toBe('GPT 5.6 Sol');
     const [effort] = catalog.optionsForModel('gpt-5.6-sol');
-    expect(sessionChatOptionValueLabel(effort!, next)).toBe('Extra High');
+    expect(sessionChatOptionValueLabel(effort!, next)).toBe('xHigh');
     // …and an id it has never heard of still uses the terminal's spelling,
     // sentence-cased for the composer chips.
     const unknown = applySessionChatDetectedOptions(catalog, next, {

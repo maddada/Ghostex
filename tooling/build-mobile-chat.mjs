@@ -111,7 +111,7 @@ if (supportedAgents.length === 0) {
 
 const result = await esbuild.build({
   bundle: true,
-  define: { 'process.env.NODE_ENV': '"production"' },
+  define: { 'process.env.NODE_ENV': '"production"', __GHOSTEX_MOBILE_CHAT__: 'true' },
   entryPoints: [entry],
   format: 'iife',
   jsx: 'automatic',
@@ -125,11 +125,20 @@ const result = await esbuild.build({
     '.woff2': 'dataurl',
   },
   minify: true,
+  metafile: true,
   outdir: 'out',
   plugins: [mobileChatTextImportPlugin, shikiClassicScriptEsbuildPlugin(), mermaidClassicScriptEsbuildPlugin()],
   target: ['safari16', 'chrome110'],
   write: false,
 });
+
+if (
+  Object.keys(result.metafile.inputs).some((input) =>
+    /session-chat-model-picker(?:-effort-icons|-icons|-input)?\.(?:tsx?|css)$/.test(input)
+  )
+) {
+  throw new Error('The mobile chat bundle must not load the quick model picker or its assets.');
+}
 
 let js = '';
 let css = '';

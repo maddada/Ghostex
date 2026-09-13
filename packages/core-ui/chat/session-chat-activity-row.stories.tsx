@@ -33,3 +33,14 @@ export const ClaudeCode: Story = {
     },
   },
 };
+
+export const Codex: Story = {
+  args: {
+    activity: {
+      kind: 'compacting',
+      label: 'Compacting conversation',
+      detectedAt: new Date().toISOString(),
+      elapsedSeconds: 14,
+    },
+  },
+};

@@ -38,7 +38,7 @@ export function SessionChatScrollBottomButton({
     };
     const resizeObserver = new ResizeObserver(measure);
     resizeObserver.observe(viewport);
-    resizeObserver.observe(content);
+    resizeObserver.observe(content, { box: 'border-box' });
     const intentObserver = new MutationObserver(measure);
     intentObserver.observe(viewport, {
       attributes: true,
