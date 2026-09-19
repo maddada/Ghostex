@@ -327,11 +327,17 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       ...options,
       keepView: keepViewRequested || focusChangesActiveProject(this, { projectId: reference.projectId }),
     };
-    if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
-      /*
-      CDXC:FocusRouting 2026-06-26-23:24:
-      Sleeping local session-card clicks must match macOS session activation by committing gxserver `/api/wakeSession` before the Rust workspace materializes the terminal. A plain focus bridge can select the tab but leaves gxserver sleeping, so route this branch through the same Wake path as the sidebar sleep toggle.
-      */
+    /*
+    CDXC:SessionSleep 2026-09-19 DECISION:
+    User: clicking a sleeping session in the sidebar, or opening its project, shows its sleeping placeholder instead of waking it; clicking the pane or pressing a key wakes it.
+    With Click to Wake Sleeping Panes on, the row takes the ordinary focus below and Rust selects its tab exactly like a tab-strip click.
+    This supersedes waking first on every sleeping row click (macOS session activation), which now applies only with the setting off.
+    SEE-ALSO: select_sleeping_local_workspace_tab in apps/desktop/src/app/workspace_terminals.rs.
+    */
+    if (
+      this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId) &&
+      !createGpuiSidebarSettings(this.runtimeSettings).clickToWakeSleepingSessions
+    ) {
       await this.setSessionSleeping(sessionId, false, focusOptions);
       return;
     }
@@ -584,7 +590,7 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
     CDXC:Workarea 2026-09-04 DECISION:
     User: Advanced > Split Right in the session menu opens the session in a new
     pane to the right of the focused agents pane. It is a sidebar focus with a
-    placement: a sleeping row wakes first exactly like a click, and the same
+    placement: a sleeping row behaves exactly like a click, and the same
     focus bridge carries `placement: 'splitRight'` so Rust either moves the
     already-open tab into a new right-hand leaf or attaches the session there.
     */
@@ -611,7 +617,10 @@ export const gpuiSidebarRuntimeSessionFocusMethods = {
       return;
     }
     this.acknowledgeSessionAttention(sessionId, 'sidebar-focus');
-    if (this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId)) {
+    if (
+      this.isSleepingLocalPresentationSession(reference.projectId, reference.sessionId) &&
+      !createGpuiSidebarSettings(this.runtimeSettings).clickToWakeSleepingSessions
+    ) {
       await this.setSessionSleeping(sessionId, false, { placement: 'splitRight' });
       return;
     }

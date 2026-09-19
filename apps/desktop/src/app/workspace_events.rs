@@ -1071,6 +1071,9 @@ impl GhostexGpuiApp {
             self.persist_shell_layout_state();
             cx.notify();
         }
+        if !message.force_remount && self.select_sleeping_local_workspace_tab(&key, false, cx) {
+            return;
+        }
         /*
         CDXC:CefRuntime 2026-07-12:
         Full reload kills the zmx daemon before this focus arrives, so the

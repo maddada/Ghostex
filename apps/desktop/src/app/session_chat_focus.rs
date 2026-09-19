@@ -18,7 +18,7 @@ impl GhostexGpuiApp {
         }
         for (session_id, view) in &self.native_chat_views {
             let focused = window.is_window_active()
-                && self.agents_chat_mode_sessions.contains(session_id)
+                && self.agents_session_chat_page_shown(*session_id)
                 && if self.active_mode == TitlebarMode::Agents {
                     self.agents_workspace
                         .pane_id_for_session(*session_id)
@@ -47,7 +47,7 @@ impl GhostexGpuiApp {
         }
         for (session_id, surface) in &self.agents_chat_surfaces {
             let focused = window.is_window_active()
-                && self.agents_chat_mode_sessions.contains(session_id)
+                && self.agents_session_chat_page_shown(*session_id)
                 && if self.active_mode == TitlebarMode::Agents {
                     self.agents_workspace
                         .pane_id_for_session(*session_id)

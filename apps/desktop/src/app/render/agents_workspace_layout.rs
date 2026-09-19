@@ -268,7 +268,7 @@ impl GhostexGpuiApp {
                     || self.workspace_node_shows_cef_chat(&split.second)
             }
             WorkspaceNode::Leaf(leaf) => leaf.tab_group.active_session_id().is_some_and(|id| {
-                self.agents_chat_mode_sessions.contains(&id) && !self.session_chat_use_gpui
+                self.agents_session_chat_page_shown(id) && !self.session_chat_use_gpui
             }),
         }
     }

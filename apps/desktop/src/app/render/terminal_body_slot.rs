@@ -39,7 +39,7 @@ impl GhostexGpuiApp {
             toggling back reattaches to the same running session. Direct PTY owners
             remain retained because they own the process.
             */
-            if self.agents_chat_mode_sessions.contains(&session_id) {
+            if self.agents_session_chat_page_shown(session_id) {
                 return self.render_agents_session_chat_body(leaf.pane_id, session_id, cx);
             }
         }

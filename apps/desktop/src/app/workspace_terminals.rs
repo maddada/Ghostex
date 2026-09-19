@@ -606,12 +606,16 @@ impl GhostexGpuiApp {
         Only a return to the project resumes what its panes surfaced.
         Starting an agent from the sidebar in a restored project that had not been visited since launch woke the sleeping session its pane surfaced, and that wake's result then selected the woken tab and took focus, so the new agent never appeared.
         The pass therefore runs on the first focus snapshot that describes this project, and when that snapshot heads for a session no pane surfaces (a new agent, or a background row) it wakes nothing: the requested session owns the visit, and the covered sessions stay asleep until clicked like any sleeping tab.
+        With Click to Wake Sleeping Panes on, it wakes nothing at all; see the SessionSleep decision on `select_sleeping_local_workspace_tab`.
         */
         let Some(project_id) = self.agents_workspace_project_id.clone() else {
             return;
         };
         if focus_state.active_project_id.as_deref() != Some(project_id.as_str())
             || !self.startup_restore_wake_pending.remove(&project_id)
+            || gpui_click_to_wake_sleeping_sessions_from_shared_settings(
+                &shared_settings::shared_sidebar_settings_snapshot(),
+            )
         {
             return;
         }
@@ -1425,6 +1429,8 @@ impl GhostexGpuiApp {
         self.scroll_workspace_pane_active_tab(self.agents_workspace.focused_pane);
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);
+        // Sleeping hides a chat-mode page and waking brings it back (`agents_session_chat_page_shown`).
+        self.reconcile_agents_pane_surfaces(cx);
         cx.notify();
         true
     }
@@ -2145,6 +2151,9 @@ impl GhostexGpuiApp {
             }),
         );
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
+        if self.select_sleeping_local_workspace_tab(key, true, cx) {
+            return;
+        }
         if self.select_existing_local_workspace_terminal_keeping_view(key, cx) {
             self.reconcile_preferred_agents_chat_launch_intents(cx);
             return;
@@ -2167,6 +2176,52 @@ impl GhostexGpuiApp {
             GpuiLocalWorkspaceAttachOrigin::BackgroundSelect,
             cx,
         );
+    }
+
+    /// CDXC:SessionSleep 2026-09-19 DECISION:
+    /// User: a sleeping session never wakes on its own. Clicking its sidebar row, opening its project, Split Right, closing a tab onto it, and the first visit to a project after a restart all show the sleeping placeholder; clicking that pane or pressing a key wakes it.
+    /// Those all reach Rust as sidebar focus requests, so an already-mapped sleeping tab is selected exactly like a tab-strip click and Click to Wake Sleeping Panes decides the rest, as it does for a tab click.
+    /// Before this, the request attached with the Wake intent and gxserver woke the session.
+    /// SEE-ALSO: focusSession and splitSessionRight in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, and `resume_restored_workspace_surfaced_terminals`.
+    pub(crate) fn select_sleeping_local_workspace_tab(
+        &mut self,
+        key: &GpuiLocalWorkspaceSessionKey,
+        keep_view: bool,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if !gpui_click_to_wake_sleeping_sessions_from_shared_settings(
+            &shared_settings::shared_sidebar_settings_snapshot(),
+        ) {
+            return false;
+        }
+        self.prune_local_workspace_session_mappings();
+        let Some(shell_session_id) = self.local_workspace_session_mappings.get(key).copied() else {
+            return false;
+        };
+        let Some(pane_id) = self.agents_workspace.pane_id_for_session(shell_session_id) else {
+            return false;
+        };
+        if !self.agents_terminal_session_is_mapped_sleeping(shell_session_id) {
+            return false;
+        }
+        if keep_view {
+            self.agents_workspace.select_tab(pane_id, shell_session_id);
+            self.finish_local_workspace_terminal_background_selection(
+                key,
+                pane_id,
+                shell_session_id,
+                cx,
+            );
+        } else {
+            if !self.should_keep_project_editor_open_for_local_workspace_terminal_focus(key) {
+                self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
+            }
+            self.select_agents_tab(pane_id, shell_session_id, cx);
+            self.set_sidebar_focus_border_handoff_target(shell_session_id);
+        }
+        self.reconcile_agents_pane_surfaces(cx);
+        cx.notify();
+        true
     }
 
     /// Selects an already-mapped tab in place when something local can render

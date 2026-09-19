@@ -356,6 +356,12 @@ when you open it.
   Sleeping sidebar sessions keep their normal title color and show a dimmer
   last-active time on the right; awake sessions show a stronger timestamp. Use `ghostex sleep|wake <selector>` to
   sleep or wake a session.
+- A sleeping session stays asleep until you ask for it. Selecting its tab,
+  clicking its row in the sidebar, opening its project, Split Right, and
+  closing the tab next to it all show a black "Press Any Key to Wake" pane;
+  click that pane or press a key to wake it. With Click to Wake Sleeping Panes
+  turned off, selecting a sleeping session wakes it right away
+  (`clickToWakeSleepingSessions`).
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.

@@ -54,6 +54,7 @@ export function rememberGpuiProjectSession(runtime: GpuiSidebarRuntime, projectI
 /**
  * CDXC:Projects 2026-09-05 DECISION:
  * User: opening a project from Quick Access selects and wakes its last agent/terminal, or creates the default agent in Chat mode (a terminal when Terminal is the default), and focuses its input.
+ * 2026-09-19: a sleeping last session is selected but no longer woken; it shows its sleeping placeholder until clicked (SessionSleep decision in focusSession).
  * Refresh before choosing so a restored project cannot look empty merely because its sidebar snapshot has not arrived yet.
  */
 export function activateGpuiProject(runtime: GpuiSidebarRuntime, projectId: string): Promise<void> {

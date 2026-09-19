@@ -143,6 +143,20 @@ impl GhostexGpuiApp {
         self.handoff_agents_session_chat_mode(session_id, cx);
     }
 
+    /// CDXC:SessionSleep 2026-09-19 WHY:
+    /// A sleeping chat-mode session drew its chat page from the stored transcript, so a session selected without waking looked open under its sleeping moon.
+    /// Its pane shows the sleeping placeholder instead; chat mode stays remembered and the page returns once the session wakes.
+    /// Use this, not bare `agents_chat_mode_sessions` membership, wherever the pane decides what it shows or where its keyboard focus goes.
+    pub(crate) fn agents_session_chat_page_shown(&self, session_id: TerminalSessionId) -> bool {
+        self.agents_chat_mode_sessions.contains(&session_id)
+            && self
+                .agents_workspace
+                .session(session_id)
+                .is_none_or(|session| {
+                    session.presentation_state != TerminalSessionPresentationState::Sleeping
+                })
+    }
+
     pub(crate) fn handoff_agents_session_chat_mode(
         &mut self,
         session_id: TerminalSessionId,
@@ -1167,7 +1181,7 @@ impl GhostexGpuiApp {
                 .rendered_leaf_order()
                 .into_iter()
                 .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
-                .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
+                .filter(|session_id| self.agents_session_chat_page_shown(*session_id))
                 .collect::<HashSet<_>>()
         } else if self.active_mode.is_project_editor_mode() {
             // CDXC:SessionChat 2026-08-02: the companion side pane
@@ -1177,7 +1191,7 @@ impl GhostexGpuiApp {
             self.current_project_editor_companion_terminal_body_mount_slots()
                 .into_iter()
                 .map(|slot_id| slot_id.session_id)
-                .filter(|session_id| self.agents_chat_mode_sessions.contains(session_id))
+                .filter(|session_id| self.agents_session_chat_page_shown(*session_id))
                 .collect::<HashSet<_>>()
         } else {
             HashSet::new()

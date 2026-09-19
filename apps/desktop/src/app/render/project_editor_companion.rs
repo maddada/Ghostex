@@ -369,7 +369,7 @@ impl GhostexGpuiApp {
         chat mode. The way back is the chat page's in-DOM cluster.
         */
         if let Some(session_id) = session_id {
-            let pane_surface_content = if self.agents_chat_mode_sessions.contains(&session_id) {
+            let pane_surface_content = if self.agents_session_chat_page_shown(session_id) {
                 Some(self.render_session_chat_surface_content(session_id))
             } else {
                 None
