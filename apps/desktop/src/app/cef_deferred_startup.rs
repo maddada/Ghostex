@@ -77,14 +77,6 @@ impl GhostexGpuiApp {
         let Some(deferred) = self.app_modal_open_deferred_for_cef.take() else {
             return;
         };
-        let quick_access_sidebar_state_message = matches!(
-            deferred.modal,
-            GpuiAppModalKind::CommandPalette
-                | GpuiAppModalKind::PreviousSessions
-                | GpuiAppModalKind::RecentProjects
-                | GpuiAppModalKind::StashedPrompts
-        )
-        .then(|| deferred.sidebar_state_message.clone());
         self.open_gpui_app_modal_window_inner(
             deferred.modal,
             deferred.open_message,
@@ -93,10 +85,5 @@ impl GhostexGpuiApp {
             deferred.reset_ready_retry,
             cx,
         );
-        if let Some(sidebar_state_message) = quick_access_sidebar_state_message
-            && self.app_modal_window.is_some()
-        {
-            self.refresh_gpui_quick_access_sessions_state_in_background(sidebar_state_message, cx);
-        }
     }
 }

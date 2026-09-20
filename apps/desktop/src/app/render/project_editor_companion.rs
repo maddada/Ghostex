@@ -719,7 +719,6 @@ impl GhostexGpuiApp {
                     ),
                     axis,
                     ResizeRailGrabSide::Straddle,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(move |this, hovered, _, cx| {
                     this.set_project_editor_companion_split_divider_hovering(mode, *hovered, cx);
@@ -885,7 +884,6 @@ impl GhostexGpuiApp {
                     ),
                     WorkspaceSplitAxis::Horizontal,
                     grab_side,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(move |this, hovered, _, cx| {
                     this.set_project_editor_companion_divider_hovering(mode, *hovered, cx);

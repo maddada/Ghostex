@@ -1236,26 +1236,18 @@ impl GhostexGpuiApp {
         if let Some(surface) = gpui_telemetry_surface_for_app_modal(modal) {
             record_gpui_surface_opened_telemetry(surface, cx.background_executor());
         }
+        if modal == GpuiAppModalKind::StashedPrompts {
+            self.enrich_gpui_saved_prompts_quick_access_open_message(&mut open_message);
+        }
         // Kinds rebuilt in native GPUI leave the React host here (native_app_modal_lifecycle.rs).
         if self.try_open_native_app_modal(modal, &open_message, cx) {
             return;
-        }
-        if modal == GpuiAppModalKind::StashedPrompts {
-            self.enrich_gpui_saved_prompts_quick_access_open_message(&mut open_message);
         }
         // The launcher owns modal hydration. Session-scoped callers such as
         // Rename and Delayed Send must not diverge based on their entry point.
         if modal.requires_sidebar_state() {
             open_message["latestSidebarStateMessage"] = sidebar_state_message.clone();
         }
-        let quick_access_sidebar_state_message = matches!(
-            modal,
-            GpuiAppModalKind::CommandPalette
-                | GpuiAppModalKind::PreviousSessions
-                | GpuiAppModalKind::RecentProjects
-                | GpuiAppModalKind::StashedPrompts
-        )
-        .then(|| sidebar_state_message.clone());
         self.open_gpui_app_modal_window_inner(
             modal,
             open_message,
@@ -1264,11 +1256,6 @@ impl GhostexGpuiApp {
             true,
             cx,
         );
-        if let Some(sidebar_state_message) = quick_access_sidebar_state_message
-            && self.app_modal_window.is_some()
-        {
-            self.refresh_gpui_quick_access_sessions_state_in_background(sidebar_state_message, cx);
-        }
     }
 
     /*
@@ -2253,6 +2240,20 @@ impl GhostexGpuiApp {
         Settings status/action responses are transient `sidebarState` messages to the shared React modal host. They must clear modal loading states without replacing the stored full hydrate snapshot used when the app-modal host becomes ready or a Settings save rehydrates the modal.
         */
         let Some(handle) = self.app_modal_window.clone() else {
+            /*
+            CDXC:AppModal 2026-09-20 WHY:
+            Quick Access is a native GPUI window now, and its controller lives in the sidebar
+            runtime rather than in a modal-host page. Its answers (recent projects, saved prompts,
+            previous sessions, transcript sizes) reach it through the sidebar host-message bridge,
+            which re-emits them on the runtime's own message source.
+            */
+            if self
+                .native_app_modal_kind()
+                .and_then(crate::app::window::quick_access::QuickAccessTabId::from_modal_kind)
+                .is_some()
+            {
+                self.dispatch_gpui_sidebar_host_message(payload, cx);
+            }
             return;
         };
         let update_result = handle.update(cx, |host, modal_window, cx| {

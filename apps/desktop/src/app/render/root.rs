@@ -1180,6 +1180,9 @@ impl Render for GhostexGpuiApp {
             above the workspace.
             */
             .children(gpui_component::Root::render_dialog_layer(window, cx))
+            // Last child, so a resize drag in progress sees each mouse move
+            // before the panes it is dragged across do.
+            .child(self.render_resize_drag_pointer_tracker(cx))
             .into_any_element();
 
         #[cfg(target_os = "linux")]

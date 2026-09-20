@@ -47,9 +47,11 @@ pub use crate::selectors::{
     QUICK_AUTOMATIONS_PROJECT_ID, TAB_SESSION_TITLE_MAX_UTF16,
 };
 pub use crate::sidebar_actions::{
-    local_project_group_project_id, plan_read_only_action, ActionEffect, SidebarActionPlan,
-    ToastLevel, NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
-    NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION, READ_ONLY_MESSAGE_TYPES,
+    apply_lifecycle_answer, local_project_group_project_id, owns_lifecycle_message,
+    plan_lifecycle_request, plan_read_only_action, ActionEffect, LifecycleAnswer, LifecycleCall,
+    LifecycleFollowUp, LifecycleRequest, SidebarActionPlan, ToastLevel, LIFECYCLE_PATCH_TTL_MS,
+    NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE, NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION,
+    READ_ONLY_MESSAGE_TYPES,
 };
 pub use crate::sidebar_menu::{
     agent_launcher_items, agent_logo_icons, colored_agent_logo, hover_strip, menu_to_json,

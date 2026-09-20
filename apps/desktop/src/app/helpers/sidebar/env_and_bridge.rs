@@ -280,45 +280,6 @@ pub(crate) fn gpui_previous_session_reference_from_history_id(
     Some((project_id, session_id))
 }
 
-pub(crate) fn gpui_quick_access_sidebar_groups_from_presentation_snapshot(
-    snapshot: &serde_json::Value,
-    active_project_id: Option<&str>,
-) -> Vec<serde_json::Value> {
-    gpui_titlebar_resource_groups_from_presentation_snapshot(snapshot, active_project_id)
-        .into_iter()
-        .filter_map(|mut group| {
-            let group_object = group.as_object_mut()?;
-            group_object.insert(
-                "isFocusModeActive".to_string(),
-                serde_json::Value::Bool(false),
-            );
-            group_object.insert("layoutVisibleCount".to_string(), serde_json::json!(1));
-            group_object.insert("viewMode".to_string(), serde_json::json!("grid"));
-            group_object.insert("visibleCount".to_string(), serde_json::json!(1));
-
-            for session in group_object
-                .get_mut("sessions")
-                .and_then(serde_json::Value::as_array_mut)
-                .into_iter()
-                .flatten()
-            {
-                let Some(session_object) = session.as_object_mut() else {
-                    continue;
-                };
-                session_object.insert("column".to_string(), serde_json::json!(0));
-                session_object.insert("isFocused".to_string(), serde_json::Value::Bool(false));
-                session_object.insert("isVisible".to_string(), serde_json::Value::Bool(false));
-                session_object.insert("row".to_string(), serde_json::json!(0));
-                session_object.insert(
-                    "shortcutLabel".to_string(),
-                    serde_json::Value::String(String::new()),
-                );
-            }
-            Some(group)
-        })
-        .collect()
-}
-
 pub(crate) fn gpui_sidebar_portless_state_from_update_result(
     result: &serde_json::Value,
 ) -> Option<serde_json::Value> {

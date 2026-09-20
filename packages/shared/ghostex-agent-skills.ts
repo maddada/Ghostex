@@ -117,7 +117,7 @@ export const BUNDLED_GHOSTEX_AGENT_SKILLS: readonly BundledGhostexAgentSkill[] =
   {
     command: 'ghostex agents-orchestration install-skill',
     description:
-      'Let one agent run a team: teaches agents to launch other agents with the model and effort you ask for, send them tasks, read their replies, and check their work, all through the `ghostex` CLI help.',
+      'Let agents work as a team: teaches agents to launch other agents with the model and effort you ask for, message each other to hand off tasks and coordinate work, read the replies, and check the results, all through the `ghostex` CLI help.',
     id: 'agentsOrchestration',
     name: 'Ghostex Agents Orchestration',
     skillName: 'ghostex-agents-orchestration',

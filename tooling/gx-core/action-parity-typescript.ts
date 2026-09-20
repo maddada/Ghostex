@@ -84,7 +84,7 @@ function fromAppModalHostMessage(message: Json): Call {
 }
 
 /** The projected group inventory, exactly as `createSidebarGroups` builds it for the runtime. */
-function buildLatestGroups(scenario: Json, parkedProjectId: string | undefined): SidebarSessionGroup[] {
+export function buildLatestGroups(scenario: Json, parkedProjectId: string | undefined): SidebarSessionGroup[] {
   const snapshot = scenario.snapshot as Json;
   const recentProjects = parkedProjectId ? [{ projectId: parkedProjectId } as any] : [];
   const metadata = createGpuiPresentationProjectProjectionMetadata({

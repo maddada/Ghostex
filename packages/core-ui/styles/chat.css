@@ -3135,6 +3135,16 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   object-fit: contain;
 }
 
+/* The cursor says what the next click does; a picture with no detail beyond its
+   fitted size sets neither and keeps the arrow. */
+.ghostex-chat-image-preview[data-zoom='in'] {
+  cursor: zoom-in;
+}
+
+.ghostex-chat-image-preview[data-zoom='out'] {
+  cursor: zoom-out;
+}
+
 /* Zoomed: the level's width is set inline and the height follows the aspect
    ratio, so both fitted caps have to come off. */
 .ghostex-chat-image-preview[data-zoomed='true'] {
@@ -3369,9 +3379,11 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
   flex-direction: column;
   gap: 0.875rem;
   justify-content: center;
+  min-width: 0;
   /* Centered within the space above the composer band, not the full pane. */
   padding: 1.5rem 1.5rem var(--ghostex-chat-composer-overlay, 0px);
   text-align: center;
+  width: 100%;
 }
 
 .ghostex-chat-new-session-agent {
@@ -3396,6 +3408,12 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 .ghostex-chat-new-session-agent > *,
 .ghostex-chat-new-session-title > * {
   grid-area: 1 / 1;
+}
+
+.ghostex-chat-new-session-title > * {
+  max-width: 100%;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .ghostex-chat-new-session-agent-slot {
@@ -3452,13 +3470,18 @@ lane inherits the same one — a size is chosen per lane, a rhythm is not.
 }
 
 .ghostex-chat-new-session-title {
+  align-items: center;
   color: var(--foreground);
   display: grid;
   font-size: 1.375rem;
   font-weight: 600;
+  justify-items: stretch;
   letter-spacing: -0.025em;
   line-height: 1.25;
-  place-items: center;
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
+  width: 100%;
 }
 
 /* --- Ghostex prompt queue (plan 016) --------------------------------------- */

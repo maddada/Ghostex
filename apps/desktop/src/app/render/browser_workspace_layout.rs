@@ -163,7 +163,6 @@ impl GhostexGpuiApp {
                 format!("ghostex-gpui-browser-split-grab-strip-{}", split_id.0),
                 axis,
                 ResizeRailGrabSide::Straddle,
-                self.resize_rail_drag_active(),
             )
             .on_mouse_down(
                 MouseButton::Left,

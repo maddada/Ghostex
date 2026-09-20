@@ -35,6 +35,9 @@ pub(in crate::app::native_chat) struct ImageViewerState {
 pub(super) struct ImageViewerWindow {
     pub(super) chat: Entity<NativeChatView>,
     pub(super) focus: FocusHandle,
+    /// The picture measured last and its own pixel size, so a resize or a zoom step does not read
+    /// the same header again. One entry: the viewer paints one picture at a time.
+    pub(super) measured: Option<(u64, Option<gpui::Size<gpui::Pixels>>)>,
     _subscription: Subscription,
 }
 
@@ -187,6 +190,7 @@ impl NativeChatView {
                                     ImageViewerWindow {
                                         chat,
                                         focus,
+                                        measured: None,
                                         _subscription: subscription,
                                     }
                                 });

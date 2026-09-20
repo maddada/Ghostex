@@ -315,7 +315,6 @@ impl GhostexGpuiApp {
                     "ghostex-gpui-command-pane-side-grab-strip",
                     WorkspaceSplitAxis::Horizontal,
                     grab_side,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(|this, hovered, _, cx| {
                     this.set_command_resize_hovering(
@@ -388,7 +387,6 @@ impl GhostexGpuiApp {
                     "ghostex-gpui-command-pane-resize-grab-strip",
                     WorkspaceSplitAxis::Vertical,
                     grab_side,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(|this, hovered, _, cx| {
                     this.set_command_resize_hovering(
@@ -569,7 +567,6 @@ impl GhostexGpuiApp {
                 format!("ghostex-gpui-command-split-grab-strip-{}", split_id.0),
                 axis,
                 ResizeRailGrabSide::Straddle,
-                self.resize_rail_drag_active(),
             )
             .on_hover(cx.listener(move |this, hovered, _, cx| {
                 this.set_command_resize_hovering(

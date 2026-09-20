@@ -85,6 +85,56 @@ const MUTATIONS: Record<string, (calls: Json[], entry: Json, dump: Json) => Json
   },
 };
 
+/**
+ * The transition half's mutations. They act on a whole dump entry rather than on a call list,
+ * because what they have to be able to break is a STATE the daemon then contradicts.
+ */
+const LIFECYCLE_MUTATIONS = [
+  'patch-a-declined-sleep',
+  'overlay-outlives-the-daemon',
+  'drop-the-replacement-focus',
+  'wake-steals-the-focus',
+  'swap-sleep-and-wake',
+  'drop-the-rpc-reason',
+];
+
+function mutateLifecycle(name: string | undefined, entry: Json): Json {
+  const clone = JSON.parse(JSON.stringify(entry)) as Json;
+  switch (name) {
+    // The optimistic value applied before the daemon agreed, which is the 2026-08-19 KeepAwake
+    // bug: a declined sleep publishing a row state the daemon never entered.
+    case 'patch-a-declined-sleep':
+      if (clone.answers?.declined) clone.answers.declined.state = clone.answers?.accepted?.state ?? null;
+      return clone;
+    // The overlay outliving a daemon row that moved somewhere else, which is the user-visible
+    // "I put it to sleep and it came back" in reverse: the row says asleep for ever.
+    case 'overlay-outlives-the-daemon':
+      if (clone.echo) clone.echo.movedOn = clone.answers?.accepted?.state ?? null;
+      return clone;
+    // The sleep handing the focus to nobody.
+    case 'drop-the-replacement-focus':
+      if (clone.answers?.accepted) clone.answers.accepted.focus = [];
+      return clone;
+    // A wake taking the focus back after the user moved on.
+    case 'wake-steals-the-focus':
+      if (clone.sleeping === false && clone.focus === 'other' && clone.answers?.accepted)
+        clone.answers.accepted.focus = [{ follow: 'focus', session: clone.sessionId }];
+      return clone;
+    // The two calls swapped.
+    case 'swap-sleep-and-wake':
+      if (clone.request?.rpc?.path)
+        clone.request.rpc.path =
+          clone.request.rpc.path === '/api/sleepSession' ? '/api/wakeSession' : '/api/sleepSession';
+      return clone;
+    // The reason the daemon logs the call under.
+    case 'drop-the-rpc-reason':
+      if (clone.request?.rpc?.params) delete clone.request.rpc.params.reason;
+      return clone;
+    default:
+      return clone;
+  }
+}
+
 const LOCAL_ACTION_BY_TYPE: Record<string, string> = {
   copyWorkspaceProjectPathForGroup: 'copyWorkspaceProjectPath',
   openWorkspaceProjectInFinderForGroup: 'openWorkspaceProjectInFinder',
@@ -95,18 +145,23 @@ async function compare([outDir, ...flags]: string[]) {
   if (!outDir) throw new Error('compare <out-dir> [--inject <mutation>]');
   const injectAt = flags.indexOf('--inject');
   const mutationName = injectAt >= 0 ? flags[injectAt + 1] : undefined;
-  const mutate = mutationName ? MUTATIONS[mutationName] : undefined;
-  if (mutationName && !mutate) {
-    console.error(`unknown mutation ${mutationName}; one of ${Object.keys(MUTATIONS).join(', ')}`);
+  const mutate = mutationName ? (MUTATIONS[mutationName] ?? ((calls: Json[]) => calls)) : undefined;
+  if (mutationName && !MUTATIONS[mutationName] && !LIFECYCLE_MUTATIONS.includes(mutationName)) {
+    console.error(
+      `unknown mutation ${mutationName}; one of ${[...Object.keys(MUTATIONS), ...LIFECYCLE_MUTATIONS].join(', ')}`
+    );
     process.exit(2);
   }
   const { runTypeScriptActions } = await import('./action-parity-typescript.ts');
+  const { runTypeScriptLifecycle } = await import('./lifecycle-parity-typescript.ts');
   const names = readdirSync(outDir)
     .filter((name) => name.startsWith('scenario-') && name.endsWith('.json'))
     .sort();
   let payloads = 0;
   let rustCalls = 0;
   let tsCalls = 0;
+  let transitions = 0;
+  let overlayKept = 0;
   const differences: string[] = [];
   for (const name of names) {
     const rustPath = join(outDir, name.replace('scenario-', 'rust-actions-'));
@@ -125,6 +180,42 @@ async function compare([outDir, ...flags]: string[]) {
       differences.push(`${name}: ${entries.length} payloads against ${ours.length} answers`);
       continue;
     }
+    const theirLifecycle = await runTypeScriptLifecycle(scenario, rust);
+    for (const [index, entry] of ((rust.lifecycle ?? []) as Json[]).entries()) {
+      if (entry.owned !== true) continue;
+      transitions += 1;
+      const theirs = theirLifecycle[index];
+      if (!theirs) {
+        differences.push(`${name} lifecycle #${index}: the TypeScript side produced no answer`);
+        continue;
+      }
+      const where = `${name} lifecycle #${index} ${entry.sleeping ? 'sleep' : 'wake'} focus=${entry.focus}`;
+      const mine = mutate ? mutateLifecycle(mutationName, entry) : entry;
+      const myRpc = mine.request?.rpc?.path ? mine.request.rpc : null;
+      if (canonical(myRpc) !== canonical(theirs.rpc))
+        differences.push(`${where} rpc: rust ${canonical(myRpc)} ts ${canonical(theirs.rpc)}`);
+      for (const answer of ['accepted', 'declined', 'failed']) {
+        const left = mine.answers?.[answer] ?? null;
+        const right = theirs.answers?.[answer] ?? null;
+        if (canonical(left) !== canonical(right))
+          differences.push(`${where} ${answer}: rust ${canonical(left)} ts ${canonical(right)}`);
+      }
+      for (const key of ['agrees', 'stillOld', 'movedOn']) {
+        const left = mine.echo?.[key] ?? null;
+        const right = theirs.echo?.[key] ?? null;
+        if (left === right) continue;
+        // The one difference this port makes on purpose: the store's overlay records the value it
+        // predicted FROM, so a daemon row that merely REPEATS that value leaves the prediction in
+        // place. The TypeScript wrote the optimistic value into its copy of the row, so the same
+        // repeat overwrites it and the row flickers back for as long as the real transition takes.
+        // Allowed only in exactly that shape, and never for the other two echoes.
+        if (key === 'stillOld' && left === (mine.answers?.accepted?.state ?? null)) {
+          overlayKept += 1;
+          continue;
+        }
+        differences.push(`${where} echo.${key}: rust ${String(left)} ts ${String(right)}`);
+      }
+    }
     for (const [index, entry] of entries.entries()) {
       payloads += 1;
       const mine = mutate ? mutate(entry.calls as Json[], entry, rust) : (entry.calls as Json[]);
@@ -140,7 +231,7 @@ async function compare([outDir, ...flags]: string[]) {
     }
   }
   console.log(
-    `scenarios ${names.length} payloads ${payloads} rustCalls ${rustCalls} tsCalls ${tsCalls} differences ${differences.length}${
+    `scenarios ${names.length} payloads ${payloads} rustCalls ${rustCalls} tsCalls ${tsCalls} transitions ${transitions} overlayKept ${overlayKept} differences ${differences.length}${
       mutationName ? ` (injected ${mutationName})` : ''
     }`
   );

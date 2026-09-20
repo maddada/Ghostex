@@ -25,10 +25,11 @@ use std::time::Instant;
 
 use ghostex_gx_core::protocol::ServerEvent;
 use ghostex_gx_core::{
-    encode_uri_component, plan_read_only_action, Core, Event, MachineId, SidebarInputs,
-    READ_ONLY_MESSAGE_TYPES,
+    apply_lifecycle_answer, encode_uri_component, plan_lifecycle_request, plan_read_only_action,
+    Core, Event, Intent, LifecycleAnswer, LifecycleFollowUp, MachineId, SessionKey, SidebarInputs,
+    QUICK_AUTOMATIONS_PROJECT_ID, READ_ONLY_MESSAGE_TYPES,
 };
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 /// Every id shape that is not a live local project group, so each branch of the resolution is
 /// probed even when the recording has no row of that kind.
@@ -83,6 +84,7 @@ fn main() -> ExitCode {
     let mut total_payloads = 0usize;
     let mut total_calls = 0usize;
     let mut from_menus = 0usize;
+    let mut total_lifecycle = 0usize;
     let mut resolve_micros: Vec<u128> = Vec::new();
     for path in &scenarios {
         let scenario: Value = match std::fs::read_to_string(path)
@@ -103,6 +105,7 @@ fn main() -> ExitCode {
         total_payloads += dump.payloads;
         total_calls += dump.calls;
         from_menus += dump.from_menus;
+        total_lifecycle += dump.lifecycle;
         let out = path.with_file_name(
             path.file_name()
                 .and_then(|name| name.to_str())
@@ -116,13 +119,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         println!(
-            "{}: {} payloads, {} calls ({} from menus)",
+            "{}: {} payloads, {} calls ({} from menus), {} lifecycle transitions",
             path.file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or(""),
             dump.payloads,
             dump.calls,
-            dump.from_menus
+            dump.from_menus,
+            dump.lifecycle
         );
     }
     resolve_micros.sort_unstable();
@@ -134,7 +138,7 @@ fn main() -> ExitCode {
         .copied()
         .unwrap_or(0);
     println!(
-        "scenarios {} payloads {total_payloads} calls {total_calls} fromMenus {from_menus} resolveUs median {median} max {}",
+        "scenarios {} payloads {total_payloads} calls {total_calls} fromMenus {from_menus} lifecycle {total_lifecycle} resolveUs median {median} max {}",
         scenarios.len(),
         resolve_micros.last().copied().unwrap_or(0)
     );
@@ -153,6 +157,7 @@ struct Dump {
     payloads: usize,
     calls: usize,
     from_menus: usize,
+    lifecycle: usize,
 }
 
 /// The menu dump `sidebar_menu_parity` writes for the same scenario, when it has been run.
@@ -293,15 +298,252 @@ fn build(
             }));
         }
     }
+    let lifecycle = lifecycle_entries(&core, scenario, now_ms);
+    let lifecycle_count = lifecycle.len();
     Some(Dump {
         payloads: entries.len(),
         calls,
         from_menus,
+        lifecycle: lifecycle_count,
         value: json!({
             "parkedProjectId": parked,
             "entries": Value::Array(entries),
+            "lifecycle": Value::Array(lifecycle),
         }),
     })
+}
+
+/// The transition half of the gate.
+///
+/// A lifecycle action is not one answer but four, and only the first is visible in a call diff:
+/// what the call was, what the client shows the moment the daemon accepts it, what it shows when
+/// the daemon then echoes AGREEMENT, and what it shows when the daemon echoes something ELSE. The
+/// last one is the case that reaches users (the row said asleep, the daemon says running) and the
+/// one nothing has ever compared, so every entry here carries all four.
+///
+/// Every session of the recording is driven, under both calls and under three starting focus
+/// states, because the focus is what decides the follow-ups: which row the sleep hands the focus
+/// to, and whether a wake takes it back.
+fn lifecycle_entries(core: &Core, scenario: &Value, now_ms: u64) -> Vec<Value> {
+    let rows: Vec<Value> = scenario
+        .pointer("/snapshot/sessions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut targets: Vec<(String, String, Option<Value>)> = rows
+        .iter()
+        .filter_map(|row| {
+            Some((
+                row.get("projectId")?.as_str()?.to_string(),
+                row.get("sessionId")?.as_str()?.to_string(),
+                Some(row.clone()),
+            ))
+        })
+        .collect();
+    // A session the store has never heard of, which the TypeScript still calls the daemon for,
+    // because `parseGxserverPresentationProjectSessionId` is a string parse and asks the store
+    // nothing.
+    targets.push(("unknown-project".to_string(), "unknown-session".to_string(), None));
+    // A session of the Quick Automations project, whose whole answer is "nothing happens".
+    targets.push((
+        QUICK_AUTOMATIONS_PROJECT_ID.to_string(),
+        "quick-1".to_string(),
+        None,
+    ));
+    // The focus sitting on a real row of another project, so "somewhere else" is a row the store
+    // holds rather than an id it would drop.
+    let first_project = targets.first().map(|(project_id, _, _)| project_id.clone());
+    let elsewhere = targets
+        .iter()
+        .rev()
+        .find(|(project_id, _, row)| row.is_some() && Some(project_id) != first_project.as_ref())
+        .map(|(project_id, session_id, _)| SessionKey::local(project_id, session_id));
+    let mut entries = Vec::new();
+    for (project_id, session_id, row) in &targets {
+        let session = SessionKey::local(project_id, session_id);
+        for sleeping in [true, false] {
+            for focus in ["self", "other", "none"] {
+                let focused = match focus {
+                    "self" => Some(session.clone()),
+                    "other" => elsewhere.clone(),
+                    _ => None,
+                };
+                entries.push(lifecycle_entry(
+                    core,
+                    &session,
+                    sleeping,
+                    focus,
+                    focused,
+                    row.as_ref(),
+                    now_ms,
+                ));
+            }
+        }
+    }
+    entries
+}
+
+/// One action, driven from one starting state through all three answers and, for the accepted
+/// one, all three echoes.
+fn lifecycle_entry(
+    core: &Core,
+    session: &SessionKey,
+    sleeping: bool,
+    focus: &str,
+    focused: Option<SessionKey>,
+    row: Option<&Value>,
+    now_ms: u64,
+) -> Value {
+    let mut base = core.clone();
+    if let Some(focused) = &focused {
+        base.handle(
+            Event::Intent(Intent::FocusSession {
+                session: focused.clone(),
+                visible: None,
+            }),
+            now_ms,
+        );
+    }
+    let payload = json!({
+        "type": "setSessionSleeping",
+        "sessionId": session.to_sidebar_session_id(),
+        "sleeping": sleeping,
+    });
+    let Some(request) = plan_lifecycle_request(&base, &payload) else {
+        return json!({
+            "sessionId": session.to_sidebar_session_id(),
+            "sleeping": sleeping,
+            "focus": focus,
+            "owned": false,
+        });
+    };
+    let focused_now = base.focus().focused_session.clone();
+    // Each answer is compared by what it LEAVES, not by the follow-up list: the two sides express
+    // the optimistic value differently (an overlay here, a written row there), so the comparable
+    // thing is the state the sidebar would draw afterwards plus which row took the focus.
+    let mut answers = Map::new();
+    let mut accepted_store = base.clone();
+    for answer in [
+        LifecycleAnswer::Accepted,
+        LifecycleAnswer::Declined,
+        LifecycleAnswer::Failed,
+    ] {
+        let follow_ups = apply_lifecycle_answer(&request, answer, focused_now.as_ref(), now_ms);
+        let mut store = base.clone();
+        for follow_up in &follow_ups {
+            if let LifecycleFollowUp::Patch { session, patch } = follow_up {
+                store.handle(
+                    Event::Intent(Intent::PatchSession {
+                        session: session.clone(),
+                        patch: patch.clone(),
+                    }),
+                    now_ms,
+                );
+            }
+        }
+        answers.insert(
+            answer.as_str().to_string(),
+            json!({
+                "state": lifecycle_json(effective_lifecycle(&store, session).as_deref()),
+                "focus": Value::Array(
+                    follow_ups
+                        .iter()
+                        .filter(|follow_up| matches!(follow_up, LifecycleFollowUp::Focus { .. }))
+                        .map(LifecycleFollowUp::to_json)
+                        .collect(),
+                ),
+            }),
+        );
+        if answer == LifecycleAnswer::Accepted {
+            accepted_store = store;
+        }
+    }
+    // The echo half: the daemon is made to say three different things about the same row, from the
+    // state an accepted answer left behind.
+    let after = accepted_store;
+    let mut echo = Map::new();
+    if let Some(row) = row {
+        let original = row
+            .get("lifecycleState")
+            .and_then(Value::as_str)
+            .unwrap_or("running")
+            .to_string();
+        let agreed = match sleeping {
+            true => "sleeping",
+            false => "running",
+        };
+        // A third value neither side predicted. `stopped` is what a session that really ended
+        // reports, and it is the case the user meets as "I put it to sleep and it came back".
+        for (name, state) in [
+            ("agrees", agreed.to_string()),
+            ("stillOld", original.clone()),
+            ("movedOn", "stopped".to_string()),
+        ] {
+            let mut echoed = after.clone();
+            let mut echo_row = row.clone();
+            echo_row["lifecycleState"] = Value::String(state.clone());
+            let frame = json!({
+                "type": "presentationDelta",
+                "protocolVersion": 1,
+                "serverId": "parity",
+                "clientId": "parity",
+                "revision": now_revision(&echoed, session),
+                "delta": { "type": "sessionUpdated", "session": echo_row },
+            });
+            // A gate whose echo silently fails to apply cannot fail: every one of the three
+            // answers would then read back the optimistic value, and two of the three are
+            // ALLOWED to. So a frame that does not parse, or that the store ignores, stops the
+            // run instead of quietly agreeing with itself.
+            let parsed = ServerEvent::parse(&frame.to_string())
+                .unwrap_or_else(|error| panic!("the echo frame does not parse: {error:?}"));
+            let output = echoed.handle(
+                Event::Frame {
+                    machine: MachineId::Local,
+                    frame: Box::new(parsed),
+                },
+                now_ms,
+            );
+            assert!(
+                output.changes.ignored.is_none(),
+                "the echo frame was ignored: {:?}",
+                output.changes.ignored
+            );
+            echo.insert(
+                name.to_string(),
+                lifecycle_json(effective_lifecycle(&echoed, session).as_deref()),
+            );
+        }
+    }
+    json!({
+        "sessionId": session.to_sidebar_session_id(),
+        "sleeping": sleeping,
+        "focus": focus,
+        "owned": true,
+        "request": request.to_json(),
+        "answers": Value::Object(answers),
+        "echo": Value::Object(echo),
+    })
+}
+
+/// One past the revision the store holds, so the delta is never dropped as stale.
+fn now_revision(core: &Core, session: &SessionKey) -> i64 {
+    core.presentation()
+        .loaded(&session.machine)
+        .map(|loaded| loaded.revision + 1)
+        .unwrap_or(1)
+}
+
+/// The lifecycle state the sidebar would draw for a row: the daemon value with the overlay on top,
+/// and nothing at all when the row is not there.
+fn effective_lifecycle(core: &Core, session: &SessionKey) -> Option<String> {
+    core.presentation()
+        .machine(&session.machine)?
+        .effective_session(&session.project_id, &session.session_id)
+        .map(|row| row.lifecycle_state.as_str().to_string())
+}
+
+fn lifecycle_json(state: Option<&str>) -> Value {
+    state.map_or(Value::Null, |state| Value::String(state.to_string()))
 }
 
 fn group_message_types() -> Vec<&'static str> {

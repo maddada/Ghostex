@@ -11,7 +11,7 @@ pub(crate) enum NativeSidebarClickReaction {
     InProcess,
     /// The session got a staged tab; the runtime's wake and attach fill it.
     Staged,
-    /// Not a local session of the active project (or a browser row): the runtime's route owns it.
+    /// Not a local session row (a browser or remote row, or one the sidebar snapshot does not hold): the runtime's route owns it.
     NotApplied,
 }
 
@@ -22,13 +22,18 @@ impl GhostexGpuiApp {
         sidebar_session_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> NativeSidebarClickReaction {
-        let reaction = if self.focus_native_sidebar_session_in_process(sidebar_session_id, cx) {
-            NativeSidebarClickReaction::InProcess
-        } else if self.stage_native_sidebar_session_tab(sidebar_session_id, cx) {
-            NativeSidebarClickReaction::Staged
-        } else {
-            NativeSidebarClickReaction::NotApplied
-        };
+        let switched_project =
+            self.swap_native_sidebar_click_workspace_project(sidebar_session_id, cx);
+        let keep_view =
+            switched_project && self.native_sidebar_click_keeps_remembered_view(sidebar_session_id);
+        let reaction =
+            if !keep_view && self.focus_native_sidebar_session_in_process(sidebar_session_id, cx) {
+                NativeSidebarClickReaction::InProcess
+            } else if self.stage_native_sidebar_session_tab(sidebar_session_id, keep_view, cx) {
+                NativeSidebarClickReaction::Staged
+            } else {
+                NativeSidebarClickReaction::NotApplied
+            };
         let applied = reaction != NativeSidebarClickReaction::NotApplied;
         if applied && let Some(key) = gpui_combined_presentation_session_key(sidebar_session_id) {
             // The runtime routes the same click and sends its own focus request for the session. It is applied while this click is still the newest selection (it attaches a staged tab) and dropped once the user has moved on (gx_store/local_focus.rs).
@@ -37,9 +42,43 @@ impl GhostexGpuiApp {
         reaction
     }
 
+    /// CDXC:Sidebar 2026-09-20 WHY:
+    /// A row click on another project's session reached the workspace only after the runtime had published the project change, so nothing on the pane moved until then and the previous project's session stayed on screen for the whole wake and attach. Everything the swap needs is already in the model, so the click's own frame runs it and the runtime's later project change lands on the project that is already active; a stale active-project payload produced before this selection is refused by the store's focus stamp (gx_store/local_focus.rs), which the reaction below advances.
+    /// Browser rows and remote sessions keep the bridge path, which owns their own activation.
+    fn swap_native_sidebar_click_workspace_project(
+        &mut self,
+        sidebar_session_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let Some(key) = gpui_combined_presentation_session_key(sidebar_session_id) else {
+            return false;
+        };
+        if self.agents_workspace_project_id.as_deref() == Some(key.project_id.as_str()) {
+            return false;
+        }
+        let Some(row) = self.native_sidebar_session_row(sidebar_session_id) else {
+            return false;
+        };
+        if row.is_browser() {
+            return false;
+        }
+        self.swap_agents_workspace_to_project_id(Some(key.project_id.clone()), cx);
+        self.agents_workspace_project_id.as_deref() == Some(key.project_id.as_str())
+    }
+
+    /// CDXC:Navigation 2026-09-20 WHY:
+    /// The 2026-09-11 decision in `focus_local_workspace_terminal_from_message` (workspace_events.rs) is that landing on another project keeps that project's remembered view, and only a session click inside the active project opens Agents. The swap above restored that view, so a click that changed the project reads it here: when it is not Agents and no project-editor companion can show the session, the click stages its tab in the background instead of switching to Agents.
+    fn native_sidebar_click_keeps_remembered_view(&self, sidebar_session_id: &str) -> bool {
+        let Some(key) = gpui_combined_presentation_session_key(sidebar_session_id) else {
+            return false;
+        };
+        self.active_mode != TitlebarMode::Agents
+            && !self.should_keep_project_editor_open_for_local_workspace_terminal_focus(&key)
+    }
+
     /// CDXC:Sidebar 2026-09-19 WHY:
     /// A row click reached the workspace only after the service thread ran the sidebar command, the runtime routed the focus, and the bridge message came back, so the pane switched one service-thread turn after the row highlight even when the session already had a tab; Waku switches in the click's own frame.
-    /// A local, awake session of the active project whose tab already has a live terminal is selected here, synchronously, through the same tab selection the bridge path ends in. The runtime still receives the command so presentation focus, attention acknowledgement and the sidebar snapshot follow. Other projects, remote and browser sessions keep the bridge path, which owns project switches and gxserver attach plans.
+    /// A local, awake session of the active project whose tab already has a live terminal is selected here, synchronously, through the same tab selection the bridge path ends in. The runtime still receives the command so presentation focus, attention acknowledgement and the sidebar snapshot follow. Another project's session reaches this path once `swap_native_sidebar_click_workspace_project` has made it the active one, and only when the destination's remembered view is Agents; remote and browser sessions keep the bridge path, which owns their activation and gxserver attach plans.
     /// The selection is a store intent (gx_store/local_focus.rs). The runtime's focus message for the same click is recognised by the store's stamp order, not by time: it is applied while the click is still the newest selection and dropped once the user has moved on. This supersedes the `sidebar_in_process_focus` marker and its three second echo window of earlier the same day.
     pub(crate) fn focus_native_sidebar_session_in_process(
         &mut self,
@@ -105,6 +144,7 @@ impl GhostexGpuiApp {
     fn stage_native_sidebar_session_tab(
         &mut self,
         sidebar_session_id: &str,
+        keep_view: bool,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         let Some(key) = gpui_combined_presentation_session_key(sidebar_session_id) else {
@@ -197,7 +237,7 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
-        if !keep_editor {
+        if !keep_editor && !keep_view {
             self.change_active_mode_with_pane_state(TitlebarMode::Agents, cx);
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
         }
