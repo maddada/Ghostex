@@ -2064,7 +2064,6 @@ impl GhostexGpuiApp {
                     "ghostex-gpui-sidebar-resize-grab-strip",
                     WorkspaceSplitAxis::Horizontal,
                     ResizeRailGrabSide::Leading,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(|this, hovered, _, cx| {
                     this.set_sidebar_divider_hovering(*hovered, cx);

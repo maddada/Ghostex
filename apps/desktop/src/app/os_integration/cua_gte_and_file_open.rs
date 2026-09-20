@@ -117,41 +117,6 @@ impl GhostexGpuiApp {
         );
     }
 
-    pub(crate) fn refresh_gpui_quick_access_sessions_state_in_background(
-        &mut self,
-        mut sidebar_state_message: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:Sessions 2026-08-08:
-        The reusable app-modal hydrate is settings-oriented and intentionally
-        carries no session groups. Read the authoritative gxserver presentation
-        off the UI thread when the Sessions page opens, project it into the
-        existing SidebarSessionGroup contract, and apply it as a normal
-        sessionState message. Closed-session paging remains independent, so the
-        modal can display whichever real dataset arrives first without a fake
-        loading row or a second list area.
-        */
-        let active_project_id = self.gpui_daemon_sessions_active_project_id();
-        self.run_gpui_app_modal_sidebar_status_task(
-            move || {
-                let groups = gpui_read_gxserver_presentation_snapshot()
-                    .map(|snapshot| {
-                        gpui_quick_access_sidebar_groups_from_presentation_snapshot(
-                            &snapshot,
-                            active_project_id.as_deref(),
-                        )
-                    })
-                    .unwrap_or_default();
-                sidebar_state_message["groups"] = serde_json::Value::Array(groups);
-                sidebar_state_message["type"] =
-                    serde_json::Value::String("sessionState".to_string());
-                sidebar_state_message
-            },
-            cx,
-        );
-    }
-
     pub(crate) fn gpui_daemon_sessions_active_project_id(&self) -> Option<String> {
         self.latest_sidebar_project_snapshot
             .as_ref()

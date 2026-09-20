@@ -13,17 +13,84 @@ use serde_json::{Value, json};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /**
- * Three steps between the fitted size and the largest view, spaced geometrically so the first
- * click is always a modest zoom. React measures the original's natural size to pick its steps;
- * GPUI paints from the fitted box, so the steps are fixed multiples of it instead.
+ * Three steps between the fitted size and the picture's own pixels, spaced geometrically so the
+ * first click is a modest zoom and the last one is exactly 1:1: React's `zoomWidthsForImage`.
  */
 pub(super) const ZOOM_LEVEL_COUNT: usize = 3;
-const ZOOM_STEPS: [f32; ZOOM_LEVEL_COUNT] = [1.5, 2.25, 3.375];
+/// What a zoom step enlarges the fitted box by when the picture itself cannot be measured.
+const UNMEASURED_ZOOM_STEPS: [f32; ZOOM_LEVEL_COUNT] = [1.5, 2.25, 3.375];
 /// React caps the fitted picture at 75% of the window height; the same cap keeps the toolbar clear.
 const FIT_HEIGHT: f32 = 0.75;
 const FIT_WIDTH: f32 = 0.9;
 /// The app-bridge image transfer moves already-base64 bytes in ordered 256 KiB messages.
 const SAVE_CHUNK_CHARS: usize = 256 * 1024;
+
+/**
+ * The picture's own pixel size, read from the header of the bytes the viewer already holds.
+ *
+ * GPUI has the decoded frame but does not hand it out, and the pixels are not wanted here anyway:
+ * only the width and height decide the box the picture is painted in.
+ */
+fn header_size(picture: &gpui::Image) -> Option<gpui::Size<gpui::Pixels>> {
+    let reader = image::ImageReader::new(std::io::Cursor::new(picture.bytes.as_slice()))
+        .with_guessed_format()
+        .ok()?;
+    let (width, height) = reader.into_dimensions().ok()?;
+    (width > 0 && height > 0).then(|| gpui::size(px(width as f32), px(height as f32)))
+}
+
+/**
+ * The whole picture, capped at the window box and never enlarged past its own pixels, which is
+ * what React's `max-height` and `max-width` caps do to an `<img>`.
+ */
+fn fitted_size(
+    natural: gpui::Size<gpui::Pixels>,
+    viewport: gpui::Size<gpui::Pixels>,
+) -> gpui::Size<gpui::Pixels> {
+    let (width, height) = (f32::from(natural.width), f32::from(natural.height));
+    let scale = (f32::from(viewport.width) * FIT_WIDTH / width)
+        .min(f32::from(viewport.height) * FIT_HEIGHT / height)
+        .min(1.0);
+    gpui::size(px(width * scale), px(height * scale))
+}
+
+/**
+ * The width each zoom step paints, geometric from the fitted width up to the picture's own pixels,
+ * or `None` when 1:1 shows no more than the fitted size already does and clicking is therefore
+ * pretending to zoom. React's `zoomWidthsForImage`, step for step.
+ */
+fn zoom_widths(
+    natural: gpui::Size<gpui::Pixels>,
+    viewport: gpui::Size<gpui::Pixels>,
+) -> Option<[f32; ZOOM_LEVEL_COUNT]> {
+    let natural_width = f32::from(natural.width);
+    let fitted_width = f32::from(fitted_size(natural, viewport).width);
+    if fitted_width <= 0.0 || natural_width <= fitted_width + 1.0 {
+        return None;
+    }
+    let ratio = (natural_width / fitted_width).powf(1.0 / ZOOM_LEVEL_COUNT as f32);
+    // The last step is the picture at 1:1; the ones before it are spaced evenly up to it.
+    let mut widths = [natural_width; ZOOM_LEVEL_COUNT];
+    for (level, width) in widths.iter_mut().enumerate().take(ZOOM_LEVEL_COUNT - 1) {
+        *width = fitted_width * ratio.powi(level as i32 + 1);
+    }
+    Some(widths)
+}
+
+/// The size this zoom level paints the picture at.
+fn painted_size(
+    natural: gpui::Size<gpui::Pixels>,
+    viewport: gpui::Size<gpui::Pixels>,
+    zoom: usize,
+) -> gpui::Size<gpui::Pixels> {
+    let fitted = fitted_size(natural, viewport);
+    let Some(widths) = zoom_widths(natural, viewport).filter(|_| zoom > 0) else {
+        return fitted;
+    };
+    let width = widths[(zoom - 1).min(ZOOM_LEVEL_COUNT - 1)];
+    let height = width * f32::from(natural.height) / f32::from(natural.width);
+    gpui::size(px(width), px(height))
+}
 
 /**
  * CDXC:SessionChat 2026-09-19 DECISION:
@@ -76,6 +143,57 @@ impl ImageViewerWindow {
             )
             .on_click(cx.listener(move |this, _, _, cx| action(this, cx)))
             .into_any_element()
+    }
+
+    /**
+     * The picture's own pixel size, or `None` when nothing here can know it.
+     *
+     * CDXC:SessionChat 2026-09-20 WHY:
+     * GPUI lays an `img` out at the natural size of its bytes and then clamps the width and the
+     * height at `max_w`/`max_h` independently, so a picture shaped differently from the fitted box
+     * keeps the leftover as empty element around the painting. That margin still takes clicks: it
+     * zoomed instead of dismissing, and a reader had to aim far outside the picture to close the
+     * viewer. Measuring the picture here lets the element be exactly the picture.
+     */
+    fn natural_size(
+        &mut self,
+        source: &ChatImageSource,
+        window: &mut Window,
+        cx: &mut gpui::App,
+    ) -> Option<gpui::Size<gpui::Pixels>> {
+        match source {
+            // Vector bytes have no pixel size of their own: GPUI draws them into whatever box they
+            // are given, so the fitted box is the right one and there is nothing to measure.
+            ChatImageSource::Bytes(picture) if picture.format != gpui::ImageFormat::Svg => {
+                if let Some((id, measured)) = self.measured
+                    && id == picture.id
+                {
+                    return measured;
+                }
+                let measured = header_size(picture);
+                self.measured = Some((picture.id, measured));
+                measured
+            }
+            // An address GPUI fetches itself: its decoded frame carries the size, and asking the
+            // asset cache the `img` element reads fetches nothing twice.
+            ChatImageSource::Uri(url) => {
+                let path = url.split(['?', '#']).next().unwrap_or(url);
+                if path.to_ascii_lowercase().ends_with(".svg") {
+                    return None;
+                }
+                let gpui::ImageSource::Resource(resource) = gpui::ImageSource::from(url.clone())
+                else {
+                    return None;
+                };
+                let data = window
+                    .use_asset::<gpui::ImgResourceLoader>(&resource, cx)?
+                    .ok()?;
+                let size = data.size(0);
+                let (width, height) = (i32::from(size.width), i32::from(size.height));
+                (width > 0 && height > 0).then(|| gpui::size(px(width as f32), px(height as f32)))
+            }
+            _ => None,
+        }
     }
 
     fn current_image(&self, cx: &Context<Self>) -> Option<Value> {
@@ -185,34 +303,55 @@ impl Render for ImageViewerWindow {
         let source = self.chat.update(cx, |chat, cx| chat.chat_image(&image, cx));
         let loading = matches!(source, ChatImageSource::Loading);
         let viewport = window.viewport_size();
+        let natural = self.natural_size(&source, window, cx);
+        // Exactly the box the picture fills, whenever its own size is known.
+        let painted = natural.map(|natural| painted_size(natural, viewport, zoom));
+        // A picture painted at its own pixels already shows everything it has, so clicking it is
+        // not a zoom; one nothing here can measure is enlarged by the steps below instead.
+        let zooms = natural.is_none_or(|natural| zoom_widths(natural, viewport).is_some());
+        // The caps stand in for the pictures that cannot be measured (vector bytes, an address
+        // still being fetched), and a zoom step enlarges the fitted box itself.
         let step = if zoom == 0 {
             1.0
         } else {
-            ZOOM_STEPS[(zoom - 1).min(ZOOM_LEVEL_COUNT - 1)]
+            UNMEASURED_ZOOM_STEPS[(zoom - 1).min(ZOOM_LEVEL_COUNT - 1)]
         };
         let max_height = viewport.height * FIT_HEIGHT * step;
         let max_width = viewport.width * FIT_WIDTH * step;
+        let fitted = |picture: gpui::Img| {
+            match painted {
+                Some(size) => picture.w(size.width).h(size.height),
+                None => picture.max_h(max_height).max_w(max_width),
+            }
+            .object_fit(gpui::ObjectFit::Contain)
+            .into_any_element()
+        };
         let picture = match source {
-            ChatImageSource::Uri(url) => Some(
-                img(url)
-                    .max_h(max_height)
-                    .max_w(max_width)
-                    .object_fit(gpui::ObjectFit::Contain)
-                    .into_any_element(),
-            ),
-            ChatImageSource::Bytes(bytes) => Some(
-                img(bytes)
-                    .max_h(max_height)
-                    .max_w(max_width)
-                    .object_fit(gpui::ObjectFit::Contain)
-                    .into_any_element(),
-            ),
+            ChatImageSource::Uri(url) => Some(fitted(img(url))),
+            ChatImageSource::Bytes(bytes) => Some(fitted(img(bytes))),
             _ => None,
         };
         let content = match picture {
             Some(picture) => div()
                 .id("chat-image-viewer-picture")
-                .chat_cursor_pointer()
+                /*
+                CDXC:SessionChat 2026-09-20 DECISION:
+                User: the previewed picture shows a zoom cursor, zoom-in while a click enlarges it
+                and zoom-out on the step that returns it to the fitted size. It is the one place in
+                the GPUI chat view that changes the cursor at all, so the arrow stays on a picture
+                that has nothing left to show, on the thumbnails, and everywhere else.
+                SEE-ALSO: apps/desktop/src/app/native_chat/cursor.rs,
+                packages/core-ui/styles/chat.css `.ghostex-chat-image-preview[data-zoom]`.
+                */
+                .map(|element| match (zooms, zoom >= ZOOM_LEVEL_COUNT) {
+                    (false, _) => element.chat_cursor_pointer(),
+                    (true, false) => element.cursor(gpui::CursorStyle::ZoomIn),
+                    (true, true) => element.cursor(gpui::CursorStyle::ZoomOut),
+                })
+                .flex_shrink_0()
+                .when_some(painted, |element, size| {
+                    element.w(size.width).h(size.height)
+                })
                 // Clicking the picture itself steps the zoom; only the surround dismisses.
                 .on_mouse_down(
                     gpui::MouseButton::Left,

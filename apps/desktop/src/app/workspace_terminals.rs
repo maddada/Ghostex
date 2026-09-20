@@ -79,6 +79,7 @@ impl GhostexGpuiApp {
                     session_id: key.session_id.clone(),
                     startup_restore: false,
                     keep_view: false,
+                    wake_sleeping: false,
                 },
                 cx,
             );
@@ -1634,6 +1635,7 @@ impl GhostexGpuiApp {
     pub(crate) fn select_local_workspace_terminal_keeping_view(
         &mut self,
         key: &GpuiLocalWorkspaceSessionKey,
+        wake_sleeping: bool,
         cx: &mut gpui::Context<Self>,
     ) {
         support_logs::append(
@@ -1645,11 +1647,17 @@ impl GhostexGpuiApp {
             }),
         );
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
-        if self.select_existing_local_workspace_terminal_keeping_view(key, cx) {
+        if !wake_sleeping && self.select_existing_local_workspace_terminal_keeping_view(key, cx) {
             self.reconcile_preferred_agents_chat_launch_intents(cx);
             return;
         }
-        let attach_intent = self.local_workspace_attach_intent_for_key(key);
+        let mapped_attach_intent = self.local_workspace_attach_intent_for_key(key);
+        // The background half of the same one-round-trip wake the ordinary path uses (`wake_sleeping` on the focus message).
+        let attach_intent = if wake_sleeping {
+            GpuiLocalWorkspaceAttachIntent::Wake
+        } else {
+            mapped_attach_intent
+        };
         let requested_pane_id = self
             .local_workspace_session_mappings
             .get(key)

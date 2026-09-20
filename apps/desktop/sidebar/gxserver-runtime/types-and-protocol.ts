@@ -578,6 +578,8 @@ export type GpuiPendingRemoteGxserverRequest = {
 
 export type GpuiGxserverCreatedSessionResult = {
   session?: {
+    /** The created row's agent, so a restore can resolve its Default Agent View before anything is woken. */
+    agentId?: string;
     projectId?: string;
     sessionId?: string;
   };

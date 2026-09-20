@@ -497,6 +497,9 @@ impl GhostexGpuiApp {
                 // two, from inside the receiver (gx_store/sidebar_shadow.rs).
                 self.receive_native_sidebar_snapshot(&payload, cx);
             }
+            cef::SidebarBridgeEvent::NativeQuickAccessSnapshot(payload) => {
+                self.receive_native_quick_access_update(&payload, cx);
+            }
             cef::SidebarBridgeEvent::ResourcesSnapshotRequest(payload) => {
                 self.receive_sidebar_resources_snapshot_request_payload(&payload, cx);
             }
@@ -960,7 +963,24 @@ impl GhostexGpuiApp {
             );
             return;
         }
-        if message.preferred_interface == GpuiPreferredAgentInterface::Chat {
+        /*
+        CDXC:SessionChat 2026-09-20 WHY:
+        Every sidebar focus now carries the session's effective Default Agent View, not only the creation flows, so a
+        restore can open its chat surface while the wake and attach run behind it instead of showing the terminal until
+        the runtime is live. A session that already has a tab carries its own recorded view in
+        `agents_chat_mode_sessions`, and arming the launch intent for it would pull a tab the user deliberately put back
+        in Terminal into Chat on the next click, so only a session with no tab yet takes the intent.
+        */
+        let session_has_tab = self
+            .local_workspace_session_mappings
+            .get(&key)
+            .copied()
+            .is_some_and(|shell_session_id| {
+                self.agents_workspace
+                    .pane_id_for_session(shell_session_id)
+                    .is_some()
+            });
+        if message.preferred_interface == GpuiPreferredAgentInterface::Chat && !session_has_tab {
             self.pending_agents_chat_launch_intents
                 .insert(GpuiWorkspaceTerminalSessionKey::Local(key.clone()));
         }
@@ -980,7 +1000,7 @@ impl GhostexGpuiApp {
             && self.view_panel_open()
             && !self.should_keep_project_editor_open_for_local_workspace_terminal_focus(&key)
         {
-            self.select_local_workspace_terminal_keeping_view(&key, cx);
+            self.select_local_workspace_terminal_keeping_view(&key, message.wake_sleeping, cx);
             return;
         }
         // macOS TerminalFocusDebugLog parity (scenario native.terminal.focus):
@@ -1101,7 +1121,16 @@ impl GhostexGpuiApp {
                 self.agents_gpui_engine_terminals.remove(&shell_session_id);
                 cx.notify();
             }
-        } else if self.focus_existing_gpui_local_workspace_terminal(&key, cx) {
+        /*
+        CDXC:FocusRouting 2026-09-20 WHY:
+        A session the sidebar reports asleep never reuses its mapped tab in place: the daemon behind that tab is dead,
+        so reusing it shows a terminal nothing is attached to. It goes to the attach plan below, whose Wake intent
+        revives the provider and rebuilds the attach payload for the same tab. This is what the sidebar's own wake used
+        to guarantee by running before this message was ever posted.
+        */
+        } else if !message.wake_sleeping
+            && self.focus_existing_gpui_local_workspace_terminal(&key, cx)
+        {
             support_logs::append_temporary(
                 support_logs::GpuiSupportLog::TerminalFocus,
                 "TEMP.gpui.sessionSwitchLatency.focusExistingCompleted",
@@ -1114,7 +1143,14 @@ impl GhostexGpuiApp {
             self.reconcile_preferred_agents_chat_launch_intents(cx);
             return;
         }
-        let attach_intent = self.local_workspace_attach_intent_for_key(&key);
+        let mapped_attach_intent = self.local_workspace_attach_intent_for_key(&key);
+        // A session the sidebar knows is asleep wakes through this one plan (`wake_sleeping` on the message), whether
+        // or not it still has a mapped tab to read a Sleeping presentation state from.
+        let attach_intent = if message.wake_sleeping {
+            GpuiLocalWorkspaceAttachIntent::Wake
+        } else {
+            mapped_attach_intent
+        };
         support_logs::append_temporary(
             support_logs::GpuiSupportLog::TerminalFocus,
             "TEMP.gpui.sessionSwitchLatency.attachPlanRequired",

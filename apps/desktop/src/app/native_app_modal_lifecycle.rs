@@ -145,6 +145,12 @@ impl GhostexGpuiApp {
             GpuiAppModalKind::Worktree => {
                 self.open_gpui_create_worktree_modal(open_message, cx);
             }
+            GpuiAppModalKind::CommandPalette
+            | GpuiAppModalKind::RecentProjects
+            | GpuiAppModalKind::PreviousSessions
+            | GpuiAppModalKind::StashedPrompts => {
+                self.open_gpui_quick_access_modal(kind, open_message, cx);
+            }
             // NATIVE-MODAL-OPEN-ARMS: one arm per converted modal kind.
             _ => return false,
         }
@@ -274,6 +280,12 @@ impl GhostexGpuiApp {
         self.app_modal_command_return_focus_target = None;
         if modal.kind == GpuiAppModalKind::ExportTranscriptResult {
             self.pending_export_transcript_reveal_path = None;
+        }
+        // Quick Access keeps a live controller in the sidebar runtime; tell it to
+        // stop publishing when its window is replaced or dismissed.
+        if crate::app::window::quick_access::QuickAccessTabId::from_modal_kind(modal.kind).is_some()
+        {
+            self.dispatch_gpui_quick_access_command(serde_json::json!({ "type": "closed" }), cx);
         }
         modal
             .window

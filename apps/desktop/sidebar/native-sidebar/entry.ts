@@ -6,6 +6,7 @@ import { createGpuiSidebarHudState } from '../gxserver-runtime/helpers/command-p
 import type { GpuiSidebarRuntimeSettings } from '../gxserver-runtime/types-and-protocol';
 import { installSessionChatRuntimeBroker } from '../session-chat-runtime/broker';
 import { connectNativeSidebar } from './controller';
+import { connectNativeQuickAccess } from '../native-quick-access/controller';
 
 const initialSettings = new Promise<GpuiSidebarRuntimeSettings>((resolve) => {
   const installed = currentGpuiRuntimeSettings();
@@ -23,5 +24,6 @@ bootClientStorage(async () => {
   installSessionChatRuntimeBroker();
   const runtime = createGpuiSidebarRuntime();
   connectNativeSidebar(runtime);
+  connectNativeQuickAccess(runtime);
   runtime.start();
 });

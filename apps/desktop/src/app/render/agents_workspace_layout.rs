@@ -294,7 +294,6 @@ impl GhostexGpuiApp {
                 format!("ghostex-gpui-workspace-split-grab-strip-{}", split_id.0),
                 axis,
                 grab_side,
-                self.resize_rail_drag_active(),
             )
             .on_hover(cx.listener(move |this, hovered, _, cx| {
                 this.set_workspace_split_hovering(split_id, *hovered, cx);
