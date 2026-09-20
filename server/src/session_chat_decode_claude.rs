@@ -228,7 +228,7 @@ fn claude_delivered_queue_keys(record: &Map<String, Value>) -> Vec<String> {
         return Vec::new();
     }
     let content = as_record(record.get("message")).and_then(|message| message.get("content"));
-    claude_content_blocks(content)
+    claude_prompt_blocks(claude_content_blocks(content))
         .into_iter()
         .filter_map(|block| match block {
             SessionChatBlock::Text { text } => {
@@ -267,6 +267,109 @@ const CLAUDE_ATTACHMENT_RECORD_TYPE: &str = "attachment";
 const CLAUDE_QUEUED_COMMAND_ATTACHMENT: &str = "queued_command";
 
 /*
+CDXC:SessionChat 2026-09-20 WHY:
+Claude Code wraps a prompt that reached it as a bracketed paste in an envelope
+of its own before recording it: `<pasted_content id="abcd">` and
+`</pasted_content id="abcd">` each on a line of their own, the id four hex digits
+repeated by the closing tag. The chat send path delivers a composer message as
+ONE paste frame, so from Claude Code 2.1.278 on, every send its TUI takes as a
+paste comes back wrapped. Read as written, the tags printed verbatim inside the
+user's own bubble, a delivered prompt stopped matching the enqueue row standing
+in for it, and the optimistic echo (which carries exactly what the composer sent)
+stopped matching its transcript twin, so a sent message stayed on screen twice
+and the second copy never retired. Decoding takes the envelope off, as Claude
+Code's own display path does, so every reader of a prompt sees the words the user
+wrote.
+*/
+const CLAUDE_PASTE_OPEN: &str = "<pasted_content id=\"";
+const CLAUDE_PASTE_ID_LEN: usize = 4;
+const CLAUDE_PASTE_OPEN_END: &str = "\">\n";
+
+fn is_claude_paste_id(text: &str) -> bool {
+    text.len() == CLAUDE_PASTE_ID_LEN
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+/// One piece of a prompt that was split by a paste envelope, appended to what
+/// the pieces before it already spell.
+fn push_prompt_piece(prompt: &mut String, piece: &str) {
+    if piece.is_empty() {
+        return;
+    }
+    if !prompt.is_empty() {
+        prompt.push('\n');
+    }
+    prompt.push_str(piece);
+}
+
+/// The prompt behind every paste envelope in `text`, or `None` when it carries
+/// no envelope at all. The envelope owns its two tag lines and the blank line
+/// Claude pads it with on each side, so what a block's body is rejoined to is
+/// the typed text around it, trimmed at the seam and separated by one newline.
+/// A body keeps its own spacing: it is the pasted text byte for byte.
+fn unwrap_claude_pasted_content(text: &str) -> Option<String> {
+    let mut unwrapped = String::new();
+    let mut taken = 0;
+    let mut search = 0;
+    let mut wrapped = false;
+    while let Some(offset) = text[search..].find(CLAUDE_PASTE_OPEN) {
+        let open = search + offset;
+        let id_start = open + CLAUDE_PASTE_OPEN.len();
+        let id_end = id_start + CLAUDE_PASTE_ID_LEN;
+        let Some(id) = text
+            .get(id_start..id_end)
+            .filter(|id| is_claude_paste_id(id))
+        else {
+            search = id_start;
+            continue;
+        };
+        if !text[id_end..].starts_with(CLAUDE_PASTE_OPEN_END) {
+            search = id_start;
+            continue;
+        }
+        let body = id_end + CLAUDE_PASTE_OPEN_END.len();
+        // The closing tag closes an envelope only where it opens a line of its own.
+        let close_tag = format!("\n</pasted_content id=\"{id}\">");
+        let Some(offset) = text[body - 1..].find(&close_tag) else {
+            break;
+        };
+        let close = body - 1 + offset;
+        push_prompt_piece(&mut unwrapped, text[taken..open].trim());
+        push_prompt_piece(&mut unwrapped, text.get(body..close).unwrap_or_default());
+        taken = close + close_tag.len();
+        if text.as_bytes().get(taken) == Some(&b'\n') {
+            taken += 1;
+        }
+        search = taken;
+        wrapped = true;
+    }
+    if !wrapped {
+        return None;
+    }
+    push_prompt_piece(&mut unwrapped, text[taken..].trim());
+    Some(unwrapped)
+}
+
+/// A prompt's own words, with Claude's paste envelope taken off.
+fn claude_prompt_text(text: String) -> String {
+    unwrap_claude_pasted_content(&text).unwrap_or(text)
+}
+
+fn claude_prompt_blocks(blocks: Vec<SessionChatBlock>) -> Vec<SessionChatBlock> {
+    blocks
+        .into_iter()
+        .map(|block| match block {
+            SessionChatBlock::Text { text } => SessionChatBlock::Text {
+                text: claude_prompt_text(text),
+            },
+            block => block,
+        })
+        .collect()
+}
+
+/*
 CDXC:SessionChat 2026-08-19:
 A prompt the user typed mid-turn is NOT written as a `user` row when the
 harness injects it into the running turn: the queue entry is released as an
@@ -292,7 +395,7 @@ fn decode_claude_queued_command(
     if attachment.get("type").and_then(Value::as_str) != Some(CLAUDE_QUEUED_COMMAND_ATTACHMENT) {
         return None;
     }
-    let prompt = extract_string(attachment.get("prompt"))?;
+    let prompt = claude_prompt_text(extract_string(attachment.get("prompt"))?);
     if prompt.trim().is_empty() {
         return None;
     }
@@ -320,7 +423,7 @@ fn decode_claude_queued_prompt(
     if record.get("operation").and_then(Value::as_str) != Some("enqueue") {
         return None;
     }
-    let content = extract_string(record.get("content"))?;
+    let content = claude_prompt_text(extract_string(record.get("content"))?);
     if content.trim().is_empty() {
         return None;
     }
@@ -414,6 +517,8 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             .into_iter()
             .filter(is_tool_result_block)
             .collect()
+    } else if role == "user" {
+        claude_prompt_blocks(decoded_blocks)
     } else {
         decoded_blocks
     };

@@ -843,8 +843,8 @@ pub struct GhostexGpuiApp {
     pub(crate) command_pane_side: GpuiCommandPaneSide,
     pub(crate) sidebar_width: f32,
     pub(crate) sidebar_collapsed: bool,
-    /// Whether the sidebar's account usage strip shows every account instead of the single collapsed row.
-    pub(crate) sidebar_usage_expanded: bool,
+    /// Whether the sidebar's account usage strip is showing. Hidden by default; the Commands row's chart button is what shows and hides it.
+    pub(crate) sidebar_usage_visible: bool,
     pub(crate) sidebar_drag: Option<SidebarDragState>,
     pub(crate) sidebar_divider_hovering: bool,
     pub(crate) sidebar_divider_hover_visible: bool,

@@ -296,7 +296,7 @@ impl GhostexGpuiApp {
             .ml(px(4.0))
             .items_center()
             .overflow_hidden()
-            .rounded(px(7.0))
+            .rounded(px(TITLEBAR_BUTTON_RADIUS))
             .border_1()
             .border_color(titlebar_button_border_color())
             .bg(workarea_header_split_button_background())

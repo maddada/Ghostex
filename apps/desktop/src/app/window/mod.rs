@@ -16,6 +16,7 @@ pub(crate) mod modal_host;
 pub(crate) mod native_modal_kit;
 pub(crate) mod new_thread_picker;
 pub(crate) mod portless_setup_modal;
+pub(crate) mod quick_access;
 pub(crate) mod remote_gxserver_install_modal;
 pub(crate) mod remote_setup_modal;
 pub(crate) mod remote_sites;

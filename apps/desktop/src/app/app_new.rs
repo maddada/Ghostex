@@ -439,7 +439,7 @@ impl GhostexGpuiApp {
                 command_resize_hover_epoch: 0,
                 gpui_pet_overlay_activities_visible: shell_layout_state
                     .pet_overlay_activities_visible,
-                sidebar_usage_expanded: shell_layout_state.sidebar_usage_expanded,
+                sidebar_usage_visible: shell_layout_state.sidebar_usage_visible,
                 gpui_pet_overlay_avatar_hovered: false,
                 gpui_pet_overlay_animation_state: GpuiPetOverlayAnimationState::Idle,
                 gpui_pet_overlay_animation_started_at: Instant::now(),

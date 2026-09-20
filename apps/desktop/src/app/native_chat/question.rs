@@ -56,6 +56,7 @@ impl NativeChatView {
                 .gap(px(8.0 * s))
                 .child(
                     div()
+                        .min_w_0()
                         .flex_1()
                         .text_color(p.card_muted)
                         .line_height(px(19.6 * s))

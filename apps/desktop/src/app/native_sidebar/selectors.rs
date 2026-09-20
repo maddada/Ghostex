@@ -66,8 +66,10 @@ impl GhostexGpuiApp {
                 .when(overflow, |row| row.child(div().id("native-sidebar-more-spaces").size(px(28.0 * scale)).flex().items_center().justify_center().rounded(px(6.0 * scale)).hover(|row| row.bg(appearance.hover))
                     .child(titlebar_svg_icon("titlebar/dots.svg", 16.0 * scale, appearance.muted))
                     .on_click(cx.listener(move |_, event: &gpui::ClickEvent, window, cx| {
-                        let mut items = vec![json!({"label": "New Space", "icon": "plus", "command": {"type": "editSpace"}}), json!({"separator": true})];
-                        items.extend(hidden.iter().map(|space| json!({"label": space.name, "icon": space.icon, "iconColor": space.color, "checked": space.selected, "command": {"type": "selectSpace", "spaceId": space.id}})));
+                        // CDXC:Spaces 2026-09-20 DECISION: User: the More menu lists the overflowing Spaces first and puts New Space last, under a separator.
+                        let mut items: Vec<_> = hidden.iter().map(|space| json!({"label": space.name, "icon": space.icon, "iconColor": space.color, "checked": space.selected, "command": {"type": "selectSpace", "spaceId": space.id}})).collect();
+                        if !items.is_empty() { items.push(json!({"separator": true})); }
+                        items.push(json!({"label": "New Space", "icon": "plus", "command": {"type": "editSpace"}}));
                         Self::show_native_sidebar_menu(&json!(items), event.position(), scale, window, cx);
                     }))))))
             .into_any_element()

@@ -317,6 +317,80 @@ function mutateTitleRule(name: string | undefined, entry: Json): Json {
   }
 }
 
+/** The bulk half's mutations. */
+function mutateBulk(name: string | undefined, entry: Json): Json {
+  const clone = JSON.parse(JSON.stringify(entry)) as Json;
+  const messages = (clone.request?.messages ?? []) as Json[];
+  switch (name) {
+    // Every fan-out paced, which would make a project Wake of fifty rows take twenty seconds.
+    case 'pace-everything':
+      if (clone.request) clone.request.intervalMs = 350;
+      return clone;
+    // Nothing paced, which is the bulk sleep hammering the daemon that the 2026-06-27 pacing
+    // decision exists to prevent.
+    case 'pace-nothing':
+      if (clone.request) clone.request.intervalMs = 0;
+      return clone;
+    // The set sent in the store's own by-id order rather than the daemon's array order. Invisible
+    // for a concurrent fan-out and visible for a paced one, which is the order rows fall asleep in.
+    case 'reorder-the-bulk-set':
+      if (clone.request) clone.request.messages = [...messages].reverse();
+      return clone;
+    // A stopped row that is pinned or tagged swept into Sleep Inactive, which promotes it back
+    // into the active shelf.
+    case 'sleep-inactive-takes-stopped-rows':
+      if (String((clone.payload as Json)?.type) === 'sleepInactiveProjectSessions' && clone.request)
+        clone.request.messages = [
+          ...messages,
+          { sessionId: 'combined-session:extra:row', sleeping: true, type: 'setSessionSleeping' },
+        ];
+      return clone;
+    // A group sleep that also asks the already-sleeping rows to sleep.
+    case 'group-sleep-ignores-lifecycle':
+      if (String((clone.payload as Json)?.type) === 'setGroupSleeping' && clone.request)
+        clone.request.messages = [
+          ...messages,
+          { sessionId: 'combined-session:extra:row', sleeping: true, type: 'setSessionSleeping' },
+        ];
+      return clone;
+    // The project wake that forgets to move the active project first.
+    case 'drop-the-project-focus':
+      if (clone.request) clone.request.focusProject = null;
+      return clone;
+    default:
+      return clone;
+  }
+}
+
+function mutateBatch(name: string | undefined, entry: Json): Json {
+  const clone = JSON.parse(JSON.stringify(entry)) as Json;
+  switch (name) {
+    // The multi-selection left in place, so the rows stay selected under an action that consumed
+    // them.
+    case 'batch-keeps-the-selection':
+      if (clone.plan) clone.plan.clearSelection = false;
+      return clone;
+    // The messages reordered, which for a batch that pairs a tag with a park changes which one the
+    // daemon sees first.
+    case 'reorder-the-batch':
+      if (clone.plan) clone.plan.messages = [...((clone.plan.messages ?? []) as Json[])].reverse();
+      return clone;
+    default:
+      return clone;
+  }
+}
+
+const BULK_MUTATIONS = [
+  'pace-everything',
+  'pace-nothing',
+  'reorder-the-bulk-set',
+  'sleep-inactive-takes-stopped-rows',
+  'group-sleep-ignores-lifecycle',
+  'drop-the-project-focus',
+  'batch-keeps-the-selection',
+  'reorder-the-batch',
+];
+
 /**
  * The snooze half's mutations.
  *
@@ -553,6 +627,7 @@ async function compare([outDir, ...flags]: string[]) {
     ...FLAGS_MUTATIONS,
     ...MODAL_MUTATIONS,
     ...SNOOZE_MUTATIONS,
+    ...BULK_MUTATIONS,
   ];
   if (mutationName && !known.includes(mutationName)) {
     console.error(`unknown mutation ${mutationName}; one of ${known.join(', ')}`);
@@ -570,6 +645,8 @@ async function compare([outDir, ...flags]: string[]) {
     runTypeScriptSnoozeBoundary,
     runTypeScriptSnoozeActions,
     runTypeScriptSnoozeCalls,
+    runTypeScriptBulk,
+    runTypeScriptBulkPacing,
   } = await import('./lifecycle-parity-typescript.ts');
   // The instants the snooze half was answered against, by case name, so a mutation can recompute
   // a wake time with the rule got wrong.
@@ -602,7 +679,22 @@ async function compare([outDir, ...flags]: string[]) {
   let snoozeActions = 0;
   let snoozeCalls = 0;
   let snoozeRefusals = 0;
+  let bulkSets = 0;
+  let bulkRefusals = 0;
+  let bulkMessages = 0;
+  let batchPlans = 0;
   const differences: string[] = [];
+  // The pacing, measured once through the shipped helper with its real timer rather than per
+  // scenario: at 350 ms a row it is the only probe here whose cost is wall-clock time.
+  const pacing = await runTypeScriptBulkPacing();
+  for (const measured of pacing) {
+    const floor = Number(measured.intervalMs) * (Number(measured.rows) - 1);
+    const paced = Number(measured.elapsedMs) >= floor;
+    if (measured.sleeping === true && !paced)
+      differences.push(`pacing: a bulk sleep of ${measured.rows} rows finished in ${measured.elapsedMs} ms, under the ${floor} ms a paced fan-out cannot beat`);
+    if (measured.sleeping === false && Number(measured.elapsedMs) >= Number(measured.intervalMs))
+      differences.push(`pacing: a bulk wake of ${measured.rows} rows took ${measured.elapsedMs} ms, which is a paced fan-out where the shipped code runs them together`);
+  }
   for (const name of names) {
     const rustPath = join(outDir, name.replace('scenario-', 'rust-actions-'));
     let rust: Json;
@@ -629,6 +721,52 @@ async function compare([outDir, ...flags]: string[]) {
         differences.push(
           `${name} titleRule #${index}: rust ${JSON.stringify(mine.title)} ts ${JSON.stringify(theirTitles[index])}`
         );
+    }
+    // The plural payloads: which rows, in which order, through which per-session action.
+    const theirBulk = await runTypeScriptBulk(scenario, rust);
+    for (const [index, entry] of ((rust.bulk ?? []) as Json[]).entries()) {
+      const theirs = theirBulk[index];
+      const payload = (entry.payload ?? {}) as Json;
+      const where = `${name} bulk #${index} ${String(payload.type)}`;
+      if (entry.owned !== true) {
+        bulkRefusals += 1;
+        continue;
+      }
+      bulkSets += 1;
+      const mine = mutate ? mutateBulk(mutationName, entry) : entry;
+      const myCalls = ((mine.request?.messages ?? []) as Json[]).map((message) => ({
+        call:
+          message.type === 'closeSession' ? 'close' : message.sleeping === true ? 'sleep' : 'wake',
+        session: message.sessionId,
+      }));
+      bulkMessages += myCalls.length;
+      if (canonical(myCalls) !== canonical(theirs?.calls ?? []))
+        differences.push(`${where}: rust ${canonical(myCalls)} ts ${canonical(theirs?.calls ?? [])}`);
+      const myFocus = (mine.request?.focusProject ?? null) as string | null;
+      if (canonical(myFocus) !== canonical(theirs?.focusProject ?? null))
+        differences.push(`${where} focusProject: rust ${canonical(myFocus)} ts ${canonical(theirs?.focusProject ?? null)}`);
+      // The interval is compared against the shipped CALL GRAPH, which the pacing probe above
+      // measured through the real helper. The first cut of this rule read only
+      // `setSessionsSleeping` and reported 364 differences that were the harness being wrong:
+      // `setGroupSleeping(true)` and `sleepInactiveProjectSessions` both delegate to
+      // `setSessionsSleeping(ids, true)` and are paced with it, while every wake and both closes
+      // go through `Promise.all`.
+      const expected = pacedPayload(payload) ? Number(pacing[0]?.intervalMs ?? 0) : 0;
+      if (Number(mine.request?.intervalMs ?? -1) !== expected)
+        differences.push(`${where} intervalMs: rust ${mine.request?.intervalMs} expected ${expected}`);
+    }
+    // The renderer's batch envelope, which is a pass-through of the two lines controller.ts runs.
+    for (const [index, entry] of ((rust.batch ?? []) as Json[]).entries()) {
+      if (entry.owned !== true) continue;
+      batchPlans += 1;
+      const mine = mutate ? mutateBatch(mutationName, entry) : entry;
+      const command = (entry.command ?? {}) as Json;
+      const expected = {
+        clearSelection: command.clearSelection === true,
+        messages: (command.messages ?? []) as Json[],
+      };
+      if (canonical(mine.plan) !== canonical(expected))
+        differences.push(`${name} batch #${index}: rust ${canonical(mine.plan)} controller ${canonical(expected)}`);
     }
     // The wake-time rule, at the fixed instants the clock file names.
     const theirClock = runTypeScriptSnoozeClock(rust);
@@ -874,7 +1012,7 @@ async function compare([outDir, ...flags]: string[]) {
     }
   }
   console.log(
-    `scenarios ${names.length} payloads ${payloads} rustCalls ${rustCalls} tsCalls ${tsCalls} transitions ${transitions} closes ${closes} forks ${forks} flagCalls ${flagCalls} modalOpens ${modalOpens} modalRefusals ${modalRefusals} titleCases ${titleCases} snoozeWakes ${snoozeWakes} snoozeBoundaries ${snoozeBoundaries} snoozeActions ${snoozeActions} snoozeCalls ${snoozeCalls} snoozeRefusals ${snoozeRefusals} overlayKept ${overlayKept} closesRestored ${closesRestored} stoppedUnhidden ${stoppedUnhidden} differences ${differences.length}${
+    `scenarios ${names.length} payloads ${payloads} rustCalls ${rustCalls} tsCalls ${tsCalls} transitions ${transitions} closes ${closes} forks ${forks} flagCalls ${flagCalls} modalOpens ${modalOpens} modalRefusals ${modalRefusals} titleCases ${titleCases} snoozeWakes ${snoozeWakes} snoozeBoundaries ${snoozeBoundaries} snoozeActions ${snoozeActions} snoozeCalls ${snoozeCalls} snoozeRefusals ${snoozeRefusals} bulkSets ${bulkSets} bulkMessages ${bulkMessages} bulkRefusals ${bulkRefusals} batchPlans ${batchPlans} overlayKept ${overlayKept} closesRestored ${closesRestored} stoppedUnhidden ${stoppedUnhidden} differences ${differences.length}${
       mutationName ? ` (injected ${mutationName})` : ''
     }`
   );
@@ -893,6 +1031,10 @@ async function compare([outDir, ...flags]: string[]) {
     ['snoozeActions', snoozeActions],
     ['snoozeCalls', snoozeCalls],
     ['snoozeRefusals', snoozeRefusals],
+    ['bulkSets', bulkSets],
+    ['bulkMessages', bulkMessages],
+    ['bulkRefusals', bulkRefusals],
+    ['batchPlans', batchPlans],
   ];
   const collapsed = measured.filter(([, count]) => count === 0);
   // With a mutation injected the gate is being tested. A mutation passes when it either creates a
@@ -913,6 +1055,16 @@ async function compare([outDir, ...flags]: string[]) {
     return;
   }
   process.exitCode = differences.length ? 1 : 0;
+}
+
+/**
+ * Whether the shipped code reaches `runGpuiSidebarBulkSleepPaced` for this payload: the three ways
+ * into `setSessionsSleeping` with `sleeping === true`, and nothing else.
+ */
+function pacedPayload(payload: Json): boolean {
+  const kind = String(payload.type);
+  if (kind === 'sleepInactiveProjectSessions') return true;
+  return (kind === 'setSessionsSleeping' || kind === 'setGroupSleeping') && payload.sleeping === true;
 }
 
 /**

@@ -63,6 +63,7 @@ impl GhostexGpuiApp {
             .flex_shrink_0()
             .items_center()
             .justify_center()
+            .rounded(px(TITLEBAR_BUTTON_RADIUS))
             .cursor_default()
             .when(enabled, |this| {
                 this.hover(|this| this.bg(titlebar_button_hover_color()))

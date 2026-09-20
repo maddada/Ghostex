@@ -243,6 +243,7 @@ impl GhostexGpuiApp {
             .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
             .items_center()
             .justify_center()
+            .rounded(px(TITLEBAR_BUTTON_RADIUS))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .text_color(icon_color)
             .cursor_default()

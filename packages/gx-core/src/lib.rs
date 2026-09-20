@@ -48,16 +48,17 @@ pub use crate::selectors::{
 };
 pub use crate::sidebar_actions::{
     apply_close_answer, apply_flags_answer, apply_fork_answer, apply_lifecycle_answer,
-    apply_snooze_answer, close_optimistic_follow_ups, iso_string_from_ms,
+    apply_snooze_answer, bulk_request_summary, close_optimistic_follow_ups, iso_string_from_ms,
     local_project_group_project_id, owns_close_message, owns_flags_message, owns_fork_message,
-    owns_lifecycle_message, owns_modal_message, owns_snooze_action, owns_snooze_message,
-    plan_close_request, plan_flags_request, plan_fork_request, plan_lifecycle_request,
+    owns_batch_command, owns_bulk_message, owns_lifecycle_message, owns_modal_message,
+    owns_snooze_action, owns_snooze_message, plan_batch, plan_bulk_request, plan_close_request, plan_flags_request, plan_fork_request, plan_lifecycle_request,
     plan_modal_action, plan_read_only_action, plan_snooze_action, plan_snooze_request,
-    rename_seed_title, snooze_wake_ms, ActionEffect, CloseAnswer, CloseFollowUp, CloseRequest,
+    rename_seed_title, snooze_wake_ms, ActionEffect, BatchPlan, BulkAction, BulkRequest,
+    CloseAnswer, CloseFollowUp, CloseRequest,
     FlagsFollowUp, FlagsRequest, ForkFollowUp, ForkRequest, LifecycleAnswer, LifecycleCall,
     LifecycleFollowUp, LifecycleRequest, ModalAction, SessionFlags, SidebarActionPlan,
     SnoozeAction, SnoozeCall, SnoozeClock, SnoozeFollowUp, SnoozeRequest, ToastLevel,
-    FLAGS_MESSAGE_TYPES, LIFECYCLE_PATCH_TTL_MS, NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
+    BULK_MESSAGE_TYPES, BULK_SLEEP_INTERVAL_MS, FLAGS_MESSAGE_TYPES, LIFECYCLE_PATCH_TTL_MS, NATIVE_PROJECT_PATH_ACTION_MESSAGE_TYPE,
     NATIVE_PROJECT_PATH_ACTION_MESSAGE_VERSION, READ_ONLY_MESSAGE_TYPES, SESSION_SNOOZE_PRESETS,
     SNOOZE_MESSAGE_TYPES,
 };

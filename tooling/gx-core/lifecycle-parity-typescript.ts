@@ -524,6 +524,109 @@ function installModalRecorder(calls: Json[]): void {
 }
 
 /**
+ * The bulk half. Drives the shipped `setGroupSleeping`, `wakeProjectSleepingSessions`,
+ * `sleepInactiveProjectSessions`, `closeInactiveProjectSessions`, `setSessionsSleeping` and the
+ * `closeSessions` arm, and records which per-session call each one made, in order.
+ *
+ * The two seams are the per-session actions themselves, `setSessionSleeping` and
+ * `transitionSession`, which is the boundary the port draws too: everything below them is already
+ * compared by the lifecycle and close halves of this gate, and running them again here would
+ * compare them twice and for the wrong reasons. `focusProjectId` is recorded because a project
+ * wake moves the active project before it fans out.
+ *
+ * `browserTabs` is empty on purpose. A project with app tabs is refused WHOLE by the port (the
+ * host cannot reach the browser bridge from this path), so the set the two sides compare is the
+ * set for a project without them; the refusal itself is asserted separately.
+ */
+export async function runTypeScriptBulk(scenario: Json, rustActions: Json): Promise<Json[]> {
+  resetBrowserStorage();
+  const out: Json[] = [];
+  for (const entry of (rustActions.bulk ?? []) as Json[]) {
+    const payload = entry.payload as Json;
+    const runtime = Object.create(GpuiSidebarRuntime.prototype) as Json;
+    runtime.presentation = scenario.snapshot;
+    runtime.browserTabs = [];
+    runtime.remotePresentations = new Map();
+    // The shape `getGpuiWorkspaceSessionSubgroups` indexes: a user-made session group id reaches
+    // it before anything else in `setGroupSleeping`, and the port refuses exactly that shape.
+    runtime.workspaceGroups = { groups: {}, projectOrder: [], projects: {} };
+    runtime.publishPresentation = () => {};
+    const calls: Json[] = [];
+    let focusProject: string | null = null;
+    runtime.focusProjectId = (projectId: string) => {
+      focusProject = projectId;
+    };
+    runtime.setSessionSleeping = (sessionId: string, sleeping: boolean) => {
+      calls.push({ call: sleeping ? 'sleep' : 'wake', session: sessionId });
+      return Promise.resolve();
+    };
+    runtime.transitionSession = (sessionId: string, action: string) => {
+      calls.push({ call: action, session: sessionId });
+      return Promise.resolve();
+    };
+    await runTypeScriptBulkPayload(runtime, payload);
+    out.push({ calls, focusProject });
+  }
+  return out;
+}
+
+async function runTypeScriptBulkPayload(runtime: Json, payload: Json): Promise<void> {
+  switch (String(payload.type)) {
+    case 'setGroupSleeping':
+      await runtime.setGroupSleeping(String(payload.groupId), payload.sleeping === true);
+      return;
+    case 'wakeProjectSleepingSessions':
+      await runtime.wakeProjectSleepingSessions(String(payload.groupId));
+      return;
+    case 'sleepInactiveProjectSessions':
+      await runtime.sleepInactiveProjectSessions(String(payload.groupId));
+      return;
+    case 'closeInactiveProjectSessions':
+      await runtime.closeInactiveProjectSessions(String(payload.groupId));
+      return;
+    case 'setSessionsSleeping':
+      await runtime.setSessionsSleeping((payload.sessionIds ?? []) as string[], payload.sleeping === true);
+      return;
+    case 'closeSessions':
+      // `handleSidebarMessage`'s own arm, which is one line and has no method of its own.
+      await Promise.all(((payload.sessionIds ?? []) as string[]).map((id) => runtime.transitionSession(id, 'close')));
+      return;
+  }
+}
+
+/**
+ * The pacing, measured rather than asserted.
+ *
+ * `setSessionsSleeping` sends a bulk SLEEP one request at a time with a real 350 ms timer between
+ * them and sends everything else together, and which of the two a payload gets is invisible in the
+ * call list the half above compares. So a few small sets are run through the SHIPPED helper with
+ * its real wait and the elapsed time is bounded on both sides: a paced run of n rows cannot finish
+ * sooner than interval * (n - 1), and an unpaced one cannot take that long. No tolerance, because a
+ * tolerance would accept a nearly-right interval.
+ *
+ * Kept to a handful of three-row sets: at 350 ms a row this is the one probe in the gate whose cost
+ * is wall-clock time.
+ */
+export async function runTypeScriptBulkPacing(): Promise<Json[]> {
+  const { GPUI_SIDEBAR_BULK_SLEEP_INTERVAL_MS } = await import('@/apps/desktop/sidebar/bulk-sleep-pacing');
+  const ids = ['combined-session:P:A', 'combined-session:P:B', 'combined-session:P:C'];
+  const out: Json[] = [];
+  for (const sleeping of [true, false]) {
+    const runtime = Object.create(GpuiSidebarRuntime.prototype) as Json;
+    runtime.setSessionSleeping = () => Promise.resolve();
+    const started = Date.now();
+    await runtime.setSessionsSleeping(ids, sleeping);
+    out.push({
+      sleeping,
+      rows: ids.length,
+      elapsedMs: Date.now() - started,
+      intervalMs: GPUI_SIDEBAR_BULK_SLEEP_INTERVAL_MS,
+    });
+  }
+  return out;
+}
+
+/**
  * The wake-time half. Runs the shipped `resolveSessionSnoozeWakeTime` at each fixed instant the
  * clock file names and returns the ISO string it produces.
  *

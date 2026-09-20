@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 
 /// Side of a thumbnail tile, matching React's `h-12 w-12` previews.
 const TILE_PX: f32 = 48.0;
+/// Hover group of one tile, which is what uncovers its remove button.
+const TILE_GROUP: &str = "chat-attachment";
 
 impl NativeChatView {
     /// Drops the markdown reference this tile stands for, through the shared removal rule.
@@ -50,6 +52,11 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
     /// The tiles come from the same `[Image #N](path)` references the composer already paints as
     /// pills (`composer_references.rs`), so a reference the user deletes by hand drops its tile too.
+    ///
+    /// CDXC:SessionChat 2026-09-20 DECISION:
+    /// User: a tile's remove button shows only while that tile is hovered, and the tile's tooltip
+    /// names the reference (`Image #1`) instead of repeating the whole file path, which the pill's
+    /// own tooltip already shows.
     pub(super) fn render_attachment_previews(
         &mut self,
         p: &ChatAppearance,
@@ -61,7 +68,13 @@ impl NativeChatView {
             .composer_references
             .iter()
             .filter(|reference| reference.kind == "image")
-            .map(|reference| (reference.range.clone(), reference.path.clone()))
+            .map(|reference| {
+                (
+                    reference.range.clone(),
+                    reference.path.clone(),
+                    reference.label.clone(),
+                )
+            })
             .collect();
         if attachments.is_empty() && pending == 0 {
             return None;
@@ -70,7 +83,7 @@ impl NativeChatView {
         // pasted image reaches it through the session's transport instead of a local file read.
         let images: Vec<Value> = attachments
             .iter()
-            .map(|(_, path)| json!({"transport":"read","path":path,"label":path,"alt":"Pasted image"}))
+            .map(|(_, path, _)| json!({"transport":"read","path":path,"label":path,"alt":"Pasted image"}))
             .collect();
         // React's `flex flex-wrap items-center gap-2 pb-2`: separate rounded chips with a real gap
         // between them, never one fused strip.
@@ -81,7 +94,7 @@ impl NativeChatView {
             .gap(px(8.0 * s))
             .pb(px(8.0 * s));
         let active = self.composer_active_image(cx);
-        for (index, (range, path)) in attachments.into_iter().enumerate() {
+        for (index, (range, path, label)) in attachments.into_iter().enumerate() {
             let removed = range.clone();
             let outlined = active.as_deref() == Some(path.as_str());
             let source = self.chat_image(&images[index], cx);
@@ -90,6 +103,7 @@ impl NativeChatView {
                 div()
                     .relative()
                     .flex_shrink_0()
+                    .group(TILE_GROUP)
                     .size(px(TILE_PX * s))
                     .child(
                         div()
@@ -103,7 +117,7 @@ impl NativeChatView {
                             .border_1()
                             .border_color(p.input_border)
                             .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(path.clone())
+                                gpui_component::tooltip::Tooltip::new(label.clone())
                                     .build(window, cx)
                             })
                             .when_some(
@@ -141,6 +155,10 @@ impl NativeChatView {
                             .id(("chat-attachment-remove", index))
                             .role(gpui::Role::Button)
                             .aria_label("Remove image")
+                            // The button hangs over the tile's corner, so its own hover keeps it
+                            // up once the pointer has left the tile's bounds for it.
+                            .invisible()
+                            .group_hover(TILE_GROUP, |style| style.visible())
                             .absolute()
                             .top(px(-5.0 * s))
                             .right(px(-5.0 * s))
@@ -153,7 +171,7 @@ impl NativeChatView {
                             .border_1()
                             .border_color(p.input_border)
                             .bg(p.card_background)
-                            .hover(|style| style.bg(p.border))
+                            .hover(|style| style.visible().bg(p.border))
                             .child(
                                 gpui::svg()
                                     .path("titlebar/x.svg")

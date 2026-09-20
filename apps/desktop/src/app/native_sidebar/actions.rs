@@ -138,6 +138,15 @@ impl GhostexGpuiApp {
         if self.gx_store_run_sidebar_snooze(&command, cx) {
             return;
         }
+        // The bulk menu, a collection's lifecycle items and a project's Sleep, Wake and Close
+        // resolve their set here and fan out into the per-session actions above, paced when the
+        // action is a sleep (gx_store/sidebar_bulk.rs).
+        if self.gx_store_run_sidebar_batch(&command, cx) {
+            return;
+        }
+        if self.gx_store_run_sidebar_bulk(&command, cx) {
+            return;
+        }
         // Two of the menus' inputs live in client storage and are written by the handler this
         // command is on its way to; the cached copy is dropped so the redraw that follows reads
         // the new value instead of waiting out its second.

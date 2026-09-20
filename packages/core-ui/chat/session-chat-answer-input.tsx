@@ -90,6 +90,7 @@ export function SessionChatAnswerInput({
     <div className='min-w-0 flex-1'>
       <SessionChatAttachmentPreviews
         images={images}
+        text={value}
         pending={pending}
         disabled={disabled}
         activeImagePath={referenceInteractions.hoveredImagePath}

@@ -239,10 +239,16 @@ pub(crate) struct GpuiAccountUsageMeterHost {
     pub(crate) height: f32,
     pub(crate) padding_x: f32,
     pub(crate) corner_radius: f32,
+    /// The meter's resting fill. Hosts that want the meters to read as cards pass a
+    /// visible one; a transparent value leaves the meter on the host's own background.
+    pub(crate) background: gpui::Hsla,
     pub(crate) hover_background: gpui::Hsla,
     /// The fill for the meter whose usage popup is open. It must stay distinct from the
     /// host's own hovered background rather than being swallowed by it.
     pub(crate) open_background: gpui::Hsla,
+    /// Whether the meter fills the cell it is given instead of hugging its content. The
+    /// meter centres its content either way, so a filled cell centres it in the column.
+    pub(crate) fill_width: bool,
     pub(crate) tooltip_placement: ManagedTooltipPlacement,
     pub(crate) tooltip_delay: Duration,
     pub(crate) scale: f32,
@@ -500,7 +506,10 @@ impl GhostexGpuiApp {
                 host.element_id_prefix,
                 account_id.as_str()
             ))
-            .flex_shrink_0()
+            .when(!host.fill_width, |this| this.flex_shrink_0())
+            .when(host.fill_width, |this| {
+                this.w_full().min_w_0().overflow_hidden()
+            })
             .relative()
             .flex()
             .h(px(host.height))
@@ -509,6 +518,7 @@ impl GhostexGpuiApp {
             .items_center()
             .justify_center()
             .cursor_default()
+            .bg(host.background)
             .when(open, |this| this.bg(open_background))
             .hover(move |this| {
                 if open {
@@ -538,12 +548,10 @@ impl GhostexGpuiApp {
             )
             /*
             CDXC:AgentProviders 2026-09-20 WHY:
-            The strip around the meters is itself the collapse/expand toggle, so a
-            press that lands on a meter opens that account's usage popup and then
-            swallows its click: the strip must not toggle in the same gesture, and
-            the sidebar's double-click-to-create-session must not fire on a meter.
-            The mouse-down still bubbles, so the sidebar menu closes as it does for
-            every other sidebar click.
+            A press that lands on a meter opens that account's usage popup and then
+            swallows its click, so the sidebar's double-click-to-create-session cannot
+            fire on a meter. The mouse-down still bubbles, so the sidebar menu closes as
+            it does for every other sidebar click.
             */
             .on_click(cx.listener(|_, _: &gpui::ClickEvent, _, cx| cx.stop_propagation()))
             .when(!open, |this| {

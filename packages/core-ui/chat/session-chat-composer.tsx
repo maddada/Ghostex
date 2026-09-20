@@ -2756,6 +2756,7 @@ export const SessionChatComposer = forwardRef<SessionChatComposerHandle, Session
           >
             <SessionChatAttachmentPreviews
               images={pastedImages}
+              text={draft}
               pending={pendingImagePastes}
               activeImagePath={activeImagePath}
               onRemove={removePastedImage}

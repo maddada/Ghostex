@@ -966,19 +966,6 @@ export function SpaceFilterRow({
           onDismiss={dismissMenus}
           vscode={vscode}
         >
-          <button
-            className='session-context-menu-item'
-            onClick={() => {
-              dismissMenus();
-              openSpaceEditor();
-            }}
-            role='menuitem'
-            type='button'
-          >
-            <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} stroke={2} />
-            New Space
-          </button>
-          {overflowSpaces.length > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
           {overflowSpaces.map((space) => (
             <button
               aria-label={getSpaceSessionStatusLabel(space.name, sessionSummaryBySpaceId[space.spaceId])}
@@ -1005,6 +992,20 @@ export function SpaceFilterRow({
               ) : null}
             </button>
           ))}
+          {/* CDXC:Spaces 2026-09-20 DECISION: User: the More menu lists the overflowing Spaces first and puts New Space last, under a separator. */}
+          {overflowSpaces.length > 0 ? <div className='session-context-menu-divider' role='separator' /> : null}
+          <button
+            className='session-context-menu-item'
+            onClick={() => {
+              dismissMenus();
+              openSpaceEditor();
+            }}
+            role='menuitem'
+            type='button'
+          >
+            <IconPlus aria-hidden='true' className='session-context-menu-icon' size={14} stroke={2} />
+            New Space
+          </button>
         </SidebarContextMenuPortal>
       ) : null}
       {otherMenuPosition ? (

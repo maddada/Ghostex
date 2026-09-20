@@ -34,9 +34,10 @@ use gpui_component::h_flex;
 use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 
 use crate::{
-    GhostexGpuiApp, TITLEBAR_BUTTON_HORIZONTAL_PADDING, TITLEBAR_CONTROL_HEIGHT,
-    TITLEBAR_LEADING_TALL_BUTTON_HEIGHT, titlebar_button_hover_color, titlebar_disabled_text_color,
-    titlebar_icon_color, titlebar_svg_icon, titlebar_tooltip, titlebar_tooltip_label,
+    GhostexGpuiApp, TITLEBAR_BUTTON_HORIZONTAL_PADDING, TITLEBAR_BUTTON_RADIUS,
+    TITLEBAR_CONTROL_HEIGHT, TITLEBAR_LEADING_TALL_BUTTON_HEIGHT, titlebar_button_hover_color,
+    titlebar_disabled_text_color, titlebar_icon_color, titlebar_svg_icon, titlebar_tooltip,
+    titlebar_tooltip_label,
 };
 
 /// Page-side event the sidebar runtime listens for. Must stay identical to
@@ -169,18 +170,20 @@ impl GhostexGpuiApp {
             })
             .flex()
             /*
-            CDXC:Navigation 2026-09-06 DECISION:
-            User: Back/Forward are square (no corner rounding), as wide as the
-            sidebar collapse and update buttons, and their hit and hover area
-            reaches 1px past the titlebar control height at the top and the
-            bottom, so the arrows sit in a taller strip than the sidebar
-            toggle next to them.
+            CDXC:Navigation 2026-09-20 DECISION:
+            User: Back/Forward carry the same corner rounding as the Quick Actions
+            split button, like every other header button. This supersedes the
+            2026-09-06 rule that they are square; the rest of that decision still
+            holds, so their hit and hover area keeps reaching 1px past the titlebar
+            control height at the top and the bottom and the arrows still sit in a
+            taller strip than the sidebar toggle next to them.
             */
             .h(px(TITLEBAR_LEADING_TALL_BUTTON_HEIGHT))
             .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
             .flex_shrink_0()
             .items_center()
             .justify_center()
+            .rounded(px(TITLEBAR_BUTTON_RADIUS))
             .cursor_default()
             .when(enabled, |this| {
                 this.hover(|this| this.bg(titlebar_button_hover_color()))

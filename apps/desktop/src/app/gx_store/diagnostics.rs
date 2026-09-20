@@ -846,6 +846,66 @@ impl GxStoreDiagnostics {
         );
     }
 
+    /// One line per `batch` envelope answered: how many messages it posted and whether it cleared
+    /// the multi-selection. No ids: a batch names every selected row.
+    pub(super) fn sidebar_batch_ran(
+        &mut self,
+        messages: usize,
+        cleared_selection: bool,
+        counters: super::sidebar_bulk::SidebarBulkCounters,
+    ) {
+        if self.sidebar_lifecycle_records >= MAX_SIDEBAR_ACTION_RECORDS
+            || !routine_logging_enabled()
+        {
+            return;
+        }
+        self.sidebar_lifecycle_records += 1;
+        record(
+            "gxStore.sidebarBatch",
+            json!({
+                "messages": messages as u64,
+                "clearedSelection": cleared_selection,
+                "batches": counters.batches,
+                "batchMessages": counters.batch_messages,
+                "batchesClearing": counters.batches_clearing,
+                "declinedSource": counters.declined_source,
+            }),
+        );
+    }
+
+    /// One line per plural payload answered: which action, how many rows it resolved, and whether
+    /// the fan-out is paced. No ids and no project: the counts are what a support log needs.
+    ///
+    /// `rows` is the number to read. A project Wake that resolves zero is a project with nothing
+    /// asleep in it, which is correct; a Sleep Selected that resolves zero when rows were selected
+    /// is not, and only this line can tell the two apart.
+    pub(super) fn sidebar_bulk_ran(
+        &mut self,
+        request: &ghostex_gx_core::BulkRequest,
+        counters: super::sidebar_bulk::SidebarBulkCounters,
+    ) {
+        if self.sidebar_lifecycle_records >= MAX_SIDEBAR_ACTION_RECORDS
+            || !routine_logging_enabled()
+        {
+            return;
+        }
+        self.sidebar_lifecycle_records += 1;
+        record(
+            "gxStore.sidebarBulk",
+            json!({
+                "action": log_text(request.action.as_str()),
+                "rows": request.messages.len() as u64,
+                "intervalMs": request.interval_ms,
+                "focusProject": request.focus_project.is_some(),
+                "bulkRequests": counters.bulk_requests,
+                "bulkMessages": counters.bulk_messages,
+                "pacedRequests": counters.paced_requests,
+                "emptyRequests": counters.empty_requests,
+                "declinedSource": counters.declined_source,
+            }),
+        );
+    }
+
     /// One line per snooze menu row answered: how many commands it posted, and nothing about the
     /// row. The wake time is NOT recorded; it is a timestamp the user chose for a session of
     /// theirs, and the counters below say everything a support log needs.

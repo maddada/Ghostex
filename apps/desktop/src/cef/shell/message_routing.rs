@@ -36,6 +36,7 @@ pub(crate) enum SidebarBridgeEventKind {
     ProjectBoardConversationResponse,
     ResourcesSnapshotRequest,
     NativeSidebarSnapshot,
+    NativeQuickAccessSnapshot,
 }
 
 impl SidebarBridgeEventKind {
@@ -86,6 +87,7 @@ impl SidebarBridgeEventKind {
             }
             SidebarBridgeFunctionId::ResourcesSnapshotRequest => Self::ResourcesSnapshotRequest,
             SidebarBridgeFunctionId::NativeSidebarSnapshot => Self::NativeSidebarSnapshot,
+            SidebarBridgeFunctionId::NativeQuickAccessSnapshot => Self::NativeQuickAccessSnapshot,
         })
     }
 }
@@ -235,6 +237,7 @@ pub enum SidebarBridgeEvent {
     ProjectBoardConversationResponse(String),
     ResourcesSnapshotRequest(String),
     NativeSidebarSnapshot(String),
+    NativeQuickAccessSnapshot(String),
     /// A first-party page tried to navigate its own main frame somewhere else; the payload is the refused URL.
     RefusedPageNavigation(String),
 }
@@ -315,6 +318,9 @@ impl SidebarBridgeEventKind {
             }
             Self::ResourcesSnapshotRequest => SidebarBridgeEvent::ResourcesSnapshotRequest(payload),
             Self::NativeSidebarSnapshot => SidebarBridgeEvent::NativeSidebarSnapshot(payload),
+            Self::NativeQuickAccessSnapshot => {
+                SidebarBridgeEvent::NativeQuickAccessSnapshot(payload)
+            }
         }
     }
 }

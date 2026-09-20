@@ -13,7 +13,8 @@
 //! `sidebar_lifecycle.rs` the ones with a daemon round trip in the middle (sleep, wake, close
 //! and fork), `sidebar_flags.rs` the four that are one call with different fields,
 //! `sidebar_modals.rs` the two that only open a dialog and `sidebar_snooze.rs` the two that read
-//! the clock and the local calendar; `diagnostics.rs` writes the log lines.
+//! the clock and the local calendar, `sidebar_bulk.rs` the plural payloads and the renderer's
+//! batch envelope; `diagnostics.rs` writes the log lines.
 
 mod burst;
 mod diagnostics;
@@ -25,6 +26,7 @@ mod remote_clients;
 mod session_walk;
 mod shadow_diff;
 mod sidebar_actions;
+mod sidebar_bulk;
 mod sidebar_flags;
 mod sidebar_lifecycle;
 mod sidebar_list;

@@ -31,8 +31,10 @@ hotkeys Every shortcut and its default binding
 - **Sidebar** (left by default): projects, their sessions, tags and filters,
   remote machines, Quick chats, and the More Options menu (Settings, Search by
   Prompt, Previous Sessions, Mobile & Remote, Extensions). The Notifications
-  bell is in its top row; account usage meters sit at the bottom above the
-  Commands row, with a Settings gear beside it.
+  bell is in its top row; the Commands row at the bottom carries a chart button
+  that shows or hides your account usage meters above it, and a Settings gear.
+  Drag the sidebar narrow and the Search and Commands rows become icon buttons
+  that keep their names and shortcuts in their tooltips.
 - **Work area**: your sessions, and the views open beside them. The sessions are
   a grid of terminal panes and tabs; each pane can show the raw terminal or the
   Session Chat rendering of the same agent conversation. Opening Code, Browser,

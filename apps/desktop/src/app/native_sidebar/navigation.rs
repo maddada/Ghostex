@@ -51,22 +51,62 @@ impl GhostexGpuiApp {
         */
         let reserves_window_controls =
             cfg!(target_os = "macos") && !footer && !self.sidebar_collapsed;
+        /*
+        CDXC:Sidebar 2026-09-20 DECISION:
+        User: once the sidebar is narrower than `SIDEBAR_COMPACT_ROWS_WIDTH`, the Search and the
+        Commands rows drop their label and their shortcut hint and become icon-only buttons with the
+        same icon they already show, the label and shortcut move into the tooltip ("Search (⌘P)",
+        "Commands (⌘⇧P)"), and every button in both rows aligns left instead of the trailing controls
+        hugging the right edge.
+        */
+        let compact = self.sidebar_width < SIDEBAR_COMPACT_ROWS_WIDTH * scale;
+        /*
+        CDXC:Sidebar 2026-09-20 WHY:
+        At `SIDEBAR_MIN_WIDTH` the macOS traffic-light reserve leaves the Search row about seventy
+        points for three buttons, so a compact row that kept all of them would have painted its last
+        one over the divider and the work area. The row is clipped, and it drops what cannot fit
+        instead: the search button always stays, the notification bell goes first because its badge
+        also shows up in the menu, and the sidebar menu button is the last to go.
+        */
+        let compact_button_slot = 38.0 * scale;
+        let compact_room = self.sidebar_width
+            - if reserves_window_controls {
+                WINDOW_CONTROLS_LEADING_RESERVE - 7.0 * scale
+            } else {
+                5.0 * scale
+            }
+            - 5.0 * scale;
+        let compact_fits = |buttons: f32| !compact || compact_room >= buttons * compact_button_slot;
+        let icon_path = if footer {
+            "titlebar/bolt.svg"
+        } else {
+            BROWSER_ICON_SEARCH
+        };
+        let tooltip_label: gpui::SharedString = match shortcut.as_deref() {
+            Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})").into(),
+            _ => label.into(),
+        };
+        let tooltip_delay = appearance.tooltip_delay;
         h_flex()
             .w_full()
             .h(px((if footer { 36.0 } else { 35.0 }) * scale))
             .pt(px(5.0 * scale))
             .pb(px(3.0 * scale))
-            .when(!footer, |row| row.px(px(5.0 * scale)).gap(px(4.0 * scale)))
+            .when(!footer || compact, |row| {
+                row.px(px(5.0 * scale)).gap(px(4.0 * scale))
+            })
             .when(reserves_window_controls, |row| {
                 row.pl(px(WINDOW_CONTROLS_LEADING_RESERVE - 7.0 * scale))
                     .window_control_area(WindowControlArea::Drag)
             })
+            .overflow_hidden()
             /*
             CDXC:Sidebar 2026-09-20 DECISION:
-            User, reviewing the 2026-09-19 screens: there is no rule under the Search row and none
-            above the usage strip or the Commands row. The session list fades out at both ends
-            instead (native_sidebar/scroll_fade.rs), so these rows draw no border at all. This
-            supersedes the 2026-09-19 rule that framed the list with a hairline at each end.
+            User: there is no rule under the Search row and none above the usage strip or the
+            Commands row. The session list fades out at its bottom end only
+            (native_sidebar/scroll_fade.rs) and nothing shades its top, so these rows draw no border
+            at all. This supersedes the 2026-09-19 rule that framed the list with a hairline at each
+            end.
             */
             .flex_shrink_0()
             .text_color(titlebar_active_text_color().opacity(0.52))
@@ -76,9 +116,40 @@ impl GhostexGpuiApp {
             than it used to: the macOS traffic-light reserve, the notification bell and the Settings
             gear. Without a clip and without fixed-size trailing controls the glyphs simply painted
             over each other there, so the label is the one thing that shrinks and is clipped, and
-            everything beside it keeps its own box.
+            everything beside it keeps its own box. Below the compact width the label stops being
+            drawn at all rather than being clipped to nothing.
             */
-            .child(
+            .child(if compact {
+                div()
+                    .id(format!("native-sidebar-{label}"))
+                    .h(px(28.0 * scale))
+                    .w(px(34.0 * scale))
+                    .rounded(px(5.0 * scale))
+                    .flex()
+                    .flex_shrink_0()
+                    .items_center()
+                    .justify_center()
+                    .cursor_default()
+                    .hover(|row| row.bg(appearance.hover))
+                    .child(titlebar_svg_icon(
+                        icon_path,
+                        15.0 * scale,
+                        titlebar_active_text_color().opacity(0.52),
+                    ))
+                    .on_click(cx.listener(move |app, _, _, cx| {
+                        cx.stop_propagation();
+                        app.dispatch_native_sidebar_ui(
+                            json!({"type": "sidebarAction", "action": action_id}),
+                            cx,
+                        );
+                    }))
+                    .managed_discrete_tooltip_with_placement(
+                        ManagedTooltipPlacement::Right,
+                        tooltip_delay,
+                        move |window, cx| titlebar_tooltip(tooltip_label.clone(), window, cx),
+                    )
+                    .into_any_element()
+            } else {
                 h_flex()
                     .id(format!("native-sidebar-{label}"))
                     .flex_1()
@@ -96,11 +167,7 @@ impl GhostexGpuiApp {
                             .flex_shrink_0()
                             .items_center()
                             .child(titlebar_svg_icon(
-                                if footer {
-                                    "titlebar/bolt.svg"
-                                } else {
-                                    BROWSER_ICON_SEARCH
-                                },
+                                icon_path,
                                 15.0 * scale,
                                 titlebar_active_text_color().opacity(0.52),
                             )),
@@ -126,20 +193,21 @@ impl GhostexGpuiApp {
                             json!({"type": "sidebarAction", "action": action_id}),
                             cx,
                         );
-                    })),
-            )
+                    }))
+                    .into_any_element()
+            })
             // CDXC:Notifications 2026-09-20 DECISION:
             // User: the notification bell sits in the sidebar's top row, before the sidebar menu button.
             .when(
-                !footer && self.titlebar_notification_bell_visible(),
+                !footer && self.titlebar_notification_bell_visible() && compact_fits(3.0),
                 |row| row.child(self.render_sidebar_notification_bell(appearance, cx)),
             )
-            .when(!footer, |row| {
+            .when(!footer && compact_fits(2.0), |row| {
                 row.child(
                     div()
                         .id("native-sidebar-more")
                         .h_full()
-                        .w(px(40.0 * scale))
+                        .w(px((if compact { 34.0 } else { 40.0 }) * scale))
                         .rounded(px(5.0 * scale))
                         .flex()
                         .flex_shrink_0()
@@ -170,6 +238,9 @@ impl GhostexGpuiApp {
             rather than shrinking to an icon. The sidebar menu keeps its own Settings and
             Hotkeys entries; that duplication is deliberate.
             */
+            .when(footer, |row| {
+                row.children(self.render_native_sidebar_usage_toggle(appearance, cx))
+            })
             .when(footer, |row| {
                 row.child(
                     div()

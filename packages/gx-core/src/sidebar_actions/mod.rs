@@ -11,8 +11,10 @@
 //! daemon has already made the session. `flags` holds the four that are one call with
 //! different fields: pin, park, tag and favorite, `modals` the two that call nothing and
 //! only open a dialog, and `snooze` the only one whose answer depends on the clock and on the
-//! local calendar.
+//! local calendar, and `bulk` the plural payloads, which are a SET and an ORDER over the ones
+//! above rather than new behaviour.
 
+mod bulk;
 mod close;
 mod flags;
 mod fork;
@@ -23,6 +25,10 @@ mod read_only;
 mod resolve;
 mod snooze;
 
+pub use bulk::{
+    bulk_request_summary, owns_batch_command, owns_bulk_message, plan_batch, plan_bulk_request,
+    BatchPlan, BulkAction, BulkRequest, BULK_MESSAGE_TYPES, BULK_SLEEP_INTERVAL_MS,
+};
 pub use close::{
     apply_close_answer, close_optimistic_follow_ups, owns_close_message, plan_close_request,
     CloseAnswer, CloseFollowUp, CloseRequest,

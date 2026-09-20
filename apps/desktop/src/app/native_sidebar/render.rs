@@ -86,13 +86,18 @@ impl GhostexGpuiApp {
             .child(self.render_native_sidebar_navigation(&appearance, false, cx))
             .child(self.render_native_sidebar_selectors(&snapshot, &appearance, cx))
             /*
-            The list and its two fade ramps are one child on purpose: the
+            The list and its bottom fade ramp are one child on purpose: the
             `on_children_prepainted` above measures the sidebar from its fourth
-            child, so the ramps must live inside the list's own slot rather than
-            become root children of their own.
+            child, so the ramp must live inside the list's own slot rather than
+            become a root child of its own.
+            CDXC:Sidebar 2026-09-20 WHY:
+            This wrapper has to be a flex column, not a bare `div()`: GPUI's default display is
+            block, and under block layout the scroll view's `flex_1().min_h_0()` does nothing, so it
+            took its full content height, never clipped and never scrolled, and the session rows
+            painted straight over the usage strip and the Commands row below it.
             */
             .child(
-                div()
+                v_flex()
                     .relative()
                     .w_full()
                     .flex_1()
@@ -200,8 +205,7 @@ impl GhostexGpuiApp {
                                     ),
                             ),
                     )
-                    .child(self.render_native_sidebar_list_fade(&appearance, true))
-                    .child(self.render_native_sidebar_list_fade(&appearance, false)),
+                    .child(self.render_native_sidebar_list_fade(&appearance)),
             )
             /*
             The usage strip and the Commands row are one footer child on purpose:

@@ -238,7 +238,6 @@ impl GhostexGpuiApp {
                     "ghostex-gpui-workarea-split-grab-strip",
                     WorkspaceSplitAxis::Horizontal,
                     grab_side,
-                    self.resize_rail_drag_active(),
                 )
                 .on_hover(cx.listener(move |this, hovered, _, cx| {
                     this.set_workarea_split_divider_hovering(*hovered, cx);

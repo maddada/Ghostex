@@ -28,7 +28,8 @@ use ghostex_gx_core::{
     apply_close_answer, apply_flags_answer, apply_fork_answer, apply_lifecycle_answer,
     apply_snooze_answer, close_optimistic_follow_ups, encode_uri_component, iso_string_from_ms,
     plan_close_request, plan_flags_request, plan_fork_request, plan_lifecycle_request,
-    plan_modal_action, plan_read_only_action, plan_snooze_action, plan_snooze_request,
+    plan_batch, plan_bulk_request, plan_modal_action, plan_read_only_action, plan_snooze_action,
+    plan_snooze_request,
     rename_seed_title, session_is_snoozed, snooze_wake_ms, ActiveGroup, CloseAnswer, CloseFollowUp,
     Core, Event, FlagsFollowUp, ForkFollowUp, Intent, LifecycleAnswer, LifecycleFollowUp,
     MachineId, ProjectKey, SectionCollapse, SessionKey, SidebarInputs, SidebarView,
@@ -99,6 +100,7 @@ fn main() -> ExitCode {
     let mut total_flags = 0usize;
     let mut total_modals = 0usize;
     let mut total_snooze = 0usize;
+    let mut total_bulk = 0usize;
     let mut resolve_micros: Vec<u128> = Vec::new();
     // The clock facts the snooze rule is answered against. The harness writes them under a pinned
     // time zone because this crate reads neither a clock nor a zone; without the file the snooze
@@ -143,6 +145,7 @@ fn main() -> ExitCode {
         total_flags += dump.flags;
         total_modals += dump.modals;
         total_snooze += dump.snooze;
+        total_bulk += dump.bulk;
         let out = path.with_file_name(
             path.file_name()
                 .and_then(|name| name.to_str())
@@ -176,7 +179,7 @@ fn main() -> ExitCode {
         .copied()
         .unwrap_or(0);
     println!(
-        "scenarios {} payloads {total_payloads} calls {total_calls} fromMenus {from_menus} lifecycle {total_lifecycle} close {total_close} fork {total_fork} flags {total_flags} modals {total_modals} snooze {total_snooze} resolveUs median {median} max {}",
+        "scenarios {} payloads {total_payloads} calls {total_calls} fromMenus {from_menus} lifecycle {total_lifecycle} close {total_close} fork {total_fork} flags {total_flags} modals {total_modals} snooze {total_snooze} bulk {total_bulk} resolveUs median {median} max {}",
         scenarios.len(),
         resolve_micros.last().copied().unwrap_or(0)
     );
@@ -201,6 +204,7 @@ struct Dump {
     flags: usize,
     modals: usize,
     snooze: usize,
+    bulk: usize,
 }
 
 /// The menu dump `sidebar_menu_parity` writes for the same scenario, when it has been run.
@@ -359,12 +363,15 @@ fn build(
     let flags_count = flags.len();
     let modals = modal_entries(model.view());
     let modal_count = modals.len();
+    let bulk = bulk_entries(&core, &view_inputs, scenario);
+    let batch = batch_entries();
     let snooze_clock = snooze_clock_entries(clock_file);
     let snooze_boundary = snooze_boundary_entries(&core, scenario, model.view());
     let snooze_actions = snooze_action_entries(model.view(), clock_file);
     let snooze_calls = snooze_call_entries(scenario);
     let snooze_count =
         snooze_clock.len() + snooze_boundary.len() + snooze_actions.len() + snooze_calls.len();
+    let bulk_count = bulk.len() + batch.len();
     Some(Dump {
         payloads: entries.len(),
         calls,
@@ -375,6 +382,7 @@ fn build(
         flags: flags_count,
         modals: modal_count,
         snooze: snooze_count,
+        bulk: bulk_count,
         value: json!({
             "parkedProjectId": parked,
             "entries": Value::Array(entries),
@@ -388,6 +396,8 @@ fn build(
             "snoozeBoundary": Value::Array(snooze_boundary),
             "snoozeActions": Value::Array(snooze_actions),
             "snoozeCalls": Value::Array(snooze_calls),
+            "bulk": Value::Array(bulk),
+            "batch": Value::Array(batch),
         }),
     })
 }
@@ -1224,6 +1234,100 @@ fn modal_entries(view: &SidebarView) -> Vec<Value> {
         }
     }
     entries
+}
+
+/// The bulk half of the gate.
+///
+/// A plural payload is a SET and an ORDER over actions that are already gated one at a time, so
+/// that is what this compares: which rows, in which order, through which per-session action, and
+/// whether the fan-out is paced. None of it is visible in a list comparison and the order is not
+/// cosmetic, because a paced sleep sends the requests in exactly this order 350 ms apart.
+///
+/// Every project of the recording is probed with all four project payloads, and the two explicit
+/// ones with id lists taken from the recording plus the shapes no recording contains (an empty
+/// list, an id the store does not hold, a browser id, a remote id).
+fn bulk_entries(core: &Core, inputs: &SidebarInputs, scenario: &Value) -> Vec<Value> {
+    let project_ids: Vec<String> = scenario
+        .pointer("/snapshot/projects")
+        .and_then(Value::as_array)
+        .map(|projects| {
+            projects
+                .iter()
+                .filter_map(|project| project.get("projectId")?.as_str())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut payloads: Vec<Value> = Vec::new();
+    for project_id in project_ids.iter().take(BULK_PROJECTS_PER_SCENARIO) {
+        let group_id = format!("combined-project:{}", encode_uri_component(project_id));
+        payloads.push(json!({ "type": "setGroupSleeping", "groupId": group_id, "sleeping": true }));
+        payloads
+            .push(json!({ "type": "setGroupSleeping", "groupId": group_id, "sleeping": false }));
+        payloads.push(json!({ "type": "wakeProjectSleepingSessions", "groupId": group_id }));
+        payloads.push(json!({ "type": "sleepInactiveProjectSessions", "groupId": group_id }));
+        payloads.push(json!({ "type": "closeInactiveProjectSessions", "groupId": group_id }));
+    }
+    // The group shapes that resolve to no local project, each a refusal with its own reason.
+    for group_id in SYNTHETIC_GROUP_IDS {
+        payloads.push(json!({ "type": "setGroupSleeping", "groupId": group_id, "sleeping": true }));
+        payloads.push(json!({ "type": "wakeProjectSleepingSessions", "groupId": group_id }));
+    }
+    // The explicit lists a multi-selection sends.
+    let selected: Vec<String> = session_ids(scenario)
+        .into_iter()
+        .take(BULK_SELECTED_PER_SCENARIO)
+        .collect();
+    for ids in [
+        selected.clone(),
+        Vec::new(),
+        vec!["combined-session:nope:nope".to_string()],
+        vec!["gpui-browser:P0erj:tab-1".to_string()],
+        vec!["remote:machine-1:session:P0erj:S1".to_string()],
+    ] {
+        payloads.push(
+            json!({ "type": "setSessionsSleeping", "sessionIds": ids, "sleeping": true, "source": "sleepBelow" }),
+        );
+        payloads
+            .push(json!({ "type": "setSessionsSleeping", "sessionIds": ids, "sleeping": false }));
+        payloads.push(json!({ "type": "closeSessions", "sessionIds": ids }));
+    }
+    payloads
+        .into_iter()
+        .map(|payload| match plan_bulk_request(core, inputs, &payload) {
+            Some(request) => json!({
+                "payload": payload,
+                "owned": true,
+                "request": request.to_json(),
+            }),
+            None => json!({ "payload": payload, "owned": false }),
+        })
+        .collect()
+}
+
+/// Enough projects to cover the shapes without multiplying the recording by five payloads. The
+/// resolution reads only the project's own rows, so a sixth project adds no branch.
+const BULK_PROJECTS_PER_SCENARIO: usize = 5;
+const BULK_SELECTED_PER_SCENARIO: usize = 4;
+
+/// The renderer's batch envelope, which is a pass-through and is compared as one.
+fn batch_entries() -> Vec<Value> {
+    let message = |kind: &str| json!({ "type": kind, "sessionId": "combined-session:P0erj:S1" });
+    let commands = vec![
+        json!({ "type": "batch", "clearSelection": true, "messages": [message("closeSession")] }),
+        json!({ "type": "batch", "messages": [message("closeSession"), message("forkSession")] }),
+        json!({ "type": "batch", "messages": [] }),
+        json!({ "type": "batch", "clearSelection": false, "messages": [message("closeSession")] }),
+        // Not a batch at all, so the planner must not answer it.
+        json!({ "type": "command", "message": message("closeSession") }),
+    ];
+    commands
+        .into_iter()
+        .map(|command| match plan_batch(&command) {
+            Some(plan) => json!({ "command": command, "owned": true, "plan": plan.to_json() }),
+            None => json!({ "command": command, "owned": false }),
+        })
+        .collect()
 }
 
 /// The wake-time half of the gate, driven directly from clock facts the harness wrote.

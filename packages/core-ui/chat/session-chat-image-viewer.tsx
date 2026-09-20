@@ -8,8 +8,12 @@
 // clipboard), Copy path (the machine path or URL behind the picture), and Save
 // image (Downloads, using the session title as the file name) sit in a
 // top-right toolbar beside the close button; thumbnails remain image-only.
-// CDXC:SessionChat 2026-09-08 DECISION:
-// User: no zoom cursor on chat image thumbnails or on the image preview.
+// CDXC:SessionChat 2026-09-20 DECISION:
+// User: the previewed picture shows a zoom-in cursor while a click enlarges it
+// and a zoom-out cursor on the step that returns it to the fitted size. That
+// narrows the 2026-09-08 decision, which kept a zoom cursor off every chat
+// picture: the thumbnails and a picture with nothing left to show still have
+// none.
 // Machine paths load through the transport's readSessionChatImage RPC — the
 // paths inside "[Image #N](path)" references live on the session's machine, so
 // the page cannot open them directly. http(s)/data URLs render as-is.
@@ -760,6 +764,7 @@ export function SessionChatImageViewerProvider({
                 <img
                   alt={state.alt ?? 'Image preview'}
                   className='ghostex-chat-image-preview rounded-lg shadow-2xl'
+                  data-zoom={zoomWidths.length === 0 ? undefined : zoomLevel >= zoomWidths.length ? 'out' : 'in'}
                   data-zoomed={zoomLevel > 0 ? 'true' : undefined}
                   // Native image dragging would fight scroll-to-pan.
                   draggable={false}

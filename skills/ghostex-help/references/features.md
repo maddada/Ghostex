@@ -580,7 +580,9 @@ Code, Open in Docs (Markdown, HTML, and Excalidraw), Copy Path, or Open File/Fol
 Location. Open File/Folder Location appears directly below the path-copy actions
 in chat, Git changed files, and Docs menus, and opens
 the location in the machine’s file manager. It requires a local desktop path.
-Right-click an opened chat image preview to close it.
+Right-click an opened chat image preview to close it. Click the picture itself to step
+through three zoom levels, the last one showing it pixel for pixel, and once more to return
+it to the fitted size; the cursor shows whether the next click still zooms.
 Disabled Code and Docs views are omitted from the menu.
 Hosts without an editor copy the path on click.
 Click the card background, circle, or change counts to expand or collapse the full diff.
@@ -861,8 +863,10 @@ Cross-agent orchestration also works through the `$ghostex-cli` skill. For
 3. The Agents Orchestration skill (`$ghostex-agents-orchestration`, installed
    from Settings > Integrations or `ghostex agents-orchestration install-skill`)
    teaches an agent to read `ghostex agents --help` and `ghostex --help`, then
-   launch other agents with the model and effort you ask for, send them tasks,
-   read their replies, and verify their work.
+   launch other agents with the model and effort you ask for, message them to
+   hand off tasks and coordinate work, read their replies, and verify what they
+   did. Agents message each other the same way, so several sessions can split a
+   job between them and report back without you relaying every step.
 
 Related settings: Settings > Agents (Default Prompt Agent, Agent approvals,
 Agent Hooks, Default view per agent), `agentAcceptAllEnabled`,
@@ -1038,12 +1042,12 @@ docs directory), `hideProjectHeaderDiffStats`,
   Its Account usage in the sidebar section lets you star saved Claude and Codex
   accounts to show their usage at the bottom of the desktop sidebar, or unstar
   them to hide it. These are the same per-account stars available in
-  Settings > Accounts. The usage strip starts collapsed to a single row holding
-  as many meters as fit, the accounts closest to their limit first; when you
-  have starred more accounts than fit in that row, click the strip to show every
-  account four per row, and click it again to collapse it. Ghostex remembers the
-  choice. When every starred account already fits, there is nothing to expand
-  and the strip is not clickable.
+  Settings > Accounts. The meters are hidden until you ask for them: the chart
+  button in the sidebar's Commands row, just left of the Settings gear, shows
+  every starred account four per row, and clicking it again hides them again.
+  Ghostex remembers the choice. While the meters are hidden the button carries a
+  small dot whenever one of those accounts is close to a limit, and the button
+  itself is only there once you have starred an account.
   Claude meters show the two tightest of the weekly, five-hour, and Fable
   limits, so the Fable limit is never hidden when it is running out; launcher
   and picker rows and the Accounts figures use the same two numbers. Each

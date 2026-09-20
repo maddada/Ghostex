@@ -30,6 +30,7 @@ pub(crate) fn header_panel_toggle_button(
         .h(px(TITLEBAR_CONTROL_HEIGHT - size_reduction))
         .items_center()
         .justify_center()
+        .rounded(px(TITLEBAR_BUTTON_RADIUS))
         .cursor_default()
         .when(enabled, |this| {
             this.hover(|this| this.bg(titlebar_button_hover_color()))

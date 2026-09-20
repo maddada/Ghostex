@@ -8,6 +8,9 @@ use gpui::ElementId;
 use gpui::Hsla;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
+use gpui::MouseButton;
+use gpui::MouseMoveEvent;
+use gpui::MouseUpEvent;
 use gpui::ParentElement;
 use gpui::Stateful;
 use gpui::Styled;
@@ -80,25 +83,16 @@ fn resize_rail_strip_trailing_reach(side: ResizeRailGrabSide) -> f32 {
 
 /// CDXC:Workarea 2026-09-19 DECISION:
 /// User: rails should be catchable without hovering exactly on the line, the way Waku's are, and the earlier rule that the visible divider must be the only grab target no longer applies to resize rails.
-/// The strip is an invisible child of the 1px rail that reaches a few pixels into the neighbouring panes. It is drawn deferred so it sits above both panes (the terminal element blocks the mouse for anything under it) and escapes the split containers' clipping. A CEF page is a native view above the GPUI scene, so the strip never receives the mouse over one; callers whose rail touches a CEF page on one side pass `Leading` or `Trailing` to put the whole strip on the GPUI-painted side, which is what Waku does next to its webview.
-///
-/// CDXC:Workarea 2026-09-19 WHY:
-/// The strip blocks the mouse for what is under it only while no resize drag is running. Every drag is driven by the root element's mouse-move listener, and GPUI delivers a move to an element only while its hitbox counts as hovered, which a blocking hitbox above it prevents. A strip that kept blocking during its own drag swallowed every move made while the pointer was still inside it, so dragging towards the strip's side did nothing.
+/// The strip is an invisible child of the 1px rail that reaches a few pixels into the neighbouring panes. It is drawn deferred so it sits above both panes and escapes the split containers' clipping, and it blocks the mouse so what is under it does not react to a pointer aiming for the rail. A CEF page is a native view above the GPUI scene, so the strip never receives the mouse over one; callers whose rail touches a CEF page on one side pass `Leading` or `Trailing` to put the whole strip on the GPUI-painted side, which is what Waku does next to its webview.
 pub(crate) fn resize_rail_grab_strip(
     id: impl Into<ElementId>,
     axis: WorkspaceSplitAxis,
     side: ResizeRailGrabSide,
-    resize_drag_active: bool,
 ) -> Stateful<Div> {
     let leading = resize_rail_strip_leading_reach(side);
     let extent =
         leading + WORKSPACE_SPLIT_HANDLE_THICKNESS + resize_rail_strip_trailing_reach(side);
-    let strip = div().id(id).absolute();
-    let strip = if resize_drag_active {
-        strip
-    } else {
-        strip.occlude()
-    };
+    let strip = div().id(id).absolute().occlude();
     match axis {
         WorkspaceSplitAxis::Horizontal => strip
             .top_0()
@@ -234,6 +228,75 @@ pub(crate) fn rail_aware_pane_border<E: Styled + ParentElement>(
 }
 
 impl GhostexGpuiApp {
+    /// CDXC:Workarea 2026-09-20 WHY:
+    /// A rail must keep following the pointer over whatever it crosses. GPUI hands a mouse move to an element's own listener only while that element's hitbox is hovered, and a blocking hitbox above it, such as a terminal or a grab strip, takes the root element out of the hit list, so a drag that entered one stopped moving and its release was never seen. This zero-size canvas listens window-wide instead, the way the terminal element does for its own drags, and does nothing unless a rail is actually being dragged.
+    pub(crate) fn render_resize_drag_pointer_tracker(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        let view = cx.entity();
+        gpui::canvas(
+            |_bounds, _window, _cx| {},
+            move |_bounds, _prepaint, window, _cx| {
+                let move_view = view.clone();
+                window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                    if !phase.bubble() {
+                        return;
+                    }
+                    move_view.update(cx, |app, cx| {
+                        app.handle_resize_drag_pointer_move(event, window, cx);
+                    });
+                });
+                let up_view = view.clone();
+                window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                    if !phase.bubble() || event.button != MouseButton::Left {
+                        return;
+                    }
+                    up_view.update(cx, |app, cx| {
+                        app.handle_resize_drag_pointer_up(event, window, cx);
+                    });
+                });
+            },
+        )
+        .absolute()
+        .size_0()
+        .into_any_element()
+    }
+
+    fn handle_resize_drag_pointer_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.resize_rail_drag_active() {
+            return;
+        }
+        self.handle_sidebar_drag_move(event, window, cx);
+        self.handle_command_pane_resize_drag_move(event, window, cx);
+        self.handle_workspace_split_resize_drag_move(event, window, cx);
+        self.handle_command_split_resize_drag_move(event, window, cx);
+        self.handle_browser_split_resize_drag_move(event, window, cx);
+        self.handle_workarea_split_resize_drag_move(event, window, cx);
+    }
+
+    fn handle_resize_drag_pointer_up(
+        &mut self,
+        event: &MouseUpEvent,
+        window: &mut gpui::Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if !self.resize_rail_drag_active() {
+            return;
+        }
+        self.handle_sidebar_drag_mouse_up(event, window, cx);
+        self.handle_command_pane_resize_mouse_up(event, window, cx);
+        self.handle_workspace_split_resize_mouse_up(event, window, cx);
+        self.handle_command_split_resize_mouse_up(event, window, cx);
+        self.handle_browser_split_resize_mouse_up(event, window, cx);
+        self.handle_workarea_split_resize_mouse_up(event, window, cx);
+    }
+
     /// Whether any resize rail is being dragged right now.
     pub(crate) fn resize_rail_drag_active(&self) -> bool {
         self.sidebar_drag.is_some()

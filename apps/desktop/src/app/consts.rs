@@ -78,18 +78,25 @@ pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 520.0;
 
 pub(crate) const SIDEBAR_RESET_WIDTH: f32 = 235.0;
 
+/// CDXC:Sidebar 2026-09-20 DECISION:
+/// User: below this width the Search and Commands rows stop being full-width rows and become
+/// icon-only buttons with their label and shortcut in a tooltip, and every button in those rows
+/// aligns left. Above it both rows keep their label, their shortcut hint and their trailing
+/// controls. Sits below the 235px default so a sidebar at its normal width is never compact; the
+/// macOS traffic-light reserve is what makes the narrow Search row run out of room first.
+pub(crate) const SIDEBAR_COMPACT_ROWS_WIDTH: f32 = 220.0;
+
 /*
 CDXC:Sidebar 2026-09-20 DECISION:
-User, reviewing the 2026-09-19 screens: the session list fades out at both ends the way the chat
-transcript does under the work area header. There is no rule under the Search row and none above the
-usage strip or the Commands row, so these two ramps are the only edges the list has. The heights are
-screen 01's own mask (`linear-gradient(transparent, #000 22px, #000 calc(100% - 28px), transparent)`
-in docs/2026-09-19/titlebarless-workspace/shared.css). This supersedes the 2026-09-19 rule that
-framed the list with a hairline at each end.
+User: the session list fades out at its bottom end only, into the usage strip and the Commands row.
+The matching ramp at the top was removed; nothing shades the list under the project header. There is
+still no rule under the Search row and none above the usage strip or the Commands row, so this one
+ramp is the only edge the list has. Its height is screen 01's own mask (the `calc(100% - 28px)` stop
+of `linear-gradient(transparent, #000 22px, #000 calc(100% - 28px), transparent)` in
+docs/2026-09-19/titlebarless-workspace/shared.css). This supersedes both the 2026-09-19 rule that
+framed the list with a hairline at each end and the earlier 2026-09-20 rule that faded both ends.
 SEE-ALSO: apps/desktop/src/app/native_sidebar/scroll_fade.rs, apps/desktop/src/app/native_sidebar/navigation.rs.
 */
-pub(crate) const SIDEBAR_LIST_TOP_FADE_HEIGHT: f32 = 22.0;
-
 pub(crate) const SIDEBAR_LIST_BOTTOM_FADE_HEIGHT: f32 = 28.0;
 
 /// CDXC:Workarea 2026-09-19 DECISION:
@@ -260,6 +267,14 @@ update, Back, reveal session, Forward, Notifications) use the same padding so th
 the right side; this supersedes the 2026-09-06 fixed 29px leading width.
 */
 pub(crate) const TITLEBAR_BUTTON_HORIZONTAL_PADDING: f32 = 7.0;
+
+/*
+CDXC:Titlebar 2026-09-20 DECISION:
+User: every header button carries the same corner rounding the Quick Actions split button already
+had, so the sidebar toggle, Back/Forward, the reveal-session dot, the ⋯ menu and the two panel
+toggles round their hover and active fills exactly like Start / Open / Commit.
+*/
+pub(crate) const TITLEBAR_BUTTON_RADIUS: f32 = 7.0;
 
 /*
 CDXC:Titlebar 2026-09-19 DECISION:

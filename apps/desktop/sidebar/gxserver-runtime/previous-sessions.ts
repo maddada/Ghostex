@@ -14,6 +14,7 @@ import {
 } from './helpers/previous-sessions';
 import { normalizeNonEmptyString } from './helpers/records';
 import type { GpuiGxserverCreatedSessionResult } from './types-and-protocol';
+import { resolveEffectivePreferredAgentInterface } from '@/packages/shared/ghostex-settings';
 import type { GxserverPresentationSearchResponse } from '@/packages/shared/gxserver-protocol';
 import type { SidebarPreviousSessionItem, SidebarToExtensionMessage } from '@/packages/shared/session-grid-contract';
 
@@ -160,9 +161,24 @@ export const gpuiSidebarRuntimePreviousSessionMethods = {
       });
       const restoredSessionId = normalizeNonEmptyString(response.session?.sessionId);
       if (restoredSessionId) {
+        /*
+        CDXC:SessionChat 2026-09-20 WHY:
+        Restoring a closed conversation is the slowest way into a session: the create above, then the wake, then the
+        attach, and only then the terminal the automatic Chat handoff waits on. The restored row names its own agent,
+        so the focus carries that agent's Default Agent View and the desktop opens chat while the rest runs behind it.
+        */
+        const restoredAgentId = normalizeNonEmptyString(response.session?.agentId);
         this.focusLocalWorkspaceSession(
           normalizeNonEmptyString(response.session?.projectId) ?? reference.projectId,
-          restoredSessionId
+          restoredSessionId,
+          restoredAgentId
+            ? {
+                preferredInterface: resolveEffectivePreferredAgentInterface(
+                  createGpuiSidebarSettings(this.runtimeSettings),
+                  restoredAgentId
+                ),
+              }
+            : undefined
         );
       }
       await this.client

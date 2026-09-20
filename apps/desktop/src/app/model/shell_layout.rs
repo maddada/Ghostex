@@ -12,7 +12,7 @@ pub(crate) struct GpuiShellLayoutState {
     pub(crate) shell_focus: ShellFocusTarget,
     pub(crate) previous_non_command_focus: Option<ShellFocusTarget>,
     pub(crate) pet_overlay_activities_visible: bool,
-    pub(crate) sidebar_usage_expanded: bool,
+    pub(crate) sidebar_usage_visible: bool,
     pub(crate) agents_workspace: WorkspaceModel,
     pub(crate) agents_workspace_project_id: Option<String>,
     pub(crate) parked_agents_workspaces_by_project: HashMap<String, serde_json::Value>,
@@ -73,7 +73,7 @@ impl GpuiShellLayoutState {
             shell_focus,
             previous_non_command_focus: Some(shell_focus),
             pet_overlay_activities_visible: true,
-            sidebar_usage_expanded: false,
+            sidebar_usage_visible: false,
             agents_workspace,
             agents_workspace_project_id: None,
             parked_agents_workspaces_by_project: HashMap::new(),
@@ -140,7 +140,7 @@ impl GpuiShellLayoutState {
     ) -> Option<Self> {
         /*
         CDXC:Workarea 2026-06-22-06:29:
-        GPUI layout persistence is scoped to placeholder shell state only: titlebar mode, tab/split ids, active selections, focus/Focus mode, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, command pane mode/height/tree, Browser tab shell ids with complete sanitized HTTP(S) URLs, project-editor companion sizing, project-editor awake/sleeping recency state, and the `petOverlayActivitiesVisible`, `sidebarUsageExpanded` and `viewPanelPickerOpen` UI booleans. Do not persist pet activity payloads, titles, paths, raw settings JSON, terminal content, command text, stdout/stderr, user paths, project paths, URL credentials, cookies, secrets, raw page titles, favicon URLs, or unrelated private user content.
+        GPUI layout persistence is scoped to placeholder shell state only: titlebar mode, tab/split ids, active selections, focus/Focus mode, bounded canonical gxserver P/G identities, the validated bounded command Action selector used for restart reuse, safe Agents Delayed Send trigger/remaining-time checkpoints, command pane mode/height/tree, Browser tab shell ids with complete sanitized HTTP(S) URLs, project-editor companion sizing, project-editor awake/sleeping recency state, and the `petOverlayActivitiesVisible`, `sidebarUsageVisible` and `viewPanelPickerOpen` UI booleans. Do not persist pet activity payloads, titles, paths, raw settings JSON, terminal content, command text, stdout/stderr, user paths, project paths, URL credentials, cookies, secrets, raw page titles, favicon URLs, or unrelated private user content.
 
         CDXC:Workarea 2026-06-22-06:29:
         Restoring corrupted or absent GPUI shell state should use the current placeholder defaults because the persisted file is optional app state. This fallback is limited to invalid state-file input and should not mask runtime errors in live layout mutation code.
@@ -393,10 +393,11 @@ impl GpuiShellLayoutState {
             .get("petOverlayActivitiesVisible")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
-        // Layout state, not a preference: the usage strip starts collapsed on a
-        // first run and on any state file written before it existed.
-        let sidebar_usage_expanded = object
-            .get("sidebarUsageExpanded")
+        // Layout state, not a preference: the usage strip starts hidden on a first
+        // run, on any state file written before it existed, and for anyone whose
+        // state still carries the retired `sidebarUsageExpanded` key.
+        let sidebar_usage_visible = object
+            .get("sidebarUsageVisible")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false);
         /*
@@ -453,7 +454,7 @@ impl GpuiShellLayoutState {
             shell_focus,
             previous_non_command_focus,
             pet_overlay_activities_visible,
-            sidebar_usage_expanded,
+            sidebar_usage_visible,
             agents_workspace,
             agents_workspace_project_id,
             parked_agents_workspaces_by_project,

@@ -83,6 +83,8 @@ impl NativeChatView {
         // its own; adding one lifts the whole block off centre.
         let region = div()
             .flex_1()
+            .w_full()
+            .min_w_0()
             .flex()
             .flex_col()
             .items_center()
@@ -114,17 +116,20 @@ impl NativeChatView {
                     |this| {
                         this.child(
                             div()
+                                .w_full()
+                                .min_w_0()
+                                .text_center()
+                                .whitespace_nowrap()
                                 .text_size(px(TITLE_TEXT_SIZE * s))
                                 .line_height(px(TITLE_TEXT_SIZE * 1.25 * s))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                 .text_color(p.foreground)
-                                .child(
+                                .child(new_session_welcome_title_wrap(
                                     welcome
                                         .get("title")
                                         .and_then(Value::as_str)
-                                        .unwrap_or("What should we work on?")
-                                        .to_owned(),
-                                ),
+                                        .unwrap_or("What should we work on?"),
+                                )),
                         )
                     },
                 )
@@ -168,6 +173,23 @@ impl NativeChatView {
             })
             .into_any_element()
     }
+}
+
+/// CDXC:SessionChat 2026-09-20 DECISION:
+/// User: when GPUI chat is very narrow, the welcome title wraps, is center aligned, and the second line has 2 or 3 words, never 1.
+/// GPUI treats U+00A0 as a wrap point, so a hard newline is the break; `whitespace_nowrap` keeps the last line from splitting again. A 6+ word headline keeps 3 words on the last line ("What should we" / "build with Codex?"); shorter ones keep 2.
+/// SEE-ALSO: packages/shared/session-chat-presentation/new-session-welcome.ts (`wrapNewSessionWelcomeTitle`).
+fn new_session_welcome_title_wrap(title: &str) -> String {
+    if title.contains('\n') {
+        return title.to_owned();
+    }
+    let words: Vec<&str> = title.split_whitespace().collect();
+    if words.len() < 4 {
+        return title.to_owned();
+    }
+    let last_count = if words.len() >= 6 { 3 } else { 2 };
+    let split = words.len() - last_count;
+    format!("{}\n{}", words[..split].join(" "), words[split..].join(" "))
 }
 
 /// The agent's brand mark, or the generic robot glyph when the agent has no artwork.

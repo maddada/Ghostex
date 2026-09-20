@@ -79,6 +79,10 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     /// The sidebar runtime sets this when the focused project changes and on a Space restore. Rust then selects the tab in the background and leaves the mode and keyboard focus alone unless the remembered view is Agents, the same rule `startup_restore` applies to the restart replay.
     /// SEE-ALSO: `focusSession` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `select_local_workspace_terminal_keeping_view` in apps/desktop/src/app/workspace_terminals.rs, `pending_keep_view_remote_focus` in apps/desktop/src/app/core.rs.
     pub(crate) keep_view: bool,
+    /// CDXC:FocusRouting 2026-09-20 WHY:
+    /// The sidebar runtime sets this when the session it is focusing is asleep, instead of awaiting its own `/api/wakeSession` before posting the focus. The attach plan then uses the Wake intent, which starts the provider, marks the row running and returns the attach metadata in one round trip, so the click no longer waits on a serial wake before anything moves.
+    /// SEE-ALSO: `focusSession` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `local_workspace_attach_intent_for_key` in apps/desktop/src/app/workspace_terminals.rs.
+    pub(crate) wake_sleeping: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

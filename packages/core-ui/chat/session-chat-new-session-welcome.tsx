@@ -13,7 +13,7 @@ headline once a card is up, so the remaining space belongs to the logo alone.
 */
 
 import { IconRobot } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { cn } from '@/packages/components/utils';
 import type { SidebarAgentIcon } from '../../shared/sidebar-agents';
 import {
@@ -124,7 +124,14 @@ export function NewSessionWelcome({
         <div className='ghostex-chat-new-session-title'>
           {layers.map((layer, index) => (
             <span className={layerClassName(layer, index < layers.length - 1)} key={layer.id}>
-              {sessionChatNewSessionWelcomeTitle(layer.agentName)}
+              {sessionChatNewSessionWelcomeTitle(layer.agentName)
+                .split('\n')
+                .map((line, lineIndex, lines) => (
+                  <Fragment key={lineIndex}>
+                    {line}
+                    {lineIndex < lines.length - 1 ? <br /> : null}
+                  </Fragment>
+                ))}
             </span>
           ))}
         </div>
