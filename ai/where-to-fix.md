@@ -63,16 +63,15 @@ Sockets, storage and timers for one platform, and nothing else:
 - `apps/desktop/src/app/gx_chat/` (feeds `gx-chat-core`), `apps/desktop/src/app/gx_store/` (feeds `gx-core`), `apps/gpui-web/src/app/gx_store/`.
 - `packages/client-storage/` owns storage ownership, validation, budgets and recovery rules for every host.
 
-## Chat during the Rust port
+## Chat
 
-User decision 2026-09-24: chat-rule fixes and features go **only** into `packages/gx-chat-core`, plus `native_chat/` when drawing changes. Do not also patch the TypeScript chat brain (`packages/shared/session-chat-controller/`, `packages/shared/session-chat-presentation/`). The desktop runs only the core since 2026-09-25 (its QuickJS chat and the `chatBrain` setting are deleted); the TypeScript brain is left for the GPUI web build, the phone's previous web chat and the replay gate. Mobile moves to native React Native views fed by the same core through UniFFI (decision 2026-09-21, 1b), so the core is also where mobile chat behaviour goes.
+User decision 2026-09-24: chat-rule fixes and features go **only** into `packages/gx-chat-core`, plus `native_chat/` when drawing changes. Since 2026-09-25 the core is the only chat brain on every client: the desktop and the GPUI web build run it through `apps/desktop/src/app/gx_chat/`, and the phone runs it through UniFFI (`packages/gx-chat-mobile`) under native React Native views (`apps/mobile/app/src/chat/`; decisions 2026-09-21, 1b, and 2026-09-25, native only). The TypeScript chat brain, the React chat and the phone's WebView chat were deleted that day. Phone drawing changes go in `apps/mobile/app/src/chat/native/`, with `native_chat/` as the reference for what each part of the document means.
 
-A chat bug that is really about the session (what reaches the terminal, what the agent's screen shows, what the transcript says) is a gxserver fix under layer 1, not a chat-core fix. It then works for every chat brain and every client immediately.
+A chat bug that is really about the session (what reaches the terminal, what the agent's screen shows, what the transcript says) is a gxserver fix under layer 1, not a chat-core fix. It then works for every client immediately.
 
 ## Where not to start new work
 
-- **React chat** (`packages/core-ui/chat/`, `apps/mobile/views/chat/`): going away; the Rust chat core replaces it everywhere.
-- **The TypeScript chat brain** (`packages/shared/session-chat-controller/`, `packages/shared/session-chat-presentation/`): being replaced by `gx-chat-core`; see above.
+- **React chat, the TypeScript chat brain and the phone's WebView chat**: deleted on 2026-09-25; do not restore them. What remains in `packages/core-ui/chat/` is the Markdown renderer, the GhostexEditor's Lexical prompt input and the Stashed Prompts draft storage, not a chat.
 - **React Kanban and Automate pages** (`apps/desktop/views/tasks-placeholder.tsx`, `apps/desktop/views/project-board/`): retired; the native views are `native_kanban/` and `native_automate/`.
 - **The old TypeScript gxserver**: gone; gxserver is Rust only.
 - **The desktop QuickJS app runtime**: deleted on 2026-09-25. Its behaviour lives in gxserver, `gx-core` and `apps/desktop/src/app/gx_store/`; do not add a JavaScript engine or service back to the desktop.
