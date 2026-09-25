@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ghostex_gx_core::{CloseAfterDoneInput, DelayedSendInput, ProjectDiffStats};
+use ghostex_gx_core::{DelayedSendInput, ProjectDiffStats};
 use serde_json::Value;
 
 use crate::GhostexGpuiApp;
@@ -33,7 +33,6 @@ pub(crate) struct SidebarRuntimeFacts {
     /// Nothing mutates it, so the three copies were three readers of one immutable document.
     pub(super) hud: Option<Arc<Value>>,
     pub(super) project_diff_stats: HashMap<String, ProjectDiffStats>,
-    pub(super) close_after_done: HashMap<String, CloseAfterDoneInput>,
     /// This app's own Delayed Sends of workspace sessions (local_delayed_sends.rs).
     pub(super) delayed_sends: HashMap<String, DelayedSendInput>,
     /// Each remote machine's client-parked projects, newest first, read once at launch

@@ -136,11 +136,11 @@ fn refresh_recent_projects(host: &mut SidebarHostInputs, hud: Option<&Value>) {
     host.recent_project_count = recent_projects.len();
 }
 
-/// The per-row facts whose real source is still the old runtime: a project's git numbers and the
-/// two armed timers this app's runtime owns.
+/// The per-row facts this app computes: a project's git numbers and this app's own Delayed Sends.
+/// A row's Close After Done comes from gxserver's presentation (gx-core `CloseAfterDoneInput::from_session`).
 ///
 /// CDXC:Sidebar 2026-09-21 WHY:
-/// The three maps are taken whole rather than filtered to the drawn rows. The channel keys them
+/// The two maps are taken whole rather than filtered to the drawn rows. The channel keys them
 /// the way the view model looks them up (a project id, a sidebar session id), every reader asks
 /// per row it draws, and the channel's sets are supersets of the publish's, which only ever held
 /// the rows that survived the machine filter, the Space and the tag filters. A Delayed Send the
@@ -151,11 +151,6 @@ fn refresh_row_facts(host: &mut SidebarHostInputs, facts: &SidebarRuntimeFacts) 
         .project_diff_stats
         .iter()
         .map(|(project_id, stats)| (project_id.clone(), *stats))
-        .collect();
-    host.close_after_done = facts
-        .close_after_done
-        .iter()
-        .map(|(session_id, close)| (session_id.clone(), close.clone()))
         .collect();
     host.local_delayed_sends = facts
         .delayed_sends

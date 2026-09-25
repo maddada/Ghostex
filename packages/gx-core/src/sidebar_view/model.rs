@@ -952,16 +952,6 @@ fn changed_timer_keys(previous: &SidebarInputs, next: &SidebarInputs) -> BTreeSe
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for key in previous
         .host
-        .close_after_done
-        .keys()
-        .chain(next.host.close_after_done.keys())
-    {
-        if previous.host.close_after_done.get(key) != next.host.close_after_done.get(key) {
-            keys.insert(key.clone());
-        }
-    }
-    for key in previous
-        .host
         .local_delayed_sends
         .keys()
         .chain(next.host.local_delayed_sends.keys())
