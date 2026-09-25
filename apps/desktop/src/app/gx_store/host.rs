@@ -69,6 +69,23 @@ pub(super) struct PumpOutcome {
     /// agree, the guard is never asked at all. That cost two live rounds to find, because it is
     /// invisible except as a counter that stays at zero.
     pub(super) local_reloaded: bool,
+    /// This computer's socket delivered a snapshot (or confirmed the held one as current), which
+    /// a reconnect to a restarted daemon does while the machine stays loaded, so
+    /// `local_reloaded` alone never reports it.
+    pub(super) local_snapshot: bool,
+}
+
+/// A snapshot frame from this computer's own socket.
+fn is_local_snapshot(event: &Event) -> bool {
+    use ghostex_gx_core::protocol::ServerEvent;
+    matches!(
+        event,
+        Event::Frame { machine: MachineId::Local, frame }
+            if matches!(
+                **frame,
+                ServerEvent::PresentationSnapshot(_) | ServerEvent::PresentationSnapshotCurrent(_)
+            )
+    )
 }
 
 /// CDXC:StateSync 2026-09-19 DECISION:
@@ -198,12 +215,14 @@ impl GxStoreHost {
             };
         }
         let mut events = Vec::with_capacity(outputs.len());
+        let mut local_snapshot = false;
         for output in outputs {
             match output {
                 ClientOutput::Event(event) => {
                     if let Event::Connection { update, .. } = &event {
                         self.note_connection(update);
                     }
+                    local_snapshot |= is_local_snapshot(&event);
                     events.push(event);
                 }
                 ClientOutput::Diagnostic(diagnostic) => {
@@ -250,6 +269,7 @@ impl GxStoreHost {
                 .machines_reloaded
                 .iter()
                 .any(MachineId::is_local),
+            local_snapshot,
         };
         self.run_effects(output.effects);
         outcome
@@ -447,7 +467,7 @@ impl GhostexGpuiApp {
     /// Returns `true` when the client's thread is gone.
     fn gx_store_pump(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         let outcome = self.gx_store.pump();
-        if outcome.local_reloaded {
+        if outcome.local_reloaded || outcome.local_snapshot {
             self.gx_store_presentation_ready(cx);
         }
         let renderer_commands = std::mem::take(&mut self.gx_store.pending_renderer_commands);
