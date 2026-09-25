@@ -430,6 +430,12 @@ pub struct GhostexGpuiApp {
     last-used view after an app restart. The CEF surfaces stay runtime-only.
     */
     pub(crate) agents_chat_mode_sessions: HashSet<TerminalSessionId>,
+    /// Sessions of the current project that have rendered the terminal agent
+    /// action bar. While a running session's bar data lags a switch, its bar
+    /// height stays reserved so the terminal body keeps its row count
+    /// (`render_terminal_agent_action_bar`). Runtime-only; cleared on project
+    /// switch, because session ids are project-local.
+    pub(crate) terminal_agent_bar_sessions: HashSet<TerminalSessionId>,
     /// The one terminal agent action bar whose "More actions" menu is open, by
     /// shell session id. Runtime-only, and single-valued because opening a
     /// second bar's menu closes the first, exactly like the chat composer's

@@ -1,6 +1,6 @@
 // Cluster: zmx client visibility announcements for Agents GPUI-engine
-// terminals (displayed vs parked), including the resting-width grid a parked
-// client keeps locally.
+// terminals (displayed, chat or parked), including the resting-width grid a
+// chat client keeps locally.
 
 use std::collections::HashSet;
 
@@ -49,9 +49,10 @@ impl GhostexGpuiApp {
       `PoppedOutPlaceholder`, never Running, so they own no engine record here.
     - Chat: a rendered chat slot holds a wide-grid claim with `ZMX_CHAT`.
     - Parked: a session outside the rendered slots holds no chat claim.
-    - Both non-visible states: the local emulator is resized to `ZMX_RESTING_GRID_COLS` x its
-      current rows so it never receives output rendered for a width it does
-      not have, then the matching `ZMX_CHAT` or `ZMX_HIDDEN` is written into the PTY input
+    - Both non-visible states: a chat client's local emulator is resized to
+      `ZMX_RESTING_GRID_COLS` x its current rows, the width its claim widens
+      the daemon to; a parked client keeps its grid (CDXC:Zmx 2026-09-25 below).
+      Then the matching `ZMX_CHAT` or `ZMX_HIDDEN` is written into the PTY input
       (the same `write_input` path pastes use; the attach client consumes the
       sequence and never forwards it to the shell).
     - Visible: the claim is written from the element's prepaint, after the
@@ -189,8 +190,16 @@ impl GhostexGpuiApp {
                     },
                 );
             } else if previous != Some(visibility) {
-                let (_, rows) = view.read(cx).model().size();
-                let cols = ZMX_RESTING_GRID_COLS;
+                // CDXC:Zmx 2026-09-25 WHY:
+                // A parked viewer keeps its grid instead of reflowing to the resting width (supersedes parking both non-visible states at 200 columns). With no visible or chat claim the daemon retains the grid the viewer last claimed (loop.zig electLeader), so the mirror at that grid takes the streamed output exactly and a redisplay at the same size needs no reflow, no claim round trip and no reflow hold. The 200-column park re-wrapped that output against a grid the daemon was not using, and every switch back resized, reflowed and held.
+                // If another client changes the daemon grid meanwhile, the redisplay's claim changes it back, and the daemon repaints every client from its own screen.
+                // Chat keeps the resting width, because the chat claim itself widens the daemon to at least 200 columns.
+                let (current_cols, rows) = view.read(cx).model().size();
+                let cols = if visibility == GpuiEngineTerminalZmxVisibility::Chat {
+                    ZMX_RESTING_GRID_COLS
+                } else {
+                    current_cols
+                };
                 view.update(cx, |view, cx| {
                     view.resize_grid(cols, rows, cx);
                     let sequence = if visibility == GpuiEngineTerminalZmxVisibility::Chat {

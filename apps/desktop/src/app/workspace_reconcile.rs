@@ -1009,6 +1009,7 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = None;
         self.local_app_shot_session_mappings.clear();
         self.agents_chat_mode_sessions = chat_mode_sessions;
+        self.terminal_agent_bar_sessions.clear();
         self.agents_terminal_startup_coordinator = AgentsTerminalStartupCoordinator::new();
         self.agents_terminal_surface_host = NativeTerminalSurfaceHost::new();
         self.agents_terminal_surface_lifecycle = NativeTerminalSurfaceLifecycleState::new();

@@ -350,7 +350,7 @@ pub struct TerminalSnapshot {
 
 /// Mirrors `RESTING_GRID_COLS` in `.dependencies/zmx` and must stay equal:
 /// it is the column count the zmx daemon rests at while no attached client
-/// is displaying, and the width a hidden client keeps its local grid at.
+/// is displaying, and the width a chat client keeps its local grid at.
 pub const ZMX_RESTING_GRID_COLS: u16 = 200;
 
 /// In-band sequence the zmx attach client consumes from its stdin (never
@@ -1169,6 +1169,18 @@ impl TerminalModel {
         let target = row.min(scrollbar.total.saturating_sub(scrollbar.len));
         let delta = i128::from(target) - i128::from(scrollbar.offset);
         scroll_terminal_delta(terminal, delta);
+    }
+
+    /// Current scrollbar state (viewport position, in rows) without consuming
+    /// snapshot dirty state.
+    pub fn scrollbar(&mut self) -> Result<VtScrollbar, VtError> {
+        let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+        let Some(terminal) = terminal.as_mut() else {
+            return Err(VtError {
+                code: ffi::GHOSTTY_INVALID_VALUE,
+            });
+        };
+        terminal.scrollbar()
     }
 
     /// Read every scrollback row without changing the user's final viewport.
