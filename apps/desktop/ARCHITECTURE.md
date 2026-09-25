@@ -59,16 +59,15 @@ The titlebar is GPUI-owned. It renders the project label, sidebar toggle, workar
 
 ### Sidebar
 
-**Technology:** existing React `SidebarApp` inside CEF.
+**Technology:** native GPUI renderer fed by the Rust store (`packages/gx-core`).
 
 Main code:
 
-- `gpui/index.html`
-- `gpui/sidebar/main.tsx`
-- `gpui/sidebar/gxserver-runtime.ts`
-- `gpui/src/cef/macos.rs`
+- `apps/desktop/src/app/native_sidebar/` (drawing and input)
+- `apps/desktop/src/app/gx_store/` (the store, its gxserver calls through `gx_rpc`, and the actions)
+- `packages/gx-core/` (the rules)
 
-Rust creates a `CefSurface` for `index.html`. The TypeScript runtime mounts the shared sidebar React app and adapts it to GPUI by providing a local message source and a `vscode.postMessage`-compatible facade. The sidebar gets gxserver bootstrap data through `window.ghostexGpui`, talks to local gxserver over HTTP/WebSocket, and posts active-project/readiness/native-action messages back through fixed CEF bridge functions.
+The React sidebar in CEF was deleted on 2026-09-21 and the QuickJS app runtime that fed it on 2026-09-25; the desktop runs no JavaScript outside its CEF pages.
 
 ### Agents terminal panes
 
