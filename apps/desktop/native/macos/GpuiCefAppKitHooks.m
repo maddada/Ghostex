@@ -51,7 +51,6 @@ void GhostexGpuiCEFClearActiveNativeView(void);
 int GhostexGpuiCEFRefreshSystemPageAppearanceForNativeView(void *nativeView);
 void GhostexGpuiCEFRefreshSystemPageAppearances(void);
 void GhostexGpuiSidebarRevealFocusEditable(void *sidebar);
-bool GhostexGpuiSidebarRevealReturnFocus(void *sidebar);
 void GhostexGpuiFirstResponderDidChange(void *gpuiRootView, void *responder);
 int GhostexGpuiKeyboardRouteNativeEvent(void *gpuiRootView, int action,
                                         uint32_t keyCode, uint64_t modifiers,
@@ -88,12 +87,8 @@ static const void *GhostexGpuiFirstResponderObserverKey =
     &GhostexGpuiFirstResponderObserverKey;
 static const void *GhostexGpuiRootPointerTrackingAreaKey =
     &GhostexGpuiRootPointerTrackingAreaKey;
-static const void *GhostexGpuiCEFMouseFocusPassiveKey =
-    &GhostexGpuiCEFMouseFocusPassiveKey;
 static const void *GhostexGpuiCEFPinchZoomDisabledKey =
     &GhostexGpuiCEFPinchZoomDisabledKey;
-static const void *GhostexGpuiCEFPassiveFocusGrantKey =
-    &GhostexGpuiCEFPassiveFocusGrantKey;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkPending = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpWorkActive = NO;
 static BOOL g_ghostexGpuiCEFMessagePumpReentrancyDetected = NO;
@@ -157,8 +152,6 @@ GhostexGpuiCEFHandleZoomCommandForResponder(id responder,
 static void GhostexGpuiCEFBrowserViewForwardEditActionToSuper(id self, SEL _cmd,
                                                               id sender);
 static NSView *GhostexGpuiCEFMarkFocusedResponder(id responder);
-static NSView *GhostexGpuiCEFPassiveFocusRootForView(NSView *view);
-static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView *view);
 static BOOL GhostexGpuiCEFRefreshSystemPageAppearanceForView(NSView *view);
 static NSEvent *GhostexGpuiNormalizedNavigationKeyEvent(NSEvent *event);
 static void GhostexGpuiFirstResponderReportWindow(NSWindow *window);
@@ -1270,85 +1263,6 @@ void GhostexGpuiCEFPrepareNativeViewForFocus(void *nativeView) {
   GhostexGpuiCEFInstallBrowserViewFocusSubclassInTree(view);
 }
 
-/*
- CDXC:FocusRouting 2026-07-22:
- The shared sidebar CEF surface is app chrome: clicking its background must
- not move keyboard focus away from the active terminal/pane. A browser root
- flagged mouse-focus passive declines first responder for every view in its
- tree (AppKit's automatic click focus and the focus-subclass mouseDown grab
- both consult this), unless Rust has explicitly granted keyboard focus for
- an editable element via the sidebar editable-focus bridge. Both flags live
- on the exact registered browser root; no hit-testing or event routing is
- changed — clicks still reach Chromium normally.
-*/
-void GhostexGpuiCEFSetNativeViewMouseFocusPassive(void *nativeView,
-                                                  bool passive) {
-  NSView *view = (__bridge NSView *)nativeView;
-  if (!view) {
-    return;
-  }
-  objc_setAssociatedObject(view, GhostexGpuiCEFMouseFocusPassiveKey,
-                           passive ? @YES : nil,
-                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-void GhostexGpuiCEFSetNativeViewPassiveFocusGrant(void *nativeView,
-                                                  bool granted) {
-  NSView *view = (__bridge NSView *)nativeView;
-  if (!view) {
-    return;
-  }
-  objc_setAssociatedObject(view, GhostexGpuiCEFPassiveFocusGrantKey,
-                           granted ? @YES : nil,
-                           OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-void GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(void *nativeView) {
-  NSView *view = (__bridge NSView *)nativeView;
-  NSWindow *window = view.window;
-  if (!view || !window) {
-    return;
-  }
-
-  if (GhostexGpuiSidebarRevealReturnFocus(nativeView)) {
-    return;
-  }
-
-  GhostexGpuiFirstResponderObserver *observer =
-      objc_getAssociatedObject(window, GhostexGpuiFirstResponderObserverKey);
-  NSView *gpuiRootView = observer.gpuiRootView;
-  if (!gpuiRootView || gpuiRootView.window != window) {
-    return;
-  }
-  /*
-   Same contract as GhostexGpuiCEFFocusGpuiRootView: clear the explicit
-   Chromium grant before AppKit transfers first responder to GPUI so a
-   renderer SYSTEM focus callback from the outgoing sidebar cannot reuse
-   stale ownership during the same event.
-  */
-  GhostexGpuiCEFClearActiveNativeView();
-  [window makeFirstResponder:gpuiRootView];
-}
-
-static NSView *GhostexGpuiCEFPassiveFocusRootForView(NSView *view) {
-  for (NSView *candidate = view; candidate; candidate = candidate.superview) {
-    if ([objc_getAssociatedObject(candidate, GhostexGpuiCEFMouseFocusPassiveKey)
-            boolValue]) {
-      return candidate;
-    }
-  }
-  return nil;
-}
-
-static BOOL GhostexGpuiCEFViewDeclinesMouseFocus(NSView *view) {
-  NSView *passiveRoot = GhostexGpuiCEFPassiveFocusRootForView(view);
-  if (!passiveRoot) {
-    return NO;
-  }
-  return ![objc_getAssociatedObject(
-      passiveRoot, GhostexGpuiCEFPassiveFocusGrantKey) boolValue];
-}
-
 void GhostexGpuiInstallFirstResponderObserverForNativeView(void *nativeView) {
   NSView *view = (__bridge NSView *)nativeView;
   if (!view || !view.window) {
@@ -1598,20 +1512,9 @@ static void GhostexGpuiCEFInstallBrowserViewFocusSubclass(NSView *view) {
 
 static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
                                                NSEvent *event) {
-  /*
-   CDXC:FocusRouting 2026-07-22:
-   A mouse-focus-passive surface (the shared sidebar) never claims first
-   responder from a click: the active terminal keeps typing focus while the
-   click continues to Chromium unchanged. Keyboard focus for its editable
-   elements arrives only through the explicit Rust editable-focus grant.
-  */
-  BOOL declinesMouseFocus =
-      [self isKindOfClass:NSView.class] &&
-      GhostexGpuiCEFViewDeclinesMouseFocus((NSView *)self);
-  NSView *browserRoot =
-      declinesMouseFocus ? nil : GhostexGpuiCEFMarkFocusedResponder(self);
+  NSView *browserRoot = GhostexGpuiCEFMarkFocusedResponder(self);
   NSWindow *window = [self window];
-  if (window && !declinesMouseFocus) {
+  if (window) {
     [window makeFirstResponder:self];
   }
   if (browserRoot && event) {
@@ -1651,19 +1554,8 @@ static void GhostexGpuiCEFBrowserViewMouseDown(id self, SEL _cmd,
 }
 
 static BOOL GhostexGpuiCEFBrowserViewAcceptsFirstResponder(id self, SEL _cmd) {
+  (void)self;
   (void)_cmd;
-  /*
-   CDXC:FocusRouting 2026-07-22:
-   AppKit also moves first responder to a clicked view on its own when that
-   view accepts first responder, before mouseDown is delivered. A passive
-   surface must decline here too, or the automatic transfer would undo the
-   mouseDown skip. Explicit Rust grants set the grant flag before calling
-   makeFirstResponder, so granted transfers still succeed.
-  */
-  if ([self isKindOfClass:NSView.class] &&
-      GhostexGpuiCEFViewDeclinesMouseFocus((NSView *)self)) {
-    return NO;
-  }
   return YES;
 }
 
