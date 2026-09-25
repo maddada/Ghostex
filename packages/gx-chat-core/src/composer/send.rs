@@ -92,6 +92,8 @@ pub fn begin(
     };
     // The draft leaves with its pictures; a refusal re-inserts the text and counts them again.
     state.composer.draft_attachment_count = 0;
+    // The send pushes its own final revision, so a push still waiting for a pause would only race it.
+    crate::composer::draft_sync::cancel_pending_push(state);
     let mut phases = vec![SendPhase::WriteDraft, SendPhase::FlushDraft];
     for step in &steps {
         phases.push(match step {
@@ -607,6 +609,7 @@ pub fn handoff(
         parked: false,
     };
     state.composer.stored_draft = Some(record.clone());
+    crate::composer::draft_sync::cancel_pending_push(state);
     state.composer.submitting = Some(Submission {
         text: text.to_string(),
         version: version.clone(),
@@ -701,6 +704,8 @@ pub fn receive_handoff(
             classify_draft_handoff(content, version.as_ref(), current, stored.as_ref(), parked);
         match disposition {
             HandoffDisposition::Conflict => {
+                // The bar now offers this transfer, which the synced-draft rule must not withdraw.
+                state.composer.draft_sync.offered_at = None;
                 state.composer.incoming_draft = Some(crate::document::IncomingDraft {
                     content: content.to_string(),
                     version: match serde_json::to_value(&version) {

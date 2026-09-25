@@ -60,6 +60,8 @@ pub struct ComposerState {
     pub draft_attachment_count: u32,
     /// A draft offered from another client, or `None`.
     pub incoming_draft: Option<IncomingDraft>,
+    /// The offer's bookkeeping and the push waiting for typing to pause.
+    pub draft_sync: crate::composer::draft_sync::DraftSyncState,
     /// Which queue and draft endpoints this host can actually call.
     pub transport: TransportQueueMethods,
     /// Whether this host can offer the session note, the stash, attachments and the terminal.

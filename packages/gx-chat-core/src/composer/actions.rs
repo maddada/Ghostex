@@ -64,7 +64,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 from_history: false,
             }]
         }
-        ActionKind::EditDraft => edit_draft(state, action),
+        ActionKind::EditDraft => edit_draft(state, action, context),
         ActionKind::SaveDraft => save_draft(state, action),
         ActionKind::RecallHistory => recall_history(state, action),
         ActionKind::OpenComposerReference => open_reference(action),
@@ -98,9 +98,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         ActionKind::DismissIncomingDraft => {
             state.composer.incoming_draft = None;
+            crate::composer::draft_sync::answered(state);
             Vec::new()
         }
         ActionKind::UseIncomingDraft => {
+            crate::composer::draft_sync::answered(state);
             let effects = state
                 .composer
                 .incoming_draft
@@ -426,9 +428,10 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
     }
 }
 
-fn edit_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     let text = text_param(action);
     track_draft_attachments(state, text);
+    crate::composer::draft_sync::edited(state, text, action.param("draftVersion"), context);
     let from_history = action.param("history") == Some(&Value::Bool(true));
     let history_changed = !from_history && state.composer.history.index.is_some();
     if !from_history {
@@ -452,17 +455,8 @@ fn save_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     track_draft_attachments(state, content);
     // `pushDraft` folds `result.draft` back onto the synced draft, so the write needs an id of its
     // own to be settled by.
-    let request_id = state.core.allocate_request_id();
-    state.composer.draft_pushes.push(request_id);
-    vec![Effect::SendRpc {
-        request_id,
-        method: ChatRpcMethod::SetSessionChatDraft,
-        params: Box::new(json!({
-            "clientId": state.identity.client_id,
-            "content": content,
-            "draftVersion": action.param("draftVersion").cloned().unwrap_or(Value::Null),
-        })),
-    }]
+    let version = action.param("draftVersion").cloned().unwrap_or(Value::Null);
+    vec![crate::composer::draft_sync::push(state, content, version)]
 }
 
 /// `recallHistory`: Up walks back through what this machine has sent, Down walks forward.
