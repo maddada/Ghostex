@@ -195,17 +195,6 @@ impl GhostexGpuiApp {
             "pickRepositoryFolder" => {
                 self.handle_gpui_pick_repository_folder_message(cx);
             }
-            "copySessionDetails" => {
-                // One function, because the sidebar's own copy actions reach the same clipboard
-                // write from Rust now without passing through this bridge
-                // (gx_store/sidebar_actions.rs).
-                if let Some(details_text) = message
-                    .get("detailsText")
-                    .and_then(serde_json::Value::as_str)
-                {
-                    self.gpui_copy_session_details_text(details_text, cx);
-                }
-            }
             "completeFirstLaunchSetup" => {
                 let is_first_launch_setup = self.app_modal_window.clone().is_some_and(|handle| {
                     handle

@@ -366,11 +366,8 @@ impl Populations {
 /// `quickAccessCommandPopulations`.
 pub(crate) fn populations(data: &QuickAccessData) -> Populations {
     let settings = data.settings();
-    let hotkeys: BTreeMap<&'static str, String> = normalize_hotkey_settings(
-        &settings["hotkeys"],
-        settings["preferredAgentInterface"].as_str(),
-        data.platform(),
-    );
+    let hotkeys: BTreeMap<&'static str, String> =
+        normalize_hotkey_settings(&settings["hotkeys"], data.platform());
     let hidden = hidden_workarea_command_ids(data);
     let to_hotkey = |definition: &'static HotkeyDefinition| {
         let hotkey = normalize_hotkey_text(
@@ -390,6 +387,7 @@ pub(crate) fn populations(data: &QuickAccessData) -> Populations {
         .filter(|definition| {
             definition.id != "openCommandPalette"
                 && definition.id != "openSessionSearchPalette"
+                && definition.id != "openProjectSearchPalette"
                 && definition.id != "openExtensions"
                 && definition.kind != "runActionSlot"
                 && definition.kind != "chatAction"

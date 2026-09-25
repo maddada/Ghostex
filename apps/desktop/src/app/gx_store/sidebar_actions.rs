@@ -142,10 +142,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// What the app modal host's `copySessionDetails` arm does. The sidebar's copy actions reach
-    /// it without the bridge now, so both callers must stay one function.
-    ///
-    /// SEE-ALSO: apps/desktop/src/app/remote_conn/app_modal_bridge.rs.
+    /// The one clipboard write for a session's copied details: the sidebar's copy actions and
+    /// Quick Access's copy rows (app/quick_access/host.rs) both come here, so they stay one
+    /// function. The app modal host's `copySessionDetails` arm that also did was deleted with the
+    /// QuickJS runtime, its last sender.
     pub(crate) fn gpui_copy_session_details_text(
         &mut self,
         details_text: &str,

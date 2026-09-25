@@ -375,13 +375,9 @@ impl QuickAccessController {
     }
 
     fn find_prompts_hotkey(&self, context: &QuickAccessContext<'_>) -> String {
-        // `normalizeghostexHotkeySettings(settings.hotkeys)` without the interface option: the
-        // New Session layout does not touch this id.
-        let hotkeys = normalize_hotkey_settings(
-            &context.data.settings()["hotkeys"],
-            None,
-            context.data.platform(),
-        );
+        // `normalizeghostexHotkeySettings(settings.hotkeys)`.
+        let hotkeys =
+            normalize_hotkey_settings(&context.data.settings()["hotkeys"], context.data.platform());
         match hotkeys.get("openFindPrompts").filter(|key| !key.is_empty()) {
             Some(key) => format_hotkey_label(key, context.data.platform()),
             None => String::new(),

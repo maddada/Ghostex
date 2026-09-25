@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GHOSTEX_HOTKEY_DEFINITIONS } from '@/packages/shared/ghostex-hotkeys';
-import { hotkeyActionIconName } from '@/apps/desktop/sidebar/native-quick-access/icons';
+import { hotkeyActionIconName } from '@/tooling/gx-core/quick-access-icons';
 
 const OUT = join(import.meta.dir, '../../packages/gx-core/src/quick_access/hotkey_table.rs');
 

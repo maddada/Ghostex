@@ -1,6 +1,7 @@
 /**
  * The app runtime port's F6 Quick Access gate: the TypeScript controller the QuickJS runtime ran
- * (apps/desktop/sidebar/native-quick-access/) and the Rust model that replaces it
+ * (apps/desktop/sidebar/native-quick-access/, deleted in step 3 and read from git at
+ * `FROZEN_RUNTIME_REVISION` by frozen-runtime.ts) and the Rust model that replaces it
  * (packages/gx-core/src/quick_access/) driven through the same scenarios, and everything each asked
  * the host to do diffed as JSON: every snapshot, menu, close, post, modal, clipboard write and timer.
  * Zero differences is the bar.
@@ -17,13 +18,14 @@
  * Both halves run in UTC and in two platforms (`mac`, `windows`), the TypeScript half in a child
  * process per platform because the controller reads the platform once at import.
  *
- * Mutations: drop-row, wrong-post, selection, hotkey-label. Deleted with the runtime in step 3.
+ * Mutations: drop-row, wrong-post, selection, hotkey-label.
  */
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { frozenRuntimeRoot } from './frozen-runtime';
 
 type Json = any;
 
@@ -94,7 +96,9 @@ async function buildScenarios(dir: string): Promise<void> {
   await import('@/tooling/gx-core/browser-shim');
   const { createGxserverPresentationSidebarGroups } =
     await import('@/packages/shared/gxserver-presentation-sidebar-projection');
-  const projection = await import('@/apps/desktop/sidebar/gxserver-runtime/helpers/presentation-projection');
+  const projection = await import(
+    `${frozenRuntimeRoot()}/apps/desktop/sidebar/gxserver-runtime/helpers/presentation-projection`
+  );
   const daemon = await readDaemon();
   // `createSidebarGroups` for this computer, as the runtime built its store (and as
   // tooling/gx-core/action-parity-typescript.ts does, without loading the runtime class).
@@ -658,7 +662,9 @@ async function runTypeScript(dir: string, platform: string): Promise<void> {
     recordDeliveredSessionChatDrafts: () => {},
   }));
   const { sidebarStore } = await import('@/packages/core-ui/sidebar-store-model');
-  const { connectNativeQuickAccess } = await import('@/apps/desktop/sidebar/native-quick-access/controller');
+  const { connectNativeQuickAccess } = await import(
+    `${frozenRuntimeRoot()}/apps/desktop/sidebar/native-quick-access/controller`
+  );
   const { storageScope } = await import('@/packages/client-storage');
 
   let recorded: Json[] = [];

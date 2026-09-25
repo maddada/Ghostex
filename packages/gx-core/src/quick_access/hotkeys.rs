@@ -1,5 +1,5 @@
 //! `normalizeghostexHotkeySettings`: the user's hotkey map resolved against the defaults, the
-//! retired defaults, the reserved chords and the New Agent Session / New Terminal layout.
+//! retired defaults and the reserved chords.
 
 use std::collections::BTreeMap;
 
@@ -8,9 +8,6 @@ use serde_json::Value;
 use super::hotkey_table::HOTKEY_DEFINITIONS;
 use super::text::{normalize_hotkey_text, HotkeyPlatform};
 use crate::sidebar_view::text::js_trim;
-
-const NEW_SESSION_PRIMARY_KEY: &str = "cmd+t";
-const NEW_SESSION_SECONDARY_KEY: &str = "cmd+shift+t";
 
 /// `GHOSTEX_RESERVED_HOTKEY_CHORDS`: the terminal owns Cmd+K on macOS only.
 fn is_reserved(value: &str, platform: HotkeyPlatform) -> bool {
@@ -22,7 +19,6 @@ fn is_reserved(value: &str, platform: HotkeyPlatform) -> bool {
 /// Every hotkey id resolved to the chord it runs on, `""` for one the user unassigned.
 pub(crate) fn normalize_hotkey_settings(
     candidate: &Value,
-    preferred_agent_interface: Option<&str>,
     platform: HotkeyPlatform,
 ) -> BTreeMap<&'static str, String> {
     let source = candidate.as_object();
@@ -59,11 +55,6 @@ pub(crate) fn normalize_hotkey_settings(
         }
         normalized.insert(definition.id, platform_default.to_string());
     }
-    apply_new_session_layout(
-        &mut normalized,
-        read("createAgentSession").is_some_and(Value::is_string),
-        preferred_agent_interface,
-    );
     normalized
 }
 
@@ -77,45 +68,4 @@ fn legacy_project_jump(id: &str) -> Option<&'static str> {
         "jumpToProject5" => "focusGroup5",
         _ => return None,
     })
-}
-
-/// `applyNewSessionHotkeyLayout`.
-fn apply_new_session_layout(
-    normalized: &mut BTreeMap<&'static str, String>,
-    agent_session_saved: bool,
-    preferred_agent_interface: Option<&str>,
-) {
-    if !agent_session_saved
-        && normalized.get("createSession").map(String::as_str) == Some(NEW_SESSION_PRIMARY_KEY)
-    {
-        normalized.insert("createSession", NEW_SESSION_SECONDARY_KEY.to_string());
-    }
-    let agent = normalized
-        .get("createAgentSession")
-        .cloned()
-        .unwrap_or_default();
-    let terminal = normalized.get("createSession").cloned().unwrap_or_default();
-    let pair = [agent.as_str(), terminal.as_str()];
-    if !pair.contains(&NEW_SESSION_PRIMARY_KEY) || !pair.contains(&NEW_SESSION_SECONDARY_KEY) {
-        return;
-    }
-    let terminal_first = preferred_agent_interface == Some("terminal");
-    normalized.insert(
-        "createAgentSession",
-        if terminal_first {
-            NEW_SESSION_SECONDARY_KEY
-        } else {
-            NEW_SESSION_PRIMARY_KEY
-        }
-        .to_string(),
-    );
-    normalized.insert(
-        "createSession",
-        if terminal_first {
-            NEW_SESSION_PRIMARY_KEY
-        } else {
-            NEW_SESSION_SECONDARY_KEY
-        }
-        .to_string(),
-    );
 }
