@@ -89,6 +89,12 @@ fn without_whitespace(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
+/// CDXC:AgentScreenDetection 2026-09-25 WHY: Claude Code 2.1.281 draws a question longer than 80 columns, or one holding a newline, behind a dim left border ("│ " on every line, blank ones included), so the heading read off the screen matches the question text only without it. Observed 2026-09-25: a four-question card whose first question ran to 169 characters refused every answer with "where its highlight sits could not be read".
+fn without_question_gutter(line: &str) -> &str {
+    let line = line.trim_start();
+    line.strip_prefix('│').unwrap_or(line)
+}
+
 /// Reads the selector's current tab and highlighted row from a screen capture.
 /// `None` when the capture shows no AskUserQuestion selector for these
 /// questions, or its highlight cannot be placed.
@@ -105,7 +111,10 @@ pub fn claude_question_selector_position(
         .position(|line| line.trim().is_empty())
         .unwrap_or(below.len() - heading_start);
     let heading_lines = &below[heading_start..heading_start + heading_len];
-    let heading = without_whitespace(&heading_lines.join(""));
+    let heading: String = heading_lines
+        .iter()
+        .map(|line| without_whitespace(without_question_gutter(line)))
+        .collect();
     let tab = if heading_lines.first().map(|line| line.trim()) == Some(CLAUDE_REVIEW_TAB_HEADING) {
         questions.len()
     } else if !lines[tab_row].trim_start().starts_with('←') {
