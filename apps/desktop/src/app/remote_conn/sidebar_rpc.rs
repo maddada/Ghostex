@@ -1,17 +1,15 @@
 //! The one way a sidebar request reaches a remote machine's gxserver.
 //!
-//! CDXC:RemoteMachines 2026-09-21 WHY:
-//! Two callers make these requests: the old runtime, through the `gpuiRemoteGxserverSidebarRequest`
-//! bridge message, and the Rust store, which answers a remote row's sleep, wake, close, fork, flags,
-//! snooze and Full Reload itself. Everything between "a machine, a path and a body" and the answer
-//! is the security boundary `CDXC:RemoteMachines 2026-06-24-16:48` describes (the endpoint
-//! allowlist, the size bound, the per-path shaping, the live tunnel's port and token, the timeout
-//! bounds) plus the refresh that keeps the old runtime's copy of the machine current. Both callers
-//! go through this one function, so a fix to any of those cannot land on one route and miss the
-//! other, and the store can never send a machine something the bridge would have refused.
+//! CDXC:RemoteMachines 2026-09-25 WHY:
+//! The Rust store's remote row actions (sleep, wake, close, fork, flags, snooze, Full Reload) and
+//! its remote project and account calls go through here. Everything between "a machine, a path
+//! and a body" and the answer is the security boundary `CDXC:RemoteMachines 2026-06-24-16:48`
+//! describes (the endpoint allowlist, the size bound, the per-path shaping, the live tunnel's port
+//! and token, the timeout bounds) plus the presentation refresh, so a fix to any of those lands on
+//! every caller. It replaces the 2026-09-21 note that the old runtime's
+//! `gpuiRemoteGxserverSidebarRequest` bridge message shared this function: the runtime is gone.
 //!
-//! SEE-ALSO: apps/desktop/src/app/remote_conn/sidebar_request_and_recent_projects.rs (the bridge),
-//! apps/desktop/src/app/gx_store/sidebar_remote.rs (the store),
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_remote.rs (the store),
 //! apps/desktop/src/app/helpers/remote/sidebar_bridge.rs (the allowlist and the shaping).
 
 use std::time::Duration;
@@ -36,8 +34,8 @@ pub(crate) enum GpuiRemoteSidebarRpcMode {
 
 impl GhostexGpuiApp {
     /// Sends one allowlisted request to `remote_machine_id`, which the caller has already passed
-    /// through `gpui_normalize_remote_machine_id`, and refreshes the old runtime's copy of that
-    /// machine once the call has come back when the path is one that changes it.
+    /// through `gpui_normalize_remote_machine_id`, and refreshes that machine's presentation once
+    /// the call has come back when the path is one that changes it.
     ///
     /// The task resolves to the machine's raw answer, which a caller must shape before any of it
     /// reaches a renderer (`gpui_remote_sidebar_response_payload`), or to

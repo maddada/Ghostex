@@ -2144,9 +2144,6 @@ impl GhostexGpuiApp {
                 );
                 self.close_gpui_app_modal_window_and_restore_command_focus(cx);
             }
-            "gpuiRemoteGxserverSidebarRequest" => {
-                self.handle_gpui_remote_gxserver_sidebar_request_message(command, cx);
-            }
             "requestProjectWorktrees"
             | "createProjectWorktree"
             | "confirmDeleteWorktree"

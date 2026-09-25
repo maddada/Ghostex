@@ -88,6 +88,7 @@ mod remote_clients;
 mod remote_last_seen;
 mod remote_last_seen_prune;
 mod remote_project_docs;
+mod remote_recent_projects;
 mod renderer_commands;
 mod rpc;
 mod rpc_types;

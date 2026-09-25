@@ -3,24 +3,8 @@
 // no logic changes). This file holds the remote sidebar RPC request/response
 // param and payload builders. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::time::Duration;
-
 use crate::app::helpers::*;
 use crate::*;
-
-pub(crate) fn gpui_remote_sidebar_request_timeout(
-    command: &serde_json::Map<String, serde_json::Value>,
-) -> Duration {
-    let timeout_ms = command
-        .get("timeoutMs")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(15_000)
-        .clamp(
-            GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MIN_MS,
-            GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MAX_MS,
-        );
-    Duration::from_millis(timeout_ms)
-}
 
 pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
     matches!(

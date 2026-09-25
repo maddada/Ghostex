@@ -36,7 +36,6 @@ use serde_json::{Value, json};
 
 use super::focus_perform::RowFocusOptions;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::gpui_sidebar_runtime_command_script;
 
 /// What this app run did with local row focus. Rides `gxStore.sidebarActions.summary`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,21 +101,6 @@ impl GhostexGpuiApp {
             });
         });
         true
-    }
-
-    /// Sends the sidebar runtime one message it still owns, on its own entry. Returns whether the
-    /// script ran; `false` means no runtime exists yet, and the message is parked on the bridge by
-    /// the script itself when one appears later.
-    pub(crate) fn gx_store_send_sidebar_runtime_command(
-        &mut self,
-        message: Value,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_runtime_command_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
     /// The counters, for the periodic summary in `sidebar_remote.rs`.

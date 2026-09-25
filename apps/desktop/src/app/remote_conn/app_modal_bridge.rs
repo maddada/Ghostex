@@ -206,11 +206,6 @@ impl GhostexGpuiApp {
                     self.gpui_copy_session_details_text(details_text, cx);
                 }
             }
-            "gpuiRemoteGxserverSidebarRequest" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_remote_gxserver_sidebar_request_message(command, cx);
-                }
-            }
             "completeFirstLaunchSetup" => {
                 let is_first_launch_setup = self.app_modal_window.clone().is_some_and(|handle| {
                     handle

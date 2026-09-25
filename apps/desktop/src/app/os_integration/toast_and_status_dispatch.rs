@@ -27,7 +27,6 @@ use gpui::point;
 use gpui::px;
 use gpui::size;
 
-use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
@@ -140,27 +139,6 @@ impl GhostexGpuiApp {
             })
             .ok();
         self.app_toast_window_height = stack_height;
-    }
-
-    pub(crate) fn dispatch_gpui_sidebar_remote_event(
-        &mut self,
-        message: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:RemoteMachines 2026-06-24-17:19:
-        Response-capable remote session requests may dispatch only request ids, success state, generic errors, and explicit safe metadata results such as previous-session search rows. Mutating remote session responses must be sanitized before this event boundary so renderer code never receives launch commands, tokens, SSH details, raw daemon bodies, or provider internals.
-        */
-        let Some(sidebar) = self.sidebar.clone() else {
-            return;
-        };
-        let script = format!(
-            "window.dispatchEvent(new CustomEvent('{GPUI_SIDEBAR_REMOTE_EVENT_NAME}', {{ detail: {} }})); undefined;",
-            message
-        );
-        sidebar.update(cx, |surface, _| {
-            surface.execute_app_owned_script(&script);
-        });
     }
 
     pub(crate) fn dispatch_gpui_remote_machine_status(

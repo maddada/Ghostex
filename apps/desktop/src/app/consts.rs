@@ -439,8 +439,6 @@ Actions past the cap stay runnable from Settings and Ghostex Quick Access.
 */
 pub(crate) const GPUI_TAB_STRIP_MAX_GLOBAL_ACTIONS: usize = 8;
 
-pub(crate) const GPUI_SIDEBAR_REMOTE_EVENT_NAME: &str = "ghostex-gpui-sidebar-remote-event";
-
 pub(crate) const GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS: usize = 512;
 
 pub(crate) const GPUI_PROJECT_CONTRACT_PATH_MAX_CHARS: usize = 4096;

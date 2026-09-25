@@ -25,6 +25,7 @@ impl GhostexGpuiApp {
     /// Launch starts only the QuickJS sidebar and chat service. CEF starts on the first browser-creation signal (a woken web pane, a modal) or after the warm-up delay, so Chromium's framework load and helper processes no longer compete with session restore.
     pub(crate) fn begin_deferred_cef_startup(&mut self, cx: &mut gpui::Context<Self>) {
         self.ensure_native_service(cx);
+        self.gx_store_load_remote_recent_projects(cx);
         if let Some(mut demand) = cef::take_runtime_demand_receiver() {
             cx.spawn(async move |this, cx| {
                 while demand.next().await.is_some() {

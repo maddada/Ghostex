@@ -51,8 +51,8 @@ pub(crate) struct SidebarRuntimeFacts {
     pub(super) close_after_done: HashMap<String, CloseAfterDoneInput>,
     /// This app's own Delayed Sends of workspace sessions (local_delayed_sends.rs).
     pub(super) delayed_sends: HashMap<String, DelayedSendInput>,
-    /// Each remote machine's client-parked projects, in the runtime's stored order: an input of the
-    /// HUD while the runtime still writes them.
+    /// Each remote machine's client-parked projects, newest first, read once at launch
+    /// (remote_recent_projects.rs): an input of the HUD.
     pub(super) remote_recent_projects: Vec<(String, Vec<Value>)>,
     /// Bumped when a post really replaced the HUD, and when one replaced the per-row facts. The
     /// two are apart so a rows post, which arrives with every projection the runtime builds, does
@@ -115,14 +115,8 @@ impl GhostexGpuiApp {
             return;
         }
         let mut reveal: Option<NativeSidebarRevealRequest> = None;
-        let mut remote_recents_moved = false;
         let facts = &mut self.gx_store.runtime_facts;
         match value.get("kind").and_then(Value::as_str) {
-            Some("remoteRecentProjects") => {
-                let rows = remote_recent_projects(&value);
-                remote_recents_moved = facts.remote_recent_projects != rows;
-                facts.remote_recent_projects = rows;
-            }
             Some("rows") => {
                 // A project's git numbers are the Rust poll's since the runtime port's F5
                 // (gx_store/git/poll.rs), which writes `project_diff_stats` itself.
@@ -169,9 +163,6 @@ impl GhostexGpuiApp {
         // Everything the list still borrows moved with this post, so the list is brought up to
         // date now rather than at the next thing that happens to move the store.
         self.gx_store_sidebar_state_changed(cx);
-        if remote_recents_moved {
-            self.gx_store_hud_sources_changed(cx);
-        }
     }
 
     /// CDXC:AgentLauncher 2026-09-23 WHY:
@@ -227,23 +218,6 @@ impl GhostexGpuiApp {
             request_id,
         });
     }
-}
-
-/// `[[machineId, rows], ...]`, the runtime's `remoteRecentProjectsByMachineId`.
-fn remote_recent_projects(value: &Value) -> Vec<(String, Vec<Value>)> {
-    value
-        .get("remoteRecentProjects")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|entry| {
-            Some((
-                entry.get(0)?.as_str()?.to_string(),
-                entry.get(1)?.as_array()?.clone(),
-            ))
-        })
-        .collect()
 }
 
 fn close_after_done(entry: &Value) -> CloseAfterDoneInput {
