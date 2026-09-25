@@ -8,9 +8,9 @@
 //! the Return action plus the Actions panel (Cmd+K) on the right. Every tab and every filter stays. Row buttons
 //! moved into the row's actions (right-click, Cmd+K, or the action's own hotkey). Supersedes the 2026-09-20
 //! instruction to look exactly like the React one; the React twins keep their look on web and mobile.
-//! The sidebar runtime keeps owning data and commands and publishes one resolved snapshot per frame; this
+//! The controller (gx-core `quick_access`) owns data and commands and publishes one resolved snapshot per frame; this
 //! window paints it, owns the search field, hover, scroll and keyboard, and posts interactions back.
-//! SEE-ALSO: packages/shared/native-quick-access.ts (the contract), apps/desktop/sidebar/native-quick-access/ (the controller),
+//! SEE-ALSO: packages/shared/native-quick-access.ts (the contract), packages/gx-core/src/quick_access/ (the controller),
 //! apps/desktop/src/app/quick_access_modal_lifecycle.rs (open, snapshot routing, close),
 //! packages/core-ui/command-palette.tsx, recent-projects-modal.tsx, previous-sessions-modal.tsx, stashed-prompts-modal.tsx (the retained React twins).
 use super::actions_menu::{QuickAccessMenuRequest, QuickAccessOpenMenu};

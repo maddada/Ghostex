@@ -374,7 +374,6 @@ impl ChatOptionMenuPanel {
                 };
                 // CDXC:SessionChat 2026-09-24 DECISION:
                 // User: the footer's values ("Default", "Medium") must not be cut short. Reasoning, Context Window and Fast keep their full width and grow into the spare room; only the Account button and labelled option buttons give way and truncate.
-                // SEE-ALSO: `.ghostex-chat-model-menu-tray-button` in packages/core-ui/chat/session-chat-model-menu.css.
                 let keeps_width = matches!(
                     setting["icon"].as_str(),
                     Some("reasoning" | "context" | "fast")
@@ -604,7 +603,6 @@ impl ChatOptionMenuPanel {
     }
 }
 
-/// CDXC:SessionChat 2026-09-24 SEE-ALSO: `MODEL_MENU_KEY_HINTS` in packages/shared/session-chat-presentation/model-menu.ts and `.ghostex-chat-model-menu-keys` in packages/core-ui/chat/session-chat-model-menu.css draw the same reminder.
 /// The compact key reminder along the card's bottom edge.
 fn render_key_hints(appearance: &ChatAppearance, palette: &Palette) -> AnyElement {
     const HINTS: [(&str, &str); 5] = [

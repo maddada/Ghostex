@@ -8,6 +8,7 @@ use gpui::{
 use serde_json::json;
 
 impl NativeChatView {
+    /// CDXC:SessionChat 2026-09-16 DECISION: User: notices are the shared status card. Actions sit right-aligned in the footer band with a keyed action on the left; the 2026-09-07 20px padding rule is superseded by the card's shared padding. User: no "Selected in terminal" badge on any picker row, in any state.
     pub(crate) fn render_notice(
         &mut self,
         p: &ChatAppearance,
@@ -34,6 +35,7 @@ impl NativeChatView {
             .then(|| self.disclosure_frame(&key, !collapsed, cx))
             .flatten();
         let body_key = key.clone();
+        // CDXC:SessionChat 2026-09-07 DECISION: User: the rate-limit picker already has clickable options, so omit its redundant Previous/Next/Confirm/Cancel controls and terminal footer.
         let rate_limit = choices.iter().any(|choice| {
             text(choice, "label").starts_with("Wait here, then continue automatically")
         });
@@ -126,6 +128,7 @@ impl NativeChatView {
             actions.extend(dialog_actions);
         }
         if !collapsed && !text(notice, "screenTail").is_empty() {
+            // CDXC:SessionChat 2026-09-13 DECISION: User: always hide the terminal-output disclosure in narrow chats. Use the shared narrow-chat breakpoint and hide already-expanded output as well.
             if f32::from(self.bounds.get().size.width) / p.scale <= 1070.0 {
                 body.push(div().into_any_element());
             } else {
@@ -201,7 +204,7 @@ impl NativeChatView {
                 body.push(tail.into_any_element());
             }
         }
-        // CDXC:AgentProviders 2026-09-18 SEE-ALSO: NoticeAccountMenu in session-chat-terminal-notice-card.tsx; only sign-in and usage-limit notices offer the account panel.
+        // CDXC:AgentProviders 2026-09-13 DECISION: User approved restricting Switch account to relevant notices after it appeared on a queued reply. Only sign-in and usage-limit notices offer the existing account picker beside Open terminal, superseding the September 12 rule for all terminal notices.
         if !collapsed
             && snapshot["accountPanel"].is_object()
             && matches!(notice["kind"].as_str(), Some("loginExpired" | "usageLimit"))
@@ -235,7 +238,7 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
-        // Trust and Remember stays reachable on a collapsed picker, matching
+        // Trust and Remember stays reachable on a collapsed picker, as on
         // the React card: the collapsed rows are the prompt's own Yes/No.
         for action in notice["actions"]
             .as_array()

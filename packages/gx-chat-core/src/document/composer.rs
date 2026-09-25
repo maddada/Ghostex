@@ -7,8 +7,8 @@ use serde_json::Value;
 
 /// Which composer controls the host can actually serve.
 ///
-/// React gates these by only passing the handler it has; the native renderer needs the same answer
-/// so a control that would do nothing stays out of the toolbar.
+/// React gated these by only passing the handler it had; the native renderer needs the answer in
+/// the document so a control that would do nothing stays out of the toolbar.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ComposerActions {

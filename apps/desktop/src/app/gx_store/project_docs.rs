@@ -22,8 +22,7 @@
 //! compute them is being deleted and no message it sent could be forwarded in its place.
 //!
 //! SEE-ALSO: packages/gx-core/src/project_docs/,
-//! apps/desktop/src/app/gx_store/client_document.rs,
-//! tooling/gx-core/sidebar-page-frozen/membership.ts.
+//! apps/desktop/src/app/gx_store/client_document.rs.
 
 use ghostex_gx_core::{
     CollectionsDocument, MachineId, ProjectWrite, SideStateUpdate, SpacesDocument,

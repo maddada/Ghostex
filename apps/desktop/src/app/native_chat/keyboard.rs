@@ -117,7 +117,7 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // React drops a pending pill open on any key press (`onKeyDownCapture` on its composer).
+        // React dropped a pending pill open on any key press (`onKeyDownCapture` on its composer).
         self.cancel_composer_reference_open();
         // The search field owns Enter, the arrows and Escape while it has focus.
         if self.search_key_down(event, window, cx) {
@@ -127,7 +127,7 @@ impl NativeChatView {
         }
         /*
         CDXC:SessionChat 2026-09-18 WHY:
-        React's image viewer closes on Escape from a capture listener on the whole chat surface
+        React's image viewer closed on Escape from a capture listener on the whole chat surface
         (session-chat-image-viewer.tsx), ahead of the composer's interrupt. The native viewer is a
         child window over the same pane, so the pane answers Escape for it too and the picture
         closes whichever of the two windows the keystroke reached.
@@ -142,7 +142,7 @@ impl NativeChatView {
             return;
         }
         // The subagent transcript is modal: Escape closes it and nothing behind it takes a
-        // keystroke, the focus trap React's dialog applies. Application chords still pass.
+        // keystroke, the focus trap React's dialog applied. Application chords still pass.
         if self.snapshot["subagent"].is_object() && !event.keystroke.modifiers.platform {
             if event.keystroke.key == "escape" && !event.is_held {
                 self.invoke(json!({"type":"subagentClose"}), cx);

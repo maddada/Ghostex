@@ -1,7 +1,7 @@
 //! The completed-work row while its history is still being read, or after the
-//! read failed. React shows the same line and Retry button in
-//! `session-chat-deferred-work.tsx`; the host publishes the per-row state as
-//! `deferredWork` (see the `loadWork` action in native-host.ts).
+//! read failed. React showed the same line and Retry button in
+//! `session-chat-deferred-work.tsx`; the core publishes the per-row state as
+//! `deferredWork` (gx-chat-core `transcript/deferred_work.rs`).
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;

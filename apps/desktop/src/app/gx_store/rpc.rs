@@ -4,7 +4,7 @@
 //! CEF, AppKit or desktop window API) can be symlinked into the web build unchanged.
 //!
 //! CDXC:ServerApi 2026-09-25 WHY:
-//! The app runtime port (docs/2026-09-25/app-runtime-port/PLAN.md) moves about 27k lines of
+//! The app runtime port (docs/2026-09-25/app-runtime-port/PLAN.md) moved about 27k lines of
 //! QuickJS into Rust that must also run in the web build. The desktop had about 110 blocking
 //! `TcpStream` call sites and the web build calls `fetch`, with no shared seam, so each ported
 //! executor would have had to be written twice. This is the seam, in the shape

@@ -398,7 +398,7 @@ export function registerManageDocsOpenFileHandler(handler?: (path: string) => vo
  * CDXC:Docs 2026-09-15 DECISION:
  * User: an agent reply can be annotated like a document. The chat's Annotate action hands the reply's markdown to Docs, which opens it as a review document with no file behind it; its notes live only in memory and feedback goes back to the same session.
  * The handoff mirrors `ghostexOpenDocsFile`: the app injects the payload before React has mounted, so it parks until the handler registers.
- * SEE-ALSO: apps/desktop/src/app/session_chat.rs (`annotateReply`), packages/core-ui/chat/session-chat-message-list/rows.tsx (the Annotate button).
+ * SEE-ALSO: apps/desktop/src/app/session_chat.rs (`annotateReply`), apps/desktop/src/app/native_chat/message_actions.rs (the Annotate button).
  */
 let pendingManageDocsReviewDocument: ManageReviewDocument | undefined;
 let manageDocsOpenReviewHandler: ((document: ManageReviewDocument) => void) | undefined;

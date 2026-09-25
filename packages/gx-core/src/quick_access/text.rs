@@ -1,5 +1,5 @@
 //! The JavaScript string, number and date behaviour Quick Access depends on, as the app runtime's
-//! QuickJS engine has it.
+//! QuickJS engine had it.
 //!
 //! CDXC:AppModal 2026-09-25 WHY:
 //! The TypeScript controller ran inside QuickJS, not V8: `localeCompare` there ignores its options

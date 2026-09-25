@@ -47,11 +47,13 @@ use crate::app::model::*;
 use crate::*;
 
 /*
-Geometry is derived from the real chat composer so the shared controls land on
-the same pixels when a session flips between Chat and Terminal:
+Geometry is derived from the chat composer (apps/desktop/src/app/native_chat/composer.rs)
+so the shared controls land on the same pixels when a session flips between Chat
+and Terminal. It was measured from the React chat, whose shape the native composer
+kept:
 
-  packages/core-ui/chat/session-chat-view.tsx  wrapper `max-w-3xl px-4 pb-3`
-  packages/core-ui/chat/session-chat-composer.tsx  box `rounded-3xl border px-4`
+  wrapper `max-w-3xl px-4 pb-3`
+  box `rounded-3xl border px-4`
 
 so the composer's action row is inset 16 + 1 + 16 = 33px from the pane's side
 edges and its centre line sits 12 + 1 + 10 + 16 = 39px above the pane's bottom
@@ -96,11 +98,11 @@ const TERMINAL_AGENT_BAR_MENU_WIDTH: f32 = 200.0;
 const TERMINAL_AGENT_BAR_MENU_GAP: f32 = 6.0;
 
 /*
-Every glyph below is the Tabler outline icon the chat footer imports from
+Every glyph below is the Tabler outline icon the chat footer used from
 `@tabler/icons-react`, shipped here as an asset file under
 `apps/desktop/assets/titlebar/` (the crate's established icon pattern; see
-`apps/desktop/src/assets.rs`). The mapping is one-for-one with
-`packages/core-ui/chat/session-chat-composer-actions.tsx`:
+`apps/desktop/src/assets.rs`). The mapping is one-for-one with the React chat's
+composer actions, which the native chat footer kept:
 
   IconDots        → dots.svg          IconNote        → note.svg
   IconStackPush   → stack-push.svg    IconPaperclip   → paperclip.svg
@@ -294,8 +296,8 @@ impl TerminalAgentBarAction {
 
 /*
 The ⋯ menu, top to bottom. It is the chat composer's menu row for row, in the
-same order, with the same icons and the same shortcut column — see
-`packages/core-ui/chat/session-chat-composer-actions.tsx`, whose expanded menu
+same order, with the same icons and the same shortcut column; see
+`apps/desktop/src/app/native_chat/actions.rs`, whose expanded menu
 renders a "Chat" group of Verbose mode and Delayed actions, then the host's
 Close After Done action, then the host's "Agent" group, then the host's
 remaining actions in host-list order under no heading at all. The headings themselves come from
@@ -1337,7 +1339,7 @@ fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {
 /// the chat-surface actions (Verbose mode, Delayed actions, Close After Done)
 /// and "Agent" over the host's session actions, and leaves its trailing
 /// host-action block unnamed;
-/// see `packages/core-ui/chat/session-chat-composer-actions.tsx`. This menu
+/// see `apps/desktop/src/app/native_chat/actions.rs`. This menu
 /// mirrors that, so Export transcript stays under a bare separator here too.
 fn terminal_agent_bar_menu_group_heading(action: TerminalAgentBarAction) -> Option<&'static str> {
     match action {

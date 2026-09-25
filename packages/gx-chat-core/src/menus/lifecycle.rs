@@ -1,8 +1,8 @@
 //! The React effects of the option and account surfaces, collapsed into one pass.
 //!
-//! `native-options.ts`, `session-options.ts` and `native-controls.ts` do their work in
+//! `native-options.ts`, `session-options.ts` and `native-controls.ts` did their work in
 //! `useMemo` and `useEffect`: rebuild the option store when the catalog or the storage key
-//! changes, fold a new detection in, read the accounts on mount and every 30 seconds, and advance
+//! changed, fold a new detection in, read the accounts on mount and every 30 seconds, and advance
 //! the switch card. None of that survives as a hook here, so it runs once per event, before the
 //! document is assembled.
 //!
@@ -88,7 +88,7 @@ pub fn observe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     // so re-arming here is the interval's next period.
     if state.core.controller_started {
         // `useState(Date.now)` on the first render; `setNow(Date.now())` when the interval fires.
-        // The setter is a state change, so the live brain publishes on it even when no label
+        // The setter is a state change, so the TypeScript brain published on it even when no label
         // moved, which is what `request_publish` reproduces. Both are reads of their own, past
         // the turn's first: the initializer runs after the switch card's, the callback's is the
         // one the drain assigned it.
@@ -305,7 +305,7 @@ const ACCOUNTS_POLL_TIMER: &str = "menus.accountsPoll";
 /// (`timer.at = now + timer.interval`) whether or not it read, and its first deadline is the clock
 /// `setInterval` itself read, which is past the render's reads rather than the call's first.
 /// Measured from the call's first read, the first poll after every restart went out one host tick
-/// early on a large frame, and `accountPanel.busy` moved a document ahead of the live brain.
+/// early on a large frame, and `accountPanel.busy` moved a document ahead of the TypeScript brain.
 fn poll_accounts(
     state: &mut ChatState,
     context: &ChatContext,
@@ -390,7 +390,7 @@ fn effect_clock_index(state: &ChatState) -> usize {
     index
 }
 
-/// The composer boot read, as `start`'s `.then(...)` in `native-host.ts` adopts it.
+/// The composer boot read, as `start`'s `.then(...)` in `native-host.ts` adopted it.
 ///
 /// `adoptAgentModelCatalog(result.modelCatalog)`, then `nativeOptionPersistence(result, …)`, which
 /// is what seeds the option store from the records already on disk for this session key. Family e2

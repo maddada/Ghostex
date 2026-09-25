@@ -143,7 +143,7 @@ pub(crate) fn gpui_previous_sessions_result_message(
 ) -> serde_json::Value {
     /*
     CDXC:Sessions 2026-06-24-11:53:
-    GPUI Previous Sessions loads real local gxserver history through `/api/listPreviousSessions` with the same bounded previous-only params as the TypeScript sidebar runtime. The response is a transient `previousSessionsResult` sidebarState payload so the shared modal clears loading without replacing the stored hydrate snapshot, and transport/token/network/parser failures return an empty contract-shaped result without logging private daemon data.
+    GPUI Previous Sessions loads real local gxserver history through `/api/listPreviousSessions` with the same bounded previous-only params the TypeScript sidebar runtime used. The response is a transient `previousSessionsResult` sidebarState payload so the shared modal clears loading without replacing the stored hydrate snapshot, and transport/token/network/parser failures return an empty contract-shaped result without logging private daemon data.
     */
     let local_page = gpui_list_previous_sessions_from_gxserver(&request).unwrap_or_default();
     let mut projects = local_page.projects;

@@ -2,15 +2,14 @@
 //! Rust in the same frame the click happens.
 //!
 //! CDXC:Sidebar 2026-09-20 WHY:
-//! The command is still sent on to the old projection afterwards, which keeps its own copy for the
-//! menus it owns until M4c. Both sides therefore apply the same command to equivalent state, which
-//! is why the comparison between the two lists stays meaningful across a click, and why the write
-//! to client storage carries only what this state changed (gx-core sidebar_ui/diff.rs).
+//! The write to client storage carries only what this state changed (gx-core sidebar_ui/diff.rs).
+//! Until the old projection was deleted the command was also sent on to it, so both sides applied
+//! the same command to equivalent state.
 //!
 //! Four commands are deliberately not identical to the TypeScript, and they are listed together
 //! here because the list belongs beside the code that decides it rather than only in a review:
 //! `collectionAction:select` and `collectionAction:toggleProjects` act on the rows and groups the
-//! list DRAWS, where `nativeCollectionGroups` acts on the collection's membership including its
+//! list DRAWS, where `nativeCollectionGroups` acted on the collection's membership including its
 //! filtered and hidden projects; and `sidebarAction:toggleProjects` likewise leaves hidden projects
 //! alone. A sidebar slot hotkey used to be the fourth: it arrives as `gpuiProjectSlotHotkey` and
 //! still never reaches this file, but since M5 piece 7c it reaches `sidebar_ui_paths.rs`, which

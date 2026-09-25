@@ -86,7 +86,7 @@ pub fn settle(
         // To fold into family e1: `menus.model_catalog` is e1's field and this adoption belongs
         // in an e1 settle. Nothing routed `ModelCatalogChanged` anywhere, so the option catalog
         // stayed empty and every menu, pill and context row drew as "no catalog"; adopting it
-        // here is what makes the replay comparable at all.
+        // here is what made the replay comparable at all.
         Event::ModelCatalogChanged { catalog } => {
             // The broker's `catalog` message is `adoptAgentModelCatalog(message.catalog)` too.
             if let Some(parsed) = parse_agent_model_catalog(catalog) {

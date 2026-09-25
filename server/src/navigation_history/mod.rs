@@ -3,7 +3,7 @@ CDXC:Navigation 2026-08-19:
 Back/Forward in the titlebar walks ONE chronological trail of everything the
 user has had active — sessions and projects, across machines — not a per-project
 stack. The trail lives here, in the daemon, because two clients render it (the
-gpui desktop titlebar in Rust and the web titlebar in React) and a stack that
+desktop titlebar and the web build's) and a stack that
 each client re-derived on its own would disagree about what "back" means the
 moment either one reloaded.
 

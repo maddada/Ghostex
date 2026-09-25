@@ -235,9 +235,8 @@ pub struct SaveMarkdownSheet {
 /// `blank`, `indicator` or `retry` while a transcript read is running.
 ///
 /// CDXC:SessionChat 2026-09-18 WHY:
-/// React advances the empty region through the shared loading stages on timers of its own. The
-/// native chat renders whatever the document says, so the same stages have to be computed here to
-/// match.
+/// React advanced the empty region through the shared loading stages on timers of its own. The
+/// native chat renders whatever the document says, so the same stages are computed here.
 pub const LOADING_STAGE_BLANK: &str = "blank";
 pub const LOADING_STAGE_INDICATOR: &str = "indicator";
 pub const LOADING_STAGE_RETRY: &str = "retry";

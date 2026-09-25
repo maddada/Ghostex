@@ -8,7 +8,7 @@
 //! The key is the RETENTION key, `JSON.stringify([machineId, projectId, sessionId])`, and not the
 //! storage session key every other chat record is suffixed with. Those two disagree for a remote
 //! session (`remote-<machineId>:<projectId>:<sessionId>` against the three-element array), so a
-//! cache written under the wrong one is a record the TypeScript brain never reads and a remote chat
+//! cache written under the wrong one is a record the reader never finds and a remote chat
 //! that draws empty every time it is reopened.
 
 use ghostex_gx_chat_core::StorageKey;

@@ -1,8 +1,7 @@
 //! The pending tool row gxserver reads off the agent's terminal, rendered as
 //! the working strip's card shape at the end of the transcript (React:
-//! `session-chat-terminal-tool-row.tsx`). The activity itself is projected by
-//! `sessionChatTerminalToolActivity`, so both renderers show the same label and
-//! the same painted tool block under it.
+//! `session-chat-terminal-tool-row.tsx`). The activity itself, its label and the
+//! painted tool block under it, is projected by the core.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -14,7 +13,7 @@ use gpui::{
 use serde_json::Value;
 
 /// One key for every card, so the next pending tool comes up the way the last
-/// one was left, which is what React persists in client storage.
+/// one was left, which is what React persisted in client storage.
 const EXPANDED_KEY: &str = "terminal-tool";
 
 /// The transcript's prose leading, React's `line-height: 1.625` on the header row.
@@ -33,7 +32,7 @@ impl NativeChatView {
         let open = expandable && self.expanded.contains(EXPANDED_KEY);
         let motion = self.disclosure_frame(EXPANDED_KEY, open, cx);
         let has_body = open || motion.is_some();
-        // React's header row is `align-items: flex-start` and puts each glyph in a
+        // React's header row was `align-items: flex-start` and put each glyph in a
         // one-line-tall box that centres it (`.ghostex-chat-status-card-lead`), so a label that
         // wraps keeps the dot and the chevron on its first line instead of drifting to the middle
         // of the card.

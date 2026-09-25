@@ -374,7 +374,7 @@ impl ProjectOverlayPatch {
 /// daemon's sort key, then worktrees under their parent projects.
 ///
 /// CDXC:StateSync 2026-09-20 SEE-ALSO:
-/// packages/shared/gxserver-presentation-sidebar-projection.ts compares these keys with `localeCompare`, which in the desktop's QuickJS is NFC normalization plus a code-point comparison, so the byte order used here is the same order for every string a daemon sends today. It is NOT the same in V8, whose `localeCompare` collates through ICU, so the web build and any other V8 consumer of this crate (M9) needs the difference decided on purpose rather than rediscovered; a string that is not in NFC already differs even on the desktop.
+/// packages/shared/gxserver-presentation-sidebar-projection.ts compares these keys with `localeCompare`, which in the desktop's QuickJS was NFC normalization plus a code-point comparison, so the byte order used here is the same order for every string a daemon sends today. It is NOT the same in V8, whose `localeCompare` collates through ICU, so the web build and any other V8 consumer of this crate (M9) needs the difference decided on purpose rather than rediscovered; a string that is not in NFC already differs even on the desktop.
 fn order_sidebar_projects<'a>(
     projects: impl Iterator<Item = &'a PresentationProject>,
     meta: &ProjectMeta,

@@ -91,7 +91,7 @@ tar = "0.4"
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
-# CDXC:SessionChat 2026-09-22 WHY: the Rust chat host mints the draft ids and the chat client id the brain must not generate itself (the core reads no random source), in the same v4 shape `crypto.randomUUID()` produces inside QuickJS. Already in the graph through the desktop crate's other dependencies.
+# CDXC:SessionChat 2026-09-22 WHY: the Rust chat host mints the draft ids and the chat client id the brain must not generate itself (the core reads no random source), in the same v4 shape `crypto.randomUUID()` produces. Already in the graph through the desktop crate's other dependencies.
 uuid = { version = "1", features = ["v4"] }
 # CDXC:WebGpui 2026-09-22 WHY: `std::time::Instant::now()` panics on wasm32, and apps/gpui-web compiles the drawing files of this crate for the browser. `web_time::Instant` IS `std::time::Instant` on every native target (a re-export, already in the graph through gpui), so files shared with the web build name it instead.
 web-time = "1"

@@ -5,7 +5,7 @@ impl GhostexGpuiApp {
     /// CDXC:SessionSleep 2026-09-23 DECISION:
     /// User (reviewing PR 152, choosing the narrow version): a sleeping session wakes when you ask for it, and only then. Clicking its sidebar row and Advanced > Split Right still wake it; opening its project, and the first visit to a project after a restart, select it and show the "Press Any Key to Wake" placeholder instead, with Click to Wake Sleeping Panes on.
     /// Those indirect selections post a focus with `keep_sleeping`, and an already-mapped sleeping tab is then selected exactly like a tab-strip click, so `select_agents_tab` applies Click to Wake Sleeping Panes as it does there. A session with no tab yet still wakes, because attaching it is what starts its provider.
-    /// SEE-ALSO: `activateGpuiProject` in apps/desktop/sidebar/gxserver-runtime/project-activation.ts, `resume_restored_workspace_surfaced_terminals` in apps/desktop/src/app/workspace_terminals.rs.
+    /// SEE-ALSO: `resume_restored_workspace_surfaced_terminals` in apps/desktop/src/app/workspace_terminals.rs.
     pub(crate) fn select_sleeping_local_workspace_tab(
         &mut self,
         key: &GpuiLocalWorkspaceSessionKey,

@@ -14,7 +14,6 @@
 //! `metadata.ts`, and that leg is gone with the local one, so there is still exactly one writer.
 //!
 //! SEE-ALSO: packages/gx-core/src/project_docs/space_editor.rs,
-//! tooling/gx-core/sidebar-page-frozen/metadata.ts,
 //! apps/desktop/src/app/gx_store/project_docs.rs.
 
 use ghostex_gx_core::{

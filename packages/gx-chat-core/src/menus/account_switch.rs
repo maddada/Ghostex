@@ -1,8 +1,8 @@
 //! Whether the account-switch card is on screen, and the clock its countdowns are measured
 //! against.
 //!
-//! Port of `packages/shared/session-chat-controller/account-switch.ts`. The TypeScript keeps
-//! `dismissed`, `now` and `observed` in React state and drives them from effects; here they are
+//! Port of `packages/shared/session-chat-controller/account-switch.ts`. The TypeScript kept
+//! `dismissed`, `now` and `observed` in React state and drove them from effects; here they are
 //! fields the core advances from the host's clock, so the same sequence of frames produces the
 //! same card.
 //!

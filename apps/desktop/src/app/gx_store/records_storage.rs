@@ -46,7 +46,7 @@ pub(crate) fn read_record_raw(
 /// Every live record of one store whose key starts with `prefix`, as `(key, raw)` pairs.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
-/// `Storage::call` has `recordScan` on the JavaScript side and this door had no equivalent, so the
+/// `Storage::call` had `recordScan` on the JavaScript side and this door had no equivalent, so the
 /// Rust chat host could only read a record whose whole key it already knew. Two of the chat's own
 /// records are keyed by a SCOPE it cannot know in advance (`<sessionKey>#<scope>` for the option
 /// pills and the model-selection outbox, `storedSessionChatOptionKeys` in
@@ -153,7 +153,7 @@ pub(crate) fn write_record(
 /// lists it, and `SessionChatStorageIndex` (`packages/core-ui/chat/session-chat-storage-index.ts`)
 /// decodes every key of its namespace with `JSON.parse`, which THROWS on `""` and takes the whole
 /// index down with it: one emptied `ghostex.sessionChat.outbox.` row would make `pendingDrafts`
-/// return nothing for every session, so the TypeScript brain would stop retrying every unsaved
+/// return nothing for every session, so the TypeScript outbox would stop retrying every unsaved
 /// draft on the computer. The store codecs say the same thing from the other side: `draftOutbox`
 /// and `sentHistory` are object codecs and `writeManaged` refuses a value they cannot decode.
 ///

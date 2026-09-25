@@ -18,22 +18,23 @@ pub struct RecordStoreUsage {
 /// row, and `revision` is the counter the client-storage service compares an event against before
 /// it believes it. `applyDatabaseMutations`
 /// (`packages/client-storage/adapters/database-transaction.ts`) keeps all three INCREMENTALLY, which
-/// is correct for one writer in one process and not for two: a decrement missed by either side
-/// drifts for the life of the installation, and the TypeScript side then refuses or over-admits
-/// every later write of that store with nothing to say why. So a Rust writer recomputes them from
-/// the table instead, which is self-correcting whatever the other side did. This function is that
+/// is correct for one writer in one process and not for two (the QuickJS service shared this table
+/// with Rust until 2026-09-25): a decrement missed by either side drifted for the life of the
+/// installation, and the TypeScript side then refused or over-admitted every later write of that
+/// store with nothing to say why. So a Rust writer recomputes them from the table instead, which is
+/// self-correcting whatever any other writer did. This function is that
 /// recompute, in ONE place: the browser import wrote it first and the last-seen remote presentation
 /// writer needs the same thing, and two copies of a bookkeeping rule is how one of them drifts.
 ///
 /// Call it INSIDE the transaction that wrote the rows.
 ///
 /// The scan is an aggregation rather than a Rust loop over every parsed row because it also runs
-/// on the app's own write path, inside `BEGIN IMMEDIATE`, where the QuickJS service's writes are
-/// waiting on the lock: at this user's scale the table is about 5,500 rows and 5.8 MB of JSON, a
+/// on the app's own write path, inside `BEGIN IMMEDIATE`, where every other write is waiting on
+/// the lock: at this user's scale the table is about 5,500 rows and 5.8 MB of JSON, a
 /// few milliseconds in SQLite against tens in `serde_json`. A row whose value is not JSON fails the
 /// statement, which is what the parsing loop did too.
 ///
-/// SEE-ALSO: packages/client-storage/adapters/database-transaction.ts (the other writer),
+/// SEE-ALSO: packages/client-storage/adapters/database-transaction.ts (the incremental rules),
 /// packages/client-storage-native/src/storage_records.rs (the write path, which scans once and hands the
 /// result on rather than scanning a second time).
 pub fn recompute_record_metadata(connection: &Connection) -> Result<()> {
@@ -75,10 +76,10 @@ pub fn scan_record_usage(connection: &Connection) -> Result<Vec<RecordStoreUsage
 /// CDXC:Settings 2026-09-21 WHY:
 /// Two things this does that a plain loop over the scan does not, and both of them are what
 /// `applyDatabaseMutations` leaves behind. A store whose LAST row was deleted produces no group, so
-/// a loop would leave its old usage standing for ever while the service decrements it to zero: a
+/// a loop would leave its old usage standing for ever where the service decremented it to zero: a
 /// metadata row in the usage shape with no rows behind it is therefore written back to zero. And a
 /// row that already holds exactly the computed value is not written at all, because this runs
-/// inside `BEGIN IMMEDIATE` with the service's writes waiting on the lock and twenty-odd upserts of
+/// inside `BEGIN IMMEDIATE` with every other write waiting on the lock, and twenty-odd upserts of
 /// values nobody changed is twenty-odd pages of WAL for nothing. Neither changes the end state.
 pub fn apply_record_metadata(connection: &Connection, usage: &[RecordStoreUsage]) -> Result<()> {
     let mut total: i64 = 0;

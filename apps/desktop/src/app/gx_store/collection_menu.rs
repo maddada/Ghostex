@@ -79,7 +79,7 @@ impl GhostexGpuiApp {
                 false,
                 self.gx_store.collection_menu,
             );
-            // Answered: the TypeScript's `if (!collection) return` writes nothing and sends the
+            // Answered: the TypeScript's `if (!collection) return` wrote nothing and sent the
             // payload nowhere else either, so handing it on would be a second, different answer.
             return true;
         };

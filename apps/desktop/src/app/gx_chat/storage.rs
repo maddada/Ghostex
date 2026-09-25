@@ -3,8 +3,8 @@
 //! The core names a store and a per-session suffix (`StorageKey { store, suffix }`) and never builds
 //! a key string; this file owns the prefix, the backend and the budget. Every row below is the
 //! matching entry of `packages/client-storage/catalog.ts`, which is the single source of truth, so a
-//! record written by the TypeScript brain is read back unchanged by this one and the other way
-//! round.
+//! record written by the TypeScript brain is read back unchanged, and the TypeScript pages that
+//! still use the catalog read what this one writes.
 //!
 //! CDXC:Drafts 2026-09-22 DECISION:
 //! User: a user's existing drafts, queued prompts, history and outbox must survive the switch to the
@@ -273,7 +273,7 @@ pub(super) fn full_key(key: &StorageKey) -> Option<String> {
 /// Reads one record, `None` when nothing is stored or the catalog no longer admits it.
 ///
 /// A refusal is returned rather than swallowed so the caller can count it; the core treats a
-/// `None` value and a failed read the same way, which is what the TypeScript's `catch` does.
+/// `None` value and a failed read the same way, which is what the TypeScript's `catch` did.
 pub(super) fn read(key: &StorageKey, now_ms: i64) -> Result<Option<String>, &'static str> {
     let store = store(&key.store).ok_or("unregistered")?;
     let name = full_key(key).ok_or("unregistered")?;
@@ -283,9 +283,9 @@ pub(super) fn read(key: &StorageKey, now_ms: i64) -> Result<Option<String>, &'st
 /// Every live record of a collection store whose SUFFIX starts with `prefix`, as
 /// `(suffix, raw)` pairs.
 ///
-/// The suffix is what the TypeScript calls the record's key once the store's own prefix is off
+/// The suffix is what the TypeScript called the record's key once the store's own prefix was off
 /// (`key.slice(STORAGE_PREFIX.length)` in `storedSessionChatOptionKeys`), so a caller compares and
-/// stores exactly the strings the other brain wrote. A singleton store has no suffix to scan and
+/// stores exactly the strings the TypeScript brain wrote. A singleton store has no suffix to scan and
 /// answers with nothing.
 pub(super) fn scan(
     store_id: &str,

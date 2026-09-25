@@ -1,7 +1,7 @@
 //! The clickable header the two composer panels share: lead icon, title, a
 //! muted meta line, an optional trailing ornament and the fold chevron. Both
 //! the Tasks panel and the Subagents strip are the shared status card with this
-//! header, the way React's `SessionChatStatusCard` renders them.
+//! header, the way React's `SessionChatStatusCard` rendered them.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;

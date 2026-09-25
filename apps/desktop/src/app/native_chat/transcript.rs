@@ -77,7 +77,7 @@ impl NativeChatView {
         );
         // CDXC:SessionChat 2026-09-09 DECISION:
         // User: subagent transcripts default to the same normal display as main chat, with verbose
-        // and summarized modes off. React reaches that by mounting its own list inside the dialog;
+        // and summarized modes off. React reached that by mounting its own list inside the dialog;
         // GPUI shares one renderer, so the child's rows drop both modes here.
         if !main {
             p.verbose = false;
@@ -184,9 +184,9 @@ impl NativeChatView {
     }
 
     /// The chevron a disclosure puts in the transcript's marker column, in place of the dot a plain
-    /// row hangs its first line from. React draws the same glyph through `.ghostex-chat-marker-slot`
+    /// row hangs its first line from. React drew the same glyph through `.ghostex-chat-marker-slot`
     /// inside its own button, so a heading made of the agent's own Markdown keeps its links and code
-    /// controls clickable; the press stops here for the same reason the React button's does, because
+    /// controls clickable; the press stops here for the same reason the React button's did, because
     /// the heading around it is a trigger too and would toggle the row straight back.
     pub(super) fn disclosure_marker(
         &self,
@@ -425,7 +425,7 @@ impl NativeChatView {
                     cx,
                 ));
                 if expanded || motion.is_some() {
-                    // React's ReasoningRow puts the thought's tail and the tool run it owns in one
+                    // React's ReasoningRow put the thought's tail and the tool run it owns in one
                     // expansion, so both hang off the rail the headline opened.
                     let mut detail_rows: Vec<AnyElement> = Vec::new();
                     let detail = text(&message["reasoning"], "body");
@@ -465,7 +465,7 @@ impl NativeChatView {
                 // React's AgentToolsDisclosure: an agent's own words are the heading its tool calls
                 // hang from, so the marker column carries a chevron instead of the reply dot and
                 // the rows below sit on that disclosure's rail
-                // (CDXC:SessionChat 2026-09-13 DECISION in rows.tsx).
+                // (CDXC:SessionChat 2026-09-13 DECISION in React's rows.tsx, now in git history).
                 let key = format!("tools:{id}");
                 let expanded = tools && self.is_expanded(&key, p.verbose);
                 let motion = self.disclosure_frame(&key, expanded, cx);
@@ -486,7 +486,7 @@ impl NativeChatView {
                         cx,
                     )));
                 // The whole heading is the trigger, not just the chevron: React's
-                // `.ghostex-chat-agent-tools-heading` carries the toggle and the hover fill, and a
+                // `.ghostex-chat-agent-tools-heading` carried the toggle and the hover fill, and a
                 // one-line commentary with a chevron beside it is read as a line to click. The
                 // controls the Markdown carries (links, file pills, fence and table actions,
                 // pictures) stop the press themselves, and `acts_on_row` keeps a press that
@@ -538,7 +538,7 @@ impl NativeChatView {
             }
         }
         // Inside a turn's work fold the raw tool pairs stay plain rows and the cards are hoisted
-        // onto the turn instead, so an answer is never rendered twice (question-hoisting.ts).
+        // onto the turn instead, so an answer is never rendered twice (the core's questions/hoisting.rs).
         if !self.in_work_fold
             && let Some(cards) =
                 self.question_exchange_cards(&format!("message:{id}"), &message["questions"], p, cx)

@@ -5,7 +5,7 @@
 //! keeps the key prefix, the field names and the legacy-value tolerance of
 //! `packages/core-ui/chat/session-chat-draft-storage.ts`, `session-chat-summary-override.ts` and
 //! `session-chat-verbose-override.ts`, so a draft written by the TypeScript brain is read back
-//! unchanged by this one and the other way round.
+//! unchanged by this one.
 //!
 //! The stores and their prefixes:
 //!

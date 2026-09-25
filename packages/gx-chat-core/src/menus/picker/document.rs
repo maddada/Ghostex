@@ -2,7 +2,7 @@
 //! provider, the selection outbox and the fork branch strip.
 //!
 //! Port of the slice of `publish` in `packages/shared/session-chat-controller/native-host.ts`
-//! that reads the picker's own state (`native-host.ts:482`, `:483`, `:493`, plus the
+//! that read the picker's own state (`native-host.ts:482`, `:483`, `:493`, plus the
 //! `modelProvider`, `modelMenuContext`, `modelSelection` and `pendingModelSelection` keys that
 //! ride in on `...viewState`).
 

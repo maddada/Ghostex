@@ -2,9 +2,8 @@
 //!
 //! CDXC:SessionFork 2026-09-18 SEE-ALSO:
 //! GPUI chat's strip is `apps/desktop/src/app/native_chat/fork_branches.rs` and the rows come from
-//! `packages/shared/session-chat-controller/native-fork-branches.ts`. The React chat page runs the
-//! same two steps itself in `focusForkBranch` (apps/desktop/sidebar/chat-page.tsx); both must keep
-//! waking a stopped branch before focusing it.
+//! `packages/gx-chat-core/src/menus/picker/fork_branches.rs`. This action must keep waking a
+//! stopped branch before focusing it.
 
 use crate::*;
 use std::time::Duration;

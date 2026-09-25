@@ -571,7 +571,7 @@ pub(super) fn drive(world: &mut World, key: &str, events: Vec<Event>) {
 
 /// A handoff's `draftSubmitted` carries what `composer('park')` minted, which is the host's.
 ///
-/// `native-host.ts` spreads the park answer into the request (`{...handoff, text, version}`), and
+/// `native-host.ts` spread the park answer into the request (`{...handoff, text, version}`), and
 /// the view reads `nextVersion` out of it to start the composer's next draft. The core has no
 /// random source and no view state, so both the handoff id and the next revision are made here and
 /// merged on the way past.
@@ -710,7 +710,7 @@ fn perform(
                 });
                 return;
             }
-            // `start` in `native-host.ts` pushes `{kind: 'composerInit', method: 'restore', params:
+            // `start` in `native-host.ts` pushed `{kind: 'composerInit', method: 'restore', params:
             // result}` from the same answer. It is the ONLY path that gives the view its client id,
             // its draft id and its draft revision, so without it every save is refused with "Two
             // editors changed the same draft revision" and the composer never reports itself ready.
@@ -784,7 +784,7 @@ fn perform(
 ///
 /// CDXC:SavedPrompts 2026-09-22 WHY:
 /// `composerHistory` has no row anywhere: it is `composer('history')`, which
-/// `native-composer.ts` answers with `listSentSessionChatMessages().map(m => m.content)
+/// `native-composer.ts` answered with `listSentSessionChatMessages().map(m => m.content)
 /// .reverse()`, a scan of the whole `sentHistory` store across every session rather than a read of
 /// one key. The suffix it arrives with is the session it was asked from and is deliberately not
 /// used, because Up-arrow recall reaches what every composer on this computer sent. Left to the
@@ -893,7 +893,7 @@ pub(super) fn publish(world: &mut World, key: &str, requests: Vec<HostRequest>) 
     let Some(retained) = world.store.get_mut(key) else {
         return;
     };
-    // `frame_at`, not `frame`: `take` in `native-host.ts` reads `Date.now()` itself, and measuring
+    // `frame_at`, not `frame`: `take` in `native-host.ts` read `Date.now()` itself, and measuring
     // `nextWakeMs` against the clock of the last event handled is one turn stale, so the host would
     // arm its timer that much late (`docs/2026-09-21/rust-chat/PROGRESS.md`, Integration 2 item 8).
     let drained = retained.core.frame_at(last_revision, now_millis() as f64);

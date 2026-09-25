@@ -1,9 +1,9 @@
 //! Everything the user can do in the chat, as the renderer reports it.
 //!
 //! The renderer sends `{"type": "<kind>", ...}`; the brain dispatches on `type` alone and reads
-//! the rest per kind. The receiver today is `action` in
-//! `packages/shared/session-chat-controller/native-host.ts` (plus the four sub-controllers it asks
-//! first), and the senders are the `json!({"type": ...})` sites under
+//! the rest per kind. The kinds and their payloads are the ones `action` in
+//! `packages/shared/session-chat-controller/native-host.ts` received (plus the four sub-controllers
+//! it asked first), and the senders are the `json!({"type": ...})` sites under
 //! `apps/desktop/src/app/native_chat/`.
 //!
 //! The payload stays a free-form map on purpose: each port family types its own actions as it

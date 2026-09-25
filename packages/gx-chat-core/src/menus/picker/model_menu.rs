@@ -5,11 +5,10 @@
 //! CDXC:SessionChat 2026-09-21 DECISION:
 //! User: the composer's model and effort pills become one pill that opens one picker: agent tabs
 //! with a favorites tab first, a model search, rows with a Cmd+number badge and a star, and a
-//! footer for reasoning, context window and fast mode. React and GPUI both draw what this module
-//! decides, so tabs, row order, search ranking, favorites and the footer can never differ between
-//! them.
-//! SEE-ALSO: packages/core-ui/chat/session-chat-model-menu.tsx,
-//! apps/desktop/src/app/native_chat/option_menu/model_menu/.
+//! footer for reasoning, context window and fast mode. Every renderer (the GPUI pop-up and the
+//! phone's sheet) draws what this module decides, so tabs, row order, search ranking, favorites
+//! and the footer can never differ between them.
+//! SEE-ALSO: apps/desktop/src/app/native_chat/option_menu/model_menu/.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -73,7 +72,8 @@ pub struct ModelMenuView {
 /// One model choice as family e1's session option catalog lists it.
 ///
 /// This is the slice of `SessionChatOptionChoice` the model menu reads. Family e1 owns the
-/// catalog that produces it (`packages/core-ui/chat/session-chat-session-options.ts`).
+/// catalog that produces it (`crate::menus::option_catalog`, ported from
+/// `packages/core-ui/chat/session-chat-session-options.ts`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelChoice {

@@ -1115,7 +1115,7 @@ impl GhostexGpuiApp {
             .map(str::to_ascii_lowercase);
         // CDXC:SessionChat 2026-09-24 DECISION:
         // User: clicking a video in chat opens it normally with the OS default app on macOS, Windows, and Linux, never in the code editor. Audio and PDFs follow the same rule.
-        // SEE-ALSO: `sessionChatMediaKind` in `packages/shared/session-chat-presentation/reference-pills.ts` keeps the same extension list for the labels and menu rows.
+        // SEE-ALSO: `sessionChatMediaKind` in `packages/core-ui/chat/session-chat-reference-pills.ts` keeps the same extension list for the labels and menu rows.
         if requested_view.is_none()
             && matches!(
                 extension.as_deref(),

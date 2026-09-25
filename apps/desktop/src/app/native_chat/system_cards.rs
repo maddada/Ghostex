@@ -17,8 +17,8 @@ const MESSAGE_PREVIEW_LINES: usize = 2;
 
 impl NativeChatView {
     /// A system turn that is a card or a rule rather than a sentence. Which card
-    /// it is comes from the shared classifier
-    /// (packages/shared/session-chat-presentation/system-cards.ts); this file
+    /// it is comes from the core's classifier
+    /// (packages/gx-chat-core/src/transcript/system_cards.rs); this file
     /// owns only the GPUI layout of each one.
     pub(super) fn system_card(
         &self,
@@ -40,7 +40,7 @@ impl NativeChatView {
         }
     }
 
-    /// React draws this one as an `inline-flex` card, not a full-width panel: it announces a name,
+    /// React drew this one as an `inline-flex` card, not a full-width panel: it announces a name,
     /// so it hugs the name and the two lines stack beside the icon (rows.tsx, `auto-named`).
     fn auto_named_card(&self, card: &Value, p: &ChatAppearance) -> AnyElement {
         let s = p.scale;
@@ -104,8 +104,8 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// CDXC:SessionFork 2026-08-28 SEE-ALSO:
-    /// packages/core-ui/chat/session-chat-message-list/rows.tsx renders the same seam in React: stitched scroll-back crossing from one fork ancestor into the next is the boundary between two threads, so it reads as a labeled rule instead of another sentence, with the daemon's text unchanged.
+    /// CDXC:SessionFork 2026-08-28 WHY:
+    /// Stitched scroll-back crossing from one fork ancestor into the next is the boundary between two threads, so it reads as a labeled rule instead of another sentence, with the daemon's text unchanged.
     fn fork_boundary_row(&self, card: &Value, p: &ChatAppearance) -> AnyElement {
         let s = p.scale;
         let rule = || div().h(px(1.0)).flex_1().min_w_0().bg(p.border);
@@ -301,7 +301,9 @@ impl NativeChatView {
 
     /// CDXC:SessionChat 2026-09-06 DECISION:
     /// User: a message one agent sends to another shows as a collapsible card titled `Received a message from "<name>"`, in the same shape as the goal and status cards, leading with a message icon; collapsed it shows the first two lines, expanded the full message as markdown.
-    /// SEE-ALSO: packages/core-ui/chat/session-chat-agent-message-card.tsx is the React card this matches.
+    /// Ported from React's session-chat-agent-message-card.tsx.
+    /// CDXC:SessionChat 2026-09-14 DECISION:
+    /// User: received subagent messages use the same font size as the rest of the agent messages, including the header, collapsed preview, and expanded body.
     fn agent_message_card(
         &self,
         id: &str,
@@ -346,7 +348,7 @@ impl NativeChatView {
             Vec::new()
         } else if expanded || motion.is_some() {
             // The marked, reference-linked form of the same text, so a path the
-            // subagent wrote is the pill React draws it as rather than backticks.
+            // subagent wrote is the pill React drew it as rather than backticks.
             let marked = text(card, "markdown");
             let full = self.markdown(
                 format!("agent-message:{id}"),

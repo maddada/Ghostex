@@ -1,10 +1,10 @@
 //! The five pure helpers the renderer asks for one gesture.
 //!
-//! They hold no state and change none, but a ported implementation has to answer them identically:
-//! the replay recording carries the fingerprint of each answer's serialized JSON, so the key order
-//! inside them is part of the contract (`docs/2026-09-21/rust-chat/REPLAY.md`).
+//! They hold no state and change none. The phone reaches them through [`crate::query`]. Each
+//! answer keeps the key order the TypeScript wrote, which the replay recording that checked the
+//! port fingerprinted (`docs/2026-09-21/rust-chat/REPLAY.md`).
 //!
-//! `nativeChat` wires them at the end of
+//! `nativeChat` wired them at the end of
 //! `packages/shared/session-chat-controller/native-host.ts`; this file is the same five functions
 //! with the same argument shapes.
 

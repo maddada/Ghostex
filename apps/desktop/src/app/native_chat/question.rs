@@ -157,6 +157,7 @@ impl NativeChatView {
         } else {
             actions.push(div().min_w_0().flex_1().into_any_element());
         }
+        // CDXC:SessionChat 2026-09-16 DECISION: User: the question's X was the interrupt, an action rather than a dismiss, and sat beside the collapse chevron; it is a Cancel button in the footer instead. The approval keeps its circled X since it has no chevron (approval.rs).
         actions.push(
             self.question_button(
                 "question-cancel",

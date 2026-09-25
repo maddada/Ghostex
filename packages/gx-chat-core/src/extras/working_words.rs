@@ -5,8 +5,7 @@
 //! does not churn words mid-turn.
 //!
 //! The core generates no random values: the draw arrives on [`crate::ChatContext::random_unit`],
-//! which a replay feeds back from the recorded `Math.random()` reads
-//! (`docs/2026-09-21/rust-chat/REPLAY.md`).
+//! which the host fills.
 
 /// `SESSION_CHAT_WORKING_WORDS`, in the TypeScript's order; the index is the whole contract.
 pub const SESSION_CHAT_WORKING_WORDS: &[&str] = &[

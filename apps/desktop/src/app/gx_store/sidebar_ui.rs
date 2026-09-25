@@ -54,7 +54,7 @@ pub(crate) struct SidebarUiCounters {
     pub(crate) write_failures: u64,
     pub(crate) read_failures: u64,
     /// Values a storage bound refused. The change stays in memory and the next one carries it
-    /// again, which is what the TypeScript writer does with the same refusal.
+    /// again, which is what the TypeScript writer did with the same refusal.
     pub(crate) write_refusals: u64,
     /// Intents that were applied before the stored state landed and were applied again on top of
     /// it, so a click in the first moments is not thrown away.

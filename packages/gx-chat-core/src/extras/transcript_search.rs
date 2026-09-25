@@ -1,10 +1,10 @@
 //! Cmd+F over the transcript, ported from
 //! `packages/shared/session-chat-presentation/transcript-search.ts`.
 //!
-//! React searches the rendered DOM because it has one; the native chat has a list of projected
-//! items instead, so the same query runs over the text those items carry. Both are
-//! case-insensitive, both count occurrences per row, and both keep the selected occurrence across
-//! a transcript refresh, so a search reads the same in either renderer.
+//! React searched the rendered DOM because it had one; the native chat has a list of projected
+//! items instead, so the same query runs over the text those items carry. It is case-insensitive,
+//! counts occurrences per row, and keeps the selected occurrence across a transcript refresh, as
+//! the React search did.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

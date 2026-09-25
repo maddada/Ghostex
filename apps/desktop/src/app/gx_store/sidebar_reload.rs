@@ -2,7 +2,7 @@
 //!
 //! CDXC:Sessions 2026-09-21 WHY:
 //! Neither of these calls the daemon itself. Full Reload is the sleep and the wake the store
-//! already owns, run ONE AT A TIME because the TypeScript awaits the first before it starts the
+//! already owns, run ONE AT A TIME because the TypeScript awaited the first before it started the
 //! second and because a wake that overtakes its own sleep reloads nothing; Split Right is a
 //! selection that carries where the pane goes, and for a sleeping row it is the same wake with a
 //! placement on it. So this file waits and it selects, and every decision it acts on is gx-core's.
@@ -13,8 +13,7 @@
 //! never reached here, which is the failure the envelope bug of piece 3d was.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_actions/reload.rs,
-//! packages/gx-core/src/sidebar_actions/split.rs,
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts.
+//! packages/gx-core/src/sidebar_actions/split.rs.
 
 use ghostex_gx_core::{
     FocusOptions, SplitAction, owns_reload_message, owns_reload_set_message,
@@ -75,7 +74,7 @@ impl GhostexGpuiApp {
                 // leg, the replacement focus and the echo guard. The wait is for the ANSWER and not
                 // for a timer: the provider has to be dead before it is asked to come back, and a
                 // sleep whose call failed stops the reload, as the TypeScript's first `await`
-                // rejecting does.
+                // rejecting did.
                 let started = this.update(cx, |this, cx| this.gx_store_start_lifecycle(&leg, cx));
                 let Ok(Some(task)) = started else {
                     return false;
@@ -204,7 +203,7 @@ impl GhostexGpuiApp {
             .diagnostics
             .sidebar_split_ran(&plan, self.gx_store.sidebar_lifecycle);
         match &plan.action {
-            // The Quick Automations row, where the TypeScript returns before it does anything.
+            // The Quick Automations row, where the TypeScript returned before it did anything.
             SplitAction::Nothing => {}
             SplitAction::Wake(wake) => {
                 self.gx_store.sidebar_lifecycle.splits_woken += 1;

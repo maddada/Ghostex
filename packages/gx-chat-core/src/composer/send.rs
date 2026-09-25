@@ -259,7 +259,7 @@ pub struct AgentSend {
 /// The echo and the marker are recorded BEFORE the call and undone when it fails, which is what
 /// makes a send read as a new row the instant the user presses Enter. Public because family e's
 /// option dispatch types a command into the agent through the same seam
-/// (`onDispatchCommand` in `native-host.ts`, which is `option-command.ts`).
+/// (`onDispatchCommand` in `native-host.ts`, which was `option-command.ts`).
 pub fn send_to_agent(
     state: &mut ChatState,
     context: &ChatContext,

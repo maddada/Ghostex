@@ -29,8 +29,9 @@ pub struct AgentIdentity {
 /// identity and the carriage keys the frame names, and touches nothing else. The core used to fold
 /// the frame onto the retained snapshot and apply THAT as if a read had landed, which replaced the
 /// list with the fold's window, re-derived `hasMore` and the cursor from it, and reset the history
-/// prefix on every frame (a page read per frame on a real chat, none of which the live brain made),
-/// and read `working` from the fold's previous value where the controller reads the frame alone.
+/// prefix on every frame (a page read per frame on a real chat, none of which the TypeScript
+/// brain made), and read `working` from the fold's previous value where the controller reads the
+/// frame alone.
 pub fn apply_state_frame(
     state: &mut ChatState,
     frame: &ghostex_gx_protocol::ChatStateFrame,

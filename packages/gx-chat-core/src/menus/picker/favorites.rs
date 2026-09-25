@@ -3,8 +3,8 @@
 //! Port of `packages/shared/session-chat-controller/model-favorites.ts` and
 //! `toggleModelMenuFavorite` from `session-chat-presentation/model-menu.ts`.
 //!
-//! Starred models belong to the person, not to a session or a renderer, so React and GPUI read
-//! and write the one list and a star set in either shows in both. **The stored record is user
+//! Starred models belong to the person, not to a session or a renderer, so every chat reads and
+//! writes the one list and a star set in one shows in all. **The stored record is user
 //! data**: `ghostex.model-favorites` holds a JSON array of `provider:value` strings and nothing
 //! else, and an unreadable list is an empty one, never an error.
 

@@ -166,9 +166,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
 
 /// Routes one action to its owner.
 ///
-/// Every arm of `action` in `packages/shared/session-chat-controller/native-host.ts` ends in a
+/// Every arm of `action` in `packages/shared/session-chat-controller/native-host.ts` ended in a
 /// publish, whatever it changed (native-host.ts:1637), so one is asked for here rather than in six
-/// family directories. The arm is `async`, so that publish runs after its last `await`: an action
+/// family directories. The arm was `async`, so that publish ran after its last `await`: an action
 /// that asked the host for something publishes when the answer lands, which is what
 /// [`crate::state::CoreState::publish_after`] records. The three arms that return early
 /// (`composerScroll`/`composerExpand`, `rowDetails`, and the sub-controller commands) never reach
@@ -178,7 +178,7 @@ pub fn dispatch(state: &mut ChatState, action: &UserAction, context: &ChatContex
     // `if (!controller) { if (command.type === 'retry') start(bootConfig); return; }`
     // (`native-host.ts`, the top of `action`): until the boot read answers there is no controller,
     // so every gesture is dropped. The renderer's first `measureContextStatus` lands in that
-    // window on every real chat, which is why the TypeScript keeps its `[0]` and the core must too.
+    // window on every real chat, which is why the TypeScript kept its `[0]` and the core must too.
     // Every `action` call is its own promise, so what it awaits is a chain of its own. A dispatch
     // nested inside another (the controller's own `restoreReturned` effect) hands the outer chain
     // back when it returns.
@@ -242,7 +242,7 @@ fn dispatch_action(
 
 /// Whether this action clears the refusal the composer is showing.
 ///
-/// `native-host.ts` clears `operationError` just before its switch, so every gesture that can
+/// `native-host.ts` cleared `operationError` just before its switch, so every gesture that can
 /// itself refuse starts from a clean line. Two groups do not reach it: the five kinds listed
 /// there, which are measurements and selection changes rather than gestures, and the arms that
 /// return earlier (the composer wheel, the open-row list, and the panel, search, terminal-tail and
@@ -283,8 +283,8 @@ fn clears_error(kind: &ActionKind) -> bool {
 /// and the subagent viewer) are handled before the switch and end in `publish(chat); return;`
 /// (native-host.ts:783-796). An effect one of them asks for is answered later and publishes again
 /// through its own `changed()` callback, not by ending this arm.
-/// The kinds whose arm touches only `native-host.ts`'s module variables and publishes without a
-/// `useState` setter, so the controller does not re-render: the at-once publishers, the composer
+/// The kinds whose arm touched only `native-host.ts`'s module variables and published without a
+/// `useState` setter, so the controller did not re-render: the at-once publishers, the composer
 /// collapse, and the renderer's measurements and caret reports.
 fn renders_nothing(kind: &ActionKind) -> bool {
     publishes_at_once(kind)

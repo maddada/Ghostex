@@ -7,12 +7,12 @@
 //! normalizer would be the wrong trade while the Settings page that writes the file stays
 //! TypeScript, so the keys Rust READS are normalized here, with the TypeScript default and clamp
 //! for each, and every other key rides along as it is saved. A reader that starts taking another
-//! key from `hud.settings` adds it to [`NORMALIZED_KEYS`] and to the F2 parity gate
-//! (tooling/app-runtime-port/f2-parity.ts), which runs the real TypeScript normalizer against this.
+//! key from `hud.settings` adds it to [`NORMALIZED_KEYS`] with the default and clamp `normalize.ts`
+//! gives it.
 
 use serde_json::{Map, Value};
 
-/// The keys normalized here, which the parity gate compares.
+/// The keys normalized here.
 pub const NORMALIZED_KEYS: [&str; 13] = [
     "sidebarTheme",
     "sidebarTooltipDelayMs",

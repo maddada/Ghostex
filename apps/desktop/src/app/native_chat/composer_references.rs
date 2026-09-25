@@ -13,7 +13,7 @@ const COMPOSER_FONT_PX: f32 = 14.0;
 /// One markdown reference in the draft, resolved to the draft's byte offsets.
 ///
 /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-/// The rules live in `packages/shared/session-chat-presentation/reference-pills.ts` and reach this
+/// The rules live in `packages/gx-chat-core/src/composer/reference_pills.rs` and reach this
 /// file through `nativeChat.composerReferences`; the input side is
 /// `.dependencies/gpui-component/crates/ui/src/input/inline_replacement.rs`.
 #[derive(Clone, Debug, PartialEq)]
@@ -182,7 +182,7 @@ impl NativeChatView {
         event: &gpui::MouseDownEvent,
         cx: &mut Context<Self>,
     ) -> bool {
-        // React drops a pending open on any press inside the composer, so a press that is not on
+        // React dropped a pending open on any press inside the composer, so a press that is not on
         // the same pill can never be followed by the earlier one opening a view.
         self.cancel_composer_reference_open();
         let Some(input) = self.input.clone() else {

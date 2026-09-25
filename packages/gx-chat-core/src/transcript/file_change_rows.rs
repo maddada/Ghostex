@@ -1,8 +1,8 @@
 //! What a file-change card says before either renderer lays it out.
 //!
-//! Ported from `packages/shared/session-chat-presentation/file-change-rows.ts`. React
-//! (`session-chat-file-change-card.tsx`) and GPUI (`native_chat/file_change_card.rs`, through the
-//! projection) both read these, so a card cannot count or shorten differently on the two surfaces.
+//! Ported from `packages/shared/session-chat-presentation/file-change-rows.ts`. GPUI
+//! (`native_chat/file_change_card.rs`, through the projection) reads these, so a card cannot count
+//! or shorten differently from one platform to the next.
 
 use crate::transcript::diff::{DiffKind, DiffLine};
 use crate::transcript::jsstr::utf16_len;
@@ -11,7 +11,7 @@ use crate::transcript::jsstr::utf16_len;
 pub const FILE_CHANGE_PREVIEW_LINES: usize = 7;
 
 /// GPUI has no start-ellipsis, so the folder half of a long path is shortened here instead. React
-/// keeps its CSS `direction: rtl` truncation, which is width-aware; this is the character budget the
+/// kept its CSS `direction: rtl` truncation, which is width-aware; this is the character budget the
 /// native card falls back to.
 pub const FILE_CHANGE_PARENT_BUDGET: usize = 52;
 
@@ -166,7 +166,7 @@ pub struct FileChangePathParts {
 }
 
 /// `budget` of `None` is the TypeScript's `Number.POSITIVE_INFINITY`, which the native card passes
-/// because both renderers shorten the folder half against the row's real width.
+/// because the renderer shortens the folder half against the row's real width.
 pub fn file_change_path_parts(
     path: &str,
     working_directory: Option<&str>,

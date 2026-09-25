@@ -4,9 +4,9 @@
 //!
 //! CDXC:SessionChat 2026-09-18 SEE-ALSO:
 //! The one rule for turning a transcript image block into something a renderer can actually show.
-//! React reads it through session-chat-image-viewer.tsx and the message-list rows; GPUI chat reads
-//! the same fields off the projected wire item in apps/desktop/src/app/native_chat/images.rs. A
-//! picture that renders in one surface and falls back to a named chip in the other is a bug here.
+//! GPUI chat reads the fields off the projected wire item in
+//! apps/desktop/src/app/native_chat/images.rs. A picture that renders on one platform and falls
+//! back to a named chip on another is a bug here.
 
 use serde_json::Value;
 
@@ -104,7 +104,7 @@ pub fn image_source(block: &ImageRef) -> Value {
 ///
 /// The native Markdown marks serialize this INTO the Markdown string, where the key order is part
 /// of the text the renderer parses back, so it cannot go through a sorted map.
-/// `label_override` is React's own stand-in text, which the inline-image mark substitutes.
+/// `label_override` is the stand-in text React used, which the inline-image mark substitutes.
 pub fn image_source_pairs(
     block: &ImageRef,
     label_override: Option<&str>,

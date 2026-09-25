@@ -3,10 +3,10 @@
 //! The core performs no I/O: it returns effects and waits for the matching [`crate::Event`]. Each
 //! effect is plain data so the same list works over UniFFI and over wasm.
 //!
-//! [`HostRequest`] is the wire form the desktop host already consumes (the `requests` array of a
-//! [`crate::Frame`], dispatched in `apps/desktop/src/app/native_chat/state.rs`). [`Effect`] is the
-//! typed form the Rust host will use once the QuickJS bridge is gone; both exist during the
-//! parity window so a frame stays comparable with the TypeScript producer's.
+//! [`Effect`] is the typed form every host receives from `handle`. A host performs the I/O ones
+//! itself and hands the ones only the view can do back as a [`HostRequest`], the wire form of the
+//! `requests` array of a [`crate::Frame`] that `apps/desktop/src/app/native_chat/state.rs`
+//! dispatches.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -40,9 +40,8 @@ pub enum Effect {
     /// `composer('asyncQuestionRead')` is the one this exists for: it hands back
     /// `{drafts, retired}` from two different stores in a single call
     /// (`apps/desktop/sidebar/session-chat-runtime/native-composer.ts`). Splitting it into two
-    /// [`Effect::ReadStorage`]s would make the core take two round trips where the TypeScript
-    /// takes one, and the number of round trips is part of the contract: the replay pairs the two
-    /// brains' storage answers by order, so one extra read drifts every answer after it.
+    /// [`Effect::ReadStorage`]s would make the core take two round trips for what the host
+    /// serves as one.
     ///
     /// A host performs the reads in the order given and answers once with the same order.
     ReadStorageBatch { keys: Vec<StorageKey> },
@@ -67,10 +66,10 @@ pub enum Effect {
     /// The presentation cache the sidebar and the chat share was updated.
     ///
     /// `createSessionChatPresentationStore(…, (state) => requests.push({kind: 'broker', method:
-    /// 'presentation', params: {state}}))` in `native-host.ts:676`, which the desktop host already
-    /// dispatches (`relay_session_chat_runtime_request`, `method == "presentation"`). `state` is
-    /// the WHOLE merged snapshot, not the patch, because that is what the store's `onChange`
-    /// receives.
+    /// 'presentation', params: {state}}))` in `native-host.ts:676` was the TypeScript's form, and
+    /// the desktop host still dispatches it (`relay_session_chat_runtime_request`,
+    /// `method == "presentation"`). `state` is the WHOLE merged snapshot, not the patch, because
+    /// that is what the store's `onChange` received.
     ///
     /// CDXC:SessionChat 2026-09-14 DECISION:
     /// User: returning to a chat should immediately restore its account, context usage and status
@@ -81,8 +80,8 @@ pub enum Effect {
     /// Read everything the chat needs at boot in one go; answered by
     /// [`crate::Event::ComposerBootRead`].
     ///
-    /// The host already owns this as one operation (`composer('read')`), and `start` in
-    /// `native-host.ts` publishes nothing until it answers, so the core waits on it the same way
+    /// The host owns this as one operation (`composer('read')`), and `start` in `native-host.ts`
+    /// published nothing until it answered, so the core waits on it the same way
     /// rather than issuing a dozen separate reads whose answers would each ship a frame.
     ReadComposerBoot { request_id: u64 },
     /// Write a stored record. `value` of `None` deletes it.
@@ -102,7 +101,7 @@ pub enum Effect {
     /// Push a store's pending writes to disk and say when they are there; answered by
     /// [`crate::Event::StorageWritten`] with the same `store` and an empty suffix.
     ///
-    /// This is `composer('flush')` on the bridge, which is `flushDraftSaves(sessionKey)`: the
+    /// This is the host's `composer('flush')`, which is `flushDraftSaves(sessionKey)`: the
     /// durable save outbox and its retry worker stay with the host
     /// (`docs/2026-09-21/rust-chat/HOST-TODO.md` section 3), and a submission must not deliver
     /// before the submitted revision is on disk. It is its own effect rather than a
@@ -111,12 +110,12 @@ pub enum Effect {
     /// Record the drafts the daemon reports as delivered, so the sent-prompt history and the
     /// recall ring learn about them.
     ///
-    /// `options.onDeliveredDrafts(syncedDraft?.deliveredDrafts ?? [])` runs on every change of
-    /// the synced draft (`controller.ts`, the `useEffect` on `syncedDraft`), and the host's arm is
-    /// `composer('deliveries', {deliveries})`, which is
+    /// `options.onDeliveredDrafts(syncedDraft?.deliveredDrafts ?? [])` ran on every change of
+    /// the synced draft (`controller.ts`, the `useEffect` on `syncedDraft`), and the host's arm was
+    /// `composer('deliveries', {deliveries})`, which was
     /// `recordDeliveredSessionChatDrafts(...)` in
     /// `apps/desktop/sidebar/session-chat-runtime/native-composer.ts`. Fire and forget: the
-    /// TypeScript neither awaits it nor publishes on its answer, so nothing answers it here
+    /// TypeScript neither awaited it nor published on its answer, so nothing answers it here
     /// either. Its own variant because the records it touches belong to the host's sent-history
     /// store, whose keys the core does not build. Each entry is one `SessionChatDeliveredDraft`
     /// as the wire carries it.

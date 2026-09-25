@@ -1,7 +1,7 @@
 //! The delivery status line above an accepted send that is still waiting for
 //! the agent's terminal: "Waiting for agent…" while it is queued or sending,
 //! the daemon's own sentence once it failed, with Retry and Remove beside it.
-//! Same rows as `session-chat-startup-send-status.tsx`; both act on the queue
+//! Ported from React's `session-chat-startup-send-status.tsx`; it acts on the queue
 //! row the send became, so Retry and Remove are the queue's own operations.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};

@@ -14,10 +14,7 @@
 //! in place, one that agrees retires it, and one that says anything else replaces it at once
 //! (`StoredPatch::verdict`).
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/lifecycle.rs,
-//! apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts (`setSessionSleeping`),
-//! tooling/gx-core/lifecycle-parity-typescript.ts (the gate that drives both sides through all
-//! three answers and all three echoes).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/lifecycle.rs.
 
 use std::time::Duration;
 
@@ -148,9 +145,9 @@ impl GhostexGpuiApp {
             LifecycleCall::Sleep => self.gx_store.sidebar_lifecycle.sleeps += 1,
             LifecycleCall::Wake => self.gx_store.sidebar_lifecycle.wakes += 1,
         }
-        // The Quick Automations row: both sides return before the call, so this is answered and
-        // nothing happens. It resolves as accepted because the TypeScript's `await` of it resolves:
-        // a reload of that row goes on to its wake, which returns early the same way.
+        // The Quick Automations row: the TypeScript returned before the call, so this is answered
+        // and nothing happens. It resolves as accepted because the TypeScript's `await` of it
+        // resolved: a reload of that row goes on to its wake, which returns early the same way.
         if request.rpc_path.is_empty() {
             self.gx_store.diagnostics.sidebar_lifecycle_ran(
                 &request,
@@ -357,7 +354,7 @@ impl GhostexGpuiApp {
             let elapsed = started.elapsed();
             // A call that spent the whole timeout and came back with an error never answered; the
             // distinction changes no follow-up and is kept because it is the one case the two
-            // clients cannot both reach (the TypeScript's `fetch` has no timeout at all).
+            // clients could not both reach (the TypeScript's `fetch` had no timeout at all).
             let answer = match (
                 CloseAnswer::read(result.as_ref().map_err(String::as_str)),
                 elapsed >= LIFECYCLE_RPC_TIMEOUT,

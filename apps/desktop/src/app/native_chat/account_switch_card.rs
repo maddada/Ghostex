@@ -2,9 +2,9 @@
 The account-switch card: the modal-style card centered over the whole chat pane
 while a Claude or Codex account switch runs. A port of `AccountSwitchCard`
 (packages/core-ui/accounts/account-switch-card.tsx) and its
-account-switch-card.css, drawn from the host's `accountSwitchCard` projection
-(packages/shared/session-chat-controller/native-accounts.ts). The copy, steps and
-usage levels come from accountSwitchCardPresentation, shared with React.
+account-switch-card.css, drawn from the core's `accountSwitchCard` projection
+(packages/gx-chat-core/src/menus/native_accounts.rs). The copy, steps and
+usage levels come from `menus/accounts_presentation.rs` in the core.
 
 CDXC:AgentProviders 2026-09-25 DECISION:
 User: make the card bigger when the pane has room, drop the bars under the usage tiles, stop the tile name (Fable) looking the same as its reset time (3d 4h), and show the agent icon once, left of the title, not on both account rows (docs/2026-09-24/account-switch-card-roomy/01-no-bars.html). The card is 430px in a narrow pane and scales up to 516px / 576px from 600px / 760px pane widths. Each tile shows a semibold name, a smaller muted reset line with a clock, and a large percent; the tile at 100% keeps its stronger outline. This supersedes the 2026-09-23 tile-edge bars and "smaller" card; the rest of that decision (neutral ink, accent for the target and progress, numbered steps with the moving line) stands, as does the 2026-09-16 backdrop that blocks the pointer until the switch finishes.
@@ -326,7 +326,7 @@ fn step(index: usize, value: &Value, id: &str, palette: &Palette, s: f32) -> Any
 }
 
 impl NativeChatView {
-    /// The overlay React renders as `.gx-account-switch-overlay` while `accountStatus.visible` holds.
+    /// The overlay React rendered as `.gx-account-switch-overlay` while `accountStatus.visible` holds.
     pub(crate) fn render_account_switch_card(
         &self,
         appearance: &ChatAppearance,

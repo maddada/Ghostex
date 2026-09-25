@@ -70,7 +70,7 @@ impl Retained {
             return false;
         }
         self.measured_at = Some(Instant::now());
-        // UTF-16 accounting, the same conservative measure the TypeScript takes of its snapshot.
+        // UTF-16 accounting, the same conservative measure the TypeScript took of its snapshot.
         serde_json::to_string(self.core.document())
             .map(|text| text.encode_utf16().count() * 2 > MAX_RETAINED_BYTES)
             .unwrap_or(false)

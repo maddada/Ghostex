@@ -22,9 +22,8 @@ use crate::state::{ChatContext, ChatState, CommandMarker, PendingSend};
 
 /// `nextSessionChatPendingSendId(now)`: `${now}-${counter}`.
 ///
-/// One counter for echoes and markers alike, because the TypeScript's is a module variable both
-/// call. Here it is state, so a replay reproduces the ids exactly and the core needs no random
-/// source.
+/// One counter for echoes and markers alike, because the TypeScript's was a module variable both
+/// called. Here it is state, so the ids are deterministic and the core needs no random source.
 pub fn next_pending_send_id(state: &mut ChatState, now_ms: i64) -> String {
     state.pending.send_counter += 1;
     format!("{now_ms}-{}", state.pending.send_counter)

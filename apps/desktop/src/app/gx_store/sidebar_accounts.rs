@@ -28,7 +28,7 @@
 //! emails and usage never reach a log line: only counts do.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_accounts/, apps/desktop/src/app/native_sidebar/menus.rs
-//! (the panel a flyout or the launcher opens), tooling/gx-core/account-menu-parity.ts.
+//! (the panel a flyout or the launcher opens).
 
 use std::time::Duration;
 

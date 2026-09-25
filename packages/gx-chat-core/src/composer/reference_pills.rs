@@ -1,7 +1,7 @@
 //! The composer's reference pills: what a `[label](path)` in the draft is, and how wide it draws.
 //!
-//! Port of `packages/shared/session-chat-presentation/reference-pills.ts`. The TypeScript scans
-//! with `String.matchAll`; the regexes it uses have no alternation a hand scanner cannot follow,
+//! Port of `packages/shared/session-chat-presentation/reference-pills.ts`. The TypeScript scanned
+//! with `String.matchAll`; the regexes it used have no alternation a hand scanner cannot follow,
 //! so the scan below is the same walk without a regex engine.
 //!
 //! CDXC:SessionChat 2026-09-18 DECISION:

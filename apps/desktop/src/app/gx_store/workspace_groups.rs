@@ -444,7 +444,7 @@ impl GhostexGpuiApp {
     /// CDXC:Sessions 2026-09-21 WHY:
     /// A write that does not reach storage is OWED again rather than counted and dropped. The
     /// database is WAL, so reads never block, but a second connection's write really does fail with
-    /// "database is locked" after the busy timeout while the QuickJS service holds a write
+    /// "database is locked" after the busy timeout while another connection holds a write
     /// transaction; a rename or a move that lost that race, followed by a quit before the debounced
     /// push reached the daemon, was gone. The owed write is replaced by any later one, retried a
     /// bounded number of times, and flushed synchronously on the quit path beside the other three
@@ -602,7 +602,7 @@ impl GhostexGpuiApp {
             background.timer(Duration::from_millis(delay_ms)).await;
             let _ = this.update(cx, |this, cx| {
                 // A booking that was replaced fires nothing: `clearTimeout` is what the TypeScript
-                // does, and a timer that cannot be cancelled has to check instead.
+                // did, and a timer that cannot be cancelled has to check instead.
                 if this.gx_store.workspace_groups.booking == booking {
                     this.gx_store_push_workspace_groups(cx);
                 }

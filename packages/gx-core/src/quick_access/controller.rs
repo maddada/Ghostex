@@ -9,7 +9,7 @@
 //! TypeScript touched in place goes through [`QuickAccessStorage`].
 //!
 //! SEE-ALSO: apps/desktop/src/app/quick_access/ (the host), apps/desktop/src/app/window/quick_access/
-//! (the window), tooling/gx-core/quick-access-parity.ts (the gate).
+//! (the window).
 
 use std::collections::BTreeSet;
 

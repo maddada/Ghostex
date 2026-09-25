@@ -62,8 +62,8 @@ pub struct TranscriptProjection {
 
 /// The one pass every renderer starts from.
 ///
-/// `interacted_message_ids` is the inline-diff opt-out React passes; the native projection always
-/// hands it an empty list, exactly as the TypeScript default does.
+/// `interacted_message_ids` is the inline-diff opt-out React passed; the native projection always
+/// hands it an empty list, exactly as the TypeScript default did.
 pub fn project_chat_transcript(
     messages: &[ChatMessage],
     working: bool,

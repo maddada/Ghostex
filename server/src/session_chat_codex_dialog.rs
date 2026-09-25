@@ -270,7 +270,7 @@ fn directory_trust_dialog(content: &[&str]) -> Option<TerminalDialog> {
 /// User: expose the "Implement this plan?" picker in chat so switching to the terminal is unnecessary.
 /// User: audit every Codex command and make its messages and interactions usable in chat, using the existing UX and improving it where needed.
 /// Numbered selectors, searchable menus, checkbox settings, and text forms retain their own selection, navigation, toggle, save, and cancel actions.
-/// SEE-ALSO: packages/core-ui/chat/session-chat-terminal-dialog.tsx and Codex tui/src/bottom_pane/list_selection_view.rs.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/terminal_dialog.rs and Codex tui/src/bottom_pane/list_selection_view.rs.
 pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
     if let Some(pager) = crate::session_chat_codex_pager::detect_codex_transcript_pager(text) {
         return Some(pager);

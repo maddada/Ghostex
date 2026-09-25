@@ -42,7 +42,7 @@ pub const SNAPSHOTS_STORE: &str = "chatSnapshots";
 
 /// The store key for one session on one machine.
 ///
-/// `JSON.stringify` of a three-string array, which is what the TypeScript writes and what an
+/// `JSON.stringify` of a three-string array, which is what the TypeScript wrote and what an
 /// installed Ghostex already has on disk. The HOST calls this: it is the half of the identity that
 /// knows the machine, the same way it builds [`crate::state::SessionIdentity::session_key`], and
 /// it passes the answer back as [`crate::event::StartConfig::retained_key`] so the record's own
@@ -63,7 +63,7 @@ pub fn decode(value: Option<&str>, now_ms: f64) -> Option<StoredSnapshot> {
 /// `persistSessionChat`'s write, or `None` when the snapshot is over the record bound.
 ///
 /// `None` DELETES the record, exactly as the TypeScript's `update` callback returning `undefined`
-/// does: an oversized snapshot is disposable, and slicing it would leave an invalid pagination
+/// did: an oversized snapshot is disposable, and slicing it would leave an invalid pagination
 /// cursor behind.
 pub fn encode(record: &StoredSnapshot) -> Option<String> {
     if !fits_record_bound(&record.snapshot) {
@@ -114,9 +114,9 @@ pub fn adopt(state: &mut ChatState, value: Option<&str>, context: &ChatContext) 
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
 /// The deadline is a plain field rather than a row in `state.core.timers`, because in the
-/// TypeScript this `setTimeout` belongs to `store.ts`, which is the desktop runtime and not the
-/// chat brain: `take`'s `nextWakeMs` reports the brain's timers alone. A row here would make every
-/// frame's wake disagree with the brain the replay grades it against, for a cache write whose only
+/// TypeScript this `setTimeout` belonged to `store.ts`, which was the desktop runtime and not the
+/// chat brain: `take`'s `nextWakeMs` reported the brain's timers alone. A row here made every
+/// frame's wake disagree with the brain the replay graded it against, for a cache write whose only
 /// cost of being late is one more tick.
 pub fn schedule(state: &mut ChatState, context: &ChatContext) {
     state.messages.retained_saved_at_ms = context.now_ms;

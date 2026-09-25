@@ -1,5 +1,4 @@
-//! Account copy and figures shared by the React account panel and switch card and their GPUI chat
-//! ports.
+//! Account copy and figures for the account panel and the account-switch card.
 //!
 //! Port of `packages/shared/session-chat-presentation/accounts.ts`. Labels are returned unmasked;
 //! each renderer applies Hide emails itself (here, `native_accounts.rs`).

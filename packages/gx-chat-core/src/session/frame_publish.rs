@@ -1,8 +1,8 @@
-//! Whether a chat frame moves a value the live brain's lifecycle republishes on.
+//! Whether a chat frame moves a value the TypeScript brain's lifecycle republished on.
 //!
-//! The TypeScript's lifecycle (`session-chat-controller/lifecycle.ts`) publishes whenever a
-//! `useState` setter is handed a value that is not `Object.is` the current one, whether or not the
-//! document it then builds changed. `onEvent` in `controller.ts` hands most of a frame's side
+//! The TypeScript's lifecycle (`session-chat-controller/lifecycle.ts`) published whenever a
+//! `useState` setter was handed a value that was not `Object.is` the current one, whether or not
+//! the document it then built changed. `onEvent` in `controller.ts` handed most of a frame's side
 //! state straight to its setters as the objects the frame parsed into, so a frame that CARRIES a
 //! lifecycle, a prompt, a notice, the fleet, the task list, the app commands, the retired question
 //! ids, the account switch, the pending model selection or a draft is a publish, even when every

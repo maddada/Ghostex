@@ -7,9 +7,9 @@
 //! change gate.
 //!
 //! CDXC:SessionChat 2026-09-18 WHY:
-//! React reads the minimap's previews straight off the turns it already rendered, but the native
-//! rail gets them over the bridge, and a working session publishes a frame a second. The whole row
-//! list keeps its identity while nothing changed, so an unchanged rail ships no bytes.
+//! React read the minimap's previews straight off the turns it had already rendered, but the
+//! native rail gets them in the document, and a working session publishes a frame a second. The
+//! whole row list keeps its identity while nothing changed, so an unchanged rail ships no bytes.
 
 use serde_json::Value;
 
@@ -33,7 +33,7 @@ pub fn markers(state: &ChatState, _context: &ChatContext) -> Vec<MinimapMarker> 
 ///
 /// The same rule as [`project_minimap`], reading `ChatMessage` rather than raw JSON so the
 /// transcript pass does not have to serialize every turn to ask for its preview. This is the one
-/// the core calls; the JSON form stays for the parity fixtures.
+/// the core calls; the JSON form has had no caller since the parity fixtures were deleted.
 pub fn project_minimap_turns(
     turns: &[(
         &ghostex_gx_protocol::chat::ChatMessage,

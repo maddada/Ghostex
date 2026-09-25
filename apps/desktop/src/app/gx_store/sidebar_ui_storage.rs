@@ -5,8 +5,8 @@
 //! The values live in the `preferences` table of the client-storage database, under the keys the
 //! TypeScript sidebar wrote them under, because an installation that upgrades keeps its collapsed
 //! groups, its Space, its hidden items and its filters, and a build from before the port must
-//! still read them. This is a second door into that database: the client-storage service in
-//! QuickJS owns the first one, and there is a `CDXC:Settings` decision saying all storage goes
+//! still read them. This was a second door into that database: the client-storage service in
+//! QuickJS owned the first one until 2026-09-25, and there is a `CDXC:Settings` decision saying all storage goes
 //! through one system so it cannot silently fill up. The second door is what the port is for, and
 //! it carries that decision's obligations itself rather than dropping them: the catalog's entry
 //! bound is enforced below, a refused or failed write is counted and reported
@@ -45,9 +45,8 @@ const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 /// exact whatever the age.
 const TOTALS_MAX_AGE: Duration = Duration::from_secs(10);
 /// `maxEntryBytes` of the stores these keys belong to (`packages/client-storage/catalog.ts`). The
-/// service in QuickJS refuses a larger entry, and this door has to refuse it too, or a payload
-/// this side stored would be one the other side cannot write: `admission` would throw, the
-/// TypeScript sidebar swallows that, and it would stop persisting while this side kept writing.
+/// client-storage service refuses a larger entry, and this door refuses it too so the catalog's
+/// bound holds for every writer of these keys.
 const MAX_ENTRY_BYTES: usize = 64 * 1024;
 /// The `workspaceGroups` and `collections` rows, which carry the SAME numbers
 /// (`{ maxEntryBytes: 256 * KiB, maxBytes: 256 * KiB }` on top of the singleton defaults). Their
@@ -158,8 +157,8 @@ fn machine_tab_key() -> String {
 
 /// The two client-storage values the sidebar's menus read that are not part of its own state:
 /// the agent the user launched last, and the keep-awake duration that is running. Both are
-/// written by the TypeScript side and read fresh (behind a short cache) rather than restored
-/// once, because either can change while the app runs.
+/// read fresh (behind a short cache) rather than restored once, because either can change while
+/// the app runs (the keep-awake duration is written by the titlebar page).
 pub(super) fn read_menu_host_state() -> Result<(Option<String>, Option<i64>), &'static str> {
     let mut held = connections()
         .lock()

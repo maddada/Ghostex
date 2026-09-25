@@ -7,14 +7,14 @@
 //! Spaces, the projects the sidebar lists, the active project) is read from the store.
 //!
 //! **The HUD's contract is what Rust reads.** These fields are produced, each as
-//! the app runtime's `createGpuiSidebarHudState` (deleted; the F2 parity gate runs it from git)
+//! the app runtime's `createGpuiSidebarHudState` (deleted with QuickJS; see git history)
 //! built it and the sidebar store normalized it: `activeProjectId`, `activeProjectSpaceRefs`,
 //! `activeSessionsSortMode`, `agentManagerZoomPercent`, `agents`, `commandsByProject`,
 //! `createSessionOnSidebarDoubleClick`, `debuggingMode`, `globalCommands`, `projectViewProjects`,
 //! `projectViewSpaces`, `recentProjects`, `renameSessionOnDoubleClick`, `settings` (see
 //! `settings.rs`) and `theme`. The runtime's other fields (the active project's `commands`, git,
 //! command-session indicators, focus title, slot labels) had no Rust reader and are not produced; a reader that needs one adds it
-//! here together with its case in the F2 parity gate (tooling/app-runtime-port/f2-parity.ts).
+//! here.
 //!
 //! CDXC:Sidebar 2026-09-25 WHY:
 //! The HUD used to reach Rust on the runtime's facts channel (`CDXC:Sidebar 2026-09-21 DECISION`,

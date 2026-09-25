@@ -2,7 +2,7 @@
 //! the notices.
 //!
 //! Port of the question, notice and async-strip arms of the `action` switch in
-//! `packages/shared/session-chat-controller/native-host.ts`. The TypeScript awaits each call; here
+//! `packages/shared/session-chat-controller/native-host.ts`. The TypeScript awaited each call; here
 //! an action leaves a request behind and `crate::questions::events` finishes the work when the
 //! answer arrives.
 
@@ -219,6 +219,7 @@ fn answer_prompt(state: &mut ChatState, answer: &Value) -> Vec<Effect> {
         .to_string();
     state.questions.answering = true;
     state.questions.notice_error = None;
+    // CDXC:SessionChat 2026-09-16 DECISION: User: picking an option is optimistic: the card disappears at once while the answer is sent in the background; it only comes back, with its failure line, when the daemon proves the answer did not land.
     // A picker answer hides the card at once: gxserver keeps reporting the detection until the
     // agent's screen catches up, and the user has already chosen.
     if kind == "terminalChoice"

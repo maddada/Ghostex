@@ -101,7 +101,7 @@ impl NativeChatView {
             }
             (!rows.is_empty()).then(|| rows)
         } else if expanded || motion.is_some() {
-            // React hangs the whole log off the rail the "Worked for" heading opened
+            // React hung the whole log off the rail the "Worked for" heading opened
             // (`SessionChatExpansion`), so the turn's work reads as one indented block.
             self.hide_file_changes = true;
             let mut log: Vec<AnyElement> = Vec::new();

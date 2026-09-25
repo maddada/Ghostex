@@ -1,9 +1,9 @@
 //! Whether a press that landed on a transcript row is a click the row should
 //! act on, or the tail of a text selection.
 //!
-//! CDXC:SessionChat 2026-09-19 SEE-ALSO:
-//! React's row-level handlers ask the DOM event two questions before they
-//! toggle anything (`session-chat-message-list/rows.tsx`,
+//! CDXC:SessionChat 2026-09-19 WHY:
+//! React's row-level handlers asked the DOM event two questions before they
+//! toggled anything (`session-chat-message-list/rows.tsx`,
 //! `session-chat-file-change-card.tsx`): did the press land on a control of its
 //! own (`event.target.closest('a, button, …')`), and did it leave a selection
 //! behind (`getSelection()?.isCollapsed === false`). GPUI has no event target,

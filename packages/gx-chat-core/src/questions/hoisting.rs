@@ -1,8 +1,7 @@
 /*
 CDXC:SessionChat 2026-09-18 SEE-ALSO:
-The hoisting rule for answered question cards, shared by the React message list
-(session-chat-message-list/list.tsx) and the GPUI transcript
-(apps/desktop/src/app/native_chat/question_exchange.rs, fed through native-presentation.ts).
+The hoisting rule for answered question cards, drawn by the GPUI transcript
+(apps/desktop/src/app/native_chat/question_exchange.rs).
 The user's answer never writes a user row: the whole ask/answer exchange lives in tool blocks
 between two user turns, so without hoisting it would vanish into the collapsed "Worked for Xs"
 section. The raw tool pairs stay as plain rows inside the expanded work log, so nothing renders

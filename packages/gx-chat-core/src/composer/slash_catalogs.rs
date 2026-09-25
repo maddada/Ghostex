@@ -2,9 +2,10 @@
 //!
 //! Split out of `slash_commands.rs` so the rules stay readable beside a table this long. It is a
 //! curated snapshot of what each agent CLI intercepts, not a runtime discovery, and it also feeds
-//! the send classification, so a wrong name costs more than a missing one: the instructions for
-//! re-verifying a catalog against the binary the user runs are in
-//! `packages/core-ui/chat/session-chat-slash-commands.ts`, and both copies change together.
+//! the send classification, so a wrong name costs more than a missing one. The instructions for
+//! re-verifying a catalog against the binary the user runs were in
+//! `packages/core-ui/chat/session-chat-slash-commands.ts`, which left with the React chat; read
+//! them in git history.
 
 use crate::composer::slash_commands::SlashCommand;
 
@@ -923,6 +924,7 @@ pub(crate) const CURSOR: &[SlashCommand] = &[
         description: "Fork this chat into a new session",
         insert_text: None,
     },
+    // CDXC:SessionChat 2026-09-15 DECISION: User: offer Cursor's /compact in chat; Cursor already handles it as an alias for /summarize.
     SlashCommand {
         name: "compact",
         description: "Summarize the conversation to reduce context (alias for /summarize)",

@@ -12,8 +12,7 @@ use serde_json::json;
 /// What the shared presentation decided this fence's header shows.
 ///
 /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-/// Written by sessionChatNativeMarkdown in packages/shared/session-chat-presentation/native-markdown.ts,
-/// which is also where React's fence header takes its label, glyph, and open-file target from.
+/// Written by the core's native Markdown pass in packages/gx-chat-core/src/transcript/native_markdown.rs.
 #[derive(Deserialize)]
 struct FenceHeader {
     label: String,

@@ -44,7 +44,7 @@ pub(crate) struct GpuiSidebarWorkspaceTabSession {
 /// CDXC:Workarea 2026-09-04 DECISION:
 /// User: Advanced > Split Right in the sidebar session menu opens the session in a pane to the right of the focused agents pane.
 /// It rides on the ordinary sidebar focus bridge as an optional `placement`, so wake, attach, and focus stay one path.
-/// SEE-ALSO: `splitSessionRight` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
+/// SEE-ALSO: `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum GpuiWorkspaceTerminalFocusPlacement {
     #[default]
@@ -72,16 +72,16 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     /// CDXC:Navigation 2026-09-04 WHY:
     /// Set only by the sidebar's one-shot startup materialization of the persisted focused session.
     /// A sidebar click means "show me this session" and may switch the app to Agents; the restore replay must not, or the view the user quit on is lost.
-    /// SEE-ALSO: `autoMaterializeStartupFocusedSession` in apps/desktop/sidebar/gxserver-runtime/presentation-stream.ts, `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
+    /// SEE-ALSO: `focus_local_workspace_terminal_from_message` in apps/desktop/src/app/workspace_events.rs.
     pub(crate) startup_restore: bool,
     /// CDXC:Navigation 2026-09-11 DECISION:
     /// User: a focus that lands on another project keeps that project's remembered view (Code, Browser, Kanban, Automate, Docs) instead of switching to Agents; only a session click inside the project already active still opens Agents.
     /// The sidebar runtime sets this when the focused project changes and on a Space restore. Rust then selects the tab in the background and leaves the mode and keyboard focus alone unless the remembered view is Agents, the same rule `startup_restore` applies to the restart replay.
-    /// SEE-ALSO: `focusSession` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `select_local_workspace_terminal_keeping_view` in apps/desktop/src/app/workspace_terminals.rs, `pending_keep_view_remote_focus` in apps/desktop/src/app/core.rs.
+    /// SEE-ALSO: `select_local_workspace_terminal_keeping_view` in apps/desktop/src/app/workspace_terminals.rs, `pending_keep_view_remote_focus` in apps/desktop/src/app/core.rs.
     pub(crate) keep_view: bool,
     /// CDXC:FocusRouting 2026-09-20 WHY:
     /// The sidebar runtime sets this when the session it is focusing is asleep, instead of awaiting its own `/api/wakeSession` before posting the focus. The attach plan then uses the Wake intent, which starts the provider, marks the row running and returns the attach metadata in one round trip, so the click no longer waits on a serial wake before anything moves.
-    /// SEE-ALSO: `focusSession` in apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, `local_workspace_attach_intent_for_key` in apps/desktop/src/app/workspace_terminals.rs.
+    /// SEE-ALSO: `local_workspace_attach_intent_for_key` in apps/desktop/src/app/workspace_terminals.rs.
     pub(crate) wake_sleeping: bool,
     /// Set by focuses the user did not aim at the session itself (opening its project), so a mapped sleeping tab is selected like a tab-strip click instead of woken. See `select_sleeping_local_workspace_tab`.
     pub(crate) keep_sleeping: bool,

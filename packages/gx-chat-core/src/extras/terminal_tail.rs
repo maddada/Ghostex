@@ -1,7 +1,7 @@
 //! The session's terminal screen, read only when the user asks for it, ported from
 //! `packages/shared/session-chat-controller/native-terminal-tail.ts`.
 //!
-//! Both readers are the React ones (the Terminal View hover and the `composerNotReady` refusal
+//! Both readers are the ones React had (the Terminal View hover and the `composerNotReady` refusal
 //! card), with their two rules kept: `unknown` is not "not ready", and a failed hover read keeps
 //! the last verdict.
 

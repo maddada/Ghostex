@@ -13,11 +13,9 @@ impl NativeChatView {
     /// Open the transcript menu at `at`, for the reference `href` when the press landed on one.
     ///
     /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
-    /// The rows are `sessionChatTranscriptMenuRows`
-    /// (`packages/shared/session-chat-presentation/transcript-menu.ts`); React's transcript
-    /// `ContextMenu` in `packages/core-ui/chat/session-chat-view.tsx` draws the same items from
-    /// `sessionChatTranscriptMenuItems`. React's subagent dialog sits outside that menu's trigger
-    /// and suppresses the browser menu, so the subagent viewer does not open this one either.
+    /// The rows come from the core (`packages/gx-chat-core/src/composer/transcript_menu.rs`).
+    /// React's subagent dialog sat outside its transcript menu's trigger and suppressed the
+    /// browser menu, so the subagent viewer does not open this one either.
     ///
     /// CDXC:SessionChat 2026-09-19 WHY:
     /// The window selection is read here, when the menu opens, as the same trimmed text Cmd+C
@@ -31,7 +29,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> bool {
         let selection = window.selected_text(cx).trim().to_owned();
-        // The composer hides behind a question card (composer.rs), which is when React disables Add to Chat.
+        // The composer hides behind a question card (composer.rs), which is when Add to Chat is disabled.
         let question_active = self.snapshot["questionCard"]["visible"] == true
             && self.snapshot["prompt"]["kind"] == "question";
         let rows: Vec<Value> = self
@@ -70,7 +68,7 @@ impl NativeChatView {
     }
 
     /// Whether a press at `at` landed on the main transcript rather than the subagent viewer or a
-    /// card below the list, the only place React's transcript menu answers.
+    /// card below the list, the only place the transcript menu answers.
     pub(super) fn in_main_transcript(&self, at: Point<Pixels>) -> bool {
         !self.snapshot["subagent"].is_object() && self.list.viewport_bounds().contains(&at)
     }

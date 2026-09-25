@@ -2,8 +2,8 @@
 //!
 //! Every expectation below is what V8 prints for the same expression. The table was produced by
 //! running the left column through `bun -e 'console.log(String(x))'` and pasting the answer, so a
-//! change here is a change against the engine the recordings were made under, not against a
-//! transcription of the specification.
+//! change here is a change against the engine the saved chat data was written under, not against
+//! a transcription of the specification.
 //!
 //! ```
 //! cargo run --release --example js_number_check

@@ -3,7 +3,7 @@
 //! **This file belongs to family d (composer).** No other family edits it. It holds what
 //! `packages/shared/session-chat-controller/queue.ts`, `submission.ts`, `native-suggestions.ts`,
 //! `native-composer-chrome.ts`, `skills.ts`, `files.ts`, `note.ts`, `draft-handoff.ts` and the
-//! plumbing's `native-composer.ts` keep: the draft text the core tracks (the host owns the text
+//! plumbing's `native-composer.ts` kept: the draft text the core tracks (the host owns the text
 //! field itself), the suggestion popup, the reference pills, the stash, the session note, the
 //! attachment count and what is in flight.
 //!
@@ -119,8 +119,8 @@ pub struct ComposerSuggestionState {
 
 /// Which composer controls the host can actually serve.
 ///
-/// React gates these by only passing the handler it has; the native renderer needs the same answer
-/// so a control that would do nothing stays out of the toolbar.
+/// React gated these by only passing the handler it had; the native renderer needs the answer in
+/// the document so a control that would do nothing stays out of the toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ComposerActionAvailability {
     pub summary: bool,

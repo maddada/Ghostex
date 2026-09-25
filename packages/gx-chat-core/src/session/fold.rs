@@ -240,9 +240,9 @@ pub fn merge_options(current: Option<&Value>, incoming: Option<&Value>) -> Optio
 /// [`merge_options`], plus whether `setSelectedOptions` would have been handed a NEW object.
 ///
 /// React bails out of a state update when `Object.is(next, current)`, so the identity of
-/// `applySelectedOptions`'s result is what decides whether the controller re-renders and therefore
-/// whether `native-options.ts`'s `useLayoutEffect(applyDetected, [.., chat.selectedOptions])` fires
-/// again. The TypeScript returns `current` itself only when the older capture won AND none of the
+/// `applySelectedOptions`'s result decided whether the controller re-rendered and therefore
+/// whether `native-options.ts`'s `useLayoutEffect(applyDetected, [.., chat.selectedOptions])` fired
+/// again. The TypeScript returned `current` itself only when the older capture won AND none of the
 /// three status payloads had to be folded in; every other path builds a fresh object, equal value
 /// or not. Callers that need that distinction (family e1's detection dep, and through it the
 /// `optionWrite` round trip) take the flag; the rest use [`merge_options`].
@@ -409,7 +409,7 @@ pub fn merge_draft_state(current: Option<&Value>, incoming: &Value) -> Value {
                         let mut entry = Map::new();
                         entry.insert("draftId".to_string(), Value::String(draft_id));
                         // `JSON.stringify(5)` is `5`, not `5.0`: the receipt goes back on the
-                        // wire and is read by the TypeScript brain.
+                        // wire, where an integer stays an integer.
                         entry.insert("revision".to_string(), js_number_value(revision));
                         Value::Object(entry)
                     })
@@ -478,7 +478,7 @@ fn empty_result() -> ReadSessionChatResult {
 /// `onEvent` in `controller.ts` hands `applyAuthoritative` the EVENT; the store's fold, which
 /// carries `selectedOptions`, `appCommands`, the queue and the draft forward when a frame omits
 /// them, is only what is retained. Applying the fold instead re-applied the carried options as a
-/// fresh detection on every replaced frame (an `optionWrite` the live brain never made, which
+/// fresh detection on every replaced frame (an `optionWrite` the TypeScript brain never made, which
 /// then took the acknowledgement a draft write was waiting for), and re-set the carried
 /// `appCommands` as a new array.
 pub fn snapshot_frame_result(frame: &ChatSnapshotFrame) -> ReadSessionChatResult {

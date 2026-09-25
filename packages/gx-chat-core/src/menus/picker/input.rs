@@ -2,7 +2,7 @@
 //!
 //! Port of `packages/shared/session-chat-presentation/model-picker-input.ts`. The wheel
 //! accumulator kept its own clock there; here every call takes `now` from
-//! [`crate::ChatContext`], so a replay reproduces the same steps.
+//! [`crate::ChatContext`], so the same inputs always produce the same steps.
 
 use serde::{Deserialize, Serialize};
 

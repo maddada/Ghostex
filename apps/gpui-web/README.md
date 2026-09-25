@@ -2,7 +2,7 @@
 
 The desktop app's native GPUI UI, compiled to wasm32 and drawn into a `<canvas>` by `gpui_web` (WebGPU, WebGL2 fallback) from the Zed fork in `.dependencies/zed`. It talks to gxserver directly from the page. It is the only web app: the React one (`apps/web`) was deleted on 2026-09-24, and `ghostex web` serves this build.
 
-Status on 2026-09-25: the sidebar, the chat view, the terminal and the sidebar's actions (the desktop's own `gx_store/` executor files, since the app runtime port's step 4) run in Chrome against live gxserver data.
+Status on 2026-09-25: the sidebar, the chat view, the terminal and the sidebar's actions (the desktop's own `gx_store/` executor files, since the app runtime port's step 4) run in Chrome against live gxserver data. The page runs the same Rust code as the desktop for the store (`gx-core`) and the chat (the desktop's chat host on `gx-chat-core`); neither build runs QuickJS or a TypeScript chat.
 
 | Surface | What runs | Reused from the desktop |
 | --- | --- | --- |

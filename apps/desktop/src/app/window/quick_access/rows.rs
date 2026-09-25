@@ -3,7 +3,7 @@
 //! Every row is the same 40px line: a glyph, the title, a muted subtitle beside it, and
 //! right-aligned accessories (keycaps, counts, chips, time, the lifecycle dot). Rows carry no
 //! buttons of their own; what a row can do lives in its actions menu (right-click, or the footer's
-//! Actions panel), which the runtime builds in apps/desktop/sidebar/native-quick-access/row-actions.ts.
+//! Actions panel), which the controller builds (packages/gx-core/src/quick_access/).
 use super::chrome::{
     asset_icon_path, quick_access_icon, quick_access_keycap, quick_access_tooltip,
 };

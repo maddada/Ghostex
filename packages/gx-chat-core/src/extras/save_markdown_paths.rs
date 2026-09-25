@@ -8,7 +8,7 @@ use crate::extras::agent_tasks::js_trim;
 
 /// `localDateDirectory`: today's date in the user's own timezone, `YYYY-MM-DD`.
 ///
-/// The TypeScript reads `new Date()` and its local `getFullYear`/`getMonth`/`getDate`. The core
+/// The TypeScript read `new Date()` and its local `getFullYear`/`getMonth`/`getDate`. The core
 /// reads no clock and knows no timezone, so both arrive on [`crate::ChatContext`].
 pub fn local_date_directory(now_ms: f64, utc_offset_minutes: i32) -> String {
     let local_ms = now_ms + f64::from(utc_offset_minutes) * 60_000.0;

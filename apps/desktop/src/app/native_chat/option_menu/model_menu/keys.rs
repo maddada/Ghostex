@@ -109,7 +109,6 @@ impl ChatOptionMenuPanel {
     ///
     /// CDXC:SessionChat 2026-09-24 DECISION:
     /// User: the model pop-up is the one model picker and is driven from the keyboard (docs/2026-09-24/model-popup-keyboard/): Up and Down move through the models and then the footer buttons and stop at the top and bottom instead of wrapping round ("make it not loop to the top when I press down while I'm at the bottom", 2026-09-24, superseding the wrap); Left and Right move the highlighted model's reasoning a level (a shake at either end or on a model without levels) and move along the footer; Enter uses the highlighted model and level in this session and Shift+Enter saves them as the agent's default, and either one closes the pop-up (2026-09-24); Cmd+1 to Cmd+9 only highlight that row and never apply it ("I should press enter to apply the model change", 2026-09-24, superseding Cmd+number picking); the footer buttons answer to their letters (see `BUTTON_LETTERS`); Tab and Shift+Tab switch agent tabs; Escape or the picker hotkey close without saving. The mouse keeps its old meaning: a click saves the default, a right-click this session only.
-    /// SEE-ALSO: packages/core-ui/chat/session-chat-model-menu.tsx (`onKeyDown`) answers the same keys for React.
     fn model_menu_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(state) = self.model_menu.as_mut() else {
             return false;

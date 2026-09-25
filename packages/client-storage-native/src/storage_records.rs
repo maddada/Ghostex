@@ -281,9 +281,9 @@ pub enum RecordRead {
 /// **The catalog's `maxAgeMs` is part of the read, not only of eviction.** `readManaged`
 /// (`packages/client-storage/service.ts`) answers `null` for a `cache` entry older than its store's
 /// `maxAgeMs` before it ever looks at the payload, so a Rust door that handed back a two-month-old
-/// row would draw data the TypeScript reader of the same key has already stopped drawing. The one
-/// thing NOT copied is the deletion `readManaged` then performs: a Rust door refuses where the
-/// service evicts, and the row is the service's to remove. The clock is the caller's, because the
+/// row would have drawn data the TypeScript reader of the same key had already stopped drawing. The
+/// one thing NOT copied is the deletion `readManaged` then performs: a Rust door refuses where the
+/// service evicted, and a read never deletes. The clock is the caller's, because the
 /// store this feeds has none of its own.
 pub fn read_record(
     connection: &Connection,

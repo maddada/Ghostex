@@ -4,12 +4,12 @@
 //!
 //! CDXC:Settings 2026-09-25 WHY:
 //! Only `ServiceRuntime::new` created the tables, imported the browser-era profile and ran
-//! `migrateStorage` and `upgradeStorageSchemas`. With the runtime being ported to Rust, a fresh
+//! `migrateStorage` and `upgradeStorageSchemas`. With the runtime ported to Rust, a fresh
 //! install would have had no tables and an upgraded one would have left its browser-era values
 //! where no Rust door reads them. The desktop now calls [`initialize_client_storage`] once at
-//! process start, before any storage door or the runtime opens the file. The TypeScript copy still
-//! runs inside the runtime until it is deleted; every step here is idempotent against it (receipts,
-//! `onlyIfAbsent`, compare-then-delete), so the second run finds nothing to do.
+//! process start, before any storage door opens the file. Until 2026-09-25 the TypeScript copy also
+//! ran inside the runtime, so every step here is idempotent (receipts, `onlyIfAbsent`,
+//! compare-then-delete): a second run finds nothing to do.
 //!
 //! SEE-ALSO: packages/client-storage/migration.ts (`migrateStorage`, `upgradeStorageSchemas`),
 //! packages/client-storage/adapters/database-transaction.ts (the row shape a migration writes),

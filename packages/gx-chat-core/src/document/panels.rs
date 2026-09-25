@@ -48,8 +48,8 @@ pub struct TerminalTailNotice {
     ///
     /// A sentence, not a flag: `apps/desktop/src/app/native_chat/composer_not_ready.rs` draws it
     /// as text, and `emptyCopy` in
-    /// `packages/shared/session-chat-controller/native-terminal-tail.ts` tells an unreadable
-    /// screen apart from a blank one.
+    /// `packages/shared/session-chat-controller/native-terminal-tail.ts` told an unreadable
+    /// screen apart from a blank one, as this does.
     pub empty: Option<String>,
 }
 
@@ -93,7 +93,8 @@ pub struct AccountStatus {
     pub extra: serde_json::Map<String, Value>,
 }
 
-/// The Chat Lab's own display settings, present only under a preview backend.
+/// A preview chat's own display settings (the retired Chat Lab's), present only under a preview
+/// backend.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviewSettings {

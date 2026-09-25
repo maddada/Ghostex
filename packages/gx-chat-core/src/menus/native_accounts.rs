@@ -1,5 +1,5 @@
 //! GPUI chat's More actions > Switch Account panel and account-switch card, projected from the
-//! same rules and copy as the React `SessionAccountsPanel` and `AccountSwitchCard`.
+//! same rules and copy the React `SessionAccountsPanel` and `AccountSwitchCard` used.
 //!
 //! Port of `packages/shared/session-chat-controller/native-accounts.ts`. Text arrives masked for
 //! Hide emails, so the renderers only lay it out.
@@ -307,7 +307,7 @@ pub fn native_account_panel(
     )
 }
 
-/// The card React's chat view renders over the pane while `accountStatus.visible` holds.
+/// The card drawn over the pane while `accountStatus.visible` holds.
 ///
 /// A failed switch shows the account request's own error when there is one, and offers Retry for
 /// its target account.
@@ -375,7 +375,7 @@ pub fn native_account_switch_card(
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
 /// This is the one locale-dependent call in the whole chat brain (`native-accounts.ts:65`). The
-/// core reads no locale, so it writes the `en-US` form QuickJS produces for the default locale
+/// core reads no locale, so it writes the `en-US` form QuickJS produced for the default locale
 /// rather than guessing the user's. It reaches a document only on the recovery line of a session
 /// whose automatic continuation is retrying.
 fn locale_date_time(value: &str, context: &crate::ChatContext) -> String {

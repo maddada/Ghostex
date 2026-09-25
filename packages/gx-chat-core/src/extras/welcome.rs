@@ -6,8 +6,7 @@
 //! React owned this decision inline in session-chat-view.tsx, so the GPUI chat had no way to reach
 //! it and fell through to the `emptyState` copy: a brand new session greeted the user with
 //! "Loading conversation… / Reading the agent transcript." forever instead of the welcome.
-//! SEE-ALSO: packages/core-ui/chat/session-chat-new-session-welcome.tsx,
-//! apps/desktop/src/app/native_chat/new_session_welcome.rs.
+//! SEE-ALSO: apps/desktop/src/app/native_chat/new_session_welcome.rs.
 
 use crate::document::EmptyState;
 use crate::extras::agent_tasks::js_trim;
@@ -72,8 +71,7 @@ pub fn new_session_welcome_title(agent_name: Option<&str>) -> String {
 /// User: when chat is very narrow, the welcome title wraps, is center aligned, and the second line
 /// has 2 or 3 words, never 1. A 6+ word headline keeps 3 words on the last line ("What should we" /
 /// "build with Codex?"); shorter ones keep 2 ("What should we" / "work on?").
-/// SEE-ALSO: apps/desktop/src/app/native_chat/new_session_welcome.rs,
-/// packages/core-ui/chat/session-chat-new-session-welcome.tsx.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/new_session_welcome.rs.
 pub fn wrap_new_session_welcome_title(title: &str) -> String {
     if title.contains('\n') {
         return title.to_string();

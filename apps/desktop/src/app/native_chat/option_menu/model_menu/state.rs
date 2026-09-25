@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// CDXC:SessionChat 2026-09-21 SEE-ALSO:
-/// What the picker shows (tabs, row order, search ranking, favorites, the footer rows and the pill's label) is decided in packages/shared/session-chat-presentation/model-menu.ts and projected by packages/shared/session-chat-controller/model-menu.ts as the snapshot's `modelMenu`; native-host.ts answers `modelMenuView`, `modelMenuPick`, `modelMenuTrait` and `modelMenuFavorite`. The React twin is packages/core-ui/chat/session-chat-model-menu.tsx. This side owns only the cursor and the open side list.
+/// What the picker shows (tabs, row order, search ranking, favorites, the footer rows and the pill's label) is decided in the core (packages/gx-chat-core/src/menus/picker/model_menu.rs) and projected as the snapshot's `modelMenu`; the core answers `modelMenuView`, `modelMenuPick`, `modelMenuTrait` and `modelMenuFavorite`. This side owns only the cursor and the open side list.
 pub(in crate::app::native_chat::option_menu) struct ModelMenuState {
     /// The snapshot's `modelMenu` this panel last drew.
     pub(super) view: Value,
@@ -125,7 +125,6 @@ impl ModelMenuState {
     }
 }
 
-/// CDXC:SessionChat 2026-09-24 SEE-ALSO: `modelMenuReasoningFor` in packages/shared/session-chat-presentation/model-menu.ts, which React applies to the same button; keep the two in step.
 /// The Reasoning button for the highlighted model: its levels, with the one Left and Right moved to
 /// marked. `browse` names the row, and `browseCurrent` says whether it is the model in use, whose
 /// level a choice applies at once as it always did.
@@ -178,7 +177,6 @@ fn reasoning_for(setting: &Value, row: Option<&Value>, effort: Option<&str>) -> 
     setting
 }
 
-/// CDXC:SessionChat 2026-09-24 SEE-ALSO: `modelMenuStepEffort` in packages/shared/session-chat-presentation/model-menu.ts.
 /// The level Left or Right moves `row` to from `current`, or `None` at an end or on a model without levels.
 pub(super) fn step_effort(row: &Value, current: &str, forward: bool) -> Option<String> {
     let efforts = row["efforts"]

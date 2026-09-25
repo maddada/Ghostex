@@ -4,16 +4,14 @@
 //! The decision is gx-core's (`sidebar_actions/flags.rs`) and this file is the call and the two
 //! things that follow it. Nothing happens before the call, which was checked rather than assumed:
 //! every caller of `updateSessionFlags` was found, and the only local-first session writes in the
-//! codebase belong to the React sidebar and never reach the native path. A call that fails leaves
-//! the row exactly as the daemon has it, and shows nothing, which is what the TypeScript does when
-//! its promise rejects.
+//! codebase belonged to the React sidebar and never reached the native path. A call that fails
+//! leaves the row exactly as the daemon has it, and shows nothing, which is what the TypeScript did
+//! when its promise rejected.
 //!
 //! Parking can also sleep, and that sleep is NOT reimplemented here: it is handed to the lifecycle
 //! path, which already owns its call, its three answers and its echo guard.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/flags.rs,
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`updateSessionFlags`,
-//! `setSessionParked`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/flags.rs.
 
 use ghostex_gx_core::{
     Event, FLAGS_MESSAGE_TYPES, FlagsFollowUp, FlagsRequest, Intent, apply_flags_answer,

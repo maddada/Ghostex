@@ -3,7 +3,7 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /// CDXC:SessionChat 2026-09-21 DECISION:
-    /// User: "remove the ability to switch between GPUI chat view and the React chat view in the settings, and take out the React chat view completely from the GPUI app". Desktop chat is GPUI only, superseding the 2026-09-17 GPUI/React toggle; React chat remains for web and mobile.
+    /// User: "remove the ability to switch between GPUI chat view and the React chat view in the settings, and take out the React chat view completely from the GPUI app". Desktop chat is GPUI only, superseding the 2026-09-17 GPUI/React toggle.
     pub(crate) fn ensure_native_chat(
         &mut self,
         session_id: TerminalSessionId,

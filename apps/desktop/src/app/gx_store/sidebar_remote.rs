@@ -19,8 +19,7 @@
 //! machine tab and `actions` is still zero means the command never reached here.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_actions/remote.rs,
-//! apps/desktop/src/app/remote_conn/sidebar_rpc.rs,
-//! tooling/gx-core/remote-action-parity.ts (the gate).
+//! apps/desktop/src/app/remote_conn/sidebar_rpc.rs.
 
 use std::time::{Duration, Instant};
 

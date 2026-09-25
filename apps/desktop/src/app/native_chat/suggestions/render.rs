@@ -108,7 +108,7 @@ impl Render for SuggestionPanel {
                     .gap(gap)
                     .h(spec.status_height(retry, s))
                     .px(inline)
-                    // React dims the loading and empty rows; the error keeps the popup's text colour.
+                    // React dimmed the loading and empty rows; the error keeps the popup's text colour.
                     .when(!retry, |row| row.text_color(p.muted))
                     .when(data["loading"] == true, |row| {
                         row.child(suggestion_spinner(px(spec.icon_px * s), p.muted))
@@ -248,7 +248,7 @@ impl Render for SuggestionPanel {
 
 impl NativeChatView {
     /// CDXC:SessionChat 2026-09-19 WHY:
-    /// React's list casts `shadow-xl` over the transcript and the top of the composer card. The popup's child window cannot paint it: the window would have to grow past the card, and that transparent margin would sit over the composer and the transcript and take their clicks, while the macOS window shadow outlines the card with a dark rim instead. The pane paints the shadow at the popup's frame as plain chrome with no hit area, and the popup's opaque card covers the part beneath it.
+    /// React's list cast `shadow-xl` over the transcript and the top of the composer card. The popup's child window cannot paint it: the window would have to grow past the card, and that transparent margin would sit over the composer and the transcript and take their clicks, while the macOS window shadow outlines the card with a dark rim instead. The pane paints the shadow at the popup's frame as plain chrome with no hit area, and the popup's opaque card covers the part beneath it.
     pub(in crate::app::native_chat) fn render_suggestion_shadow(
         &self,
         p: &ChatAppearance,
@@ -283,7 +283,7 @@ impl NativeChatView {
     }
 }
 
-/// Every React row is a bare `<button>`, so theme.css's legacy base outlines it with the app
+/// Every React row was a bare `<button>`, so theme.css's legacy base outlined it with the app
 /// theme's `--app-border`, whatever the chat's own theme: black at 12% under the plain light app
 /// theme and white at 11% under every other one.
 fn row_outline(state: &serde_json::Value) -> Hsla {

@@ -324,8 +324,8 @@ fn model_menu_pick_action(
             //
             // CDXC:SessionChat 2026-09-22 WHY:
             // The agent is looked up HERE rather than handed to the host as a
-            // `switchDraftAgentForProvider` action nobody performs: `native-host.ts:1058` does the
-            // same `availableAgents.find(...)` before it dispatches `switchDraftAgent`, and the
+            // `switchDraftAgentForProvider` action nobody performs: `native-host.ts:1058` did the
+            // same `availableAgents.find(...)` before it dispatched `switchDraftAgent`, and the
             // core already holds the list.
             if state.session.available_agents.is_some() {
                 state.pickers.model_menu_view = Default::default();

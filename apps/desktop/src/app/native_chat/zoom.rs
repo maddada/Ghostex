@@ -16,7 +16,7 @@ const ZOOM_PERCENT_KEY: &str = "keyboardZoomPercent";
 
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// The rungs are Chromium's preset zoom factors kept inside the 70% to 200% range Settings offers,
-/// so the same number of presses lands on the same percentage as React chat on web and mobile, and
+/// so the same number of presses lands on the same percentage as the React chat did on web and mobile, and
 /// every rung is also a multiple of the shared 5% step. Cmd+0 drops the override and returns the pane to the
 /// configured default instead of to a flat 100%, which is what a reset means once the default is a
 /// user setting.
@@ -129,8 +129,8 @@ impl NativeChatView {
         write_keyboard_zoom_percent(state, self.zoom.override_percent);
     }
 
-    /// Drops the temporary zoom when the configured default changes, so Settings > Chat and the
-    /// Chat Lab's zoom control stay in charge of what this pane returns to.
+    /// Drops the temporary zoom when the configured default changes, so Settings > Chat stays in
+    /// charge of what this pane returns to.
     pub(super) fn sync_chat_zoom_default(&mut self) {
         let default = ChatAppearance::default_zoom_percent(&self.snapshot);
         if self.zoom.default_percent == Some(default) {

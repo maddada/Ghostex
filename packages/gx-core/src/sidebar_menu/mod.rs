@@ -6,8 +6,8 @@
 //! projection by row id, which meant a row the projection had not published drew with no menu and
 //! no hover buttons, and every accepted publish forced the whole list to be reinstalled. They are
 //! built here instead, on demand for the row or group the user opened, and nothing is cached that
-//! could go stale. This supersedes nothing: the TypeScript builders keep running for the machines
-//! this store does not hold yet.
+//! could go stale. This supersedes nothing: the TypeScript builders kept running for the machines
+//! this store did not hold yet, until they were deleted.
 //!
 //! Every builder is a port of one file of the deleted sidebar page, named in its
 //! own `SEE-ALSO`. The command payloads are unchanged, so a row built here and a row built there

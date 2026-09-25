@@ -126,7 +126,7 @@ fn header_value(row: &Value, key: &str) -> String {
 /// User: prepend the sender's CLI-resolved identity to every agent message. Assemble the header before enqueueing so delayed delivery retains the original sender.
 /// CDXC:Cli 2026-09-18 DECISION:
 /// User: the header must not render as a heading. The old `MESSAGE FROM` header ended in a dashed line, which Markdown reads as a setext underline, so the chat turned the whole header into an h2. A blank line now separates header and body.
-/// SEE-ALSO: packages/shared/session-chat-presentation/agent-message.ts parses this header (and the old dashed one) into the chat's message card.
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/agent_message.rs parses this header (and the old dashed one) into the chat's message card.
 pub(super) fn message(sender: &Value, body: &str) -> String {
     let sender = summary(sender);
     format!("Message from another agent\nAgent: {}\nSession: {}\nSession ID: {}\nAgent ID: {}\nAgent Session ID: {}\nReply to: {}\n\n{}",

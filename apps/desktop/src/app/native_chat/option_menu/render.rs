@@ -236,6 +236,8 @@ impl ChatOptionMenuPanel {
 }
 
 impl Render for ChatOptionMenuPanel {
+    /// CDXC:SessionChat 2026-09-13 DECISION: User: chat menus follow light mode, the root menu and both versions of the Switch Account submenu included.
+    /// Every panel reads the chat's `appearance.light` here and in `accounts.rs` (`Colors::new`), because each menu is its own window outside the chat pane.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.model_menu.is_some() {
             return self.render_model_menu(window, cx);

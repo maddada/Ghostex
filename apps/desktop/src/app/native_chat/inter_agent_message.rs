@@ -6,7 +6,7 @@ use serde_json::Value;
 impl NativeChatView {
     /// CDXC:SessionChat 2026-09-18 DECISION:
     /// User: a message another agent sent with `ghostex agents send` reads as a message from that agent, not as the user's own prompt bubble, and its sender header is never a heading.
-    /// SEE-ALSO: packages/core-ui/chat/session-chat-inter-agent-message-card.tsx is the React card this matches; packages/shared/session-chat-presentation/agent-message.ts parses the header.
+    /// SEE-ALSO: packages/gx-chat-core/src/transcript/agent_message.rs parses the header.
     pub(super) fn inter_agent_message_card(
         &self,
         id: &str,
@@ -67,7 +67,7 @@ impl NativeChatView {
                 cx,
             )]
         };
-        // React footers this card with the send's delivery status; a waiting send says so here too.
+        // React footed this card with the send's delivery status; a waiting send says so here too.
         let actions = self
             .render_startup_delivery(message, p, cx)
             .map_or_else(Vec::new, |status| vec![status]);

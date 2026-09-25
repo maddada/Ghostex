@@ -159,7 +159,7 @@ pub fn insert_reference(current: &str, reference: &str, start: usize, end: usize
     }
 }
 
-/// Drops the reference an attachment thumbnail stands for, the way removing a pasted image does in
+/// Drops the reference an attachment thumbnail stands for, the way removing a pasted image did in
 /// `packages/core-ui/chat/session-chat-composer.tsx`: one leading space and one trailing space go
 /// with it so the surrounding sentence keeps its spacing.
 pub fn remove_reference(current: &str, start: usize, end: usize) -> ComposerEdit {

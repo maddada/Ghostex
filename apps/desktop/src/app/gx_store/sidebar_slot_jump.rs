@@ -9,7 +9,7 @@
 //! store's list is the only list since M4d part 2 step 6.
 //!
 //! **Where each effect ends, read rather than assumed.** The FOCUS ends where a row click's ends,
-//! because it is one: the row click's `selectSession` (which the old page turns into the runtime's
+//! because it is one: the row click's `selectSession` (which the old page turned into the runtime's
 //! `focusSession`, the call `runNativeProjectSlotHotkey` itself made through the same
 //! `selectNativeSidebarSession`) and the click's in-process reaction
 //! (`react_to_native_sidebar_session_click`: the project swap, the tab selection or staged tab, and

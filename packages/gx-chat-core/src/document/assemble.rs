@@ -1,9 +1,8 @@
 //! How the document is put together: one call per port family, in a fixed order.
 //!
 //! Family a runs first and writes the session facts every other family reads; the other five then
-//! write their own keys over that. No family writes a key another one owns, so the six can be
-//! ported in parallel and a replay can be gated on one family's keys alone
-//! (`tooling/gx-chat-core/replay-diff.ts --keys`).
+//! write their own keys over that. No family writes a key another one owns, so each family's keys
+//! can be changed and checked on their own.
 //!
 //! The order below is not a dependency chain: every family reads [`crate::state::ChatState`], not
 //! the half-built document. It is fixed only so two runs of the same state produce the same bytes.

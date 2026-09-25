@@ -1,7 +1,7 @@
 //! How a pill choice reaches the agent: as a queued daemon request, or as text and keystrokes
 //! typed into the TUI.
 //!
-//! Port of `packages/shared/session-chat-controller/option-dispatch.ts`. The TypeScript awaits
+//! Port of `packages/shared/session-chat-controller/option-dispatch.ts`. The TypeScript awaited
 //! each step; here the decision tree produces the ordered list of steps and the caller performs
 //! them, because the core performs no I/O and holds no promise.
 
@@ -27,6 +27,8 @@ pub enum QueuedOption {
 }
 
 /// `queueSessionChatOption`: whether the choice belongs to the daemon's queue rather than the TUI.
+///
+/// CDXC:SessionChat 2026-09-09 DECISION: Every quick-picker provider needs the durable delivery callback, including on draft sessions (Grok Build models and efforts change directly from chat).
 pub fn queue_session_chat_option(
     descriptor: &OptionDescriptor,
     value: Option<&str>,

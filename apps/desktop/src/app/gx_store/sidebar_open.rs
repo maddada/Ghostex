@@ -17,10 +17,8 @@
 //! menu, a machine's Configure, the Space editor or a project's Add Worktree and `opens` is zero
 //! means the command never reached here.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/open.rs,
-//! tooling/gx-core/sidebar-page-frozen/navigation.ts,
-//! tooling/gx-core/sidebar-page-frozen/project-actions.ts,
-//! tooling/gx-core/sidebar-page-frozen/space-navigation.ts.
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/open.rs, the deleted sidebar page's
+//! `navigation.ts`, `project-actions.ts` and `space-navigation.ts`.
 
 use web_time::Instant;
 

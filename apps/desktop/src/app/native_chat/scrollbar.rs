@@ -13,7 +13,7 @@
 //! a drag or a selection away from the transcript underneath it. The strip is
 //! the pane's last 5px, and every composer control is inset by the footer's own
 //! 16px padding, so the column beside the box covers nothing interactive: the
-//! same geometry React has, where the composer overlay centers a `max-w-3xl px-4`
+//! same geometry React had, where the composer overlay centered a `max-w-3xl px-4`
 //! card under a track pinned to the pane's right edge.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
@@ -29,15 +29,15 @@ impl NativeChatView {
     /// or the pointer is on it, fades out when the reader stops, and drags.
     ///
     /// CDXC:SessionChat 2026-09-19 WHY:
-    /// React's track is `top: 0; bottom: 0` of the message scroller, and the scroller spans the whole
-    /// chat pane because the composer is an overlay over it and the transcript keeps its end clear
-    /// with a bottom inset that tracks the box (use-session-chat-composer-inset.ts), so the viewport
-    /// and the track keep their length whatever the box does. The native composer is a real sibling
+    /// React's track was `top: 0; bottom: 0` of the message scroller, and the scroller spanned the whole
+    /// chat pane because the composer was an overlay over it and the transcript kept its end clear
+    /// with a bottom inset that tracked the box (use-session-chat-composer-inset.ts), so the viewport
+    /// and the track kept their length whatever the box did. The native composer is a real sibling
     /// region below the list, so the list's viewport is what shrinks as the box grows, and a track
     /// bound to that viewport ended higher up the pane on every grow, collapse and expand: the thumb
     /// jumped. So the track is a column of its own reaching the bottom of the pane, measured once per
     /// frame, and the scroll size reported to the component is `track + the list's max offset`, which
-    /// keeps `content - track` equal to the list's scrollable distance exactly. That is React's math
+    /// keeps `content - track` equal to the list's scrollable distance exactly. That was React's math
     /// (a constant viewport against a content height that carries the composer inset), and it leaves
     /// the thumb still while the box resizes.
     ///

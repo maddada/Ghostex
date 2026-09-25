@@ -1,9 +1,8 @@
 //! Reading a subagent out of a tool call and result pair, ported from
 //! `packages/shared/session-chat-presentation/subagent.ts`.
 //!
-//! React renders the result as `SessionChatSubagentLink`, the native chat as the link chip beside a
-//! tool row's heading; both take the target from here so a Task row points at the same transcript
-//! on either surface.
+//! The native chat renders the result as the link chip beside a tool row's heading and takes the
+//! target from here, so a Task row always points at the same transcript.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

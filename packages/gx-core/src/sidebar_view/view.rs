@@ -1,5 +1,5 @@
-//! What the sidebar draws: the same content the native renderer reads from the TypeScript
-//! snapshot today, minus menus, hover actions and header actions.
+//! What the sidebar draws: the same content the native renderer once read from the TypeScript
+//! snapshot, minus menus, hover actions and header actions (`sidebar_menu/` builds those).
 
 use std::sync::Arc;
 

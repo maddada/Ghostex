@@ -16,7 +16,8 @@ pub const DESKTOP_COMPOSER_PLACEHOLDER: &str =
     "Press Enter to send a message and Tab to Queue.\nUse @ to mention a file and $ for using skills.";
 
 /// What a touch composer (the phone, `StartConfig::touch_composer`) says when nothing is blocking
-/// it: React's `MOBILE_SESSION_CHAT_PLACEHOLDER` in `session-chat-composer.tsx`.
+/// it, the text of the React chat's `MOBILE_SESSION_CHAT_PLACEHOLDER`
+/// (`session-chat-composer.tsx`).
 pub const TOUCH_COMPOSER_PLACEHOLDER: &str =
     "Tap \u{2191} to send or hold it to queue; use @ for files and $ for skills.";
 
@@ -110,9 +111,10 @@ pub fn composer_placeholder(
 }
 
 /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-/// The 2026-09-03 decision in `packages/core-ui/chat/session-chat-send-blocked-toast.tsx` is that a
-/// blocked Send raises a red toast naming the reason instead of disabling the composer. React posts
-/// this request over the app-modal bridge; GPUI chat emits the same request to its native toast host.
+/// The 2026-09-03 decision, first recorded in
+/// `packages/core-ui/chat/session-chat-send-blocked-toast.tsx`, is that a blocked Send raises a red
+/// toast naming the reason instead of disabling the composer. GPUI chat emits this request to its
+/// native toast host.
 pub fn send_blocked_toast_request(reason: &str) -> OrderedMap {
     let description = reason.trim();
     app_toast_request("error", SEND_BLOCKED_TITLE, description)

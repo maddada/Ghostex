@@ -1,9 +1,10 @@
 //! The view document: one value that says everything the chat renderer draws.
 //!
-//! This is the `snapshot` field of a [`crate::Frame`], built today by `publish` in
-//! `packages/shared/session-chat-controller/native-host.ts` and read key by key by
-//! `apps/desktop/src/app/native_chat/`. The JSON must not change, so every field below carries the
-//! TypeScript spelling and the TypeScript absent-versus-null behaviour:
+//! This is the `snapshot` field of a [`crate::Frame`], in the shape `publish` in
+//! `packages/shared/session-chat-controller/native-host.ts` built it, and read key by key by
+//! `apps/desktop/src/app/native_chat/` and the phone's native views. The JSON is their contract, so
+//! every field below carries the TypeScript spelling and the TypeScript absent-versus-null
+//! behaviour:
 //!
 //! - `Tri::Absent` is a key `JSON.stringify` left out because the value was `undefined`.
 //! - `Tri::Null` and `Option::None` are a key present with `null`.
@@ -192,7 +193,8 @@ pub struct Document {
     pub loading_stage: Option<String>,
     pub skills_loading: bool,
     pub files_loading: bool,
-    /// The Chat Lab's display settings, present only under a preview backend.
+    /// A preview chat's display settings (the retired Chat Lab's), present only under a preview
+    /// backend.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_settings: Option<PreviewSettings>,
 
@@ -207,19 +209,18 @@ pub struct Document {
 
 /// The document's keys whose value can change without a publish.
 ///
-/// `native-host.ts` publishes for two reasons, and only two. The REACTIVE one is the chat
-/// computation re-running: `new ChatComputation(..., publish)` calls `publish` whenever the state
-/// it holds changed, and that state is everything `...viewState` spreads into the snapshot. The
-/// IMPERATIVE one is an explicit `publish(controller.current())`, which the arms of `action` and a
-/// handful of sub-controller callbacks make by hand.
+/// `native-host.ts` published for two reasons, and only two. The REACTIVE one was the chat
+/// computation re-running: `new ChatComputation(..., publish)` called `publish` whenever the state
+/// it held changed, and that state was everything `...viewState` spread into the snapshot. The
+/// IMPERATIVE one was an explicit `publish(controller.current())`, which the arms of `action` and a
+/// handful of sub-controller callbacks made by hand.
 ///
-/// The keys below are built inside `publish` from module variables rather than from the
+/// The keys below were built inside `publish` from module variables rather than from the
 /// computation's state, so moving one is not itself a reason to ship a document: it rides on the
 /// next publish somebody asks for. The core's own change test therefore ignores them, and the
-/// family that owns one asks for a publish where the TypeScript calls `changed()`.
+/// family that owns one asks for a publish where the TypeScript called `changed()`.
 ///
-/// Adding a key here without wiring its owner's publish LOSES a document. Measure with
-/// `tooling/gx-chat-core/run-gates.sh` either way.
+/// Adding a key here without wiring its owner's publish LOSES a document.
 impl Document {
     /// This document with the imperative keys blanked, which is what the change test compares.
     pub fn reactive(&self) -> Self {

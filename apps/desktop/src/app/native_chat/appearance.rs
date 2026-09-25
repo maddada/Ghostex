@@ -40,9 +40,6 @@ pub(crate) struct ChatAppearance {
 impl ChatAppearance {
     /// CDXC:Theming 2026-09-23 DECISION:
     /// User: under window glass the chat's bubbles, cards, chips and composer are frosted rather than solid: light washes over the glass, and the composer takes the same wash as the user's message bubble. This supersedes the same day's heavier composer tint. Only the pane inside the main window takes this; the chat's popup windows are opaque and keep their fills.
-    ///
-    /// CDXC:Theming 2026-09-23 WHY:
-    /// Window glass exists only in the desktop window, so the React chat has no counterpart to keep in parity with.
     pub(crate) fn on_window_glass(mut self, glass: bool) -> Self {
         if !glass {
             return self;
@@ -87,13 +84,14 @@ impl ChatAppearance {
         self.menu
     }
 
-    /// The `--destructive` tone the React transcript paints failed tool results and failed writes in.
+    /// The `--destructive` tone the React transcript painted failed tool results and failed writes in.
     pub(crate) fn error(&self) -> Hsla {
         rgb(if self.light { 0xc53030 } else { 0xef9999 }).into()
     }
 
-    /// The zoom this pane returns to: the Chat Lab's control in the Lab, `sessionChatZoomPercent`
-    /// otherwise. `zoom.rs` layers the keyboard's temporary override over it.
+    /// The zoom this pane returns to: a preview host's `previewSettings` when it supplies one (Chat
+    /// Lab did, and is deleted), `sessionChatZoomPercent` otherwise. `zoom.rs` layers the
+    /// keyboard's temporary override over it.
     pub(crate) fn default_zoom_percent(state: &serde_json::Value) -> f32 {
         let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
         Self::settings_zoom_percent(
@@ -179,8 +177,9 @@ impl ChatAppearance {
                 gpui::Hsla::from(rgb(0xffffff)).opacity(0.08)
             },
             card_background: if light { raised(0.3) } else { background },
-            // Mirrors --chat-card-panel / --chat-card-footer in session-chat-status-card.css: over the
-            // neutral defaults these are the old #1e1e1e / #151515 dark and #fbfbfb / #f5f5f6 light tones.
+            // CDXC:Theming 2026-09-22 DECISION: User: the cards must take the theme's tint in the blueish light theme; they were not tinted at all. Light mode mixes toward white off the chat background (60% for the panel, 10% for the footer band) instead of the fixed #fdfdfd / #f5f5f5 pinned on 2026-09-16, which this supersedes, keeping the cards lighter than the page.
+            // Over the neutral defaults these are the old #1e1e1e / #151515 dark and #fbfbfb / #f5f5f6
+            // light tones.
             card_panel: if light {
                 raised(0.6)
             } else {
@@ -193,6 +192,7 @@ impl ChatAppearance {
             },
             ring: color(0x737373, 0x9f9fa9),
             prose: color(0xb4b8c0, 0x4d4d50),
+            // CDXC:SessionChat 2026-09-13 DECISION: User: fix unreadable chat cards in light mode through the shared theme. Dark mode keeps #fcfcfc titles and actions (`foreground`) and #b4b8bf content (`card_muted`); light mode uses the light palette; sizes, weights and outlined actions stay the same.
             card_muted: color(0xb4b8bf, 0x71717b),
             muted: color(0x9e9e9e, 0x71717b),
             border: lifted(0.062, 0.095),

@@ -54,7 +54,7 @@ fn scope<'a>(
 
 /// Rebuilds the viewer's item list when one of its inputs moved.
 ///
-/// Called once per event from family f's settle. The TypeScript calls `project()` from exactly
+/// Called once per event from family f's settle. The TypeScript called `project()` from exactly
 /// two places (a restart and a finished read), and both are a change to the page, the agent path
 /// or the working flag, so an inputs guard is the same decision without the call sites.
 pub fn refresh(state: &mut ChatState, context: &ChatContext) {

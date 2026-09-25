@@ -1,12 +1,8 @@
 //! The right-click menu behind a composer pill or a transcript link.
 //!
 //! Port of `packages/shared/session-chat-presentation/reference-menu.ts`. The rows are serialized
-//! exactly as the TypeScript builds them, key order included, because the renderer forwards
-//! `command` back to the host untouched and the replay gate fingerprints the serialized answer.
-//!
-//! CDXC:SessionChat 2026-09-18 SEE-ALSO:
-//! The React rows are `packages/core-ui/chat/session-chat-reference-menu-items.tsx`; both renderers
-//! offer the same entries in the same order for a composer pill or a transcript link.
+//! exactly as the TypeScript built them, key order included, because the renderer forwards
+//! `command` back to the host untouched.
 
 use serde::{Deserialize, Serialize};
 

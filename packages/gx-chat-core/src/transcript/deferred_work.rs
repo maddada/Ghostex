@@ -1,7 +1,7 @@
 //! Reading a completed turn's collapsed work back out of history.
 //!
 //! Port of `readWork` in `packages/shared/session-chat-presentation/deferred-work.ts`. The
-//! TypeScript is one `async` loop that keeps asking for the page before the last until it meets
+//! TypeScript was one `async` loop that kept asking for the page before the last until it met
 //! the section's first message; the core owns no I/O, so the loop is turned inside out: one page
 //! per [`crate::Effect::SendRpc`], with the walk's cursor, its seen set and the rows it has
 //! collected carried on [`DeferredWalk`] between answers.
@@ -66,8 +66,8 @@ pub enum WalkStep {
 impl DeferredWalk {
     /// Starts a walk for one `work` descriptor, or `None` when it carries no offset.
     ///
-    /// A malformed descriptor is where the TypeScript reads `work.beforeOffset` off `null` and
-    /// throws; the core answers the row with [`WORK_HISTORY_UNREADABLE`] instead of panicking,
+    /// A malformed descriptor is where the TypeScript read `work.beforeOffset` off `null` and
+    /// threw; the core answers the row with [`WORK_HISTORY_UNREADABLE`] instead of panicking,
     /// because a host is free to send anything and a panic here takes the host thread with it.
     pub fn begin(turn_id: String, work: Option<&Value>) -> Option<Self> {
         let work = work?;
@@ -172,7 +172,7 @@ pub struct CachedWork {
     pub bytes: usize,
 }
 
-/// The walked sections, oldest use first, exactly as the TypeScript's insertion-ordered `Map` is.
+/// The walked sections, oldest use first, exactly as the TypeScript's insertion-ordered `Map` was.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DeferredWorkCache {
     entries: Vec<CachedWork>,

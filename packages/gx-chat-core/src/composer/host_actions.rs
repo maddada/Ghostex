@@ -15,6 +15,9 @@ struct Definition {
     hotkey: Option<&'static str>,
 }
 
+/// CDXC:SessionChat 2026-09-05 DECISION:
+/// User: add Split Right below Close After Done in the chat composer's More menu.
+/// The renderers list the session rows in this order.
 const DEFINITIONS: &[Definition] = &[
     Definition {
         id: "rename",

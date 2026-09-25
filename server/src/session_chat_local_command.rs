@@ -22,8 +22,8 @@ renders them.
 
 SEE-ALSO: server/src/session_chat_app_command.rs (the live acknowledgement
 these retire), server/src/session_chat_read.rs (the merge into a page),
-packages/core-ui/chat/session-chat-local-command-transcript.ts (the client's
-half of the escaped-markup contract).
+packages/gx-chat-core/src/transcript/local_command.rs (the client's half of
+the escaped-markup contract).
 */
 
 use std::fs::{self, OpenOptions};

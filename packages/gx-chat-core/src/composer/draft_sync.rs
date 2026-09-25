@@ -6,7 +6,7 @@
 //! button to see it". A composer draft saved on one device is offered on every other device that
 //! shows the same chat, through the "Another saved draft is available" bar with Use and Dismiss,
 //! and every composer pushes its draft to gxserver once typing pauses instead of only when the
-//! field loses focus. The offer is the React composer's `shouldOfferSessionChatDraft` effect
+//! field loses focus. The offer was the React composer's `shouldOfferSessionChatDraft` effect
 //! (`packages/core-ui/chat/session-chat-composer.tsx`), which neither the TypeScript native host
 //! nor this core had ported: gxserver delivered the draft on every read and frame, the core folded
 //! it into `draft.synced`, and no rule ever turned it into an offer, so no native chat (desktop,

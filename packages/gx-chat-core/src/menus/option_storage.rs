@@ -8,8 +8,8 @@
 //! CDXC:SessionChat 2026-09-22 WHY:
 //! The core had no writer at all for the option pills: `OptionStore::take_dirty` existed with no
 //! caller, so a detected model or effort was never persisted and the core made three fewer host
-//! round trips than the TypeScript at boot. The replay pairs storage answers by ORDER, so those
-//! three missing writes drifted every answer after them.
+//! round trips than the TypeScript at boot. The replay that checked the port paired storage
+//! answers by ORDER, so those three missing writes drifted every answer after them.
 //!
 //! The record is keyed by the SCOPED option key (`<sessionKey>` or `<sessionKey>#<agentId>`), not
 //! by the session key, which is what `storedSessionChatOptionKeys` scans for and what the host
@@ -62,7 +62,7 @@ pub fn remember_option_state(seed: &mut Value, option_key: &str, state: &OptionS
     }
 }
 
-/// `JSON.stringify(state)`: the option values in the field order the TypeScript writes them.
+/// `JSON.stringify(state)`: the option values in the field order the TypeScript wrote them.
 pub fn option_state_to_value(state: &OptionState) -> Value {
     serde_json::to_value(state).unwrap_or(Value::Null)
 }

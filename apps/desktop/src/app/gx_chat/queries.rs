@@ -2,7 +2,7 @@
 //!
 //! They are not events: the composer asks `composerReferences` on every paint and a right-click
 //! asks `transcriptMenu` before it can open a menu, so both need an answer in the same turn rather
-//! than a frame later. The QuickJS brain exposes them beside `action` on the same global
+//! than a frame later. The deleted QuickJS brain exposed them beside `action` on the same global
 //! (`native-host.ts`); the Rust core exposes them as plain functions over `&ChatState`, so the
 //! worker can answer one without touching the core's state at all.
 //!

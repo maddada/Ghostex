@@ -2,8 +2,8 @@
 //!
 //! Ported from `seedRead`, `requestResync` and `loadEarlier` in
 //! `packages/shared/session-chat-controller/controller.ts`, together with `withReadTimeout` and the
-//! two retry schedulers that live inside `requestResync`. The TypeScript keeps each read's identity
-//! in the closure that awaits it; the core has no closures, so the same facts ride on
+//! two retry schedulers that lived inside `requestResync`. The TypeScript kept each read's
+//! identity in the closure that awaited it; the core has no closures, so the same facts ride on
 //! `state.messages.reads` and a settled request id picks the row back out.
 
 use ghostex_gx_protocol::{ChatStatus, ReadSessionChatResult};
@@ -62,7 +62,7 @@ pub fn issue_read(
     if let Some(offset) = before_offset {
         params.insert("beforeOffset".to_string(), Value::from(offset));
     }
-    // `loadEarlier` reads through `transport.readHistory` (`native-host.ts`), which is
+    // `loadEarlier` read through `transport.readHistory` (`native-host.ts`), which was
     // `rpc('readSessionChat', { ...params, historyMode: params.detail ? 'detail' : 'turns' })`, with
     // `preserveNewest` while a working session has no user turn on screen yet. Without the two the
     // page came back as a plain window rather than as history.
@@ -114,10 +114,10 @@ pub fn arm_read_deadline(state: &mut ChatState, context: &ChatContext) {
 
 /// Takes the outstanding read a settled request belongs to.
 ///
-/// By id first, which is what a real host answers with. A replay feeds back the ids of the other
-/// brain's own rpc sequence, so an id this core never issued falls through to the oldest read in
-/// flight; the caller only reaches here for a payload that already parsed as a chat read, so
-/// nothing else can be consumed by the fallback.
+/// By id first, which is what a real host answers with. The replay that checked the port fed back
+/// the ids of the other brain's own rpc sequence, so an id this core never issued falls through to
+/// the oldest read in flight; the caller only reaches here for a payload that already parsed as a
+/// chat read, so nothing else can be consumed by the fallback.
 pub fn take_read(state: &mut ChatState, request_id: u64) -> Option<OutstandingRead> {
     let at = state
         .messages

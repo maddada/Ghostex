@@ -2,7 +2,7 @@
 //! the pending terminal tool card.
 //!
 //! Ported from `packages/shared/session-chat-controller/native-transcript-rows.ts`. Every
-//! classification here comes from the same presentation rules React reads, so GPUI only lays the
+//! classification here comes from the same presentation rules React read, so GPUI only lays the
 //! rows out (`apps/desktop/src/app/native_chat/tool_run.rs`, `file_change_card.rs`,
 //! `terminal_tool_row.rs`).
 
@@ -43,8 +43,8 @@ pub fn tool_rows(pairs: &[ToolPair<'_>], agent_path: &str) -> Vec<Value> {
                 || !detail["output"].as_str().unwrap_or_default().is_empty();
             let subagent = match tool_subagent(pair, agent_path) {
                 Some(Value::Object(mut target)) => {
-                    // `self` is a selector pointing back at the conversation being read: React
-                    // renders it as plain text rather than a link, and so does the GPUI heading chip.
+                    // `self` is a selector pointing back at the conversation being read: the GPUI
+                    // heading chip renders it as plain text rather than a link, as React did.
                     let selector = target
                         .get("selector")
                         .and_then(Value::as_str)
@@ -93,7 +93,7 @@ pub fn tool_fold(pairs: &[ToolPair<'_>]) -> Value {
 
 /// One card per file a turn wrote.
 ///
-/// Only the projected card crosses the bridge: the raw result block would ship the whole write
+/// Only the projected card ships: the raw result block would ship the whole write
 /// output again.
 pub fn file_rows(
     changes: &[FileChange<'_>],
@@ -106,9 +106,9 @@ pub fn file_rows(
         .map(|(index, change)| {
             let counts = file_change_counts(&change.lines);
             let failed = change.result_is_error();
-            // The same opt-out React's card takes: both renderers shorten the folder half against
+            // The same opt-out React's card took: the renderer shortens the folder half against
             // the row's real width, so a character budget on top of that only cuts folders that
-            // would have fitted, and the two panes disagree about the same path.
+            // would have fitted.
             let parts = file_change_path_parts(&change.path, working_directory, None);
             json!({
                 "path": change.path,

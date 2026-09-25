@@ -2,9 +2,8 @@
 //! session rather than only the rows the sidebar list shows.
 //!
 //! CDXC:SessionChat 2026-09-21 SEE-ALSO:
-//! packages/shared/session-chat-presentation/armed-actions.ts is the TypeScript twin this is a port
-//! of; packages/core-ui/chat/session-chat-working-strip.tsx and
-//! apps/desktop/src/app/native_chat/working_strip.rs draw the labels.
+//! apps/desktop/src/app/native_chat/working_strip.rs draws the labels. Ported from
+//! packages/shared/session-chat-presentation/armed-actions.ts (deleted 2026-09-25).
 //!
 //! CDXC:SessionChat 2026-09-21 WHY:
 //! Drawn from every machine's presentation rather than from the sidebar view, because the view is

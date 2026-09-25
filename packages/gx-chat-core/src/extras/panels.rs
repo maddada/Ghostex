@@ -19,8 +19,8 @@ pub const FLEET_CLOCK_TICK_MS: f64 = 1_000.0;
 /// The store and key the fold is remembered under.
 ///
 /// "I want the plan out of the way" is a preference, not a per-session view state, so the fold
-/// survives a restart. Same store and same key as React's panel, so the two renderers remember one
-/// answer.
+/// survives a restart. Same store and same key React's panel used, so a fold saved before the
+/// port is still remembered.
 pub fn tasks_collapsed_key() -> StorageKey {
     StorageKey {
         store: "tasksCollapsed".to_string(),

@@ -395,7 +395,7 @@ impl GhostexGpuiApp {
 
     /// A write that does not reach storage is OWED again rather than counted and dropped: the
     /// database is WAL, so reads never block, but a second connection's write really does fail
-    /// after the busy timeout while the QuickJS service holds a write transaction.
+    /// after the busy timeout while another connection holds a write transaction.
     fn gx_document_write_storage<D: ClientDocument>(
         &mut self,
         document: &Value,
@@ -582,7 +582,7 @@ impl GhostexGpuiApp {
             background.timer(Duration::from_millis(delay_ms)).await;
             let _ = this.update(cx, |this, cx| {
                 // A booking that was replaced fires nothing: `clearTimeout` is what the TypeScript
-                // does, and a timer that cannot be cancelled has to check instead.
+                // did, and a timer that cannot be cancelled has to check instead.
                 if D::host(this).booking == booking {
                     this.gx_document_push::<D>(cx);
                 }

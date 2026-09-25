@@ -4,9 +4,8 @@
 //! `packages/shared/session-chat-controller/native-fork-branches.ts`.
 //!
 //! CDXC:SessionFork 2026-09-18 SEE-ALSO:
-//! The branch switcher's copy and row rules, shared by
-//! `packages/core-ui/chat/session-chat-fork-branch-switcher.tsx` and
-//! `apps/desktop/src/app/native_chat/fork_branches.rs`. Neither renderer may re-derive a title, a
+//! The branch switcher's copy and row rules, drawn by
+//! `apps/desktop/src/app/native_chat/fork_branches.rs`. The renderer may not re-derive a title, a
 //! subtitle, the lifecycle tone, or the family gate.
 
 use serde::{Deserialize, Serialize};

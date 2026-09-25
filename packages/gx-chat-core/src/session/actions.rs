@@ -17,7 +17,8 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         action.kind,
         ActionKind::Retry | ActionKind::Refresh | ActionKind::LoadEarlier
     ) {
-        // All three reach the end of the TypeScript's `action`, which publishes whatever happened.
+        // All three reached the end of the TypeScript's `action`, which published whatever
+        // happened.
         state.core.request_publish();
     }
     match action.kind {

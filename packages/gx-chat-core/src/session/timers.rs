@@ -38,7 +38,7 @@ pub fn callback_reads_clock(key: &str) -> bool {
 pub struct TimerEntry {
     /// The family's own name for this timer. Arming the same key again moves the deadline rather
     /// than adding a second row, which is what the TypeScript's `if (timerRef.current !== null)
-    /// return` guards achieve by hand.
+    /// return` guards achieved by hand.
     pub key: String,
     /// When it comes due, in the host's epoch milliseconds.
     pub due_at_ms: f64,

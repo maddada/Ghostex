@@ -2,9 +2,8 @@
 //! pane, with the child's model label, its task, back and close, and the child's
 //! own transcript rendered by the same row renderers as the main list.
 //!
-//! Every value comes from the host's `subagent` projection and its own splice
-//! channel (`packages/shared/session-chat-controller/native-subagent.ts`), the
-//! same rules React's `session-chat-subagent-viewer.tsx` renders; this file only
+//! Every value comes from the core's `subagent` projection and its own splice
+//! channel (`packages/gx-chat-core/src/extras/subagent.rs`); this file only
 //! lays them out.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
@@ -19,7 +18,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 
 impl NativeChatView {
-    /// The viewer's transcript window, spliced exactly like the main list (`subagentItemsSplice` in native-host.ts).
+    /// The viewer's transcript window, spliced exactly like the main list (the core frame's `subagent_splice`).
     pub(super) fn apply_subagent_splice(&mut self, splice: &mut Value) {
         let inserted = splice
             .get_mut("items")
@@ -91,7 +90,7 @@ impl NativeChatView {
             }
             return None;
         }
-        // React's dialog traps focus, so Escape closes it whatever the reader last clicked. The
+        // React's dialog trapped focus, so Escape closed it whatever the reader last clicked. The
         // native card is painted inside the pane, so it has to claim the pane's focus itself:
         // without this the keyboard handler never sees Escape unless the composer already had it.
         if !self.subagent_focused {
@@ -288,7 +287,7 @@ impl NativeChatView {
                 .flex_col()
                 .items_center()
                 .justify_center()
-                // React's dialog is `min(960px, 100% - 2rem)` by `min(860px, 100dvh - 3rem)`: the
+                // React's dialog was `min(960px, 100% - 2rem)` by `min(860px, 100dvh - 3rem)`: the
                 // padding is that 1rem side and 1.5rem top/bottom inset, and the card's max size
                 // caps it, so a narrow pane still shows the backdrop on both sides of the card.
                 .px(px(16.0 * s))
@@ -327,7 +326,12 @@ impl NativeChatView {
         }))
     }
 
-    /// A subagent's name as the link React paints: no fill, an underline on hover, and the agent type above the action in its tooltip.
+    /// A subagent's name as the link React painted: no fill, an underline on hover, and the agent type above the action in its tooltip.
+    ///
+    /// CDXC:Tooltips 2026-09-12 DECISION: User: subagent transcript links use the same styled tooltip as chat skill references, with no model name; agent types use the regular action font.
+    ///
+    /// CDXC:SessionChat 2026-09-09 DECISION: User: subagent links show only a dotted underline on hover, with no background fill.
+    /// GPUI has no dotted underline, so the hover draws a thin muted underline.
     pub(super) fn subagent_link(
         &self,
         id: String,

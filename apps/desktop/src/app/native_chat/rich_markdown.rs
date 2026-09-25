@@ -17,8 +17,8 @@ use serde_json::{Value, json};
  * pieces out.
  *
  * CDXC:SessionChat 2026-09-18 SEE-ALSO:
- * The marks are written by sessionChatNativeMarkdown in
- * packages/shared/session-chat-presentation/native-markdown.ts. Alert colours
+ * The marks are written by the core's native Markdown pass
+ * (packages/gx-chat-core/src/transcript/native_markdown.rs). Alert colours
  * mirror the --alert-* families in packages/core-ui/styles/chat.css.
  */
 

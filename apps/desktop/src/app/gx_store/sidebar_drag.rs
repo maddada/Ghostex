@@ -18,7 +18,6 @@
 //! `moves` climbs and `movePosts` does not means every drop is being refused.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_drag/,
-//! tooling/gx-core/sidebar-page-frozen/reorder.ts,
 //! apps/desktop/src/app/gx_store/workspace_groups.rs.
 
 use std::time::Duration;

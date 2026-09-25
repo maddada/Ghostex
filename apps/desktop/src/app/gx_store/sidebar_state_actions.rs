@@ -20,9 +20,7 @@
 //! zero, and the per-command `gxStore.sidebarOpen` line, which names the call and never the payload
 //! (a machine's host, a project's agent choice and a session's title are the user's).
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/{delayed_send,agent_run,machine_disable}.rs,
-//! tooling/gx-core/sidebar-page-frozen/{session-actions,project-actions}.ts,
-//! tooling/gx-core/state-action-parity.ts.
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/{delayed_send,agent_run,machine_disable}.rs.
 
 use web_time::Instant;
 

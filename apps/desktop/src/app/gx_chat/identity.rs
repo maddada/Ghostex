@@ -28,7 +28,7 @@ impl ChatIdentity {
     ///
     /// `machineId` is the spelling `session_chat_runtime.rs` puts on the wire: the literal
     /// `"local"` for this computer and the saved machine's settings id otherwise. Both it and an
-    /// absent field mean "local", because `broker.ts` takes its prefix from exactly that test
+    /// absent field mean "local", because `broker.ts` took its prefix from exactly that test
     /// (`machineId === 'local' ? '' : ...`) and a chat that read `remote-local:` here would open on
     /// a different draft than the one the TypeScript brain wrote.
     pub(super) fn from_config(config: &Value) -> Self {
@@ -63,7 +63,7 @@ impl ChatIdentity {
 
     /// `JSON.stringify([machineId, projectId, sessionId])`, the retention key.
     ///
-    /// `SessionChatRuntimeIdentity.machineId` is a plain string on the TypeScript side, never
+    /// `SessionChatRuntimeIdentity.machineId` was a plain string on the TypeScript side, never
     /// absent, so this computer spells itself `"local"` here too rather than `null`.
     pub(super) fn retention_key(&self) -> String {
         let machine = self.machine_id.as_deref().unwrap_or(LOCAL_MACHINE_ID);

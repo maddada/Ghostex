@@ -4,7 +4,7 @@
 //! the same chat host; the view keeps these two names for it.
 
 /// CDXC:SessionChat 2026-09-25 DECISION:
-/// User: "can we please disable quick js and delete it". The desktop chat always runs on `packages/gx-chat-core` through `src/app/gx_chat/`: the `chatBrain` setting, the QuickJS chat runtime, the shadow comparison and the QuickJS chat recorder are deleted, and an old saved `chatBrain` value is ignored. Supersedes the 2026-09-24 decision that made Rust the default and kept QuickJS selectable. QuickJS itself stays in the app for the app runtime (`apps/desktop/sidebar/gxserver-runtime/`) until that is ported.
+/// User: "can we please disable quick js and delete it". The desktop chat always runs on `packages/gx-chat-core` through `src/app/gx_chat/`: the `chatBrain` setting, the QuickJS chat runtime, the shadow comparison and the QuickJS chat recorder are deleted, and an old saved `chatBrain` value is ignored. Supersedes the 2026-09-24 decision that made Rust the default and kept QuickJS selectable.
 pub(crate) use crate::app::gx_chat::{
     ChatHostHandle as ChatRuntimeWorker, ChatHostOutput as ChatRuntimeOutput,
 };

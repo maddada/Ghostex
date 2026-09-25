@@ -151,7 +151,7 @@ pub(super) fn receive(world: &mut World, inbound: Inbound) {
 /// as new as the one in effect, is cached for the next boot read, and reaches every chat.
 ///
 /// The one in effect is the last push this host adopted, else the cached record (which the
-/// TypeScript's `current` starts from). A server whose last fetch predates this computer's never
+/// TypeScript's `current` started from). A server whose last fetch predates this computer's never
 /// rolls it back, and the same lineup again redraws nothing.
 fn adopt_catalog(world: &mut World, catalog: Value) {
     if ghostex_gx_chat_core::menus::catalog::parse_agent_model_catalog(&catalog).is_none() {

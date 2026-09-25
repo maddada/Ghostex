@@ -3,10 +3,9 @@
 //! Port of `packages/shared/session-chat-presentation/transcript-menu.ts`.
 //!
 //! CDXC:SessionChat 2026-09-19 SEE-ALSO:
-//! React renders these in the transcript `ContextMenu` of `packages/core-ui/chat/session-chat-view.tsx`
-//! (reference rows from `session-chat-reference-menu-items.tsx`); GPUI asks for the same rows from
-//! `apps/desktop/src/app/native_chat/transcript_menu.rs`. Copy stands alone, disabled, on plain
-//! transcript with nothing selected, so the menu never opens empty.
+//! GPUI asks for these rows from `apps/desktop/src/app/native_chat/transcript_menu.rs`. Copy
+//! stands alone, disabled, on plain transcript with nothing selected, so the menu never opens
+//! empty.
 
 use crate::composer::reference_menu::{reference_menu_rows, ReferenceMenuRow};
 use crate::ordered;

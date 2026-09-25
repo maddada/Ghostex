@@ -47,7 +47,7 @@ impl NativeChatView {
         (images, index)
     }
 
-    /// The composer's pasted and dropped image thumbnails, with the uploading tile React shows.
+    /// The composer's pasted and dropped image thumbnails, with the uploading tile React showed.
     ///
     /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
     /// The tiles come from the same `[Image #N](path)` references the composer already paints as

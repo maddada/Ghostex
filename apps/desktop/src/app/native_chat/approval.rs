@@ -35,6 +35,7 @@ impl NativeChatView {
                     .text_color(p.foreground)
                     .child("Approval request"),
             )
+            // CDXC:SessionChat 2026-09-07 DECISION: User: card X buttons match Open terminal's color, outline and background, rather than a custom border and background of their own.
             .child(
                 div()
                     .id("approval-cancel")

@@ -3,7 +3,7 @@
 //! CDXC:CefRuntime 2026-09-25 WHY:
 //! gxserver sends the CLI's renderer commands to the first socket that registered for them. That
 //! was the QuickJS app runtime's socket, which answered 11 of the 25 actions gxserver allows and
-//! failed the rest with "Unsupported renderer command." The runtime is being removed, so the
+//! failed the rest with "Unsupported renderer command." The runtime was removed, so the
 //! desktop's own gx-client socket registers instead and this file is the validation the runtime
 //! did. The verbs whose feature no longer exists in the app were taken out of gxserver's forward
 //! list (`RENDERER_COMMAND_ACTIONS`) in the same change: `setVisibleCount` and `setViewMode` (the

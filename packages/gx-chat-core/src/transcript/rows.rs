@@ -29,7 +29,7 @@ pub fn rows(state: &ChatState, context: &ChatContext) -> Vec<TranscriptItem> {
 /// The open set is reported by `Event::Measured(Measurement::OpenRowDetails)`, so only the rows on
 /// screen ever build their diff lines or tool output.
 ///
-/// `native-host.ts:424` is `presentation.rowDetail(...) ?? subagentViewer.rowDetail(...)`: a row
+/// `native-host.ts:424` was `presentation.rowDetail(...) ?? subagentViewer.rowDetail(...)`: a row
 /// opened INSIDE the subagent viewer belongs to the child transcript, whose messages the session's
 /// own projection has never seen, so the viewer answers for it.
 pub fn row_details(state: &ChatState, context: &ChatContext) -> RowDetails {
@@ -107,7 +107,8 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
     // `this.scheduleBackfill()` at the end of `update`: the zero-delay timer is armed by the
     // publish that queued the placeholders, so the very next `tick` promotes them. Arming it
     // from the settle instead waited for the NEXT event's settle, so on every real chat the first
-    // transcript shipped its older rows as placeholders one document longer than the live brain.
+    // transcript shipped its older rows as placeholders one document longer than the TypeScript
+    // brain did.
     if state.transcript_view.has_pending_backfill() {
         state.core.timers.arm_once(
             crate::transcript::settle::BACKFILL_TIMER,

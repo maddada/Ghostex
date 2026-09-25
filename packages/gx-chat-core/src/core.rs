@@ -50,19 +50,19 @@ pub struct ChatCore {
     parts_revision: u64,
     /// Whether a publish has happened at all.
     ///
-    /// `native-host.ts` starts with its OWN empty `minimapMarkers` and `subagentItems` arrays
-    /// (native-host.ts:145, :149) and replaces both inside `publish` with the projection's rail and
-    /// the viewer's list. So a drain before the first publish ships the module's arrays and the
-    /// drain after it ships the replacements, which are different objects however equal they are.
+    /// `native-host.ts` started with its OWN empty `minimapMarkers` and `subagentItems` arrays
+    /// (native-host.ts:145, :149) and replaced both inside `publish` with the projection's rail and
+    /// the viewer's list. So a drain before the first publish shipped the module's arrays and the
+    /// drain after it shipped the replacements, which are different objects however equal they are.
     /// The core has no identities, so the first publish clears those two pointers by hand.
     published_once: bool,
 }
 
 /// The parts the host already has, which is what turns a whole list into a splice.
 ///
-/// `native-host.ts` keeps one `sent…` variable per channel and compares by array identity; unchanged
-/// items keep their identity there (`native-presentation.ts` caches its projection), so comparing by
-/// value here is the same test.
+/// `native-host.ts` kept one `sent…` variable per channel and compared by array identity; unchanged
+/// items kept their identity there (`native-presentation.ts` cached its projection), so comparing
+/// by value here is the same test.
 #[derive(Clone, Debug, Default)]
 struct SentFrame {
     /// The parts counter the host was last sent, so a drain after a publish ships all four
@@ -92,7 +92,7 @@ impl ChatCore {
     ///
     /// `context` carries the host's clock and UTC offset for this turn; every deadline, elapsed
     /// label, retry backoff and local-midnight boundary is measured against it, which is what
-    /// makes a replay reproducible.
+    /// makes the same inputs produce the same document.
     pub fn handle(&mut self, event: Event, context: ChatContext) -> Vec<Effect> {
         self.context = context;
         // Index zero of the turn's clock reads is `now_ms` itself.
@@ -165,7 +165,7 @@ impl ChatCore {
 
     /// The same frame, with `nextWakeMs` measured at the host's clock AT THE DRAIN.
     ///
-    /// `take` in `native-host.ts` reads `Date.now()` itself, so its wake is the remaining delay
+    /// `take` in `native-host.ts` read `Date.now()` itself, so its wake is the remaining delay
     /// from the moment the host asks, not from the last event the core handled. A host that drains
     /// on a different turn from the one it last fed (which is every host: it ticks, then takes)
     /// would otherwise arm its timer that much too late.
@@ -260,7 +260,7 @@ impl ChatCore {
     /// with identical content would ship the whole document once a second for nothing.
     pub fn republish(&mut self) {
         crate::session::working::stamp_working_started(&mut self.state, self.context.now_ms);
-        // The two `useEffect`s the TypeScript runs before the composition reads their state: the
+        // The two `useEffect`s the TypeScript ran before the composition read their state: the
         // pending echoes pruned against the authoritative list, and the pending tool row dropped
         // once the transcript retired it.
         crate::session::before_compose(&mut self.state, &self.context);
@@ -388,7 +388,7 @@ fn expand(event: Event) -> Vec<Event> {
 ///
 /// CDXC:SessionChat 2026-09-18 WHY:
 /// A live status row changes once a second, and shipping the whole transcript for it cost about 1MB
-/// of JSON per frame on a 139-message session. Only the changed window crosses the bridge; GPUI
+/// of JSON per frame on a 139-message session. Only the changed window ships; GPUI
 /// splices its item list and list state the same way.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/state.rs (pump).
 ///

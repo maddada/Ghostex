@@ -46,9 +46,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.has_more = state.messages.has_more;
     into.earlier_page_cursor = state.messages.before_offset as i64;
     into.loading_earlier = state.messages.loading_earlier;
-    // Omitted, not `null`: the TypeScript writes `operationError` straight from a
-    // `string | undefined`, so `JSON.stringify` drops the key whenever there is no refusal. Its
-    // `operationErrorCode` sibling is written as `?? null` and is therefore always present.
+    // Omitted, not `null`: the TypeScript wrote `operationError` straight from a
+    // `string | undefined`, so `JSON.stringify` dropped the key whenever there was no refusal. Its
+    // `operationErrorCode` sibling was written as `?? null` and is therefore always present.
     into.operation_error = match state.core.operation_error.clone() {
         Some(message) => Tri::Value(message),
         None => Tri::Absent,

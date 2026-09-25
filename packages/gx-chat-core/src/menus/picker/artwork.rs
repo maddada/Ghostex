@@ -3,11 +3,7 @@
 //! Port of the two key functions in
 //! `packages/shared/session-chat-presentation/model-picker-artwork.ts`. Only the keys move: the
 //! artwork itself stays a build-time constant of each renderer (`model-picker-artwork.json`, read
-//! by the React picker and by `apps/desktop/src/app/native_chat/`), so the document carries the
-//! key and never the SVG.
-//!
-//! CDXC:SessionChat 2026-09-17 SEE-ALSO: React picker icons and the desktop's `assets.rs` consume
-//! that artwork together.
+//! by `apps/desktop/src/app/native_chat/`), so the document carries the key and never the SVG.
 
 /// `modelPickerArtworkKey`.
 pub fn model_picker_artwork_key(model: &str, standard: bool) -> &'static str {

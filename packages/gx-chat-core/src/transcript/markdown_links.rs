@@ -1,6 +1,6 @@
 //! The reference links a message's Markdown carries, parsed once when the message changes.
 //!
-//! Ported from `packages/shared/session-chat-presentation/markdown-links.ts`. The TypeScript parses
+//! Ported from `packages/shared/session-chat-presentation/markdown-links.ts`. The TypeScript parsed
 //! with `mdast-util-from-markdown` and no extensions, which is plain CommonMark; the Rust side uses
 //! `markdown::to_mdast` with `ParseOptions::default()`, the same author's port of the same parser
 //! with the same default. GFM is deliberately off on both sides, which is why the autolink scan

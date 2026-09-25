@@ -28,9 +28,8 @@ pub(crate) enum GroupKind {
     /// it builds the list (the deleted sidebar page's `model.ts`, `group.isChatCollection` in the group loop),
     /// so the desktop sidebar has never shown it and neither does this list. What the More menu's
     /// All Automations really does is `openAutomationsPage`, which changes the active project and
-    /// opens the Automate workarea; the row is a side effect nobody sees here. Do not add one to
-    /// make the two lists agree: they already agree, and a row only this side drew would be a
-    /// difference the shadow reports for ever.
+    /// opens the Automate workarea; the row is a side effect nobody sees here. Do not add one: the
+    /// sidebar has never drawn it, so a row here would be a new difference, not a fix.
     Chats,
     Project,
     /// A user-made session group inside a project.

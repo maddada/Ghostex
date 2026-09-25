@@ -30,7 +30,7 @@
 //!
 //! **And the group id is the OLD RUNTIME's, handed in, never the core's focus.**
 //! CDXC:RemoteMachines 2026-09-21 WHY:
-//! Since remote focus part 2 step 2 the core's focus DOES follow a remote focus (the host's tab selection takes it, and the shadow mirror follows the runtime's own), but it still cannot stand in for the runtime's group, for two reasons. The core names the user-made group a row sits in (`group_of_session`), where `setRemotePresentationSessionFocus` always names the project's own group or the machine's Chats, and the string rule above answers differently for the two. And the runtime's `activeGroupId` still moves on paths the store does not see in the moment (a group attach from navigation history or a Space restore, a lifecycle replacement and its restores); the store learns those from the runtime's publish, which lags the command. Planning from `core.focus()` before step 2 sent a `keepView` the runtime did not on every second click inside the active remote project. So the group is what the runtime holds at the moment of the click, which [`RuntimeActiveGroup`] tracks from what the host SENT the runtime and what the runtime last PUBLISHED; its comment has the proof.
+//! Since remote focus part 2 step 2 the core's focus DOES follow a remote focus (the host's tab selection takes it), but it still cannot stand in for the runtime's group, for two reasons. The core names the user-made group a row sits in (`group_of_session`), where `setRemotePresentationSessionFocus` always names the project's own group or the machine's Chats, and the string rule above answers differently for the two. And the runtime's `activeGroupId` still moves on paths the store does not see in the moment (a group attach from navigation history or a Space restore, a lifecycle replacement and its restores); the store learns those from the runtime's publish, which lags the command. Planning from `core.focus()` before step 2 sent a `keepView` the runtime did not on every second click inside the active remote project. So the group is what the runtime holds at the moment of the click, which [`RuntimeActiveGroup`] tracks from what the host SENT the runtime and what the runtime last PUBLISHED; its comment has the proof.
 //!
 //! Refused, each with its reason: a LOCAL row (the store's own focus path owns it), a browser row
 //! (an app tab, not a session), and an id that does not parse as a remote session. A machine whose
@@ -137,9 +137,9 @@ impl RemoteFocusPlan {
 
     /// The ids the open's tab-selected callback carries (`set_sidebar_gxserver_remote_attach_focus_state`
     /// builds them from the attach key with `gpui_remote_scoped_project_id` and
-    /// `gpui_remote_scoped_session_id`). Not sent by the host: the open sends it. The gate replays it
-    /// through `handleGpuiWorkspaceTabSessionSelected` to prove it moves the marks the forwarded
-    /// command used to move.
+    /// `gpui_remote_scoped_session_id`). Not sent by the host: the open sends it. The deleted parity
+    /// gate replayed it through `handleGpuiWorkspaceTabSessionSelected` to prove it moved the marks
+    /// the forwarded command used to move.
     pub fn tab_selection(&self) -> Value {
         json!({
             "projectId": self.session.project_key().to_workspace_project_id(),

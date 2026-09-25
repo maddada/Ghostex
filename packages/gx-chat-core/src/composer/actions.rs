@@ -1,7 +1,7 @@
 //! Family d's user actions: everything the composer does, from a keystroke to a send.
 //!
 //! The arms follow the `action` switch in
-//! `packages/shared/session-chat-controller/native-host.ts`. What the TypeScript does with an
+//! `packages/shared/session-chat-controller/native-host.ts`. What the TypeScript did with an
 //! `await` the core does with an [`Effect`] and a later event, so nothing here performs I/O.
 
 use serde_json::{json, Value};
@@ -228,7 +228,7 @@ fn draft_version(action: &UserAction) -> Option<crate::composer::queue::DraftVer
 /// that flag yet.
 fn scroll(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     // The subagent transcript is modal: a wheel over it is not a composer gesture
-    // (`native-host.ts`, the first thing `action` checks).
+    // (`native-host.ts`, the first thing `action` checked).
     if crate::extras::subagent::is_open(&state.extras.subagent) {
         return Vec::new();
     }
@@ -509,8 +509,8 @@ pub(crate) fn apply_recall(state: &mut ChatState, up: bool) -> Vec<Effect> {
     }
 }
 
-/// React's composer opens a pill only when its destination is a local file; a web link pill is
-/// inert.
+/// A pill opens only when its destination is a local file, as React's composer did; a web link
+/// pill is inert.
 fn open_reference(action: &UserAction) -> Vec<Effect> {
     let href = string_param(action, "href");
     match classify_link_href(href) {

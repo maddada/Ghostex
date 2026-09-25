@@ -12,8 +12,7 @@
 //! title and note, which are the user's own words, and the record says only which dialog opened
 //! and whether a seed was present.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/modals.rs,
-//! tooling/gx-core/sidebar-page-frozen/session-actions.ts (`runNativeSessionAction`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/modals.rs.
 
 use ghostex_gx_core::{owns_modal_message, plan_modal_action};
 use serde_json::Value;

@@ -2,8 +2,8 @@
 The Switch Account panel: More actions > Switch Account, and the Switch account
 button on sign-in and usage-limit notices. A port of `SessionAccountsPanel`
 (packages/core-ui/accounts/session-panel.tsx, styled by `.gx-account-submenu` in
-accounts.css) drawn from the host's `accountPanel` projection
-(packages/shared/session-chat-controller/native-accounts.ts), which already
+accounts.css) drawn from the core's `accountPanel` projection
+(packages/gx-chat-core/src/menus/native_accounts.rs), which already
 carries the shared copy and Hide emails masking.
 
 The panel is laid out as a list of blocks so the popup window can be sized to the

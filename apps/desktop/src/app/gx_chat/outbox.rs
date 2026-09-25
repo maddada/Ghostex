@@ -168,6 +168,6 @@ fn next_sequence() -> u64 {
 /// Every session's worker, keyed by the retention key its chat is held under.
 ///
 /// A worker is created when a chat is attached and kept while it is retained, which is what
-/// `replayDraftSaves` does on the TypeScript side: a row left by a previous run goes out when its
+/// `replayDraftSaves` did on the TypeScript side: a row left by a previous run goes out when its
 /// chat is opened again rather than being lost.
 pub(super) type Workers = BTreeMap<String, DraftWorker>;
