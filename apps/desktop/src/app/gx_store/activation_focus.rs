@@ -6,22 +6,23 @@
 //! Each of these used to reach the app runtime through a callback of its own
 //! (`onStatusPetActivation`, `onMenuBarSessionActivation`, `onCommandPaletteSessionFocus`,
 //! `onCommandPaletteRunSidebarCommand`), and every one of those only re-entered the runtime's
-//! `focusSession` or `runSidebarCommand`. The ids are shaped here and the message goes on the
-//! runtime's ONE command entry, the same one a sidebar row click takes (`sidebar_focus_route.rs`),
-//! so the focus and the Action run have a single owner to port instead of five doors into it. The
-//! bounded-id rules the callbacks enforced (StatusPet 2026-06-26) are enforced before this point
-//! by `status_pet.rs` and here.
+//! `focusSession` or `runSidebarCommand`. The ids are shaped here and handed to the store's one
+//! focus and Action run (`focus_perform.rs`, `sidebar_command_run.rs`), the same ones a sidebar
+//! row click and a project row's Actions button end in. The bounded-id rules the callbacks
+//! enforced (StatusPet 2026-06-26) are enforced before this point by `status_pet.rs` and here.
 //!
 //! SEE-ALSO: apps/desktop/src/app/status_pet.rs (the dispatchers),
-//! apps/desktop/sidebar/gxserver-runtime/core.ts (`focusSession` and `runSidebarCommand` arms).
+//! apps/desktop/src/app/gx_store/focus_perform.rs.
 
 use ghostex_gx_core::{ProjectKey, SessionKey};
 use serde_json::json;
 
+use super::focus_perform::RowFocusOptions;
 use crate::GhostexGpuiApp;
 
 impl GhostexGpuiApp {
-    /// Focuses one session the way a sidebar row click does. Returns whether a runtime took it.
+    /// Focuses one session the way a sidebar row click does. Returns whether the id named
+    /// something a focus can take.
     pub(crate) fn gx_store_focus_activated_session(
         &mut self,
         session_id: &str,
@@ -30,17 +31,13 @@ impl GhostexGpuiApp {
         if session_id.is_empty() {
             return false;
         }
-        // The runtime can answer this with a focus change, so it must hear the newest local
-        // selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        self.gx_store_send_sidebar_runtime_command(
-            json!({ "type": "focusSession", "sessionId": session_id }),
-            cx,
-        )
+        // A focus starts from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
+        self.gx_store_focus_session_row(session_id, RowFocusOptions::default(), cx)
     }
 
     /// Focuses one sidebar group (a project, or a user-made group in one) the way a header click
-    /// does. Returns whether a runtime took it.
+    /// does. Returns whether the id named a group a focus can take.
     pub(crate) fn gx_store_focus_activated_group(
         &mut self,
         group_id: &str,
@@ -49,11 +46,8 @@ impl GhostexGpuiApp {
         if group_id.is_empty() {
             return false;
         }
-        self.gx_store_flush_old_runtime_tell(cx);
-        self.gx_store_send_sidebar_runtime_command(
-            json!({ "type": "focusGroup", "groupId": group_id }),
-            cx,
-        )
+        self.gx_store_flush_local_selection(cx);
+        self.gx_store_focus_group_row(group_id, cx)
     }
 
     /// The Back/Forward stop the sidebar is on (navigation_history/controller.rs).
@@ -66,8 +60,8 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// Runs one saved Action by id, with the scope that picks its list. Returns whether a runtime
-    /// took it.
+    /// Runs one saved Action by id, with the scope that picks its list. Returns `true`: the run is
+    /// answered here whatever it finds.
     pub(crate) fn gx_store_run_activated_sidebar_command(
         &mut self,
         command_id: &str,
@@ -82,10 +76,10 @@ impl GhostexGpuiApp {
         if let Some(scope) = scope {
             message["scope"] = json!(scope);
         }
-        // A sidebar command can change focus in the runtime: it must hear the newest local
-        // selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        self.gx_store_send_sidebar_runtime_command(message, cx)
+        // The run can move the project, which starts from the store's newest selection.
+        self.gx_store_flush_local_selection(cx);
+        self.gx_store_run_sidebar_command(&message, cx);
+        true
     }
 }
 

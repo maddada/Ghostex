@@ -1,51 +1,49 @@
-//! A click on a row of THIS computer, and everything that behaves like one: the store performs the
-//! page's half itself and sends the runtime's `focusSession` straight to the runtime.
+//! A click on a row of THIS computer, and everything that behaves like one: the page's half and
+//! the runtime's half of the old click, both performed by the store.
 //!
 //! CDXC:FocusRouting 2026-09-21 WHY:
-//! Five senders in this crate posted `{type:'selectSession', mode:'focus'}` and relied on the
-//! sidebar page's `selectNativeSidebarSession` to turn it into `focusSession`: a row click
+//! Five senders in this crate post `{type:'selectSession', mode:'focus'}`: a row click
 //! (`native_sidebar/sessions.rs`), the project slot hotkey and the session slot hotkey (both
-//! through `gx_store_focus_and_reveal_slot_row`), the session walk's hand-offs
-//! (`session_walk.rs`) and the burst's landing ask (`burst.rs`). That page is being deleted, so
-//! all five now end here, in ONE route: the page's half of the click (the multi-selection cleared,
-//! an open app modal closed) performed in Rust, then the runtime's own message on the runtime's own
-//! entry. It is the same shape the remote row's click already has
-//! (`sidebar_remote_focus.rs`), and it is deliberately one interception rather than five call-site
-//! changes, so a sixth sender cannot miss it.
+//! through `gx_store_focus_and_reveal_slot_row`), the session walk's steps into another project
+//! (`session_walk.rs`) and a held key's landing row (`burst.rs`). All five end here, in ONE route,
+//! and it is deliberately one interception rather than five call-site changes, so a sixth sender
+//! cannot miss it.
+//!
+//! CDXC:FocusRouting 2026-09-25 WHY:
+//! The route used to send the runtime its `focusSession` after the page's half. The runtime's focus
+//! is gone (focus_perform.rs), so the store performs that half too: right after the click's own
+//! in-process reaction, which the row click, the slot hotkeys and the walk run in the same frame
+//! AFTER posting this command. That is the order the runtime's asynchronous answer always had, and
+//! it matters: the reaction selects a live tab or stages one in the click's frame, and the focus
+//! then wakes or attaches the staged tab. Whether the click changes the project is judged NOW,
+//! before the reaction moves the store, and handed to the focus as `keep_view`
+//! (CDXC:Navigation 2026-09-11 DECISION in focus_perform.rs).
 //!
 //! **The held-key hot path is not on it.** A held previous/next session walk reaches
 //! `NativeSidebarClickReaction::InProcess` and sends NOTHING (`session_walk.rs`): no
-//! `selectSession`, so no work here. The presses that do arrive here pay one extra
-//! `close_app_modal_from_bridge`, which is two `Option` tests when no modal is open, and save the
-//! page's own routing, snapshot lookup and zustand write.
-//!
-//! **What is deliberately not reproduced**, the same three the remote click dropped (declared
-//! difference 53): `applyLocalFocus` and `clearFocusedSessionScrollSuppression` are the zustand
-//! store's optimistic marks for the REACT sidebar, which the desktop does not draw (its only
-//! reader was the React sidebar, deleted on 2026-09-24; Quick Access and native chat settings read
-//! neither), and the store owns the highlight itself in the same frame. The runtime's own publish
-//! sets them a moment later exactly as it always did.
+//! `selectSession`, so no work here.
 //!
 //! **Counters** ride `gxStore.sidebarActions.summary` as `localFocus`: `focuses`, `browserRows`,
-//! `modalsClosed`, `declinedSource`. A run in which the user clicked a row and
-//! `focuses` is zero means the click never reached here; `declinedSource` moving means a click
-//! arrived before the list was ready, which is the launch window and nothing else.
+//! `modalsClosed`, `declinedSource`. A run in which the user clicked a row and `focuses` is zero
+//! means the click never reached here; `declinedSource` moving means a click arrived before the
+//! list was ready, which is the launch window and nothing else.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/core.ts (`onSidebarCommand`),
+//! SEE-ALSO: apps/desktop/src/app/gx_store/focus_perform.rs,
 //! apps/desktop/src/app/gx_store/sidebar_remote_focus.rs.
 
 use ghostex_gx_core::SessionKey;
 use serde_json::{Value, json};
 
+use super::focus_perform::RowFocusOptions;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::gpui_sidebar_runtime_command_script;
 
 /// What this app run did with local row focus. Rides `gxStore.sidebarActions.summary`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct LocalFocusRouteCounters {
-    /// Local `selectSession` clicks the store routed to the runtime itself.
+    /// Local `selectSession` clicks the store focused.
     pub(crate) focuses: u64,
-    /// Of those, the ones naming a browser tab, which the runtime focuses its own way.
+    /// Of those, the ones naming a browser tab, which no focus takes any more.
     pub(crate) browser_rows: u64,
     /// Of those, the ones that closed an open app modal (the click's `closeAppModal`).
     pub(crate) modals_closed: u64,
@@ -55,7 +53,7 @@ pub(crate) struct LocalFocusRouteCounters {
 
 impl GhostexGpuiApp {
     /// Answers a LOCAL row's `selectSession` with `mode: focus`. Returns whether it did, in which
-    /// case the command must NOT also reach the old page, which would post a second `focusSession`.
+    /// case the command goes no further.
     ///
     /// A remote row never gets here: `gx_store_plan_remote_row_focus` runs first and owns it.
     pub(crate) fn gx_store_focus_local_row(
@@ -77,12 +75,12 @@ impl GhostexGpuiApp {
         // own `close` arm reaches. Before the focus, as the TypeScript had it.
         let had_modal = self.app_modal_window.is_some() || self.native_app_modal.is_some();
         self.close_app_modal_from_bridge(cx);
-        // The runtime must hear the newest local selection before a message that moves its focus.
-        self.gx_store_flush_old_runtime_tell(cx);
-        let sent = self.gx_store_send_sidebar_runtime_command(
-            json!({ "type": "focusSession", "sessionId": session_id }),
-            cx,
-        );
+        // A focus starts from the store's newest selection.
+        self.gx_store_flush_local_selection(cx);
+        // `focusChangesActiveProject`, judged before the click's reaction moves the store.
+        let keep_view = SessionKey::parse_sidebar_session_id(&session_id).is_some_and(|session| {
+            self.gx_store.core.focus().active_project.as_ref() != Some(&session.project_key())
+        });
         let browser = session_id.starts_with("gpui-browser:");
         let counters = &mut self.gx_store.local_focus_route;
         counters.focuses += 1;
@@ -92,9 +90,17 @@ impl GhostexGpuiApp {
         if had_modal {
             counters.modals_closed += 1;
         }
-        // Answered either way: with no runtime there is nothing to send it on to, and the old page
-        // is inside that same runtime.
-        let _ = sent;
+        // After the click's in-process reaction, which the senders run right after this command.
+        let app = cx.entity().downgrade();
+        cx.defer(move |cx| {
+            let _ = app.update(cx, |app, cx| {
+                let options = RowFocusOptions {
+                    keep_view,
+                    ..RowFocusOptions::default()
+                };
+                app.gx_store_focus_session_row(&session_id, options, cx);
+            });
+        });
         true
     }
 

@@ -13,6 +13,7 @@
 //! - Daemon rows are replaced whole, never merged; local edits are overlays that never renumber
 //!   the revision.
 
+mod active_project_context;
 mod attention;
 mod change;
 mod connection;
@@ -29,19 +30,26 @@ mod notification_feed;
 mod overlay;
 mod presentation_store;
 mod refetch;
+mod renderer_commands;
+mod project_activation;
 mod project_docs;
 mod quick_access;
-mod renderer_commands;
 mod selectors;
+mod session_create;
 mod sidebar_accounts;
 mod sidebar_actions;
-mod session_create;
+mod sidebar_command_run;
 mod sidebar_drag;
 mod sidebar_menu;
 mod sidebar_ui;
 mod sidebar_view;
 mod workspace_groups;
 
+pub use crate::active_project_context::{
+    active_project_context_payload, project_context_payload, quick_automations_payload,
+    quick_projectless_payload, ACTIVE_PROJECT_CONTEXT_MESSAGE_TYPE,
+    ACTIVE_PROJECT_CONTEXT_MESSAGE_VERSION,
+};
 pub use crate::attention::{
     AgentActivityReport, ATTENTION_PATCH_TTL_MS, ESCAPE_DONE_SUPPRESSION_MS, MIN_ATTENTION_VISIBLE_MS,
 };
@@ -68,6 +76,10 @@ pub use crate::notification_feed::{
 pub use crate::overlay::SessionPatch;
 pub use crate::sidebar_actions::{
     remote_focus_group, RuntimeActiveGroup, RUNTIME_GROUP_SENT_TRUST_MS,
+};
+pub use crate::project_activation::{
+    plan_project_activation, project_last_session_storage_key, ProjectActivation,
+    PROJECT_LAST_SESSION_KEY_PREFIX,
 };
 pub use crate::project_docs::{
     apply_space_row_reorder, can_drop_project_with_worktrees, create_collection,
@@ -126,6 +138,10 @@ pub use crate::sidebar_actions::{
     MACHINE_DISABLE_SETTINGS_SOURCE,
 };
 pub use crate::session_create::*;
+pub use crate::sidebar_command_run::{
+    plan_sidebar_command_run, SidebarCommandRun, SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE,
+    SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION,
+};
 pub use crate::sidebar_accounts::{
     account_headline_windows, account_session_working, account_usage_detail, account_usage_label,
     agent_accounts_http_answer, group_accounts_target, is_five_hour_window, is_weekly_window,

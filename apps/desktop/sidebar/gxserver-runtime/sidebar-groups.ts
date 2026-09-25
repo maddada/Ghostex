@@ -3,7 +3,6 @@ CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import { createGpuiSidebarActiveProjectContextPayloadFromGroups } from "../active-project-context";
 import {
   createGpuiWorkspaceSessionSubgroupId,
   getGpuiWorkspaceSessionSubgroups,
@@ -88,27 +87,8 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
   publishRemotePresentationPatch(): void;
   applyDomainProjectDelta(delta: GxserverPresentationDelta): void;
   refreshRecentProjectsFromClient(): void;
-  refreshSidebarHudFromClient(): void;
-  postActiveProjectContext(): void;
-  postGxserverPresentationFocusState(): void;
-  activeRemoteProjectReference():
-    { machineId: string; projectId: string } | undefined;
-  activeWorkspaceTabSessionsFromLatestGroups(): GpuiActiveWorkspaceTabSessionPayload[];
   createSidebarGroups(
     presentation: GxserverPresentationSnapshot,
-  ): SidebarSessionGroup[];
-  withQuickAutomationsOverviewGroup(
-    groups: SidebarSessionGroup[],
-  ): SidebarSessionGroup[];
-  createQuickAutomationsSidebarSession(): SidebarSessionItem;
-  quickAutomationsSidebarSessionId(): string;
-  isQuickAutomationsSidebarSessionId(sessionId: string): boolean;
-  createQuickAutomationsProjectContext(): NonNullable<
-    SidebarSessionGroup["projectContext"]
-  >;
-  activeProjectContextGroups(): SidebarSessionGroup[];
-  withSelectedProjectActiveGroup(
-    groups: SidebarSessionGroup[],
   ): SidebarSessionGroup[];
   pruneWorkspaceGroupAssignments(
     presentation: GxserverPresentationSnapshot,
@@ -132,10 +112,6 @@ export interface GpuiSidebarRuntimeSidebarGroupMethods {
     group: SidebarSessionGroup,
     scopedProjectId: string,
   ): SidebarSessionGroup[];
-  ensureActiveProject(
-    presentation: GxserverPresentationSnapshot,
-    projectProjection: GpuiPresentationProjectProjectionMetadata,
-  ): void;
 }
 
 export const gpuiSidebarRuntimeSidebarGroupMethods = {
@@ -150,57 +126,22 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     }
 
     const groups = this.createSidebarGroups(presentation);
-    /*
-    CDXC:FocusRouting 2026-06-26-23:24:
-    Sidebar session-card wake decisions should use the lifecycle state that was just rendered from gxserver presentation. Cache only bounded local project/session routing ids for sleeping rows before emitting hydrate/patch so a same-tick click cannot miss the sleeping state and fall through to plain focus.
-    */
-    this.sleepingLocalSidebarSessionIds = new Set(
-      groups.flatMap((group) =>
-        group.sessions.flatMap((session) => {
-          const reference = parseGxserverPresentationProjectSessionId(
-            session.sessionId,
-          );
-          return reference &&
-            (session.lifecycleState === "sleeping" ||
-              session.isSleeping === true)
-            ? [
-                createGxserverPresentationProjectSessionId(
-                  reference.projectId,
-                  reference.sessionId,
-                ),
-              ]
-            : [];
-        }),
-      ),
-    );
     this.hasHydrated = true;
     this.latestGroups = groups;
     postGpuiSidebarRuntimeFactsRows(this);
-    this.postActiveProjectContext();
-    this.postGxserverPresentationFocusState();
   },
 
   publishUnavailable(this: GpuiSidebarRuntime, _reason: string): void {
     this.presentation = undefined;
     this.appUserData = createEmptyGpuiAppUserData();
     this.domainProjects = [];
-    /*
-    CDXC:Workarea 2026-09-04 WHY:
-    `focusedSessionId` / `visibleSessionIds` / `activeProjectId` survive here on purpose.
-    They are the restore seed replayed from the bootstrap at startup, and this method runs before the first daemon snapshot on every launch (`start()` publishes the bootstrap-pending placeholder, and any patch that lands before the snapshot arrives ends up here too).
-    Dropping them wiped the session the user quit on before `autoMaterializeStartupFocusedSession` ever saw it, and the post below persisted the loss to disk, so the next launch had nothing to restore either.
-    The ids are only routing hints: `ensureActiveProject` validates them against the real snapshot on hydrate, and a reconnect after a daemon restart lands on the same session instead of the first row.
-    */
     this.recentProjects = [];
-    this.sidebarHud = undefined;
     this.latestGroups = [
       ...createGpuiGxserverUnavailableSidebarGroups(),
       ...this.createRemoteSidebarGroups(),
     ];
     this.hasHydrated = true;
     postGpuiSidebarRuntimeFactsRows(this);
-    this.postActiveProjectContext();
-    this.postGxserverPresentationFocusState();
   },
 
   publishRemotePresentationPatch(this: GpuiSidebarRuntime): void {
@@ -235,8 +176,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
     this.hasHydrated = true;
     this.latestGroups = groups;
     postGpuiSidebarRuntimeFactsRows(this);
-    this.postActiveProjectContext();
-    this.postGxserverPresentationFocusState();
   },
 
   applyDomainProjectDelta(
@@ -262,7 +201,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       ) {
         this.refreshRecentProjectsFromClient();
       }
-      this.refreshSidebarHudFromClient();
       return;
     }
     if (delta.type === "projectRemoved") {
@@ -270,7 +208,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         (project) => project.projectId !== delta.projectId,
       );
       this.refreshRecentProjectsFromClient();
-      this.refreshSidebarHudFromClient();
     }
   },
 
@@ -293,264 +230,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       .catch(() => undefined);
   },
 
-  refreshSidebarHudFromClient(this: GpuiSidebarRuntime): void {
-    const client = this.client;
-    if (!client) {
-      return;
-    }
-    void client
-      .fetchSidebarHud(this.activeProjectId)
-      .then((sidebarHud) => {
-        if (this.client !== client) {
-          return;
-        }
-        this.sidebarHud = sidebarHud;
-      })
-      .catch(() => {
-        /*
-         * CDXC:AgentLauncher 2026-06-24-20:34:
-         * Sidebar HUD projection refresh is best-effort after active-project or
-         * project-metadata changes. Failure keeps the previous gxserver
-         * projection instead of rebuilding custom launcher/action rows from
-         * raw project metadata in the renderer.
-         */
-      });
-  },
-
-  postActiveProjectContext(this: GpuiSidebarRuntime): void {
-    if (!this.presentation && !this.activeRemoteProjectReference()) {
-      /*
-      CDXC:Workarea 2026-09-04 WHY:
-      Without a local presentation the group set is the unavailable placeholder, so this payload would be the projectless one.
-      Rust treats that as authoritative: it parks the restored Agents workspace, swaps in an empty pane, coerces the mode to Agents, and hides every restored CEF surface, then rebuilds it all a moment later when the hydrate names the project again.
-      That round trip ran on every launch (`start()` publishes before the snapshot fetch) and was the flash of a different pane the user saw, and mid-session it is what a daemon restart looked like.
-      Rust already holds the restored project from its shell state; the first real hydrate republishes the selection, and a remote group that owns the selection still goes out because its rows do not come from the local daemon.
-      */
-      return;
-    }
-    // The service installs every bridge function before `start()`, so this is always present.
-    const postActiveProjectContext =
-      window.ghostexGpui?.postActiveProjectContext;
-    if (typeof postActiveProjectContext !== "function") {
-      return;
-    }
-
-    const payload = createGpuiSidebarActiveProjectContextPayloadFromGroups({
-      groups: this.activeProjectContextGroups(),
-    });
-    /*
-    CDXC:Automations 2026-07-04-23:18:
-    The active-project helper owns Source/Kanban/Automate/Docs surface identity. Post its payload unchanged so Rust can strictly accept `automateBoardId` beside `kanbanBoardId` before issuing the bundled Automate runtime URL.
-    */
-    // `focusStamp` sits beside the helper's payload, as in the focus state: Rust refuses a project switch produced before this runtime heard of a newer local selection (apps/desktop/src/app/gx_store/local_focus.rs).
-    postActiveProjectContext(
-      JSON.stringify({ ...payload, focusStamp: this.gpuiFocusStamp }),
-    );
-  },
-
-  postGxserverPresentationFocusState(this: GpuiSidebarRuntime): void {
-    const postFocusState =
-      window.ghostexGpui?.postGxserverPresentationFocusState;
-    if (typeof postFocusState !== "function") {
-      return;
-    }
-    /*
-    CDXC:RemoteMachines 2026-07-30:
-    Rust treats this snapshot's activeProjectId as the authoritative Agents
-    workspace switch target. `this.activeProjectId` stays a local-only concept
-    while a remote session or remote group is active, so publishing it here
-    yanked the workspace back to the last local project on every routine
-    remote presentation patch. Publish the machine-scoped remote project id —
-    the same key the active-project context bridge uses — whenever the remote
-    machine owns focus. Tab sessions use the same already-projected SidebarApp
-    group for local and remote workspaces. Remote rows retain their
-    machine-scoped project identity so Rust can reconcile restored attach tabs
-    without confusing them with local gxserver sessions.
-    */
-    const activeRemoteReference = this.activeRemoteProjectReference();
-    if (!this.presentation && !activeRemoteReference) {
-      /*
-      CDXC:Workarea 2026-09-04 WHY:
-      `tabSessions` is Rust's authority for which tabs exist in the active project; an empty list means "this project has no sessions" and makes `reconcile_with_sidebar_tab_sessions` clear every restored tab, split, and session mapping.
-      Before the first local snapshot the placeholder groups have no rows, so a post here (the bootstrap-pending publish, or a remote presentation patch that lands before the local fetch returns) sent exactly that empty list for the restored project.
-      The hydrate then re-created every session as a fresh tab in sidebar sort order with the first row active: the "different session after restart" the user kept reporting, and the reason split layouts came back flattened.
-      Rust already has the persisted focus ids from the bootstrap, so there is nothing to tell it until real rows exist.
-      */
-      return;
-    }
-    const activeTabSessions = this.activeWorkspaceTabSessionsFromLatestGroups();
-    const activeProjectId = activeRemoteReference
-      ? createGpuiRemotePresentationProjectId(
-          activeRemoteReference.machineId,
-          activeRemoteReference.projectId,
-        )
-      : this.activeProjectId;
-    const payload = JSON.stringify({
-      activeProjectId,
-      /**
-       * CDXC:FocusRouting 2026-09-20 WHY:
-       * The selected sidebar group rides with the focus state because a user-made session group can hold no session at all, and the Rust store derives the active group from the focused session; without it the store stays on the project's own group and refuses the empty tab list this payload carries for the selected group.
-       */
-      activeGroupId: this.activeGroupId,
-      tabSessions: activeTabSessions,
-      focusedSessionId: this.focusedSessionId,
-      focusStamp: this.gpuiFocusStamp,
-      type: GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_TYPE,
-      version: GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION,
-      visibleSessionIds: [...this.visibleSessionIds],
-    });
-    try {
-      postFocusState(payload);
-    } catch {
-      /*
-      CDXC:FocusRouting 2026-06-24-21:07:
-      Focus-state publication is a sidebar-native synchronization hint for Rust bootstrap replay only. A missing or rejecting CEF bridge must not change gxserver data, create fallback focus ids, log renderer payloads, or block the visible SidebarApp state that React already owns.
-      */
-    }
-  },
-
-  activeRemoteProjectReference(
-    this: GpuiSidebarRuntime,
-  ): { machineId: string; projectId: string } | undefined {
-    /*
-    The one derivation of "which remote project is selected". Both bridges that
-    have to answer that question read it from here — the presentation
-    focus-state snapshot and the active-project context — because a remote
-    selection lives only in `activeGroupId`/`focusedSessionId`, and the two
-    bridges disagreeing is what let one of them publish the remote project
-    while the other published a stale local one.
-    */
-    const focusedRemoteSession = this.focusedSessionId
-      ? parseGpuiRemotePresentationSessionId(this.focusedSessionId)
-      : undefined;
-    if (focusedRemoteSession) {
-      return focusedRemoteSession;
-    }
-    if (!this.activeGroupId) {
-      return undefined;
-    }
-    const remoteGroup = parseGpuiRemotePresentationGroupId(this.activeGroupId);
-    if (remoteGroup) {
-      return remoteGroup;
-    }
-    const subgroup = parseGpuiWorkspaceSessionSubgroupId(this.activeGroupId);
-    return subgroup
-      ? parseGpuiRemotePresentationProjectId(subgroup.projectId)
-      : undefined;
-  },
-
-  activeWorkspaceTabSessionsFromLatestGroups(
-    this: GpuiSidebarRuntime,
-  ): GpuiActiveWorkspaceTabSessionPayload[] {
-    /*
-    CDXC:CommandPane 2026-07-05:
-    The native GPUI Agents tab strip mirrors the already-projected active
-    SidebarApp group. Hidden, companion, carrier, and subgroup filtering stays
-    upstream in createSidebarGroups; this bridge only serializes the active
-    gxserver rows in their rendered order with the same visible title chain
-    used by the SidebarApp cards and macOS pane tabs. Remote rows carry their
-    machine-scoped project id plus the owning daemon's raw session id; titles
-    are never reconstructed from remote attach metadata.
-    */
-    const activeGroup =
-      this.latestGroups.find((group) => group.groupId === this.activeGroupId) ??
-      this.latestGroups.find((group) => group.isActive);
-    if (!activeGroup) {
-      return [];
-    }
-    const seen = new Set<string>();
-    const sessions: GpuiActiveWorkspaceTabSessionPayload[] = [];
-    for (const session of activeGroup.sessions) {
-      const localReference = parseGxserverPresentationProjectSessionId(
-        session.sessionId,
-      );
-      const remoteReference = parseGpuiRemotePresentationSessionId(
-        session.sessionId,
-      );
-      if (!localReference && !remoteReference) {
-        continue;
-      }
-      if (localReference?.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID) {
-        continue;
-      }
-      const kind = session.sessionKind;
-      if (kind !== "terminal") {
-        continue;
-      }
-      const projectId = remoteReference
-        ? createGpuiRemotePresentationProjectId(
-            remoteReference.machineId,
-            remoteReference.projectId,
-          )
-        : localReference!.projectId;
-      const sessionId = remoteReference?.sessionId ?? localReference!.sessionId;
-      const key = remoteReference
-        ? session.sessionId
-        : createGxserverPresentationProjectSessionId(projectId, sessionId);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-      const presentation = remoteReference
-        ? (this.remotePresentations.get(remoteReference.machineId) ??
-          this.remoteLastSeenPresentations.get(remoteReference.machineId))
-        : this.presentation;
-      const workingDirectory =
-        session.cwd ||
-        presentation?.projects.find(
-          (project) =>
-            project.projectId ===
-            (remoteReference?.projectId ?? localReference!.projectId),
-        )?.path;
-      sessions.push({
-        activity: session.activity,
-        ...(workingDirectory ? { workingDirectory } : {}),
-        ...(session.agentIcon ? { agentIcon: session.agentIcon } : {}),
-        ...(session.agentName?.trim()
-          ? { agentName: session.agentName.trim() }
-          : {}),
-        ...(session.agentSessionId?.trim()
-          ? { agentSessionId: session.agentSessionId.trim() }
-          : {}),
-        ...(session.sessionNote?.trim() ? { hasSessionNote: true } : {}),
-        ...(typeof session.stashedPromptCount === "number" &&
-        session.stashedPromptCount > 0
-          ? { stashedPromptCount: Math.floor(session.stashedPromptCount) }
-          : {}),
-        // CDXC:AgentProviders 2026-09-03: present-only, daemon-resolved rows.
-        ...(session.switchableAgents && session.switchableAgents.length > 0
-          ? {
-              switchableAgents: session.switchableAgents.map((row) => ({
-                agentId: row.agentId,
-                icon: row.icon,
-                name: row.name,
-              })),
-            }
-          : {}),
-        // CDXC:Drafts 2026-08-28: present-only, so a non-draft row
-        // publishes exactly what it published before drafts existed.
-        ...(session.isDraft === true ? { isDraft: true } : {}),
-        isGeneratingFirstPromptTitle:
-          session.isGeneratingFirstPromptTitle === true,
-        isSleeping: session.isSleeping === true,
-        kind,
-        ...(session.lifecycleState
-          ? { lifecycleState: session.lifecycleState }
-          : {}),
-        projectId,
-        sessionId,
-        title: boundedGpuiActiveWorkspaceTabSessionTitle(
-          session.displayTitle?.trim() ||
-            session.primaryTitle?.trim() ||
-            session.terminalTitle?.trim() ||
-            session.alias.trim() ||
-            DEFAULT_TERMINAL_SESSION_TITLE,
-        ),
-      });
-    }
-    return sessions;
-  },
-
   createSidebarGroups(
     this: GpuiSidebarRuntime,
     presentation: GxserverPresentationSnapshot,
@@ -562,7 +241,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       recentProjects: this.recentProjects,
       projectOrder: this.workspaceGroups.projectOrder,
     });
-    this.ensureActiveProject(presentation, projectProjection);
     const subgroupHiddenSessionKeys =
       this.collectWorkspaceSubgroupSessionKeys(presentation);
     const hiddenSessionKeys =
@@ -572,10 +250,14 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
             ...subgroupHiddenSessionKeys,
           ])
         : this.localFirstHiddenPresentationSessionKeys;
+    /*
+    CDXC:FocusRouting 2026-09-25 WHY:
+    This runtime owns no focus any more (the Rust store does, apps/desktop/src/app/gx_store/focus_publish.rs), so its projection carries no active group, focused row or visible fill; nothing it builds is drawn.
+    */
     const projectGroups = createGxserverPresentationSidebarGroups({
-      activeProjectId: this.activeProjectId,
+      activeProjectId: undefined,
       chatProjectIds: projectProjection.chatProjectIds,
-      focusedSessionId: this.focusedSessionId,
+      focusedSessionId: undefined,
       hiddenProjectIds: projectProjection.hiddenProjectIds,
       hiddenSessionKeys,
       presentation,
@@ -586,7 +268,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
           createGxserverPresentationProjectSessionId(projectId, sessionId),
         ),
       resolveSessionRoutingId: createGpuiSidebarSessionRoutingId,
-      visibleSessionIds: this.visibleSessionIds,
+      visibleSessionIds: new Set<string>(),
     });
     const groups = this.spliceWorkspaceSubgroups(
       projectGroups,
@@ -594,235 +276,16 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       projectProjection,
     );
 
-    if (!this.activeGroupId) {
-      this.activeGroupId =
-        groups.find((group) => group.isActive)?.groupId ??
-        groups.find((group) => group.projectContext)?.groupId ??
-        groups.find((group) => group.isChatCollection)?.groupId;
-    }
-
-    const localGroups = groups.map((group) => {
-      const isActiveGroup = group.groupId === this.activeGroupId;
-      return {
-        ...group,
-        isActive: isActiveGroup,
-        sessions: group.sessions.map((session) => ({
-          ...session,
-          isFocused:
-            isActiveGroup &&
-            this.focusedSessionId ===
-              parseGxserverPresentationProjectSessionId(session.sessionId)
-                ?.sessionId,
-          /*
-          GPUI terminal visibility is owned by the native workspace callback.
-          Do not preserve the shared projection's first-row fallback here:
-          pinned sessions sort first and would otherwise look surfaced without
-          owning a pane.
-          */
-          isVisible:
-            isActiveGroup &&
-            this.visibleSessionIds.has(
-              parseGxserverPresentationProjectSessionId(session.sessionId)
-                ?.sessionId ?? session.sessionId,
-            ),
-        })),
-      };
-    });
-    return [
-      ...this.withQuickAutomationsOverviewGroup(localGroups),
-      ...this.createRemoteSidebarGroups(),
-    ];
-  },
-
-  withQuickAutomationsOverviewGroup(
-    this: GpuiSidebarRuntime,
-    groups: SidebarSessionGroup[],
-  ): SidebarSessionGroup[] {
-    if (!this.quickAutomationsOverviewOpen) {
-      return groups;
-    }
-    const quickSession = this.createQuickAutomationsSidebarSession();
-    const nextGroups = groups.map((group) => {
-      if (group.groupId !== GPUI_GXSERVER_CHATS_GROUP_ID) {
-        return group;
-      }
-      const sessions = [
-        quickSession,
-        ...group.sessions.filter(
-          (session) =>
-            !this.isQuickAutomationsSidebarSessionId(session.sessionId),
-        ),
-      ].map((session, index) => ({
+    const localGroups = groups.map((group) => ({
+      ...group,
+      isActive: false,
+      sessions: group.sessions.map((session) => ({
         ...session,
-        column: index % GRID_COLUMN_COUNT,
-        row: index,
-      }));
-      const visibleCount =
-        visibleCountForGxserverPresentationSidebarSessions(sessions);
-      return {
-        ...group,
-        isActive:
-          this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID ||
-          group.isActive,
-        layoutVisibleCount: visibleCount,
-        sessions,
-        visibleCount,
-      };
-    });
-    if (
-      nextGroups.some((group) => group.groupId === GPUI_GXSERVER_CHATS_GROUP_ID)
-    ) {
-      return nextGroups;
-    }
-    const sessions = [quickSession];
-    const visibleCount =
-      visibleCountForGxserverPresentationSidebarSessions(sessions);
-    return [
-      {
-        groupId: GPUI_GXSERVER_CHATS_GROUP_ID,
-        isActive: this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
-        isChatCollection: true,
-        isFocusModeActive: false,
-        kind: "workspace",
-        layoutVisibleCount: visibleCount,
-        sessions,
-        title: "Chats",
-        viewMode: "grid",
-        visibleCount,
-      },
-      ...groups,
-    ];
-  },
-
-  createQuickAutomationsSidebarSession(
-    this: GpuiSidebarRuntime,
-  ): SidebarSessionItem {
-    const sessionId = this.quickAutomationsSidebarSessionId();
-    const isActive = this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID;
-    /*
-    CDXC:Automations 2026-07-08:
-    Mirror macOS `createQuickAutomationsSidebarSession` and
-    `isQuickAutomationsSidebarReference`: the overview is one synthetic Quick
-    row named All Automations, scoped to project id `quick-automations`,
-    and removed from the session-local runtime projection when closed.
-    */
-    return {
-      activity: "idle",
-      alias: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE,
-      column: 0,
-      detail: "All projects",
-      displayTitle: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE,
-      isFocused:
-        isActive &&
-        this.focusedSessionId === GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID,
-      isLive: false,
-      isRunning: false,
-      isVisible: isActive,
-      lifecycleState: "done",
-      nativePaneState: "unmounted",
-      primaryTitle: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE,
-      providerSessionState: "missing",
-      row: 0,
-      sessionId,
-      shortcutLabel: "",
-    };
-  },
-
-  quickAutomationsSidebarSessionId(this: GpuiSidebarRuntime): string {
-    return createGxserverPresentationProjectSessionId(
-      GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
-      GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID,
-    );
-  },
-
-  isQuickAutomationsSidebarSessionId(
-    this: GpuiSidebarRuntime,
-    sessionId: string,
-  ): boolean {
-    const reference = parseGxserverPresentationProjectSessionId(sessionId);
-    return (
-      reference?.projectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID &&
-      reference.sessionId === GPUI_QUICK_AUTOMATIONS_SIDEBAR_SESSION_ID
-    );
-  },
-
-  createQuickAutomationsProjectContext(
-    this: GpuiSidebarRuntime,
-  ): NonNullable<SidebarSessionGroup["projectContext"]> {
-    return {
-      canRemoveProject: false,
-      editor: {
-        diffStats: createDefaultSidebarProjectDiffStats(),
-        isOpen: true,
-        isSleeping: false,
-        projectId: GPUI_QUICK_AUTOMATIONS_PROJECT_ID,
-        status: "running",
-      },
-      path: "",
-    };
-  },
-
-  activeProjectContextGroups(this: GpuiSidebarRuntime): SidebarSessionGroup[] {
-    if (
-      !this.quickAutomationsOverviewOpen ||
-      this.activeProjectId !== GPUI_QUICK_AUTOMATIONS_PROJECT_ID
-    ) {
-      return this.withSelectedProjectActiveGroup(this.latestGroups);
-    }
-    return this.latestGroups.map((group) =>
-      group.groupId === GPUI_GXSERVER_CHATS_GROUP_ID
-        ? {
-            ...group,
-            projectContext: this.createQuickAutomationsProjectContext(),
-            title: GPUI_QUICK_AUTOMATIONS_DISPLAY_TITLE,
-          }
-        : group,
-    );
-  },
-
-  withSelectedProjectActiveGroup(
-    this: GpuiSidebarRuntime,
-    groups: SidebarSessionGroup[],
-  ): SidebarSessionGroup[] {
-    /*
-    The active-project payload is a strict projection of these groups, so a
-    group set with no active group publishes the Quick/projectless payload: no
-    active project and every project workarea disabled. That is the right
-    answer only when nothing is selected. When a project is selected, the
-    selection is the truth and a missing `isActive` flag is a projection that
-    has not caught up yet — a patch rebuilt from a presentation that predates
-    the click, or a remote snapshot that lands a tick later. Publishing the
-    projectless payload there tells Rust to drop the project the user just
-    picked and coerce the mode away from the workarea it just opened, so
-    re-assert the selection on its own group instead of contradicting it. Only
-    a group the projection already built can be marked: identity still comes
-    from explicit project metadata, never synthesized here.
-    */
-    if (groups.some((group) => group.isActive)) {
-      return groups;
-    }
-    const remoteReference = this.activeRemoteProjectReference();
-    const selectedProjectId = remoteReference
-      ? createGpuiRemotePresentationProjectId(
-          remoteReference.machineId,
-          remoteReference.projectId,
-        )
-      : this.activeProjectId;
-    if (!selectedProjectId) {
-      return groups;
-    }
-    let matched = false;
-    const nextGroups = groups.map((group) => {
-      if (
-        matched ||
-        group.projectContext?.editor.projectId !== selectedProjectId
-      ) {
-        return group;
-      }
-      matched = true;
-      return { ...group, isActive: true };
-    });
-    return matched ? nextGroups : groups;
+        isFocused: false,
+        isVisible: false,
+      })),
+    }));
+    return [...localGroups, ...this.createRemoteSidebarGroups()];
   },
 
   /*
@@ -967,10 +430,10 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
           subgroup.groupId,
         );
         const built = createGxserverPresentationSidebarGroup({
-          activeProjectId: this.activeProjectId,
+          activeProjectId: undefined,
           canRemoveProject: false,
           createProjectGroupId: () => subgroupSidebarId,
-          focusedSessionId: this.focusedSessionId,
+          focusedSessionId: undefined,
           project,
           resolveAgentIcon: resolveGpuiSidebarAgentIcon,
           resolveCloseAfterDone: (resolvedProjectId, sessionId) =>
@@ -982,7 +445,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
             ),
           resolveSessionRoutingId: createGpuiSidebarSessionRoutingId,
           sessions: memberRows,
-          visibleSessionIds: this.visibleSessionIds,
+          visibleSessionIds: new Set<string>(),
         });
         result.push({
           ...built,
@@ -1026,8 +489,8 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       staleMachineIds.add(machineId);
     }
     const groups = createGpuiRemotePresentationSidebarGroups({
-      activeGroupId: this.activeGroupId,
-      focusedSessionId: this.focusedSessionId,
+      activeGroupId: undefined,
+      focusedSessionId: undefined,
       presentationsByMachineId,
       remoteGroupOrderByMachineId: this.remoteGroupOrderByMachineId,
       remoteRecentProjectsByMachineId: this.remoteRecentProjectsByMachineId,
@@ -1041,7 +504,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
           ),
         ),
       settings,
-      visibleSessionIds: this.visibleSessionIds,
+      visibleSessionIds: new Set<string>(),
     });
     return groups.flatMap((group) => {
       const expanded = this.expandRemoteSidebarGroup(group);
@@ -1145,7 +608,7 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
         canCreateSessionGroup: true,
         canFocusMode: false,
         groupId: subgroupSidebarId,
-        isActive: this.activeGroupId === subgroupSidebarId,
+        isActive: false,
         kind: "workspace" as const,
         layoutVisibleCount: visibleCount,
         projectContext: undefined,
@@ -1173,101 +636,6 @@ export const gpuiSidebarRuntimeSidebarGroupMethods = {
       },
       ...subgroupGroups,
     ];
-  },
-
-  ensureActiveProject(
-    this: GpuiSidebarRuntime,
-    presentation: GxserverPresentationSnapshot,
-    projectProjection: GpuiPresentationProjectProjectionMetadata,
-  ): void {
-    /*
-    CDXC:RemoteMachines 2026-08-26:
-    A remote group the user selected owns the active project, and
-    `activeProjectId` stays a local-only field while it does — so the local id
-    beside it is stale or empty by design. Rebuilding local groups must not
-    read that as "nothing is selected" and activate the first local project,
-    which yanks the sidebar, the workspace, and the browser workarea off the
-    remote project mid-click. With no local project to steal to it is worse:
-    the fall-through below parks the selection on Chats, which publishes the
-    projectless active-project context that clears the project in Rust and
-    coerces the mode away from the workarea the user just opened.
-    */
-    if (
-      this.activeGroupId &&
-      parseGpuiRemotePresentationGroupId(this.activeGroupId)
-    ) {
-      return;
-    }
-    const projectIds = new Set<string>(
-      presentation.projects.map((project) => project.projectId),
-    );
-    if (
-      this.quickAutomationsOverviewOpen &&
-      this.activeProjectId === GPUI_QUICK_AUTOMATIONS_PROJECT_ID
-    ) {
-      if (this.activeGroupId !== GPUI_GXSERVER_CHATS_GROUP_ID) {
-        this.activeGroupId = GPUI_GXSERVER_CHATS_GROUP_ID;
-      }
-      return;
-    }
-    if (this.focusedSessionId) {
-      /*
-      CDXC:FocusRouting 2026-06-27-13:22:
-      Re-clicking a local session in the GPUI sidebar must keep behaving like the macOS app: the focused terminal owns the active project. Bootstrap can replay a stale initial project beside the current focused session, so resolve the session from the fresh presentation snapshot before rendering groups.
-      */
-      const focusedProjectId = presentation.sessions.find(
-        (session) => session.sessionId === this.focusedSessionId,
-      )?.projectId;
-      if (
-        focusedProjectId &&
-        projectIds.has(focusedProjectId) &&
-        !projectProjection.hiddenProjectIds.has(focusedProjectId)
-      ) {
-        const focusedGroupId = projectProjection.chatProjectIds.has(
-          focusedProjectId,
-        )
-          ? GPUI_GXSERVER_CHATS_GROUP_ID
-          : (this.workspaceSubgroupSidebarIdForSession(
-              focusedProjectId,
-              this.focusedSessionId,
-            ) ?? createGxserverPresentationProjectGroupId(focusedProjectId));
-        if (
-          this.activeProjectId !== focusedProjectId ||
-          this.activeGroupId !== focusedGroupId
-        ) {
-          this.activeProjectId = focusedProjectId;
-          this.activeGroupId = focusedGroupId;
-          this.refreshSidebarHudFromClient();
-        }
-        return;
-      }
-    }
-    if (
-      this.activeProjectId &&
-      projectIds.has(this.activeProjectId) &&
-      !projectProjection.hiddenProjectIds.has(this.activeProjectId)
-    ) {
-      if (projectProjection.chatProjectIds.has(this.activeProjectId)) {
-        if (this.activeGroupId !== GPUI_GXSERVER_CHATS_GROUP_ID) {
-          this.activeGroupId = GPUI_GXSERVER_CHATS_GROUP_ID;
-          this.refreshSidebarHudFromClient();
-        }
-        return;
-      }
-      return;
-    }
-    const firstProject = presentation.projects.find(
-      (project) =>
-        !projectProjection.hiddenProjectIds.has(project.projectId) &&
-        !projectProjection.chatProjectIds.has(project.projectId),
-    );
-    if (firstProject) {
-      this.focusProjectId(firstProject.projectId);
-      return;
-    }
-    this.activeProjectId = undefined;
-    this.activeGroupId = GPUI_GXSERVER_CHATS_GROUP_ID;
-    this.refreshSidebarHudFromClient();
   },
 };
 

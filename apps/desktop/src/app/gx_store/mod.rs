@@ -1,15 +1,15 @@
 //! The Rust store (`ghostex-gx-core`) running inside the desktop app. Per-concern files:
 //! `host.rs` owns the core, the client and the pump; `effects.rs` performs what the core asks
-//! for; `local_focus.rs` makes selections local and admits the old runtime's focus payloads;
-//! `burst.rs` tells the old runtime once and releases deferred work when the selection settles;
+//! for; `local_focus.rs` makes selections local and draws the row highlight; `burst.rs` finishes a
+//! selection once and releases deferred work when it settles; `focus_publish.rs` hands the store's
+//! focus to the workspace and `focus_perform.rs` performs a session or group focus;
 //! `session_walk.rs` walks the rendered sidebar rows for the previous and next session hotkeys;
 //! `remote_clients.rs` runs one client per connected remote machine and owns the machine tabs,
 //! and `remote_last_seen.rs` keeps the last-seen copy of every remote machine, reading one back to
 //! seed a machine that has not connected in this run and writing it as the machine's rows move,
 //! through `records_storage.rs`, the door to the `records` table an indexeddb-catalogued store
 //! lives in rather than the `preferences` one every other door here uses;
-//! `layout_persist.rs` writes the shell layout on a timer; `shadow_diff.rs` mirrors the old
-//! runtime's focus into the core and compares its tab list; `sidebar_list.rs` builds the sidebar
+//! `layout_persist.rs` writes the shell layout on a timer; `sidebar_list.rs` builds the sidebar
 //! list (`_inputs` mirrors what it reads from outside the store, `sidebar_ui_storage.rs` reads the
 //! hidden projects) and `sidebar_self_check.rs` rebuilds it from scratch every so often to catch a
 //! cache that failed to invalidate, and writes the store's periodic counters;
@@ -68,6 +68,8 @@ mod diagnostics_project_docs;
 mod diagnostics_remote_last_seen;
 mod diagnostics_runtime_facts;
 mod effects;
+mod focus_perform;
+mod focus_publish;
 pub(crate) mod git;
 mod host;
 mod hud;
@@ -77,6 +79,7 @@ mod primary_launcher;
 mod local_delayed_sends;
 mod local_focus;
 mod notifications;
+mod project_activation;
 mod project_docs;
 mod quick_access_data;
 mod records_storage;
@@ -90,10 +93,10 @@ mod rpc_types;
 mod runtime_facts;
 mod runtime_trace;
 mod session_walk;
-mod shadow_diff;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;
+mod sidebar_command_run;
 mod sidebar_clock;
 mod sidebar_close_project;
 mod sidebar_drag;
@@ -141,11 +144,11 @@ pub(crate) use sidebar_ui_storage::{
     read_preference_value, with_read_connection, with_write_connection, write_client_document_value,
 };
 
+pub(crate) use activation_focus::{menu_bar_session_focus_id, palette_session_focus_id};
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
 pub(crate) use host::GxStoreHost;
-#[allow(unused_imports)] // the first callers arrive with the runtime port's family commits
-pub(crate) use activation_focus::{menu_bar_session_focus_id, palette_session_focus_id};
 pub(crate) use primary_launcher::read_primary_agent_launcher_id;
+#[allow(unused_imports)] // the first callers arrive with the runtime port's family commits
 pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 #[allow(unused_imports)]
 pub(crate) use rpc_types::GxRpcError;

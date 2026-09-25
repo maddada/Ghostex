@@ -277,6 +277,9 @@ impl GhostexGpuiApp {
         if self.gx_store_run_sidebar_create(&command, cx) {
             return;
         }
+        if self.gx_store_claim_focus_command(&command, cx) {
+            return;
+        }
         if self.sidebar.is_none() {
             return;
         }
@@ -292,8 +295,8 @@ impl GhostexGpuiApp {
         // store names the session the close focuses, from the list it draws
         // (gx_store/sidebar_close_project.rs).
         let command = self.gx_store_add_close_project_successor(command);
-        // A sidebar command can change focus in the runtime, so it must not be handled while the runtime still holds an older focus stamp than the store (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
+        // What reaches the runtime starts from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
         // What is left is the runtime's, and it goes straight there: the sidebar page that used to
         // route it is being deleted (gx_store/sidebar_runtime_route.rs).
         self.gx_store_route_sidebar_command_to_runtime(&command, ui_only, cx);

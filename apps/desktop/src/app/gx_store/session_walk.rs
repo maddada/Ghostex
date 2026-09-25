@@ -108,13 +108,12 @@ impl GhostexGpuiApp {
     /// One step of the previous or next session hotkey.
     ///
     /// The target is selected the way a click on its row is. A local session of the active
-    /// project whose tab has a live terminal is selected in process and nothing is sent to the
-    /// sidebar runtime for the step (the coalesced tell follows the burst). One without a live
-    /// terminal gets its staged tab at once; the runtime, which still owns wake and attach, is
-    /// asked for it when the key is released, so a hold does not wake every session it passes (a
-    /// single press asks at once, as a click does). A session of another project, a remote
-    /// session and a browser tab keep the runtime's route for that step, because the runtime
-    /// still owns project switches, remote machines and browser rows.
+    /// project whose tab has a live terminal is selected in process and nothing else runs for the
+    /// step (the selection's follow-up runs when the burst ends). One without a live terminal gets
+    /// its staged tab at once and is focused (woken or attached) when the key is released, so a
+    /// hold does not wake every session it passes (a single press focuses at once, as a click
+    /// does). A session of another project and a remote session take the click's route, which
+    /// switches the project or opens the remote tab.
     pub(crate) fn walk_native_sidebar_sessions(
         &mut self,
         reverse: bool,
@@ -138,21 +137,10 @@ impl GhostexGpuiApp {
                 && self.agents_workspace_project_id.as_deref() == Some(key.project_id.as_str())
         });
         let select = json!({"type": "selectSession", "sessionId": target_id, "mode": "focus"});
-        if held && self.gx_store_walk_waits_for_runtime(&target_id, current.as_deref()) {
-            // This row was already handed to the runtime during this hold and the store's focus
-            // has not moved since: the project switch, remote open or browser focus is still on
-            // its way. Asking again per key repeat made the runtime answer every duplicate, and
-            // the late answers pulled focus back to this row after the walk had moved on.
-            return;
-        }
-        if !held {
-            self.gx_store_clear_walk_handoff();
-        }
         let route = match &local_key {
             None => {
-                self.gx_store_hand_walk_row_to_runtime(&target_id, current.as_deref());
                 self.dispatch_native_sidebar_ui(select, cx);
-                "runtime"
+                "click"
             }
             Some(key) => match self.react_to_native_sidebar_session_click(&target_id, cx) {
                 // A row click closes an open app modal (Settings) through the runtime's
@@ -162,13 +150,10 @@ impl GhostexGpuiApp {
                 NativeSidebarClickReaction::InProcess
                     if !held && self.app_modal_window.is_some() =>
                 {
-                    self.gx_store_expect_request_after_tell(key);
                     self.dispatch_native_sidebar_ui(select, cx);
                     "inProcessClosesModal"
                 }
                 NativeSidebarClickReaction::InProcess => {
-                    // No request follows, so none is expected back.
-                    self.gx_store_forget_expected_echo(key);
                     if let Some(shell_session_id) =
                         self.local_workspace_session_mappings.get(key).copied()
                     {
@@ -187,20 +172,16 @@ impl GhostexGpuiApp {
                     "inProcess"
                 }
                 NativeSidebarClickReaction::Staged if held => {
-                    self.gx_store_ask_runtime_for_landing_row(&target_id);
-                    "stagedAskAtSettle"
+                    self.gx_store_focus_landing_row_at_settle(&target_id);
+                    "stagedFocusAtSettle"
                 }
                 NativeSidebarClickReaction::Staged => {
-                    // The tell goes out first, so the runtime's request follows the payload that
-                    // echoes this selection's stamp.
-                    self.gx_store_expect_request_after_tell(key);
                     self.dispatch_native_sidebar_ui(select, cx);
                     "staged"
                 }
                 NativeSidebarClickReaction::NotApplied => {
-                    self.gx_store_hand_walk_row_to_runtime(&target_id, current.as_deref());
                     self.dispatch_native_sidebar_ui(select, cx);
-                    "runtime"
+                    "click"
                 }
             },
         };

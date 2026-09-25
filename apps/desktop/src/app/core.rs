@@ -132,7 +132,6 @@ pub struct GhostexGpuiApp {
     same tab id now.
     */
     pub(crate) browser_tabs_runtime_key: u64,
-    pub(crate) sidebar_browser_tabs_snapshot: String,
     /*
     CDXC:SessionSleep 2026-08-20:
     Last published set of local gxserver sessions this shell is actually showing

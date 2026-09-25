@@ -33,11 +33,7 @@ impl GhostexGpuiApp {
             } else {
                 NativeSidebarClickReaction::NotApplied
             };
-        let applied = reaction != NativeSidebarClickReaction::NotApplied;
-        if applied && let Some(key) = gpui_combined_presentation_session_key(sidebar_session_id) {
-            // The runtime routes the same click and sends its own focus request for the session. It is applied while this click is still the newest selection (it attaches a staged tab) and dropped once the user has moved on (gx_store/local_focus.rs).
-            self.gx_store_expect_click_echo(&key);
-        }
+        // The store's focus of the same click follows at the end of this frame and wakes or attaches a staged tab (gx_store/sidebar_focus_route.rs).
         reaction
     }
 

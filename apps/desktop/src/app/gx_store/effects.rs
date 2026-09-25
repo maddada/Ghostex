@@ -65,15 +65,10 @@ impl GxStoreHost {
                     self.diagnostics
                         .skipped_rows(projects, groups, sessions, &first_error);
                 }
-                // Kept newest per project and handed to the old runtime with the next tell: the
-                // record lives in its client storage (`projectLastSession`) until storage moves
-                // to Rust, and a second writer would leave its cache stale. A remote session is
-                // remembered by the runtime itself when the tab selection moves its marks
-                // (`setRemotePresentationSessionFocus`), under ids a tell cannot carry.
+                // Kept newest per project and written to client storage (`projectLastSession`) when
+                // the selection finishes (gx_store/focus_perform.rs), local and remote alike.
                 Effect::RememberProjectSession { session, .. } => {
-                    if session.machine.is_local() {
-                        self.local_focus.remember(session);
-                    }
+                    self.local_focus.remember(session);
                 }
                 // The notification feed is this computer's daemon's: the old runtime read it on
                 // its local socket only, and a remote machine's feed is not shown.

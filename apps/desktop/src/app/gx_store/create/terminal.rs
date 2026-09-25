@@ -51,7 +51,7 @@ impl GhostexGpuiApp {
 
     /// `createSession(groupId = this.activeGroupId)`. The task resolves when the create has come
     /// back, with the failure a caller that awaited it (the onboarding's first session) reports.
-    pub(super) fn gx_store_create_terminal(
+    pub(crate) fn gx_store_create_terminal(
         &mut self,
         group_id: Option<&str>,
         cx: &mut gpui::Context<Self>,

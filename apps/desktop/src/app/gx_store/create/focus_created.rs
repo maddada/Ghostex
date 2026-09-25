@@ -4,13 +4,15 @@
 //! CDXC:FocusRouting 2026-09-25 WHY:
 //! The old runtime followed a create with `focusLocalWorkspaceSession`, which set ITS focus copy
 //! first and then posted the focus, so the attach completion's check that the runtime's copy names
-//! the session passed. A create performed here has nobody to tell before the attach returns, and
-//! the store cannot take the session as a local selection while its row has not arrived: the same
-//! race `CDXC:SessionFork 2026-09-24 DECISION` solved for Fork, and solved the same way. The
-//! session is recorded as created here for a short while, and the attach completion treats it like
-//! a fork's (the newest focus request and the workspace's project decide, not the runtime's copy),
-//! including the background attach a launch from another view takes. A create in another project
-//! takes that project's workspace first, as a fork and a row click do.
+//! the session passed. The store cannot take the session as a local selection while its row has
+//! not arrived: the same race `CDXC:SessionFork 2026-09-24 DECISION` solved for Fork, and solved
+//! the same way. The session is recorded as created here for a short while, and the attach
+//! completion treats it like a fork's (the newest focus request and the workspace's project
+//! decide), including the background attach a launch from another view takes. A create in another
+//! project takes that project's workspace first, as a fork and a row click do, and the store's
+//! focus holds the new session until its row arrives (focus_publish.rs), so the workspace publish
+//! follows the create instead of the session it came from. A create that a Git workflow starts
+//! takes this same open (git/prompt_agent.rs).
 //!
 //! SEE-ALSO: apps/desktop/src/app/workspace_events.rs (`focus_local_workspace_terminal_from_message`
 //! and the attach completion), apps/desktop/src/app/gx_store/sidebar_lifecycle.rs
@@ -73,6 +75,12 @@ impl GhostexGpuiApp {
         // exactly as the runtime's focus post did on arrival.
         self.adopt_agent_launch_placeholder(&message, cx);
         self.swap_agents_workspace_to_project_id(Some(project_id.to_string()), cx);
+        // The store's focus takes the new session (held until its row arrives), so no publish
+        // before the attach returns pulls the workspace back to the project it came from.
+        self.gx_store_select_opened_session(
+            &ghostex_gx_core::SessionKey::local(project_id, session_id),
+            cx,
+        );
         self.focus_local_workspace_terminal_from_message(&message, cx);
     }
 

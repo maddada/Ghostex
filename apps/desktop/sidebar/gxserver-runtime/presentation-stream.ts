@@ -9,14 +9,8 @@ import {
   GPUI_PRESENTATION_STREAM_RECOVERY_DELAYS_MS,
 } from './constants';
 import type { GpuiSidebarRuntime } from './core';
-import { rememberGpuiProjectSession } from './project-activation';
-import {
-  activeGroupIdForGpuiGxserverBootstrapPresentationState,
-  hasSameGpuiGxserverBootstrapTransport,
-  validateGpuiGxserverBootstrap,
-} from './helpers/bootstrap';
-import { sameStringSet } from './helpers/records';
-import { isCustomSessionTagsState, parseGpuiRemotePresentationProjectId } from './helpers/remote-presentation';
+import { hasSameGpuiGxserverBootstrapTransport, validateGpuiGxserverBootstrap } from './helpers/bootstrap';
+import { isCustomSessionTagsState } from './helpers/remote-presentation';
 import type {
   GpuiGxserverBootstrap,
   GpuiSidebarRuntimeSnapshotKind,
@@ -44,13 +38,11 @@ at the bottom of this file is what keeps the two in step.
 export interface GpuiSidebarRuntimePresentationStreamMethods {
   applyGxserverBootstrapChanged(bootstrap: GpuiGxserverBootstrap): void;
   startFromBootstrap(bootstrap: GpuiGxserverBootstrap): void;
-  applyGxserverBootstrapPresentationState(bootstrap: GpuiValidatedGxserverBootstrap): boolean;
   openPresentationSubscription(clientId: string, lastRevision: number): void;
   recoverPresentationStream(clientId: string): void;
   reopenPresentationStream(clientId: string): void;
   notePresentationStreamAcknowledged(): void;
   applyPresentationSnapshot(snapshot: GxserverPresentationSnapshot, kind: GpuiSidebarRuntimeSnapshotKind): void;
-  autoMaterializeStartupFocusedSession(): void;
   applyPresentationDelta(delta: GxserverPresentationDelta, gxserverRevision: number): void;
   findLocalPresentationSession(projectId: string, sessionId: string): GxserverPresentationSession | undefined;
   patchPresentationSession(
@@ -103,7 +95,6 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     this.presentationStreamAcknowledgedAt = undefined;
     this.gxserverBootstrap = validated;
     this.client = new GpuiGxserverClient(validated);
-    this.applyGxserverBootstrapPresentationState(validated);
 
     const client = this.client;
     void Promise.all([
@@ -111,59 +102,20 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       client.fetchAppUserData(),
       client.fetchProjectList().catch(() => undefined),
       client.fetchRecentProjects().catch(() => undefined),
-      client.fetchSidebarHud(validated.initialActiveProjectId),
     ])
-      .then(([snapshot, appUserData, domainProjects, recentProjects, sidebarHud]) => {
+      .then(([snapshot, appUserData, domainProjects, recentProjects]) => {
         if (this.client !== client) {
           return;
         }
         this.appUserData = appUserData;
         this.domainProjects = domainProjects ? [...domainProjects] : [];
         this.recentProjects = recentProjects ? [...recentProjects] : [];
-        this.sidebarHud = sidebarHud;
         this.applyPresentationSnapshot(snapshot, 'hydrate');
         this.openPresentationSubscription(validated.clientId, snapshot.revision);
       })
       .catch(() => {
         this.publishUnavailable('snapshot-failed');
       });
-  },
-
-  applyGxserverBootstrapPresentationState(
-    this: GpuiSidebarRuntime,
-    bootstrap: GpuiValidatedGxserverBootstrap
-  ): boolean {
-    const nextFocusedSessionId = bootstrap.focusedSessionId;
-    const nextVisibleSessionIds = new Set(bootstrap.visibleSessionIds ?? []);
-    /*
-    CDXC:RemoteMachines 2026-07-30:
-    A bootstrap can replay a machine-scoped remote project id after a remote
-    session owned focus at shutdown. `this.activeProjectId` is a local-only
-    gxserver key (HUD fetches, domain-project lookups), so the scoped id may
-    only select the remote group; it must never become the local active
-    project id.
-    */
-    const nextActiveProjectId =
-      bootstrap.initialActiveProjectId && parseGpuiRemotePresentationProjectId(bootstrap.initialActiveProjectId)
-        ? this.activeProjectId
-        : bootstrap.initialActiveProjectId;
-    const nextActiveGroupId = activeGroupIdForGpuiGxserverBootstrapPresentationState({
-      focusedSessionId: nextFocusedSessionId,
-      initialActiveProjectId: bootstrap.initialActiveProjectId,
-    });
-    const didChange =
-      this.activeProjectId !== nextActiveProjectId ||
-      this.activeGroupId !== nextActiveGroupId ||
-      this.focusedSessionId !== nextFocusedSessionId ||
-      !sameStringSet(this.visibleSessionIds, nextVisibleSessionIds);
-    this.activeProjectId = nextActiveProjectId;
-    this.activeGroupId = nextActiveGroupId;
-    this.focusedSessionId = nextFocusedSessionId;
-    this.visibleSessionIds = nextVisibleSessionIds;
-    if (nextFocusedSessionId && bootstrap.initialActiveProjectId) {
-      rememberGpuiProjectSession(this, bootstrap.initialActiveProjectId, nextFocusedSessionId);
-    }
-    return didChange;
   },
 
   openPresentationSubscription(this: GpuiSidebarRuntime, clientId: string, lastRevision: number): void {
@@ -181,18 +133,6 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       },
       onError: () => {
         this.recoverPresentationStream(clientId);
-      },
-      /*
-      CDXC:AgentLauncher 2026-08-07:
-      Global Action writes reach this surface only as this announcement. They
-      are not project writes, so they produce no projectUpdated delta, and the
-      Settings window that made the write is a different surface whose response
-      never lands here. Refetch the HUD the same way a project Action edit
-      already does, so a Global Action flagged for the project row appears and
-      disappears with the toggle instead of on the next unrelated delta.
-      */
-      onGlobalSidebarCommands: () => {
-        this.refreshSidebarHudFromClient();
       },
       /*
       CDXC:Projects 2026-09-21 WHY:
@@ -277,9 +217,8 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
       client.fetchPresentationSnapshot(),
       client.fetchProjectList().catch(() => undefined),
       client.fetchRecentProjects().catch(() => undefined),
-      client.fetchSidebarHud(this.activeProjectId),
     ])
-      .then(([snapshot, domainProjects, recentProjects, sidebarHud]) => {
+      .then(([snapshot, domainProjects, recentProjects]) => {
         if (this.client !== client) {
           return;
         }
@@ -289,7 +228,6 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
         if (recentProjects) {
           this.recentProjects = [...recentProjects];
         }
-        this.sidebarHud = sidebarHud;
         this.applyPresentationSnapshot(snapshot, this.hasHydrated ? 'patch' : 'hydrate');
         this.openPresentationSubscription(clientId, snapshot.revision);
       })
@@ -318,45 +256,6 @@ export const gpuiSidebarRuntimePresentationStreamMethods = {
     }
     this.publishPresentation(kind);
     this.notifyNativeGxserverPresentationReady();
-    if (kind === 'hydrate') {
-      this.autoMaterializeStartupFocusedSession();
-    }
-  },
-
-  autoMaterializeStartupFocusedSession(this: GpuiSidebarRuntime): void {
-    /*
-    Restore eagerness (Decision #3, 2026-07-02, revised 2026-08-07): the
-    session the user was looking at when the app quit re-materializes
-    automatically on relaunch. Rust persists the presentation focus state
-    across restarts and replays it through the bootstrap; once the first
-    presentation hydrate confirms that focused session is still a running local
-    session, re-attach it through the normal workspace focus bridge. This
-    covers the focused session only. Every other surfaced session — the other
-    panes of a split, remote attach tabs, and sessions whose provider went to
-    sleep while the app was closed — is now restored by Rust from the workspace
-    model it already owns, so nothing further is needed here.
-    */
-    if (this.didAutoMaterializeStartupSession) {
-      return;
-    }
-    this.didAutoMaterializeStartupSession = true;
-    const focusedSessionId = this.focusedSessionId;
-    if (!focusedSessionId || !this.visibleSessionIds.has(focusedSessionId)) {
-      return;
-    }
-    const session = this.presentation?.sessions.find(
-      (presentationSession) => presentationSession.sessionId === focusedSessionId
-    );
-    if (!session || session.lifecycleState !== 'running') {
-      return;
-    }
-    /*
-    CDXC:Navigation 2026-09-04 DECISION:
-    User: restart must bring back the last active project, the last active view (Agents, Code, and so on), and the last visible sessions, so the user can continue where they left off.
-    The focus bridge normally switches the app to Agents and moves keyboard focus to the pane, which is right for a sidebar click but undoes the restored view when the user quit on Code, Browser, Kanban, Automate, or Docs.
-    `startupRestore` tells Rust this is the restore replay, not a click, so it keeps the restored mode and only materializes the session where the restored layout already shows it.
-    */
-    this.postLocalWorkspaceTerminalFocus(session.projectId, focusedSessionId, undefined, { startupRestore: true });
   },
 
   applyPresentationDelta(this: GpuiSidebarRuntime, delta: GxserverPresentationDelta, gxserverRevision: number): void {

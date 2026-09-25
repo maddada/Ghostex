@@ -4,7 +4,6 @@
 //
 // Cluster: sidebar runtime settings, host-message dispatch, sidebar divider/collapse
 
-use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -481,8 +480,8 @@ impl GhostexGpuiApp {
         if self.gx_store_run_session_edit(&message, cx) {
             return true;
         }
-        // Host messages carry the sidebar hotkeys (previous or next session, session and project slots), which change focus in the runtime: it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
+        // What reaches the runtime starts from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
         self.gx_store_note_primary_launcher_host_message(&message);
         let Some(sidebar) = self.sidebar.clone() else {
             return false;
@@ -1440,121 +1439,6 @@ impl GhostexGpuiApp {
         }
         self.gx_store_set_local_delayed_sends(&sessions, cx);
         self.sidebar_agents_delayed_sends_snapshot = snapshot;
-        true
-    }
-
-    pub(crate) fn refresh_gpui_sidebar_browser_tabs_if_changed(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let browser_mode_is_visible = self.active_mode == TitlebarMode::Browser
-            && self
-                .project_editor_shell
-                .is_mode_awake(TitlebarMode::Browser);
-        let focused_browser_tab_id = if browser_mode_is_visible {
-            match self.shell_focus {
-                ShellFocusTarget::BrowserPane(pane_id) => {
-                    self.browser_tabs.active_tab_id_for_pane(pane_id)
-                }
-                ShellFocusTarget::BrowserSurface => self
-                    .browser_tabs
-                    .active_tab_id_for_pane(self.browser_tabs.focused_pane),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        let active_browser_project_id = self.browser_tabs_project_id.clone();
-        let active_browser_surface_tab_ids = self
-            .browser_surfaces
-            .keys()
-            .copied()
-            .collect::<HashSet<_>>();
-        /*
-        CDXC:Browser 2026-08-26:
-        A tab of an inactive project is asleep only when its page is really
-        gone. Since a project switch parks the outgoing project's pages instead
-        of destroying them, "awake" is per-project surface ownership: the live
-        map for the mounted project, that project's parked bundle for every
-        other one.
-        */
-        let parked_browser_surface_tab_ids = self
-            .parked_browser_runtimes_by_project
-            .iter()
-            .map(|(project_id, runtime)| (project_id.as_str(), runtime.surface_tab_ids()))
-            .collect::<HashMap<_, _>>();
-        let mut projects = self
-            .parked_browser_tabs_by_project
-            .iter()
-            .filter(|(project_id, _)| self.browser_tabs_project_id.as_ref() != Some(*project_id))
-            .map(|(project_id, tabs)| (project_id.as_str(), tabs))
-            .collect::<Vec<_>>();
-        if let Some(project_id) = self.browser_tabs_project_id.as_deref() {
-            projects.push((project_id, &self.browser_tabs));
-        }
-        projects.sort_by(|left, right| left.0.cmp(right.0));
-
-        let tabs = projects
-            .into_iter()
-            .flat_map(|(project_id, model)| {
-                let project_is_active = active_browser_project_id.as_deref() == Some(project_id);
-                let awake_tab_ids = if project_is_active {
-                    active_browser_surface_tab_ids.clone()
-                } else {
-                    parked_browser_surface_tab_ids
-                        .get(project_id)
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                let visible_tab_ids = model
-                    .rendered_leaf_order()
-                    .into_iter()
-                    .filter_map(|pane_id| model.active_tab_id_for_pane(pane_id))
-                    .collect::<HashSet<_>>();
-                /*
-                CDXC:Browser 2026-07-12:
-                Only loaded tabs project as sidebar browser sessions. The
-                address-only "New Tab" placeholder (including the in-place
-                reset left behind by closing the last tab) stays out of the
-                sidebar, so closing the last browser tab removes its sidebar
-                row, and committing an address in the browser address bar
-                surfaces the loaded tab as a fresh sidebar session.
-                */
-                model
-                    .tabs
-                    .iter()
-                    .filter(|tab| tab.state == BrowserTabState::Loaded)
-                    .map(move |tab| {
-                        serde_json::json!({
-                            "isActive": project_is_active && focused_browser_tab_id == Some(tab.id),
-                            "isSleeping": !awake_tab_ids.contains(&tab.id),
-                            "isVisible": browser_mode_is_visible
-                                && project_is_active
-                                && visible_tab_ids.contains(&tab.id),
-                            "projectId": project_id,
-                            "tabId": tab.id.0.to_string(),
-                            "faviconUrl": tab
-                                .runtime_favicon_fetch
-                                .as_ref()
-                                .map(|source| source.url.as_str()),
-                            "title": tab.display_title(),
-                            "url": tab.address_value(),
-                        })
-                    })
-            })
-            .collect::<Vec<_>>();
-        let snapshot = serde_json::Value::Array(tabs).to_string();
-        if self.sidebar_browser_tabs_snapshot == snapshot {
-            return false;
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_browser_tabs_script(&snapshot);
-        if !sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script)) {
-            return false;
-        }
-        self.sidebar_browser_tabs_snapshot = snapshot;
         true
     }
 

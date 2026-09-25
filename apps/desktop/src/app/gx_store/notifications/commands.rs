@@ -208,13 +208,8 @@ impl GhostexGpuiApp {
                 if let Some(message) = marked {
                     this.receive_notification_feed_state_message(&message, cx);
                 }
-                // The same door a sidebar row click takes to the focus the runtime still owns; it
-                // must hear the newest local selection before a message that moves its focus.
-                this.gx_store_flush_old_runtime_tell(cx);
-                this.gx_store_send_sidebar_runtime_command(
-                    json!({ "type": "focusSession", "sessionId": sidebar_session_id }),
-                    cx,
-                );
+                // The same focus a sidebar row click ends in (gx_store/focus_perform.rs).
+                this.gx_store_focus_activated_session(&sidebar_session_id, cx);
                 let request_id = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .map_or(0, |elapsed| elapsed.as_micros() as u64);

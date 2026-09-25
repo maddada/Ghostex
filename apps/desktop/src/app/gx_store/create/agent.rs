@@ -68,7 +68,7 @@ impl GhostexGpuiApp {
     }
 
     /// `resolveEffectivePreferredAgentInterface(settings, agentId)`.
-    pub(super) fn gx_store_preferred_interface(&self, agent_id: &str) -> String {
+    pub(crate) fn gx_store_preferred_interface(&self, agent_id: &str) -> String {
         self.gx_store_preferred_interface_settings()
             .resolve(Some(agent_id))
             .unwrap_or("terminal")
@@ -118,7 +118,7 @@ impl GhostexGpuiApp {
 
     /// `requestAgentSessionLaunch(agentId, groupId, accountId)`: the hook check, then the dialog or
     /// the launch.
-    pub(super) fn gx_store_request_agent_launch(
+    pub(crate) fn gx_store_request_agent_launch(
         &mut self,
         agent_id: &str,
         group_id: Option<&str>,

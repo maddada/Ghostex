@@ -579,27 +579,13 @@ impl GhostexGpuiApp {
         CDXC:Workarea 2026-06-29-00:02:
         Active-project changes no longer reconcile Source/Browser/Kanban/Automate/Manage readiness stores. The stored snapshot immediately feeds titlebar availability and the direct runtime URL/CEF gates, so stale proof state cannot keep or block a workarea surface.
         */
-        let local_stamp = self.gx_store_local_focus_stamp();
-        let workspace_project_id = self.agents_workspace_project_id.clone();
-        let mut refused_stamp = None;
+        // Since 2026-09-25 the payload is the store's own (gx_store/focus_publish.rs), built from the
+        // one focus there is, so nothing can be older than a newer local selection any more.
         let stored = store_latest_gpui_project_snapshot_from_sidebar_contract_json(
             &mut self.latest_sidebar_project_snapshot,
             payload,
-            |snapshot, focus_stamp| {
-                // Same project: context data only, nothing to swap. Another project from before the newest local selection: the runtime had not heard of that selection yet.
-                let observed_stamp = focus_stamp.unwrap_or(0);
-                let admitted = observed_stamp >= local_stamp
-                    || gpui_active_project_id_from_snapshot(Some(snapshot))
-                        == workspace_project_id.as_deref();
-                if !admitted {
-                    refused_stamp = Some(observed_stamp);
-                }
-                admitted
-            },
+            |_, _| true,
         );
-        if let Some(observed_stamp) = refused_stamp {
-            self.gx_store_note_stale_project_context(observed_stamp);
-        }
         match stored {
             Ok(GpuiProjectSnapshotStoreResult::Changed) => {
                 /*

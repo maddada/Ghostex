@@ -530,7 +530,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:SessionFork 2026-09-24 DECISION:
     /// User: forking a session from its sidebar row's Fork or from the chat's More actions > Fork switches to the forked session.
-    /// Its attach completes as `GpuiLocalWorkspaceAttachOrigin::Fork`, which lands the fork unless the user selected something else meanwhile. It must not use the ordinary sidebar-focus check that the runtime's focus copy still names the session: nobody tells the runtime about the fork before the attach returns, and the store cannot take the fork as a local selection either while its row has not arrived, so the runtime's next routine publish (still naming the source) was admitted and the ready attach was dropped with the source left on screen. Setting that copy by hand before the attach was tried and lost the same race. A fork from another project's row takes that project's workspace first, as a row click does.
+    /// Its attach completes as `GpuiLocalWorkspaceAttachOrigin::Fork`, which lands the fork unless the user selected something else meanwhile. It must not use the ordinary sidebar-focus check that the published focus names the session: the store cannot take the fork as a local selection while its row has not arrived, so a routine publish in between (still naming the source) dropped the ready attach with the source left on screen. Setting that copy by hand before the attach was tried and lost the same race. A fork from another project's row takes that project's workspace first, as a row click does.
     fn gx_store_place_local_workspace_session(
         &mut self,
         session: &SessionKey,
@@ -538,6 +538,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.swap_agents_workspace_to_project_id(Some(session.project_id.clone()), cx);
+        // The store's focus takes the fork (held until its row arrives), so no publish before the
+        // attach returns pulls the workspace back to the source's project (focus_publish.rs).
+        self.gx_store_select_opened_session(session, cx);
         self.gx_store_select_local_workspace_session(
             session,
             placement_target,

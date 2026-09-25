@@ -195,18 +195,6 @@ pub(crate) fn gpui_status_indicator_session_from_value(
     })
 }
 
-pub(crate) fn gpui_menu_bar_project_activation_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onMenuBarProjectActivation==='function'){{bridge.onMenuBarProjectActivation(payload);}}else{{const pending=Array.isArray(bridge.pendingMenuBarProjectActivations)?bridge.pendingMenuBarProjectActivations:[];pending.push(payload);bridge.pendingMenuBarProjectActivations=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_workspace_tab_session_selected_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTabSessionSelected==='function'){{bridge.onWorkspaceTabSessionSelected(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTabSessionSelections)?bridge.pendingWorkspaceTabSessionSelections:[];pending.push(payload);bridge.pendingWorkspaceTabSessionSelections=pending;}}}})(); undefined;"
-    )
-}
-
 pub(crate) fn gpui_workspace_terminal_rename_command_input(
     command: GpuiWorkspaceTerminalRenameCommandKind,
     title: &str,

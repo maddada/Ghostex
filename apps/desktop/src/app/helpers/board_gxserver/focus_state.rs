@@ -34,21 +34,6 @@ pub(crate) struct GpuiGxserverPresentationFocusEcho {
     pub(crate) active_group_id: Option<String>,
 }
 
-/// The focus state of a sidebar runtime payload together with what rides beside it.
-pub(crate) fn gpui_gxserver_presentation_focus_state_and_stamp_from_sidebar_contract_json(
-    text: &str,
-) -> Result<
-    (
-        GpuiGxserverPresentationFocusState,
-        GpuiGxserverPresentationFocusEcho,
-    ),
-    GpuiGxserverPresentationFocusStateContractError,
-> {
-    let value = serde_json::from_str::<serde_json::Value>(text)
-        .map_err(|_| GpuiGxserverPresentationFocusStateContractError::MalformedJson)?;
-    gpui_gxserver_presentation_focus_state_and_stamp_from_sidebar_contract_value(&value)
-}
-
 /// CDXC:FocusRouting 2026-09-19 WHY:
 /// `focusStamp` is the newest store focus stamp Rust told the sidebar runtime before it produced this payload; Rust uses it to tell a payload that answers the current selection from one that was already overtaken. It is optional (the runtime sends none until it has been told one, and the persisted focus file never has one) and it is kept out of `GpuiGxserverPresentationFocusState`, whose equality decides whether a payload changed anything.
 fn gpui_gxserver_presentation_focus_state_and_stamp_from_sidebar_contract_value(

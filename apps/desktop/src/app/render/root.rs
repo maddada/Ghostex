@@ -212,7 +212,6 @@ impl Render for GhostexGpuiApp {
             current_sidebar_max_width(window, self.active_mode),
         );
         self.sample_panel_motion(window, cx);
-        self.refresh_gpui_sidebar_browser_tabs_if_changed(cx);
         // The shown sessions are reported to gxserver's Auto Sleep; while the selection is still moving that would happen once per tab step. The settle repaints, so the set is reported for the tab the user landed on.
         if !self.gx_store_selection_is_settling() {
             self.gx_store_report_shown_sessions(cx);

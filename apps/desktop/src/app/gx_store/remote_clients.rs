@@ -214,8 +214,6 @@ impl GxStoreHost {
             self.diagnostics.remote_machine_loaded(&self.core, &machine);
         }
         self.run_effects(output.effects);
-        // A remote frame can be exactly what a pending remote tab-list difference was waiting for.
-        self.settle_shadow_diff();
         (thread_ended, true)
     }
 
@@ -704,6 +702,11 @@ impl GhostexGpuiApp {
         // A wake whose drain came back empty (the thread woke the host and the host had already
         // drained it) has nothing for the list to read.
         if applied {
+            // A remote project's workspace follows its machine's frames the way this computer's
+            // follows the local ones (focus_publish.rs).
+            if self.gx_store_after_pump(true, cx) {
+                cx.notify();
+            }
             self.gx_store_update_sidebar_list(cx);
             // The rows this machine's tab draws are also the copy the NEXT run seeds from while it
             // is offline, so every frame that moves them owes the stored key an update

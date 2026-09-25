@@ -82,31 +82,15 @@ export type GpuiSidebarRuntimeSettingsSnapshot = {
 export type GpuiSidebarHostMessage = ExtensionToSidebarMessage;
 
 export type GhostexGpuiSidebarBridge = {
-  browserTabs?: readonly GpuiBrowserTabSummary[];
-  /**
-   * CDXC:SessionSleep 2026-08-20:
-   * The local gxserver sessions the shell is rendering right now, terminal body
-   * or chat surface alike. Auto Sleep protects these instead of guessing
-   * visibility from the rows this runtime last saw selected.
-   */
-  onBrowserTabsChanged?: (tabs: readonly GpuiBrowserTabSummary[]) => void;
-  /**
-   * CDXC:Browser 2026-08-18:
-   * Rust asks the sidebar to reveal one Browser tab row after the user opened
-   * it. Rust owns tab identity (project id + tab id); the session id the
-   * sidebar rows are keyed by is derived here, in the same place that builds
-   * those rows, so Rust never has to know the sidebar's id format.
-   */
   gxserverBootstrap?: GpuiGxserverBootstrap;
   onGxserverBootstrapChanged?: (bootstrap: GpuiGxserverBootstrap) => void;
   onExportTranscriptModalCommand?: (payload: unknown) => void;
   onGitCommitModalCommand?: (payload: unknown) => void;
-  onMenuBarProjectActivation?: (payload: unknown) => void;
   onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
   /**
    * CDXC:Sidebar 2026-09-21 WHY:
-   * The Rust store's direct route for a sidebar command this runtime still owns (focus, session
-   * groups, worktrees, git, remote machines, transcripts). It replaces the hop through the sidebar
+   * The Rust store's direct route for a sidebar command this runtime still owns (a remote
+   * machine's project collections and Spaces). It replaces the hop through the sidebar
    * page's `onNativeSidebarCommand`, which is being deleted with that page; anything Rust sends
    * before this is installed is parked on `pendingSidebarCommands` and drained here.
    */
@@ -137,32 +121,20 @@ export type GhostexGpuiSidebarBridge = {
    * previous swipe's momentum tail.
    */
   onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;
-  onWorkspaceTabSessionSelected?: (payload: unknown) => void;
   onWorkspaceTerminalEscapePressed?: (payload: unknown) => void;
   pendingExportTranscriptModalCommands?: unknown[];
   pendingGitCommitModalCommands?: unknown[];
-  pendingMenuBarProjectActivations?: unknown[];
   pendingSidebarCommands?: unknown[];
   pendingTitlebarGitActions?: unknown[];
   pendingWorktreeModalCommands?: unknown[];
   pendingWorkspaceSessionAttentionAcknowledgements?: unknown[];
-  pendingWorkspaceTabSessionSelections?: unknown[];
   pendingWorkspaceTerminalEscapePresses?: unknown[];
-  postActiveProjectContext?: (payload: string) => boolean;
-  postBrowserTabFocus?: (payload: string) => boolean;
-  postCreateProjectAgent?: (payload: string) => boolean;
-  postCreateProjectTerminal?: (payload: string) => boolean;
-  postGxserverPresentationFocusState?: (payload: string) => boolean;
-  postNativeProjectPathAction?: (payload: string) => boolean;
   postOpenBrowserUrl?: (payload: string) => boolean;
   postPetOverlayState?: (payload: string) => boolean;
-  postSidebarCommandAction?: (payload: string) => boolean;
-  postSidebarCommandRunEnd?: (payload: string) => boolean;
   postSessionCompletionSound?: (payload: string) => boolean;
   postGlobalActions?: (payload: string) => boolean;
   postSessionStatusIndicators?: (payload: string) => boolean;
   postTitlebarGitMenuState?: (payload: string) => boolean;
-  postWorkspaceTerminalFocus?: (payload: string) => boolean;
   postWorkspaceTerminalRenameCommand?: (payload: string) => boolean;
   runtimeSettings?: GpuiSidebarRuntimeSettings;
 };

@@ -311,27 +311,18 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         match session.machine.remote_id() {
-            None => {
-                self.swap_agents_workspace_to_project_id(Some(session.project_id.clone()), cx);
-                self.focus_local_workspace_terminal_from_message(
-                    &crate::app::model::GpuiSidebarWorkspaceTerminalFocusMessage {
-                        force_remount: false,
-                        placement: crate::app::model::GpuiWorkspaceTerminalFocusPlacement::Tab,
-                        placement_target_session_id: None,
-                        preferred_interface: match open_in_chat {
-                            true => crate::app::model::GpuiPreferredAgentInterface::Chat,
-                            false => crate::app::model::GpuiPreferredAgentInterface::Terminal,
-                        },
-                        project_id: session.project_id.clone(),
-                        session_id: session.session_id.clone(),
-                        startup_restore: false,
-                        keep_view: false,
-                        wake_sleeping: false,
-                        keep_sleeping: false,
-                    },
-                    cx,
-                );
-            }
+            // A create's own open: the attach counts as the create's and the store's focus holds
+            // the new session until its row arrives (create/focus_created.rs).
+            None => self.gx_store_focus_created_session(
+                &session.project_id,
+                &session.session_id,
+                false,
+                Some(match open_in_chat {
+                    true => "chat",
+                    false => "terminal",
+                }),
+                cx,
+            ),
             Some(_) => {
                 // The same open a remote row's click performs, through the same entry point.
                 let payload = ghostex_gx_core::open_remote_session_terminal(

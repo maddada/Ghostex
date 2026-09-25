@@ -25,6 +25,8 @@ use crate::GhostexGpuiApp;
 pub(crate) struct SidebarRuntimeRouteCounters {
     /// `{type:'command'}` payloads unwrapped and handed to the runtime.
     pub(super) routed: u64,
+    /// Focus and Action-run messages the store performed instead (focus_perform.rs).
+    pub(super) claimed_focus: u64,
     /// Commands whose whole answer is the sidebar's own state, which the store already applied.
     pub(super) ui_only: u64,
     /// Anything else: nothing owns it on either side any more.
@@ -36,6 +38,32 @@ pub(crate) struct SidebarRuntimeRouteCounters {
 }
 
 impl GhostexGpuiApp {
+    /// A wrapped `focusSession`, `focusGroup`, `openAutomationsPage` or `runSidebarCommand` (a
+    /// Space restore, a header's Actions button, the More menu's All Automations): the store
+    /// performs it (focus_perform.rs) instead of the runtime. Returns whether it did.
+    pub(crate) fn gx_store_claim_focus_command(
+        &mut self,
+        command: &Value,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if command.get("type").and_then(Value::as_str) != Some("command") {
+            return false;
+        }
+        let Some(message) = command.get("message") else {
+            return false;
+        };
+        if !matches!(
+            message.get("type").and_then(Value::as_str),
+            Some("focusSession" | "focusGroup" | "openAutomationsPage" | "runSidebarCommand")
+        ) {
+            return false;
+        }
+        // A focus starts from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
+        self.gx_store.runtime_route.claimed_focus += 1;
+        self.gx_store_perform_focus_message(message, cx)
+    }
+
     /// A command that arrived while the renderer was drawing the loading skeleton. Counted and
     /// dropped: the ids in it name rows of a list that has not been built, and the runtime cannot
     /// perform the half of it the store owns.

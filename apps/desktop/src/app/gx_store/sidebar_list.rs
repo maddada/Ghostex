@@ -389,6 +389,7 @@ impl GhostexGpuiApp {
     /// books the next clock deadline. Cheap to call: an update with nothing changed returns at
     /// once.
     pub(crate) fn gx_store_update_sidebar_list(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store_publish_if_focus_moved(cx);
         let now_ms = now_ms();
         let machine = self.gx_store.core.presentation().machine(&MachineId::Local);
         let loaded = machine.is_some_and(|machine| machine.loaded().is_some());

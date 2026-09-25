@@ -9,12 +9,6 @@ import {
   createEmptyGpuiWorkspaceSessionGroupsState,
   readStoredGpuiWorkspaceSessionGroupsState,
 } from '../workspace-session-groups';
-import type { GpuiSidebarRuntimeAppShotAndMiscMethods } from './app-shot-and-misc';
-import { gpuiSidebarRuntimeAppShotAndMiscMethods } from './app-shot-and-misc';
-import type { GpuiSidebarRuntimeAttentionMethods } from './attention-tracking';
-import { gpuiSidebarRuntimeAttentionMethods } from './attention-tracking';
-import type { GpuiSidebarRuntimeAutoSleepMethods } from './auto-sleep';
-import { gpuiSidebarRuntimeAutoSleepMethods } from './auto-sleep';
 import { asGpuiSidebarCommand } from './sidebar-command-entry';
 import { GpuiGxserverClient } from './client';
 import type { GpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
@@ -23,37 +17,20 @@ import {
   GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES,
   GPUI_SIDEBAR_REMOTE_EVENT_NAME,
 } from './constants';
-import type { GpuiSidebarRuntimeGitMethods } from './git';
-import { gpuiSidebarRuntimeGitMethods } from './git';
 import {
   createEmptyGpuiAppUserData,
   currentGpuiRuntimeSettings,
-  hasSameGpuiRuntimeSettings,
 } from './helpers/bootstrap';
-import { normalizeGpuiBrowserTabs } from './helpers/browser-tabs';
 import { readStoredGpuiRemoteGroupOrder, readStoredGpuiRemoteRecentProjects } from './helpers/recent-projects';
-import { normalizeNonEmptyString } from './helpers/records';
 import { GpuiRemoteLastSeenStore } from './helpers/remote-last-seen';
-import {
-  normalizeGpuiSidebarRemoteEvent,
-  parseGpuiRemotePresentationProjectId,
-} from './helpers/remote-presentation';
+import { normalizeGpuiSidebarRemoteEvent } from './helpers/remote-presentation';
 import type { GpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
 import { gpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
-import type { GpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
-import { gpuiSidebarRuntimeProjectAndCommandMethods } from './projects-and-commands';
 import type { GpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
 import { gpuiSidebarRuntimeRemoteMachineMethods } from './remote-machines';
-import type { GpuiSidebarRuntimeSessionCreateMethods } from './session-create';
-import { gpuiSidebarRuntimeSessionCreateMethods } from './session-create';
-import type { GpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
-import { gpuiSidebarRuntimeSessionFocusMethods } from './sessions-and-focus';
 import type { GpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
 import { gpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
-import type { GpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
-import { gpuiSidebarRuntimeTerminalLifecycleMethods } from './terminal-lifecycle-queue';
 import type {
-  GpuiBrowserTabSummary,
   GpuiPendingRemoteGxserverRequest,
   GpuiPresentationSubscription,
   GpuiRemoteSidebarHud,
@@ -84,7 +61,6 @@ import type {
   SidebarSessionGroup,
   SidebarToExtensionMessage,
 } from '@/packages/shared/session-grid-contract';
-import { isSidebarCommandScope } from '@/packages/shared/sidebar-commands';
 
 /*
 CDXC:StateSync 2026-06-24-11:00:
@@ -198,8 +174,6 @@ export class GpuiSidebarRuntime {
     });
   }
 
-  activeGroupId: string | undefined;
-  activeProjectId: string | undefined;
   appUserData: GxserverAppUserData = createEmptyGpuiAppUserData();
   /**
    * Escalating presentation-stream recovery state. `AcknowledgedAt` is when the
@@ -218,17 +192,8 @@ export class GpuiSidebarRuntime {
    * held back, the trailing timer that will run it once the cooldown expires.
    */
   readonly staleRemotePresentationRefreshes = new Map<string, { lastStartedAt: number; trailingTimeoutId?: number }>();
-  browserTabs: GpuiBrowserTabSummary[] = [];
   client: GpuiGxserverClient | undefined;
   domainProjects: GxserverProjectDomainState[] = [];
-  focusedSessionId: string | undefined;
-  /**
-   * CDXC:FocusRouting 2026-09-19 WHY:
-   * Focus and tabs are owned by the Rust store: this runtime is told about a selection, never asked, and must never override a newer local one (user decision in apps/desktop/src/app/gx_store/local_focus.rs).
-   * The newest focus stamp Rust sent with a tab selection. Every focus state posted afterwards echoes it, so Rust can tell a payload that answers the current selection from one produced before this runtime heard of it.
-   * SEE-ALSO: apps/desktop/src/app/gx_store/local_focus.rs, apps/desktop/src/app/helpers/board_gxserver/focus_state.rs.
-   */
-  gpuiFocusStamp: number | undefined;
   gxserverBootstrap: GpuiValidatedGxserverBootstrap | undefined;
   hasHydrated = false;
   latestGroups: SidebarSessionGroup[] = [];
@@ -236,11 +201,6 @@ export class GpuiSidebarRuntime {
   pendingRemoteGxserverRequests = new Map<string, GpuiPendingRemoteGxserverRequest>();
   presentation: GxserverPresentationSnapshot | undefined;
   previousSessionsByHistoryId = new Map<string, SidebarPreviousSessionItem>();
-  projectBoardRestorableLinkChecks = new Map<
-    string,
-    { checkedAt: number; restorable: boolean; resumable: boolean; title?: string }
-  >();
-  quickAutomationsOverviewOpen = false;
   previousSessionsResult:
     | {
         cursor?: string;
@@ -252,28 +212,13 @@ export class GpuiSidebarRuntime {
   recentProjects: GxserverRecentProjectDomainState[] = [];
   remoteGxserverRequestSequence = 0;
   remotePresentations = new Map<string, GxserverPresentationSnapshot>();
-  /*
-   * CDXC:RemoteMachines 2026-08-29:
-   * Each connected machine's own Action lists, kept per machine so the merged
-   * HUD can key them under this app's machine-scoped project ids without the
-   * two machines' project id spaces colliding.
-   */
-  remoteSidebarHuds = new Map<string, GpuiRemoteSidebarHud>();
   remoteLastSeenPresentations = new Map<string, GxserverPresentationSnapshot>();
   remoteLastSeenStore = new GpuiRemoteLastSeenStore();
   remoteRecentProjectsByMachineId = new Map<string, GxserverRecentProjectDomainState[]>();
   remoteGroupOrderByMachineId = new Map<string, string[]>();
   revision = 0;
   runtimeSettings: GpuiSidebarRuntimeSettings | undefined;
-  /*
-   * The HUD read this runtime still keeps for its own remaining readers. The tab strip's Global
-   * Actions come from the Rust HUD since the app runtime port's F2 (gx_store/hud/).
-   */
-  sidebarHud: GxserverSidebarHudResponse | undefined;
-  sleepingLocalSidebarSessionIds = new Set<string>();
   subscription: GpuiPresentationSubscription | undefined;
-  visibleSessionIds = new Set<string>();
-  didAutoMaterializeStartupSession = false;
   workspaceGroups: GpuiWorkspaceSessionGroupsState = createEmptyGpuiWorkspaceSessionGroupsState();
   lastForwardedRemoteSidebarProjectCollectionsJsonByMachineId = new Map<string, string>();
   lastForwardedRemoteSidebarSpacesJsonByMachineId = new Map<string, string>();
@@ -306,63 +251,18 @@ export class GpuiSidebarRuntime {
       */
       this.messageSource.postMessage(message);
     };
-    const applyBrowserTabs = (tabs: readonly GpuiBrowserTabSummary[] | undefined) => {
-      const next = normalizeGpuiBrowserTabs(tabs);
-      gpuiBridge.browserTabs = next;
-      if (JSON.stringify(this.browserTabs) === JSON.stringify(next)) {
-        return;
-      }
-      this.browserTabs = next;
-      if (this.presentation) {
-        this.publishPresentation('patch');
-      }
-    };
-    gpuiBridge.onBrowserTabsChanged = applyBrowserTabs;
-    applyBrowserTabs(gpuiBridge.browserTabs);
-    gpuiBridge.onMenuBarProjectActivation = (payload) => {
-      this.handleGpuiMenuBarProjectActivation(payload);
-    };
-    gpuiBridge.onWorkspaceTabSessionSelected = (payload) => {
-      this.handleGpuiWorkspaceTabSessionSelected(payload);
-    };
     /*
     CDXC:Sidebar 2026-09-21 WHY:
     The desktop sidebar is the Rust store's, and the page that used to receive its commands and
-    forward them here is deleted. Everything the
-    store cannot perform itself, because this runtime still owns it (focus, session groups,
-    worktrees, git, remote machines, transcripts), arrives on this one entry instead and goes
-    straight to the same handler the page's forward ended in. One hop fewer, and nothing in the
-    route depends on a page being loaded.
+    forward them here is deleted. What the store cannot perform itself, because this runtime still
+    owns it (a remote machine's project collections and Spaces), arrives on this one entry instead
+    and goes straight to the same handler the page's forward ended in.
     */
     gpuiBridge.onSidebarCommand = (payload) => {
       const message = asGpuiSidebarCommand(payload);
       if (message) void this.handleSidebarMessage(message);
     };
     installGpuiWorkspaceGroupsHandBack(this);
-    const pendingMenuBarProjectActivations = Array.isArray(gpuiBridge.pendingMenuBarProjectActivations)
-      ? gpuiBridge.pendingMenuBarProjectActivations.splice(0)
-      : [];
-    if (pendingMenuBarProjectActivations.length > 0) {
-      /*
-      CDXC:StatusPet 2026-06-26-06:05:
-      GPUI menu-bar project clicks can arrive before the SidebarApp runtime installs callbacks. Drain only fixed first-party project activation payloads carrying one bounded project id, then route through focusProjectId; do not persist payloads or expose paths, titles, commands, URLs, tokens, terminal text, or a generic native event bus.
-      */
-      for (const payload of pendingMenuBarProjectActivations) {
-        this.handleGpuiMenuBarProjectActivation(payload);
-      }
-    }
-    const pendingWorkspaceTabSessionSelections = Array.isArray(gpuiBridge.pendingWorkspaceTabSessionSelections)
-      ? gpuiBridge.pendingWorkspaceTabSessionSelections.splice(0)
-      : [];
-    if (pendingWorkspaceTabSessionSelections.length > 0) {
-      /*
-      CDXC:FocusRouting 2026-06-26-08:01:
-      Workspace tab clicks originate from Rust after the local tab is already selected. Drain them into sidebar focus only so startup-time delivery cannot re-enter the Rust workspace materialization bridge or create a focus loop.
-      */
-      for (const payload of pendingWorkspaceTabSessionSelections) {
-        this.handleGpuiWorkspaceTabSessionSelected(payload);
-      }
-    }
     const pendingSidebarCommands = Array.isArray(gpuiBridge.pendingSidebarCommands)
       ? gpuiBridge.pendingSidebarCommands.splice(0)
       : [];
@@ -371,12 +271,7 @@ export class GpuiSidebarRuntime {
       if (message) void this.handleSidebarMessage(message);
     }
     gpuiBridge.onRuntimeSettingsChanged = (runtimeSettings) => {
-      const didChange = !hasSameGpuiRuntimeSettings(this.runtimeSettings, runtimeSettings);
       this.runtimeSettings = runtimeSettings;
-      if (!didChange) {
-        return;
-      }
-      this.postActiveProjectContext();
     };
     gpuiBridge.onGxserverBootstrapChanged = (bootstrap) => {
       this.applyGxserverBootstrapChanged(bootstrap);
@@ -395,14 +290,6 @@ export class GpuiSidebarRuntime {
         // A queued stale-revision refetch is for a cache this just dropped, and
         // the machine is no longer reachable to serve it.
         this.forgetStaleRemotePresentationRefresh(remoteEvent.machineId);
-        /*
-        CDXC:RemoteMachines 2026-08-29:
-        A disconnected machine's Actions are no longer runnable, so its cached
-        Action lists go with its presentation instead of leaving dead buttons on
-        rows the app can no longer reach.
-        */
-        this.remoteSidebarHuds.delete(remoteEvent.machineId);
-        this.dropRemotePresentationSessionFocus(remoteEvent.machineId);
         this.publishRemotePresentationPatch();
       }
       return;
@@ -422,13 +309,6 @@ export class GpuiSidebarRuntime {
       this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
       this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
       this.publishRemotePresentationPatch();
-      /*
-      CDXC:RemoteMachines 2026-08-29:
-      The snapshot is the point where this app learns which projects the machine
-      has, so it is also where their Actions have to be read. The HUD is a
-      separate projection from presentation, so it needs its own read.
-      */
-      void this.refreshRemoteSidebarHudFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
       return;
     }
 
@@ -509,15 +389,6 @@ export class GpuiSidebarRuntime {
     this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
     this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
     this.publishRemotePresentationPatch();
-    /*
-    CDXC:RemoteMachines 2026-08-29:
-    A project row on the remote machine is the one delta that can carry an
-    Actions edit made over there, so re-read that machine's Action lists then
-    and only then — session deltas arrive constantly and cannot change them.
-    */
-    if ('domainProject' in remoteEvent.payload.delta) {
-      void this.refreshRemoteSidebarHudFromGxserver(remoteEvent.remoteMachineId).catch(() => undefined);
-    }
   };
 
   async handleSidebarMessage(message: SidebarToExtensionMessage): Promise<void> {
@@ -529,49 +400,6 @@ export class GpuiSidebarRuntime {
      */
     nativePost({ kind: 'traceEntry', name: `handleSidebarMessage:${message.type}` });
     switch (message.type) {
-      case 'focusGroup':
-        this.focusGroup(message.groupId, message);
-        return;
-      case 'focusSession':
-        await this.focusSession(message.sessionId, message);
-        this.postSidebarSessionFocusConfirmation(message.sessionId);
-        return;
-      case 'runSidebarCommand': {
-        /*
-        CDXC:CommandPane 2026-06-26-05:22:
-        Runtime command-pane messages can arrive from untyped CEF/renderer boundaries. Reject missing, non-string, or blank command ids before Action lookup so unsafe extra launch fields cannot make the selector path throw or reach the fixed command-action bridge.
-        */
-        const commandId = normalizeNonEmptyString(message.commandId);
-        if (!commandId) {
-          this.handleUnsupportedSidebarMessage(message);
-          return;
-        }
-        /*
-        CDXC:AgentLauncher 2026-08-07:
-        Project rows can run either list, so the renderer names the scope.
-        Validate the value like runMode rather than trusting the annotation: an
-        unrecognized scope is an unsupported no-op, never a silent fallback to
-        the project list, which would run an Action the user did not click. An
-        absent scope stays project, which is what every sender that predates
-        Global Actions sends.
-        */
-        if (message.scope !== undefined && !isSidebarCommandScope(message.scope)) {
-          this.handleUnsupportedSidebarMessage(message);
-          return;
-        }
-        this.runSidebarCommand(commandId, message, message.scope ?? 'project');
-        return;
-      }
-      case 'openAutomationsPage':
-        /*
-        CDXC:Automations 2026-07-08:
-        Mirror macOS `openQuickAutomationsPage`, `ensureQuickAutomationsProject`,
-        and `focusQuickAutomationsProject` from native/sidebar/native-sidebar.tsx:
-        create the session-local Quick overview row, focus it, and let the
-        existing active-project context post carry the Automate workarea identity.
-        */
-        this.openQuickAutomationsPage();
-        return;
       /*
       CDXC:Projects 2026-09-21 WHY:
       REMOTE only. This computer's copies of both documents are written and pushed by Rust
@@ -622,19 +450,11 @@ moved method carries an explicit return type annotation.
 */
 export interface GpuiSidebarRuntime
   extends
-    GpuiSidebarRuntimeGitMethods,
     GpuiSidebarRuntimeSidebarGroupMethods,
     GpuiSidebarRuntimePresentationStreamMethods,
-    GpuiSidebarRuntimeSessionFocusMethods,
-    GpuiSidebarRuntimeSessionCreateMethods,
-    GpuiSidebarRuntimeAutoSleepMethods,
-    GpuiSidebarRuntimeAttentionMethods,
     GpuiSidebarRuntimeCloseAfterDoneMethods,
-    GpuiSidebarRuntimeTerminalLifecycleMethods,
     GpuiSidebarRuntimeWorkspaceGroupMethods,
-    GpuiSidebarRuntimeRemoteMachineMethods,
-    GpuiSidebarRuntimeAppShotAndMiscMethods,
-    GpuiSidebarRuntimeProjectAndCommandMethods {}
+    GpuiSidebarRuntimeRemoteMachineMethods {}
 
 function installGpuiSidebarRuntimeMethods(methods: Record<string, unknown>): void {
   for (const [name, value] of Object.entries(methods)) {
@@ -647,16 +467,8 @@ function installGpuiSidebarRuntimeMethods(methods: Record<string, unknown>): voi
   }
 }
 
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeGitMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSidebarGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimePresentationStreamMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSessionFocusMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSessionCreateMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAutoSleepMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAttentionMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeCloseAfterDoneMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeTerminalLifecycleMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeWorkspaceGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeRemoteMachineMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeAppShotAndMiscMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeProjectAndCommandMethods);
