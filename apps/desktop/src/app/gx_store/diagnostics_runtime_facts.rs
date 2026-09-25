@@ -54,7 +54,6 @@ impl GxStoreDiagnostics {
                 // The other half of "no page in the route": what the sidebar dispatch's
                 // fall-through did with a command the store did not perform itself.
                 "runtimeRoute": {
-                    "routed": route.routed,
                     "uiOnly": route.ui_only,
                     // Above zero means a command has no owner on either side any more.
                     "unroutable": route.unroutable,
@@ -77,7 +76,7 @@ impl GxStoreDiagnostics {
         );
     }
 
-    /// A command that reached the end of the dispatch in a shape the runtime has no arm for. The
+    /// A command that reached the end of the dispatch with no owner on either side. The
     /// TYPE only, which is a fixed word from the renderer's own closed set, never the payload.
     pub(super) fn sidebar_command_unroutable(&mut self, kind: Option<&str>) {
         if self.unroutable_command_warnings >= 8 {

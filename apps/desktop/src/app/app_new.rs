@@ -293,7 +293,6 @@ impl GhostexGpuiApp {
                 local_app_shot_session_mappings: HashMap::new(),
                 sidebar_command_pane_sessions_snapshot: String::new(),
                 sidebar_agents_delayed_sends_snapshot: String::new(),
-                sidebar_timer_presentations_replayed_after_ready: false,
                 sidebar_primary_agent_launcher_id:
                     crate::app::gx_store::read_primary_agent_launcher_id(),
                 native_app_modal: None,

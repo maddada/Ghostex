@@ -123,9 +123,7 @@ impl GhostexGpuiApp {
                     "The project was added."
                 };
                 if let Some(machine_id) = active_clone.remote_machine_id {
-                    self.refresh_gpui_remote_gxserver_presentation_in_background(
-                        machine_id, false, cx,
-                    );
+                    self.refresh_gpui_remote_gxserver_presentation_in_background(&machine_id);
                 }
                 self.dispatch_gpui_repository_clone_toast(
                     "success",

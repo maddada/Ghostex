@@ -57,8 +57,7 @@ pub use crate::change::{ChangeSummary, IgnoredReason, SideStateChanges};
 pub use crate::connection::{ConnectionPhase, ConnectionState, ConnectionUpdate};
 pub use crate::core::{Core, Effect, Event, Intent, Output, ResubscribeReason};
 pub use crate::doc_sync::{
-    document_hand_back_script, document_reconcile_wanted, document_request_script, DocumentSync,
-    EmptyEchoRule, SyncEffect, SyncPolicy, SyncedDocument,
+    document_reconcile_wanted, DocumentSync, EmptyEchoRule, SyncEffect, SyncPolicy, SyncedDocument,
 };
 pub use crate::focus::{
     default_group_for_project, empty_tab_list_confirmed, next_visible_sessions_for_local_focus,
@@ -208,12 +207,9 @@ pub use crate::workspace_groups::{
     owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
 };
 pub use crate::workspace_groups::{
-    workspace_groups_hand_back_script, workspace_groups_request_script, AdoptOutcome,
-    ProjectWorkspaceGroups,
-    WorkspaceGroupsDocument, WorkspaceGroupsEffect, WorkspaceGroupsSync, WorkspaceSubgroup,
-    WORKSPACE_GROUPS_HAND_OFF_MESSAGE_TYPE, WORKSPACE_GROUPS_SCRIPT_PLACEHOLDER,
-    WORKSPACE_GROUPS_SYNC_DELAY_MS, WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS,
-    WORKSPACE_SESSION_GROUP_MAX_COUNT,
+    AdoptOutcome, ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceGroupsEffect,
+    WorkspaceGroupsSync, WorkspaceSubgroup, WORKSPACE_GROUPS_SYNC_DELAY_MS,
+    WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS, WORKSPACE_SESSION_GROUP_MAX_COUNT,
 };
 
 /// The wire types, re-exported so a host needs one dependency.

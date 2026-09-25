@@ -5,7 +5,7 @@
 //! object, which is the only thing its callers test, and every other path builds a new document
 //! even when nothing in it moved.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/workspace-session-groups.ts (`renameGpuiWorkspaceSessionSubgroup`,
+//! SEE-ALSO: tooling/gx-core/workspace-session-groups-frozen.ts (`renameGpuiWorkspaceSessionSubgroup`,
 //! `removeGpuiWorkspaceSessionSubgroup`), packages/gx-core/src/workspace_groups/group_commands.rs.
 
 use crate::sidebar_view::text::js_trim;

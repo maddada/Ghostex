@@ -170,10 +170,7 @@ impl GhostexGpuiApp {
         self.gx_store_hud_settings_changed(cx);
         self.remote_reconnect_sync_with_settings(cx);
         if let Some(sidebar) = self.sidebar.clone() {
-            let next_snapshot = next_snapshot.clone();
-            sidebar.update(cx, |surface, _| {
-                surface.refresh_sidebar_runtime_settings(next_snapshot);
-            });
+            sidebar.update(cx, |surface, _| surface.refresh_sidebar_runtime_settings());
         }
         if self.coerce_active_mode_to_available_project_context(cx) {
             self.update_project_workarea_runtime_cef_surface_visibility(cx);
@@ -471,23 +468,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:CommandPane 2026-06-24-23:49:
-        Command-pane Action run-state feedback targets only the first-party GPUI sidebar CEF surface and the typed `window.ghostexGpui.onSidebarHostMessage` callback installed by the SidebarApp runtime. The generated script carries only existing sidebar message JSON and must not expose generic eval IPC, command text, paths, terminal output, status-file paths, tokens, or persisted shell-state fields.
+        CDXC:Sidebar 2026-09-25 WHY:
+        The app's modals, the New Thread picker and the delayed-send menus hand the sidebar's own
+        messages here, and the store answers every one it has an owner for. What is left used to go
+        on to the app runtime's `onSidebarHostMessage`, which only re-posted it to a message source
+        nothing listens to any more, so it stops here and the answer is `false`.
         */
         if self.gx_store_claim_sidebar_host_message(&message, cx) {
             return true;
         }
-        if self.gx_store_run_session_edit(&message, cx) {
-            return true;
-        }
-        // What reaches the runtime starts from the store's newest selection (gx_store/burst.rs).
-        self.gx_store_flush_local_selection(cx);
-        self.gx_store_note_primary_launcher_host_message(&message);
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_host_message_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        self.gx_store_run_session_edit(&message, cx)
     }
 
     pub(crate) fn handle_gpui_pick_workspace_folder_message(

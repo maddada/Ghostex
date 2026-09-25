@@ -24,7 +24,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'nod
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseGpuiWorkspaceSessionSubgroupId } from '@/apps/desktop/sidebar/workspace-session-groups';
+import { parseGpuiWorkspaceSessionSubgroupId } from '@/packages/shared/workspace-session-subgroup-id';
 import { SETTINGS_MODAL_NAVIGATION_TABS } from '@/packages/shared/ghostex-settings';
 import {
   createGxserverPresentationProjectSessionId,

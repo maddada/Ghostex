@@ -99,8 +99,11 @@ pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) token: String,
 }
 
+/// CDXC:RemoteMachines 2026-09-25 WHY:
+/// The stream's snapshots and deltas fed the app runtime's copy of the machine, which is gone (the
+/// Rust store's own client per machine draws it, gx_store/remote_clients.rs). The stream stays as
+/// the tunnel's liveness check: its failure is what tears a dead tunnel down.
 pub(crate) enum GpuiRemoteGxserverPresentationStreamMessage {
-    Event(serde_json::Value),
     Failed,
 }
 

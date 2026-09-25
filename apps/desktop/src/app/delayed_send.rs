@@ -3451,11 +3451,7 @@ impl GhostexGpuiApp {
                                     project_id,
                                     session_id,
                                 } => {
-                                    this.refresh_gpui_remote_gxserver_presentation_in_background(
-                                        remote_machine_id.clone(),
-                                        false,
-                                        cx,
-                                    );
+                                    this.refresh_gpui_remote_gxserver_presentation_in_background(&remote_machine_id);
                                     this.handle_gpui_remote_session_native_action(
                                         GpuiSidebarNativeProjectPathActionMessage {
                                             action:

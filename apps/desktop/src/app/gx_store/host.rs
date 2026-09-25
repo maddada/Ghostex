@@ -447,6 +447,9 @@ impl GhostexGpuiApp {
     /// Returns `true` when the client's thread is gone.
     fn gx_store_pump(&mut self, cx: &mut gpui::Context<Self>) -> bool {
         let outcome = self.gx_store.pump();
+        if outcome.local_reloaded {
+            self.gx_store_presentation_ready(cx);
+        }
         let renderer_commands = std::mem::take(&mut self.gx_store.pending_renderer_commands);
         if !renderer_commands.is_empty() {
             self.gx_store_take_renderer_commands(renderer_commands, cx);

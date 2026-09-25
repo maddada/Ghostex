@@ -13,10 +13,7 @@
 //! writer, its start-up post and the Rust receiver are gone.
 //! SEE-ALSO: packages/client-storage/catalog.ts (the `launcher` store).
 
-use serde_json::Value;
-
-use super::sidebar_ui_storage::{read_preference_value, write_client_document_value};
-use crate::GhostexGpuiApp;
+use super::sidebar_ui_storage::read_preference_value;
 
 const PRIMARY_AGENT_LAUNCHER_KEY: &str = "ghostex-sidebar-project-terminal-launcher";
 
@@ -25,22 +22,4 @@ pub(crate) fn read_primary_agent_launcher_id() -> Option<String> {
     let stored = read_preference_value(PRIMARY_AGENT_LAUNCHER_KEY).ok()??;
     let agent_id = stored.trim();
     (!agent_id.is_empty() && agent_id.len() <= 128).then(|| agent_id.to_string())
-}
-
-impl GhostexGpuiApp {
-    /// A `runSidebarAgent` host message is on its way to the runtime: its agent becomes the
-    /// default, in this app's field and in client storage.
-    pub(crate) fn gx_store_note_primary_launcher_host_message(&mut self, message: &Value) {
-        if message.get("type").and_then(Value::as_str) != Some("runSidebarAgent") {
-            return;
-        }
-        let Some(agent_id) = message.get("agentId").and_then(Value::as_str) else {
-            return;
-        };
-        // `writePrimaryAgentLauncherId(message.agentId)` stored the id as it came.
-        let _ = write_client_document_value(PRIMARY_AGENT_LAUNCHER_KEY, Some(agent_id));
-        let agent_id = agent_id.trim();
-        self.sidebar_primary_agent_launcher_id =
-            (!agent_id.is_empty() && agent_id.len() <= 128).then(|| agent_id.to_string());
-    }
 }

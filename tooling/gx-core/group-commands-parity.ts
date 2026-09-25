@@ -16,7 +16,7 @@ import './browser-shim';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { frozenWorkspaceGroupEditMethods } from './workspace-groups-edits-frozen';
-import { parseGpuiWorkspaceSessionGroupsState } from '@/apps/desktop/sidebar/workspace-session-groups';
+import { parseGpuiWorkspaceSessionGroupsState } from './workspace-session-groups-frozen';
 
 type Json = any;
 

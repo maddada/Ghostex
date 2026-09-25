@@ -6,12 +6,10 @@
 //! document and the Spaces document are all instances of it, so a fix to the pending-push window
 //! lands in one place rather than in three copies that drift.
 
-mod bridge;
 mod document;
 mod sync;
 mod trigger;
 
-pub use bridge::{document_hand_back_script, document_request_script};
 pub use document::{EmptyEchoRule, SyncPolicy, SyncedDocument};
 pub use sync::{AdoptOutcome, DocumentSync, SyncEffect};
 pub use trigger::document_reconcile_wanted;

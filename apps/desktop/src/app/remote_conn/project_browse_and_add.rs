@@ -201,11 +201,7 @@ impl GhostexGpuiApp {
                 broken in the first place — so a failure answer is exactly when
                 a snapshot pull is needed for the project to become visible.
                 */
-                this.refresh_gpui_remote_gxserver_presentation_in_background(
-                    remote_machine_id,
-                    false,
-                    cx,
-                );
+                this.refresh_gpui_remote_gxserver_presentation_in_background(&remote_machine_id);
             });
         })
         .detach();
@@ -450,9 +446,7 @@ impl GhostexGpuiApp {
                     */
                     Some(remote_machine_id) => {
                         this.refresh_gpui_remote_gxserver_presentation_in_background(
-                            remote_machine_id.clone(),
-                            false,
-                            cx,
+                            &remote_machine_id,
                         );
                         if clone_answer_lost {
                             if let Some(job_id) = clone_watch_job_id {

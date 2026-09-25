@@ -544,7 +544,6 @@ pub struct GhostexGpuiApp {
     include terminal text, commands, paths, titles, agent prompts, or output.
     */
     pub(crate) sidebar_agents_delayed_sends_snapshot: String,
-    pub(crate) sidebar_timer_presentations_replayed_after_ready: bool,
     /// The sidebar page's last-used launcher agent id, published over the native host bridge for the native New Thread picker.
     pub(crate) sidebar_primary_agent_launcher_id: Option<String>,
     /// The open native GPUI app modal, if any; see app/native_app_modal_lifecycle.rs.

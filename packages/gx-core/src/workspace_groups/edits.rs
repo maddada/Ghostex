@@ -10,7 +10,7 @@
 //! step-by-step comparison, which is what the gate does, so the identity semantics are modelled
 //! rather than improved.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/workspace-session-groups.ts
+//! SEE-ALSO: tooling/gx-core/workspace-session-groups-frozen.ts
 //! (`createGpuiWorkspaceSessionSubgroup`, `moveGpuiWorkspaceSessionToSubgroup`,
 //! `syncGpuiWorkspaceSessionOrderInSubgroup`), packages/gx-core/src/sidebar_drag/order_write.rs.
 

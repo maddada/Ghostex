@@ -73,12 +73,6 @@ pub(crate) fn gpui_sidebar_runtime_command_script(message: &serde_json::Value) -
     )
 }
 
-pub(crate) fn gpui_sidebar_host_message_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui;if(bridge&&typeof bridge.onSidebarHostMessage==='function'){{bridge.onSidebarHostMessage({message});}}}})(); undefined;"
-    )
-}
-
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_sidebar_native_pointer_inside_script(inside: bool) -> String {
     format!(

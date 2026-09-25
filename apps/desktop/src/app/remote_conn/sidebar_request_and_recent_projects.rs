@@ -239,9 +239,7 @@ impl GhostexGpuiApp {
                         GpuiRecentProjectMutation::Close | GpuiRecentProjectMutation::Restore
                     ) && let Some(machine_id) = machine_id
                     {
-                        this.refresh_gpui_remote_gxserver_presentation_in_background(
-                            machine_id, false, cx,
-                        );
+                        this.refresh_gpui_remote_gxserver_presentation_in_background(&machine_id);
                     }
                     return;
                 }

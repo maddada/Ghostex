@@ -148,9 +148,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        CDXC:RemoteMachines 2026-06-24-16:48:
-        GPUI remote-machine status and presentation events are Rust-owned sidebar-only messages. Send only sanitized state enums, machine ids, and gxserver presentation snapshots/deltas into SidebarApp; remote auth tokens, SSH host/user/key data, paths from Settings commands, URLs, daemon response bodies, stdout/stderr, and command text must stay out of CEF globals and logs.
-
         CDXC:RemoteMachines 2026-06-24-17:19:
         Response-capable remote session requests may dispatch only request ids, success state, generic errors, and explicit safe metadata results such as previous-session search rows. Mutating remote session responses must be sanitized before this event boundary so renderer code never receives launch commands, tokens, SSH details, raw daemon bodies, or provider internals.
         */
@@ -221,15 +218,6 @@ impl GhostexGpuiApp {
             self.attach_surfaced_remote_workspace_terminals(remote_machine_id, cx);
         }
         self.refresh_session_chat_runtime_endpoints(false, cx);
-        let mut payload = serde_json::json!({
-            "machineId": remote_machine_id,
-            "state": state,
-            "type": "remoteMachineStatus",
-        });
-        if let Some(message) = message.map(str::trim).filter(|message| !message.is_empty()) {
-            payload["message"] = serde_json::Value::String(message.to_string());
-        }
-        self.dispatch_gpui_sidebar_remote_event(payload, cx);
     }
 
     pub(crate) fn dispatch_gpui_settings_action_status(

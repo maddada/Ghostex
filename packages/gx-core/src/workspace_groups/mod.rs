@@ -21,8 +21,6 @@ pub use group_commands::{
 pub use document::{ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceSubgroup};
 pub use edits::WORKSPACE_SESSION_GROUP_MAX_COUNT;
 pub use sync::{
-    workspace_groups_hand_back_script, workspace_groups_request_script, WorkspaceGroupsEffect,
-    WorkspaceGroupsSync, WORKSPACE_GROUPS_HAND_OFF_MESSAGE_TYPE,
-    WORKSPACE_GROUPS_SCRIPT_PLACEHOLDER, WORKSPACE_GROUPS_SYNC_DELAY_MS,
+    WorkspaceGroupsEffect, WorkspaceGroupsSync, WORKSPACE_GROUPS_SYNC_DELAY_MS,
     WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS,
 };

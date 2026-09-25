@@ -23,8 +23,9 @@ import {
   syncGpuiWorkspaceProjectOrder,
   syncGpuiWorkspaceSessionOrderInSubgroup,
   syncGpuiWorkspaceSessionSubgroupOrder,
-} from '@/apps/desktop/sidebar/workspace-session-groups';
+} from './workspace-session-groups-frozen';
 import { createGpuiPresentationProjectProjectionMetadata } from '@/apps/desktop/sidebar/gxserver-runtime/helpers/presentation-projection';
+import { frozenSidebarProjectionMethods } from './sidebar-projection-frozen';
 import {
   createGpuiRemotePresentationGroupId,
   createGpuiRemotePresentationProjectId,
@@ -47,6 +48,8 @@ import type { SidebarProjectWorktreeMetadata } from '@/packages/shared/session-g
 type Json = any;
 
 export const frozenWorkspaceGroupEditMethods = {
+  // The projection and the hand-off these edits end in, frozen with them (sidebar-projection-frozen.ts).
+  ...frozenSidebarProjectionMethods,
   async updateRemoteWorkspaceGroups(
     this: Json,
     remoteMachineId: string,

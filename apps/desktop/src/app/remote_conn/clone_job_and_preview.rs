@@ -60,11 +60,9 @@ impl GhostexGpuiApp {
                             consecutive_errors = 0;
                             continue;
                         }
-                        let _ = this.update(cx, |this, cx| {
+                        let _ = this.update(cx, |this, _| {
                             this.refresh_gpui_remote_gxserver_presentation_in_background(
-                                remote_machine_id.clone(),
-                                false,
-                                cx,
+                                &remote_machine_id,
                             );
                         });
                         return;

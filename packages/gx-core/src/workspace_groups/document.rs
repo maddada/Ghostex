@@ -11,7 +11,7 @@
 //! the stored one is missing or below 2, which is what stops a new group reusing a name the user
 //! already has on screen.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/workspace-session-groups.ts,
+//! SEE-ALSO: tooling/gx-core/workspace-session-groups-frozen.ts,
 //! packages/gx-core/src/workspace_groups/sync.rs.
 
 use std::collections::BTreeMap;

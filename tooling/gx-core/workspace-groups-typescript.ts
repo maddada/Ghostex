@@ -40,7 +40,7 @@ import {
   GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY,
   isEmptyGpuiWorkspaceSessionGroupsState,
   parseGpuiWorkspaceSessionGroupsState,
-} from '@/apps/desktop/sidebar/workspace-session-groups';
+} from './workspace-session-groups-frozen';
 import {
   GPUI_WORKSPACE_GROUPS_SERVER_SYNC_DELAY_MS,
   GPUI_WORKSPACE_GROUPS_SERVER_SYNC_RETRY_DELAY_MS,

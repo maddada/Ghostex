@@ -59,7 +59,6 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_loop(
         let _ = gpui_remote_gxserver_presentation_stream_once(
             &target,
             cancel.as_ref(),
-            &tx,
             client_id.as_str(),
             &mut last_revision,
         );
@@ -78,7 +77,6 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_loop(
 pub(crate) fn gpui_remote_gxserver_presentation_stream_once(
     target: &GpuiRemoteGxserverRequestTarget,
     cancel: &AtomicBool,
-    tx: &mpsc::UnboundedSender<GpuiRemoteGxserverPresentationStreamMessage>,
     client_id: &str,
     last_revision: &mut Option<u64>,
 ) -> Result<(), String> {
@@ -106,16 +104,13 @@ pub(crate) fn gpui_remote_gxserver_presentation_stream_once(
                 let Ok(event) = serde_json::from_str::<serde_json::Value>(text.trim()) else {
                     continue;
                 };
-                let Some((payload, revision)) =
-                    gpui_remote_gxserver_presentation_event_payload(&event)
+                let Some((_, revision)) = gpui_remote_gxserver_presentation_event_payload(&event)
                 else {
                     continue;
                 };
                 if let Some(revision) = revision {
                     *last_revision = Some(revision);
                 }
-                tx.unbounded_send(GpuiRemoteGxserverPresentationStreamMessage::Event(payload))
-                    .map_err(|_| "Remote presentation receiver closed.".to_string())?;
             }
             GpuiWebSocketFrame::Ping(payload) => {
                 gpui_websocket_write_control_frame(&mut stream, 0xA, &payload)?;

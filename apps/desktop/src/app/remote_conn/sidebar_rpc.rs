@@ -107,9 +107,7 @@ impl GhostexGpuiApp {
                 }
                 if refreshes {
                     this.refresh_gpui_remote_gxserver_presentation_in_background(
-                        remote_machine_id,
-                        false,
-                        cx,
+                        &remote_machine_id,
                     );
                 }
             });

@@ -16,25 +16,17 @@
 //! asks the guard what it means. An echo the guard refuses is undone by putting the held document
 //! back, which is the one and only place that decision is made.
 //!
-//! **Since M5 piece 7c this is the ONLY writer of the key and the only pusher.** The old runtime
-//! still EDITS the document for the paths it owns (rename, close, create, the project order, and
-//! placing a session it has just created or forked into a group), because those are not the store's
-//! yet; what it no longer does is write client storage or call the daemon. `persistWorkspaceGroups`
-//! posts the edited document to the host instead (`hand_offs` below), and the held document is
-//! handed BACK to the old runtime after every change here, which is what keeps its copy from being
-//! the stale base the next edit is computed from. Its own `adoptWorkspaceGroupsFromGxserver` is
-//! gone with the write: an echo has to pass the guard, and the old runtime has no way to know
-//! whether a push is outstanding.
+//! **This is the only editor, the only writer of the key and the only pusher.** Every edit (New
+//! Group, Rename, Close Group, every order write, placing a created or forked session) is made
+//! here since the app runtime port (2026-09-25), so the hand-off from the old runtime and the
+//! hand-back to it are gone with it.
 //!
 //! **The counters that prove this path fires** are `edits`, `storageWrites`, `pushes`,
-//! `pushFailures`, `echoesAdopted`, `echoesRefused`, `handOffs`, `handBacks` and `prunes` on
-//! `gxStore.workspaceGroups`. A run in which the user dragged a session inside a user-made group
-//! and `edits` is zero means the command never reached here; a run in which the user renamed or
-//! closed a group and `handOffs` is zero means the old runtime's edit never reached here and that
-//! rename was never stored.
+//! `pushFailures`, `echoesAdopted`, `echoesRefused` and `prunes` on `gxStore.workspaceGroups`. A
+//! run in which the user dragged a session inside a user-made group and `edits` is zero means the
+//! command never reached here.
 //!
 //! SEE-ALSO: packages/gx-core/src/workspace_groups/sync.rs,
-//! apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts,
 //! apps/desktop/src/app/gx_store/sidebar_drag.rs.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -76,9 +68,8 @@ const READ_RETRY_SLOW: Duration = Duration::from_secs(30);
 /// CDXC:Sessions 2026-09-21 WHY:
 /// A process-wide count, not this document's own, and named for what it really measures: the
 /// handler in `session_chat.rs` is shared by every `ghostexNativeHost` message and needs a window,
-/// so a hand-off of the workspace session groups document can vanish there with nothing else to
-/// say so. A non-zero value beside a `handOffs` that did not move is the shape of a rename that
-/// never reached disk. It is not specific to this message and is not reported as if it were.
+/// so a message can vanish there with nothing else to say so. It is not specific to this document
+/// and is not reported as if it were.
 static NATIVE_HOST_MESSAGES_DROPPED: AtomicU64 = AtomicU64::new(0);
 
 pub(crate) fn note_native_host_message_dropped() {
@@ -122,13 +113,6 @@ pub(crate) struct WorkspaceGroupsCounters {
     pub(crate) echoes_adopted: u64,
     pub(crate) echoes_equal: u64,
     pub(crate) echoes_pushed_back: u64,
-    /// Documents the old runtime edited and handed over, one per `persistWorkspaceGroups`. A run
-    /// with a rename, a close, a new group or a project reorder in it and a zero here means the
-    /// old runtime's edits are reaching nothing at all.
-    pub(crate) hand_offs: u64,
-    /// Times the held document was pushed back to the old runtime, which is what stops the next
-    /// hand-off being computed from a stale base.
-    pub(crate) hand_backs: u64,
     /// Passes of the prune that actually dropped a member. A pass that drops nothing is not an
     /// edit and is not counted, exactly as `pruneWorkspaceGroupAssignments` writes nothing.
     pub(crate) prunes: u64,
@@ -137,22 +121,11 @@ pub(crate) struct WorkspaceGroupsCounters {
     /// Reads of the stored key that failed. Until one succeeds nothing is adopted and nothing is
     /// edited, so a non-zero value here beside a zero `edits` is this app refusing to guess.
     pub(crate) read_failures: u64,
-    /// Hand-offs refused because the stored key had not been read yet. The page keeps the document
-    /// it edited; this app has nothing to put it on top of, so when the read lands it ASKS the page
-    /// to hand it over again rather than handing the stored one back, which would replace the
-    /// user's edit and show them the rename reverting.
-    pub(crate) hand_offs_refused: u64,
-    /// Times the page was asked to hand its document over again after a refusal.
-    pub(crate) hand_offs_requested: u64,
     /// Daemon echoes left unjudged for the same reason. **Read this beside `deferred_recovered`:**
     /// equal means every deferral was judged when the read landed, and `echoes_deferred` ahead of
     /// it means one is still owed, which is the daemon's copy never being adopted at all.
     pub(crate) echoes_deferred: u64,
     pub(crate) deferred_recovered: u64,
-    /// Hand-backs whose script the service refused to evaluate. The page's copy is then the stale
-    /// base of its next edit, which is declared difference 29 in a second shape, so the record of
-    /// what it was told is NOT advanced and the next change tells it again.
-    pub(crate) hand_backs_dropped: u64,
     /// Pumps that reported `side_state.workspace_groups` as moved, which is what schedules the
     /// reconcile, and reconciles actually entered.
     ///
@@ -177,10 +150,6 @@ pub(crate) struct WorkspaceGroupsHost {
     /// Bumped by every booking, so a fired timer of a booking that was replaced does nothing.
     booking: u64,
     restored: bool,
-    /// The document the old runtime was last told about, so it is told again only when the held
-    /// document really moved. Set only when the script was dispatched: a page that was not there
-    /// yet must be told on the next change rather than never.
-    handed_back: Option<WorkspaceGroupsDocument>,
     /// The storage write that has not landed yet: `None` is the REMOVE, `Some(raw)` the value, and
     /// the whole field absent is "nothing owed". Replaced by any newer write and cleared only by
     /// the attempt that was carrying it.
@@ -188,9 +157,6 @@ pub(crate) struct WorkspaceGroupsHost {
     write_retries: u32,
     /// A read is on the background executor right now, so the pump must not book a second one.
     restoring: bool,
-    /// The page holds an edit this app refused and has not handed over again yet, so nothing may be
-    /// told to the page until it does: a hand-back would replace that edit.
-    page_holds_newer: bool,
     read_retries: u32,
     read_retry_scheduled: bool,
 }
@@ -209,8 +175,8 @@ impl GhostexGpuiApp {
     /// the run, and that mutex is held across `BEGIN IMMEDIATE` by the write paths. The read runs on
     /// the background executor now, behind one `restoring` flag, exactly as the sidebar's own state
     /// does; this function only ever books it and answers what is known. Until it lands nothing may
-    /// adopt an echo, take a hand-off or answer a drop, because all three would be computed against
-    /// a document this app does not have.
+    /// adopt an echo or answer a drop, because both would be computed against a document this app
+    /// does not have.
     pub(super) fn gx_store_restore_workspace_groups(
         &mut self,
         cx: &mut gpui::Context<Self>,
@@ -276,7 +242,6 @@ impl GhostexGpuiApp {
         {
             self.gx_store.workspace_groups.counters.deferred_recovered =
                 self.gx_store.workspace_groups.counters.echoes_deferred;
-            // This tells the page and emits the record on its way, unless the page holds newer.
             self.gx_store_reconcile_workspace_groups(cx);
         }
         // Now the store ends up holding what the guard holds. Skipped when there is nothing to hold
@@ -286,15 +251,6 @@ impl GhostexGpuiApp {
             let held = self.gx_store.workspace_groups.sync.document().clone();
             self.gx_store_apply_workspace_groups_to_store(&held, cx);
         }
-        // An edit the page made while the read was on its way is only in the page's copy, and
-        // handing the stored document back would replace it: the user would watch the rename they
-        // just made revert. So the page is asked to hand its own document over again instead, which
-        // is one `persistWorkspaceGroups` and therefore the same path every other edit takes.
-        if self.gx_store.workspace_groups.page_holds_newer {
-            self.gx_store_ask_old_runtime_for_workspace_groups(cx);
-            return;
-        }
-        self.gx_store_tell_old_runtime_workspace_groups(cx);
     }
 
     /// Books another read after a failure. The first `MAX_READ_RETRIES` come quickly; after that it
@@ -325,37 +281,6 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
-    }
-
-    /// The old runtime edited the document and handed it over instead of writing it. Applied as a
-    /// local edit, which is exactly what `persistWorkspaceGroups` used to do by itself: write the
-    /// key, book the push.
-    ///
-    /// The document is taken WHOLE rather than merged, because the old runtime computed it from the
-    /// document this file handed it and a merge would invent a third answer neither side made.
-    pub(crate) fn gx_store_receive_workspace_groups_hand_off(
-        &mut self,
-        state: &Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        // The stored key has to be in hand before any edit lands on top of it, for the same reason
-        // the echo path reads it first: a cold start must not write a document built on nothing.
-        // A read that has not landed refuses the edit rather than writing over what it cannot see;
-        // the page keeps the document in memory and its next edit carries it.
-        if !self.gx_store_restore_workspace_groups(cx) {
-            self.gx_store.workspace_groups.counters.hand_offs_refused += 1;
-            self.gx_store.workspace_groups.page_holds_newer = true;
-            return;
-        }
-        self.gx_store.workspace_groups.counters.hand_offs += 1;
-        // The page's document is here; this app is the holder again.
-        self.gx_store.workspace_groups.page_holds_newer = false;
-        // Taken as an edit even when the document is equal to the held one, because that is what
-        // `persistWorkspaceGroups` did: it wrote the key and booked the push unconditionally, and
-        // `syncGpuiWorkspaceSessionOrderInSubgroup` really does hand back an equal document
-        // (workspace_groups/edits.rs explains why that identity is modelled rather than improved).
-        // Swallowing it here would be the same silent simplification one layer up.
-        self.gx_store_edit_workspace_groups(WorkspaceGroupsDocument::parse(state), cx);
     }
 
     /// Drops members whose sessions the daemon no longer lists, which is what
@@ -434,7 +359,6 @@ impl GhostexGpuiApp {
         let effects = self.gx_store.workspace_groups.sync.edit(document.clone());
         self.gx_store_run_workspace_groups_effects(effects, cx);
         self.gx_store_apply_workspace_groups_to_store(&document, cx);
-        self.gx_store_tell_old_runtime_workspace_groups(cx);
     }
 
     /// The daemon's copy just landed in the store. Asks the guard what it means and, when the guard
@@ -495,62 +419,6 @@ impl GhostexGpuiApp {
         if Some(&held) != server_state.as_ref() {
             self.gx_store_apply_workspace_groups_to_store(&held, cx);
         }
-        self.gx_store_tell_old_runtime_workspace_groups(cx);
-    }
-
-    /// Hands the held document to the old runtime, which no longer reads the daemon's copy itself.
-    ///
-    /// This is the half of the hand-off that makes the other half safe: the old runtime's next
-    /// edit is computed from whatever it holds, so if it kept adopting the daemon's echo it would
-    /// hand back a document built on the copy the guard had just refused, which is declared
-    /// difference 29 in a second shape. Told only when the document really moved, and the record of
-    /// what it was told is updated only when the script was dispatched, so a page that was not
-    /// there yet is told on the next change rather than never.
-    /// Asks the page to post its own document, which arrives as an ordinary hand-off.
-    ///
-    /// One `persistWorkspaceGroups`, so the recovery path and every other edit are the same path
-    /// and there is no second way for a document to cross. Dropped rather than retried when the
-    /// page is not there: it has not edited anything in that state either.
-    fn gx_store_ask_old_runtime_for_workspace_groups(&mut self, cx: &mut gpui::Context<Self>) {
-        let Some(service) = self.sidebar.clone() else {
-            return;
-        };
-        let script = ghostex_gx_core::workspace_groups_request_script();
-        if service.update(cx, |surface, _| surface.execute_app_owned_script(&script)) {
-            self.gx_store.workspace_groups.counters.hand_offs_requested += 1;
-        }
-    }
-
-    fn gx_store_tell_old_runtime_workspace_groups(&mut self, cx: &mut gpui::Context<Self>) {
-        // While the page is the only holder of an edit this app had to refuse, telling it anything
-        // would replace that edit. It is asked for its document instead, and told again once it
-        // arrives.
-        if self.gx_store.workspace_groups.page_holds_newer {
-            return;
-        }
-        let held = self.gx_store.workspace_groups.sync.document();
-        if self.gx_store.workspace_groups.handed_back.as_ref() == Some(held) {
-            return;
-        }
-        let held = held.clone();
-        let Some(service) = self.sidebar.clone() else {
-            return;
-        };
-        // Its own named bridge function, not a sidebar command: a command arrives in one of two
-        // envelopes and picking the wrong one is how piece 3d shipped dead with a clean gate. The
-        // script itself is built in gx-core so the gate can evaluate the real text against the real
-        // page code (`workspace_groups_hand_back_script`).
-        let script = ghostex_gx_core::workspace_groups_hand_back_script(&held.to_json());
-        // The return value decides whether this counts as told. `evaluate` reports an error and
-        // discards the script, so recording the document as handed back from the CALL rather than
-        // from the answer would leave the page holding a stale base for ever.
-        let sent = service.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        if !sent {
-            self.gx_store.workspace_groups.counters.hand_backs_dropped += 1;
-            return;
-        }
-        self.gx_store.workspace_groups.counters.hand_backs += 1;
-        self.gx_store.workspace_groups.handed_back = Some(held);
     }
 
     fn gx_store_run_workspace_groups_effects(

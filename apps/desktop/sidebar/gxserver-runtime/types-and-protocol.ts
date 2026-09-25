@@ -73,20 +73,9 @@ export type GpuiSidebarRuntimeSettingsSnapshot = {
   showBetaFeatures: boolean;
 };
 
-/**
- * Everything Rust's `dispatch_gpui_sidebar_host_message` can hand to
- * `onSidebarHostMessage`: the extension-to-sidebar messages the React app
- * consumes. The sidebar-owned commands Rust used to forward here (rename,
- * notes, delayed sends, creates) are answered in Rust.
- */
-export type GpuiSidebarHostMessage = ExtensionToSidebarMessage;
-
 export type GhostexGpuiSidebarBridge = {
   gxserverBootstrap?: GpuiGxserverBootstrap;
   onGxserverBootstrapChanged?: (bootstrap: GpuiGxserverBootstrap) => void;
-  onExportTranscriptModalCommand?: (payload: unknown) => void;
-  onGitCommitModalCommand?: (payload: unknown) => void;
-  onRuntimeSettingsChanged?: (runtimeSettings: GpuiSidebarRuntimeSettingsSnapshot) => void;
   /**
    * CDXC:Sidebar 2026-09-21 WHY:
    * The Rust store's direct route for a sidebar command this runtime still owns (a remote
@@ -95,15 +84,6 @@ export type GhostexGpuiSidebarBridge = {
    * before this is installed is parked on `pendingSidebarCommands` and drained here.
    */
   onSidebarCommand?: (payload: unknown) => void;
-  onSidebarHostMessage?: (message: GpuiSidebarHostMessage) => void;
-  /**
-   * CDXC:SavedPrompts 2026-08-24:
-   * A Saved Prompts row asked to be taken back to the session it was stashed
-   * from. Rust forwards the row's raw gxserver ids plus the durable provider
-   * conversation id; this runtime resolves the best available target.
-   */
-  onTitlebarGitAction?: (payload: unknown) => void;
-  onWorktreeModalCommand?: (payload: unknown) => void;
   /**
    * CDXC:Sidebar 2026-08-02:
    * Close every open sidebar context menu because a native mouse-down landed
@@ -112,30 +92,7 @@ export type GhostexGpuiSidebarBridge = {
    */
   dismissSidebarContextMenus?: () => void;
   dismissSidebarTooltips?: () => void;
-  /**
-   * CDXC:Spaces 2026-08-29:
-   * A finger scroll gesture began (NSEventPhaseBegan) inside the sidebar's
-   * native frame. Installed by the sidebar entry point, called by Rust's
-   * AppKit observer; the Space-swipe handler resets its gesture lock on it
-   * because DOM wheel events cannot tell a new physical swipe from the
-   * previous swipe's momentum tail.
-   */
-  onWorkspaceSessionAttentionAcknowledge?: (payload: unknown) => void;
-  onWorkspaceTerminalEscapePressed?: (payload: unknown) => void;
-  pendingExportTranscriptModalCommands?: unknown[];
-  pendingGitCommitModalCommands?: unknown[];
   pendingSidebarCommands?: unknown[];
-  pendingTitlebarGitActions?: unknown[];
-  pendingWorktreeModalCommands?: unknown[];
-  pendingWorkspaceSessionAttentionAcknowledgements?: unknown[];
-  pendingWorkspaceTerminalEscapePresses?: unknown[];
-  postOpenBrowserUrl?: (payload: string) => boolean;
-  postPetOverlayState?: (payload: string) => boolean;
-  postSessionCompletionSound?: (payload: string) => boolean;
-  postGlobalActions?: (payload: string) => boolean;
-  postSessionStatusIndicators?: (payload: string) => boolean;
-  postTitlebarGitMenuState?: (payload: string) => boolean;
-  postWorkspaceTerminalRenameCommand?: (payload: string) => boolean;
   runtimeSettings?: GpuiSidebarRuntimeSettings;
 };
 

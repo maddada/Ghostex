@@ -34,7 +34,7 @@ import { reorderNativeSidebar } from '@/tooling/gx-core/sidebar-page-frozen/reor
 import { runNativeProjectDrop } from '@/tooling/gx-core/sidebar-page-frozen/project-drag';
 import { runNativeMembershipAction } from '@/tooling/gx-core/sidebar-page-frozen/membership';
 import { sidebarStore } from '@/packages/core-ui/sidebar-store-model';
-import { parseGpuiWorkspaceSessionGroupsState } from '@/apps/desktop/sidebar/workspace-session-groups';
+import { parseGpuiWorkspaceSessionGroupsState } from './workspace-session-groups-frozen';
 import {
   parseSidebarProjectCollectionsFromGxserver,
   serializeSidebarProjectCollectionsForGxserver,

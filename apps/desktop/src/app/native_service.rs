@@ -135,16 +135,17 @@ impl NativeService {
             }
         }
     }
-    pub(crate) fn refresh_sidebar_runtime_settings(
-        &mut self,
-        settings: cef::SidebarRuntimeSettingsSnapshot,
-    ) {
+    /// A settings save: re-arms the runtime thread's trace records.
+    ///
+    /// CDXC:Diagnostics 2026-09-25 WHY:
+    /// The runtime no longer reads settings after start (nothing in it reacts to a change), so the
+    /// saved settings are not sent into it any more; the trace switch is the one thing a save still
+    /// has to reach on this thread.
+    pub(crate) fn refresh_sidebar_runtime_settings(&mut self) {
         self.trace.store(
             crate::app::gx_store::runtime_trace_enabled(),
             Ordering::Relaxed,
         );
-        let settings = Self::settings(&settings);
-        self.execute_app_owned_script(&format!("window.ghostexGpui.runtimeSettings = {settings}; window.ghostexGpui.onRuntimeSettingsChanged?.({settings}); void 0;"));
     }
     pub(crate) fn refresh_sidebar_gxserver_bootstrap(
         &mut self,

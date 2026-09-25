@@ -280,9 +280,6 @@ impl GhostexGpuiApp {
         if self.gx_store_claim_focus_command(&command, cx) {
             return;
         }
-        if self.sidebar.is_none() {
-            return;
-        }
         self.stage_agent_launch_placeholder(&command, cx);
         // The Space a `selectSpace` is LEAVING, read before the intent below moves it: the restore
         // that follows only runs when the selection really changed (gx_store/space_switch.rs).
@@ -295,11 +292,8 @@ impl GhostexGpuiApp {
         // store names the session the close focuses, from the list it draws
         // (gx_store/sidebar_close_project.rs).
         let command = self.gx_store_add_close_project_successor(command);
-        // What reaches the runtime starts from the store's newest selection (gx_store/burst.rs).
-        self.gx_store_flush_local_selection(cx);
-        // What is left is the runtime's, and it goes straight there: the sidebar page that used to
-        // route it is being deleted (gx_store/sidebar_runtime_route.rs).
-        self.gx_store_route_sidebar_command_to_runtime(&command, ui_only, cx);
+        // What is left has no owner, or was the sidebar's own state (gx_store/sidebar_runtime_route.rs).
+        self.gx_store_note_unanswered_sidebar_command(&command, ui_only);
         // The Space the switch landed on reopens the session it was last left on, from the list the
         // intent above has just rebuilt. It posts the same `focusSession` the page posted, after
         // the page has been told, so the order of the two messages is the one the runtime already

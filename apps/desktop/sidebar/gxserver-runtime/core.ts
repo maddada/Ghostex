@@ -4,25 +4,11 @@ CDXC:RepoStructure 2026-08-22:
 Split out of the single 21,861-line `gxserver-runtime.ts`. Pure move: no logic
 changed. See `core.ts` for how the runtime's methods are re-attached.
 */
-import type { GpuiWorkspaceSessionGroupsState } from '../workspace-session-groups';
-import {
-  createEmptyGpuiWorkspaceSessionGroupsState,
-  readStoredGpuiWorkspaceSessionGroupsState,
-} from '../workspace-session-groups';
 import { asGpuiSidebarCommand } from './sidebar-command-entry';
 import { GpuiGxserverClient } from './client';
-import type { GpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
-import { gpuiSidebarRuntimeCloseAfterDoneMethods } from './close-after-done';
-import {
-  GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES,
-  GPUI_SIDEBAR_REMOTE_EVENT_NAME,
-} from './constants';
-import {
-  createEmptyGpuiAppUserData,
-  currentGpuiRuntimeSettings,
-} from './helpers/bootstrap';
-import { readStoredGpuiRemoteGroupOrder, readStoredGpuiRemoteRecentProjects } from './helpers/recent-projects';
-import { GpuiRemoteLastSeenStore } from './helpers/remote-last-seen';
+import { GPUI_SIDEBAR_REMOTE_EVENT_NAME } from './constants';
+import { createEmptyGpuiAppUserData } from './helpers/bootstrap';
+import { readStoredGpuiRemoteRecentProjects } from './helpers/recent-projects';
 import { normalizeGpuiSidebarRemoteEvent } from './helpers/remote-presentation';
 import type { GpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
 import { gpuiSidebarRuntimePresentationStreamMethods } from './presentation-stream';
@@ -33,22 +19,16 @@ import { gpuiSidebarRuntimeSidebarGroupMethods } from './sidebar-groups';
 import type {
   GpuiPendingRemoteGxserverRequest,
   GpuiPresentationSubscription,
-  GpuiRemoteSidebarHud,
-  GpuiSidebarRuntimeSettings,
   GpuiValidatedGxserverBootstrap,
 } from './types-and-protocol';
 import type { GpuiSidebarRuntimeWorkspaceGroupMethods } from './workspace-groups-sync';
-import { gpuiSidebarRuntimeWorkspaceGroupMethods, installGpuiWorkspaceGroupsHandBack } from './workspace-groups-sync';
+import { gpuiSidebarRuntimeWorkspaceGroupMethods } from './workspace-groups-sync';
 import type { WebviewApi } from '@/packages/core-ui/webview-api';
-import { reduceGxserverPresentationDelta } from '@/packages/shared/gxserver-presentation-cache';
 import type {
   GxserverAppUserData,
   GxserverPresentationSnapshot,
   GxserverProjectDomainState,
   GxserverRecentProjectDomainState,
-  GxserverSidebarHudResponse,
-  GxserverSidebarProjectCollectionsState,
-  GxserverSidebarSpacesState,
 } from '@/packages/shared/gxserver-protocol';
 import type {
   ExtensionToSidebarMessage,
@@ -56,9 +36,7 @@ import type {
   SidebarHudChangedMessage,
   SidebarHydrateMessage,
   SidebarOrderSyncResultMessage,
-  SidebarPreviousSessionItem,
   SidebarPreviousSessionsResultMessage,
-  SidebarSessionGroup,
   SidebarToExtensionMessage,
 } from '@/packages/shared/session-grid-contract';
 
@@ -103,16 +81,12 @@ CDXC:Projects 2026-06-24-22:51:
 Generated Chat folders must not render as individual GPUI project groups, and clicking a chat session must not publish that chat folder as the active project to Rust. Treat host Ghostex-home chat roots, including dev `.active/chats` homes, as projectless Chats containers before building active-project context, Settings project rows, or Git HUD state.
 */
 export function createGpuiSidebarRuntime(): {
-  applyWorkspaceGroupsFromHost: (state: unknown) => void;
-  persistWorkspaceGroups: () => void;
   messageSource: GpuiSidebarLocalMessageSource;
   start: () => void;
   vscode: WebviewApi;
 } {
   const runtime = new GpuiSidebarRuntime();
   return {
-    applyWorkspaceGroupsFromHost: (state: unknown) => runtime.applyWorkspaceGroupsFromHost(state),
-    persistWorkspaceGroups: () => runtime.persistWorkspaceGroups(),
     messageSource: runtime.messageSource,
     start: () => runtime.start(),
     vscode: runtime.vscode,
@@ -163,17 +137,6 @@ export class GpuiSidebarRuntime {
     },
   };
 
-  notifyNativeGxserverPresentationReady(): void {
-    window.requestAnimationFrame(() => {
-      if (!this.presentation) {
-        return;
-      }
-      window.webkit?.messageHandlers?.ghostexNativeHost?.postMessage({
-        type: 'gxserverPresentationReady',
-      });
-    });
-  }
-
   appUserData: GxserverAppUserData = createEmptyGpuiAppUserData();
   /**
    * Escalating presentation-stream recovery state. `AcknowledgedAt` is when the
@@ -186,52 +149,30 @@ export class GpuiSidebarRuntime {
   presentationStreamAcknowledgedAt: number | undefined;
   presentationStreamRecoveryAttempt = 0;
   presentationStreamRecoveryTimeoutId: number | undefined;
-  /**
-   * Per-remote-machine throttle for the "this delta is stale, refetch the whole
-   * snapshot" recovery. Holds the last start time and, when a refetch is being
-   * held back, the trailing timer that will run it once the cooldown expires.
-   */
-  readonly staleRemotePresentationRefreshes = new Map<string, { lastStartedAt: number; trailingTimeoutId?: number }>();
   client: GpuiGxserverClient | undefined;
   domainProjects: GxserverProjectDomainState[] = [];
   gxserverBootstrap: GpuiValidatedGxserverBootstrap | undefined;
   hasHydrated = false;
-  latestGroups: SidebarSessionGroup[] = [];
-  localFirstHiddenPresentationSessionKeys = new Set<string>();
   pendingRemoteGxserverRequests = new Map<string, GpuiPendingRemoteGxserverRequest>();
   presentation: GxserverPresentationSnapshot | undefined;
-  previousSessionsByHistoryId = new Map<string, SidebarPreviousSessionItem>();
-  previousSessionsResult:
-    | {
-        cursor?: string;
-        previousSessions: SidebarPreviousSessionItem[];
-        query?: string;
-        requestId: string;
-      }
-    | undefined;
   recentProjects: GxserverRecentProjectDomainState[] = [];
   remoteGxserverRequestSequence = 0;
+  /**
+   * Nothing fills this any more: the remote machines' presentations are the Rust store's
+   * (apps/desktop/src/app/gx_store/remote_clients.rs). It is read only by the remote Project Group
+   * and Space edits below, which wait on the user (CDXC:RemoteMachines 2026-09-21 DECISION in
+   * apps/desktop/src/app/gx_store/remote_project_docs.rs) and go with them.
+   */
   remotePresentations = new Map<string, GxserverPresentationSnapshot>();
-  remoteLastSeenPresentations = new Map<string, GxserverPresentationSnapshot>();
-  remoteLastSeenStore = new GpuiRemoteLastSeenStore();
   remoteRecentProjectsByMachineId = new Map<string, GxserverRecentProjectDomainState[]>();
-  remoteGroupOrderByMachineId = new Map<string, string[]>();
   revision = 0;
-  runtimeSettings: GpuiSidebarRuntimeSettings | undefined;
   subscription: GpuiPresentationSubscription | undefined;
-  workspaceGroups: GpuiWorkspaceSessionGroupsState = createEmptyGpuiWorkspaceSessionGroupsState();
   lastForwardedRemoteSidebarProjectCollectionsJsonByMachineId = new Map<string, string>();
   lastForwardedRemoteSidebarSpacesJsonByMachineId = new Map<string, string>();
-  lastForwardedCustomSessionTagsJson: string | undefined;
-  lastForwardedRemoteCustomSessionTagsJsonByMachineId = new Map<string, string>();
 
   start(): void {
     this.installGpuiBridgeCallbacks();
-    this.runtimeSettings = currentGpuiRuntimeSettings();
     this.remoteRecentProjectsByMachineId = readStoredGpuiRemoteRecentProjects();
-    this.remoteGroupOrderByMachineId = readStoredGpuiRemoteGroupOrder();
-    this.remoteLastSeenPresentations = this.remoteLastSeenStore.read();
-    this.workspaceGroups = readStoredGpuiWorkspaceSessionGroupsState();
     window.addEventListener(GPUI_SIDEBAR_REMOTE_EVENT_NAME, this.handleGpuiSidebarRemoteEvent);
     this.publishUnavailable('bootstrap-pending');
     // `service.ts` installs the bootstrap from the start config before `start()` runs (an empty
@@ -244,13 +185,6 @@ export class GpuiSidebarRuntime {
 
   installGpuiBridgeCallbacks(): void {
     const gpuiBridge = (window.ghostexGpui = window.ghostexGpui ?? {});
-    gpuiBridge.onSidebarHostMessage = (message) => {
-      /*
-      CDXC:CommandPane 2026-06-24-23:49:
-      Rust-owned command-pane Action lifecycle feedback enters the reused SidebarApp through the same local message source as gxserver presentation patches. Keep this callback typed to existing sidebar messages so GPUI can update button run-state without exposing generic IPC, command text, paths, terminal output, or persisted state to React.
-      */
-      this.messageSource.postMessage(message);
-    };
     /*
     CDXC:Sidebar 2026-09-21 WHY:
     The desktop sidebar is the Rust store's, and the page that used to receive its commands and
@@ -262,7 +196,6 @@ export class GpuiSidebarRuntime {
       const message = asGpuiSidebarCommand(payload);
       if (message) void this.handleSidebarMessage(message);
     };
-    installGpuiWorkspaceGroupsHandBack(this);
     const pendingSidebarCommands = Array.isArray(gpuiBridge.pendingSidebarCommands)
       ? gpuiBridge.pendingSidebarCommands.splice(0)
       : [];
@@ -270,125 +203,22 @@ export class GpuiSidebarRuntime {
       const message = asGpuiSidebarCommand(payload);
       if (message) void this.handleSidebarMessage(message);
     }
-    gpuiBridge.onRuntimeSettingsChanged = (runtimeSettings) => {
-      this.runtimeSettings = runtimeSettings;
-    };
     gpuiBridge.onGxserverBootstrapChanged = (bootstrap) => {
       this.applyGxserverBootstrapChanged(bootstrap);
     };
   }
 
+  /**
+   * CDXC:RemoteMachines 2026-09-25 WHY:
+   * Only the answers to this runtime's own remote requests arrive here now. The machines' status
+   * and presentations are the Rust store's (apps/desktop/src/app/gx_store/remote_clients.rs), so
+   * Rust no longer sends them to this runtime.
+   */
   readonly handleGpuiSidebarRemoteEvent = (event: Event): void => {
     const remoteEvent = normalizeGpuiSidebarRemoteEvent((event as CustomEvent<unknown>).detail);
-    if (!remoteEvent) {
-      return;
-    }
-    if (remoteEvent.type === 'remoteMachineStatus') {
-      this.messageSource.postMessage(remoteEvent);
-      if (GPUI_REMOTE_MACHINE_PRESENTATION_CLEAR_STATES.has(remoteEvent.state)) {
-        this.remotePresentations.delete(remoteEvent.machineId);
-        // A queued stale-revision refetch is for a cache this just dropped, and
-        // the machine is no longer reachable to serve it.
-        this.forgetStaleRemotePresentationRefresh(remoteEvent.machineId);
-        this.publishRemotePresentationPatch();
-      }
-      return;
-    }
-
-    if (remoteEvent.type === 'remoteGxserverResponse') {
+    if (remoteEvent?.type === 'remoteGxserverResponse') {
       this.resolveRemoteGxserverRequest(remoteEvent);
-      return;
     }
-
-    if (remoteEvent.payload.type === 'presentationSnapshot') {
-      const snapshot = remoteEvent.payload.snapshot;
-      const previous = this.remotePresentations.get(remoteEvent.remoteMachineId);
-      if (previous && previous.revision > snapshot.revision) {
-        return;
-      }
-      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
-      this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
-      this.publishRemotePresentationPatch();
-      return;
-    }
-
-    const previous = this.remotePresentations.get(remoteEvent.remoteMachineId);
-    if (!previous) {
-      this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-      return;
-    }
-    if (remoteEvent.payload.type === 'sidebarProjectCollectionsChanged') {
-      if (remoteEvent.payload.revision < previous.revision) {
-        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-        return;
-      }
-      const snapshot: GxserverPresentationSnapshot = {
-        ...previous,
-        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
-        sidebarProjectCollections: remoteEvent.payload.sidebarProjectCollections,
-      };
-      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
-      this.forwardRemoteSidebarProjectCollectionsFromGxserver(
-        remoteEvent.remoteMachineId,
-        remoteEvent.payload.sidebarProjectCollections
-      );
-      this.publishRemotePresentationPatch();
-      return;
-    }
-    if (remoteEvent.payload.type === 'sidebarSpacesChanged') {
-      if (remoteEvent.payload.revision < previous.revision) {
-        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-        return;
-      }
-      const snapshot: GxserverPresentationSnapshot = {
-        ...previous,
-        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
-        sidebarSpaces: remoteEvent.payload.sidebarSpaces,
-      };
-      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
-      this.forwardRemoteSidebarSpacesFromGxserver(remoteEvent.remoteMachineId, remoteEvent.payload.sidebarSpaces);
-      this.publishRemotePresentationPatch();
-      return;
-    }
-    if (remoteEvent.payload.type === 'customSessionTagsChanged') {
-      if (remoteEvent.payload.revision < previous.revision) {
-        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-        return;
-      }
-      const snapshot: GxserverPresentationSnapshot = {
-        ...previous,
-        customSessionTags: remoteEvent.payload.customSessionTags,
-        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
-      };
-      this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
-      this.forwardRemoteCustomSessionTagsFromGxserver(
-        remoteEvent.remoteMachineId,
-        remoteEvent.payload.customSessionTags
-      );
-      this.publishRemotePresentationPatch();
-      return;
-    }
-    if (remoteEvent.payload.type === 'workspaceGroupsChanged') {
-      if (remoteEvent.payload.revision < previous.revision) {
-        this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-        return;
-      }
-      this.remotePresentations.set(remoteEvent.remoteMachineId, {
-        ...previous,
-        revision: remoteEvent.payload.revision as GxserverPresentationSnapshot['revision'],
-        workspaceGroups: remoteEvent.payload.groups,
-      });
-      this.publishRemotePresentationPatch();
-      return;
-    }
-    if (remoteEvent.payload.revision <= previous.revision) {
-      this.scheduleStaleRemotePresentationRefresh(remoteEvent.remoteMachineId);
-      return;
-    }
-    const snapshot = reduceGxserverPresentationDelta(previous, remoteEvent.payload.delta, remoteEvent.payload.revision);
-    this.remotePresentations.set(remoteEvent.remoteMachineId, snapshot);
-    this.pruneRemoteWorkspaceGroupAssignments(remoteEvent.remoteMachineId, snapshot);
-    this.publishRemotePresentationPatch();
   };
 
   async handleSidebarMessage(message: SidebarToExtensionMessage): Promise<void> {
@@ -452,7 +282,6 @@ export interface GpuiSidebarRuntime
   extends
     GpuiSidebarRuntimeSidebarGroupMethods,
     GpuiSidebarRuntimePresentationStreamMethods,
-    GpuiSidebarRuntimeCloseAfterDoneMethods,
     GpuiSidebarRuntimeWorkspaceGroupMethods,
     GpuiSidebarRuntimeRemoteMachineMethods {}
 
@@ -469,6 +298,5 @@ function installGpuiSidebarRuntimeMethods(methods: Record<string, unknown>): voi
 
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeSidebarGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimePresentationStreamMethods);
-installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeCloseAfterDoneMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeWorkspaceGroupMethods);
 installGpuiSidebarRuntimeMethods(gpuiSidebarRuntimeRemoteMachineMethods);

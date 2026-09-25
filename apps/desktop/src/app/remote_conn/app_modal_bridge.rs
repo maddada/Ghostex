@@ -407,18 +407,6 @@ impl GhostexGpuiApp {
             "quitResourcesFromTitlebar" => {
                 self.receive_gpui_titlebar_resources_quit_message(&message, window, cx);
             }
-            // The old runtime edited the workspace session groups document. Since M5 piece 7c it
-            // writes neither client storage nor the daemon: this is the one writer, behind the
-            // pending-push guard (gx_store/workspace_groups.rs). A payload whose `state` is not an
-            // object is dropped rather than parsed, because an empty document REMOVES the key and a
-            // malformed message must never be the thing that deletes the user's groups.
-            ghostex_gx_core::WORKSPACE_GROUPS_HAND_OFF_MESSAGE_TYPE => {
-                let Some(state) = message.get("state").filter(|state| state.is_object()) else {
-                    return;
-                };
-                let state = state.clone();
-                self.gx_store_receive_workspace_groups_hand_off(&state, cx);
-            }
             // The sidebar's own Load Sessions row reaches the same three steps without this
             // bridge since M5 (gx_store/sidebar_open.rs), so they are one function.
             "accountSwitchProgress" => {
@@ -440,38 +428,6 @@ impl GhostexGpuiApp {
                     })
                 };
                 self.set_session_account_switch_progress(key, &message["progress"], None, cx);
-            }
-            "gxserverPresentationReady" => {
-                self.refresh_gpui_new_thread_picker_agents(cx);
-                self.refresh_gpui_new_thread_picker_accounts(cx);
-                self.ensure_gpui_new_thread_picker_preloaded(cx);
-                if !self.sidebar_timer_presentations_replayed_after_ready {
-                    /*
-                    CDXC:DelayedSend 2026-07-22:
-                    Restored timer state is re-armed before the sidebar CEF
-                    surface exists. The first renderer presentation hydrate is
-                    the earliest authority that its bridge and React runtime
-                    can receive timer projections. Discard any pre-ready
-                    dispatch snapshots and replay both Agents and Commands
-                    summaries exactly once at that boundary so a restored
-                    timer cannot remain active without its sidebar chrome.
-                    */
-                    self.sidebar_command_pane_sessions_snapshot.clear();
-                    self.sidebar_agents_delayed_sends_snapshot.clear();
-                    let command_timers_replayed =
-                        self.refresh_sidebar_command_pane_sessions_if_changed(cx);
-                    let agents_timers_replayed =
-                        self.refresh_sidebar_agents_delayed_sends_if_changed(cx);
-                    self.sidebar_timer_presentations_replayed_after_ready =
-                        command_timers_replayed && agents_timers_replayed;
-                }
-                let loading_toast_visible = self
-                    .app_toasts
-                    .iter()
-                    .any(|toast| toast.id == GPUI_GXSERVER_DAEMON_TOAST_ID && toast.loading);
-                if loading_toast_visible {
-                    self.remove_gpui_app_toast(GPUI_GXSERVER_DAEMON_TOAST_ID, cx);
-                }
             }
             "stopGxserverFromTitlebar" => {
                 self.stop_gpui_local_gxserver_from_titlebar(false, cx);

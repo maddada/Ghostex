@@ -319,9 +319,7 @@ impl GhostexGpuiApp {
                         ) {
                             this.refresh_sidebar_command_pane_sessions_if_changed(cx);
                             this.refresh_gpui_remote_gxserver_presentation_in_background(
-                                remote_machine_id,
-                                false,
-                                cx,
+                                &remote_machine_id,
                             );
                         }
                     }

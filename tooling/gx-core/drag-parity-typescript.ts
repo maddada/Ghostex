@@ -25,7 +25,7 @@ import { GpuiSidebarRuntime } from '@/apps/desktop/sidebar/gxserver-runtime/core
 import { frozenHandleWorkspaceGroupMessage, frozenWorkspaceGroupEditMethods } from './workspace-groups-edits-frozen';
 import { reorderNativeSidebar } from '@/tooling/gx-core/sidebar-page-frozen/reorder';
 import { sidebarStore } from '@/packages/core-ui/sidebar-store-model';
-import { parseGpuiWorkspaceSessionGroupsState } from '@/apps/desktop/sidebar/workspace-session-groups';
+import { parseGpuiWorkspaceSessionGroupsState } from './workspace-session-groups-frozen';
 
 type Json = Record<string, any>;
 

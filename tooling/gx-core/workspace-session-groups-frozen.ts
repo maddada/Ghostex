@@ -1,3 +1,10 @@
+/**
+ * The app runtime's workspace session groups helpers (`apps/desktop/sidebar/workspace-session-groups.ts`),
+ * moved here unchanged on 2026-09-25 when the app runtime port's sweep removed their last product
+ * caller. The Rust store owns the document (packages/gx-core/src/workspace_groups/); the gates in
+ * this folder still compare it with this TypeScript. The subgroup id helpers live on in
+ * packages/shared/workspace-session-subgroup-id.ts.
+ */
 import { storageScope } from '@/packages/client-storage';
 
 const clientStorage = storageScope(['workspaceGroups']);

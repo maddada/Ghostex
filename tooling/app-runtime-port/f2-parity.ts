@@ -306,12 +306,21 @@ async function loadOldAttention(dir: string): Promise<Json> {
       .replaceAll("'./records'", `'${current}/helpers/records'`)
       .replaceAll("'./remote-presentation'", `'${current}/helpers/remote-presentation'`)
   );
+  // Deleted from the runtime by the sweep, so it comes out of git with the tracker.
+  writeFileSync(
+    join(out, 'helpers/terminal-lifecycle.ts'),
+    read('helpers/terminal-lifecycle.ts')
+      .replaceAll("'../constants'", `'${out}/constants'`)
+      .replaceAll("'../types-and-protocol'", `'${current}/types-and-protocol'`)
+      .replace(/'\.\/(records|remote-presentation|status-indicators)'/g, `'${current}/helpers/$1'`)
+  );
   writeFileSync(
     join(out, 'attention-tracking.ts'),
     read('attention-tracking.ts')
       .replaceAll("'./core'", `'${current}/core'`)
       .replaceAll("'./types-and-protocol'", `'${current}/types-and-protocol'`)
-      .replace(/'\.\/helpers\/(bootstrap|records|remote-presentation|terminal-lifecycle)'/g, `'${current}/helpers/$1'`)
+      .replaceAll("'./helpers/terminal-lifecycle'", `'${out}/helpers/terminal-lifecycle'`)
+      .replace(/'\.\/helpers\/(bootstrap|records|remote-presentation)'/g, `'${current}/helpers/$1'`)
   );
   return (await import(join(out, 'attention-tracking.ts'))).gpuiSidebarRuntimeAttentionMethods;
 }

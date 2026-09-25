@@ -117,6 +117,18 @@ pub(crate) struct RemoteClients {
 }
 
 impl RemoteClients {
+    /// Asks that machine's client for a full snapshot, on its live socket or with its next connect.
+    /// A machine with no client (not connected) has nothing to ask.
+    pub(crate) fn request_full_snapshot(&self, machine_id: &str) {
+        if let Some(client) = self
+            .clients
+            .get(machine_id)
+            .and_then(|remote| remote.client.as_ref())
+        {
+            client.request_resubscribe();
+        }
+    }
+
     /// The machine tabs. Empty until the first reconcile, which is the moment before the app has
     /// read its settings.
     pub(crate) fn tabs(&self) -> &[MachineTabInput] {
