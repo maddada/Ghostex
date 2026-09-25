@@ -1,8 +1,8 @@
-//! The daemon's armed Delayed Send of a workspace session, added to the dialog's open message
+//! The armed Delayed Send of a workspace session, added to the dialog's open message
 //! when the dialog is opened by the hotkey or by the session's own bar (named by its shell id), so
-//! it shows the countdown the row's menu item shows (gx-core `daemon_delayed_send_seed`).
+//! it shows the countdown the row's menu item shows (gx-core `delayed_send_seed`).
 
-use ghostex_gx_core::{SessionKey, daemon_delayed_send_seed};
+use ghostex_gx_core::{SessionKey, delayed_send_seed};
 use serde_json::Value;
 
 use crate::GhostexGpuiApp;
@@ -41,6 +41,10 @@ impl GhostexGpuiApp {
         let (Some(session), Some(open)) = (session, open_message.as_object_mut()) else {
             return;
         };
-        open.extend(daemon_delayed_send_seed(&self.gx_store.core, &session));
+        open.extend(delayed_send_seed(
+            self.gx_store.sidebar_list.view(),
+            &self.gx_store.core,
+            &session,
+        ));
     }
 }

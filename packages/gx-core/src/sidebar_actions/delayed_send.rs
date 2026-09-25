@@ -84,19 +84,27 @@ pub fn plan_delayed_send_action(view: &SidebarView, command: &Value) -> Option<S
     }))
 }
 
-/// The daemon's armed Delayed Send of one session, as the dialog's seed fields: what a Delayed
-/// Send opened by the hotkey or a session's own bar adds to its open message, so it shows the
-/// countdown or the armed trigger the row's menu item shows. Empty when the store does not hold
-/// the session or the daemon has none armed; the host's own timers are the host's to add.
+/// The armed Delayed Send of one session, as the dialog's seed fields: what a Delayed Send opened
+/// by the hotkey or a session's own bar adds to its open message, so it shows the countdown or the
+/// armed trigger the row's menu item shows. It reads the drawn row, which is where the menu item
+/// reads it, and the session's daemon state when the row is not drawn (a collapsed group). Empty
+/// when neither has one armed; the host's own timers are the host's to add.
 ///
 /// CDXC:DelayedSend 2026-09-25 WHY:
-/// The hotkey's open message names the session by its shell id, which no sidebar row matches, so it carried no daemon trigger and an armed send opened on "After a delay". The row's seeds come from the same resolution (`sidebar_view/rows.rs`, daemon first), so both entry points show the same state.
-pub fn daemon_delayed_send_seed(core: &Core, session: &SessionKey) -> Map<String, Value> {
+/// The hotkey's open message names the session by its shell id, which no sidebar row matches, so it carried no daemon trigger and an armed send opened on "After a delay". Both entry points now seed from the same row, so they show the same state.
+pub fn delayed_send_seed(
+    view: &SidebarView,
+    core: &Core,
+    session: &SessionKey,
+) -> Map<String, Value> {
     let mut open = Map::new();
-    let delayed = core
-        .presentation()
-        .session(session)
-        .and_then(|session| crate::sidebar_view::rows::delayed_send(&session, None));
+    let delayed = match drawn_row(view, &session.to_sidebar_session_id()) {
+        Some(row) => row.delayed_send.clone(),
+        None => core
+            .presentation()
+            .session(session)
+            .and_then(|session| crate::sidebar_view::rows::delayed_send(&session, None)),
+    };
     insert_delayed_send_seed(&mut open, delayed.as_ref());
     open
 }

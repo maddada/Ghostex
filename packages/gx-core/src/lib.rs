@@ -132,7 +132,7 @@ pub use crate::sidebar_actions::{
     terminal_lifecycle_fallback_focus, titlebar_sleep_inactive_ids,
 };
 pub use crate::sidebar_actions::{
-    daemon_delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
+    delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
     owns_delayed_send_command,
     owns_machine_disable_command, plan_agent_run, plan_delayed_send_action, plan_machine_disable,
     MACHINE_DISABLE_SETTINGS_SOURCE,
