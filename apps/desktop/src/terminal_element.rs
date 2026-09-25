@@ -2803,8 +2803,8 @@ pub(crate) fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         "sleepFocusedSession" => "alt+shift+s",
         "delayedSend" => "ctrl+shift+s",
         "closeAfterDone" => "",
-        "forkSession" => "ctrl+shift+f",
-        "reloadSession" => "ctrl+shift+r",
+        "forkSession" => "cmd+ctrl+shift+f",
+        "reloadSession" => "",
         "promptEditor" => "ctrl+g",
         "sessionNote" => "cmd+alt+n",
         "toggleChatView" => "alt+g",
@@ -2825,7 +2825,18 @@ pub(crate) fn terminal_overlay_hotkey_label(action_id: &str) -> Option<String> {
         .get("hotkeys")
         .and_then(serde_json::Value::as_object)
         .and_then(|hotkeys| hotkeys.get(action_id))
-        .and_then(serde_json::Value::as_str);
+        .and_then(serde_json::Value::as_str)
+        // Retired defaults, mirroring `gpui_migrated_hotkey_for_action`.
+        .filter(|key| {
+            let retired: &[&str] = match action_id {
+                "forkSession" => &["ctrl+shift+f", "cmd+alt+f"],
+                "reloadSession" => &["ctrl+shift+r", "cmd+alt+r"],
+                _ => &[],
+            };
+            !retired
+                .iter()
+                .any(|retired| key.trim().eq_ignore_ascii_case(retired))
+        });
     let key = terminal_overlay_platform_hotkey(action_id, persisted_key.unwrap_or(default_key));
     let key = key.trim();
     if key.is_empty() {
@@ -2847,8 +2858,8 @@ fn terminal_overlay_platform_hotkey<'a>(action_id: &str, key: &'a str) -> &'a st
     }
     let defaults = match action_id {
         "delayedSend" => Some(("ctrl+shift+s", "cmd+alt+s")),
-        "forkSession" => Some(("ctrl+shift+f", "cmd+alt+f")),
-        "reloadSession" => Some(("ctrl+shift+r", "cmd+alt+r")),
+        "forkSession" => Some(("cmd+ctrl+shift+f", "cmd+alt+shift+f")),
+        "renameActiveSession" => Some(("cmd+r", "cmd+shift+r")),
         "promptEditor" => Some(("ctrl+g", "cmd+shift+g")),
         "stashedPrompts" => Some(("cmd+alt+s", "cmd+shift+s")),
         _ => None,

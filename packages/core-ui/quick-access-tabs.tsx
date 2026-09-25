@@ -26,6 +26,7 @@ const QUICK_ACCESS_TABS = [
 const QUICK_ACCESS_HOTKEY_ACTION_TABS: Partial<Record<ghostexHotkeyActionId, QuickAccessTab>> = {
   openCommandPalette: 'commands',
   openSessionSearchPalette: 'recentSessions',
+  openProjectSearchPalette: 'recentProjects',
   stashedPrompts: 'savedPrompts',
 };
 

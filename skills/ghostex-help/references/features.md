@@ -100,21 +100,27 @@ focuses its name field.
   sessions keep running) and Merge All Panes, or drag it to move that session
   onto another pane's edge (a new split) or its middle (it takes that pane's
   place), and the pane it left closes. Each pane can show the raw terminal or
-  Session Chat. Cmd+T starts a new chat with the agent you used last and
-  Cmd+Shift+T opens a new terminal; when Default view for compatible agents
-  (`preferredAgentInterface`) is Terminal the two keys swap. In a browser tab
-  Cmd+T opens another browser tab, and in the Commands pane or Terminal view it
-  opens another terminal tab there. Cmd+D splits.
+  Session Chat. Cmd+Shift+O starts a new session with the agent you used last,
+  in your default view (Chat or Terminal), like ChatGPT's New Chat. Cmd+N opens
+  the New Thread picker instead: type to filter the configured agents (last used
+  first), Browser, or Terminal, press Enter to start it in the active project,
+  and press Tab on Claude or Codex to pick an account. Cmd+Shift+T opens a new
+  terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
+  focused session, and Cmd+D splits. Cmd+R renames the focused session,
+  Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)
+  closes it. On Windows and Linux use Ctrl for Cmd, except that fork is
+  Ctrl+Alt+Shift+F and rename is Ctrl+Shift+R, because Ctrl+R belongs to the
+  terminal. While the Code editor itself has keyboard focus, Cmd+N and
+  Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
   A new chat that you leave without typing anything closes on its own, so empty
-  sessions do not pile up in the sidebar, and pressing Cmd+T again while one is
-  open takes you back to it. Once you type or send something it stays like any
-  other session.
+  sessions do not pile up in the sidebar, and pressing Cmd+Shift+O again while
+  one is open takes you back to it. Once you type or send something it stays
+  like any other session.
   Cmd+Option+Arrow moves focus between the session panes and the Commands pane;
   it skips the view panel.
-  Cmd+Option+T opens the New Thread picker: type to filter the configured
-  agents (last used first), Browser, or Terminal, press Enter to start it in
-  the active project, and press Tab on Claude or Codex to pick an account.
-  Hotkeys: `createAgentSession`, `createSession`, `openNewThreadPalette`.
+  Hotkeys: `createAgentSession`, `openNewThreadPalette`, `createSession`,
+  `openBrowserPane`, `forkSession`, `renameActiveSession`, `sleepFocusedSession`,
+  `closeFocusedSession`.
 - **Code**: the built-in VS Code based editor (code-server). Opens files from
   chat links, `ghostex edit <file>`, and Open In. Optional Use VS Code settings
   reuses the local VS Code configuration.
@@ -216,12 +222,12 @@ focuses its name field.
   Escape closes the document search.
 - **Terminal**: a command terminal in the view panel that works like the
   Commands pane, only on the right beside your sessions instead of below them.
-  It has its own tab bar with a **+** for new terminals, Cmd+T for another tab
-  and Cmd+D for a split while it has focus, drag to regroup or split, right-click
+  It has its own tab bar with a **+** for new terminals, Cmd+Shift+T for another
+  tab and Cmd+D for a split while it has focus, drag to regroup or split, right-click
   a tab for Sleep and Close scopes, and Actions can run in it. A project has one
   Terminal view; opening it creates its first Command Terminal, closing its last
   tab closes the view, and its terminals keep running and come back when you
-  reopen it. It does not replace the Commands pane: F12 and the header's command
+  reopen it. It does not replace the Commands pane: Cmd+J (Mac), F12 and the header's command
   terminal toggle still open that pane, and both can be open at once.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
@@ -449,7 +455,7 @@ Related settings: everything under General > Sidebar, `agentManagerZoomPercent`
 ## Commands pane
 
 The Commands pane holds command terminals below the workspace, or on its right
-when Command Pane Side is set to Right. Open it with F12. The **Terminal** view
+when Command Pane Side is set to Right. Open it with Cmd+J on Mac or F12 anywhere. The **Terminal** view
 (see Views) is the same kind of terminal opened as a tab of the view panel
 instead; it has its own tabs and does not affect the Commands pane. Auto-minimize Commands
 pane is on by default: after you move focus elsewhere and leave the pointer
@@ -523,7 +529,8 @@ when you open it.
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.
-- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions.
+- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions, and
+  Cmd+Option+Shift+O opens it on recent projects.
   Its four tabs are Commands, Projects, Sessions, and Saved Prompts; they sit
   at the bottom left of the window and Cmd+1 through Cmd+4 switch between
   them. Filters (Saved/Recovered/Sent, All/Closed/External, project, tags) are
@@ -573,7 +580,10 @@ the terminal's attachment action offers the same choices.
 Hover a message to show its actions and the time it was sent in a row below
 it: Copy message, Reply by Annotating, and Save to md under an agent's final
 reply; Rewind to here, Save prompt, and Copy message under your own messages.
-Hover the time to see the full date.
+Hover the time to see the full date. While a chat has focus, Shift+Esc moves
+the keyboard to its chat box, Cmd+Shift+; copies the last code block an agent
+wrote, and Cmd+Shift+C copies the agent's last reply (Mac only; on Windows and
+Linux Ctrl+Shift+C stays terminal copy).
 The chat box edits like VS Code: Up on the first line jumps to the start and
 Down on the last line to the end, Option+Up/Down moves the current line,
 Option+Shift+Up/Down duplicates it, Cmd+Shift+K deletes it, Cmd+L selects it,
@@ -627,8 +637,9 @@ space allows, with separators only between items on the same row.
 Codex can ask questions while it keeps working. These appear above the composer,
 so you can keep writing your next message. Choose a suggested answer or write
 your own, then press Enter or Send answer; Shift+Enter adds a new line, and
-selecting an option alone sends nothing. An orange spinner with a pink dot in
-the sidebar means the agent is working and has an unanswered question. The dot
+selecting an option alone sends nothing. An orange dot followed by a pink dot on
+the session, in the sidebar and in the phone's session list, means the agent is
+working and has an unanswered question. The dot
 stays visible until you answer or skip, even while that chat is focused; if the
 agent finishes first, the pink attention dot remains.
 Use the arrows to move between questions, collapse the panel to answer later,
@@ -826,6 +837,16 @@ did before; waking the session later brings it back on the model you chose.
 Session-only picks work for Claude only: other agents' own model pickers always
 save the choice as the default.
 
+On the phone, tapping the model pill opens the same picker as a sheet, without
+keyboard shortcuts. Tap a model to highlight it; its reasoning levels appear under
+it, and tapping one sets the level. Then tap Use in this session, or Save as
+default to also make it the agent's default for new sessions (agents other than
+Claude show a single Apply button, since their pickers always save the default).
+Tap the info icon on the highlighted model to read what it is for. The bottom
+buttons work as on the computer; long-press one (Claude only) to apply the change
+to this session alone. In a session that has started, the phone's picker shows
+only that agent's models.
+
 Picking a model from another agent's tab does not change the running session,
 which cannot switch agents. It opens Handoff / Export on Handoff to an agent with
 that agent already selected; confirm it and the new session starts on the model
@@ -858,8 +879,11 @@ Sending a chat message, including a delayed chat send, replaces any text still
 in the terminal input. Ghostex checks that the agent's input is ready and empty
 before inserting the message; spaces and newlines alone count as empty. If it
 cannot confirm this, delivery stops and the chat draft or queued message is kept.
-If another saved draft is available, hover over or click its preview icon to
-read the full text above the icon before choosing Use or Dismiss.
+A chat draft you type on one device (your computer or the Ghostex phone app)
+shows up in the same chat on your other devices as "Another saved draft is
+available". Choose Use to load it into your input, or Dismiss to keep what you
+have; hover over or click its preview icon to read the full text above the icon
+first.
 
 Settings > Accounts saves Claude and Codex logins and marks each one Automatic
 or Manual. Quick launch, the main launcher row, and any session started without
@@ -1150,7 +1174,7 @@ sessions, so any client can control agents on any machine.
   Remote). Easy Connect installs the Tailcat helper, turns on SSH access with
   one admin prompt, and shows a pairing QR code; scan it with the Ghostex
   mobile app (Android ships today). A Tailscale path is offered for tailnets.
-  With Auto reconnect enabled in the phone's SSH connection settings, the phone
+  With Auto reconnect enabled in the phone's Settings > Connection, the phone
   checks the connection when you return to the app or its network changes and
   reconnects interrupted agent terminals. Tap a red cloud or choose Reconnect
   from the computer's menu to start a fresh connection. Easy Connect does not

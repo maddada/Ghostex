@@ -58,17 +58,30 @@ they ask for one.
    exactly like a save in the Settings modal and the command prints the old and
    new value once the app has written it. Report that line to the user.
 
-4. When a row is not agent-writable (accounts, remote pairing, structured
-   values such as hotkeys and tag lists, or rows that are only buttons in the
-   UI), do not try to edit files or JSON. Open the right Settings page with the
-   row already searched and tell the user what to click:
+4. Hotkeys have their own commands. Find the action id with `list` (it
+   searches titles too), then change it; `none` unassigns and `reset` restores
+   the default. `set` refuses keys another hotkey already uses unless you add
+   `--replace`, so tell the user which hotkey loses them before using it:
+
+   ```bash
+   ghostex settings hotkeys list [search] [--changed]
+   ghostex settings hotkeys set <id> cmd+shift+o
+   ghostex settings hotkeys reset <id>        # or --all
+   ```
+
+   These need a Ghostex newer than 10.2.1. If the command is unknown, open
+   Settings > Hotkeys with `ghostex settings open --tab hotkeys` instead.
+
+5. When a row is not agent-writable (accounts, remote pairing, structured
+   values such as tag lists, or rows that are only buttons in the UI), do not
+   try to edit files or JSON. Open the right Settings page with the row already
+   searched and tell the user what to click:
 
    ```bash
    ghostex settings open <key>
-   ghostex settings open --tab hotkeys
    ```
 
-5. For anything beyond settings (start or steer agents, sessions, automations,
+6. For anything beyond settings (start or steer agents, sessions, automations,
    the project board, prompt history, servers, diagnostics), route to the
    `$ghostex-cli` skill and its `ghostex --help` catalog. Use `$ghostex-help`
    to explain, `$ghostex-cli` to operate.

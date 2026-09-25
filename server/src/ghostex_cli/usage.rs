@@ -343,6 +343,10 @@ pub fn usage() -> String {
             "Open Settings on a tab, with the setting's row searched",
         ),
         format_help_command(
+            "settings hotkeys [list|get|set|reset] ...",
+            "List hotkeys, or change, unassign or reset one (or --all) through the running desktop app",
+        ),
+        format_help_command(
             "guide [overview|features|settings|hotkeys]",
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
@@ -1086,6 +1090,11 @@ Usage:
   gx settings set <key> <value> [--json]
   gx settings reset <key> [--json]
   gx settings open [<key>] [--tab <id>] [--json]
+  gx settings hotkeys [list] [<search>] [--changed] [--json]
+  gx settings hotkeys get <id> [--json]
+  gx settings hotkeys set <id> <keys> [--replace] [--json]
+  gx settings hotkeys reset <id> [--json]
+  gx settings hotkeys reset --all [--json]
   gx settings --help
 
 Keys:
@@ -1104,6 +1113,17 @@ Writing:
   value. The desktop app must be running. Keys marked read-only for agents
   (structured values, account and remote-pairing state, secrets, Settings UI
   actions) cannot be set; use settings open <key> so the user can change them.
+
+Hotkeys:
+  Ids are the camelCase action ids from `ghostex guide hotkeys` (a title such
+  as \"Fork Session\" works too). Keys are written like cmd+shift+o: modifiers
+  cmd, ctrl, alt (option) and shift, then one key (a letter, digit, symbol,
+  f1-f24, up, down, left, right, tab, enter, escape, space, backspace, delete,
+  home, end, pageup, pagedown). Separate a two-step sequence with a space. On
+  Windows and Linux cmd means Ctrl. `none` unassigns a hotkey. set refuses keys
+  another hotkey already uses unless --replace moves them (the other hotkey is
+  left unassigned). Changes save through the running desktop app like the
+  Hotkeys page and bind at once.
 
 Tabs (for --tab):
   settings integrations extensions osIntegration remote projects agents

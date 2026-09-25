@@ -1848,17 +1848,14 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:FocusMode 2026-06-22-12:51:
-        Cmd+N is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.
+        New Browser Tab is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.
 
         CDXC:Titlebar 2026-06-22-15:52:
-        Cmd+N must respect Quick/projectless titlebar availability before switching modes. Browser placeholder tabs stay part of durable shell state, but user-facing Browser creation commands cannot make Browser active when the native titlebar would show it disabled.
+        New Browser Tab must respect Quick/projectless titlebar availability before switching modes. Browser placeholder tabs stay part of durable shell state, but user-facing Browser creation commands cannot make Browser active when the native titlebar would show it disabled.
 
-        CDXC:CommandPalette 2026-06-26-06:47:
-        Focused-pane Browser open commands must match native command-panel parity: CommandPane shell focus no-ops because the native command terminal titlebar branch default-returns, while Agents, Browser, and project-editor focus still create and focus a Browser tab.
+        CDXC:Hotkeys 2026-09-25 DECISION:
+        User: Cmd+T always opens a new browser tab (Ctrl+T on Windows and Linux), so it works from the Commands pane and the Terminal view too. This supersedes the 2026-06-26 CommandPalette rule that made it a no-op while a command terminal had focus; New Terminal (Cmd+Shift+T) opens a terminal tab there.
         */
-        if !gpui_focused_pane_open_browser_hotkey_should_open(self.shell_focus) {
-            return;
-        }
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
             return;
         }

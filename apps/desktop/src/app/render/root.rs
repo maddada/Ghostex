@@ -239,6 +239,11 @@ impl Render for GhostexGpuiApp {
             .on_action(cx.listener(|this, action: &crate::app::native_sidebar::actions::NativeSidebarAction, window, cx| {
                 this.handle_native_sidebar_action(action, window, cx);
             }))
+            // CDXC:Hotkeys 2026-09-25 DECISION:
+            // User: hotkeys go to the Code editor only while it is focused, not whenever it is open. A CEF page keeps AppKit's first responder until something takes it, so clicking the sidebar, a header or the tab strip left Code (or a browser page) receiving every chord. Clicks inside a CEF page never reach GPUI, so a GPUI mouse-down is always a click outside it and hands the keyboard back to the window.
+            .capture_any_mouse_down(cx.listener(|app, _: &MouseDownEvent, _window, _cx| {
+                app.reclaim_gpui_root_for_chrome_input_focus();
+            }))
             .relative()
             .size_full()
             .bg(window_shell_background())

@@ -259,9 +259,7 @@ export function quickAccessCommandPopulations(petOverlayEnabled: boolean): {
   projectActions: PaletteCommand[];
 } {
   const state = sidebarStore.getState();
-  const hotkeys = normalizeghostexHotkeySettings(state.hud.settings?.hotkeys, {
-    preferredAgentInterface: state.hud.settings?.preferredAgentInterface,
-  });
+  const hotkeys = normalizeghostexHotkeySettings(state.hud.settings?.hotkeys);
   const hidden = hiddenWorkareaCommandIds();
   const paneActionIds = new Set<string>(PANE_ACTION_COMMAND_IDS);
   const toHotkeyCommand = (definition: ghostexHotkeyDefinition): PaletteCommand => {
@@ -278,6 +276,7 @@ export function quickAccessCommandPopulations(petOverlayEnabled: boolean): {
     (definition) =>
       definition.id !== 'openCommandPalette' &&
       definition.id !== 'openSessionSearchPalette' &&
+      definition.id !== 'openProjectSearchPalette' &&
       definition.id !== 'openExtensions' &&
       definition.action.kind !== 'runActionSlot' &&
       definition.action.kind !== 'chatAction' &&

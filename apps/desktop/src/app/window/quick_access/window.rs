@@ -865,6 +865,7 @@ impl Render for GpuiQuickAccessWindow {
                     let tab = match action.action_id.as_str() {
                         "openCommandPalette" => QuickAccessTabId::Commands,
                         "openSessionSearchPalette" => QuickAccessTabId::RecentSessions,
+                        "openProjectSearchPalette" => QuickAccessTabId::RecentProjects,
                         "stashedPrompts" => QuickAccessTabId::SavedPrompts,
                         _ => {
                             cx.propagate();

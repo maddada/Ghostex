@@ -179,16 +179,6 @@ impl GhostexGpuiApp {
         false
     }
 
-    /// Cmd+T in a Browser pane opens a browser tab on desktop; the browser build has no Browser panes.
-    pub(crate) fn run_new_session_hotkey(
-        &mut self,
-        _action_id: &str,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) -> bool {
-        false
-    }
-
     pub(crate) fn react_to_native_sidebar_session_click(
         &mut self,
         _sidebar_session_id: &str,

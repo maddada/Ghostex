@@ -2948,7 +2948,6 @@ export function SettingsModal({
                         'expandCollapsedProjectsOnJump'
                       )}
                       hotkeys={draft.hotkeys}
-                      preferredAgentInterface={draft.preferredAgentInterface}
                       sectionRefs={hotkeySectionRefs}
                       sectionSearches={hotkeySectionSearches}
                       showLessForExpandedProjectJumps={draft.showLessForExpandedProjectJumps}

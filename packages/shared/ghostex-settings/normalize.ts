@@ -954,11 +954,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
      * read so older settings files gain configurable native hotkeys without a
      * migration or fallback execution path.
      */
-    hotkeys: normalizeghostexHotkeySettings(source.hotkeys, {
-      preferredAgentInterface: normalizePreferredAgentInterface(
-        readString(source, 'preferredAgentInterface', DEFAULT_ghostex_SETTINGS.preferredAgentInterface)
-      ),
-    }),
+    hotkeys: normalizeghostexHotkeySettings(source.hotkeys),
     showActivePaneOutline: readBoolean(source, 'showActivePaneOutline', DEFAULT_ghostex_SETTINGS.showActivePaneOutline),
     windowGlass: normalizeWindowGlassMode(readString(source, 'windowGlass', DEFAULT_ghostex_SETTINGS.windowGlass)),
     windowGlassSource: normalizeWindowGlassSource(

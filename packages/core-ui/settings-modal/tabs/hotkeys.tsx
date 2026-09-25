@@ -32,7 +32,6 @@ export function HotkeysSettingsTab({
   onExpandCollapsedProjectsOnJumpChange,
   onShowLessForExpandedProjectJumpsChange,
   onSidebarSessionCycleSkipsSleepingChange,
-  preferredAgentInterface,
   searchQuery,
   sectionRefs,
   sectionSearches,
@@ -51,7 +50,6 @@ export function HotkeysSettingsTab({
   onExpandCollapsedProjectsOnJumpChange: (checked: boolean) => void;
   onShowLessForExpandedProjectJumpsChange: (checked: boolean) => void;
   onSidebarSessionCycleSkipsSleepingChange: (checked: boolean) => void;
-  preferredAgentInterface: string;
   searchQuery: string;
   sectionRefs: HotkeySettingsSectionRefs;
   sectionSearches: HotkeySettingsSectionSearches;
@@ -61,9 +59,8 @@ export function HotkeysSettingsTab({
   sidebarSessionCycleSkipsSleepingModification: Required<SettingModificationProps>;
   visibleSections: readonly HotkeySettingsSectionDefinition[];
 }) {
-  const normalizeOptions = { preferredAgentInterface };
-  const normalizedHotkeys = normalizeghostexHotkeySettings(hotkeys, normalizeOptions);
-  const defaultHotkeys = normalizeghostexHotkeySettings(DEFAULT_ghostex_HOTKEYS, normalizeOptions);
+  const normalizedHotkeys = normalizeghostexHotkeySettings(hotkeys);
+  const defaultHotkeys = normalizeghostexHotkeySettings(DEFAULT_ghostex_HOTKEYS);
   const duplicateIds = useMemo(() => getDuplicateHotkeyIds(normalizedHotkeys), [normalizedHotkeys]);
   const pendingHotkeySectionViewportRef = useRef<HTMLElement | null>(null);
   const hotkeySectionFrameRef = useRef<number | undefined>(undefined);
@@ -93,13 +90,10 @@ export function HotkeysSettingsTab({
 
   const updateHotkey = (id: ghostexHotkeyActionId, value: string) => {
     onChange(
-      normalizeghostexHotkeySettings(
-        {
-          ...normalizedHotkeys,
-          [id]: normalizeHotkeyText(value),
-        },
-        normalizeOptions
-      )
+      normalizeghostexHotkeySettings({
+        ...normalizedHotkeys,
+        [id]: normalizeHotkeyText(value),
+      })
     );
   };
 

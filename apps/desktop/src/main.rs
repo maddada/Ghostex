@@ -329,10 +329,10 @@ fn main() {
             gpui_key_binding_from_shared_hotkey("cmd+b", ToggleGpuiSidebarCollapsed, None),
             gpui_key_binding_from_shared_hotkey("cmd+alt+b", ToggleViewPanel, None),
             KeyBinding::new(SLEEP_FOCUSED_SESSION_DEFAULT_KEY, SleepFocusedSession, None),
-            gpui_key_binding_from_shared_hotkey("cmd+t", NewTerminalTab, None),
+            gpui_key_binding_from_shared_hotkey("cmd+shift+t", NewTerminalTab, None),
             gpui_key_binding_from_shared_hotkey("cmd+d", SplitFocusedTerminalRight, None),
             gpui_key_binding_from_shared_hotkey("cmd+shift+d", SplitFocusedTerminalDown, None),
-            gpui_key_binding_from_shared_hotkey("cmd+n", NewBrowserTab, None),
+            gpui_key_binding_from_shared_hotkey("cmd+t", NewBrowserTab, None),
             gpui_key_binding_from_shared_hotkey("cmd+ctrl+f", ToggleAgentsFocusMode, None),
             gpui_key_binding_from_shared_hotkey(
                 gpui_platform_hotkey_for_action("mergeAllTabs", "ctrl+shift+m"),

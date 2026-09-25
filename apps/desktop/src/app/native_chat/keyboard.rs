@@ -392,7 +392,8 @@ impl NativeChatView {
             this.send(true, window, cx);
             cx.stop_propagation();
             window.prevent_default();
-        } else if key.key == "escape" {
+        } else if key.key == "escape" && !key.modifiers.shift {
+            // Shift+Esc is Focus Chat Box (chat_hotkeys.rs), never an interrupt.
             if this.maximized_window.is_some() {
                 this.close_maximized(cx);
             } else {

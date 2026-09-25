@@ -50,6 +50,8 @@ const RENAME_TITLE_MAX_UTF16: usize = 120;
 const OPEN_BROWSER_URL_MAX_UTF16: usize = 16 * 1024;
 const SETTINGS_SEARCH_MAX_UTF16: usize = 200;
 const SETTINGS_PATCH_MAX_KEYS: usize = 50;
+/// Far above the ~100 hotkey ids; bounds what one `ghostex settings hotkeys` save can carry.
+const SETTINGS_PATCH_MAX_HOTKEYS: usize = 512;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpenPathsMode {
@@ -271,6 +273,10 @@ fn run_command(payload: &Value, key: &str) -> Result<RendererVerb, RendererComma
 }
 
 /// `applyRendererSettingsPatch`'s checks: 1 to 50 keys, each a boolean, string or finite number.
+/// CDXC:Hotkeys 2026-09-25 WHY:
+/// `hotkeys` is the one structured value allowed: `ghostex settings hotkeys` sends the complete
+/// action id -> keys map the Hotkeys page saves, so it may only be an object of strings.
+/// SEE-ALSO: server/src/ghostex_cli/settings_hotkeys.rs.
 fn settings_patch(payload: &Value) -> Result<RendererVerb, RendererCommandError> {
     let patch = payload
         .get("patch")
@@ -279,12 +285,15 @@ fn settings_patch(payload: &Value) -> Result<RendererVerb, RendererCommandError>
     if patch.is_empty() || patch.len() > SETTINGS_PATCH_MAX_KEYS {
         return Err(RendererCommandError::InvalidSettingsPatch);
     }
-    let scalar = |value: &Value| match value {
+    let allowed = |key: &String, value: &Value| match value {
         Value::Bool(_) | Value::String(_) => true,
         Value::Number(number) => number.as_f64().is_some_and(f64::is_finite),
+        Value::Object(hotkeys) if key == "hotkeys" => {
+            hotkeys.len() <= SETTINGS_PATCH_MAX_HOTKEYS && hotkeys.values().all(Value::is_string)
+        }
         _ => false,
     };
-    if !patch.values().all(scalar) {
+    if !patch.iter().all(|(key, value)| allowed(key, value)) {
         return Err(RendererCommandError::InvalidSettingsPatch);
     }
     Ok(RendererVerb::UpdateSettingsPatch {

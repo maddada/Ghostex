@@ -53,6 +53,7 @@ impl NativeChatView {
 impl Render for NativeChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         super::scroll_bottom::register(cx);
+        super::chat_hotkeys::register(cx);
         super::search::register(cx);
         super::zoom::register(cx);
         self.last_render = Some(web_time::Instant::now());
@@ -193,6 +194,7 @@ impl Render for NativeChatView {
                 },
             ))
             .capture_action(cx.listener(Self::scroll_bottom_action))
+            .capture_action(cx.listener(Self::run_chat_hotkey))
             .capture_action(cx.listener(Self::open_search_action))
             .capture_action(cx.listener(Self::chat_zoom_in_action))
             .capture_action(cx.listener(Self::chat_zoom_out_action))

@@ -16,6 +16,7 @@ mod attachment_previews;
 mod attachments;
 mod binding;
 mod cards;
+mod chat_hotkeys;
 pub(crate) mod child_window;
 mod choice_rows;
 mod completed_work_row;
