@@ -375,6 +375,12 @@ const PRODUCT_LIST = [
      * gomobile output that is never committed. The Android job regenerates it from
      * that Go source on every build, so the Go source is a real input to the APK.
      *
+     * The Rust chat core is the second exception, on the same terms: the submodule's
+     * modules/gx-chat-core loads libgx_chat_mobile.so and its UniFFI Kotlin bindings,
+     * which the Android job builds from packages/gx-chat-mobile (and the gx-chat-core and
+     * gx-protocol crates it compiles in) and never commits. Without these pathspecs a
+     * release that changed only the chat core would reuse the previous APK.
+     *
      * FINGERPRINT_ALGORITHM_REVISION is deliberately NOT bumped for this purely
      * additive change. The header rule exists so a stale record can never be
      * compared against a different input set; here every product already hashes
@@ -391,6 +397,9 @@ const PRODUCT_LIST = [
       { pathspec: 'apps/mobile/app' },
       { pathspec: 'apps/mobile/tailcat-bridge/**' },
       { pathspec: ':(exclude)apps/mobile/tailcat-bridge/build' },
+      { pathspec: 'packages/gx-chat-mobile/**' },
+      { pathspec: 'packages/gx-chat-core/**' },
+      { pathspec: 'packages/gx-protocol/**' },
       { pathspec: 'tooling/release-mobile/android.sh' },
       { pathspec: 'tooling/release-gpui/android.sh' },
       { pathspec: '.github/workflows/release-gpui-android.yml' },

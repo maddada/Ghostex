@@ -45,6 +45,8 @@ jobs:
       # The NDK compiler cache (ccache) and the gomobile bridge cache are keyed
       # on this pin, so a bump invalidates both.
       ANDROID_NDK_VERSION: 29.0.14206865
+      # Builds the Rust chat core's Android libraries (packages/gx-chat-mobile/build.sh).
+      CARGO_NDK_VERSION: 4.1.2
     steps:
       - uses: actions/checkout@v6
         with:
@@ -120,6 +122,40 @@ jobs:
           test -s "$MODULE/libs/tailcatbridge.jar"
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             test -s "$MODULE/src/main/jniLibs/$abi/libgojni.so"
+          done
+      # CDXC:Release 2026-09-25 WHY: the phone's chat runs on the Rust chat core
+      # through UniFFI (`apps/mobile/app/modules/gx-chat-core`). Its `.so` files
+      # and Kotlin bindings are gitignored outputs of
+      # `packages/gx-chat-mobile/build.sh`, so without this step Gradle cannot
+      # compile the module. They are built from this checkout, so the APK
+      # carries the same chat core as the desktop release, for all four ABIs
+      # the APK ships (a missing ABI would crash the chat on that phone). The
+      # staged output is cached on exactly its inputs: the three crates, the
+      # toolchain pin inside `packages/gx-chat-mobile`, the NDK and cargo-ndk.
+      - name: Restore the Rust chat core for Android
+        id: gx_chat_core_cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            apps/mobile/app/modules/gx-chat-core/android/src/main/jniLibs
+            apps/mobile/app/modules/gx-chat-core/android/src/main/java/dev/ghostex/gxchatcore/uniffi
+          key: gx-chat-core-android-${{ runner.os }}-ndk${{ env.ANDROID_NDK_VERSION }}-cargo-ndk${{ env.CARGO_NDK_VERSION }}-${{ hashFiles('packages/gx-chat-mobile/**', 'packages/gx-chat-core/**', 'packages/gx-protocol/**') }}
+      - name: Build the Rust chat core for Android
+        if: steps.gx_chat_core_cache.outputs.cache-hit != 'true'
+        run: |
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' packages/gx-chat-mobile/rust-toolchain.toml)"
+          test -n "$toolchain"
+          tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal
+          tooling/release-gpui/retry.sh 3 5 -- cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          GX_CHAT_ANDROID_ABIS="arm64-v8a armeabi-v7a x86 x86_64" \
+            packages/gx-chat-mobile/build.sh --target android
+      - name: Verify the Rust chat core
+        run: |
+          MODULE=apps/mobile/app/modules/gx-chat-core/android/src/main
+          test -s "$MODULE/java/dev/ghostex/gxchatcore/uniffi/gx_chat_mobile.kt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            test -s "$MODULE/jniLibs/$abi/libgx_chat_mobile.so"
           done
       - name: Install repository dependencies
         # `tooling/release-mobile/android.sh` runs `bun run build:mobile-chat`,

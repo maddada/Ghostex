@@ -95,6 +95,32 @@ jobs:
           for abi in arm64-v8a armeabi-v7a x86 x86_64; do
             test -s "$MODULE/src/main/jniLibs/$abi/libgojni.so"
           done
+      # Same contract as release-gpui-android.yml: the Rust chat core's `.so`
+      # files and UniFFI Kotlin bindings are never committed, so they are built
+      # here from the source checkout for all four APK ABIs. Sources older than
+      # the gx-chat-core Expo module (10.2.0 and earlier) have nothing to build.
+      - name: Build the Rust chat core for Android
+        env:
+          CARGO_NDK_VERSION: 4.1.2
+        run: |
+          if [ ! -d apps/mobile/app/modules/gx-chat-core ]; then
+            echo "Source has no gx-chat-core module; nothing to build."
+            exit 0
+          fi
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' packages/gx-chat-mobile/rust-toolchain.toml)"
+          test -n "$toolchain"
+          .release-automation/tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal
+          .release-automation/tooling/release-gpui/retry.sh 3 5 -- rustup target add --toolchain "$toolchain" \
+            aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          .release-automation/tooling/release-gpui/retry.sh 3 5 -- cargo install cargo-ndk --version "$CARGO_NDK_VERSION" --locked
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/29.0.14206865"
+          GX_CHAT_ANDROID_ABIS="arm64-v8a armeabi-v7a x86 x86_64" \
+            packages/gx-chat-mobile/build.sh --target android
+          MODULE=apps/mobile/app/modules/gx-chat-core/android/src/main
+          test -s "$MODULE/java/dev/ghostex/gxchatcore/uniffi/gx_chat_mobile.kt"
+          for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+            test -s "$MODULE/jniLibs/$abi/libgx_chat_mobile.so"
+          done
       - name: Install repository dependencies
         # `tooling/release-mobile/android.sh` runs `bun run build:mobile-chat`,
         # which imports esbuild from the ROOT node_modules. The React Native
