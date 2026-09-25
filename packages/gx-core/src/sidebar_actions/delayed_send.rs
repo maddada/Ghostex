@@ -23,7 +23,9 @@
 
 use serde_json::{Map, Value};
 
-use crate::sidebar_view::SidebarView;
+use crate::core::Core;
+use crate::keys::SessionKey;
+use crate::sidebar_view::{DelayedSendView, SidebarView};
 
 use super::modals::rename_seed_title;
 use super::plan::{ActionEffect, SidebarActionPlan};
@@ -65,12 +67,7 @@ pub fn plan_delayed_send_action(view: &SidebarView, command: &Value) -> Option<S
     if let Some(agent_icon) = &row.agent_icon {
         text("agentIcon", agent_icon);
     }
-    if let Some(deadline_at) = delayed.and_then(|delayed| delayed.deadline_at.as_deref()) {
-        text("delayedSendDeadlineAt", deadline_at);
-    }
-    if let Some(label) = delayed.and_then(|delayed| delayed.remaining_label.as_deref()) {
-        text("delayedSendRemainingLabel", label);
-    }
+    insert_delayed_send_seed(&mut open, delayed);
     let mut flag = |key: &str, value: bool| {
         open.insert(key.to_string(), Value::Bool(value));
     };
@@ -80,16 +77,55 @@ pub fn plan_delayed_send_action(view: &SidebarView, command: &Value) -> Option<S
             .as_ref()
             .is_some_and(|close| close.armed),
     );
-    flag(
-        "sendWhenAllProjectSessionsStopActive",
-        delayed.is_some_and(|delayed| delayed.send_when_all_project_sessions_stop_active),
-    );
-    flag(
-        "sendWhenAgentStopsActive",
-        delayed.is_some_and(|delayed| delayed.send_when_agent_stops_active),
-    );
     flag("supportsSendWhenAgentStops", true);
     flag("supportsSendWhenAllProjectSessionsStop", true);
+    Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
+        payload: Value::Object(open),
+    }))
+}
+
+/// The daemon's armed Delayed Send of one session, as the dialog's seed fields: what a Delayed
+/// Send opened by the hotkey or a session's own bar adds to its open message, so it shows the
+/// countdown or the armed trigger the row's menu item shows. Empty when the store does not hold
+/// the session or the daemon has none armed; the host's own timers are the host's to add.
+///
+/// CDXC:DelayedSend 2026-09-25 WHY:
+/// The hotkey's open message names the session by its shell id, which no sidebar row matches, so it carried no daemon trigger and an armed send opened on "After a delay". The row's seeds come from the same resolution (`sidebar_view/rows.rs`, daemon first), so both entry points show the same state.
+pub fn daemon_delayed_send_seed(core: &Core, session: &SessionKey) -> Map<String, Value> {
+    let mut open = Map::new();
+    let delayed = core
+        .presentation()
+        .session(session)
+        .and_then(|session| crate::sidebar_view::rows::delayed_send(&session, None));
+    insert_delayed_send_seed(&mut open, delayed.as_ref());
+    open
+}
+
+/// The five Delayed Send fields of the dialog's open message. Every optional one is ABSENT when
+/// the TypeScript's value was `undefined`, because the dialog tells an absent key from a null one.
+fn insert_delayed_send_seed(open: &mut Map<String, Value>, delayed: Option<&DelayedSendView>) {
+    if let Some(deadline_at) = delayed.and_then(|delayed| delayed.deadline_at.as_deref()) {
+        open.insert(
+            "delayedSendDeadlineAt".to_string(),
+            Value::String(deadline_at.to_string()),
+        );
+    }
+    if let Some(label) = delayed.and_then(|delayed| delayed.remaining_label.as_deref()) {
+        open.insert(
+            "delayedSendRemainingLabel".to_string(),
+            Value::String(label.to_string()),
+        );
+    }
+    open.insert(
+        "sendWhenAllProjectSessionsStopActive".to_string(),
+        Value::Bool(
+            delayed.is_some_and(|delayed| delayed.send_when_all_project_sessions_stop_active),
+        ),
+    );
+    open.insert(
+        "sendWhenAgentStopsActive".to_string(),
+        Value::Bool(delayed.is_some_and(|delayed| delayed.send_when_agent_stops_active)),
+    );
     // Passed on as the daemon sent it. A daemon `null` is the one shape that differs: the protocol
     // reads it as absent while the TypeScript copies `null` through (declared difference 40).
     if let Some(agent) =
@@ -97,7 +133,4 @@ pub fn plan_delayed_send_action(view: &SidebarView, command: &Value) -> Option<S
     {
         open.insert("sendWhenSpecificAgentFinishes".to_string(), agent.clone());
     }
-    Some(SidebarActionPlan::one(ActionEffect::OpenAppModal {
-        payload: Value::Object(open),
-    }))
 }

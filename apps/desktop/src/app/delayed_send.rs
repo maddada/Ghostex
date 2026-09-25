@@ -849,6 +849,9 @@ impl GhostexGpuiApp {
                 .any(|(_, mapped_session_id)| *mapped_session_id == session_id);
         open_message["supportsSendWhenAllProjectSessionsStop"] =
             serde_json::json!(supports_project_scope);
+        // The daemon's armed send, which the row's own open carries; a local watcher or timer
+        // below restates it.
+        self.gx_store_seed_daemon_delayed_send(open_message, session_id);
         /*
         CDXC:DelayedSend 2026-08-19:
         Armed Delayed Sends live on the daemon, and the sidebar row already

@@ -62,6 +62,7 @@ mod client_storage_init;
 mod collection_menu;
 mod create;
 mod custom_tags_sync;
+mod delayed_send_seed;
 mod diagnostics;
 mod diagnostics_open;
 mod diagnostics_project_docs;

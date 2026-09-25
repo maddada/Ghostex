@@ -61,7 +61,9 @@ pub use close::{
     apply_close_answer, close_optimistic_follow_ups, owns_close_message, plan_close_request,
     CloseAnswer, CloseFollowUp, CloseRequest,
 };
-pub use delayed_send::{owns_delayed_send_command, plan_delayed_send_action};
+pub use delayed_send::{
+    daemon_delayed_send_seed, owns_delayed_send_command, plan_delayed_send_action,
+};
 pub use flags::{
     apply_flags_answer, owns_flags_message, plan_flags_request, FlagsFollowUp, FlagsRequest,
     SessionFlags, FLAGS_MESSAGE_TYPES,
