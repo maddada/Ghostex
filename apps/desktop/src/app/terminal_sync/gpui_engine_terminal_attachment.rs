@@ -458,12 +458,37 @@ impl GhostexGpuiApp {
         false
     }
 
+    /*
+    CDXC:Clipboard 2026-09-25 WHY:
+    A file dropped on a remote-attached terminal uploads over that machine's
+    SSH connection before its reference is pasted, because the local path
+    names nothing on the remote machine. This is the drag-and-drop route into
+    the same flow the Attach File or Folder button takes, and the sibling of
+    the 2026-08-21 remote paste rule.
+    */
     pub(crate) fn insert_paths_into_gpui_engine_terminal(
         &mut self,
         target: GpuiEngineTerminalEventTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
         paths: &[PathBuf],
         cx: &mut gpui::Context<Self>,
     ) {
+        let remote_machine_id = match target {
+            GpuiEngineTerminalEventTarget::Agents(session_id) => {
+                self.remote_machine_id_for_attached_shell_session(session_id)
+            }
+            GpuiEngineTerminalEventTarget::Command(_) => None,
+        };
+        if let Some(remote_machine_id) = remote_machine_id {
+            self.upload_dropped_paths_to_remote_gpui_engine_terminal(
+                target,
+                runtime_session_id,
+                paths,
+                remote_machine_id.as_str(),
+                cx,
+            );
+            return;
+        }
         let mut next_image_number = 1usize;
         let text = paths
             .iter()
@@ -495,6 +520,111 @@ impl GhostexGpuiApp {
         if let Some(view) = view {
             view.update(cx, |view, cx| view.send_text_input(&text, cx));
         }
+    }
+
+    /// Uploads files dropped on a remote-attached terminal to that machine and
+    /// pastes the returned remote references, the same flow the terminal's
+    /// Attach File or Folder button drives for a picker selection.
+    pub(crate) fn upload_dropped_paths_to_remote_gpui_engine_terminal(
+        &mut self,
+        target: GpuiEngineTerminalEventTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
+        paths: &[PathBuf],
+        remote_machine_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if paths.is_empty() {
+            return;
+        }
+        let settings = shared_settings::shared_sidebar_settings_snapshot();
+        let Some(config) =
+            gpui_remote_machine_config_from_settings(settings.object(), remote_machine_id)
+        else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Attachment unavailable",
+                "The saved remote machine is missing required SSH settings.",
+                cx,
+            );
+            return;
+        };
+        let Some(remote_target) = self.gpui_remote_gxserver_request_target(remote_machine_id)
+        else {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Attachment unavailable",
+                "Reconnect the remote machine before attaching a file or folder.",
+                cx,
+            );
+            return;
+        };
+        let Some((origin_view_id, lease)) = (match target {
+            GpuiEngineTerminalEventTarget::Agents(id) => self.agents_gpui_engine_terminals.get(&id),
+            GpuiEngineTerminalEventTarget::Command(id) => {
+                self.command_gpui_engine_terminals.get(&id)
+            }
+        })
+        .filter(|record| record.runtime_session_id == runtime_session_id)
+        .map(|record| (record.view.entity_id(), record.pin_viewer())) else {
+            return;
+        };
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            "Uploading attachment",
+            "Uploading the dropped items to the remote machine.",
+            cx,
+        );
+        let background = cx.background_executor().clone();
+        let paths = paths.to_vec();
+        cx.spawn(async move |this, cx| {
+            let _lease = lease;
+            let result = background
+                .spawn(async move {
+                    paths
+                        .iter()
+                        .map(|path| {
+                            gpui_upload_terminal_attachment_to_remote(
+                                &config,
+                                &remote_target.execution_target,
+                                path.as_path(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, String>>()
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                if !this.gpui_terminal_viewer_matches_entity(target, origin_view_id)
+                    || !this.gpui_engine_terminal_target_matches_runtime(target, runtime_session_id)
+                {
+                    return;
+                }
+                match result {
+                    Ok(references) => {
+                        let text = gpui_terminal_attachment_markdown_text(&references);
+                        if this.paste_text_into_gpui_engine_terminal_target(
+                            target,
+                            runtime_session_id,
+                            text.as_str(),
+                            cx,
+                        ) {
+                            this.dispatch_gpui_workspace_action_toast(
+                                "success",
+                                "Attachment uploaded",
+                                "The remote attachment reference was pasted into the terminal.",
+                                cx,
+                            );
+                        }
+                    }
+                    Err(message) => this.dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Attachment upload failed",
+                        message.as_str(),
+                        cx,
+                    ),
+                }
+            });
+        })
+        .detach();
     }
 
     /// True while gxserver reports a first-prompt title job in flight for the
