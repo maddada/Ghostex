@@ -145,8 +145,7 @@ function stageMonacoVs(): Plugin {
  * So the highlighter ships the way Monaco does: prebuilt classic scripts staged
  * beside the bundle, pulled in by <script src> only when a fence needs them.
  * tooling/shiki-classic-assets.mjs owns both the staged files and the loader
- * shim, and the mobile chat build uses the same module so the two hosts cannot
- * drift apart.
+ * shim.
  */
 function stageShikiChatRuntime(): Plugin {
   return {

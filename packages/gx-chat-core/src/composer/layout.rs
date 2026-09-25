@@ -2,7 +2,7 @@
 //!
 //! Port of `packages/shared/session-chat-presentation/composer-layout.ts` and
 //! `composer-scroll.ts`. The animation metrics stay in
-//! `packages/shared/session-chat-presentation/composer-animation.json`, which both renderers
+//! `packages/gx-chat-core/visual/composer-animation.json`, which both renderers
 //! already read; nothing copies them here.
 
 use serde::{Deserialize, Serialize};

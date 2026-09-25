@@ -17,13 +17,12 @@ struct StatusTone {
 }
 
 /// The tone table React's status rows read (`STATUS_TONE_ICON` in
-/// session-chat-message-list/rows.tsx). One row names the glyph for both
-/// renderers, so a completed action cannot wear a green check in React and a red
-/// triangle here; the class names in the file are React's, the hex colors are
-/// this renderer's.
+/// session-chat-message-list/rows.tsx), kept as `status-tone.json` in the core.
+/// One row names each tone's glyph; the class names in the file are React's, the
+/// hex colors are this renderer's.
 static TONES: LazyLock<HashMap<String, StatusTone>> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/status-tone.json"
+        "../../../../../packages/gx-chat-core/visual/status-tone.json"
     ))
     .expect("shared status tone table")
 });
@@ -34,7 +33,7 @@ fn hex(color: &str) -> Option<Hsla> {
         .map(|value| rgb(value).into())
 }
 
-/// An unnamed tone is the completed-action tone, the same default React's row takes.
+/// An unnamed tone is the completed-action tone, the same default React's row took.
 fn tone(name: &str) -> &'static StatusTone {
     TONES.get(name).unwrap_or(&TONES["ok"])
 }
@@ -73,7 +72,7 @@ impl NativeChatView {
     /// The column carries no padding of its own. Every transcript row already
     /// ends with the same trailing space (`transcript_item_row`), and a second
     /// block of it here is what pushed consecutive completed-action pills far
-    /// further apart than React's, which are only `pb-3` from each other.
+    /// further apart than React's, which were only `pb-3` from each other.
     fn status_rows(&self, suppressed: &Value, p: &ChatAppearance) -> AnyElement {
         let s = p.scale;
         let sole = json!([{"label": suppressed["label"], "tone": suppressed["tone"]}]);
@@ -120,6 +119,7 @@ impl NativeChatView {
             .max_w_full()
             .min_w_0()
             .gap(px(8.0 * s))
+            // CDXC:SessionChat 2026-09-04 DECISION: User: the row is less rounded than a pill (0.75rem, same as the terminal activity card) so a wrapped two-line row does not read as a lozenge.
             .rounded(px(12.0 * s))
             .border_1()
             .border_color(p.border)

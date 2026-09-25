@@ -2,8 +2,8 @@
 //! `packages/shared/session-chat-controller/working-strip.ts`.
 //!
 //! CDXC:SessionChat 2026-09-17 SEE-ALSO:
-//! React's working strip and the native chat share stint words and activity precedence here;
-//! visual dimensions and spark artwork live in session-chat-presentation/working-strip.json.
+//! Stint words and activity precedence live here; visual dimensions and spark artwork live in
+//! packages/gx-chat-core/visual/working-strip.json.
 
 use crate::document::WorkingStrip;
 use crate::extras::activity::compute_activity_at;
@@ -14,7 +14,7 @@ use crate::state::{ChatContext, ChatState, WorkingWordState};
 ///
 /// The initializer's draw is made once and then immediately replaced whenever the first
 /// computation already sees a working session, which is why the two draws come off the context in
-/// order: the replay's recorded `Math.random()` queue has both.
+/// order, the same two `Math.random()` reads the TypeScript made.
 pub fn settle_working_word(word: &mut WorkingWordState, working: bool, context: &ChatContext) {
     let mut slot = 0usize;
     if word.last_working.is_none() {

@@ -15,10 +15,10 @@
 //     resolves to the shared core once that grammar is registered, which is
 //     exactly the shape `use()` needs (stable identity per key).
 //
-//  2. DUAL-THEME output, not a JS theme signal. Session Chat's theme is a DOM
+//  2. DUAL-THEME output, not a JS theme signal. The theme is a DOM
 //     attribute (`data-chat-theme` on `.ghostex-session-chat-scope`, set by
-//     session-chat-view.tsx), not React state that reaches the markdown
-//     renderer. Shiki's `defaultColor: false` dual-theme mode emits
+//     the page that hosts the Markdown), not React state that reaches the
+//     markdown renderer. Shiki's `defaultColor: false` dual-theme mode emits
 //     `--shiki-light` / `--shiki-dark` custom properties per token and no
 //     inline `color`, so chat.css picks the side that matches the attribute.
 //     Theme flips therefore cost zero re-highlighting and one cache entry
@@ -33,7 +33,6 @@ import type { SessionChatCodeLanguage } from './session-chat-code-languages';
 import { createSessionChatHighlighterCore } from './session-chat-shiki-engine';
 
 export { resolveSessionChatCodeLanguage } from './session-chat-code-languages';
-export { SESSION_CHAT_HIGHLIGHTING_AVAILABLE } from './session-chat-shiki-engine';
 export type { SessionChatCodeLanguage } from './session-chat-code-languages';
 
 export const SESSION_CHAT_SHIKI_LIGHT_THEME = 'github-light-default';

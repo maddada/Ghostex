@@ -1,9 +1,8 @@
 //! Pictures shared in the conversation.
 //!
 //! CDXC:SessionChat 2026-09-18 SEE-ALSO:
-//! React renders the same blocks through session-chat-image-viewer.tsx and the message-list rows;
-//! both surfaces classify a block with `sessionChatImageSource` in
-//! packages/shared/session-chat-presentation/images.ts. A machine path is bytes only
+//! The core classifies each block with `image_source` in
+//! packages/gx-chat-core/src/transcript/images.rs. A machine path is bytes only
 //! `readSessionChatImage` can serve, because the picture lives on the session's machine, so it is
 //! read once here and shared by the thumbnail and the full-size viewer. A picture that cannot be
 //! read renders the named chip it would otherwise have been, never a broken image well.
@@ -25,7 +24,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-/// The measurements React draws a transcript picture with, read from the shared file.
+/// The measurements React drew a transcript picture with, read from `image-visual.json`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ChatImageVisual {
@@ -44,12 +43,11 @@ pub(super) struct ChatImageVisual {
 }
 
 /// CDXC:SessionChat 2026-09-19 SEE-ALSO: The thumbnail's size, radius, hairline and row gaps come
-/// from packages/shared/session-chat-presentation/image-visual.json, which mirrors the CSS in
-/// packages/core-ui/styles/chat.css and the row classes in
-/// packages/core-ui/chat/session-chat-message-list/rows.tsx.
+/// from packages/gx-chat-core/visual/image-visual.json, which mirrors the CSS in
+/// packages/core-ui/styles/chat.css.
 pub(super) static VISUAL: LazyLock<ChatImageVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/image-visual.json"
+        "../../../../../packages/gx-chat-core/visual/image-visual.json"
     ))
     .expect("shared transcript image appearance")
 });
@@ -367,7 +365,7 @@ impl NativeChatView {
         ChatImageTile::Loading
     }
 
-    /// The transport answered a `loadImage` ask (native-host.ts pushes the `chatImage` request).
+    /// The transport answered a `loadImage` ask (the core's `chatImage` request).
     pub(super) fn receive_chat_image(&mut self, request: &Value, cx: &mut Context<Self>) {
         let path = text(&request["params"], "path");
         if path.is_empty() {
@@ -548,10 +546,10 @@ impl NativeChatView {
 
     /// A picture written into prose, at the position its author wrote it.
     ///
-    /// React draws the same 3rem thumbnail for a Markdown image and for a link that names a picture
+    /// React drew the same 3rem thumbnail for a Markdown image and for a link that names a picture
     /// (`SessionChatInlineImage`); the shared projection marks both, so a `data:` URL and a machine
     /// path load through this transport instead of the blank band a `TextView` leaves behind. When
-    /// the bytes cannot be read the picture's own words stand in, exactly as React's fallback does.
+    /// the bytes cannot be read the picture's own words stand in, exactly as React's fallback did.
     pub(super) fn inline_image(
         &self,
         id: &str,

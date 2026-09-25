@@ -143,7 +143,7 @@ impl NativeChatView {
             "terminalView" => "Terminal View",
             _ => action,
         };
-        // CDXC:SessionChat 2026-09-18 SEE-ALSO: The stash count badge, the session-note presence dot and the pressed Summary/Note states come from `packages/shared/session-chat-controller/native-composer-chrome.ts`, the shared form of React's `session-chat-composer-actions.tsx` chrome.
+        // CDXC:SessionChat 2026-09-18 SEE-ALSO: The stash count badge, the session-note presence dot and the pressed Summary/Note states come from the core's composer chrome (`packages/gx-chat-core/src/composer/note.rs`), ported from React's `session-chat-composer-actions.tsx` chrome.
         let chrome = &self.snapshot["composerChrome"];
         let pressed = match action {
             "summaryMode" => chrome["summaryPressed"] == true,
@@ -232,7 +232,7 @@ impl NativeChatView {
         // CDXC:SessionChat 2026-09-19 SEE-ALSO:
         // The chat box's tween, React's `use-session-chat-composer-transition.ts`. Timing, easing and
         // the collapsed and expanded metrics are shared through
-        // `packages/shared/session-chat-presentation/composer-animation.json`; `composer_animation.rs`
+        // `packages/gx-chat-core/visual/composer-animation.json`; `composer_animation.rs`
         // holds the interpolation.
         let metrics = &*super::composer_animation::METRICS;
         let frame = self.composer_frame(cx);
@@ -260,7 +260,7 @@ impl NativeChatView {
             /*
             CDXC:Drafts 2026-09-18 DECISION:
             User (2026-09-10, React): the saved-draft notice previews the message it would restore.
-            React hangs a popover off a document icon; the GPUI row puts the same preview in the
+            React hung a popover off a document icon; the GPUI row puts the same preview in the
             icon's tooltip so the notice stays one line high.
             */
             let preview: String = self.snapshot["incomingDraft"]["content"]
@@ -509,6 +509,7 @@ impl NativeChatView {
                             } else {
                                 metrics.expanded_line_height_px
                             } * s))
+                            // CDXC:SessionChat 2026-09-14 DECISION: User: an empty, collapsed composer shows only the first line of its placeholder. The collapsed field is one line tall and its row clips, so the placeholder's second line never shows.
                             .when(collapsed, |this| {
                                 this.h(px(metrics.collapsed_height_px * s))
                                     .max_h(px(metrics.collapsed_height_px * s))
@@ -526,7 +527,7 @@ impl NativeChatView {
                     .items_center()
                     .justify_between()
                     .gap(px(8.0 * s))
-                    // React fades its option pills and toolbar back in over the second half of an
+                    // React faded its option pills and toolbar back in over the second half of an
                     // expansion rather than having them appear the moment the box starts growing.
                     .when(frame.controls_opacity < 1.0, |this| {
                         this.opacity(frame.controls_opacity)
@@ -539,7 +540,7 @@ impl NativeChatView {
                     .when(!collapsed, |this| this.child(measurement)),
             )
             .when(!maximized, |this| this.child(content_measure));
-        // CDXC:SessionChat 2026-09-18 WHY: React's inline composer has a zero-height notification section before its field, contributing one grid gap even while idle. Reserve that same gap here, after any cards or note.
+        // CDXC:SessionChat 2026-09-18 WHY: React's inline composer had a zero-height notification section before its field, contributing one grid gap even while idle. Reserve that same gap here, after any cards or note.
         footer = footer.child(
             div()
                 .relative()

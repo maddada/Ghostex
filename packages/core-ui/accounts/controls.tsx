@@ -7,7 +7,7 @@ import {
   accountResetsLine,
   ACCOUNT_POLICY_PRIORITY_OPTIONS,
   ACCOUNT_POLICY_RETRY_DESCRIPTION,
-} from '@/packages/shared/session-chat-presentation/accounts';
+} from './presentation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/packages/components/ui/select';
 import { Switch } from '@/packages/components/ui/switch';
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
@@ -38,7 +38,7 @@ export function AccountLogo({
     </span>
   );
 }
-export { accountFigureWindows } from '@/packages/shared/session-chat-presentation/accounts';
+export { accountFigureWindows } from './presentation';
 export function AccountIdentity({ account }: { account: AgentAccount }) {
   const figures = accountFigures(account);
   return (

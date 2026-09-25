@@ -27,7 +27,7 @@ struct WebVisual {
 
 pub(super) static VISUAL: LazyLock<ReferenceVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/reference-visual.json"
+        "../../../../../packages/gx-chat-core/visual/reference-visual.json"
     ))
     .expect("shared reference appearance")
 });
@@ -63,10 +63,10 @@ pub(super) fn composer_color(kind: &str, appearance: &ChatAppearance) -> Option<
 
 /// The transcript's right-click menu on a reference, wired into the markdown view's secondary-click
 /// hook because these pills are inline links inside gpui-component's text, not elements of our own.
-/// The rows and the ordering are the composer's (`reference_menu.rs`), the way React shares
+/// The rows and the ordering are the composer's (`reference_menu.rs`), the way React shared
 /// `session-chat-reference-menu-items.tsx` between both. On the main transcript the pill leads the
 /// transcript menu instead (`transcript_menu.rs`), which adds Copy and Add to Chat when text is
-/// selected, as React's transcript menu does.
+/// selected, as React's transcript menu did.
 pub(super) fn secondary_click(
     chat: gpui::WeakEntity<NativeChatView>,
 ) -> impl Fn(&str, gpui::Modifiers, &mut gpui::Window, &mut gpui::App) + Send + Sync + 'static {

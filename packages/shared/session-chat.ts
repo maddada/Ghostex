@@ -2,8 +2,9 @@ import type { AccountSwitchProgress } from './agent-accounts';
 import { normalizeContentThemeSetting, type ContentThemeSetting } from './appearance';
 import type { SessionChatDraftVersion } from './session-chat-queue';
 // Session Chat — normalized chat projection of an agent terminal session.
-// Canonical wire types shared by gxserver (Rust mirror in server/src/session_chat.rs),
-// the shared React chat components (packages/core-ui/chat/), and every client host.
+// Canonical wire types shared by gxserver (Rust mirror in server/src/session_chat.rs)
+// and the client hosts; the chat itself reads them through the Rust chat core
+// (packages/gx-chat-core).
 // All values must stay plain JSON: they cross the /api/events websocket, the CEF bridge,
 // and the gpui remote-machine proxy.
 
@@ -600,7 +601,7 @@ up. `agent-stream` is the `⏺ …` message Claude is writing right now: `text`
 carries the whole block as painted so far (stitched across probes once the
 bullet scrolls off the full-screen grid; `label` is its first paragraph), and
 the client shows it as the streaming assistant bubble until the transcript
-carries the same text (session-chat-terminal-stream.ts). `claude-status` is an
+carries the same text (packages/gx-chat-core/src/session/terminal.rs). `claude-status` is an
 allowlisted star-marker line and becomes transient reasoning history in the
 client; `claude-tool` is the row above a `⎿` output gutter, i.e. a tool call,
 shown as a pending tool row at the bottom of the transcript and never in the
@@ -663,7 +664,7 @@ User: a prompt Claude Code pulls back into its composer after an Escape must
 come back into the chat composer too, and its bubble must leave the transcript,
 so the user never writes a follow-up to a message the agent never took.
 SEE-ALSO: server/src/session_chat_returned_prompt.rs,
-packages/core-ui/chat/session-chat-returned-prompt.ts.
+packages/gx-chat-core/src/state/composer.rs.
 */
 export interface SessionChatReturnedPrompt {
   /** Stable per detection; a client applies each id once. */

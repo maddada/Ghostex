@@ -1,10 +1,10 @@
 /*
  * CDXC:SessionChat 2026-08-22:
- * The transcript's typeface. Imported here rather than from a host entry point
- * because this sheet is the one file both chat surfaces load (the web host
- * through sidebar/styles.css and the mobile WebView through
- * mobile-chat/session-chat.css), so one import covers them all. The mobile build inlines `.woff2` as a data URL, so its single-file
- * page keeps the face with no external request.
+ * The transcript's typeface, imported here so every page that loads this sheet
+ * (the CEF pages' Markdown and prompt input) gets it with no host entry point.
+ * The React chat that this sheet was written for was deleted on 2026-09-25; the
+ * chat itself is drawn natively now, and the rules below that still match live
+ * markup are the Markdown and Lexical input ones.
  *
  * A variable face specifically: the transcript needs 400 for running prose and
  * 500/600 for labels and headings off ONE file, and real weights rather than
@@ -12,8 +12,6 @@
  * looking heavier than it should next to the body copy.
  */
 @import '@fontsource-variable/dm-sans/index.css';
-@import '../chat/session-chat-card-styles.css';
-@import '../chat/session-chat-status-card.css';
 
 /*
  * CDXC:SessionChat 2026-07-31:

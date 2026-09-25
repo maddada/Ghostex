@@ -7,7 +7,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..');
 
 /**
  * CDXC:CefRuntime 2026-09-06 WHY:
- * CEF and mobile file URLs cannot import module chunks. Stage Mermaid once as a classic script instead of inlining its renderer into every chat pane and Docs entry.
+ * CEF file URLs cannot import module chunks. Stage Mermaid once as a classic script instead of inlining its renderer into every Markdown and Docs entry.
  */
 export async function writeMermaidClassicAssets(outDir) {
   await fs.mkdir(outDir, { recursive: true });

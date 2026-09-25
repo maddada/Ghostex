@@ -654,7 +654,7 @@ export type ghostexSettings = {
   /**
    * Reveal thinking-owned tool calls by default in Session Chat. Chats that
    * use the composer's Verbose pill store their own value and stop following
-   * this (packages/core-ui/chat/session-chat-verbose-override.ts).
+   * this (the `verbose` store, packages/gx-chat-core/src/composer/storage.rs).
    */
   sessionChatVerboseMode: boolean;
   /** CDXC:SessionChat 2026-09-13 DECISION:

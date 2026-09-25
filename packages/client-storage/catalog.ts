@@ -137,7 +137,7 @@ export const storageCatalog = Object.freeze({
   verbose: define(
     'verbose',
     'Chat verbose preference',
-    chat + 'session-chat-verbose-override.ts',
+    'packages/gx-chat-core/src/composer/storage.rs',
     'ghostex.sessionChat.verbose.',
     binary,
     disk
@@ -145,7 +145,7 @@ export const storageCatalog = Object.freeze({
   summary: define(
     'summary',
     'Chat summary preference',
-    chat + 'session-chat-summary-override.ts',
+    'packages/gx-chat-core/src/composer/storage.rs',
     'ghostex.sessionChat.summary.',
     binary,
     disk
@@ -153,42 +153,42 @@ export const storageCatalog = Object.freeze({
   tasksCollapsed: define(
     'tasksCollapsed',
     'Chat task panel',
-    chat + 'session-chat-agent-tasks-panel.tsx',
+    'packages/gx-chat-core/src/extras/panels.rs',
     'ghostex.chat.agentTasks.collapsed',
     binary
   ),
   terminalExpanded: define(
     'terminalExpanded',
     'Chat terminal output',
-    chat + 'session-chat-terminal-tool-row.tsx',
+    'retired React chat (deleted 2026-09-25)',
     'ghostex.sessionChat.terminalToolExpanded',
     boolean
   ),
   claudeContext: define(
     'claudeContext',
     'Claude context display',
-    chat + 'session-chat-context-details.ts',
+    'packages/gx-chat-core/src/menus/context/preferences.rs',
     'ghostex.chat.context-details.v1',
     objectCodec
   ),
   codexContext: define(
     'codexContext',
     'Codex context display',
-    chat + 'session-chat-context-details.ts',
+    'packages/gx-chat-core/src/menus/context/preferences.rs',
     'ghostex.chat.context-details.codex.v1',
     objectCodec
   ),
   cursorContext: define(
     'cursorContext',
     'Cursor context display',
-    chat + 'session-chat-context-details.ts',
+    'packages/gx-chat-core/src/menus/context/preferences.rs',
     'ghostex.chat.context-details.cursor.v1',
     objectCodec
   ),
   notices: define(
     'notices',
     'Dismissed chat notices',
-    chat + 'session-chat-terminal-notice-card.tsx',
+    'packages/gx-chat-core/src/questions/drafts.rs',
     'ghostex.sessionChat.noticeDismissed.',
     textCodec,
     disk
@@ -196,7 +196,7 @@ export const storageCatalog = Object.freeze({
   sessionOptions: define(
     'sessionOptions',
     'Session model options',
-    chat + 'session-chat-session-options.ts',
+    'packages/gx-chat-core/src/menus/option_storage.rs',
     'ghostex.sessionChat.options.',
     objectCodec,
     cache
@@ -204,14 +204,14 @@ export const storageCatalog = Object.freeze({
   modelFavorites: define(
     'modelFavorites',
     'Starred models in the chat model picker',
-    'packages/shared/session-chat-controller/model-favorites.ts',
+    'packages/gx-chat-core/src/menus/picker/favorites.rs',
     'ghostex.model-favorites',
     stringListCodec
   ),
   modelOutbox: define(
     'modelOutbox',
     'Pending model selections',
-    chat + 'session-chat-model-selection-outbox.tsx',
+    'packages/gx-chat-core/src/menus/picker/selection.rs',
     'ghostex.model-selection-outbox.',
     objectCodec,
     protectedDisk
@@ -219,7 +219,7 @@ export const storageCatalog = Object.freeze({
   retiredQuestions: define(
     'retiredQuestions',
     'Answered question receipts',
-    chat + 'session-chat-async-questions.tsx',
+    'packages/gx-chat-core/src/questions/drafts.rs',
     'ghostex:async-questions:',
     stringListCodec,
     protectedDisk
@@ -227,7 +227,7 @@ export const storageCatalog = Object.freeze({
   questionDrafts: define(
     'questionDrafts',
     'Unsent question answers',
-    chat + 'session-chat-question-drafts.ts',
+    'packages/gx-chat-core/src/questions/drafts.rs',
     'ghostex.sessionChat.questionDraft.',
     objectCodec,
     protectedDisk
@@ -243,7 +243,7 @@ export const storageCatalog = Object.freeze({
   composerSelection: define(
     'composerSelection',
     'Parked composer selection',
-    chat + 'session-chat-composer-parking.ts',
+    'retired React chat (deleted 2026-09-25)',
     'ghostex.sessionChat.composerSelection.',
     objectCodec,
     protectedDisk
@@ -251,7 +251,7 @@ export const storageCatalog = Object.freeze({
   chatClient: define(
     'chatClient',
     'Chat client identity',
-    chat + 'session-chat-queue.ts',
+    chat + 'session-chat-client-id.ts',
     'ghostex.sessionChat.clientId',
     textCodec,
     { policy: 'protected' }
@@ -259,7 +259,7 @@ export const storageCatalog = Object.freeze({
   returnedPrompts: define(
     'returnedPrompts',
     'Returned prompt receipts',
-    chat + 'session-chat-returned-prompt.ts',
+    'packages/gx-chat-core/src/composer/storage.rs',
     'ghostex.sessionChat.returnedPrompts.applied',
     stringListCodec,
     { policy: 'protected' }

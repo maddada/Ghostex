@@ -36,7 +36,7 @@ impl WorkingStripVisual {
 
 pub(crate) static VISUAL: LazyLock<WorkingStripVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../packages/shared/session-chat-presentation/working-strip.json"
+        "../../../../packages/gx-chat-core/visual/working-strip.json"
     ))
     .expect("shared working strip appearance")
 });

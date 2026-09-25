@@ -1,29 +1,28 @@
-//! Platform-neutral core of the Ghostex chat: the brain behind every chat renderer.
+//! Platform-neutral core of the Ghostex chat: the only chat brain, behind every chat renderer.
 //!
 //! Inputs are [`Event`]s (gxserver chat frames, user [`UserAction`]s, clock ticks, storage
 //! answers). Outputs are the [`Document`] the renderer draws plus [`Effect`]s the host performs.
 //! Nothing here touches gpui, threads, sockets, the file system, or a clock; the host passes
 //! `now_ms` in. That is what lets the desktop app, the mobile app (through UniFFI), and the web
-//! build share one chat brain.
+//! build share one chat brain. The crate must keep building for wasm32-unknown-unknown.
 //!
 //! Design rules:
 //!
-//! - The document is the contract. Its JSON must stay identical to what
-//!   `packages/shared/session-chat-controller/native-host.ts` publishes today, because 24,000
-//!   lines of drawing code in `apps/desktop/src/app/native_chat/` read it by key and must not
-//!   change.
+//! - The document is the contract. Its JSON is what the GPUI renderer
+//!   (`apps/desktop/src/app/native_chat/`, also compiled into `apps/gpui-web`) and the phone's
+//!   native views (`apps/mobile/app/src/chat/`) read by key, so a key, its spelling or its
+//!   absent-versus-null behaviour changes only together with every renderer.
 //! - Absent, `null` and a value are three different things on the wire. Use `Tri` where the
 //!   producer can leave a key out.
 //! - Integers stay integers. A JSON `1` written back as `1.0` is a contract break.
 //! - No callbacks into the core, no generics and no lifetimes at the public boundary, so the same
 //!   API works over UniFFI.
 //!
-//! The port families each own one directory below, listed in
-//! `docs/2026-09-21/rust-chat/FAMILIES.md`. Nobody edits outside their own directory except to add
-//! one line to a barrel here.
+//! Each directory below owns one area of the chat (session, transcript, questions, composer,
+//! menus, extras); the split is described in `docs/2026-09-21/rust-chat/FAMILIES.md`. Keep a
+//! rule in the directory that owns its area and keep the barrels here thin.
 
 mod action;
-pub mod bridge;
 pub mod composer;
 mod core;
 mod dispatch;
@@ -34,6 +33,7 @@ pub mod extras;
 pub mod jsnum;
 pub mod jstime;
 pub mod menus;
+pub mod query;
 pub mod questions;
 pub mod session;
 pub mod state;

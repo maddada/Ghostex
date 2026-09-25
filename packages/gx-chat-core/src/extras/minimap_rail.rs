@@ -2,17 +2,15 @@
 //! `packages/shared/session-chat-presentation/minimap.ts`.
 //!
 //! CDXC:SessionChat 2026-09-18 SEE-ALSO:
-//! One dash per user prompt, in two renderers: packages/core-ui/chat/session-chat-minimap.tsx (with
-//! session-chat-minimap.css) and apps/desktop/src/app/native_chat/minimap.rs, which reads the same
-//! minimap.json. The rail's `scale` is also written as `--ghostex-chat-minimap-scale` in
-//! session-chat-minimap.css; change both together.
+//! One dash per user prompt, drawn by apps/desktop/src/app/native_chat/minimap.rs, which reads the
+//! same minimap.json.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// `minimap.json`, the one table both renderers already read. Included rather than ported, the way
 /// `docs/2026-09-21/rust-chat/SEAM.md` section 4 requires of the presentation tables.
-const GEOMETRY_JSON: &str = include_str!("../../../shared/session-chat-presentation/minimap.json");
+const GEOMETRY_JSON: &str = include_str!("../../visual/minimap.json");
 
 /// The rail's dimensions.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

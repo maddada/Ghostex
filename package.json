@@ -8,7 +8,6 @@
   "scripts": {
     "//start": "CLONE-LOCAL (ghostex-ui-revamp, 2026-09-20): this checkout starts the isolated Ghostex-UI-Revamp variant so it runs beside the normal Ghostex. Do not merge this \"start\" line back to main; upstream \"start\" is \"bun tooling/start-gpui.mjs\".",
     "start": "bun tooling/start-gpui.mjs",
-    "chat:lab": "bun tooling/chat-preview.mjs",
     "start:isolated": "bun tooling/start-gpui.mjs --isolated",
     "start:server": "bun tooling/start-gxserver.mjs",
     "gx:isolated": "bun tooling/isolated-gpui.mjs",
@@ -47,7 +46,7 @@
     "debug:sessions": "bun apps/session-tui/src/main.ts",
     "debug:sessions:build": "bun apps/session-tui/build.ts",
     "build:sidebar-css": "tailwindcss -i packages/core-ui/styles/shadcn.css -o packages/core-ui/styles/shadcn.generated.css --minify",
-    "build:mobile-chat": "node tooling/build-mobile-chat.mjs",
+    "generate:mobile-chat-agents": "node tooling/generate-mobile-chat-agents.mjs",
     "build:mobile-find": "node tooling/build-mobile-find.mjs",
     "generate:mobile-tabler-icons": "node tooling/generate-mobile-tabler-icons.mjs",
     "cli": "cargo run --quiet --manifest-path server/Cargo.toml --bin ghostex --",

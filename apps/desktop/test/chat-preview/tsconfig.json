@@ -1,1 +1,0 @@
-{"extends":"../../../../tsconfig.json","compilerOptions":{"paths":{"@/*":["../../../../*"]}},"include":["*.tsx","*.ts","../../../../packages/shared/asset-modules.d.ts","../../../../packages/shared/typecheck-shims.d.ts"]}

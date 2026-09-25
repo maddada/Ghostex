@@ -12,7 +12,6 @@ mod browser_history;
 mod cef;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod cef_component_window;
-mod chat_preview;
 mod component_store;
 mod ghostty_kit;
 mod ghostty_vt;
@@ -172,10 +171,6 @@ pub(crate) use crate::app::view_scopes::*;
 fn main() {
     #[cfg(windows)]
     if gpui_run_windows_remote_ssh_askpass() {
-        return;
-    }
-    if std::env::var_os("GHOSTEX_CHAT_PREVIEW_STATE").is_some() {
-        chat_preview::run();
         return;
     }
     #[cfg(target_os = "windows")]

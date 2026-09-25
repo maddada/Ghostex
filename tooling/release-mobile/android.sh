@@ -29,11 +29,11 @@ export ORG_GRADLE_PROJECT_ghostexReleaseStorePassword="$GHOSTEX_ANDROID_SIGNING_
 export ORG_GRADLE_PROJECT_ghostexReleaseKeyAlias="$GHOSTEX_ANDROID_SIGNING_KEY_ALIAS"
 export ORG_GRADLE_PROJECT_ghostexReleaseKeyPassword="$GHOSTEX_ANDROID_SIGNING_KEY_PASSWORD"
 
-# The React Native app packages the shared chat page as generated WebView
-# assets. Rebuild it from the release checkout so a committed asset from an
-# earlier shared-UI revision can never reach the APK.
+# The React Native app's list of chat-capable agents is generated from
+# packages/shared/session-chat.ts. Regenerate it from the release checkout so a
+# committed list from an earlier revision can never reach the APK.
 cd "$REPO_ROOT"
-bun run build:mobile-chat
+bun run generate:mobile-chat-agents
 
 cd "$MOBILE_ROOT"
 bunx expo prebuild --platform android --no-install

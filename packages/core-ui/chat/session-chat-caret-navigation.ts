@@ -1,4 +1,4 @@
-import type { SessionChatComposerKeyEvent } from './session-chat-composer';
+import type { SessionChatComposerKeyEvent } from './session-chat-input-api';
 
 export interface SessionChatCaretMovement {
   direction: 'left' | 'right' | 'up' | 'down';

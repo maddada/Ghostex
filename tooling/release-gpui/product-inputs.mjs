@@ -82,10 +82,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   },
   { path: 'apps/gpui-web', why: 'GPUI web build; built from a checkout with `bun run web:build`, never part of a GPUI release artifact.' },
   {
-    path: 'apps/mobile/views/chat',
-    why: 'Mobile chat bundle source; consumed by the mobile submodule build, not by release jobs.',
-  },
-  {
     path: 'apps/mobile/views/find',
     why: 'Mobile Find Prompts bundle source; consumed by the mobile submodule build, not by release jobs.',
   },

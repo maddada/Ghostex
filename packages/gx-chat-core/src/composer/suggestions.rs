@@ -2,7 +2,7 @@
 //!
 //! Port of `packages/shared/session-chat-presentation/composer-suggestions.ts` and
 //! `packages/shared/session-chat-controller/native-suggestions.ts`. The popup's own geometry stays
-//! in `packages/shared/session-chat-presentation/composer-suggestions.json`, which both renderers
+//! in `packages/gx-chat-core/visual/composer-suggestions.json`, which both renderers
 //! read directly.
 
 use serde::{Deserialize, Serialize};
@@ -19,10 +19,6 @@ use crate::composer::trigger::{
 };
 
 /// The heading above the composer's `@` file list.
-///
-/// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-/// Read by React's composer (`session-chat-composer.tsx`) and by this projection, so the GPUI and
-/// React pickers cannot drift apart on what the list is called.
 pub const FILE_SUGGESTION_HEADING: &str = "Project files";
 
 /// Which of the three lists is open.
@@ -485,8 +481,8 @@ pub fn suggestion_popup(
                 .skills_error
                 .as_deref()
                 .is_some_and(|error| !error.is_empty()),
-        // React turns a loader beside "Loading skills…" and "Listing project files…", and shows no
-        // spinner beside the error row or "No skills available.".
+        // React turned a loader beside "Loading skills…" and "Listing project files…", and showed
+        // no spinner beside the error row or "No skills available.".
         loading: match kind {
             SuggestionKind::Skill => sources.skills_loading,
             SuggestionKind::File => count == 0,

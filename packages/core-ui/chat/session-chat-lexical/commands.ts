@@ -1,4 +1,4 @@
-import type { SessionChatComposerInputApi } from '../session-chat-composer';
+import type { SessionChatComposerInputApi } from '../session-chat-input-api';
 import { sessionChatComposerReferences } from '../session-chat-reference-pills';
 
 export interface ComposerEditorControls extends SessionChatComposerInputApi {

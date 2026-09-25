@@ -158,7 +158,7 @@ jobs:
             test -s "$MODULE/jniLibs/$abi/libgx_chat_mobile.so"
           done
       - name: Install repository dependencies
-        # `tooling/release-mobile/android.sh` runs `bun run build:mobile-chat`,
+        # `tooling/release-mobile/android.sh` runs `bun run generate:mobile-chat-agents`,
         # which imports esbuild from the ROOT node_modules. The React Native
         # install below is scoped to apps/mobile/app and does not provide it.
         run: tooling/release-gpui/retry.sh 3 5 -- bun install --frozen-lockfile

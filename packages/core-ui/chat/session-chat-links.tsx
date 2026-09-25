@@ -48,7 +48,7 @@ export {
   classifySessionChatLinkHref,
   sessionChatFilePositionFromHref,
   type SessionChatLinkTarget,
-} from '@/packages/shared/session-chat-presentation/links';
+} from '@/packages/core-ui/chat/presentation/links';
 
 const SessionChatHostLinksContext = createContext<SessionChatHostLinks | null>(null);
 

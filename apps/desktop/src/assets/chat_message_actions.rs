@@ -10,7 +10,7 @@ struct MessageActionIcons {
 
 static ICONS: LazyLock<MessageActionIcons> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../packages/shared/session-chat-presentation/message-action-icons.json"
+        "../../../../packages/gx-chat-core/visual/message-action-icons.json"
     ))
     .expect("shared message action artwork")
 });

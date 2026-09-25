@@ -1,6 +1,6 @@
 import { detectghostexHotkeyPlatform } from '@/packages/shared/ghostex-hotkeys';
 import { shortcutKeyFromKeyboardEvent } from '@/packages/shared/keyboard-shortcut-key';
-import type { SessionChatComposerKeyEvent } from './session-chat-composer';
+import type { SessionChatComposerKeyEvent } from './session-chat-input-api';
 
 export type SessionChatTextEditCommand =
   | 'undo'

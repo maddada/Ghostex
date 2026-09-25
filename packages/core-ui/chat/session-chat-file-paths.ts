@@ -46,12 +46,12 @@
 
 import { IconFile, IconFileCode, IconMarkdown } from '@tabler/icons-react';
 
-import { sessionChatFilePositionSuffix } from '@/packages/shared/session-chat-presentation/file-position';
+import { sessionChatFilePositionSuffix } from '@/packages/core-ui/chat/presentation/file-position';
 export {
   splitSessionChatFilePosition,
   sessionChatFilePositionSuffix,
   type SessionChatFilePosition,
-} from '@/packages/shared/session-chat-presentation/file-position';
+} from '@/packages/core-ui/chat/presentation/file-position';
 // The decisions themselves live in the shared presentation package so the GPUI
 // transcript can reach them without React; this module keeps the React icons
 // and the remark passes that feed react-markdown.
@@ -59,12 +59,12 @@ import {
   sessionChatBareFilePaths,
   sessionChatFilePathIconName,
   type SessionChatFilePathRef,
-} from '@/packages/shared/session-chat-presentation/file-paths';
+} from '@/packages/core-ui/chat/presentation/file-paths';
 export {
   resolveSessionChatFenceTitleFilePath,
   resolveSessionChatInlineCodeFilePath,
   type SessionChatFilePathRef,
-} from '@/packages/shared/session-chat-presentation/file-paths';
+} from '@/packages/core-ui/chat/presentation/file-paths';
 
 /** Exposes a file chip's unadorned path to the transcript context menu. */
 export const SESSION_CHAT_FILE_PATH_ATTRIBUTE = 'data-session-chat-file-path';

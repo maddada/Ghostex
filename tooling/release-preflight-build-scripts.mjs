@@ -24,8 +24,8 @@ import { pathToFileURL } from 'node:url';
  release workflow, so they are not here either.
 
  Two of the steps write TRACKED files: build:sidebar-css regenerates
- packages/core-ui/styles/shadcn.generated.css and build:mobile-chat regenerates
- the committed WebView assets inside the apps/mobile/app submodule. Both builds
+ packages/core-ui/styles/shadcn.generated.css and generate:mobile-chat-agents
+ regenerates the committed chat agent list inside the apps/mobile/app submodule. Both builds
  are deterministic (verified by rebuilding twice), so on a release-ready tree they
  are no-ops on disk. Every tracked output is snapshotted before its command runs;
  if the rebuild changes any of them, the previous bytes are put back so the
@@ -42,13 +42,9 @@ export const RELEASE_BUILD_SCRIPTS = Object.freeze([
     //   -> tooling/release-gpui/android.sh -> tooling/release-mobile/android.sh
     //   (also release-mobile-ios-testflight.yml -> tooling/release-mobile/ios-testflight.sh)
     caller: 'release-gpui-android.yml -> tooling/release-mobile/android.sh',
-    command: 'bun run build:mobile-chat',
+    command: 'bun run generate:mobile-chat-agents',
     timeoutMs: 5 * 60 * 1000,
-    trackedOutputs: [
-      'apps/mobile/app/assets/webview/session-chat',
-      'apps/mobile/app/src/chat/session-chat-agents.generated.ts',
-      'apps/mobile/app/src/chat/session-chat-html.generated.ts',
-    ],
+    trackedOutputs: ['apps/mobile/app/src/chat/session-chat-agents.generated.ts'],
   },
   {
     // CI: release-gpui-macos.yml -> tooling/release-gpui/macos.sh -> apps/desktop/scripts/build-macos-app.sh
