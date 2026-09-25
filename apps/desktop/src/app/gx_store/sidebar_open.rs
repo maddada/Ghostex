@@ -22,7 +22,7 @@
 //! tooling/gx-core/sidebar-page-frozen/project-actions.ts,
 //! tooling/gx-core/sidebar-page-frozen/space-navigation.ts.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use ghostex_gx_core::{SORT_ACTIONS, owns_open_command, plan_open_action};
 use serde_json::Value;

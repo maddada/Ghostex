@@ -65,8 +65,8 @@ impl GitReviewConfirm {
 }
 
 fn review_request_id(remote: bool) -> String {
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let millis = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     match remote {

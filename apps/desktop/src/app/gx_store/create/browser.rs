@@ -15,7 +15,8 @@
 //! SEE-ALSO: packages/gx-core/src/session_create/browser.rs,
 //! apps/desktop/src/app/workspace_events.rs (`open_browser_url_from_renderer_command`).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use ghostex_gx_core::{
     ActiveGroup, BrowserPaneOpen, DEFAULT_BROWSER_LAUNCH_URL, Event, Intent, MachineId,

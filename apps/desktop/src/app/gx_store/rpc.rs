@@ -95,3 +95,25 @@ pub(crate) async fn gx_rpc_with_timeout(
         ))
     })
 }
+
+/// The typed-operation call the store's sidebar action files make: `gpui_gxserver_rpc_result`
+/// (its error text and its result check unchanged) run on the background executor, exactly as each
+/// of those files spawned it before.
+///
+/// CDXC:WebGpui 2026-09-25 WHY:
+/// Those files (sleep, wake, close, fork, flags, snooze, the order writes, the client documents'
+/// pushes) predate `gx_rpc` and blocked a background thread on the helper inline, which a page
+/// cannot do. Moving that one expression behind this name lets the GPUI web build compile the
+/// same files with a `fetch` twin of the same signature (`apps/gpui-web/src/app/gx_store/rpc.rs`)
+/// while the desktop keeps the call, the error strings and the timeout it had.
+pub(crate) fn gxserver_rpc_result_task(
+    background: &gpui::BackgroundExecutor,
+    path: &str,
+    params: Value,
+    timeout: Duration,
+) -> gpui::Task<Result<Value, String>> {
+    let path = path.to_string();
+    background.spawn(async move {
+        crate::app::helpers::gpui_gxserver_rpc_result(&path, &params, timeout)
+    })
+}

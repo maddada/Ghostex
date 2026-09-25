@@ -29,9 +29,9 @@ use ghostex_gx_core::{
 };
 use serde_json::{Value, json};
 
+use super::rpc::gxserver_rpc_result_task;
 use super::sidebar_drop_queue::DropQueueNeed;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::board_gxserver::gxserver_health_and_daemon::gpui_gxserver_rpc_result;
 
 /// `/api/updateSessionOrder` is a plain write; it gets the same timeout the other sidebar calls do.
 const ORDER_RPC_TIMEOUT: Duration = Duration::from_secs(10);
@@ -280,11 +280,13 @@ impl GhostexGpuiApp {
         let params = json!({ "projectId": project.project_id, "sessionIds": session_ids });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move {
-                    gpui_gxserver_rpc_result("/api/updateSessionOrder", &params, ORDER_RPC_TIMEOUT)
-                })
-                .await;
+            let result = gxserver_rpc_result_task(
+                &background,
+                "/api/updateSessionOrder",
+                params,
+                ORDER_RPC_TIMEOUT,
+            )
+            .await;
             let _ = this.update(cx, |this, _| {
                 if result.is_err() {
                     this.gx_store.sidebar_drag.session_order_failures += 1;

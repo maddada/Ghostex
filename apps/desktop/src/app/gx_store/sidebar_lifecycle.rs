@@ -31,8 +31,8 @@ use ghostex_gx_core::{
 use serde_json::Value;
 
 use super::host::now_ms;
+use super::rpc::gxserver_rpc_result_task;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::gpui_gxserver_rpc_result;
 use crate::app::model::{
     GpuiPreferredAgentInterface, GpuiSidebarWorkspaceTerminalFocusMessage,
     GpuiWorkspaceTerminalFocusPlacement,
@@ -164,12 +164,9 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         Some(cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             this.update(cx, |this, cx| {
                 this.gx_store_apply_lifecycle_answer(&request, result, round_trip_ms, cx)
@@ -262,12 +259,9 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             let _ = this.update(cx, |this, cx| {
                 this.gx_store_apply_fork_answer(&request, result, round_trip_ms, cx);
@@ -357,12 +351,9 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let elapsed = started.elapsed();
             // A call that spent the whole timeout and came back with an error never answered; the
             // distinction changes no follow-up and is kept because it is the one case the two

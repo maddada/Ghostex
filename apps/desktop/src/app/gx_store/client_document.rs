@@ -37,9 +37,10 @@ use std::time::Duration;
 use ghostex_gx_core::{AdoptOutcome, DocumentSync, SyncEffect, SyncedDocument};
 use serde_json::Value;
 
+use super::rpc::gxserver_rpc_result_task;
 use super::sidebar_ui_storage;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::board_gxserver::gxserver_health_and_daemon::gpui_gxserver_rpc_result;
+use crate::app::helpers::gpui_gxserver_rpc_result;
 
 /// The push is a plain write-through, so it gets the same timeout every other sidebar call has.
 const PUSH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -596,9 +597,8 @@ impl GhostexGpuiApp {
         let params = serde_json::json!({ "state": document });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move { gpui_gxserver_rpc_result(D::RPC_PATH, &params, PUSH_TIMEOUT) })
-                .await;
+            let result =
+                gxserver_rpc_result_task(&background, D::RPC_PATH, params, PUSH_TIMEOUT).await;
             let _ = this.update(cx, |this, cx| {
                 let ok = result.is_ok();
                 if !ok {

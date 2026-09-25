@@ -24,7 +24,7 @@
 //! tooling/gx-core/sidebar-page-frozen/{session-actions,project-actions}.ts,
 //! tooling/gx-core/state-action-parity.ts.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use ghostex_gx_core::{
     ActionEffect, SidebarActionPlan, owns_agent_run_command, owns_delayed_send_command,

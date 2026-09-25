@@ -69,7 +69,7 @@ pub(crate) struct GpuiQuickAccessWindow {
     /// A selection the pointer made must not scroll the list under it; only
     /// keyboard moves and re-ranked queries reveal their row.
     suppress_scroll: bool,
-    last_load_more: Option<std::time::Instant>,
+    last_load_more: Option<web_time::Instant>,
     was_active: bool,
     focus_handle: FocusHandle,
     subscriptions: Vec<Subscription>,
@@ -1145,7 +1145,7 @@ impl GpuiQuickAccessWindow {
                     return;
                 }
                 // The React list throttled its reveal to one step per 150ms.
-                let now = std::time::Instant::now();
+                let now = web_time::Instant::now();
                 if this
                     .last_load_more
                     .is_some_and(|last| now.duration_since(last).as_millis() < 150)

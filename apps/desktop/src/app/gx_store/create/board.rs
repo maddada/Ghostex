@@ -19,7 +19,8 @@
 //! apps/desktop/src/app/status_pet.rs (`dispatch_gpui_project_board_conversation_request`).
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use ghostex_gx_core::{
     BoardSession, BoardSessionFacts, LinkAvailability, MachineId, board_agent_options,

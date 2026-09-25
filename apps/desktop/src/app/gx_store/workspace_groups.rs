@@ -43,7 +43,7 @@ use super::sidebar_ui_storage;
 use crate::GhostexGpuiApp;
 
 mod group_commands;
-use crate::app::helpers::board_gxserver::gxserver_health_and_daemon::gpui_gxserver_rpc_result;
+use super::rpc::gxserver_rpc_result_task;
 
 /// `GPUI_WORKSPACE_SESSION_GROUPS_STORAGE_KEY`.
 pub(crate) const WORKSPACE_GROUPS_STORAGE_KEY: &str = "ghostex-gpui-workspace-session-groups";
@@ -617,15 +617,13 @@ impl GhostexGpuiApp {
         let params = serde_json::json!({ "state": document });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move {
-                    gpui_gxserver_rpc_result(
-                        "/api/updateWorkspaceSessionGroups",
-                        &params,
-                        PUSH_TIMEOUT,
-                    )
-                })
-                .await;
+            let result = gxserver_rpc_result_task(
+                &background,
+                "/api/updateWorkspaceSessionGroups",
+                params,
+                PUSH_TIMEOUT,
+            )
+            .await;
             let _ = this.update(cx, |this, cx| {
                 let ok = result.is_ok();
                 if !ok {

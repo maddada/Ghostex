@@ -14,7 +14,7 @@
 //! apps/desktop/sidebar/gxserver-runtime/core.ts (`handleSidebarMessage`, the arms this replaces),
 //! tooling/gx-core/action-parity.ts (the gate).
 
-use std::time::Instant;
+use web_time::Instant;
 
 use ghostex_gx_core::{
     ActionEffect, READ_ONLY_MESSAGE_TYPES, SidebarActionPlan, plan_read_only_action,

@@ -161,8 +161,8 @@ impl GhostexGpuiApp {
         host.sequence += 1;
         let request_id = format!(
             "export-transcript-{:x}-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            web_time::SystemTime::now()
+                .duration_since(web_time::UNIX_EPOCH)
                 .map(|elapsed| elapsed.as_millis())
                 .unwrap_or_default(),
             host.sequence

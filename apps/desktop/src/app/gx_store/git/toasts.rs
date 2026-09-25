@@ -17,8 +17,8 @@ static TOAST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 /// A fresh id for a toast that is replaced in place (`createGpuiGitToastId`,
 /// `createGpuiWorktreeToastId`).
 pub(crate) fn new_toast_id(prefix: &str) -> String {
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let millis = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
         .unwrap_or_default();
     let sequence = TOAST_SEQUENCE.fetch_add(1, Ordering::Relaxed);

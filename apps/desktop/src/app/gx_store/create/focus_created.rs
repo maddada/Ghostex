@@ -18,7 +18,8 @@
 //! and the attach completion), apps/desktop/src/app/gx_store/sidebar_lifecycle.rs
 //! (`gx_store_place_local_workspace_session`).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use crate::GhostexGpuiApp;
 use crate::app::model::{

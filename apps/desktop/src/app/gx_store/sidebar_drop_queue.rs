@@ -27,7 +27,8 @@
 //! apps/desktop/src/app/gx_store/client_document.rs.
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use web_time::Instant;
 
 use ghostex_gx_core::CollectionsDocument;
 use serde_json::{Value, json};
