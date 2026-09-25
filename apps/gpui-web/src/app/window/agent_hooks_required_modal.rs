@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/agent_hooks_required_modal.rs

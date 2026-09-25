@@ -1,0 +1,1 @@
+../../../desktop/src/app/quick_access_modal_lifecycle.rs

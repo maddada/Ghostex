@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/delete_worktree_modal.rs

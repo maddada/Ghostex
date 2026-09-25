@@ -32,7 +32,7 @@ mod prelude {
     pub(crate) use std::sync::Arc;
     pub(crate) use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     pub(crate) use std::time::Duration;
-    pub(crate) use web_time::{Instant, SystemTime};
+    pub(crate) use web_time::{Instant, SystemTime, UNIX_EPOCH};
 }
 pub(crate) use crate::app::consts::*;
 pub(crate) use crate::app::helpers::*;
@@ -113,6 +113,7 @@ pub fn run() -> Result<(), JsValue> {
         cx.open_window(WindowOptions::default(), |window, cx| {
             let shell = cx.new(|cx| {
                 let mut app = GhostexGpuiApp::new();
+                app.web_host.main_window = Some(window.window_handle());
                 app.gx_store_start(cx);
                 app
             });

@@ -40,3 +40,8 @@ pub(crate) fn append_temporary(log: GpuiSupportLog, event: &str, details: Value)
 pub(crate) fn temporary_fluid_voice_text_shape(_text: &str) -> Value {
     Value::Null
 }
+
+/// Written even with no scenario on, on the desktop; the console takes it like any other.
+pub(crate) fn append_repro(log: GpuiSupportLog, event: &str, details: Value) {
+    append(log, event, details);
+}

@@ -65,3 +65,18 @@ pub(crate) async fn gx_rpc(
         .await
         .unwrap_or_else(|_| Err(GxRpcError::transport(path, "The request was dropped.")))
 }
+
+/// The desktop's `gxserver_rpc_result_task` (the sidebar action files' call): the same call with `fetch`, its failure as the message a toast shows.
+pub(crate) fn gxserver_rpc_result_task(
+    background: &gpui::BackgroundExecutor,
+    path: &str,
+    params: Value,
+    _timeout: std::time::Duration,
+) -> gpui::Task<Result<Value, String>> {
+    let path = path.to_string();
+    background.spawn(async move {
+        gx_rpc(None, &path, params)
+            .await
+            .map_err(|error| error.message)
+    })
+}

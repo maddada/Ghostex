@@ -96,3 +96,30 @@ pub(crate) fn popup_window_surface(color: gpui::Hsla) -> gpui::Hsla {
 pub(crate) fn frosted_menu_fill(color: gpui::Hsla) -> gpui::Hsla {
     color
 }
+
+/// The desktop's blocking typed-operation call, which only its quit path still makes synchronously (a client document's last push). A page cannot block on `fetch` and has no quit path, so the answer is a refusal.
+pub(crate) fn gpui_gxserver_rpc_result(
+    _endpoint: &str,
+    _params: &Value,
+    _timeout: std::time::Duration,
+) -> Result<Value, String> {
+    Err("A blocking gxserver call is not available in the browser.".to_string())
+}
+
+/// An Open In target (an editor, Finder). A page cannot launch an app, so the list it offers is empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuiOpenTarget {
+    pub(crate) id: String,
+    pub(crate) label: String,
+}
+
+pub(crate) fn gpui_visible_open_targets_from_current_settings() -> Vec<GpuiOpenTarget> {
+    Vec::new()
+}
+
+pub(crate) fn gpui_launch_open_target(
+    _target: &GpuiOpenTarget,
+    _project_path: &std::path::Path,
+) -> Result<(), String> {
+    Err("Open In needs the Ghostex app.".to_string())
+}

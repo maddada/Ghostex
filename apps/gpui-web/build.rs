@@ -61,6 +61,7 @@ fn extract(lines: &[&str], item: &str, file: &Path) -> String {
         .position(|line| {
             let rest = line
                 .strip_prefix("pub(crate) ")
+                .or_else(|| line.strip_prefix("pub(super) "))
                 .or_else(|| line.strip_prefix("pub "))
                 .unwrap_or(line);
             heads.iter().any(|head| {

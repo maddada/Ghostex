@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/rename_worktree_modal.rs

@@ -90,10 +90,36 @@ impl GhostexGpuiApp {
             .child(div().flex_1())
             .child(Self::render_disabled_header_button("web-header-start", TITLEBAR_ICON_PLAYER_PLAY, Some("Start")))
             .child(Self::render_disabled_header_button("web-header-open", TITLEBAR_ICON_FOLDER_OPEN, Some("Open")))
-            .child(Self::render_disabled_header_button("web-header-commit", TITLEBAR_ICON_GIT_COMMIT, Some("Commit")))
+            .child(self.render_web_git_button(cx))
             .child(Self::render_disabled_header_button("web-header-more", TITLEBAR_ICON_DOTS, None))
             .child(Self::render_disabled_header_button("web-header-panel-bottom", TITLEBAR_ICON_PANEL_BOTTOM, None))
             .child(Self::render_disabled_header_button("web-header-panel-right", TITLEBAR_ICON_PANEL_RIGHT, None))
+            .into_any_element()
+    }
+
+    /// Commit opens the Git menu, as the desktop's Commit split button's main half does (`CDXC:Git 2026-09-20`).
+    fn render_web_git_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let text = titlebar_active_text_color();
+        let recorded = self.web_host.git_button_bounds.clone();
+        h_flex()
+            .id("web-header-commit")
+            .h(px(TITLEBAR_CONTROL_HEIGHT))
+            .px(px(7.0))
+            .gap(px(5.0))
+            .rounded(px(6.0))
+            .items_center()
+            .text_size(px(12.0))
+            .text_color(text)
+            .cursor_pointer()
+            .hover(|button| button.bg(titlebar_popup_menu_hover_color()))
+            .child(titlebar_svg_icon(TITLEBAR_ICON_GIT_COMMIT, 15.0, text))
+            .child("Commit")
+            .child(
+                gpui::canvas(move |element_bounds, _, _| recorded.set(Some(element_bounds)), |_, _, _, _| {})
+                    .absolute()
+                    .size_full(),
+            )
+            .on_click(cx.listener(move |app, _, window, cx| app.web_toggle_git_menu(window, cx)))
             .into_any_element()
     }
 
@@ -124,6 +150,7 @@ impl Render for GhostexGpuiApp {
         div()
             .id("ghostex-web-shell")
             .size_full()
+            .relative()
             .flex()
             .bg(titlebar_background())
             .on_action(cx.listener(|app, action: &NativeSidebarAction, window, cx| {
@@ -154,5 +181,7 @@ impl Render for GhostexGpuiApp {
                     })
                     .children(terminal_bar),
             )
+            .children(self.render_web_git_menu(cx))
+            .children(self.render_web_toasts())
     }
 }

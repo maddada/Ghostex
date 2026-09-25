@@ -3,7 +3,6 @@ use gpui::{AnyElement, Context, IntoElement, WindowHandle, div};
 use serde_json::Value;
 
 use crate::app::native_sidebar::appearance::SidebarAppearance;
-use crate::app::native_sidebar::model::NativeSidebarRenameRequest;
 use crate::app::native_sidebar::state::NativeSidebarState;
 use crate::app::titlebar::account_usage::{GpuiAccountUsageMeter, GpuiAccountUsageMeterHost};
 use crate::*;
@@ -55,6 +54,34 @@ pub(crate) struct GhostexGpuiApp {
     >,
     pub(crate) notification_feed_state: crate::notification_feed::GpuiNotificationFeedState,
     pub(crate) titlebar_notification_bell_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
+    /// Toasts and the page's other stand-ins for the desktop's app-level services (`web_host/`).
+    pub(crate) web_host: crate::app::web_host::WebHostState,
+    /// The native dialog open over the page, under the desktop's field name so its modal files compile unchanged.
+    pub(crate) native_app_modal: Option<crate::app::native_app_modal_lifecycle::NativeAppModal>,
+    /// The Git menu the header's Git button opens, as the desktop's titlebar holds it (`gx_store/git/hud.rs` writes it).
+    pub(crate) titlebar_git_menu_state: Option<crate::app::model::GpuiTitlebarGitMenuState>,
+    /// Handoff / Export's Reveal path; an export never lands on a page's disk, so it stays empty.
+    pub(crate) pending_export_transcript_reveal_path: Option<String>,
+    /// The agents a worktree or New Thread dialog offers (the HUD's `agents`).
+    pub(crate) new_thread_picker_agents: Option<Vec<Value>>,
+    /// Remote machine tunnels; always empty in a page (`remote_conn/`).
+    pub(crate) remote_gxserver_connections:
+        HashMap<String, crate::app::remote_conn::GpuiRemoteGxserverConnection>,
+    /// The saved settings the HUD is composed from (see `cef.rs`).
+    pub(crate) sidebar_runtime_settings_snapshot: crate::cef::SidebarRuntimeSettingsSnapshot,
+    /// The active project as the desktop's project snapshot carries it (a browser open reads it); set from the store's focus.
+    pub(crate) latest_sidebar_project_snapshot: Option<crate::app::model::GpuiProjectSnapshot>,
+    /// The desktop queues project switches behind a pane attach; the page switches at once, so this stays empty.
+    pub(crate) project_switch_pending_requests: Vec<()>,
+    /// The desktop's sidebar page handle, which its agent launcher checks before staging a launch. The page is its own sidebar, so it is always present.
+    pub(crate) sidebar: Option<()>,
+    /// Quick Access (`app/quick_access/`, the desktop's host and window).
+    pub(crate) quick_access: crate::app::quick_access::host::QuickAccessHost,
+    /// Action run states for Quick Access's Commands rows; the page runs no Actions, so it stays empty.
+    pub(crate) sidebar_command_run_feedback_states:
+        HashMap<String, crate::app::model::GpuiSidebarCommandRunFeedbackState>,
+    /// The desktop gives a command pane its keyboard focus back when a dialog closes; the page has no command pane.
+    pub(crate) app_modal_command_return_focus_target: Option<()>,
 }
 
 impl GhostexGpuiApp {
@@ -76,6 +103,19 @@ impl GhostexGpuiApp {
             linked_session_opened: false,
             notification_feed_state: Default::default(),
             titlebar_notification_bell_bounds: Rc::new(std::cell::Cell::new(None)),
+            web_host: Default::default(),
+            native_app_modal: None,
+            titlebar_git_menu_state: None,
+            pending_export_transcript_reveal_path: None,
+            new_thread_picker_agents: None,
+            remote_gxserver_connections: HashMap::new(),
+            sidebar_runtime_settings_snapshot: Default::default(),
+            latest_sidebar_project_snapshot: None,
+            project_switch_pending_requests: Vec::new(),
+            sidebar: Some(()),
+            quick_access: Default::default(),
+            sidebar_command_run_feedback_states: HashMap::new(),
+            app_modal_command_return_focus_target: None,
         }
     }
 
@@ -149,15 +189,6 @@ impl GhostexGpuiApp {
         false
     }
 
-    /// Configured hotkeys run through the desktop's modal host bridge, which the browser build does not have.
-    pub(crate) fn handle_gpui_app_modal_sidebar_command(
-        &mut self,
-        _message: Value,
-        _window: &mut Window,
-        _cx: &mut Context<Self>,
-    ) {
-    }
-
     pub(crate) fn react_to_native_sidebar_session_click(
         &mut self,
         _sidebar_session_id: &str,
@@ -178,10 +209,6 @@ impl GhostexGpuiApp {
 
     pub(crate) fn gx_store_selection_is_settling(&self) -> bool {
         false
-    }
-
-    pub(crate) fn gx_store_pending_collection_rename(&self) -> Option<NativeSidebarRenameRequest> {
-        None
     }
 
     pub(crate) fn gx_store_note_sidebar_snapshot_browser_focus(&mut self, browser_focus: bool) {
