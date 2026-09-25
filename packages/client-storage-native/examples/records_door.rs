@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use ghostex_chat_runtime::{RecordRead, RecordStore, RecordWrite, read_record, write_record};
+use ghostex_client_storage::{RecordRead, RecordStore, RecordWrite, read_record, write_record};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 

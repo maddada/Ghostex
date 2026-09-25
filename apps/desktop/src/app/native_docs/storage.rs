@@ -133,7 +133,7 @@ pub(crate) fn import_browser_state_once() {
         .unwrap_or_else(|| crate::shared_settings::ghostex_storage_paths().cef_cache_dir())
         .join("Default");
     let result = crate::app::gx_store::with_write_connection(|connection| {
-        ghostex_chat_runtime::import_docs_browser_state(connection, &profile).map_err(|error| {
+        ghostex_client_storage::import_docs_browser_state(connection, &profile).map_err(|error| {
             eprintln!("[ghostex-gpui] Could not move the Docs page's saved state: {error:#}");
             "import"
         })

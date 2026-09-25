@@ -22,7 +22,7 @@
 //! by one writer while the other replaces it.
 //!
 //! SEE-ALSO: packages/client-storage/catalog.ts (the entry and store bounds this mirrors),
-//! packages/chat-runtime/src/storage_records.rs (the `records` door to the same file).
+//! packages/client-storage-native/src/storage_records.rs (the `records` door to the same file).
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -69,7 +69,7 @@ const MAX_BACKEND_BYTES: usize = 2 * 1024 * 1024;
 /// about twice as much. One implementation for both tables, in the crate the `records` door's
 /// bounds live in, because two stores measured by two counters is a bound that disagrees with
 /// itself.
-pub(super) use ghostex_chat_runtime::storage_bytes;
+pub(super) use ghostex_client_storage::storage_bytes;
 
 /// The sidebar state as storage holds it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

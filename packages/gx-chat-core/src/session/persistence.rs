@@ -3,7 +3,7 @@
 //! Ported from `apps/desktop/sidebar/session-chat-runtime/persistence.ts`. The record must stay
 //! byte compatible with what the TypeScript wrote, because an installed Ghostex reads its own old
 //! records after the switch: every number is an integer here for the same reason
-//! `packages/chat-runtime/src/storage_records.rs` had to be fixed, since JavaScript writes `1`
+//! `packages/client-storage-native/src/storage_records.rs` had to be fixed, since JavaScript writes `1`
 //! where an `f64` would write `1.0`.
 
 use serde::{Deserialize, Serialize};

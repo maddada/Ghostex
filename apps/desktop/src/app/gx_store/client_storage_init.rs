@@ -9,7 +9,7 @@
 //! app goes on: every door reports its own read or write failure, and the next start retries,
 //! because every step rolled back.
 //!
-//! SEE-ALSO: packages/chat-runtime/src/storage_init.rs, apps/desktop/src/main.rs (the caller).
+//! SEE-ALSO: packages/client-storage-native/src/storage_init.rs, apps/desktop/src/main.rs (the caller).
 
 use serde_json::json;
 
@@ -22,7 +22,7 @@ pub(crate) fn initialize_client_storage_at_start() {
         .unwrap_or_else(|| crate::shared_settings::ghostex_storage_paths().cef_cache_dir())
         .join("Default");
     let now_ms = super::host::now_ms() as i64;
-    match ghostex_chat_runtime::initialize_client_storage(
+    match ghostex_client_storage::initialize_client_storage(
         &super::sidebar_ui_storage::client_storage_path(),
         Some(&profile),
         now_ms,

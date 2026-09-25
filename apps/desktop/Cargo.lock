@@ -2515,7 +2515,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ghostex-chat-runtime"
+name = "ghostex-client-storage"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2554,7 +2554,7 @@ dependencies = [
  "flate2",
  "futures",
  "ghostex-agent-sync",
- "ghostex-chat-runtime",
+ "ghostex-client-storage",
  "ghostex-docs",
  "ghostex-editor-client",
  "ghostex-gx-chat-client",

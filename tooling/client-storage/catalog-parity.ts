@@ -1,5 +1,5 @@
 /**
- * Compares the Rust copy of the client-storage catalog (packages/chat-runtime/src/storage_catalog.rs),
+ * Compares the Rust copy of the client-storage catalog (packages/client-storage-native/src/storage_catalog.rs),
  * which the desktop's start-up migrations read, with `definitions` in packages/client-storage/catalog.ts.
  * Order, id, key, collection flag, backend and version must all match. Exits 1 on any difference.
  *
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { definitions } from '@/packages/client-storage/catalog';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const source = readFileSync(`${root}packages/chat-runtime/src/storage_catalog.rs`, 'utf8');
+const source = readFileSync(`${root}packages/client-storage-native/src/storage_catalog.rs`, 'utf8');
 const backends: Record<string, string> = { Local: 'local', Session: 'session', Records: 'indexeddb' };
 const rust = [
   ...source.matchAll(/store\(\s*"([^"]+)",\s*"([^"]*)",\s*(true|false),\s*(Local|Session|Records),?\s*\)/g),

@@ -197,7 +197,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ghostex-chat-runtime"
+name = "ghostex-client-storage"
 version = "0.1.0"
 dependencies = [
  "anyhow",

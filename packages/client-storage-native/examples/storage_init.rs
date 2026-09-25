@@ -11,7 +11,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use ghostex_chat_runtime::{StorageInitReport, initialize_client_storage, scan_record_usage};
+use ghostex_client_storage::{StorageInitReport, initialize_client_storage, scan_record_usage};
 use rusqlite::Connection;
 use serde_json::Value;
 

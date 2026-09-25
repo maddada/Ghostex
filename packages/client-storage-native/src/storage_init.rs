@@ -13,7 +13,7 @@
 //!
 //! SEE-ALSO: packages/client-storage/migration.ts (`migrateStorage`, `upgradeStorageSchemas`),
 //! packages/client-storage/adapters/database-transaction.ts (the row shape a migration writes),
-//! packages/chat-runtime/src/storage_import.rs (the browser-era import),
+//! packages/client-storage-native/src/storage_import.rs (the browser-era import),
 //! apps/desktop/src/app/gx_store/client_storage_init.rs (the caller).
 
 use std::path::Path;

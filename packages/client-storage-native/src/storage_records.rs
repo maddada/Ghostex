@@ -12,7 +12,7 @@
 //!
 //! SEE-ALSO: apps/desktop/src/app/gx_store/records_storage.rs (the pool, the transaction and the
 //! error vocabulary), packages/client-storage/adapters/database-transaction.ts (the other writer of
-//! this table), packages/chat-runtime/src/storage_metadata.rs (the bookkeeping).
+//! this table), packages/client-storage-native/src/storage_metadata.rs (the bookkeeping).
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};

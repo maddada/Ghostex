@@ -34,7 +34,7 @@ pub struct RecordStoreUsage {
 /// statement, which is what the parsing loop did too.
 ///
 /// SEE-ALSO: packages/client-storage/adapters/database-transaction.ts (the other writer),
-/// packages/chat-runtime/src/storage_records.rs (the write path, which scans once and hands the
+/// packages/client-storage-native/src/storage_records.rs (the write path, which scans once and hands the
 /// result on rather than scanning a second time).
 pub fn recompute_record_metadata(connection: &Connection) -> Result<()> {
     apply_record_metadata(connection, &scan_record_usage(connection)?)
