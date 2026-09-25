@@ -393,6 +393,7 @@ impl ChatOptionMenu {
                     let menu = menu.clone();
                     move |window, cx| {
                         window.set_background_corner_radius(corner_radius);
+                        crate::app::helpers::apply_frosted_menu_blur(window);
                         crate::app::window::popup_frame::strip_gpui_popup_window_frame(window);
                         crate::app::window::attach_gpui_app_modal_window_to_main_window(
                             window, parent,

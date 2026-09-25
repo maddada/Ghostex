@@ -14,9 +14,9 @@ use super::state::DocsProjectKey;
 use crate::GhostexGpuiApp;
 use crate::app::model::TitlebarMode;
 
-/// CDXC:Docs 2026-09-19 DECISION:
-/// User: the Docs files list is not resizable and keeps this one width, which replaced the resizable 230-560px range.
-pub(crate) const SIDEBAR_WIDTH: f32 = 292.0;
+/// CDXC:Docs 2026-09-25 DECISION:
+/// User: "please make the set width for it 260px". The Docs files list is not resizable and keeps this one width (it was 292px since the 2026-09-19 decision that replaced the resizable 230-560px range).
+pub(crate) const SIDEBAR_WIDTH: f32 = 260.0;
 /// CDXC:Docs 2026-09-06 DECISION:
 /// User: below 800px of Docs viewport width, overlay the files list instead of pushing the file content; supersedes the 690px breakpoint.
 pub(crate) const FLOATING_SIDEBAR_MAX_WIDTH: f32 = 800.0;
@@ -132,12 +132,25 @@ impl GhostexGpuiApp {
         .size_full();
 
         let document = self.render_native_docs_document(&p, layout, window, cx);
-        let docked_files = layout
-            .docked
-            .then(|| self.render_native_docs_files_list(&p, layout, false, window, cx));
-        // A floating list draws in a child window of its own (`drawer.rs`).
+        let docked_frame = self.native_docs_sample_docked_motion(layout, window, cx);
+        let docked_files = (layout.docked || docked_frame.animating).then(|| {
+            let list = self.render_native_docs_files_list(&p, layout, false, window, cx);
+            if docked_frame.animating {
+                crate::app::panel_motion::clip_panel_horizontally(docked_frame, true, list)
+                    .into_any_element()
+            } else {
+                list
+            }
+        });
+        // A floating list draws in a child window of its own (`drawer.rs`). A peek that was just
+        // pinned stays up over the docked list while that grows in beneath it, then goes at once,
+        // so the list never jumps.
         let view = VIEW_BOUNDS.with(|cell| cell.get());
-        self.native_docs_sync_drawer(layout.overlay, view, cx);
+        let pinning = layout.docked
+            && docked_frame.animating
+            && docked_frame.opening
+            && self.native_docs_drawer_shown();
+        self.native_docs_sync_drawer(layout.overlay || pinning, !layout.docked, view, cx);
         let restore = (!layout.visible()).then(|| self.render_native_docs_restore_button(&p, cx));
         let header_bottom = super::document_view::HEADER_BOUNDS
             .with(|cell| cell.get())

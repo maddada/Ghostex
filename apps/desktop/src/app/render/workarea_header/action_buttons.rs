@@ -1,8 +1,6 @@
 //! The header's trailing half: the Start / Open / Commit split buttons, the ⋯ menu, the two panel
 //! toggles. Platform caption controls belong to the rightmost band region.
 
-use std::time::Duration;
-
 use gpui::AnyElement;
 use gpui::Bounds;
 use gpui::InteractiveElement as _;
@@ -20,8 +18,6 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::h_flex;
-use gpui_component::tooltip::ManagedTooltipExt as _;
-use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use crate::app::consts::*;
 use crate::app::helpers::*;
@@ -47,7 +43,6 @@ pub(crate) struct WorkareaHeaderSplitButton {
     pub(crate) icon: &'static str,
     pub(crate) icon_size: f32,
     pub(crate) label: SharedString,
-    pub(crate) tooltip: &'static str,
     /// The diagnostic name for a press on the main half, kept identical to the name the old
     /// titlebar button logged so the popup repro logs stay comparable.
     pub(crate) primary_intent: &'static str,
@@ -199,8 +194,8 @@ impl GhostexGpuiApp {
             .text_size(px(12.5))
             .cursor_default()
             .hover(move |this| {
-                this.bg(titlebar_button_hover_color())
-                    .text_color(titlebar_icon_hover_color())
+                this.bg(titlebar_split_button_hover_color())
+                    .text_color(titlebar_split_button_hover_text_color())
             })
             .on_mouse_down(
                 MouseButton::Left,
@@ -266,8 +261,8 @@ impl GhostexGpuiApp {
             ))
             .when(cfg!(target_os = "windows"), |this| this.occlude())
             .cursor_default()
-            .when(open, |this| this.bg(titlebar_active_segment_color()))
-            .hover(move |this| this.bg(titlebar_button_hover_color()))
+            .when(open, |this| this.bg(titlebar_split_button_open_color()))
+            .hover(move |this| this.bg(titlebar_split_button_hover_color()))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
@@ -308,7 +303,6 @@ impl GhostexGpuiApp {
                 icon_color,
             ));
 
-        let tooltip = spec.tooltip;
         titlebar_split_button_frame(h_flex().id(spec.id), TITLEBAR_CONTROL_HEIGHT)
             .relative()
             .flex_shrink_0()
@@ -319,13 +313,6 @@ impl GhostexGpuiApp {
             .child(main)
             .child(titlebar_split_button_divider(TITLEBAR_CONTROL_HEIGHT))
             .child(caret)
-            .when(!open, |this| {
-                this.managed_discrete_tooltip_with_placement(
-                    ManagedTooltipPlacement::Left,
-                    Duration::from_millis(300),
-                    move |window, cx| titlebar_tooltip(tooltip, window, cx),
-                )
-            })
             .on_prepaint({
                 let anchor_state = anchor_state.clone();
                 move |bounds, window, cx| {
@@ -401,7 +388,6 @@ impl GhostexGpuiApp {
                             icon: actions_icon_path,
                             icon_size: 16.0,
                             label: actions_label,
-                            tooltip: TITLEBAR_ACTIONS_TOOLTIP,
                             primary_intent: "runPrimaryAction",
                             dimmed: self.titlebar_quick_action_button_on_cooldown(),
                             busy: false,
@@ -424,7 +410,6 @@ impl GhostexGpuiApp {
                             icon: open_target_icon_path,
                             icon_size: 13.0,
                             label: "Open".into(),
-                            tooltip: TITLEBAR_OPEN_TARGETS_TOOLTIP,
                             primary_intent: "openPrimaryTarget",
                             dimmed: false,
                             busy: false,
@@ -451,7 +436,6 @@ impl GhostexGpuiApp {
                                 icon: git_icon_path,
                                 icon_size: 16.0,
                                 label: "Commit".into(),
-                                tooltip: TITLEBAR_GIT_TOOLTIP,
                                 primary_intent: "togglePopup",
                                 dimmed: false,
                                 busy: self

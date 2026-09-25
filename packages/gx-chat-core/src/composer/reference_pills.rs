@@ -134,6 +134,58 @@ pub fn ends_with_image_extension(path: &str) -> bool {
         .any(|extension| lowered.ends_with(extension))
 }
 
+const VIDEO_EXTENSIONS: &[&str] = &[
+    ".3gp", ".avi", ".flv", ".m2ts", ".m4v", ".mkv", ".mov", ".mp4", ".mpeg", ".mpg", ".mts",
+    ".ogv", ".webm", ".wmv",
+];
+const AUDIO_EXTENSIONS: &[&str] = &[
+    ".aac", ".aif", ".aiff", ".flac", ".m4a", ".mp3", ".oga", ".ogg", ".opus", ".wav", ".wma",
+];
+
+/// Files that only a system app can play or show; opening them in Code is never right.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MediaKind {
+    Audio,
+    Pdf,
+    Video,
+}
+
+/// CDXC:SessionChat 2026-09-24 DECISION:
+/// User: a pasted video reads "Video #1" instead of "File #1", its menu names what it is, and clicking it opens it normally with the OS default app on macOS, Windows, and Linux instead of the code editor. Audio and PDFs follow the same rule.
+/// SEE-ALSO: `open_session_chat_file_for_session` in `apps/desktop/src/app/session_chat.rs` keeps the same extension list for the click.
+pub fn media_kind(path: &str) -> Option<MediaKind> {
+    let lowered = crate::transcript::jsstr::ascii_lower(without_position(path));
+    let has = |extensions: &[&str]| {
+        extensions
+            .iter()
+            .any(|extension| lowered.ends_with(extension))
+    };
+    if has(VIDEO_EXTENSIONS) {
+        Some(MediaKind::Video)
+    } else if has(AUDIO_EXTENSIONS) {
+        Some(MediaKind::Audio)
+    } else if lowered.ends_with(".pdf") {
+        Some(MediaKind::Pdf)
+    } else {
+        None
+    }
+}
+
+/// The noun a reference to `path` is named with: `Video` in "[Video #1](clip.mp4)", "Open Video
+/// Location".
+pub fn path_noun(path: &str) -> &'static str {
+    match media_kind(path) {
+        Some(MediaKind::Audio) => "Audio",
+        Some(MediaKind::Pdf) => "PDF",
+        Some(MediaKind::Video) => "Video",
+        None => match reference_kind("", path) {
+            ReferenceKind::Image => "Image",
+            ReferenceKind::Folder => "Folder",
+            _ => "File",
+        },
+    }
+}
+
 /// `/(?:^|[\\/])SKILL\.md$/i`.
 fn is_skill_file(path: &str) -> bool {
     let lowered = crate::transcript::jsstr::ascii_lower(path);
@@ -149,7 +201,7 @@ pub fn is_web_url(path: &str) -> bool {
     lowered.starts_with("http://") || lowered.starts_with("https://")
 }
 
-/// `/^Image #\d+$/`, `/^File #\d+$/`, `/^Folder #\d+$/`.
+/// `/^Image #\d+$/`, `/^(?:Audio|File|PDF|Video) #\d+$/`, `/^Folder #\d+$/`.
 fn numbered_label(label: &str, prefix: &str) -> bool {
     let Some(rest) = label.strip_prefix(prefix) else {
         return false;
@@ -164,7 +216,10 @@ fn explicit_reference_kind(label: &str) -> Option<ReferenceKind> {
     if numbered_label(label, "Image #") {
         return Some(ReferenceKind::Image);
     }
-    if numbered_label(label, "File #") {
+    if ["Audio #", "File #", "PDF #", "Video #"]
+        .iter()
+        .any(|prefix| numbered_label(label, prefix))
+    {
         return Some(ReferenceKind::File);
     }
     if numbered_label(label, "Folder #") {

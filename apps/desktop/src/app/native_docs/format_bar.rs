@@ -26,14 +26,209 @@ pub(crate) enum DocsFormatMenu {
     Table,
 }
 
+/// One button of the bar, in the order it is laid out.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DocsBarItem {
+    Heading,
+    Bullet,
+    Numbered,
+    Task,
+    Table,
+    Code,
+    Link,
+    Wiki,
+    Image,
+    Quote,
+    Rule,
+    Find,
+    Width,
+    Lines,
+    Git,
+}
+
+/// The bar's metrics, the web toolbar's (`M/styles.ts:1354-1535`).
+const BUTTON: f32 = 27.0;
+const GROUP_GAP: f32 = 8.0;
+const BUTTON_GAP: f32 = 1.0;
+const SEPARATOR: f32 = 9.0;
+const MODE_WIDTH: f32 = 76.0;
+/// Padding and border on both sides.
+const BAR_CHROME: f32 = 8.0;
+/// The bar keeps 14px clear of the document's edges (`max-width: 100% - 28px`).
+const BAR_EDGE_ROOM: f32 = 28.0;
+/// Hidden buttons come back only once this much more room is free, so the bar does not flicker at
+/// the threshold.
+const REGROW_SLACK: f32 = 6.0;
+
+impl DocsBarItem {
+    const FORMAT_BLOCKS: [Self; 4] = [Self::Heading, Self::Bullet, Self::Numbered, Self::Task];
+    const FORMAT_INSERTS: [Self; 7] = [
+        Self::Table,
+        Self::Code,
+        Self::Link,
+        Self::Wiki,
+        Self::Image,
+        Self::Quote,
+        Self::Rule,
+    ];
+    const VIEW: [Self; 4] = [Self::Find, Self::Width, Self::Lines, Self::Git];
+
+    /// CDXC:Docs 2026-09-25 DECISION:
+    /// User: the formatting bar fits a document narrower than the bar, and the buttons that do not fit go into a "⋯" menu at the end of the bar (option b of three: fit like the web toolbar and keep the hidden buttons reachable). The web toolbar's order is kept: the three optional view toggles go first, then the formatting buttons from the end; Find, Live/Source and the collapse toggle always stay.
+    const OVERFLOW_ORDER: [Self; 14] = [
+        Self::Width,
+        Self::Lines,
+        Self::Git,
+        Self::Rule,
+        Self::Quote,
+        Self::Image,
+        Self::Wiki,
+        Self::Link,
+        Self::Code,
+        Self::Table,
+        Self::Task,
+        Self::Numbered,
+        Self::Bullet,
+        Self::Heading,
+    ];
+
+    fn id(self) -> &'static str {
+        match self {
+            Self::Heading => "docs-fmt-heading",
+            Self::Bullet => "docs-fmt-bullet",
+            Self::Numbered => "docs-fmt-numbered",
+            Self::Task => "docs-fmt-task",
+            Self::Table => "docs-fmt-table",
+            Self::Code => "docs-fmt-code",
+            Self::Link => "docs-fmt-link",
+            Self::Wiki => "docs-fmt-wiki",
+            Self::Image => "docs-fmt-image",
+            Self::Quote => "docs-fmt-quote",
+            Self::Rule => "docs-fmt-rule",
+            Self::Find => "docs-fmt-find",
+            Self::Width => "docs-fmt-width",
+            Self::Lines => "docs-fmt-lines",
+            Self::Git => "docs-fmt-git",
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Self::Heading => "docs/l-heading-17.svg",
+            Self::Bullet => "docs/l-list-17.svg",
+            Self::Numbered => "docs/l-list-ordered-17.svg",
+            Self::Task => "docs/l-list-todo-17.svg",
+            Self::Table => "docs/l-table-2-17.svg",
+            Self::Code => "docs/l-code-17.svg",
+            Self::Link => "docs/l-link-17.svg",
+            Self::Wiki => "docs/l-brackets-17.svg",
+            Self::Image => "docs/l-image-17.svg",
+            Self::Quote => "docs/l-quote-17.svg",
+            Self::Rule => "docs/l-minus-17.svg",
+            Self::Find => "docs/l-search-17.svg",
+            Self::Width => "docs/l-panel-left-right-dashed-17.svg",
+            Self::Lines => "docs/l-hash-17.svg",
+            Self::Git => "docs/l-git-compare-17.svg",
+        }
+    }
+
+    /// The name the action carries through a menu.
+    pub(crate) fn command(self) -> &'static str {
+        &self.id()["docs-fmt-".len()..]
+    }
+
+    pub(crate) fn from_command(command: &str) -> Option<Self> {
+        Self::FORMAT_BLOCKS
+            .into_iter()
+            .chain(Self::FORMAT_INSERTS)
+            .chain(Self::VIEW)
+            .find(|item| item.command() == command)
+    }
+}
+
+/// The bar's full width with `hidden` left out and, when anything is, the "⋯" button added.
+fn bar_width(hidden: &[DocsBarItem]) -> f32 {
+    let shown = |items: &[DocsBarItem]| items.iter().filter(|item| !hidden.contains(item)).count();
+    let group = |buttons: usize, extra: f32, extra_children: usize| {
+        let children = buttons + extra_children;
+        buttons as f32 * BUTTON + extra + children.saturating_sub(1) as f32 * BUTTON_GAP
+    };
+    let (blocks, inserts) = (
+        shown(&DocsBarItem::FORMAT_BLOCKS),
+        shown(&DocsBarItem::FORMAT_INSERTS),
+    );
+    let separator = blocks > 0 && inserts > 0;
+    let mut children: Vec<f32> = Vec::new();
+    if blocks + inserts > 0 {
+        children.push(group(
+            blocks + inserts,
+            if separator { SEPARATOR } else { 0.0 },
+            usize::from(separator),
+        ));
+    }
+    children.push(group(shown(&DocsBarItem::VIEW), 0.0, 0));
+    children.push(MODE_WIDTH);
+    if !hidden.is_empty() {
+        children.push(BUTTON);
+    }
+    children.push(BUTTON);
+    BAR_CHROME + children.iter().sum::<f32>() + (children.len() - 1) as f32 * GROUP_GAP
+}
+
+/// How many buttons (from the front of `OVERFLOW_ORDER`) to hide in `room`, given how many are
+/// hidden now.
+fn overflow_count(room: f32, hidden_now: usize) -> usize {
+    let order = DocsBarItem::OVERFLOW_ORDER;
+    let fitting = |slack: f32| {
+        (0..=order.len())
+            .find(|&count| bar_width(&order[..count]) + slack <= room)
+            .unwrap_or(order.len())
+    };
+    let shrink = fitting(0.0);
+    if shrink > hidden_now {
+        return shrink;
+    }
+    fitting(REGROW_SLACK).min(hidden_now)
+}
+
+thread_local! {
+    /// The "⋯" button's bounds in each window that draws it, for its menu to open under.
+    static MORE_ANCHORS: std::cell::RefCell<Vec<(gpui::WindowId, gpui::Bounds<gpui::Pixels>)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
 impl GhostexGpuiApp {
+    /// Hands `f` back when `window` is the main window; otherwise runs the edit there instead.
+    fn native_docs_take_for_main_window<F>(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+        f: F,
+    ) -> Option<F>
+    where
+        F: FnOnce(&mut EditorState, &mut Context<EditorState>) + 'static,
+    {
+        let slot = std::rc::Rc::new(std::cell::Cell::new(Some(f)));
+        let deferred = slot.clone();
+        let moved = self.native_docs_defer_to_main_window(window, cx, move |this, window, cx| {
+            if let Some(f) = deferred.take() {
+                this.native_docs_edit(window, cx, f);
+            }
+        });
+        if moved { None } else { slot.take() }
+    }
+
     /// Runs a source edit on the open live editor, then gives it focus back.
     fn native_docs_edit(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-        f: impl FnOnce(&mut EditorState, &mut Context<EditorState>),
+        f: impl FnOnce(&mut EditorState, &mut Context<EditorState>) + 'static,
     ) {
+        // A click in the bar's frosted window edits and focuses the editor in the main window.
+        let Some(f) = self.native_docs_take_for_main_window(window, cx, f) else {
+            return;
+        };
         let Some(editor) = self
             .native_docs
             .active_document()
@@ -54,6 +249,75 @@ impl GhostexGpuiApp {
         p: &DocsPalette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let frosted = super::format_bar_window::format_bar_frosted(p);
+        let room = self.native_docs.format_bar_room.get();
+        if room > 0.0 {
+            self.native_docs.format_bar_hidden =
+                overflow_count(room - BAR_EDGE_ROOM, self.native_docs.format_bar_hidden);
+        }
+        let row = self.native_docs_format_bar_row(p, None, cx)?;
+        let collapsed = self.native_docs.format_bar_collapsed;
+        let menu = self.native_docs.format_menu;
+        // Under glass the row itself is drawn in its frosted window (`format_bar_window.rs`); this
+        // window keeps an invisible twin of it, which holds the row's place, reports where it is,
+        // and anchors the menus and the find panel that open above it.
+        let shell = if frosted {
+            div()
+                .relative()
+                .flex()
+                .child(row.invisible())
+                .child(self.native_docs_format_bar_reporter(cx))
+        } else {
+            div().relative().flex().child(row)
+        };
+        let shell = shell
+            .when(menu == DocsFormatMenu::Heading && !collapsed, |bar| {
+                bar.child(self.render_native_docs_heading_menu(p, cx))
+            })
+            .when(menu == DocsFormatMenu::Table && !collapsed, |bar| {
+                bar.child(self.render_native_docs_table_menu(p, cx))
+            })
+            .children(self.render_native_docs_find(p, cx));
+        Some(
+            div()
+                .absolute()
+                .bottom(px(14.0))
+                .left_0()
+                .right_0()
+                .flex()
+                .justify_center()
+                .child(shell)
+                .child(self.native_docs_format_bar_room_probe())
+                .into_any_element(),
+        )
+    }
+
+    /// Measures the width the bar may use (the document's), redrawing when it changes so the
+    /// bar can move buttons into or out of its menu.
+    fn native_docs_format_bar_room_probe(&self) -> AnyElement {
+        let room = self.native_docs.format_bar_room.clone();
+        gpui::canvas(
+            move |bounds, window, _| {
+                let width = bounds.size.width.as_f32();
+                if room.replace(width) != width {
+                    window.refresh();
+                }
+            },
+            |_, _, _, _| {},
+        )
+        .absolute()
+        .size_full()
+        .into_any_element()
+    }
+
+    /// The bar's own row of buttons, drawn in the Docs view or, under glass, in the bar's frosted
+    /// window with `frosted` as its tint and border.
+    pub(crate) fn native_docs_format_bar_row(
+        &mut self,
+        p: &DocsPalette,
+        frosted: Option<(gpui::Hsla, gpui::Hsla)>,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Stateful<gpui::Div>> {
         let document = self.native_docs.active_document()?;
         if document.kind != DocsFileKind::Markdown || document.live.is_none() {
             return None;
@@ -126,214 +390,90 @@ impl GhostexGpuiApp {
             .items_center()
             .gap(px(8.0))
             .rounded(px(10.0))
-            .bg(p.floating)
             .border_1()
-            .border_color(p.border)
-            .shadow_lg()
+            .map(|shell| match frosted {
+                Some((tint, border)) => shell.bg(tint).border_color(border),
+                None => shell.bg(p.floating).border_color(p.border).shadow_lg(),
+            })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation());
         let shell = if collapsed {
             shell.child(toggle)
         } else {
-            let format_group = div()
-                .flex()
-                .items_center()
-                .gap(px(1.0))
-                .child(
-                    button(
-                        "docs-fmt-heading",
-                        "docs/l-heading-17.svg",
-                        "Heading",
-                        menu == DocsFormatMenu::Heading,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.native_docs.format_menu =
-                            if this.native_docs.format_menu == DocsFormatMenu::Heading {
-                                DocsFormatMenu::None
-                            } else {
-                                DocsFormatMenu::Heading
-                            };
-                        this.native_docs_notify(cx);
-                    })),
+            let hidden = &DocsBarItem::OVERFLOW_ORDER[..self.native_docs.format_bar_hidden];
+            let shown = |items: &[DocsBarItem]| -> Vec<DocsBarItem> {
+                items
+                    .iter()
+                    .copied()
+                    .filter(|item| !hidden.contains(item))
+                    .collect()
+            };
+            let (blocks, inserts, view) = (
+                shown(&DocsBarItem::FORMAT_BLOCKS),
+                shown(&DocsBarItem::FORMAT_INSERTS),
+                shown(&DocsBarItem::VIEW),
+            );
+            let item_button = |item: DocsBarItem| {
+                let active = match item {
+                    DocsBarItem::Heading => menu == DocsFormatMenu::Heading,
+                    DocsBarItem::Table => menu == DocsFormatMenu::Table,
+                    DocsBarItem::Find => find_visible,
+                    DocsBarItem::Width => constrain,
+                    DocsBarItem::Lines => numbers,
+                    DocsBarItem::Git => git,
+                    _ => false,
+                };
+                button(
+                    item.id(),
+                    item.icon(),
+                    bar_item_label(item, constrain, numbers, git),
+                    active,
                 )
-                .child(
-                    button(
-                        "docs-fmt-bullet",
-                        "docs/l-list-17.svg",
-                        "Bullet List",
-                        false,
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.native_docs_edit(window, cx, |e, cx| {
-                            toggle_list(e, ListKind::Bullet, cx)
-                        })
-                    })),
-                )
-                .child(
-                    button(
-                        "docs-fmt-numbered",
-                        "docs/l-list-ordered-17.svg",
-                        "Numbered List",
-                        false,
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.native_docs_edit(window, cx, |e, cx| {
-                            toggle_list(e, ListKind::Numbered, cx)
-                        })
-                    })),
-                )
-                .child(
-                    button("docs-fmt-task", "docs/l-list-todo-17.svg", "Task", false).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            this.native_docs_edit(window, cx, |e, cx| {
-                                toggle_list(e, ListKind::Task, cx)
-                            })
-                        }),
-                    ),
-                )
-                .child(separator())
-                .child(
-                    button(
-                        "docs-fmt-table",
-                        "docs/l-table-2-17.svg",
-                        "Table",
-                        menu == DocsFormatMenu::Table,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.native_docs.format_menu =
-                            if this.native_docs.format_menu == DocsFormatMenu::Table {
-                                DocsFormatMenu::None
-                            } else {
-                                DocsFormatMenu::Table
-                            };
-                        this.native_docs.table_hover = (0, 0);
-                        this.native_docs_notify(cx);
-                    })),
-                )
-                .child(
-                    button("docs-fmt-code", "docs/l-code-17.svg", "Code Block", false).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            this.native_docs_edit(window, cx, code_block)
-                        }),
-                    ),
-                )
-                .child(
-                    button("docs-fmt-link", "docs/l-link-17.svg", "Link", false).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            this.native_docs_edit(window, cx, |e, cx| {
-                                wrap_link(e, LinkKind::Link, cx)
-                            })
-                        }),
-                    ),
-                )
-                .child(
-                    button(
-                        "docs-fmt-wiki",
-                        "docs/l-brackets-17.svg",
-                        "Wiki Link",
-                        false,
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.native_docs_edit(window, cx, |e, cx| wrap_link(e, LinkKind::Wiki, cx))
-                    })),
-                )
-                .child(
-                    button("docs-fmt-image", "docs/l-image-17.svg", "Image", false).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            this.native_docs_edit(window, cx, |e, cx| {
-                                wrap_link(e, LinkKind::Image, cx)
-                            })
-                        }),
-                    ),
-                )
-                .child(
-                    button("docs-fmt-quote", "docs/l-quote-17.svg", "Quote", false).on_click(
-                        cx.listener(|this, _, window, cx| {
-                            this.native_docs_edit(window, cx, toggle_quote)
-                        }),
-                    ),
-                )
-                .child(
-                    button(
-                        "docs-fmt-rule",
-                        "docs/l-minus-17.svg",
-                        "Horizontal Rule",
-                        false,
-                    )
-                    .on_click(cx.listener(|this, _, window, cx| {
-                        this.native_docs_edit(window, cx, horizontal_rule)
-                    })),
-                );
+                .on_click(cx.listener(move |this, _, window, cx| {
+                    this.native_docs_run_bar_item(item, None, window, cx)
+                }))
+            };
+            let format_group = (!blocks.is_empty() || !inserts.is_empty()).then(|| {
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(BUTTON_GAP))
+                    .children(blocks.iter().map(|item| item_button(*item)))
+                    .when(!blocks.is_empty() && !inserts.is_empty(), |group| {
+                        group.child(separator())
+                    })
+                    .children(inserts.iter().map(|item| item_button(*item)))
+            });
             let right_group = div()
                 .flex()
                 .items_center()
-                .gap(px(1.0))
-                .child(
-                    button(
-                        "docs-fmt-find",
-                        "docs/l-search-17.svg",
-                        "Find and Replace",
-                        find_visible,
+                .gap(px(BUTTON_GAP))
+                .children(view.iter().map(|item| item_button(*item)));
+            let more = (!hidden.is_empty()).then(|| {
+                button("docs-fmt-more", "titlebar/dots.svg", "More", false)
+                    .relative()
+                    .child(
+                        gpui::canvas(
+                            |bounds, window, _| {
+                                let id = window.window_handle().window_id();
+                                MORE_ANCHORS.with(|anchors| {
+                                    let mut anchors = anchors.borrow_mut();
+                                    anchors.retain(|(window, _)| *window != id);
+                                    anchors.push((id, bounds));
+                                });
+                            },
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .size_full(),
                     )
                     .on_click(cx.listener(|this, _, window, cx| {
-                        if this.native_docs_find_visible() {
-                            this.native_docs_hide_find(window, cx);
-                        } else {
-                            this.native_docs_show_find(window, cx);
-                        }
-                    })),
-                )
-                .child(
-                    button(
-                        "docs-fmt-width",
-                        "docs/l-panel-left-right-dashed-17.svg",
-                        if constrain {
-                            "Use Full Content Width"
-                        } else {
-                            "Constrain Content Width"
-                        },
-                        constrain,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.native_docs.constrain_width = !this.native_docs.constrain_width;
-                        this.native_docs_notify(cx);
-                    })),
-                )
-                .child(
-                    button(
-                        "docs-fmt-lines",
-                        "docs/l-hash-17.svg",
-                        if numbers {
-                            "Hide Line Numbers"
-                        } else {
-                            "Show Line Numbers"
-                        },
-                        numbers,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.native_docs.line_numbers = !this.native_docs.line_numbers;
-                        this.native_docs_notify(cx);
-                    })),
-                )
-                .child(
-                    button(
-                        "docs-fmt-git",
-                        "docs/l-git-compare-17.svg",
-                        if git {
-                            "Hide Git Changes"
-                        } else {
-                            "Show Git Changes"
-                        },
-                        git,
-                    )
-                    .on_click(cx.listener(|this, _, _, cx| {
-                        this.native_docs.git_changes = !this.native_docs.git_changes;
-                        this.native_docs_notify(cx);
-                    })),
-                );
+                        this.native_docs_show_bar_overflow_menu(window, cx)
+                    }))
+            });
             let mode = div()
                 .id("docs-fmt-mode")
                 .h(px(27.0))
-                .min_w(px(76.0))
+                .min_w(px(MODE_WIDTH))
                 .px(px(8.0))
                 .flex()
                 .items_center()
@@ -361,30 +501,161 @@ impl GhostexGpuiApp {
                     cx.listener(move |this, _, _, cx| this.native_docs_toggle_live(&path, cx)),
                 );
             shell
-                .child(format_group)
+                .children(format_group)
                 .child(right_group)
                 .child(mode)
+                .children(more)
                 .child(toggle)
         };
-        let shell = shell
-            .when(menu == DocsFormatMenu::Heading && !collapsed, |bar| {
-                bar.child(self.render_native_docs_heading_menu(p, cx))
+        Some(shell)
+    }
+
+    /// A bar button's click, from the bar or from its "⋯" menu (`from_menu`). The menu runs the
+    /// button's plain action: a heading level (`level`) or the default 3 by 2 table, since the
+    /// pickers those buttons open hang from the bar.
+    pub(crate) fn native_docs_run_bar_item(
+        &mut self,
+        item: DocsBarItem,
+        from_menu: Option<u8>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let toggle_menu = |this: &mut Self, which: DocsFormatMenu, cx: &mut Context<Self>| {
+            this.native_docs.format_menu = if this.native_docs.format_menu == which {
+                DocsFormatMenu::None
+            } else {
+                which
+            };
+            this.native_docs.table_hover = (0, 0);
+            this.native_docs_notify(cx);
+        };
+        match item {
+            DocsBarItem::Heading => match from_menu {
+                Some(level) => {
+                    self.native_docs_edit(window, cx, move |e, cx| set_heading(e, level, cx))
+                }
+                None => toggle_menu(self, DocsFormatMenu::Heading, cx),
+            },
+            DocsBarItem::Table => match from_menu {
+                Some(_) => self.native_docs_edit(window, cx, |e, cx| insert_table(e, 3, 2, cx)),
+                None => toggle_menu(self, DocsFormatMenu::Table, cx),
+            },
+            DocsBarItem::Bullet => {
+                self.native_docs_edit(window, cx, |e, cx| toggle_list(e, ListKind::Bullet, cx))
+            }
+            DocsBarItem::Numbered => {
+                self.native_docs_edit(window, cx, |e, cx| toggle_list(e, ListKind::Numbered, cx))
+            }
+            DocsBarItem::Task => {
+                self.native_docs_edit(window, cx, |e, cx| toggle_list(e, ListKind::Task, cx))
+            }
+            DocsBarItem::Code => self.native_docs_edit(window, cx, code_block),
+            DocsBarItem::Link => {
+                self.native_docs_edit(window, cx, |e, cx| wrap_link(e, LinkKind::Link, cx))
+            }
+            DocsBarItem::Wiki => {
+                self.native_docs_edit(window, cx, |e, cx| wrap_link(e, LinkKind::Wiki, cx))
+            }
+            DocsBarItem::Image => {
+                self.native_docs_edit(window, cx, |e, cx| wrap_link(e, LinkKind::Image, cx))
+            }
+            DocsBarItem::Quote => self.native_docs_edit(window, cx, toggle_quote),
+            DocsBarItem::Rule => self.native_docs_edit(window, cx, horizontal_rule),
+            DocsBarItem::Find => {
+                let toggle = |this: &mut Self, window: &mut Window, cx: &mut Context<Self>| {
+                    if this.native_docs_find_visible() {
+                        this.native_docs_hide_find(window, cx);
+                    } else {
+                        this.native_docs_show_find(window, cx);
+                    }
+                };
+                if !self.native_docs_defer_to_main_window(window, cx, toggle) {
+                    toggle(self, window, cx);
+                }
+            }
+            DocsBarItem::Width => {
+                self.native_docs.constrain_width = !self.native_docs.constrain_width;
+                self.native_docs_notify(cx);
+            }
+            DocsBarItem::Lines => {
+                self.native_docs.line_numbers = !self.native_docs.line_numbers;
+                self.native_docs_notify(cx);
+            }
+            DocsBarItem::Git => {
+                self.native_docs.git_changes = !self.native_docs.git_changes;
+                self.native_docs_notify(cx);
+            }
+        }
+    }
+
+    /// The "⋯" menu: the buttons the bar has no room for, in the bar's order.
+    fn native_docs_show_bar_overflow_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let id = window.window_handle().window_id();
+        let Some(trigger) = MORE_ANCHORS.with(|anchors| {
+            anchors
+                .borrow()
+                .iter()
+                .find(|(window, _)| *window == id)
+                .map(|(_, bounds)| *bounds)
+        }) else {
+            return;
+        };
+        let hidden = &DocsBarItem::OVERFLOW_ORDER[..self.native_docs.format_bar_hidden];
+        let (constrain, numbers, git) = (
+            self.native_docs.constrain_width,
+            self.native_docs.line_numbers,
+            self.native_docs.git_changes,
+        );
+        let action = |item: DocsBarItem, level: Option<u8>| -> Box<dyn gpui::Action> {
+            Box::new(super::actions::NativeDocsAction {
+                command: serde_json::json!({
+                    "type": "barItem",
+                    "item": item.command(),
+                    "level": level.unwrap_or(1),
+                }),
             })
-            .when(menu == DocsFormatMenu::Table && !collapsed, |bar| {
-                bar.child(self.render_native_docs_table_menu(p, cx))
-            })
-            .children(self.render_native_docs_find(p, cx));
-        Some(
-            div()
-                .absolute()
-                .bottom(px(14.0))
-                .left_0()
-                .right_0()
-                .flex()
-                .justify_center()
-                .child(shell)
-                .into_any_element(),
-        )
+        };
+        let mut menu = crate::app::context_menu::GpuiContextMenu::new();
+        let mut formatting = false;
+        for item in DocsBarItem::FORMAT_BLOCKS
+            .into_iter()
+            .chain(DocsBarItem::FORMAT_INSERTS)
+            .filter(|item| hidden.contains(item))
+        {
+            formatting = true;
+            menu = if item == DocsBarItem::Heading {
+                menu.submenu_with_icon(
+                    "Heading",
+                    Some(item.icon()),
+                    (1..=6u8)
+                        .map(|level| (format!("Heading {level}").into(), action(item, Some(level))))
+                        .collect(),
+                )
+            } else {
+                menu.menu_with_icon(
+                    bar_item_label(item, constrain, numbers, git),
+                    item.icon(),
+                    false,
+                    action(item, None),
+                )
+            };
+        }
+        let view: Vec<DocsBarItem> = DocsBarItem::VIEW
+            .into_iter()
+            .filter(|item| hidden.contains(item))
+            .collect();
+        if formatting && !view.is_empty() {
+            menu = menu.separator();
+        }
+        for item in view {
+            menu = menu.menu_with_icon(
+                bar_item_label(item, constrain, numbers, git),
+                item.icon(),
+                false,
+                action(item, None),
+            );
+        }
+        self.native_docs_show_menu(menu, trigger, true, window, cx);
     }
 
     fn render_native_docs_heading_menu(
@@ -428,7 +699,7 @@ impl GhostexGpuiApp {
                     .child(format!("Heading {level}"))
                     .on_click(cx.listener(move |this, _, window, cx| {
                         this.native_docs.format_menu = DocsFormatMenu::None;
-                        this.native_docs_edit(window, cx, |e, cx| set_heading(e, level, cx));
+                        this.native_docs_edit(window, cx, move |e, cx| set_heading(e, level, cx));
                     }))
             }))
             .into_any_element()
@@ -468,7 +739,9 @@ impl GhostexGpuiApp {
                         }))
                         .on_click(cx.listener(move |this, _, window, cx| {
                             this.native_docs.format_menu = DocsFormatMenu::None;
-                            this.native_docs_edit(window, cx, |e, cx| insert_table(e, c, r, cx));
+                            this.native_docs_edit(window, cx, move |e, cx| {
+                                insert_table(e, c, r, cx)
+                            });
                         })),
                 );
             }
@@ -742,4 +1015,28 @@ pub(crate) fn wrap_inline(
         editor.replace_range(selection.clone(), &replacement, cx);
         editor.select_range(selection.start..selection.start + len, cx);
     });
+}
+
+/// A bar button's tooltip, and its row in the "⋯" menu.
+fn bar_item_label(item: DocsBarItem, constrain: bool, numbers: bool, git: bool) -> &'static str {
+    match item {
+        DocsBarItem::Heading => "Heading",
+        DocsBarItem::Bullet => "Bullet List",
+        DocsBarItem::Numbered => "Numbered List",
+        DocsBarItem::Task => "Task",
+        DocsBarItem::Table => "Table",
+        DocsBarItem::Code => "Code Block",
+        DocsBarItem::Link => "Link",
+        DocsBarItem::Wiki => "Wiki Link",
+        DocsBarItem::Image => "Image",
+        DocsBarItem::Quote => "Quote",
+        DocsBarItem::Rule => "Horizontal Rule",
+        DocsBarItem::Find => "Find and Replace",
+        DocsBarItem::Width if constrain => "Use Full Content Width",
+        DocsBarItem::Width => "Constrain Content Width",
+        DocsBarItem::Lines if numbers => "Hide Line Numbers",
+        DocsBarItem::Lines => "Show Line Numbers",
+        DocsBarItem::Git if git => "Hide Git Changes",
+        DocsBarItem::Git => "Show Git Changes",
+    }
 }

@@ -54,7 +54,7 @@ impl Render for SuggestionPanel {
         let outline = if glass {
             gpui::transparent_black()
         } else {
-            row_outline(&state)
+            row_outline()
         };
         let card_border = if glass { p.border } else { p.input_border };
         let inline = px(spec.padding_inline_px * s);
@@ -286,12 +286,11 @@ impl NativeChatView {
 /// Every React row was a bare `<button>`, so theme.css's legacy base outlined it with the app
 /// theme's `--app-border`, whatever the chat's own theme: black at 12% under the plain light app
 /// theme and white at 11% under every other one.
-fn row_outline(state: &serde_json::Value) -> Hsla {
+fn row_outline() -> Hsla {
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-    let settings = state["previewSettings"]
-        .as_object()
-        .unwrap_or_else(|| snapshot.object());
-    if crate::app::helpers::gpui_app_modal_sidebar_theme_from_settings(settings) == "plain-light" {
+    if crate::app::helpers::gpui_app_modal_sidebar_theme_from_settings(snapshot.object())
+        == "plain-light"
+    {
         Hsla::from(rgb(0x000000)).opacity(0.12)
     } else {
         Hsla::from(rgb(0xffffff)).opacity(0.11)

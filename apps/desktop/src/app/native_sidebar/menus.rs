@@ -12,7 +12,6 @@ use gpui_component::{Root, h_flex, v_flex};
 use serde_json::Value;
 
 /// The gap between a trigger button and the menu that drops down from it.
-const SIDEBAR_MENU_TRIGGER_GAP: f32 = 5.0;
 /// How long after the More menu dismisses itself a press on its button still counts as that press.
 const MORE_MENU_SAME_PRESS: std::time::Duration = std::time::Duration::from_millis(250);
 
@@ -66,7 +65,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Sidebar 2026-09-21 DECISION:
-    /// User: the sidebar menu drops down from its trigger button rather than opening where the pointer was: its right edge lines up with the button's right edge, and it sits below the button with a 5px gap.
+    /// User: the sidebar menu drops down from its trigger button rather than opening where the pointer was: its right edge lines up with the button's right edge, and it sits below the button with a gap (4px since 2026-09-25, `HEADER_MENU_TRIGGER_GAP`).
     pub(crate) fn show_native_sidebar_menu_below(
         items: &Value,
         trigger: Bounds<Pixels>,
@@ -78,7 +77,7 @@ impl GhostexGpuiApp {
             items,
             Point::new(
                 trigger.right(),
-                trigger.bottom() + px(SIDEBAR_MENU_TRIGGER_GAP * scale),
+                trigger.bottom() + px(crate::app::consts::HEADER_MENU_TRIGGER_GAP * scale),
             ),
             SidebarMenuPlacement::BelowTrigger,
             scale,

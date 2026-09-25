@@ -89,16 +89,11 @@ impl ChatAppearance {
         rgb(if self.light { 0xc53030 } else { 0xef9999 }).into()
     }
 
-    /// The zoom this pane returns to: a preview host's `previewSettings` when it supplies one (Chat
-    /// Lab did, and is deleted), `sessionChatZoomPercent` otherwise. `zoom.rs` layers the
-    /// keyboard's temporary override over it.
-    pub(crate) fn default_zoom_percent(state: &serde_json::Value) -> f32 {
+    /// The zoom this pane returns to, `sessionChatZoomPercent`. `zoom.rs` layers the keyboard's
+    /// temporary override over it.
+    pub(crate) fn default_zoom_percent() -> f32 {
         let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-        Self::settings_zoom_percent(
-            state["previewSettings"]
-                .as_object()
-                .unwrap_or_else(|| snapshot.object()),
-        )
+        Self::settings_zoom_percent(snapshot.object())
     }
 
     fn settings_zoom_percent(settings: &serde_json::Map<String, serde_json::Value>) -> f32 {
@@ -110,9 +105,7 @@ impl ChatAppearance {
 
     pub(crate) fn current(state: &serde_json::Value) -> Self {
         let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-        let settings = state["previewSettings"]
-            .as_object()
-            .unwrap_or_else(|| snapshot.object());
+        let settings = snapshot.object();
         let light = gpui_session_chat_uses_light_theme(settings);
         let color = |dark, light_color| rgb(if light { light_color } else { dark }).into();
         let enabled = |name| settings.get(name).and_then(serde_json::Value::as_bool) == Some(true);

@@ -850,7 +850,7 @@ impl GhostexGpuiApp {
                 let _ = self.paste_image_or_send_control_v(cx);
             }
             TerminalViewEvent::PathsDropped(paths) => {
-                self.insert_paths_into_gpui_engine_terminal(target, paths, cx);
+                self.insert_paths_into_gpui_engine_terminal(target, runtime_session_id, paths, cx);
             }
             TerminalViewEvent::AttachPathsRequested => {
                 if let Some(attachment_target) =

@@ -62,11 +62,21 @@ export const DARK_THEME_PRESET_OPTIONS: ReadonlyArray<{
   label: string;
   value: DarkThemePreset;
 }> = [
-  { label: 'Dark Gray', value: 'gray' },
+  { label: 'Graphite', value: 'gray' },
   { label: 'Black', value: 'black' },
+  { label: 'Slate', value: 'slate' },
+  { label: 'Midnight', value: 'midnight' },
   { label: 'Blue', value: 'blue' },
+  { label: 'Indigo', value: 'indigo' },
+  { label: 'Teal', value: 'teal' },
   { label: 'Green', value: 'green' },
+  { label: 'Forest', value: 'forest' },
+  { label: 'Olive', value: 'olive' },
+  { label: 'Amber', value: 'amber' },
+  { label: 'Orange', value: 'orange' },
   { label: 'Red', value: 'red' },
+  { label: 'Rose', value: 'rose' },
+  { label: 'Pink', value: 'pink' },
   { label: 'Purple', value: 'purple' },
   { label: 'Custom', value: 'custom' },
 ];
@@ -75,12 +85,22 @@ export const LIGHT_THEME_PRESET_OPTIONS: ReadonlyArray<{
   label: string;
   value: LightThemePreset;
 }> = [
-  { label: 'Light Gray', value: 'gray' },
+  { label: 'Graphite', value: 'gray' },
   { label: 'White', value: 'white' },
+  { label: 'Slate', value: 'slate' },
+  { label: 'Midnight', value: 'midnight' },
   { label: 'Blue', value: 'blue' },
+  { label: 'Indigo', value: 'indigo' },
+  { label: 'Teal', value: 'teal' },
   { label: 'Green', value: 'green' },
-  { label: 'Pink', value: 'pink' },
+  { label: 'Forest', value: 'forest' },
+  { label: 'Olive', value: 'olive' },
+  { label: 'Amber', value: 'amber' },
   { label: 'Orange', value: 'orange' },
+  { label: 'Red', value: 'red' },
+  { label: 'Rose', value: 'rose' },
+  { label: 'Pink', value: 'pink' },
+  { label: 'Purple', value: 'purple' },
   { label: 'Custom', value: 'custom' },
 ];
 

@@ -3028,8 +3028,8 @@
     },
     {
       "key": "darkThemePreset",
-      "title": "Dark theme",
-      "subtitle": "Preset dark chrome for the sidebar and window, or Custom to tune its contrast and tint.",
+      "title": "Dark mode colour",
+      "subtitle": "The colour of the sidebar and window in dark mode: one of sixteen colour squares, or a custom colour under More colour options.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3040,7 +3040,7 @@
       "default": "gray",
       "options": [
         {
-          "label": "Dark Gray",
+          "label": "Graphite",
           "value": "gray"
         },
         {
@@ -3048,16 +3048,56 @@
           "value": "black"
         },
         {
+          "label": "Slate",
+          "value": "slate"
+        },
+        {
+          "label": "Midnight",
+          "value": "midnight"
+        },
+        {
           "label": "Blue",
           "value": "blue"
+        },
+        {
+          "label": "Indigo",
+          "value": "indigo"
+        },
+        {
+          "label": "Teal",
+          "value": "teal"
         },
         {
           "label": "Green",
           "value": "green"
         },
         {
+          "label": "Forest",
+          "value": "forest"
+        },
+        {
+          "label": "Olive",
+          "value": "olive"
+        },
+        {
+          "label": "Amber",
+          "value": "amber"
+        },
+        {
+          "label": "Orange",
+          "value": "orange"
+        },
+        {
           "label": "Red",
           "value": "red"
+        },
+        {
+          "label": "Rose",
+          "value": "rose"
+        },
+        {
+          "label": "Pink",
+          "value": "pink"
         },
         {
           "label": "Purple",
@@ -3072,8 +3112,8 @@
     },
     {
       "key": "customSidebarTitlebarBackgroundDarknessPercent",
-      "title": "Dark theme background contrast",
-      "subtitle": "Contrast of the dark sidebar and window chrome background while Dark theme is Custom.",
+      "title": "Custom dark mode depth",
+      "subtitle": "How deep the custom dark mode colour is, while Custom colour in dark mode is on.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3088,8 +3128,8 @@
     },
     {
       "key": "customSidebarTitlebarBackgroundTintColor",
-      "title": "Dark theme background tint",
-      "subtitle": "Subtle tint of the dark sidebar and window chrome background while Dark theme is Custom.",
+      "title": "Custom dark mode tint",
+      "subtitle": "The hue of the custom dark mode colour, while Custom colour in dark mode is on.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3102,8 +3142,8 @@
     },
     {
       "key": "lightThemePreset",
-      "title": "Light theme",
-      "subtitle": "Preset light chrome for the sidebar and window, or Custom to tune its contrast and tint.",
+      "title": "Light mode colour",
+      "subtitle": "The colour of the sidebar and window in light mode: one of sixteen colour squares, or a custom colour under More colour options.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3114,7 +3154,7 @@
       "default": "gray",
       "options": [
         {
-          "label": "Light Gray",
+          "label": "Graphite",
           "value": "gray"
         },
         {
@@ -3122,20 +3162,60 @@
           "value": "white"
         },
         {
+          "label": "Slate",
+          "value": "slate"
+        },
+        {
+          "label": "Midnight",
+          "value": "midnight"
+        },
+        {
           "label": "Blue",
           "value": "blue"
+        },
+        {
+          "label": "Indigo",
+          "value": "indigo"
+        },
+        {
+          "label": "Teal",
+          "value": "teal"
         },
         {
           "label": "Green",
           "value": "green"
         },
         {
-          "label": "Pink",
-          "value": "pink"
+          "label": "Forest",
+          "value": "forest"
+        },
+        {
+          "label": "Olive",
+          "value": "olive"
+        },
+        {
+          "label": "Amber",
+          "value": "amber"
         },
         {
           "label": "Orange",
           "value": "orange"
+        },
+        {
+          "label": "Red",
+          "value": "red"
+        },
+        {
+          "label": "Rose",
+          "value": "rose"
+        },
+        {
+          "label": "Pink",
+          "value": "pink"
+        },
+        {
+          "label": "Purple",
+          "value": "purple"
         },
         {
           "label": "Custom",
@@ -3146,8 +3226,8 @@
     },
     {
       "key": "themeSidebarContrast",
-      "title": "Sidebar contrast",
-      "subtitle": "The sidebar's contrast. Higher makes dark backgrounds darker and light backgrounds whiter; 0 is the theme's own.",
+      "title": "Sidebar colourfulness",
+      "subtitle": "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) to Vivid (lighter, more colourful). Colourfulness sets the sidebar and work area together.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3160,8 +3240,8 @@
     },
     {
       "key": "themeWorkAreaContrast",
-      "title": "Work area contrast",
-      "subtitle": "The work area's contrast (chat, terminals and views). Higher makes dark backgrounds darker and light backgrounds whiter; 0 is the theme's own.",
+      "title": "Work area colourfulness",
+      "subtitle": "How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Vivid. Colourfulness sets the sidebar and work area together.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3174,8 +3254,8 @@
     },
     {
       "key": "customSidebarTitlebarLightBackgroundLightnessPercent",
-      "title": "Light theme background contrast",
-      "subtitle": "Contrast of the light sidebar and window chrome background while Light theme is Custom.",
+      "title": "Custom light mode depth",
+      "subtitle": "How deep the custom light mode colour is, while Custom colour in light mode is on.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3188,8 +3268,8 @@
     },
     {
       "key": "customSidebarTitlebarLightBackgroundTintColor",
-      "title": "Light theme background tint",
-      "subtitle": "Subtle tint of the light sidebar and window chrome background while Light theme is Custom.",
+      "title": "Custom light mode tint",
+      "subtitle": "The hue of the custom light mode colour, while Custom colour in light mode is on.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -3266,7 +3346,7 @@
     },
     {
       "key": "terminalGhosttyLightTheme",
-      "title": "Terminal light palette",
+      "title": "Terminal palette in light mode",
       "subtitle": "Uses your configured Ghostty light theme, or GitHub Light when no theme is configured.",
       "tab": "theme",
       "tabTitle": "Theme",
@@ -5226,7 +5306,7 @@
     },
     {
       "key": "terminalGhosttyTheme",
-      "title": "Terminal dark palette",
+      "title": "Terminal palette in dark mode",
       "subtitle": "Uses your configured Ghostty dark theme, or GitHub Dark when no theme is configured.",
       "tab": "theme",
       "tabTitle": "Theme",
@@ -7190,8 +7270,8 @@
     },
     {
       "key": "windowGlass",
-      "title": "Window glass",
-      "subtitle": "Let the blurred desktop show through the window. By default, light mode stays opaque.",
+      "title": "Enable transparency",
+      "subtitle": "Let your desktop show through the window. Use transparency picks Automatic (dark mode only), Always or Never.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7218,8 +7298,8 @@
     },
     {
       "key": "windowGlassSource",
-      "title": "Glass shows",
-      "subtitle": "Wallpaper only keeps other windows from showing through the glass. Custom image shows a picture you choose, and Video plays a video behind it.",
+      "title": "What shows behind the glass",
+      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or a video playing behind the glass.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7250,7 +7330,7 @@
     },
     {
       "key": "windowGlassImagePlacement",
-      "title": "Glass picture position",
+      "title": "Picture position",
       "subtitle": "Where the wallpaper, custom picture or video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
       "tab": "theme",
       "tabTitle": "Theme",
@@ -7274,8 +7354,8 @@
     },
     {
       "key": "windowGlassImageDark",
-      "title": "Glass image for dark mode",
-      "subtitle": "The picture the glass blurs in dark mode when Glass shows is Custom image.",
+      "title": "Picture for dark mode",
+      "subtitle": "The picture the glass blurs in dark mode when Picture shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7288,8 +7368,8 @@
     },
     {
       "key": "windowGlassImageLight",
-      "title": "Glass image for light mode",
-      "subtitle": "The picture the glass blurs in light mode when Glass shows is Custom image.",
+      "title": "Picture for light mode",
+      "subtitle": "The picture the glass blurs in light mode when Picture shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7302,8 +7382,8 @@
     },
     {
       "key": "windowGlassVideoDark",
-      "title": "Glass video for dark mode",
-      "subtitle": "The video the glass plays in dark mode when Glass shows is Video: an aerial wallpaper your computer has downloaded, or a video file you choose.",
+      "title": "Video for dark mode",
+      "subtitle": "The video the glass plays in dark mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7316,8 +7396,8 @@
     },
     {
       "key": "windowGlassVideoLight",
-      "title": "Glass video for light mode",
-      "subtitle": "The video the glass plays in light mode when Glass shows is Video: an aerial wallpaper your computer has downloaded, or a video file you choose.",
+      "title": "Video for light mode",
+      "subtitle": "The video the glass plays in light mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7330,7 +7410,7 @@
     },
     {
       "key": "windowGlassVideoOnlyOnPower",
-      "title": "Play glass video only when plugged in",
+      "title": "Play only when plugged in",
       "subtitle": "Pause the glass video while your computer runs on battery. It always pauses when Ghostex is in the background.",
       "tab": "theme",
       "tabTitle": "Theme",
@@ -7400,7 +7480,7 @@
     },
     {
       "key": "showActivePaneOutline",
-      "title": "Show Active Pane Outline",
+      "title": "Show active pane outline",
       "subtitle": "Show an outline around the currently focused pane.",
       "tab": "theme",
       "tabTitle": "Theme",
@@ -7415,7 +7495,7 @@
     },
     {
       "key": "workspaceActivePaneBorderColor",
-      "title": "Active Pane Border",
+      "title": "Active pane outline colour",
       "subtitle": "Color of the outline around the currently focused pane.",
       "tab": "theme",
       "tabTitle": "Theme",

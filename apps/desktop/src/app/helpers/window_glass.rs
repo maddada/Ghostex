@@ -501,21 +501,51 @@ impl GhostexGpuiApp {
 }
 
 /// Fill coverage of a menu or popover window under glass; its own window blurs what is behind it.
-pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.5;
+pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.32;
+
+/// `WINDOW_GLASS_MENU_ALPHA` in light mode.
+pub(crate) const WINDOW_GLASS_MENU_ALPHA_LIGHT: f32 = 0.6;
 
 /// How much a dark menu colour is lifted toward white under glass, so the frost reads as a light
 /// pane over the blur instead of a dark hole.
 const WINDOW_GLASS_MENU_LIFT_DARK: f32 = 0.08;
 
 /// CDXC:Theming 2026-09-25 DECISION:
-/// User: a single frosted menu was "not looking glassy at all" (the theme's dark menu colour at 62% over a blurred dark window read as nearly solid). Every frosted menu and tooltip takes this one fill: in dark mode the menu colour is lifted a little toward white, and the fill covers half the blur, so the frost shows. Supersedes the plain 62% fill.
+/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its 60px, desaturated blur), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur.
 pub(crate) fn frosted_menu_fill(color: Hsla) -> Hsla {
     let lifted = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
         color
     } else {
         color.blend(gpui::white().opacity(WINDOW_GLASS_MENU_LIFT_DARK))
     };
-    lifted.opacity(WINDOW_GLASS_MENU_ALPHA)
+    lifted.opacity(frosted_menu_alpha())
+}
+
+/// How much of a frosted menu or tooltip its fill covers: little in dark mode, where the menu's
+/// light text reads over anything behind it, more in light mode, where dark text needs a lighter
+/// backing.
+pub(crate) fn frosted_menu_alpha() -> f32 {
+    if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+        WINDOW_GLASS_MENU_ALPHA_LIGHT
+    } else {
+        WINDOW_GLASS_MENU_ALPHA
+    }
+}
+
+/// Blur radius of a frosted menu or tooltip window. Narrower than the main window's glass so the
+/// shapes and colours behind a menu still read through it.
+pub(crate) const FROSTED_MENU_BLUR_RADIUS: f32 = 20.0;
+
+/// Whether a frosted menu's backdrop keeps the colour saturation the main window's glass strips.
+pub(crate) const FROSTED_MENU_KEEP_SATURATION: bool = true;
+
+/// Gives a menu or tooltip window the frosted menus' blur (`FROSTED_MENU_BLUR_RADIUS`,
+/// `FROSTED_MENU_KEEP_SATURATION`). Call it where the window sets its corner radius.
+pub(crate) fn apply_frosted_menu_blur(window: &gpui::Window) {
+    window.set_background_blur_style(
+        gpui::px(FROSTED_MENU_BLUR_RADIUS),
+        FROSTED_MENU_KEEP_SATURATION,
+    );
 }
 
 /// The fill of a menu or panel that has a window of its own (the header's dropdowns): the frosted

@@ -176,6 +176,12 @@ impl GhostexGpuiApp {
             "sendAcrossFiles" => self.native_docs_send_across_files(cx),
             "resendAll" => self.native_docs_send_notes(true, cx),
             "configureFolders" => self.native_docs_open_folders_settings(window, cx),
+            "barItem" => {
+                if let Some(item) = super::format_bar::DocsBarItem::from_command(&text("item")) {
+                    let level = command["level"].as_u64().unwrap_or(1).clamp(1, 6) as u8;
+                    self.native_docs_run_bar_item(item, Some(level), window, cx);
+                }
+            }
             _ => {}
         }
         self.native_docs_notify(cx);
@@ -213,9 +219,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Shows a menu for a trigger in the files list. A list drawn in the drawer's window opens
-    /// its menus over the main window at the same spot on screen, where every app menu is hosted.
-    fn native_docs_show_list_menu(
+    /// Shows a Docs menu for its trigger. A trigger drawn in one of Docs' child windows (the
+    /// files list's drawer, the formatting bar's frosted window) opens its menu over the main
+    /// window at the same spot on screen, where every app menu is hosted.
+    pub(crate) fn native_docs_show_menu(
         &mut self,
         menu: GpuiContextMenu,
         trigger: Bounds<Pixels>,
@@ -223,18 +230,18 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.native_docs_in_drawer(window) {
+        let Some(origin) = self.native_docs_child_window_origin(window) else {
             if toggle {
                 menu.toggle_below(trigger, window, cx);
             } else {
                 menu.show(trigger.origin, window, cx);
             }
             return;
-        }
+        };
         let Some(main) = self.main_window_handle else {
             return;
         };
-        let trigger = self.native_docs_drawer_to_main(trigger);
+        let trigger = Bounds::new(origin + trigger.origin, trigger.size);
         let app = cx.entity();
         cx.defer(move |cx| {
             let _ = main.update(cx, |_, window, cx| {
@@ -282,7 +289,7 @@ impl GhostexGpuiApp {
                 create("excalidraw"),
             );
         let trigger = CREATE_MENU_ANCHOR.with(|cell| cell.get());
-        self.native_docs_show_list_menu(menu, trigger, true, window, cx);
+        self.native_docs_show_menu(menu, trigger, true, window, cx);
     }
 
     /// The header's menu: Refresh and Configure docs folders.
@@ -306,7 +313,7 @@ impl GhostexGpuiApp {
                 action(json!({ "type": "configureFolders" })),
             );
         let trigger = OVERFLOW_MENU_ANCHOR.with(|cell| cell.get());
-        self.native_docs_show_list_menu(menu, trigger, true, window, cx);
+        self.native_docs_show_menu(menu, trigger, true, window, cx);
     }
 
     /// A tree row's right-click menu, in the Docs page's order.
@@ -390,7 +397,7 @@ impl GhostexGpuiApp {
             menu = menu.menu_with_icon("Delete", "titlebar/trash.svg", false, command("delete"));
         }
         let trigger = Bounds::new(position, gpui::size(px(1.0), px(1.0)));
-        self.native_docs_show_list_menu(menu, trigger, false, window, cx);
+        self.native_docs_show_menu(menu, trigger, false, window, cx);
     }
 
     fn native_docs_create_file(
@@ -723,32 +730,6 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// CDXC:Docs 2026-09-15 DECISION:
-    /// User: closing an open file that has unsaved changes asks first, with Save, Discard, and Cancel, the way familiar editors do.
-    /// Runs `f` against the main window when `window` is the drawer's: a prompt asked from the
-    /// floating list belongs over the app, not inside the list's narrow window. False when `window`
-    /// is already the main window and the caller goes on itself.
-    fn native_docs_defer_to_main_window(
-        &mut self,
-        window: &Window,
-        cx: &mut Context<Self>,
-        f: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
-    ) -> bool {
-        if !self.native_docs_in_drawer(window) {
-            return false;
-        }
-        let Some(main) = self.main_window_handle else {
-            return true;
-        };
-        let app = cx.entity();
-        cx.defer(move |cx| {
-            let _ = main.update(cx, |_, window, cx| {
-                app.update(cx, |this, cx| f(this, window, cx));
-            });
-        });
-        true
-    }
-
     /// The Open Files "x": closes every open file, asking once about the unsaved ones.
     pub(crate) fn native_docs_request_close_all(
         &mut self,
@@ -819,6 +800,8 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// CDXC:Docs 2026-09-15 DECISION:
+    /// User: closing an open file that has unsaved changes asks first, with Save, Discard, and Cancel, the way familiar editors do.
     pub(crate) fn native_docs_confirm_close(
         &mut self,
         path: &str,

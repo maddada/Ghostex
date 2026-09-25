@@ -186,6 +186,7 @@ impl Render for GhostexGpuiApp {
         self.sync_main_window_glass(window, cx);
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
         self.native_docs_drop_unseen_drawer(cx);
+        self.native_docs_drop_unseen_format_bar(cx);
         self.main_window_display_id = window.display(cx).map(|display| display.id());
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {

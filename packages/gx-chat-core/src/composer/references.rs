@@ -4,11 +4,13 @@
 //! code unit, the same unit `references.ts` counts, because the host applies them to its own text
 //! field.
 
-use crate::composer::reference_pills::ends_with_image_extension;
+use serde::Serialize;
+
+use crate::composer::reference_pills::{ends_with_image_extension, media_kind, path_noun};
 use crate::composer::text::Utf16Text;
 
 /// The composer text plus where the caret ends up, both in UTF-16 code units.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ComposerEdit {
     pub text: String,
     pub caret: usize,
@@ -16,7 +18,12 @@ pub struct ComposerEdit {
 
 /// `/\[Image #(\d+)·?\]\(/g`: the highest existing image number in the draft, plus one.
 pub fn next_image_reference_index(text: &str) -> u32 {
-    next_reference_index(text, read_image_label)
+    next_named_reference_index(text, "Image")
+}
+
+/// Images, videos, audio, and PDFs each count on their own: `/\[<noun> #(\d+)·?\]\(/g`, plus one.
+fn next_named_reference_index(text: &str, noun: &str) -> u32 {
+    next_reference_index(text, |text, start| read_named_label(text, start, noun))
 }
 
 /// `/\[(?:\\.|[^\]\\\r\n])* #(\d+)\]\(/g`: numbered file references include attachment labels and
@@ -44,10 +51,10 @@ fn next_reference_index(
     highest + 1
 }
 
-/// `\[Image #(\d+)·?\]\(` anchored at `start`.
-fn read_image_label(text: &Utf16Text, start: usize) -> Option<(u32, usize)> {
+/// `\[<noun> #(\d+)·?\]\(` anchored at `start`.
+fn read_named_label(text: &Utf16Text, start: usize, noun: &str) -> Option<(u32, usize)> {
     let mut index = start;
-    for expected in "[Image #".chars() {
+    for expected in format!("[{noun} #").chars() {
         if text.at(index) != Some(expected) {
             return None;
         }
@@ -132,13 +139,49 @@ fn read_digits(text: &Utf16Text, start: usize) -> Option<(u32, usize)> {
     Some((digits.parse::<u32>().unwrap_or(u32::MAX), index))
 }
 
-/// The reference the `@` picker and the attachment bridge insert for `path`.
+/// The reference the `@` picker and the attachment bridge insert for `path`: `[Image #N](path)`,
+/// `[Video #N](path)`, and so on, falling back to `[File #N](path)`.
 pub fn native_path_reference(path: &str, text: &str) -> String {
     if ends_with_image_extension(path) {
         format!("[Image #{}]({path})", next_image_reference_index(text))
+    } else if media_kind(path).is_some() {
+        let noun = path_noun(path);
+        format!(
+            "[{noun} #{}]({path})",
+            next_named_reference_index(text, noun)
+        )
     } else {
         format!("[File #{}]({path})", next_file_reference_index(text))
     }
+}
+
+/// Inserts one reference per uploaded path into a question answer, the way the composer inserts a
+/// pasted attachment (the user's `CDXC:Clipboard` decision on `finish_answer_attachments`). The
+/// upload can finish after more typing; the selection captured when the paste started then no
+/// longer belongs to the draft, so the references go at the end instead.
+pub fn insert_answer_attachments(
+    current: &str,
+    paths: &[&str],
+    original: &str,
+    start: usize,
+    end: usize,
+) -> ComposerEdit {
+    let unchanged = current == original;
+    let mut edit = ComposerEdit {
+        text: current.to_string(),
+        caret: if unchanged {
+            start
+        } else {
+            current.encode_utf16().count()
+        },
+    };
+    let mut finish = if unchanged { end } else { edit.caret };
+    for path in paths {
+        let reference = native_path_reference(path, &edit.text);
+        edit = insert_reference(&edit.text, &reference, edit.caret, finish);
+        finish = edit.caret;
+    }
+    edit
 }
 
 /// Inserts `reference` at `[start, end)`, adding the spaces the sentence around it needs.

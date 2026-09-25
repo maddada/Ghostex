@@ -901,7 +901,9 @@ pub(crate) const TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT: f32 = 650.0;
 
 pub(crate) const TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH: f32 = 5.0;
 
-pub(crate) const TITLEBAR_POPUP_MENU_GAP: f32 = 6.0;
+/// CDXC:Theming 2026-09-25 DECISION:
+/// User: "For all these menus that drop down from the headers, we need to have a 4px gap. Right now, they are touching. We need to have a 4px gap vertically between the button itself and the menu that pops up." Every menu or panel that drops from a header button (the work area header's split buttons, ⋯ menu and panels, the sidebar's ☰ and project header buttons) opens exactly this far below the button, or this far above it when it flips upward. Supersedes the sidebar menu's 5px and the project header menus' 6px.
+pub(crate) const HEADER_MENU_TRIGGER_GAP: f32 = 4.0;
 
 pub(crate) const TITLEBAR_POPUP_MENU_ROW_HEIGHT: f32 = 34.0;
 
@@ -924,8 +926,6 @@ pub(crate) const TITLEBAR_POPUP_READING_HEADER_HEIGHT: f32 = 34.0;
 pub(crate) const TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE: f32 = 12.0;
 
 pub(crate) const TITLEBAR_POPUP_READING_HEADER_BUTTON_ICON_SIZE: f32 = 16.0;
-
-pub(crate) const TITLEBAR_POPUP_VERTICAL_OFFSET: f32 = 6.0;
 
 /*
 CDXC:ContextMenus 2026-09-16 WHY:
@@ -952,13 +952,9 @@ pub(crate) const TITLEBAR_TIPS_TOOLTIP: &str = "Tips";
 
 pub(crate) const TITLEBAR_RESOURCES_TOOLTIP: &str = "Resources Monitor";
 
-pub(crate) const TITLEBAR_MORE_TOOLTIP: &str = "More";
 
-pub(crate) const TITLEBAR_GIT_TOOLTIP: &str = "Git actions";
 
-pub(crate) const TITLEBAR_ACTIONS_TOOLTIP: &str = "Quick Actions";
 
-pub(crate) const TITLEBAR_OPEN_TARGETS_TOOLTIP: &str = "Open in an app";
 
 pub(crate) const TITLEBAR_UPDATE_AVAILABLE_TOOLTIP: &str =
     "Update Ghostex! All your sessions will continue running.";

@@ -297,6 +297,7 @@ impl GhostexGpuiApp {
                     ""
                 });
                 window.set_background_corner_radius(px(10.0));
+                crate::app::helpers::apply_frosted_menu_blur(window);
                 crate::app::window::popup_frame::strip_gpui_popup_window_frame(window);
                 if visible {
                     window.activate_window();

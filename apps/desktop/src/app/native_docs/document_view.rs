@@ -96,7 +96,16 @@ impl GhostexGpuiApp {
             .min_w_0()
             .min_h_0()
             .child(header)
-            .child(div().flex_1().min_h_0().child(body))
+            // The body fills exactly the space under the header. A percentage height inside the
+            // flexed row resolved against the whole column instead, which pushed the body's last
+            // 37px (the formatting bar and the document's last lines) below the view.
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .relative()
+                    .child(div().absolute().inset_0().child(body)),
+            )
             .into_any_element()
     }
 

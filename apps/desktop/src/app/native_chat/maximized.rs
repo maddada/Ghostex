@@ -7,6 +7,8 @@ use gpui::{
 };
 use gpui_component::Root;
 
+/// CDXC:SessionChat 2026-09-16 DECISION:
+/// User: never show the working indicator, task list, or subagents above the maximized composer. This supersedes the maximized status placement from 2026-09-12; otherwise the working indicator stays above all component cards. `render_composer` leaves the working strip, the agent tasks and the agent fleet out while `maximized_window` is set.
 struct MaximizedComposer {
     chat: Entity<NativeChatView>,
     _subscription: Subscription,
@@ -96,7 +98,7 @@ impl NativeChatView {
         if self.maximized_window.is_some() || self.maximized_opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.maximized_opening = true;

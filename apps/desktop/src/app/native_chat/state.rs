@@ -24,7 +24,6 @@ pub(crate) struct NativeChatConfig {
     pub(crate) client_id: String,
     pub(crate) remote: Option<GpuiRemoteGxserverRequestTarget>,
     pub(crate) app: Option<gpui::WeakEntity<crate::GhostexGpuiApp>>,
-    pub(crate) preview: Option<Value>,
     pub(crate) parent_native_view: *mut std::ffi::c_void,
     pub(crate) initial_snapshot: Option<Value>,
     pub(crate) initial_presentation: Option<Value>,
@@ -216,7 +215,7 @@ impl NativeChatView {
             json!({"baseUrl": format!("http://127.0.0.1:{}", target.local_port), "authToken": target.token})
         });
         let runtime = ChatRuntimeWorker::start(
-            json!({"clientId":config.client_id,"machineId":config.machine_id,"projectId":config.project_id,"sessionId":config.session_id,"initialSnapshot":config.initial_snapshot,"initialPresentation":config.initial_presentation,"preview":config.preview,"endpoint":endpoint}),
+            json!({"clientId":config.client_id,"machineId":config.machine_id,"projectId":config.project_id,"sessionId":config.session_id,"initialSnapshot":config.initial_snapshot,"initialPresentation":config.initial_presentation,"endpoint":endpoint}),
             move || {
                 let _ = wake.unbounded_send(());
             },
@@ -821,6 +820,7 @@ impl NativeChatView {
         let diagnostic_method = method.to_owned();
         let import_attachments = method == "importNativeAttachments";
         let mut params = request["params"].as_object().cloned().unwrap_or_default();
+        let diagnostic_session = format!("{}:{}", config.project_id, config.session_id);
         params.insert("projectId".into(), config.project_id.into());
         params.insert("sessionId".into(), config.session_id.into());
         let params = Value::Object(params);
@@ -843,11 +843,15 @@ impl NativeChatView {
                     crate::support_logs::GpuiSupportLog::SessionChat,
                     "gpui.sessionChat.viewState",
                     "sessionChat.nativeRpcResult",
+                    // The session and the refusal's own sentence let a failed send be matched
+                    // to its terminal capture in gxserver's session-chat-send-failures.jsonl.
                     json!({
                         "method": diagnostic_method,
                         "requestId": id,
+                        "sessionKey": diagnostic_session,
                         "succeeded": error.is_null(),
                         "errorCode": error["code"],
+                        "errorMessage": error["message"],
                     }),
                 );
                 if let Some(runtime) = &this.runtime {

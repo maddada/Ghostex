@@ -69,6 +69,16 @@ impl GhostexGpuiApp {
         }).detach();
     }
 
+    /// CDXC:Drafts 2026-09-25 WHY:
+    /// A create that opens in Chat arms its launch intent here rather than leaving it to `focus_local_workspace_terminal_from_message`, which arms it only for a session with no tab so a tab the user put back in Terminal stays there. The store's selection of the created session runs first and publishes the tab list, so the session already has its tab when that rule looks; the intent was skipped, the chat opened through the selection's Chat adoption, which never claims the staged first-input draft, and gxserver typed Handoff / Export's transcript link into the hidden terminal instead of the chat composer. That tab is the create's own, not a view the user chose.
+    pub(crate) fn arm_created_session_chat_launch_intent(
+        &mut self,
+        key: GpuiLocalWorkspaceSessionKey,
+    ) {
+        self.pending_agents_chat_launch_intents
+            .insert(GpuiWorkspaceTerminalSessionKey::Local(key));
+    }
+
     /// CDXC:SessionChat 2026-09-09 DECISION:
     /// User: chat opens immediately when creating an agent; terminal startup runs in the background and sending waits for the agent's input box.
     /// This tab owns chat before it has a terminal launch payload. The ordinary attach completion fills that same tab.

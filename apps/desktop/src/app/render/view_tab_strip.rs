@@ -614,9 +614,9 @@ impl GhostexGpuiApp {
                 .items_center()
                 .justify_center()
                 .cursor_default()
-                .when(active, |this| this.bg(titlebar_active_segment_color()))
+                .when(active, |this| this.bg(titlebar_split_button_open_color()))
                 .when(enabled, |this| {
-                    this.hover(|this| this.bg(titlebar_button_hover_color()))
+                    this.hover(|this| this.bg(titlebar_split_button_hover_color()))
                 })
                 .child(titlebar_svg_icon(
                     icon,

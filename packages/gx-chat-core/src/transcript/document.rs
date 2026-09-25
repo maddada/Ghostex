@@ -79,11 +79,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     The user rail's own actions. `rewindAvailable` is React's `rewindToMessage` gate (a host that can
     reach `/api/rewindSessionChat` and an agent whose rewind Ghostex drives); `rewindEnabled` is its
     live `canRewind` gate, the same condition that lets the composer send, because the daemon types
-    the rewind into that same pane. A preview backend answers no rewind route at all, which is why
-    a preview chat never offers the action.
+    the rewind into that same pane.
     */
-    into.rewind_available = state.core.preview_settings.is_none()
-        && agent_supports_rewind(state.session.agent.as_deref());
+    into.rewind_available = agent_supports_rewind(state.session.agent.as_deref());
     // `rewindEnabled: sendBlockedReason(state) === null`. That is family d's rule, and
     // `document::assemble` runs family b first, so it is read off the state family d's settle
     // cached it on rather than out of a half-built document.

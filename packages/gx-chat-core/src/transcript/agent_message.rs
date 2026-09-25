@@ -29,7 +29,8 @@ pub fn parse_agent_message(text: &str) -> Option<AgentMessage> {
 }
 
 /// A message another Ghostex agent session sent with `ghostex agents send` or
-/// `agents create --task`.
+/// `agents create --task`, or one another Claude session sent over Claude's own cross-session
+/// channel.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InterAgentMessage {
     pub agent_name: String,
@@ -39,6 +40,9 @@ pub struct InterAgentMessage {
     pub agent_session_id: String,
     pub reply_to: String,
     pub body: String,
+    /// Delivered by Claude's cross-session channel instead of typed into the session's terminal,
+    /// so it is no prompt a rewind can return to.
+    pub cross_session: bool,
 }
 
 /// `^([A-Za-z ]+): (.*)$` against one line.
@@ -60,6 +64,9 @@ fn header_field(line: &str) -> Option<(&str, &str)> {
 /// line, so transcripts recorded before the format change render the same way.
 /// SEE-ALSO: server/src/ghostex_cli/agents/identity.rs writes the header.
 pub fn parse_inter_agent_message(text: &str) -> Option<InterAgentMessage> {
+    if let Some(message) = parse_cross_session_message(text) {
+        return Some(message);
+    }
     let lines = split_newlines(text);
     let opener = js_trim(lines.first().copied().unwrap_or_default());
     if opener != "Message from another agent" && opener != "MESSAGE FROM" {
@@ -100,6 +107,42 @@ pub fn parse_inter_agent_message(text: &str) -> Option<InterAgentMessage> {
     }
     message.body = js_trim(&lines[(index + 1).min(lines.len())..].join("\n")).to_string();
     Some(message)
+}
+
+const CROSS_SESSION_OPEN: &str = "<cross-session-message";
+const CROSS_SESSION_CLOSE: &str = "</cross-session-message>";
+
+/// CDXC:SessionChat 2026-09-25 DECISION:
+/// User: a message another Claude session sent renders with the chat's message-from-another-agent card, like one sent with `ghostex agents send`. Claude wraps it as `<cross-session-message from="…" from-name="…">`, so the card names Claude as the agent and the sender's session name as its session. A row holding several envelopes is left to the harness marker, since one card cannot show two senders.
+/// SEE-ALSO: server/src/session_chat_decode_claude.rs keeps only this envelope from the row Claude writes when the message reaches an idle session.
+pub fn parse_cross_session_message(text: &str) -> Option<InterAgentMessage> {
+    let rest = js_trim(text).strip_prefix(CROSS_SESSION_OPEN)?;
+    let (attributes, rest) = rest.split_once('>')?;
+    if !attributes.is_empty() && !attributes.starts_with(' ') {
+        return None;
+    }
+    let body = rest.strip_suffix(CROSS_SESSION_CLOSE)?;
+    if body.contains(CROSS_SESSION_CLOSE) {
+        return None;
+    }
+    Some(InterAgentMessage {
+        agent_name: "Claude".to_string(),
+        session_title: envelope_attribute(attributes, "from-name").to_string(),
+        reply_to: envelope_attribute(attributes, "from").to_string(),
+        body: js_trim(body).to_string(),
+        cross_session: true,
+        ..InterAgentMessage::default()
+    })
+}
+
+/// ` name="value"`; Claude strips quotes and angle brackets from every value it writes.
+fn envelope_attribute<'a>(attributes: &'a str, name: &str) -> &'a str {
+    let marker = format!(" {name}=\"");
+    let Some(start) = attributes.find(&marker).map(|at| at + marker.len()) else {
+        return "";
+    };
+    let value = &attributes[start..];
+    js_trim(&value[..value.find('"').unwrap_or(value.len())])
 }
 
 /// `/root/windows_support` is addressed as `windows_support` by the agents themselves.

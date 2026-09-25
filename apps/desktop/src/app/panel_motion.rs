@@ -167,7 +167,7 @@ impl PanelMotion {
         self.frame = PanelFrame::default();
     }
 
-    fn sample(
+    pub(crate) fn sample(
         &mut self,
         open: bool,
         open_extent: f32,

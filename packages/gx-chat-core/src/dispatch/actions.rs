@@ -58,6 +58,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::AsyncQuestionToggle
         | ActionKind::AsyncQuestionNavigate
         | ActionKind::AsyncQuestionText
+        | ActionKind::AsyncQuestionImagesPending
         | ActionKind::AsyncQuestionOption
         | ActionKind::AsyncQuestionSend
         | ActionKind::AsyncQuestionSkip

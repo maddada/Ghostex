@@ -72,6 +72,13 @@ impl GhostexGpuiApp {
     ) {
     }
 
+    /// The desktop's pane tab switches to Chat through a launch intent; the page opens the session on the surface the focus prefers.
+    pub(crate) fn arm_created_session_chat_launch_intent(
+        &mut self,
+        _key: crate::app::model::GpuiLocalWorkspaceSessionKey,
+    ) {
+    }
+
     /// The desktop drops its cached menu inputs after a write; the page builds its menu inputs on every update.
     pub(crate) fn gx_store_note_menu_host_write(&mut self, _command: &Value) {}
 }

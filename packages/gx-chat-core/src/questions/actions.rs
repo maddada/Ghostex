@@ -95,6 +95,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 state.core.effects_not_awaited = true;
             }
         }
+        // The host is still saving pasted pictures, so Send waits instead of leaving them out.
+        ActionKind::AsyncQuestionImagesPending => async_controller::images_pending(
+            &mut state.questions.async_questions,
+            action.param("pending") == Some(&Value::Bool(true)),
+        ),
         ActionKind::AsyncQuestionOption => {
             let projection = async_projection(state, prompt.as_ref(), notice.as_ref());
             let key = action.param("key").and_then(Value::as_str).unwrap_or("");

@@ -62,10 +62,38 @@ impl GhostexGpuiApp {
         });
     }
 
-    /// The slide's length: the panels' own duration, or none with Reduce Motion.
+    /// The docked list's frame this frame: pinning and unpinning tween its width like the app's
+    /// own panels, with the list sliding at its full width inside the frame.
     ///
-    /// CDXC:Docs 2026-09-12 DECISION:
-    /// User: the files sidebar animates in, and out, with the same speed and style as the app's floating sidebar reveal. Only the panel moves: the shell takes its new layout in one step and the panel slides across its own width, so neither the file tree nor the document reflows during the slide.
+    /// CDXC:Docs 2026-09-25 DECISION:
+    /// User: "the animation for the docs sidebar appearing/pinning/collapsing is all not matching the sessions sidebar (no animation when pinning/unpinning)". Pinning and unpinning the docked files list tween its width on the panels' own motion (`panel_motion.rs`: the Panel animations speed and curve, Reduce Motion snaps), the list anchored to the view's right edge like the side panel, and the document resizing with it as it does beside the sessions sidebar. The floating list (a drawer or a peek) slides its own window like the floating sessions sidebar. This supersedes the 2026-09-12 decision that only the panel moved and nothing reflowed.
+    pub(crate) fn native_docs_sample_docked_motion(
+        &mut self,
+        layout: DocsSidebarLayout,
+        window: &mut gpui::Window,
+        cx: &mut Context<Self>,
+    ) -> crate::app::panel_motion::PanelFrame {
+        let state = &mut self.native_docs;
+        if state.docked_narrow != Some(layout.narrow) {
+            if state.docked_narrow.is_some() {
+                state.docked_motion.reset();
+            }
+            state.docked_narrow = Some(layout.narrow);
+        }
+        let frame = state.docked_motion.sample(
+            layout.docked,
+            super::render::SIDEBAR_WIDTH,
+            0.0,
+            cx.reduce_motion(),
+            web_time::Instant::now(),
+        );
+        if frame.animating {
+            window.request_animation_frame();
+        }
+        frame
+    }
+
+    /// The floating list's slide length: the panels' own duration, or none with Reduce Motion.
     pub(crate) fn native_docs_slide_duration() -> Duration {
         crate::app::floating_reveal::model::floating_reveal_slide_duration(
             crate::app::helpers::gpui_macos_reduce_motion_enabled(),

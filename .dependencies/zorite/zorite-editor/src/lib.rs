@@ -936,6 +936,8 @@ pub struct EditorState {
     shape_memo: std::cell::RefCell<Option<ShapeMemo>>,
     /// See [`ScanData`].
     scan_cache: std::cell::RefCell<Option<(u64, std::rc::Rc<ScanData>)>>,
+    /// Local change (Ghostex Docs): [`Self::line_starts`] per (`content_gen`, content length).
+    line_starts_cache: std::cell::RefCell<Option<(u64, usize, std::rc::Rc<Vec<usize>>)>>,
     /// See [`ScrollCompensatorFn`].
     scroll_compensator: Option<ScrollCompensatorFn>,
     /// Cross-frame shaping caches — line runs, table column widths, and table
@@ -1122,6 +1124,7 @@ impl EditorState {
             table_resize_hover: None,
             shape_memo: std::cell::RefCell::new(None),
             scan_cache: std::cell::RefCell::new(None),
+            line_starts_cache: std::cell::RefCell::new(None),
             scroll_compensator: None,
             last_paint_gen: 0,
             shape_caches: ShapeCaches::default(),
@@ -4479,13 +4482,26 @@ impl EditorState {
 
     /// Byte offset where each visual line starts (line 0 starts at 0; each line
     /// after a `\n`). Always has at least one entry.
-    fn line_starts(&self) -> Vec<usize> {
+    ///
+    /// Local change (Ghostex Docs): cached per content generation. Every
+    /// `line_end` / `row_col` rebuilt this by scanning the whole document, and
+    /// prepaint calls `line_end` once per line, so each frame of a 2,500-line
+    /// document scanned it 2,500 times (about half a second per frame).
+    fn line_starts(&self) -> std::rc::Rc<Vec<usize>> {
+        let key = (self.content_gen, self.content.len());
+        if let Some((generation, len, starts)) = self.line_starts_cache.borrow().as_ref()
+            && (*generation, *len) == key
+        {
+            return starts.clone();
+        }
         let mut starts = vec![0];
         for (i, b) in self.content.bytes().enumerate() {
             if b == b'\n' {
                 starts.push(i + 1);
             }
         }
+        let starts = std::rc::Rc::new(starts);
+        *self.line_starts_cache.borrow_mut() = Some((key.0, key.1, starts.clone()));
         starts
     }
 

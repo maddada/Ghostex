@@ -1,6 +1,5 @@
 use std::{cell::Cell, rc::Rc};
 
-use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 use gpui_component::{
     ElementExt as _, Side,
     menu::{PopupMenu, PopupMenuItem},
@@ -78,11 +77,6 @@ impl GhostexGpuiApp {
             .on_prepaint({
                 let trigger_bounds = trigger_bounds.clone();
                 move |bounds, _, _| trigger_bounds.set(Some(bounds))
-            })
-            .when(!open, |this| {
-                this.managed_tooltip_with_placement(ManagedTooltipPlacement::Left, |window, cx| {
-                    titlebar_tooltip("Browser pane actions menu", window, cx)
-                })
             })
             .child(self.render_browser_tab_overflow_icon())
             .into_any_element()

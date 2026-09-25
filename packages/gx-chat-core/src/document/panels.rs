@@ -92,14 +92,3 @@ pub struct AccountStatus {
     #[serde(flatten)]
     pub extra: serde_json::Map<String, Value>,
 }
-
-/// A preview chat's own display settings (the retired Chat Lab's), present only under a preview
-/// backend.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PreviewSettings {
-    pub session_chat_theme: String,
-    pub session_chat_zoom_percent: u32,
-    pub session_chat_verbose_mode: bool,
-    pub session_chat_simple_mode: bool,
-}

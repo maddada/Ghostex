@@ -3476,8 +3476,10 @@ function AppModalHost() {
         onOpenScreenRecordingPreferences={() => {
           vscode.postMessage({ type: "openScreenRecordingPreferences" });
         }}
-        onOpenSettings={() => {
-          openAppModal({ modal: "settings", type: "open" });
+        onOpenSettings={(tab) => {
+          openAppModal(
+            tab ? { initialTab: tab, modal: "settings", type: "open" } : { modal: "settings", type: "open" },
+          );
         }}
         onPickProjectFolder={() => {
           vscode.postMessage({ type: "pickFirstLaunchProjectFolder" });

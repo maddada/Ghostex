@@ -67,18 +67,29 @@ static double GhostexGpuiDocsDrawerEaseOut(double t) {
   if (!NSEqualRects(window.frame, frame)) [window setFrame:frame display:NO];
 }
 
+// CDXC:Docs 2026-09-25 WHY:
+// The window is kept between uses, unlike the sessions panel, which opens a new one each time.
+// Releasing the hold at the end of a slide-out, while the window was a 1pt sliver, made GPUI lay
+// the list out and draw it 1pt wide, and the next slide-in held that empty frame, so the list
+// came in as bare glass and appeared only once the slide ended. The window goes back to its full
+// width after it is ordered out and before the hold is released, so GPUI never lays the list out
+// at a sliver.
 - (void)finish {
   [self.timer invalidate];
   self.timer = nil;
-  self.progress = self.target;
-  [self layout];
-  [self setHeld:NO];
   if (self.target == 0) {
     [self.window orderOut:nil];
+    self.progress = 1;
+    [self layout];
+    [self setHeld:NO];
+    self.progress = 0;
     if (self.clickMonitor) [NSEvent removeMonitor:self.clickMonitor];
     self.clickMonitor = nil;
     self.outsideClick = NO;
   } else {
+    self.progress = 1;
+    [self layout];
+    [self setHeld:NO];
     [self.window invalidateShadow];
   }
 }
@@ -168,10 +179,21 @@ void GhostexGpuiDocsDrawerShow(void *drawerView, void *mainView, double x, doubl
                                            return event;
                                          }];
       }
-      // Held before the first narrow frame, so GPUI never lays the list out at a sliver.
+      // Full width first, then held before the first narrow frame, so the frame GPUI holds is
+      // the whole list and it is never laid out at a sliver.
+      state.progress = 1;
+      [state layout];
       if (slideSeconds > 0) [state setHeld:YES];
+      state.progress = 0;
       [state layout];
       [window orderFront:nil];
+      // Present the list now, in this transaction, so the first frame of the slide already shows
+      // it; GPUI would otherwise draw only once the window's display link starts, after the
+      // system reports the window visible, which can be the whole slide later. The caller has
+      // marked the window dirty and calls this outside any app update, which GPUI's synchronous
+      // `displayLayer:` needs.
+      [host.layer setNeedsDisplay];
+      [host.layer displayIfNeeded];
       [state animateTo:1];
       return;
     }

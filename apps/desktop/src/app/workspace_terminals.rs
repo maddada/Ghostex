@@ -532,12 +532,14 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn current_project_view_state(&self) -> GpuiProjectViewState {
+        let active_mode = self.available_titlebar_mode_or_agents(self.active_mode);
         GpuiProjectViewState {
-            active_mode: self.available_titlebar_mode_or_agents(self.active_mode),
+            active_mode,
             open_views: self.open_views.clone(),
             view_strip_layout: self.view_strip_layout.clone(),
             last_view_mode: self.last_open_view_mode,
             workarea_split_ratio: self.project_editor_shell.workarea_split_ratio,
+            active_view_awake: self.project_editor_shell.is_mode_awake(active_mode),
         }
     }
 
@@ -627,6 +629,13 @@ impl GhostexGpuiApp {
             self.view_panel_picker_open && target_mode == TitlebarMode::Agents;
         self.view_panel_maximized = self.view_panel_maximized
             && (target_mode != TitlebarMode::Agents || self.view_panel_picker_open);
+        // Woken before focus and visibility below read the lifecycle (`active_view_awake`).
+        if state.active_view_awake
+            && target_mode == state.active_mode
+            && !self.project_editor_shell.is_mode_awake(target_mode)
+        {
+            self.mark_project_editor_mode_awake(target_mode, cx);
+        }
         self.apply_view_pane_state(cx);
         self.seed_terminal_view_for_open(cx);
         self.focus_shell_target(

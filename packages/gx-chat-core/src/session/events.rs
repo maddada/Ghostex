@@ -215,7 +215,6 @@ pub fn boot_read(
         state.core.title = settings.title;
     }
     let config = state.session.boot_config.clone().unwrap_or_default();
-    state.core.preview_settings = config.preview.clone();
     // The `sessionChanged` branch of the subscribe effect (`controller.ts:853`): the agent
     // identity, the status line's own options and the working directory come back from the shared
     // cache before anything is read, which is what makes a return to a chat immediate.

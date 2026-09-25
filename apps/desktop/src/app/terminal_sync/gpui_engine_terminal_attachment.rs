@@ -148,19 +148,8 @@ impl GhostexGpuiApp {
             return;
         }
 
-        let remote_machine_id = match &target {
-            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Agents(
-                session_id,
-            )) => self
-                .agents_chat_remote_key_for_session(*session_id)
-                .map(|key| key.remote_machine_id),
-            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Command(
-                session_id,
-            )) => self
-                .command_remote_action_session_for_command_tab(*session_id)
-                .map(|reference| reference.remote_machine_id.clone()),
-        };
-        let Some(remote_machine_id) = remote_machine_id else {
+        let Some(remote_machine_id) = self.gpui_terminal_attachment_remote_machine_id(&target)
+        else {
             match gpui_local_terminal_attachment_reference(path.as_path()) {
                 Ok(reference) => {
                     let text = gpui_terminal_attachment_markdown_text(&[reference]);
@@ -180,7 +169,50 @@ impl GhostexGpuiApp {
             }
             return;
         };
+        self.upload_paths_to_remote_gpui_engine_terminal(
+            target,
+            runtime_session_id,
+            remote_machine_id,
+            vec![path],
+            cx,
+        );
+    }
 
+    /// The remote machine whose terminal the target shows, or `None` when the
+    /// terminal runs on this computer.
+    pub(crate) fn gpui_terminal_attachment_remote_machine_id(
+        &self,
+        target: &GpuiTerminalAttachmentTarget,
+    ) -> Option<String> {
+        match target {
+            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Agents(
+                session_id,
+            )) => self
+                .agents_chat_remote_key_for_session(*session_id)
+                .map(|key| key.remote_machine_id),
+            GpuiTerminalAttachmentTarget::Terminal(GpuiEngineTerminalEventTarget::Command(
+                session_id,
+            )) => self
+                .command_remote_action_session_for_command_tab(*session_id)
+                .map(|reference| reference.remote_machine_id.clone()),
+        }
+    }
+
+    /// Uploads local items over the remote machine's SSH connection and pastes
+    /// the returned remote references into the terminal. Items upload in order
+    /// and the first failure cancels the paste, so the agent never receives a
+    /// partial list.
+    pub(crate) fn upload_paths_to_remote_gpui_engine_terminal(
+        &mut self,
+        target: GpuiTerminalAttachmentTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
+        remote_machine_id: String,
+        paths: Vec<PathBuf>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if paths.is_empty() {
+            return;
+        }
         let settings = shared_settings::shared_sidebar_settings_snapshot();
         let Some(config) =
             gpui_remote_machine_config_from_settings(settings.object(), remote_machine_id.as_str())
@@ -203,13 +235,6 @@ impl GhostexGpuiApp {
             );
             return;
         };
-
-        self.dispatch_gpui_workspace_action_toast(
-            "info",
-            "Uploading attachment",
-            "Uploading the selected item to the remote machine.",
-            cx,
-        );
         let Some((origin_view_id, lease)) = (match target.engine_target() {
             GpuiEngineTerminalEventTarget::Agents(id) => self.agents_gpui_engine_terminals.get(&id),
             GpuiEngineTerminalEventTarget::Command(id) => {
@@ -219,16 +244,33 @@ impl GhostexGpuiApp {
         .map(|record| (record.view.entity_id(), record.pin_viewer())) else {
             return;
         };
+
+        let uploading_message = if paths.len() == 1 {
+            "Uploading the selected item to the remote machine.".to_string()
+        } else {
+            format!("Uploading {} items to the remote machine.", paths.len())
+        };
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            "Uploading attachment",
+            uploading_message.as_str(),
+            cx,
+        );
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let _lease = lease;
             let result = background
                 .spawn(async move {
-                    gpui_upload_terminal_attachment_to_remote(
-                        &config,
-                        &remote_target.execution_target,
-                        path.as_path(),
-                    )
+                    paths
+                        .iter()
+                        .map(|path| {
+                            gpui_upload_terminal_attachment_to_remote(
+                                &config,
+                                &remote_target.execution_target,
+                                path.as_path(),
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -241,8 +283,8 @@ impl GhostexGpuiApp {
                     return;
                 }
                 match result {
-                    Ok(reference) => {
-                        let text = gpui_terminal_attachment_markdown_text(&[reference]);
+                    Ok(references) => {
+                        let text = gpui_terminal_attachment_markdown_text(&references);
                         if this.paste_text_into_gpui_engine_terminal_target(
                             target.engine_target(),
                             runtime_session_id,
@@ -252,7 +294,11 @@ impl GhostexGpuiApp {
                             this.dispatch_gpui_workspace_action_toast(
                                 "success",
                                 "Attachment uploaded",
-                                "The remote attachment reference was pasted into the terminal.",
+                                if references.len() == 1 {
+                                    "The remote attachment reference was pasted into the terminal."
+                                } else {
+                                    "The remote attachment references were pasted into the terminal."
+                                },
                                 cx,
                             );
                         }
@@ -527,12 +573,33 @@ impl GhostexGpuiApp {
         false
     }
 
+    /// CDXC:Clipboard 2026-09-25 WHY:
+    /// A remote terminal runs on the remote machine, so a dropped item's local path names nothing the agent there can open. Drops on a remote Agents or command terminal therefore upload like the terminal's Attach File or Folder button and paste the remote references; local terminals keep the typed paths.
     pub(crate) fn insert_paths_into_gpui_engine_terminal(
         &mut self,
         target: GpuiEngineTerminalEventTarget,
+        runtime_session_id: AgentsTerminalRuntimeSessionId,
         paths: &[PathBuf],
         cx: &mut gpui::Context<Self>,
     ) {
+        let attachment_target = GpuiTerminalAttachmentTarget::Terminal(target);
+        if let Some(remote_machine_id) =
+            self.gpui_terminal_attachment_remote_machine_id(&attachment_target)
+        {
+            if self.gpui_terminal_attachment_target_matches_runtime(
+                &attachment_target,
+                runtime_session_id,
+            ) {
+                self.upload_paths_to_remote_gpui_engine_terminal(
+                    attachment_target,
+                    runtime_session_id,
+                    remote_machine_id,
+                    paths.to_vec(),
+                    cx,
+                );
+            }
+            return;
+        }
         let mut next_image_number = 1usize;
         let text = paths
             .iter()

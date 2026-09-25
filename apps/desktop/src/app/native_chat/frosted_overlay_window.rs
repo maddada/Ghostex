@@ -10,6 +10,7 @@
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::hotkeys::gpui_configured_hotkey_label;
 use crate::app::native_chat::cursor::ChatCursor as _;
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _, Subscription,
@@ -72,6 +73,10 @@ struct FrostedOverlayView {
     overlay: FrostedOverlay,
     /// Bumped on every hover change, so a delayed tooltip only shows for the hover that asked.
     tooltip_epoch: Rc<Cell<u64>>,
+    /// Whether the pointer is over the control.
+    hovered: Rc<Cell<bool>>,
+    /// The window alpha last handed to `set_overlay_window_alpha`.
+    alpha: Cell<f32>,
     _observe: Subscription,
     _release: Subscription,
 }
@@ -240,10 +245,18 @@ fn apply_frosted_overlay(
             move |window, cx| {
                 window.set_background_corner_radius(radius);
                 attach_overlay_window(window, parent);
+                // The fork switcher's window opens at rest, so it never shows a full-strength frame first.
+                let alpha = match overlay {
+                    FrostedOverlay::ScrollBottom => 1.0,
+                    FrostedOverlay::ForkBranches => super::fork_branches::RESTING_OPACITY,
+                };
+                set_overlay_window_alpha(window, alpha);
                 let view = cx.new(|cx| FrostedOverlayView {
                     chat: chat.downgrade(),
                     overlay,
                     tooltip_epoch: Rc::default(),
+                    hovered: Rc::default(),
+                    alpha: Cell::new(alpha),
                     _observe: cx.observe(&chat, |_, _, cx| cx.notify()),
                     // A chat torn down with its control up takes the control with it.
                     _release: cx.observe_release_in(&chat, window, |_, _, window, _| {
@@ -285,7 +298,7 @@ fn finish(
 }
 
 impl Render for FrostedOverlayView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(chat) = self.chat.upgrade() else {
             return div().into_any_element();
         };
@@ -298,7 +311,27 @@ impl Render for FrostedOverlayView {
         match self.overlay {
             FrostedOverlay::ScrollBottom => scroll_bottom_pill(self.chat.clone(), &p, hover),
             FrostedOverlay::ForkBranches => {
-                fork_branches_badge(chat, &p, hover, self.tooltip_epoch.clone(), cx)
+                let lifted = self.hovered.get()
+                    || chat
+                        .read(cx)
+                        .chat_menu_is_open(super::fork_branches::FORK_BRANCHES_TRIGGER);
+                let opacity = if lifted {
+                    1.0
+                } else {
+                    super::fork_branches::RESTING_OPACITY
+                };
+                if self.alpha.replace(opacity) != opacity {
+                    set_overlay_window_alpha(window, opacity);
+                }
+                fork_branches_badge(
+                    chat,
+                    &p,
+                    hover,
+                    opacity,
+                    self.tooltip_epoch.clone(),
+                    self.hovered.clone(),
+                    cx,
+                )
             }
         }
     }
@@ -356,12 +389,15 @@ fn scroll_bottom_pill(
 }
 
 /// The fork switcher's frosted twin of `render_fork_branch_badge`: the same icon and count, and a
-/// click that opens the same menu under the badge's place in the pane.
+/// click that opens the same menu under the badge's place in the pane. `opacity` is the switcher's
+/// current strength, drawn by the badge itself only where its window cannot fade as a whole.
 fn fork_branches_badge(
     chat: gpui::Entity<NativeChatView>,
     p: &ChatAppearance,
     hover: gpui::Hsla,
+    opacity: f32,
     tooltip_epoch: Rc<Cell<u64>>,
+    hovered_state: Rc<Cell<bool>>,
     cx: &mut Context<FrostedOverlayView>,
 ) -> AnyElement {
     let (count, tooltip, menu_open) = {
@@ -395,6 +431,7 @@ fn fork_branches_badge(
             p.composer_background
         })
         .hover(move |style| style.bg(hover))
+        .when(!WINDOW_ALPHA, |this| this.opacity(opacity))
         .font_family(p.font.clone())
         .text_size(px(11.0 * s))
         .text_color(p.muted)
@@ -410,6 +447,8 @@ fn fork_branches_badge(
         // The window is too small to hold the tooltip, so it is shown in the chat's window under
         // the badge's place there, after the managed tooltips' own delay.
         .on_hover(move |hovered, window, cx| {
+            hovered_state.set(*hovered);
+            window.refresh();
             let epoch = tooltip_epoch.get() + 1;
             tooltip_epoch.set(epoch);
             let chat = hover_chat.clone();
@@ -535,3 +574,25 @@ fn attach_overlay_window(window: &mut Window, parent: *mut std::ffi::c_void) {
 
 #[cfg(not(target_os = "macos"))]
 fn attach_overlay_window(_: &mut Window, _: *mut std::ffi::c_void) {}
+
+/// Whether `set_overlay_window_alpha` can fade a control's window; elsewhere the fork switcher dims
+/// its own badge and the blur behind it stays at full strength.
+const WINDOW_ALPHA: bool = cfg!(target_os = "macos");
+
+/// Fades the control's whole window. The blur is the window's own backdrop, which an element's
+/// opacity cannot reach.
+#[cfg(target_os = "macos")]
+fn set_overlay_window_alpha(window: &mut Window, alpha: f32) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    unsafe extern "C" {
+        fn GhostexGpuiSetChildWindowAlpha(view: *mut std::ffi::c_void, alpha: f64);
+    }
+    if let Ok(handle) = HasWindowHandle::window_handle(window)
+        && let RawWindowHandle::AppKit(handle) = handle.as_raw()
+    {
+        unsafe { GhostexGpuiSetChildWindowAlpha(handle.ns_view.as_ptr(), f64::from(alpha)) };
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn set_overlay_window_alpha(_: &mut Window, _: f32) {}

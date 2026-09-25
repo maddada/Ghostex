@@ -23,7 +23,7 @@ use serde_json::{Map, Value};
 use crate::document::{
     AccountStatus, AsyncQuestions, ComposerActions, ComposerChrome, ComposerOverflow,
     DeferredWorkRow, Draft, EmptyState, HostAction, IncomingDraft, Interaction, NewSessionWelcome,
-    Note, PreviewSettings, QuestionCard, Queue, TerminalTail, ViewState, WorkingStrip,
+    Note, QuestionCard, Queue, TerminalTail, ViewState, WorkingStrip,
 };
 
 /// Everything the chat renderer draws, in one value.
@@ -193,10 +193,6 @@ pub struct Document {
     pub loading_stage: Option<String>,
     pub skills_loading: bool,
     pub files_loading: bool,
-    /// A preview chat's display settings (the retired Chat Lab's), present only under a preview
-    /// backend.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview_settings: Option<PreviewSettings>,
 
     /// Keys this build does not model yet, carried through untouched.
     ///

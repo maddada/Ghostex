@@ -1,154 +1,370 @@
 /*
- * The Theme settings page: the theme preview cards and the Advanced disclosure.
- * Each card draws a small window in its theme's own colours (set inline as
- * --theme-preview-*), so it looks the same in the light and dark Settings.
- * The drawn window is shared with the onboarding's Get started panel, which
- * styles its own card chrome in onboarding/styles/get-started.css.
+ * The Theme settings page: the theme colour squares, Colourfulness, each group's own More options, and the glass
+ * picture flow. The squares' gradients are set inline (theme-simple-controls.tsx `swatchStyle`); the square shape,
+ * sheen and selected ring live here and are shared with the onboarding's look card (get-started.css sizes its row).
  */
-.ghostex-settings-shadcn .theme-card-grid {
+:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-colour-grid {
   display: grid;
-  gap: 0.625rem;
-  grid-template-columns: repeat(auto-fill, minmax(5.25rem, 1fr));
-}
-
-.ghostex-settings-shadcn .theme-card {
-  align-items: stretch;
-  background: transparent;
-  border: 1px solid var(--settings-hairline);
-  border-radius: 0.625rem;
-  color: var(--muted-foreground);
-  cursor: default;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding: 0.375rem 0.375rem 0.5rem;
-  text-align: center;
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
-}
-
-.ghostex-settings-shadcn .theme-card:hover {
-  background: color-mix(in srgb, var(--foreground) 5%, transparent);
-}
-
-.ghostex-settings-shadcn .theme-card.is-selected {
-  border-color: var(--ring);
-  box-shadow: 0 0 0 1px var(--ring);
-  color: var(--foreground);
-}
-
-.ghostex-settings-shadcn .theme-card:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
-  border-color: var(--ring);
-}
-
-.ghostex-settings-shadcn .theme-card-name {
-  font-size: var(--settings-text-detail);
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-window {
-  aspect-ratio: 16 / 10;
-  background: var(--theme-preview-chrome);
-  border: 1px solid color-mix(in srgb, var(--theme-preview-foreground) 14%, transparent);
-  border-radius: 0.375rem;
-  display: flex;
-  overflow: hidden;
+  gap: 0.5rem;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
   width: 100%;
 }
 
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-sidebar {
+:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-colour-swatch {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: default;
+  min-width: 0;
+  padding: 0;
+}
+
+:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-colour-square {
+  aspect-ratio: 1;
+  border-radius: 0.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 4px 10px rgba(0, 0, 0, 0.3);
+  display: block;
+  position: relative;
+  transition: transform 120ms ease;
+  width: 100%;
+}
+
+:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-colour-square::after {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 42%);
+  border-radius: inherit;
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-colour-swatch:hover .theme-colour-square {
+  transform: translateY(-1px);
+}
+
+.ghostex-settings-shadcn .theme-colour-swatch.is-selected .theme-colour-square {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.ghostex-settings-shadcn .theme-colour-swatch:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+  outline: none;
+}
+
+.ghostex-settings-shadcn .theme-colour-picker {
   display: flex;
-  flex: 0 0 32%;
   flex-direction: column;
-  gap: 3px;
-  padding: 7px 4px;
+  gap: 0.75rem;
+  width: 100%;
 }
 
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-row {
-  background: color-mix(in srgb, var(--theme-preview-foreground) 16%, transparent);
-  border-radius: 2px;
-  height: 4px;
+.ghostex-settings-shadcn .theme-colour-readout {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  margin-left: 0.5rem;
 }
 
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-row.is-selected {
-  background: color-mix(in srgb, var(--theme-preview-foreground) 38%, transparent);
+.ghostex-settings-shadcn .theme-colour-pairing-note {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  margin: 0;
 }
 
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-work {
-  background: var(--theme-preview-work);
-  border-left: 1px solid color-mix(in srgb, var(--theme-preview-foreground) 10%, transparent);
+.ghostex-settings-shadcn .theme-scheme-tabs {
+  align-self: flex-start;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  border: 1px solid var(--settings-hairline);
+  border-radius: 0.5rem;
+  display: inline-flex;
+  padding: 2px;
+}
+
+.ghostex-settings-shadcn .theme-scheme-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  cursor: default;
+  font: inherit;
+  font-size: var(--settings-text-detail);
+  padding: 0.25rem 0.75rem;
+}
+
+.ghostex-settings-shadcn .theme-scheme-tabs button.is-selected {
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  color: var(--foreground);
+}
+
+.ghostex-settings-shadcn .theme-colourfulness-control {
+  align-items: center;
   display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 5px 5px;
+  gap: 0.75rem;
 }
 
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-bubble {
-  align-self: flex-end;
-  background: color-mix(in srgb, var(--theme-preview-foreground) 14%, transparent);
-  border-radius: 3px;
-  height: 7px;
-  width: 55%;
-}
-
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-text {
-  background: color-mix(in srgb, var(--theme-preview-foreground) 22%, transparent);
-  border-radius: 2px;
-  height: 3px;
-  width: 85%;
-}
-
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-text.is-short {
-  width: 60%;
-}
-
-:is(.ghostex-settings-shadcn, .gx-onboarding) .theme-preview-composer {
-  background: color-mix(in srgb, var(--theme-preview-foreground) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--theme-preview-foreground) 14%, transparent);
-  border-radius: 4px;
-  height: 9px;
-  margin-top: auto;
-}
-
-.ghostex-settings-shadcn .theme-advanced-disclosure {
+.ghostex-settings-shadcn .theme-colourfulness-slider {
   align-items: center;
   display: flex;
   gap: 0.625rem;
-  height: auto;
-  justify-content: flex-start;
-  padding: 0.5rem 0.25rem;
+  width: 18rem;
+}
+
+.ghostex-settings-shadcn .theme-colourfulness-track {
+  flex: 1;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .theme-colourfulness-end,
+.ghostex-settings-shadcn .theme-colourfulness-value,
+.ghostex-settings-shadcn .theme-colourfulness-split {
+  color: var(--muted-foreground);
+  font-size: var(--settings-text-detail);
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .theme-colourfulness-value {
+  text-align: right;
+  width: 4.25rem;
+}
+
+.ghostex-settings-shadcn .theme-colour-live-preview {
+  border: 1px solid var(--settings-hairline);
+  border-radius: 0.5rem;
+  display: flex;
+  flex: none;
+  height: 2rem;
+  overflow: hidden;
+  width: 6rem;
+}
+
+.ghostex-settings-shadcn .theme-colour-live-preview-sidebar {
+  flex: 0 0 38%;
+}
+
+.ghostex-settings-shadcn .theme-colour-live-preview-work {
+  border-left: 1px solid color-mix(in srgb, var(--theme-preview-foreground) 12%, transparent);
+  flex: 1;
+}
+
+/* Each group's own More options: a full-width row at the end of its card. */
+.ghostex-settings-shadcn .theme-more-options-btn {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--settings-hairline);
+  color: var(--muted-foreground);
+  cursor: default;
+  display: flex;
+  font: inherit;
+  font-size: var(--settings-text-detail);
+  gap: 0.5rem;
+  padding: 0.6875rem 1rem;
+  text-align: left;
   width: 100%;
 }
 
-.ghostex-settings-shadcn .theme-advanced-disclosure-title {
-  color: var(--foreground);
-  font-size: var(--settings-text-heading);
-  font-weight: 400;
+.ghostex-settings-shadcn .theme-more-options-btn:hover {
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
 }
 
-.ghostex-settings-shadcn .theme-advanced-disclosure-hint {
-  color: var(--muted-foreground);
-  font-size: var(--settings-text-detail);
+.ghostex-settings-shadcn .theme-more-options-label {
+  color: var(--foreground);
+}
+
+.ghostex-settings-shadcn .theme-more-options-summary {
   min-width: 0;
+  opacity: 0.75;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ghostex-settings-shadcn .theme-advanced-disclosure-chevron {
-  color: var(--muted-foreground);
+.ghostex-settings-shadcn .theme-more-options-chevron {
   flex-shrink: 0;
-  margin-left: auto;
+  height: 0.875rem;
   transition: transform 150ms ease;
+  width: 0.875rem;
 }
 
-.ghostex-settings-shadcn .theme-advanced-disclosure-chevron.is-open {
+.ghostex-settings-shadcn .theme-more-options-chevron.is-open {
   transform: rotate(90deg);
+}
+
+.ghostex-settings-shadcn .theme-more-subhead {
+  align-items: center;
+  border-top: 1px solid var(--settings-hairline);
+  color: var(--muted-foreground);
+  display: flex;
+  font-size: var(--settings-text-detail);
+  font-weight: 600;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem 0.25rem;
+}
+
+.ghostex-settings-shadcn .theme-more-step-badge {
+  align-items: center;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 999px;
+  color: var(--foreground);
+  display: inline-flex;
+  font-size: 0.6875rem;
+  height: 1.125rem;
+  justify-content: center;
+  width: 1.125rem;
+}
+
+.ghostex-settings-shadcn .theme-stacked-row {
+  padding: 0.5rem 1rem 0.75rem;
+}
+
+/* Step 1: what shows behind the glass. */
+.ghostex-settings-shadcn .theme-glass-source-cards {
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ghostex-settings-shadcn .theme-glass-source-card {
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  border: 1px solid var(--settings-hairline);
+  border-radius: 0.625rem;
+  color: var(--foreground);
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 0.125rem;
+  padding: 0.625rem;
+  text-align: left;
+}
+
+.ghostex-settings-shadcn .theme-glass-source-card.is-selected {
+  outline: 2px solid var(--ring);
+  outline-offset: -1px;
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art {
+  background: linear-gradient(135deg, #3b5b8f, #6b3f6f);
+  border-radius: 0.4375rem;
+  display: block;
+  height: 2.875rem;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-desktop::after {
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 0.25rem;
+  box-shadow: 18px 8px 0 rgba(255, 255, 255, 0.2);
+  content: '';
+  height: 60%;
+  left: 10%;
+  position: absolute;
+  top: 18%;
+  width: 45%;
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-wallpaper {
+  background: linear-gradient(135deg, #2f6f8f, #3d8f6a 60%, #d8a24b);
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-picture {
+  background:
+    radial-gradient(circle at 70% 35%, #f3c46a 0 12%, transparent 13%),
+    linear-gradient(180deg, #7aa6d8, #3b5b8f 55%, #2f4a2f 56%);
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-video {
+  background: linear-gradient(135deg, #1d2b52, #563a7a);
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-video::after {
+  color: rgba(255, 255, 255, 0.85);
+  content: '▶';
+  display: grid;
+  font-size: 1rem;
+  inset: 0;
+  place-items: center;
+  position: absolute;
+}
+
+.ghostex-settings-shadcn .theme-glass-source-name {
+  font-size: var(--settings-text-body, 0.8125rem);
+}
+
+.ghostex-settings-shadcn .theme-glass-source-description {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+/* Step 2: the dark and light pictures side by side. */
+.ghostex-settings-shadcn .theme-glass-picture-pair {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-slot {
+  background: color-mix(in srgb, var(--foreground) 3%, transparent);
+  border: 1px solid var(--settings-hairline);
+  border-radius: 0.625rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.625rem;
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-thumb {
+  border-radius: 0.5rem;
+  display: grid;
+  font-size: 0.6875rem;
+  height: 4.5rem;
+  margin-bottom: 0.25rem;
+  place-items: center;
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-thumb.is-dark {
+  background:
+    radial-gradient(circle at 30% 30%, #6d8fd6 0 10%, transparent 11%),
+    linear-gradient(180deg, #0f1733, #27325f 60%, #121a2e 61%);
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-thumb.is-light {
+  background:
+    radial-gradient(circle at 72% 30%, #ffe29a 0 11%, transparent 12%),
+    linear-gradient(180deg, #bcdcff, #eaf4ff 58%, #a9cf93 59%);
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-thumb.is-empty {
+  background: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--foreground) 4%, transparent) 0 8px,
+    transparent 8px 16px
+  );
+  border: 1px dashed var(--settings-hairline);
+  color: var(--muted-foreground);
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-mode {
+  font-size: var(--settings-text-detail);
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-file {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .theme-glass-picture-actions {
+  display: flex;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
 }

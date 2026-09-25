@@ -23,7 +23,6 @@ impl GhostexGpuiApp {
             ),
             shell_session_id,
             app: Some(cx.weak_entity()),
-            preview: None,
             parent_native_view: std::ptr::null_mut(),
             client_id: format!("gpui-web-{}", crate::app::helpers::gpui_random_uuid_string().unwrap_or_default()),
             remote: None,

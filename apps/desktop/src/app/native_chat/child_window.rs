@@ -51,13 +51,40 @@ impl NativeChatView {
     }
 
     fn sync_pane_modal_windows(&mut self, cx: &mut Context<Self>) {
+        self.sync_owned_modal_windows(cx);
+        self.sync_suggestion_window(cx);
+    }
+
+    fn sync_owned_modal_windows(&mut self, cx: &mut Context<Self>) {
         self.sync_image_viewer_window(cx);
         self.sync_table_preview_window(cx);
         self.sync_rewind_window(cx);
         self.sync_save_markdown_window(cx);
         self.sync_context_editor_window(cx);
         self.sync_maximized_window(cx);
-        self.sync_suggestion_window(cx);
+    }
+
+    /// The window the pane was last drawn in, forgotten once that window has closed.
+    pub(super) fn open_main_window(&mut self, cx: &gpui::App) -> Option<gpui::AnyWindowHandle> {
+        if self
+            .main_window
+            .is_some_and(|window| !cx.windows().contains(&window))
+        {
+            self.main_window = None;
+        }
+        self.main_window
+    }
+
+    /// CDXC:SessionChat 2026-09-25 WHY:
+    /// The floating sessions panel draws the chat in a window of its own and closes it when it goes away, and the chat's owned modals are restored when the pane is next shown, which comes before the chat is drawn in the window that shows it now. Opening them then read the closed panel window's frame, and GPUI's "window not found" landed in the chat's error banner and stayed there. A modal owed to a pane whose window is gone therefore waits for the pane's next draw, which names the window it belongs to, and opens once that draw has measured the pane there.
+    pub(super) fn note_drawn_in(&mut self, window: gpui::AnyWindowHandle, cx: &mut Context<Self>) {
+        if self.main_window.replace(window) == Some(window) || self.pane_hidden {
+            return;
+        }
+        let chat = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |chat, cx| chat.sync_owned_modal_windows(cx));
+        });
     }
 
     pub(super) fn pane_windows_open(&self) -> bool {

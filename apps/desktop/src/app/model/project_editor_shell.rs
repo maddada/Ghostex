@@ -132,6 +132,9 @@ pub(crate) struct GpuiProjectViewState {
     /// comes back to the same view.
     pub(crate) last_view_mode: Option<TitlebarMode>,
     pub(crate) workarea_split_ratio: f32,
+    /// CDXC:Workarea 2026-09-25 DECISION:
+    /// User: switching between Spaces for a while must not sleep the side panel view that was focused. A view's awake flag is app-wide, so the idle timer still sleeps it while another project is on screen (that is what frees a hidden page there); this records that the project's focused view was awake when it was left, and coming back wakes it instead of showing the sleeping card. A view the user slept is not awake when left and stays asleep. Runtime only, never persisted: after a launch every view starts asleep (CDXC:Browser 2026-09-19).
+    pub(crate) active_view_awake: bool,
 }
 
 pub(crate) struct ProjectEditorShellModel {
@@ -449,6 +452,7 @@ pub(crate) fn project_view_state_from_shell_state(
             .and_then(TitlebarMode::from_slug)
             .filter(|mode| *mode != TitlebarMode::Agents),
         workarea_split_ratio: workarea_split_ratio_from_shell_state(object, "companionWidthRatio"),
+        active_view_awake: false,
     })
 }
 

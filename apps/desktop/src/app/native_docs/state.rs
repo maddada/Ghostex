@@ -317,6 +317,18 @@ pub(crate) struct NativeDocsState {
     pub(crate) drawer_synced: bool,
     /// The task that closes the drawer on a click elsewhere in the main window is running.
     pub(crate) drawer_click_watch: bool,
+    /// The docked list's pin and unpin tween, the one the app's panels use (`panel_motion.rs`).
+    pub(crate) docked_motion: crate::app::panel_motion::PanelMotion,
+    /// Whether the view was narrow when the tween was last sampled: crossing the breakpoint is a
+    /// layout change, which docks or floats the list without a tween.
+    pub(crate) docked_narrow: Option<bool>,
+    /// How many of the bar's buttons (from the front of `DocsBarItem::OVERFLOW_ORDER`) are in its
+    /// "⋯" menu for lack of room.
+    pub(crate) format_bar_hidden: usize,
+    /// The width the bar may use, measured at the last paint (0 until then).
+    pub(crate) format_bar_room: std::rc::Rc<std::cell::Cell<f32>>,
+    /// The formatting bar's frosted window under glass (`format_bar_window.rs`).
+    pub(crate) format_bar_window: super::format_bar_window::DocsFormatBarWindow,
     /// A field of the floating list to focus once its window draws (the search, a rename).
     pub(crate) drawer_focus: Option<gpui::Entity<gpui_component::input::InputState>>,
 }
@@ -348,6 +360,7 @@ impl NativeDocsState {
             pending_origin: self.pending_origin.take(),
             watch_task: self.watch_task.take(),
             drawer: self.drawer.take(),
+            format_bar_window: std::mem::take(&mut self.format_bar_window),
             drawer_opening: self.drawer_opening,
             ..Self::default()
         };

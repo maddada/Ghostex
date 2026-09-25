@@ -53,7 +53,6 @@ impl GhostexGpuiApp {
             sidebar_session_id,
             shell_session_id: session_id,
             app: Some(cx.weak_entity()),
-            preview: None,
             parent_native_view: self.parent_ns_view,
             client_id: format!("native-desktop-{}", std::process::id()),
             remote,

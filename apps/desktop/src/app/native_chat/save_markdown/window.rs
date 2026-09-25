@@ -44,7 +44,7 @@ impl NativeChatView {
         if self.save_markdown_window.handle.is_some() || self.save_markdown_window.opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.save_markdown_window.opening = true;

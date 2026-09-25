@@ -87,8 +87,7 @@ pub enum Event {
 #[serde(rename_all = "camelCase")]
 pub struct StartConfig {
     /// All three default, because the host does not always know them at boot: the desktop host
-    /// learns the client id from its own storage read, and a preview chat (the retired Chat Lab's)
-    /// has a preview backend instead of a session.
+    /// learns the client id from its own storage read.
     #[serde(default)]
     pub client_id: String,
     #[serde(default)]
@@ -101,16 +100,12 @@ pub struct StartConfig {
     /// The presentation cache the sidebar and the chat share.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_presentation: Option<Value>,
-    /// The preview scenario (the retired Chat Lab's), when this chat is a preview rather than a
-    /// session.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview: Option<Value>,
     /// `JSON.stringify([machineId, projectId, sessionId])`, the key of this session's retained
     /// transcript record.
     ///
     /// The host builds it with [`crate::session::persistence::storage_key`], because only it knows
     /// the machine id, and the core writes it back inside the record. Empty when the host retains
-    /// nothing, as a preview chat does.
+    /// nothing.
     #[serde(default)]
     pub retained_key: String,
     /// The host's composer is a touch field with no Enter-to-send (the phone): the composer's

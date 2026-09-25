@@ -10,7 +10,7 @@ use crate::composer::json::OrderedMap;
 use crate::composer::links::{
     classify_link_href, file_position_from_href, FilePosition, LinkTarget,
 };
-use crate::composer::reference_pills::{reference_kind, ReferenceKind};
+use crate::composer::reference_pills::{media_kind, path_noun, reference_kind, ReferenceKind};
 use crate::ordered;
 
 /// One row of the menu: the command the host runs, an icon, and a label.
@@ -86,7 +86,16 @@ pub fn reference_menu_rows(href: &str) -> Vec<ReferenceMenuRow> {
     };
     let position = file_position_from_href(href);
     let mut rows = Vec::new();
-    if reference_kind("", &path) != ReferenceKind::Folder {
+    let noun = path_noun(&path);
+    if media_kind(&path).is_some() {
+        // No `view`: the host opens media with the OS default app.
+        rows.push(ReferenceMenuRow {
+            command: ordered! { "action": "openFile", "path": path.clone(), "type": "host" },
+            icon_path: "titlebar/external-link.svg".to_string(),
+            label: format!("Open {noun}"),
+            disabled: None,
+        });
+    } else if reference_kind("", &path) != ReferenceKind::Folder {
         rows.push(ReferenceMenuRow {
             command: file_command(&path, "code", position),
             icon_path: "titlebar/code.svg".to_string(),
@@ -111,7 +120,7 @@ pub fn reference_menu_rows(href: &str) -> Vec<ReferenceMenuRow> {
     rows.push(ReferenceMenuRow {
         command: ordered! { "action": "locateFile", "path": path, "type": "host" },
         icon_path: "titlebar/folder-open.svg".to_string(),
-        label: "Open File/Folder Location".to_string(),
+        label: format!("Open {noun} Location"),
         disabled: None,
     });
     rows

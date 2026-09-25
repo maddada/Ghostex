@@ -538,44 +538,6 @@ body.app-modal-host-body {
 }
 
 /*
- * CDXC:SessionChat 2026-09-13 WHY:
- * Chat defaults to rounded controls, including its portaled menus, but component classes must be able to choose their own radius.
- * The base layer replaces the 2026-08-02 unlayered override so rounded-sm, rounded-full and rounded-none work on newly added controls.
- * Collapse rails, floating terminal controls and file-change cards retain their own geometry.
- */
-@layer base {
-  .ghostex-session-chat-scope :is(input, textarea),
-  .ghostex-session-chat-popup,
-  .ghostex-session-chat-scope
-    :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
-      .ghostex-chat-expansion-rail
-    ):not(.ghostex-chat-file-change-card button):not(.ghostex-chat-terminal-search-button),
-  .ghostex-session-chat-popup
-    :is(
-      button,
-      [role='button'],
-      [data-slot='dropdown-menu-item'],
-      [data-slot='dropdown-menu-checkbox-item'],
-      [data-slot='dropdown-menu-radio-item'],
-      [data-slot='dropdown-menu-sub-trigger'],
-      [data-slot='dropdown-menu-sub-content']
-    ):not(.ghostex-chat-file-change-card button) {
-    border-radius: calc(var(--radius, 0.625rem) - 2px);
-  }
-}
-
-.ghostex-session-chat-scope :is(input, textarea),
-.ghostex-session-chat-popup {
-  border-radius: revert-layer;
-}
-
-/* Preserve controls intentionally designed as circles/pills. Send is 6px, not
-   a circle — see `.ghostex-chat-send-button` in packages/core-ui/styles/chat.css. */
-.ghostex-session-chat-scope :is(.ghostex-chat-footer-control, .ghostex-chat-scroll-bottom-button, button.rounded-full) {
-  border-radius: 9999px;
-}
-
-/*
  * CDXC:AppModal 2026-08-24:
  * The modal shell is the Codex modal surface (#161616) rather than the app
  * window background, so raised cards inside it have something to sit on.

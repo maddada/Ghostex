@@ -1,7 +1,7 @@
 //! The frosted child windows the app's menus and tooltips draw in while the main window is glass.
 //!
 //! CDXC:Theming 2026-09-25 DECISION:
-//! User, of the sidebar menu and the header's ⋯ menu reading as near-opaque dark boxes: "is it possible to make context menu and these menus in the app match the look of the app when transparency is enabled better?", then "ok do ur best option / apply this to all the menus and tooltips like the ... and sidebar menu etc". Under window glass every menu and tooltip is a frosted surface: it draws in a blurred window of its own, filled with the theme's menu colour at `WINDOW_GLASS_MENU_ALPHA`, with a faint ink border and the soft ink wash on its highlighted row. Menus that already had a window (the header's dropdowns, context menus, the chat's menus) keep it; the sidebar's menus and every tooltip, which were drawn inside the main window where nothing can blur, move into the windows kept here. Glass off, they all look as before.
+//! User, of the sidebar menu and the header's ⋯ menu reading as near-opaque dark boxes: "is it possible to make context menu and these menus in the app match the look of the app when transparency is enabled better?", then "ok do ur best option / apply this to all the menus and tooltips like the ... and sidebar menu etc". Under window glass every menu and tooltip is a frosted surface: it draws in a blurred window of its own, filled with the frosted menu fill (`frosted_menu_fill`), with a faint ink border and the soft ink wash on its highlighted row. Menus that already had a window (the header's dropdowns, context menus, the chat's menus) keep it; the sidebar's menus and every tooltip, which were drawn inside the main window where nothing can blur, move into the windows kept here. Glass off, they all look as before.
 //!
 //! CDXC:Theming 2026-09-25 WHY:
 //! Only one menu and one tooltip are ever up, so each kind keeps one window and hides it between uses rather than opening a new one each time (a GPUI window pays for a new Metal surface; tooltips come and go on every hover). A window's blur is limited to the rounded frames its content reports (`Window::report_frosted_region`), so a menu with a submenu, or a tooltip bubble with its margins, blurs only its panels. A window that is replaced is closed first, and nothing here holds its owner alive, so a leftover can never outlive what it showed (the lesson of the stacked scroll pills).
@@ -232,6 +232,7 @@ fn open_host(
             ..Default::default()
         },
         move |window, cx| {
+            crate::app::helpers::apply_frosted_menu_blur(window);
             match kind {
                 // A tooltip bubble sits inside margins, so its window's blur follows the bubble.
                 FrostedHostKind::Tooltip => window.set_frosted_surface(true),

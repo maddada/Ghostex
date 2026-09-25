@@ -47,7 +47,7 @@ pub use crate::document::{
     assemble, frame_parts, AccountStatus, AsyncQuestions, ComposerActions, ComposerChrome,
     ComposerOverflow, DeferredWorkRow, Document, Draft, EmptyState, Frame, FrameParts, HostAction,
     IncomingDraft, Interaction, ItemsSplice, MinimapMarker, NewSessionWelcome, Note,
-    PreviewSettings, ProjectedMessage, Queue, QueueCapabilities, QueuedPrompt, QuestionCard,
+    ProjectedMessage, Queue, QueueCapabilities, QueuedPrompt, QuestionCard,
     QuestionControls, QuestionDraft, RowDetails, TerminalTail, TerminalTailNotice, TranscriptItem,
     ViewState, WorkingStrip,
 };

@@ -108,6 +108,7 @@ pub fn project_message(
         body.clone()
     };
     let agent_message = parse_agent_message(&body);
+    let inter_agent_message = is_user.then(|| parse_inter_agent_message(&body)).flatten();
     let (remaining, changes) = split_file_changes(tools);
     let tool_pairs = pair_tool_blocks(remaining);
     let copy_text = if is_user {
@@ -145,7 +146,11 @@ pub fn project_message(
     projected.insert("copyText".to_string(), copy_text.clone().into());
     projected.insert(
         "canRewind".to_string(),
-        message_can_rewind(message, &copy_text, &suppressed).into(),
+        (message_can_rewind(message, &copy_text, &suppressed)
+            && !inter_agent_message
+                .as_ref()
+                .is_some_and(|inter| inter.cross_session))
+        .into(),
     );
     projected.insert("actionContent".to_string(), message_action_content(&body));
     projected.insert("time".to_string(), message_time(message.timestamp, context));
@@ -170,7 +175,7 @@ pub fn project_message(
     );
     projected.insert(
         "interAgentMessage".to_string(),
-        match is_user.then(|| parse_inter_agent_message(&body)).flatten() {
+        match &inter_agent_message {
             Some(inter) => serde_json::json!({
                 "agentName": inter.agent_name,
                 "sessionTitle": inter.session_title,

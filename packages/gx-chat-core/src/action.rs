@@ -149,6 +149,7 @@ action_kinds! {
     AsyncQuestionToggle => "asyncQuestionToggle",
     AsyncQuestionNavigate => "asyncQuestionNavigate",
     AsyncQuestionText => "asyncQuestionText",
+    AsyncQuestionImagesPending => "asyncQuestionImagesPending",
     AsyncQuestionOption => "asyncQuestionOption",
     AsyncQuestionSend => "asyncQuestionSend",
     AsyncQuestionSkip => "asyncQuestionSkip",

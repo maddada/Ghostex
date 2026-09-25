@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### 🩹 Fixes
+- **Files dropped onto a remote machine's terminal are uploaded to that machine** and pasted as references the agent there can open, instead of local paths it cannot read, thanks to @Ni7e ([#159](https://github.com/maddada/Ghostex/pull/159)).
+
 ## 10.2.1 - 2026-09-24
 
 **Ghostex 10.2.1 is out.** A chat fix for the Android app, seven new website views, a keyboard-driven model pop-up, chat that folds finished work away as it goes, Cmd+T for your last-used agent, sessions you can drag between Pinned, Sessions and Parked, and a large batch of chat, Windows and Linux fixes.

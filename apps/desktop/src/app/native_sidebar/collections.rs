@@ -79,7 +79,7 @@ impl GhostexGpuiApp {
             None => div()
                 .flex_1()
                 .min_w_0()
-                .text_ellipsis()
+                .truncate()
                 .text_size(px(15.55 * scale))
                 .font_weight(FontWeight::LIGHT)
                 .child(collection.title.clone())

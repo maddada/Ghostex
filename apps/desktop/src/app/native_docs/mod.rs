@@ -15,6 +15,7 @@ pub(crate) mod files_list;
 pub(crate) mod find;
 pub(crate) mod fonts;
 pub(crate) mod format_bar;
+pub(crate) mod format_bar_window;
 pub(crate) mod gutter;
 pub(crate) mod live;
 pub(crate) mod notes;

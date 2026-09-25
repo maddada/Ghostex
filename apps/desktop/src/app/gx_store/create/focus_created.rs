@@ -70,7 +70,7 @@ impl GhostexGpuiApp {
         let key = GpuiLocalWorkspaceSessionKey::from(&message);
         let attaches = &mut self.gx_store.create.created_attaches.entries;
         attaches.retain(|(held, at)| *held != key && at.elapsed() < CREATED_ATTACH_WINDOW);
-        attaches.push((key, Instant::now()));
+        attaches.push((key.clone(), Instant::now()));
         self.gx_store.create.counters.created_focuses += 1;
         // A launch staged an instant composer for this project; the created session takes it over,
         // exactly as the runtime's focus post did on arrival.
@@ -82,6 +82,10 @@ impl GhostexGpuiApp {
             &ghostex_gx_core::SessionKey::local(project_id, session_id),
             cx,
         );
+        // The store's selection above already gave the session its tab (session_chat_launch.rs).
+        if message.preferred_interface == GpuiPreferredAgentInterface::Chat {
+            self.arm_created_session_chat_launch_intent(key);
+        }
         self.focus_local_workspace_terminal_from_message(&message, cx);
     }
 

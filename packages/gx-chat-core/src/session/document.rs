@@ -54,11 +54,6 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         None => Tri::Absent,
     };
     into.operation_error_code = state.core.operation_error_code.clone();
-    into.preview_settings = state
-        .core
-        .preview_settings
-        .as_ref()
-        .and_then(|value| serde_json::from_value(value.clone()).ok());
     let _ = context;
 }
 

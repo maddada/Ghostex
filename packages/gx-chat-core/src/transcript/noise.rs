@@ -15,6 +15,7 @@
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole, ChatSource};
 use serde_json::{json, Map, Value};
 
+use crate::transcript::agent_message::parse_cross_session_message;
 use crate::transcript::foreign::{decode_escaped_markup, effort_label, parse_command_envelope};
 use crate::transcript::jsstr::{
     ascii_lower, collapse_whitespace, js_trim, js_trim_start, split_newlines,
@@ -638,6 +639,11 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
             ChatBlock::ToolCall { .. } | ChatBlock::ToolResult { .. }
         )
     }) {
+        return None;
+    }
+    // A peer Claude session's message is the message-from-another-agent card, a turn of its own
+    // like a `ghostex agents send` message, not a harness marker.
+    if message.role == ChatRole::User && parse_cross_session_message(&text).is_some() {
         return None;
     }
     if is_context_compaction_record(message, &text) {

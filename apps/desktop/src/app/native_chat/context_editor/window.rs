@@ -50,7 +50,7 @@ impl NativeChatView {
         if self.context_editor_window.handle.is_some() || self.context_editor_window.opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.context_editor_window.opening = true;

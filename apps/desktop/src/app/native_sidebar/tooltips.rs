@@ -7,7 +7,7 @@ use gpui_component::{
 
 use super::session_list::SESSION_INSET_X;
 use crate::app::helpers::{
-    WINDOW_GLASS_MENU_ALPHA, titlebar_popup_menu_background, titlebar_popup_menu_border_color,
+    titlebar_popup_menu_background, titlebar_popup_menu_border_color,
     titlebar_popup_menu_foreground, window_glass_active_in,
 };
 

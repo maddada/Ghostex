@@ -132,7 +132,7 @@ impl NativeChatView {
     /// Drops the temporary zoom when the configured default changes, so Settings > Chat stays in
     /// charge of what this pane returns to.
     pub(super) fn sync_chat_zoom_default(&mut self) {
-        let default = ChatAppearance::default_zoom_percent(&self.snapshot);
+        let default = ChatAppearance::default_zoom_percent();
         if self.zoom.default_percent == Some(default) {
             return;
         }
@@ -153,7 +153,7 @@ impl NativeChatView {
     }
 
     fn step_chat_zoom(&mut self, step: ZoomStep, cx: &mut Context<Self>) {
-        let default = ChatAppearance::default_zoom_percent(&self.snapshot);
+        let default = ChatAppearance::default_zoom_percent();
         self.zoom.default_percent = Some(default);
         let current = self.zoom.override_percent.unwrap_or(default);
         let next = match step {

@@ -58,7 +58,7 @@ impl Render for NativeChatView {
         super::zoom::register(cx);
         self.last_render = Some(web_time::Instant::now());
         self.schedule_row_detail_sync(window, cx);
-        self.main_window = Some(window.window_handle());
+        self.note_drawn_in(window.window_handle(), cx);
         if self.maximized_window.is_none() {
             self.ensure_input(window, cx);
         }

@@ -41,6 +41,15 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: ReadonlyMap<string, string>
   ['#6c4f8f', '#0a0611'],
   ['#854f7a', '#100611'],
   ['#8a4f5f', '#100409'],
+  // 2026-09-25 preset colours (Slate, Midnight, Indigo, Teal, Forest, Olive, Amber, Rose).
+  ['#4a6a8a', '#070d14'],
+  ['#1f3a8a', '#02061a'],
+  ['#4b4fa6', '#08081c'],
+  ['#2f7f7f', '#021213'],
+  ['#2e6a3a', '#031205'],
+  ['#6b6b35', '#0e0f03'],
+  ['#8a6a2a', '#130c02'],
+  ['#8a4a5c', '#12040b'],
 ]);
 
 export function normalizeSidebarTitlebarHexColor(value: string, fallback: string): string {
@@ -387,6 +396,15 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: ReadonlyMap<string, string
   ['#6c4f8f', '#f2edf7'],
   ['#854f7a', '#f7ecf3'],
   ['#8a4f5f', '#f7ecef'],
+  // 2026-09-25 preset colours (Slate, Midnight, Indigo, Teal, Forest, Olive, Amber, Rose).
+  ['#4a6a8a', '#ebf1f8'],
+  ['#1f3a8a', '#edeff8'],
+  ['#4b4fa6', '#eeeef8'],
+  ['#2f7f7f', '#ebf4f5'],
+  ['#2e6a3a', '#edf7f0'],
+  ['#6b6b35', '#f4f4ec'],
+  ['#8a6a2a', '#f6f2ec'],
+  ['#8a4a5c', '#f7edf0'],
 ]);
 
 export function clampSidebarTitlebarLightBackgroundLightnessPercent(value: number): number {
@@ -448,9 +466,34 @@ export const DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_COLOR = getSidebar
  * same resolution as the custom controls, so presets and custom chrome can never drift apart. Choosing a
  * preset leaves the saved custom values alone; they come back unchanged when Custom is selected again.
  * 2026-09-22: User: all the colored dark presets default to 96 contrast.
+ *
+ * CDXC:Theming 2026-09-25 DECISION:
+ * User: "I want more colors there. You just have a few there right now. I want more colors there. I want a darker blue
+ * also." Both appearances offer the same sixteen colours (Graphite, Black/White, Slate, Midnight, Blue, Indigo, Teal,
+ * Green, Forest, Olive, Amber, Orange, Red, Rose, Pink, Purple); Midnight is the darker blue. The existing ids and values
+ * are unchanged so saved themes keep their look, `gray` is labelled Graphite, and the new tints have calibrated entries
+ * in the dark and light tint tables so they read as richly as Blue, Green and Red.
+ * SEE-ALSO: `DARK_THEME_PRESET_CONTROLS` / `LIGHT_THEME_PRESET_CONTROLS` and the tint tables in
+ * apps/desktop/src/app/helpers/titlebar.rs, which must match these entry for entry.
  */
-export type DarkThemePreset = 'gray' | 'black' | 'blue' | 'green' | 'red' | 'purple' | 'custom';
-export type LightThemePreset = 'gray' | 'white' | 'blue' | 'green' | 'pink' | 'orange' | 'custom';
+export type ThemePresetColor =
+  | 'gray'
+  | 'slate'
+  | 'midnight'
+  | 'blue'
+  | 'indigo'
+  | 'teal'
+  | 'green'
+  | 'forest'
+  | 'olive'
+  | 'amber'
+  | 'orange'
+  | 'red'
+  | 'rose'
+  | 'pink'
+  | 'purple';
+export type DarkThemePreset = ThemePresetColor | 'black' | 'custom';
+export type LightThemePreset = ThemePresetColor | 'white' | 'custom';
 export type DarkChromeControls = { darknessPercent: number; tintColor: string };
 export type LightChromeControls = { lightnessPercent: number; tintColor: string };
 
@@ -463,9 +506,19 @@ export const DARK_THEME_PRESET_CONTROLS: Readonly<Record<Exclude<DarkThemePreset
     tintColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_COLOR,
   },
   black: { darknessPercent: 100, tintColor: '#000000' },
+  slate: { darknessPercent: 94, tintColor: '#4a6a8a' },
+  midnight: { darknessPercent: 94, tintColor: '#1f3a8a' },
   blue: { darknessPercent: 96, tintColor: '#336699' },
+  indigo: { darknessPercent: 94, tintColor: '#4b4fa6' },
+  teal: { darknessPercent: 94, tintColor: '#2f7f7f' },
   green: { darknessPercent: 96, tintColor: '#3f7a5f' },
+  forest: { darknessPercent: 94, tintColor: '#2e6a3a' },
+  olive: { darknessPercent: 94, tintColor: '#6b6b35' },
+  amber: { darknessPercent: 94, tintColor: '#8a6a2a' },
+  orange: { darknessPercent: 96, tintColor: '#8a5330' },
   red: { darknessPercent: 96, tintColor: '#884444' },
+  rose: { darknessPercent: 94, tintColor: '#8a4a5c' },
+  pink: { darknessPercent: 96, tintColor: '#854f7a' },
   purple: { darknessPercent: 96, tintColor: '#6c4f8f' },
 };
 
@@ -475,10 +528,20 @@ export const LIGHT_THEME_PRESET_CONTROLS: Readonly<Record<Exclude<LightThemePres
     tintColor: DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_COLOR,
   },
   white: { lightnessPercent: 100, tintColor: '#ffffff' },
+  slate: { lightnessPercent: 95, tintColor: '#4a6a8a' },
+  midnight: { lightnessPercent: 94, tintColor: '#1f3a8a' },
   blue: { lightnessPercent: 95, tintColor: '#336699' },
+  indigo: { lightnessPercent: 95, tintColor: '#4b4fa6' },
+  teal: { lightnessPercent: 95, tintColor: '#2f7f7f' },
   green: { lightnessPercent: 95, tintColor: '#3f7a5f' },
-  pink: { lightnessPercent: 95, tintColor: '#854f7a' },
+  forest: { lightnessPercent: 94, tintColor: '#2e6a3a' },
+  olive: { lightnessPercent: 95, tintColor: '#6b6b35' },
+  amber: { lightnessPercent: 95, tintColor: '#8a6a2a' },
   orange: { lightnessPercent: 95, tintColor: '#8a5330' },
+  red: { lightnessPercent: 95, tintColor: '#884444' },
+  rose: { lightnessPercent: 95, tintColor: '#8a4a5c' },
+  pink: { lightnessPercent: 95, tintColor: '#854f7a' },
+  purple: { lightnessPercent: 95, tintColor: '#6c4f8f' },
 };
 
 /**

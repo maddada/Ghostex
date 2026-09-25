@@ -48,7 +48,7 @@ impl NativeChatView {
         if self.rewind_window.handle.is_some() || self.rewind_window.opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.rewind_window.opening = true;

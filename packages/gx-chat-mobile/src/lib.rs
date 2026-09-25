@@ -92,8 +92,9 @@ impl MobileChatCore {
             .unwrap_or_default()
     }
 
-    /// One of the five pure helpers (`composerReferences`, `composerKeyIntent`, `referenceMenu`,
-    /// `transcriptMenu`, `sendBlockedToast`), answered from the current state.
+    /// One of the pure helpers (`composerReferences`, `composerKeyIntent`, `referenceMenu`,
+    /// `transcriptMenu`, `sendBlockedToast`, `insertAnswerAttachments`, `removeChatReference`),
+    /// answered from the current state.
     pub fn query(&self, name: String, arguments_json: String) -> String {
         self.run(|core| {
             let query = Query::from_wire(&name)

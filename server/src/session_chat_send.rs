@@ -124,8 +124,10 @@ const SESSION_CHAT_SHELL_PROMPT_NOT_REACHED: &str =
     "The agent did not exit back to the shell, so the resume command was not typed.";
 pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
     "The agent's input box is not on screen, so nothing was sent.";
-const SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED: &str =
-    "Claude Code settings did not close to reveal the input box, so nothing was sent.";
+const SESSION_CHAT_CLAUDE_PANEL_NOT_DISMISSED: &str =
+    "The Claude Code panel over the input box did not close, so nothing was sent.";
+/// Escape presses one send spends on a panel that stays up.
+const SESSION_CHAT_CLAUDE_PANEL_ESCAPES: u64 = 3;
 /// CDXC:SessionChat 2026-09-23 WHY:
 /// Native Windows Codex reads console input records through ConPTY, which turns a bare Escape into VK_ESCAPE but does not decode CSI-u Escape. Chat Stop's CSI-u write left a live turn streaming until physical Escape interrupted it. POSIX zmx (including WSL) retains CSI-u: bare Escape was dropped by kitty-enabled Claude Code in the verified 2026-08-01 flow.
 #[cfg(windows)]
@@ -1000,9 +1002,10 @@ pub enum SessionChatSendStep {
     AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget),
     /// See CDXC:SessionChat in session_chat_claude_question_prep.rs.
     PrepareClaudeQuestion(crate::session_chat_claude_question_prep::ClaudeQuestionPrep),
-    /// Close Claude Code's positively identified Settings screen, then require
-    /// its real composer to appear before any later input-line write can run.
-    DismissClaudeSettings {
+    /// Close a positively identified Claude Code panel whose Escape is safe (Settings, or
+    /// an offer listed in session_chat_claude_popups.rs), then require its real composer
+    /// to appear before any later input-line write can run.
+    DismissClaudePanel {
         agent: Option<String>,
         timeout_ms: u64,
     },
@@ -1162,11 +1165,11 @@ pub fn build_session_chat_message_steps(
     agent: Option<&str>,
     text: &str,
     image_paths: &[String],
-    dismiss_claude_settings: bool,
+    dismiss_claude_panel: bool,
 ) -> Vec<SessionChatSendStep> {
     let mut steps = Vec::new();
-    if dismiss_claude_settings {
-        steps.push(SessionChatSendStep::DismissClaudeSettings {
+    if dismiss_claude_panel {
+        steps.push(SessionChatSendStep::DismissClaudePanel {
             agent: agent.map(str::to_string),
             timeout_ms: SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
         });
@@ -2145,85 +2148,87 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
-                SessionChatSendStep::DismissClaudeSettings { agent, timeout_ms } => {
-                    if let Err(error) = write_session_chat_payload(
-                        &project_id,
-                        &session_id,
-                        &zmx_name,
-                        &source,
-                        SESSION_CHAT_INTERRUPT,
-                    )
-                    .await
-                    {
-                        outcome = Err(SessionChatSendError::new(
-                            SessionChatSendFailure::Write,
-                            error,
-                        ));
-                        break;
-                    }
-                    let wait = crate::session_chat_composer::wait_for_session_chat_composer(
-                        &zmx_name,
-                        agent.as_deref(),
-                        crate::session_chat_composer::SessionChatComposerWaitPolicy {
-                            settle_ms: 0,
-                            timeout_ms,
-                            // Once Escape has been sent, only positive composer
-                            // evidence may release the message writes.
-                            unknown_hold_ms: timeout_ms,
-                        },
-                        &|| job_generation != generation.load(Ordering::SeqCst),
-                    )
-                    .await;
-                    match wait {
-                        crate::session_chat_composer::SessionChatComposerWait::Ready => {}
-                        crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
-                            outcome = Err(SessionChatSendError::not_attempted(
-                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                SessionChatSendStep::DismissClaudePanel { agent, timeout_ms } => {
+                    // Claude can drop a key that lands the instant a panel opens, so Escape is
+                    // pressed again only while an Escape-safe panel is still what the screen
+                    // shows; any other screen stops the presses, so no stray Escape reaches the
+                    // input box.
+                    let attempt_ms = (timeout_ms / SESSION_CHAT_CLAUDE_PANEL_ESCAPES)
+                        .max(crate::session_chat_composer::SESSION_CHAT_COMPOSER_POLL_MS);
+                    let mut presses = 0;
+                    let failure = loop {
+                        presses += 1;
+                        if let Err(error) = write_session_chat_payload(
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            SESSION_CHAT_INTERRUPT,
+                        )
+                        .await
+                        {
+                            break Some(SessionChatSendError::new(
+                                SessionChatSendFailure::Write,
+                                error,
                             ));
-                            break;
                         }
-                        crate::session_chat_composer::SessionChatComposerWait::Unknown => {
-                            log_session_chat_paste_verification(
-                                LogLevel::Error,
-                                "sessionChatClaudeSettingsDismissFailed",
-                                &project_id,
-                                &session_id,
-                                &zmx_name,
-                                &source,
-                                0,
-                                timeout_ms,
-                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED,
-                            );
-                            outcome = Err(SessionChatSendError::new(
-                                SessionChatSendFailure::ComposerNotReady,
-                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED.to_string(),
-                            ));
-                            break;
-                        }
-                        crate::session_chat_composer::SessionChatComposerWait::NotReady(
-                            readiness,
-                        ) => {
-                            let reason = readiness
+                        let wait = crate::session_chat_composer::wait_for_session_chat_composer(
+                            &zmx_name,
+                            agent.as_deref(),
+                            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                                settle_ms: 0,
+                                timeout_ms: attempt_ms,
+                                // Once Escape has been sent, only positive composer
+                                // evidence may release the message writes.
+                                unknown_hold_ms: attempt_ms,
+                            },
+                            &|| job_generation != generation.load(Ordering::SeqCst),
+                        )
+                        .await;
+                        let reason = match wait {
+                            crate::session_chat_composer::SessionChatComposerWait::Ready => {
+                                break None;
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
+                                break Some(SessionChatSendError::not_attempted(
+                                    SESSION_CHAT_SEND_CANCELLED.to_string(),
+                                ));
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                                readiness,
+                            ) if readiness.should_dismiss_with_escape()
+                                && presses < SESSION_CHAT_CLAUDE_PANEL_ESCAPES =>
+                            {
+                                continue;
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                                readiness,
+                            ) => readiness
                                 .reason
-                                .clone()
-                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string());
-                            log_session_chat_paste_verification(
-                                LogLevel::Error,
-                                "sessionChatComposerNotReady",
-                                &project_id,
-                                &session_id,
-                                &zmx_name,
-                                &source,
-                                0,
-                                timeout_ms,
-                                &reason,
-                            );
-                            outcome = Err(SessionChatSendError::new(
-                                SessionChatSendFailure::ComposerNotReady,
-                                reason,
-                            ));
-                            break;
-                        }
+                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string()),
+                            crate::session_chat_composer::SessionChatComposerWait::Unknown => {
+                                SESSION_CHAT_CLAUDE_PANEL_NOT_DISMISSED.to_string()
+                            }
+                        };
+                        log_session_chat_paste_verification(
+                            LogLevel::Error,
+                            "sessionChatClaudePanelDismissFailed",
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            0,
+                            timeout_ms,
+                            &reason,
+                        );
+                        break Some(SessionChatSendError::new(
+                            SessionChatSendFailure::ComposerNotReady,
+                            reason,
+                        ));
+                    };
+                    if let Some(error) = failure {
+                        outcome = Err(error);
+                        break;
                     }
                 }
                 SessionChatSendStep::WaitForComposer {
@@ -3502,35 +3507,14 @@ pub(crate) async fn handle_send_session_chat_message_http(
     // CDXC:SessionChat 2026-09-09 DECISION:
     // User: sending in a new chat is immediate, but delivery waits for the agent's input box. A durable queue receipt lets both apps clear the composer while startup continues.
     if crate::agents::session_is_draft(&target.session) && image_paths.is_empty() {
-        let mut startup_params = params.clone();
-        startup_params.insert("startupSend".to_string(), json!(true));
-        return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
-            &state.paths,
-            state.metadata.server_id.as_str(),
-            "/api/queueSessionChatPrompt",
-            &startup_params,
-        ) {
-            Ok(result) => {
-                crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-                    state,
-                    &target.project_id,
-                    &target.session_id,
-                );
-                routed_json(
-                    Some(endpoint_path),
-                    StatusCode::OK,
-                    rpc_success(
-                        request_id,
-                        json!({
-                            "queued": true,
-                            "textBytes": text.len(),
-                            "queuedPromptId": result.value.pointer("/prompt/id"),
-                        }),
-                    ),
-                )
-            }
-            Err(error) => domain_error_response(endpoint_path, request_id, error),
-        };
+        return crate::session_chat_send_wake::queue_startup_send(
+            state,
+            endpoint_path,
+            request_id,
+            &params,
+            &target,
+            &text,
+        );
     }
     match crate::session_chat_queue_runtime::send_session_chat_message_with_draft(
         state,
@@ -3551,6 +3535,21 @@ pub(crate) async fn handle_send_session_chat_message_http(
                 json!({ "queued": true, "textBytes": text_bytes }),
             ),
         ),
+        Err(error)
+            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+        {
+            crate::session_chat_send_wake::deliver_when_started(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                &image_paths,
+                draft_version.as_ref(),
+            )
+            .await
+        }
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
 }

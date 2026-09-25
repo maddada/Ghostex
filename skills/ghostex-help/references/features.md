@@ -595,6 +595,12 @@ chats, `/compact` summarizes the conversation to reduce context, just like
 In Claude Code and Codex chats, start a message with `!` to run a shell command
 in that agent's session, for example `! pwd`. The command and its output appear
 in the chat.
+Sending a message to a sleeping session wakes it. While the agent is still
+starting, the message shows in the chat right away and is typed in as soon as
+the agent's input box appears. If Claude Code has its settings, a plugin
+recommendation, or its background-agents list over the input box, sending closes
+it first (a recommendation is declined for now). A question or approval the
+agent is waiting on still has to be answered in its card.
 ZCode supports chat messages, thinking, tool results, attachments, and imported
 conversation history. Install its hooks in Settings > Agents to connect new
 conversations and keep activity in sync. ZCode runs in the same terminal, so
@@ -1206,6 +1212,9 @@ sessions, so any client can control agents on any machine.
   gxserver on it. The machine appears as a sidebar section with its own
   projects and sessions; its terminals stream into the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
+  Files and folders you drop onto a remote terminal or add with its attach
+  (paperclip) button are uploaded to that computer first, so the terminal gets
+  references the agent there can open.
   Open Code from the view panel's + menu to edit the remote project; if prompted,
   install the editor component first. Folder links in remote chats also browse
   the remote folder in Code.
@@ -1391,51 +1400,54 @@ docs directory), `hideProjectHeaderDiffStats`,
   and Computer Use; which views to show (Browser and Docs are on by default
   on a first run) and the browser skill; phone pairing and notifications;
   and the first project folder with the default agent and session view,
-  next to the look: Appearance, the dark and light theme, Background contrast,
-  Enable Transparency and Transparency strength (the same choices as Settings >
-  Theme). Turning transparency on there also switches Appearance to Dark. "I already know Ghostex" on the first panel skips the rest. Reopen it any
+  next to the look: Appearance, the theme colour squares (Dark and Light tabs),
+  Colourfulness and one Transparency row (the simple choices from Settings >
+  Theme), with a "More theme options in Settings > Theme" link that opens the
+  Theme page. Turning transparency on there also switches Appearance to Dark. "I already know Ghostex" on the first panel skips the rest. Reopen it any
   time from Tips > Setup or Quick Access > Commands > Setup.
 
 ## Appearance and app
 
-Theme, background contrast and tint, window glass, and active pane outline
-live on their own Settings page, Theme, right below General
-(`ghostex settings open --tab theme`). The page starts simple: Appearance
-(System, Light, or Dark; System is the default and follows the operating
-system appearance), a row of cards for the dark theme and one for the light theme, each
-card a small picture of the window in that theme's colors, Background contrast (five
-steps from Lowest to Highest, Normal in the middle; higher makes dark backgrounds
-darker and light backgrounds whiter, for both appearances; it sets the Sidebar
-contrast and Work area contrast sliders under Advanced together, which can also be
-set apart, and it moves the Custom contrast sliders too), an Enable Transparency switch, and Transparency strength (a 0 to 100 slider; higher shows more of the desktop, and it sets the four glass tint sliders under Advanced so the work area stays a little more see-through than the sidebar). Everything else is under Advanced, a button below those that opens the
-Colours, Chat and terminal, and Glass groups plus links to related
-settings on General; a search for one of those rows opens it. Dark theme offers
-Dark Gray (the default), Black, Blue, Green, Red, Purple, or Custom; Light theme
-offers Light Gray (the default, #f4f4f5), White, Blue, Green, Pink, Orange, or
-Custom. Choosing Custom opens Advanced, where Colours shows that appearance's
-Background contrast slider (85 to 100 for dark, 60 to 100 for light; 100 is
-black for dark, white for light) and Background tint color picker; the other
-appearance's rows stay hidden. A preset never overwrites the custom values, so switching back to
-Custom restores them. The chosen theme colors the sidebar and window chrome, the
-sidebar's dropdown menus, and the chat view background (chat keeps following its
-own Chat theme setting, so a light chat in a dark app uses the light theme's
-color). Chat and terminal default to Follow app, with optional Light, Dark, or
-System overrides under Advanced > Chat and terminal. Existing saved themes are preserved, and a
-saved dark contrast or tint that differs from the default starts on Custom. The
-accent color (status highlights, accent text, advanced-setting markers) has no
-setting of its own: it follows the dark theme's tint hue, and a neutral tint
-keeps the sky-blue accent.
+Theme colours, colourfulness, window glass, and active pane outline live on their
+own Settings page, Theme, right below General (`ghostex settings open --tab theme`).
+It has three groups, each with its own More options button for the finer
+controls, plus links to related settings on General; a search for a row inside
+More options opens it.
+Colours: Appearance (System, Light, or Dark; System is the default and follows the
+operating system appearance); Theme colour, a row of sixteen small gradient
+squares with Dark mode and Light mode tabs (Graphite, the default, Black in dark
+mode or White in light mode, Slate, Midnight, a deep navy, Blue, Indigo, Teal,
+Green, Forest, Olive, Amber, Orange, Red, Rose, Pink and Purple; picking a colour
+gives the other mode the same colour until you pick one there yourself); and
+Colourfulness, five steps from Subtle to Vivid (Soft is the default) that set how
+much of the colour shows in the sidebar and work area at once, with a small
+sidebar and work area preview. More colour options can set the sidebar and work
+area colourfulness separately, turn on a custom colour for dark or light mode
+(its tint and depth, 85 to 100 for dark and 60 to 100 for light), and show the
+active pane outline and its colour. A preset never overwrites the custom values,
+so turning the custom colour back on restores them. The chosen theme colors the
+sidebar and window chrome, the sidebar's dropdown menus, and the chat view
+background (chat keeps following its own Chat theme setting, so a light chat in a
+dark app uses the light theme's color). Chat and terminal: Chat theme and
+Terminal theme default to Follow app, with optional Light, Dark, or System
+overrides; More chat and terminal options holds the terminal palettes. Existing
+saved themes are preserved, and a saved dark contrast or tint that differs from
+the default starts on the custom colour. The accent color (status highlights,
+accent text, advanced-setting markers) has no setting of its own: it follows the
+dark theme's tint hue, and a neutral tint keeps the sky-blue accent.
 Window glass lets the blurred desktop show through the sidebar, the work area,
-terminals, and chat on macOS and Windows. The Enable Transparency switch turns it on as Glass in
-dark mode (the default), which uses glass in dark mode and stays opaque in light
-mode, or off as Always opaque; Advanced > Glass also offers Always glass, which
-forces glass in both.
+terminals, and chat on macOS and Windows. The Transparency group's Enable
+transparency switch turns it on (glass in dark mode, the default) or off, and
+Strength (0 to 100) sets how see-through it is. More transparency options goes
+in the order you decide: 1 what shows behind the glass, 2 the pictures or videos,
+3 their position, then Fine-tune the tints and Use transparency (Automatic, which
+is dark mode only, Always, or Never).
 Docs, Kanban, the browser, and the code editor stay opaque. Turning on Reduce
 transparency in the macOS accessibility settings, or turning off Transparency effects
 in Windows Settings > Personalization > Colors, always makes the window opaque. On
 Windows, turning glass on takes effect the next time Ghostex starts, the corners of
 menus and pop-ups follow Windows' own rounding, and notifications keep solid cards.
-Glass shows (macOS only) picks what the glass blurs: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Custom image shows a picture you choose instead, one for dark mode and one for light mode (Glass image for dark mode and Glass image for light mode, each with a Choose image button); a mode with no picture shows everything behind the window. Video plays a muted, looping, blurred video behind the glass, one for dark mode and one for light mode (Glass video for dark mode and Glass video for light mode): pick an aerial wallpaper your computer has already downloaded (download more by choosing them in System Settings > Wallpaper), or Choose a file… for a .mov or .mp4 video. The video pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play glass video only when plugged in (on by default) pauses it on battery. For Wallpaper only, Custom image and Video, Glass picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassVideoOnlyOnPower`).
+What shows behind the glass (macOS only) is four cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Video plays a muted, looping, blurred video behind the glass, one for dark mode and one for light mode (Video for dark mode and Video for light mode): pick an aerial wallpaper your computer has already downloaded (download more by choosing them in System Settings > Wallpaper), or Choose a file… for a .mov or .mp4 video. The video pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
 Keep Awake (Power)
 prevents sleep while agents work.

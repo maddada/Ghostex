@@ -53,9 +53,6 @@ pub struct CoreState {
     pub hide_account_emails: bool,
     /// The session's display title, or `None` when it has none.
     pub title: Option<String>,
-    /// A preview chat's display settings (the retired Chat Lab's), present only under a preview
-    /// backend.
-    pub preview_settings: Option<serde_json::Value>,
     /// Every deadline the core is waiting on. Any family may arm one by key; the host only ever
     /// sees the earliest, as the frame's `nextWakeMs`.
     pub timers: crate::session::timers::TimerTable,
