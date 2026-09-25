@@ -37,7 +37,7 @@ import { resetBrowserStorage } from './browser-shim';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GpuiSidebarRuntime } from '@/apps/desktop/sidebar/gxserver-runtime/core';
-import { runGpuiSidebarBulkSleepPaced } from '@/apps/desktop/sidebar/bulk-sleep-pacing';
+import { runGpuiSidebarBulkSleepPaced } from '@/tooling/gx-core/bulk-sleep-pacing-frozen';
 
 type Json = Record<string, any>;
 

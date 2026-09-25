@@ -1,3 +1,8 @@
+/**
+ * The app runtime's bulk sleep pacing (`apps/desktop/sidebar/bulk-sleep-pacing.ts`), moved here
+ * unchanged on 2026-09-25: its callers left the runtime with F3 (c30db3086) and only the gates in
+ * this folder still import it. The Rust pacing is packages/gx-core/src/sidebar_actions/bulk.rs.
+ */
 export const GPUI_SIDEBAR_BULK_SLEEP_INTERVAL_MS = 350;
 
 export type GpuiSidebarBulkSleepCounts = {

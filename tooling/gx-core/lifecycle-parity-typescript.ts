@@ -796,7 +796,7 @@ async function runTypeScriptBulkPayload(runtime: Json, payload: Json): Promise<v
  */
 export async function runTypeScriptBulkPacing(): Promise<Json[]> {
   const { runGpuiSidebarBulkSleepPaced, GPUI_SIDEBAR_BULK_SLEEP_INTERVAL_MS } =
-    await import('@/apps/desktop/sidebar/bulk-sleep-pacing');
+    await import('@/tooling/gx-core/bulk-sleep-pacing-frozen');
   const rows = ['a', 'b', 'c'];
   const waits: number[] = [];
   const counts = await runGpuiSidebarBulkSleepPaced(rows, async () => {}, {
