@@ -37,9 +37,10 @@
 //! rows did not come from THIS run's stream (not loaded yet, or drawn from the stored last-seen
 //! copy) is answered too, the way the old runtime answered it: see [`RemoteFocusPlan::live`].
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`focusSession`'s remote
-//! branch, `focusChangesActiveProject`, `sessionPreferredAgentInterface`, `splitSessionRight`),
-//! apps/desktop/src/app/gx_store/sidebar_remote_focus.rs,
+//! Ported from the deleted `gxserver-runtime/sessions-and-focus.ts` (`focusSession`'s remote
+//! branch, `focusChangesActiveProject`, `sessionPreferredAgentInterface`, `splitSessionRight`).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_remote_focus.rs,
 //! apps/desktop/src/app/remote_conn/native_action.rs.
 
 use serde_json::{json, Map, Value};

@@ -14,9 +14,10 @@
 //! as given would put a project in the order more than once; `syncGpuiWorkspaceProjectOrder`
 //! de-duplicates, and the re-nest runs first so the de-duplication keeps the first position.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts
-//! (`syncWorkspaceGroupOrder`, `normalizeWorkspaceProjectOrder`),
-//! packages/gx-core/src/sidebar_drag/project_move.rs.
+//! Ported from `syncWorkspaceGroupOrder` and `normalizeWorkspaceProjectOrder` in the deleted
+//! `gxserver-runtime/workspace-groups-sync.ts` (see git history).
+//!
+//! SEE-ALSO: packages/gx-core/src/sidebar_drag/project_move.rs.
 
 use serde_json::Value;
 

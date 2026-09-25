@@ -22,9 +22,9 @@ pub(crate) const GPUI_SESSION_CHAT_DRAFT_TRANSFER_TIMEOUT: Duration = Duration::
 CDXC:SessionChat 2026-08-21:
 The terminal view's "Queued: N" chip needs the queue size for the handful of
 sessions actually on screen in terminal mode. gxserver publishes the same count
-as `queuedPromptCount` on its presentation snapshot, which the sidebar runtime
-already receives; when that field reaches Rust through the focus-state tab
-sessions this read should be deleted rather than kept beside it. Until then the
+as `queuedPromptCount` on its presentation snapshot, which the Rust store
+already receives (gx_store/sidebar_snapshot.rs); when the terminal view reads
+that field from the store this read should be deleted rather than kept beside it. Until then the
 poll stays deliberately narrow: Agents mode only, visible panes only, the active
 tab only, chat-capable sessions only — never a per-session sweep of the project.
 */

@@ -5,11 +5,11 @@
 //! write, the fixed native project-path bridge, a toast). Those calls are the thing that has to
 //! match the TypeScript exactly, and a wrong one is invisible in any comparison of the drawn list,
 //! so they are modelled as values here rather than performed where they are decided. The host runs
-//! them; the parity gate enumerates them and diffs them against the calls the shipped TypeScript
-//! makes for the same payload.
+//! them; the parity gate (`tooling/gx-core/action-parity.ts`, deleted with the TypeScript)
+//! enumerated them and diffed them against the calls the shipped TypeScript made for the same
+//! payload.
 //!
-//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_actions.rs (the host that runs them),
-//! tooling/gx-core/action-parity.ts (the gate).
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_actions.rs (the host that runs them).
 
 use serde_json::{json, Map, Value};
 

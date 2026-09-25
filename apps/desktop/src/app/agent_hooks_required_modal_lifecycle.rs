@@ -79,7 +79,7 @@ impl GhostexGpuiApp {
     }
 
     /// The `confirmAgentHookLaunch` route of the React host: the same bounded
-    /// ids the delayed_send arm accepts, forwarded to the sidebar runtime.
+    /// ids the delayed_send arm accepts, handed to the Rust store (gx_store/create/agent.rs).
     fn dispatch_gpui_confirm_agent_hook_launch(
         &mut self,
         launch: &GpuiAgentHookLaunch,

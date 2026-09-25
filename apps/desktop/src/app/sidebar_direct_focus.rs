@@ -96,7 +96,7 @@ impl GhostexGpuiApp {
         self.begin_sidebar_focus_border_handoff(cx);
         self.local_workspace_latest_focus_key = Some(key.clone());
         self.advance_presentation_focus_to_in_process_click(&key);
-        // The bootstrap carries the focused session to the sidebar runtime, one script per change. A held previous or next session key must not send one per row; the tell that ends the burst refreshes it (gx_store/burst.rs).
+        // The bootstrap carries the focused session to the store's transport, the chat endpoints and the app-modal host, one refresh per change. A held previous or next session key must not send one per row; the tell that ends the burst refreshes it (gx_store/burst.rs).
         if !self.gx_store_key_is_held() && !self.gx_store_selection_is_settling() {
             self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
         }

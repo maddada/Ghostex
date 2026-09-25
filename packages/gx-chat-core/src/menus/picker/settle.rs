@@ -40,12 +40,10 @@ pub fn settle(
     mut next_request_id: impl FnMut() -> u64,
 ) -> Vec<Effect> {
     let mut effects = Vec::new();
-    // To fold into family e1: `currentAgentModelCatalog()` starts from the snapshot bundled with
-    // the build (`agent-model-catalog-state.ts:37`), so every pill, menu and context row already
-    // has a full lineup before any push arrives. `MenusState::model_catalog` starts empty
-    // instead, which draws every agent as "outside the catalog". Seeding it here is the smallest
-    // fix that makes the port comparable; it belongs in family e1's own boot, beside the
-    // `newer()` rule that lets a pushed catalog replace it.
+    // The snapshot bundled with the build seeds the lineup (as the deleted TypeScript catalog
+    // store's `currentAgentModelCatalog()` did), so every pill, menu and context row already has a
+    // full lineup before any push arrives. `MenusState::model_catalog` starts empty, which would
+    // draw every agent as "outside the catalog".
     if state.menus.model_catalog.agents.is_empty() {
         if let Some(bundled) = bundled_agent_model_catalog() {
             state.menus.model_catalog = bundled;
@@ -468,7 +466,7 @@ pub fn outbox_retry_selection(state: &ChatState) -> Option<ModelPickerSelection>
 /// The `agent-model-catalog.json` snapshot bundled with the build.
 ///
 /// SEAM.md section 4: the JSON tables are already platform neutral and must not be ported; the
-/// crate includes the same file the TypeScript imports.
+/// crate includes the same file gxserver bundles.
 fn bundled_agent_model_catalog() -> Option<crate::menus::catalog::AgentModelCatalog> {
     const BUNDLED: &str = include_str!("../../../../../agent-model-catalog.json");
     parse_agent_model_catalog(&serde_json::from_str::<Value>(BUNDLED).ok()?)

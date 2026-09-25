@@ -76,11 +76,11 @@ pub(crate) struct GpuiSidebarWorkspaceTerminalFocusMessage {
     pub(crate) startup_restore: bool,
     /// CDXC:Navigation 2026-09-11 DECISION:
     /// User: a focus that lands on another project keeps that project's remembered view (Code, Browser, Kanban, Automate, Docs) instead of switching to Agents; only a session click inside the project already active still opens Agents.
-    /// The sidebar runtime sets this when the focused project changes and on a Space restore. Rust then selects the tab in the background and leaves the mode and keyboard focus alone unless the remembered view is Agents, the same rule `startup_restore` applies to the restart replay.
+    /// The store's focus (gx_store/focus_perform.rs; the sidebar runtime until 2026-09-25) sets this when the focused project changes and on a Space restore. Rust then selects the tab in the background and leaves the mode and keyboard focus alone unless the remembered view is Agents, the same rule `startup_restore` applies to the restart replay.
     /// SEE-ALSO: `select_local_workspace_terminal_keeping_view` in apps/desktop/src/app/workspace_terminals.rs, `pending_keep_view_remote_focus` in apps/desktop/src/app/core.rs.
     pub(crate) keep_view: bool,
     /// CDXC:FocusRouting 2026-09-20 WHY:
-    /// The sidebar runtime sets this when the session it is focusing is asleep, instead of awaiting its own `/api/wakeSession` before posting the focus. The attach plan then uses the Wake intent, which starts the provider, marks the row running and returns the attach metadata in one round trip, so the click no longer waits on a serial wake before anything moves.
+    /// The store's focus (gx_store/focus_perform.rs; the sidebar runtime until 2026-09-25) sets this when the session it is focusing is asleep, instead of awaiting its own `/api/wakeSession` before posting the focus. The attach plan then uses the Wake intent, which starts the provider, marks the row running and returns the attach metadata in one round trip, so the click no longer waits on a serial wake before anything moves.
     /// SEE-ALSO: `local_workspace_attach_intent_for_key` in apps/desktop/src/app/workspace_terminals.rs.
     pub(crate) wake_sleeping: bool,
     /// Set by focuses the user did not aim at the session itself (opening its project), so a mapped sleeping tab is selected like a tab-strip click instead of woken. See `select_sleeping_local_workspace_tab`.

@@ -10,9 +10,10 @@
 //! copy it holds to each socket as it connects. The same copy is what screen
 //! detection maps footer names through and what the Cursor, Grok and
 //! Antigravity picker drivers accept, so a model added to the file is
-//! selectable and recognised without a release. Clients still poll GitHub
-//! themselves (`packages/shared/agent-model-catalog-state.ts`), so an older
-//! gxserver on a remote machine never holds a client back.
+//! selectable and recognised without a release. Until 2026-09-25 the
+//! TypeScript clients also polled GitHub themselves (the deleted
+//! `packages/shared/agent-model-catalog-state.ts`); the Rust chat clients take
+//! the catalog from gxserver and the build's bundled snapshot only.
 //!
 //! WHY: raw.githubusercontent.com serves the file with a five-minute cache,
 //! so polling faster than that finds nothing new. The request carries the
@@ -20,8 +21,8 @@
 //! GHOSTEX_AGENT_MODEL_CATALOG_REMOTE=off turns the network path off, and
 //! unit tests never fetch.
 //!
-//! SEE-ALSO: `packages/shared/agent-model-catalog.ts` (the parser this
-//! validation mirrors), `packages/gx-chat-core/src/menus/catalog.rs`.
+//! SEE-ALSO: `packages/gx-chat-core/src/menus/catalog.rs` (the parser this
+//! validation mirrors).
 
 use std::{
     fs,

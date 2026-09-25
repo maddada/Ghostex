@@ -80,7 +80,7 @@ fn run_git_worktree_topology_probe(project_path: &str) -> Option<GitWorktreeTopo
 
 /// CDXC:Worktrees 2026-09-16 WHY:
 /// A bare repository can be the registered parent of every linked checkout. Git's first list entry identifies that parent; the first non-bare entry is already a child.
-/// SEE-ALSO: server/src/server/worktree_ops/projects.rs, apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts.
+/// SEE-ALSO: server/src/server/worktree_ops/projects.rs, packages/gx-core/src/git_menu/worktree.rs.
 pub(crate) fn detect_registered_git_worktree_metadata(
     projects: &[Value],
     project_path: &str,

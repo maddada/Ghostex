@@ -3,9 +3,9 @@
 //! title settings gxserver generates a title from.
 //!
 //! SEE-ALSO: packages/shared/sidebar-agents.ts (`getDefaultSidebarAgentByIcon`),
-//! packages/shared/session-grid-contract-session.ts (`createAgentSessionDefaultTitle`),
-//! apps/desktop/sidebar/gxserver-runtime/session-create.ts
-//! (`createFirstPromptTitleRuntimeSettings`, `resolveSessionTitleGenerationCommandForGxserver`).
+//! packages/shared/session-grid-contract-session.ts (`createAgentSessionDefaultTitle`).
+//! `createFirstPromptTitleRuntimeSettings` and `resolveSessionTitleGenerationCommandForGxserver`
+//! were ported from the deleted `gxserver-runtime/session-create.ts` (see git history).
 
 use serde_json::{json, Map, Value};
 

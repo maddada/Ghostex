@@ -1861,9 +1861,10 @@ export type SidebarToExtensionMessage =
       /**
        * CDXC:TranscriptExport 2026-08-24:
        * The Export Transcript dialog's Export button: run the export with the
-       * chosen include-toggles. The dialog never names the session — the
-       * sidebar runtime holds the pending export context from opening the
-       * dialog — and `requestId` proves the command still belongs to that open.
+       * chosen include-toggles. The dialog never names the session (the
+       * host, apps/desktop/src/app/gx_store/git/export_transcript.rs, holds
+       * the pending export context from opening the dialog; the sidebar
+       * runtime held it until 2026-09-25), and `requestId` proves the command still belongs to that open.
        */
       includeCommands?: boolean;
       includePatches?: boolean;
@@ -1924,7 +1925,7 @@ export type SidebarToExtensionMessage =
        *
        * CDXC:ContextMenus 2026-09-11 WHY:
        * On the desktop app the same pair also holds the sidebar's native focus grant for as long as any menu is open, so every SidebarContextMenuPortal instance must send both, balanced.
-       * SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts.
+       * The runtime that counted the pair (`gxserver-runtime/sessions-and-focus.ts`) was deleted with QuickJS on 2026-09-25.
        */
       type: 'sidebarContextMenuOpened';
     }
@@ -2102,8 +2103,8 @@ export type SidebarToExtensionMessage =
        *
        * CDXC:AgentLauncher 2026-09-09 WHY:
        * The New Thread picker sends no group id: it is an app-modal window
-       * that cannot see sidebar groups, and the sidebar runtime already owns
-       * the active group, so an absent id means the active project.
+       * that cannot see sidebar groups, and the sidebar store (gx-core; the
+       * QuickJS runtime until 2026-09-25) already owns the active group, so an absent id means the active project.
        */
       groupId?: string;
       type: 'openBrowserPaneInGroup';

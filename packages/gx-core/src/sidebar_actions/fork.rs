@@ -12,11 +12,12 @@
 //! One thing DOES happen before the call and is not reversed: the source session's project and
 //! group become active. That is kept rather than fixed. It is not a pane and not a row, it is
 //! where the user is looking, and a failed fork that also threw the user back to another project
-//! would be a second surprise on top of the error. The TypeScript leaves it too, and the toast is
+//! would be a second surprise on top of the error. The TypeScript left it too, and the toast is
 //! what says the fork did not happen.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`forkSession`),
-//! apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
+//! Ported from `forkSession` in the deleted `gxserver-runtime/sessions-and-focus.ts`.
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
 
 use serde_json::{json, Value};
 

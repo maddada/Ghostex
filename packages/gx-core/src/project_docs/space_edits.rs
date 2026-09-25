@@ -6,9 +6,10 @@
 //! tolerate. Re-sanitizing here would silently drop a member the server still holds and the next
 //! echo would put it back, which is an oscillation with no guard to stop it.
 //!
-//! SEE-ALSO: packages/core-ui/spaces.ts, packages/core-ui/sidebar-space-order.ts,
-//! tooling/gx-core/sidebar-page-frozen/reorder.ts (the `moveSpace` arm),
-//! tooling/gx-core/sidebar-page-frozen/project-drag.ts (the `moveToSpace` arm).
+//! Ported from the sidebar page's `moveSpace` and `moveToSpace` arms (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/reorder.ts` and `project-drag.ts`; see git history).
+//!
+//! SEE-ALSO: packages/core-ui/spaces.ts, packages/core-ui/sidebar-space-order.ts.
 
 use crate::sidebar_view::text::js_trim;
 use crate::sidebar_view::SpacesState;

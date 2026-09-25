@@ -1,7 +1,8 @@
 //! The Saved Prompts tab: the Saved, Recovered and Sent views, the scope and tag filters, day
 //! grouping, rows and editor of packages/core-ui/stashed-prompts-modal.tsx.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/native-quick-access/prompts.ts.
+//! Ported from `apps/desktop/sidebar/native-quick-access/prompts.ts` (deleted with QuickJS on
+//! 2026-09-25; see git history).
 
 use std::collections::BTreeMap;
 

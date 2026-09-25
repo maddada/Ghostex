@@ -70,7 +70,7 @@ pub(crate) async fn project_worktree_list_payload(
 
 /// CDXC:Worktrees 2026-09-16 WHY:
 /// Git lists the main repository first, even when bare; selecting the first non-bare entry hides a linked checkout from the picker and adoption API.
-/// SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts, server/src/domain/git_worktree.rs.
+/// SEE-ALSO: packages/gx-core/src/git_menu/worktree.rs (`normalizeGpuiExistingWorktreeOptions`), apps/desktop/src/app/gx_store/git/worktree_list.rs, server/src/domain/git_worktree.rs.
 pub(crate) async fn project_worktree_options(
     context: &ProjectWorktreeOperationContext,
 ) -> std::result::Result<Vec<ProjectWorktreeOptionRow>, ProjectWorktreeOperationError> {

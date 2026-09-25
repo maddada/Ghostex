@@ -171,9 +171,10 @@ const LINE_BREAK_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatHardBreak
 const REHYPE_PLUGINS = [rehypeSessionChatColorSwatches];
 
 /**
- * GitHub's five alert kinds, with GitHub's own labels and colour families. The
- * colours live in chat.css so both chat themes can carry their own value; this
- * side only picks the label and the icon.
+ * GitHub's five alert kinds, with GitHub's own labels. The colours are the
+ * `--alert-*` variables chat.css maps onto the rule and title; the React chat's
+ * theme rules defined them (deleted 2026-09-25), and no CEF page sets them now.
+ * This side only picks the label and the icon.
  */
 const ALERT_PRESENTATIONS: Record<SessionChatAlertKind, { Icon: typeof IconInfoCircle; label: string }> = {
   caution: { Icon: IconAlertOctagon, label: 'Caution' },

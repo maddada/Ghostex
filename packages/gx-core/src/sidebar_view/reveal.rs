@@ -24,8 +24,8 @@
 //! The second build keeps whichever tag filters the plan leaves in place, because the compact list
 //! it measures is the one the user will be looking at.
 //!
-//! SEE-ALSO: the deleted sidebar page's `reveal.ts`,
-//! tooling/gx-core/sidebar-page-frozen/space-navigation.ts (`rememberNativeSidebarFocus`).
+//! Ported from the deleted sidebar page's `reveal.ts` and `rememberNativeSidebarFocus` (frozen in
+//! the deleted `tooling/gx-core/sidebar-page-frozen/space-navigation.ts`; see git history).
 
 use crate::core::Core;
 use crate::keys::{MachineId, ProjectKey, SessionKey};

@@ -1,5 +1,5 @@
 //! The app side of the native Automate view: which project it shows, rendering it in the view
-//! panel, and handing it the sidebar runtime's answers to its session-list requests.
+//! panel, and handing it the store's answers (gx_store/create/board.rs) to its session-list requests.
 
 use super::requests::AutomateScope;
 use super::view::{AutomateHostInfo, NATIVE_AUTOMATE_SESSIONS_REQUEST_PREFIX, NativeAutomateView};

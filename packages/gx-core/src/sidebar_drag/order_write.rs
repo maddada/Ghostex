@@ -10,13 +10,14 @@
 //! side only because the `case` arm asks the id first, so they are one function here too.
 //!
 //! Nothing in this file decides a refusal from a rule: every early return below is one the
-//! TypeScript has, at the same place and for the same id.
+//! TypeScript had, at the same place and for the same id. It was ported from
+//! `gxserver-runtime/workspace-groups-sync.ts` (`syncWorkspaceSubgroupSessionOrder`,
+//! `moveSessionToWorkspaceGroup`, `createWorkspaceGroupFromSession`),
+//! `gxserver-runtime/sessions-and-focus.ts` (`syncSessionOrder`) and
+//! `packages/shared/gxserver-presentation-cache.ts` (`reorderPresentationProjectSessions`), all
+//! deleted; see git history.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts
-//! (`syncWorkspaceSubgroupSessionOrder`, `moveSessionToWorkspaceGroup`,
-//! `createWorkspaceGroupFromSession`), apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! (`syncSessionOrder`), packages/shared/gxserver-presentation-cache.ts
-//! (`reorderPresentationProjectSessions`), apps/desktop/src/app/gx_store/sidebar_drag.rs.
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_drag.rs.
 
 use serde_json::{json, Value};
 

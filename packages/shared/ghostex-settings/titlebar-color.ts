@@ -709,7 +709,7 @@ function isLightSidebarTitlebarBackground(color: string): boolean {
  * the shipped neutral chrome these land next to the previous fixed menu colours (#171717 for #191919 /
  * #ffffff), exactly on the previous #0d0d0d dark chat, and on #f7f7f7 for the light chat.
  * SEE-ALSO: apps/desktop/src/app/helpers/titlebar.rs and apps/desktop/src/app/native_chat/appearance.rs
- * paint the native menu and chat; packages/core-ui/styles/chat.css reads the published chat variables.
+ * paint the native menu and chat.
  */
 export function getSidebarTitlebarMenuBackgroundForChrome(chromeColor: string): string {
   return blendSidebarTitlebarTowardWhite(chromeColor, isLightSidebarTitlebarBackground(chromeColor) ? 0.7 : 0.05);

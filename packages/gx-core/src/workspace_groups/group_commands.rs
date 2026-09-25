@@ -6,13 +6,13 @@
 //! itself (`createWorkspaceGroup`, `renameWorkspaceGroup`, `closeWorkspaceGroup`) and handed over
 //! with `persistWorkspaceGroups`. The planner is the TypeScript's, early return for early return;
 //! the host writes the document through the one writer (gx_store/workspace_groups.rs), closes the
-//! members through the store's own close, and asks the runtime's `focusGroup` for the group the
-//! command makes active, which is the runtime's focus authority until that moves too
-//! (`focusGroup` with a user-made group's id is exactly the `activeProjectId` / `activeGroupId` /
+//! members through the store's own close, and dispatches a `focusGroup` sidebar command for the
+//! group the command makes active (performed in Rust by gx_store/focus_perform.rs since the
+//! QuickJS runtime was deleted on 2026-09-25; `focusGroup` with a user-made group's id is exactly the `activeProjectId` / `activeGroupId` /
 //! HUD refresh / publish tail these handlers ended with).
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts (the deleted handlers),
-//! apps/desktop/src/app/gx_store/workspace_groups/group_commands.rs (the host).
+//! SEE-ALSO: apps/desktop/src/app/gx_store/workspace_groups/group_commands.rs (the host). The
+//! TypeScript handlers were in the deleted `gxserver-runtime/workspace-groups-sync.ts`.
 
 use serde_json::Value;
 

@@ -83,7 +83,8 @@ impl NativeChatView {
                 |this: gpui::Div| {
                     this.child(
                         // React masked the viewport's last rows into the composer band
-                        // (`--scroll-fade-mask` on `[data-slot='message-scroller-viewport']` in chat.css).
+                        // (`--scroll-fade-mask` on `[data-slot='message-scroller-viewport']` in chat.css,
+                        // deleted on 2026-09-25).
                         // GPUI cannot mask a scrolling list, so the same shape is painted: a plain div with
                         // no id and no interactivity, which registers no hitbox and takes no input.
                         div()

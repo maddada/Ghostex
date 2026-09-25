@@ -233,8 +233,8 @@ export function SidebarContextMenuPortal({
     /**
      * CDXC:ContextMenus 2026-09-11 WHY:
      * On the desktop app these two notifications are also what makes an open menu hold native focus, so a click back into a pane blurs the page and dismisses it.
-     * The runtime counts them and merges the result with editable focus in the CEF helper, so the menu itself never needs DOM focus and no menu, flyout, or submenu has to be marked. Do not reintroduce a focus() here or a focus-tracking attribute on the menu: inferring the grant from the focused node is what closed menus on every submenu switch and flyout click.
-     * SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts, apps/desktop/src/bin/ghostex_gpui_cef_helper.rs.
+     * The QuickJS runtime counted them and merged the result with editable focus in the CEF helper (until the runtime was deleted on 2026-09-25), so the menu itself never needs DOM focus and no menu, flyout, or submenu has to be marked. Do not reintroduce a focus() here or a focus-tracking attribute on the menu: inferring the grant from the focused node is what closed menus on every submenu switch and flyout click.
+     * SEE-ALSO: apps/desktop/src/bin/ghostex_gpui_cef_helper.rs. (The counting side, `gxserver-runtime/sessions-and-focus.ts`, was deleted with QuickJS.)
      */
     notifySidebarContextMenuOpened(vscode);
     return () => {

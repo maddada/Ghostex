@@ -1,6 +1,7 @@
 //! A project collection's context menu.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/collection-menu.ts.
+//! Ported from the TypeScript sidebar page's collection menu (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/collection-menu.ts`; see git history).
 
 use serde_json::Value;
 

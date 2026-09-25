@@ -17,8 +17,8 @@
 //!
 //! CDXC:Sidebar 2026-09-25 WHY:
 //! The runtime composed this and posted it on the facts channel; the app runtime port (family F2)
-//! composes it here. The runtime still reads the HUD for its own remaining readers (a sidebar
-//! Action run, Generate Name, Quick Access) until they move, but posts nothing of it.
+//! composes it here. The runtime's other HUD readers (a sidebar Action run, Generate Name, Quick
+//! Access) moved to Rust too, and the runtime itself was deleted with QuickJS on 2026-09-25.
 //!
 //! SEE-ALSO: packages/gx-core/src/hud/, apps/desktop/src/app/gx_store/runtime_facts.rs.
 

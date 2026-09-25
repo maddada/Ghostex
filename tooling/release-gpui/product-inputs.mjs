@@ -134,9 +134,10 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
   { pathspec: 'packages/components/**' },
   { pathspec: 'components.json' },
   /*
-   * Imported at build time by packages/shared/agent-model-catalog-store.ts, so
-   * the snapshot is baked into every CEF sidebar bundle. The runtime refresh
-   * from raw.githubusercontent.com does not remove it as a build input.
+   * Compiled in with include_str! by server/src/agent_model_catalog.rs and
+   * packages/gx-chat-core/src/menus/picker/settle.rs, so the snapshot is baked
+   * into gxserver and every chat. The runtime refresh from
+   * raw.githubusercontent.com does not remove it as a build input.
    */
   { pathspec: 'agent-model-catalog.json' },
   { pathspec: '.dependencies/ghostty/**' },

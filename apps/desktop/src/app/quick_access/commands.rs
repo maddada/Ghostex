@@ -5,9 +5,10 @@
 //! These rows post `togglePetOverlay`, `createChat`, `openAutomationsPage`,
 //! `openCurrentProjectInFinder` and `openCurrentProjectInTarget` as a modal-host `sidebarCommand`.
 //! `handle_gpui_app_modal_sidebar_command` had no arm for any of them and the app runtime never saw
-//! them, so these rows did nothing. The two the sidebar runtime still answers (Quick Terminal and
+//! them, so these rows did nothing. The two the sidebar runtime answered (Quick Terminal and
 //! All Automations) now enter the sidebar's own command route, which is where the More menu's All
-//! Automations already goes, so whichever side owns them answers them. Quick Browser Tab
+//! Automations already goes, and the store answers them there (gx_store/create/claim.rs,
+//! gx_store/focus_perform.rs). Quick Browser Tab
 //! (`openBrowserChat`) is answered by the create family's own arm. The other three are Rust's: the pet toggles the same `petOverlayEnabled` setting its menu writes, Finder
 //! is the native project path action, and "Open In" launches the chosen target on the active
 //! project without making it the titlebar's default.

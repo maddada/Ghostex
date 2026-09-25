@@ -242,11 +242,11 @@ impl GhostexGpuiApp {
                 if gpui_project_board_conversation_action_forwarded(&action) {
                     /*
                     macOS parity ownership: board conversation actions (state,
-                    startWork, links, jumps, toasts) live in the sidebar
-                    runtime — the GPUI equivalent of `native-sidebar.tsx` —
-                    which owns agents, presentation state, focus routing, and
-                    the gxserver client. Rust forwards the first-party page
-                    request and later routes the runtime's response back to
+                    startWork, links, jumps, toasts) live in the Rust store
+                    (gx_store/create/board.rs; the sidebar runtime until
+                    2026-09-25), which owns agents, presentation state, focus
+                    routing, and the gxserver client. Rust bounds the first-party
+                    page request and later routes the store's response back to
                     the originating tasks CEF page.
                     */
                     if !self.dispatch_gpui_project_board_conversation_request(&request, cx) {
@@ -381,7 +381,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         /*
-        The sidebar runtime answers forwarded board conversation requests
+        The store (gx_store/create/board.rs) answers board conversation requests
         here; the validated response object travels back to any tasks CEF
         workarea as the standard `ghostex-project-board-response` event,
         matched by the page on its own requestId.

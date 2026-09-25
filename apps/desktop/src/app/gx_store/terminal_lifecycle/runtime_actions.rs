@@ -66,8 +66,8 @@ impl GhostexGpuiApp {
                 self.gx_store_switch_workspace_session_agent(key, &session_id, agent_id, cx);
                 true
             }
-            // Export and Handoff open the export dialog, which the runtime's export family still
-            // owns (F5).
+            // Export and Handoff open the export dialog, which the caller routes to
+            // gx_store/git/export_transcript.rs.
             _ => return None,
         };
         Some(performed)

@@ -10,8 +10,8 @@
 //! switch progress (`SwitchProgress`), and hands each answer back with the context its request
 //! carried. Nothing here reads a clock or performs I/O.
 //!
-//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_accounts.rs (the host),
-//! tooling/gx-core/account-menu-parity.ts (the gate).
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_accounts.rs (the host). The parity gate,
+//! `tooling/gx-core/account-menu-parity.ts`, was deleted with the TypeScript.
 
 mod data;
 mod items;

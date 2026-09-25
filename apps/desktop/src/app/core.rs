@@ -135,9 +135,10 @@ pub struct GhostexGpuiApp {
     /*
     CDXC:SessionSleep 2026-08-20:
     Last published set of local gxserver sessions this shell is actually showing
-    (terminal body or chat surface). The sidebar runtime's Auto Sleep sweep
-    otherwise decides visibility from its own click history, which cannot see a
-    parked terminal behind a chat surface and is wiped on a daemon reconnect.
+    (terminal body or chat surface). Until 2026-09-25 the sidebar runtime's Auto Sleep sweep
+    decided visibility from its own click history, which could not see a
+    parked terminal behind a chat surface and was wiped on a daemon reconnect;
+    the shown-sessions report (gx_store/terminal_lifecycle/shown_sessions.rs) carries it now.
     */
     /*
     CDXC:TranscriptExport 2026-08-20:
@@ -151,14 +152,14 @@ pub struct GhostexGpuiApp {
     pub(crate) latest_sidebar_project_snapshot: Option<GpuiProjectSnapshot>,
     /*
     CDXC:Navigation 2026-08-19:
-    Back/Forward availability plus their tooltips, pushed by the sidebar runtime
-    whenever gxserver's trail changes. The render path may only read this cached
+    Back/Forward availability plus their tooltips, written by the navigation
+    history controller (navigation_history/controller.rs) whenever gxserver's trail changes. The render path may only read this cached
     value — see `navigation_history` for why the titlebar owns no trail state.
     */
     pub(crate) navigation_history_state: navigation_history::GpuiNavigationHistoryState,
     pub(crate) navigation_history: navigation_history::NavigationHistoryHost,
-    /// The notification feed rows and unread count, pushed by the sidebar
-    /// runtime whenever gxserver's feed changes. Render-path read only; see
+    /// The notification feed rows and unread count, written by the Rust store
+    /// (gx_store/notifications/) whenever gxserver's feed changes. Render-path read only; see
     /// `notification_feed` for the ownership split.
     pub(crate) notification_feed_state: notification_feed::GpuiNotificationFeedState,
     /// Last painted bounds of the titlebar bell, so the `openNotifications`
@@ -404,7 +405,7 @@ pub struct GhostexGpuiApp {
     Local sidebar session clicks need a runtime-only bridge from gxserver project/session identity to the GPUI Agents shell tab that owns the real attach process. Keep the latest focus key, map, pending attach set, and native tab lifecycle request ids process-local, prune them against the shell workspace, and store no titles, paths, commands, tokens, daemon bodies, terminal text, or persistent layout metadata here.
 
     CDXC:Workarea 2026-06-26-07:25:
-    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then notify the sidebar runtime for best-effort gxserver cleanup. Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
+    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then hand the close to the Rust store for best-effort gxserver cleanup (the sidebar runtime did this until 2026-09-25). Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
 
     CDXC:SessionTitles 2026-06-27-02:27:
     Mapped workspace rename uses this same runtime-only gxserver project/session to shell-tab map, then requires a currently mounted Running Agents Ghostty surface before sending `/rename <title>` and a real Return key. Do not store rename titles, raw renderer JSON, command text, paths, output, or fallback target choices here.

@@ -1,8 +1,8 @@
 //! Turning the ids a command carries into the things the daemon and the native bridge accept.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/projects-and-commands.ts
-//! (`resolveProjectIdForGroup`), apps/desktop/sidebar/gxserver-runtime/app-shot-and-misc.ts
-//! (`postNativeProjectPathAction`), apps/desktop/sidebar/gxserver-runtime/constants.ts.
+//! Ported from `resolveProjectIdForGroup` (`gxserver-runtime/projects-and-commands.ts`),
+//! `postNativeProjectPathAction` (`gxserver-runtime/app-shot-and-misc.ts`) and
+//! `gxserver-runtime/constants.ts`, all deleted with QuickJS on 2026-09-25 (see git history).
 
 use serde_json::{json, Value};
 

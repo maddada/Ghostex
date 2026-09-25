@@ -8,7 +8,7 @@ no rows, so a brand new session sat on "Loading conversation… / Reading the ag
 transcript." while React showed the agent mark and "What should we build with X?".
 The core now projects `newSessionWelcome` and `loadingStage` (packages/gx-chat-core/src/extras/welcome.rs),
 and this module renders them. The sizes below come from the React welcome's
-`.ghostex-chat-new-session*` rules in packages/core-ui/styles/chat.css.
+`.ghostex-chat-new-session*` rules in packages/core-ui/styles/chat.css (deleted 2026-09-25).
 */
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
@@ -34,7 +34,7 @@ const TITLE_TEXT_SIZE: f32 = 22.0;
 /// chat's own theme tokens rather than the app chrome's.
 pub(super) fn brand_logo_color(icon: &str, p: &ChatAppearance) -> Hsla {
     match icon {
-        // chat.css: `--ghostex-zcode-logo` is black on light chat, white on dark.
+        // `--ghostex-zcode-logo` (styles/theme.css) is black on light chat, white on dark.
         "zcode" => {
             if p.light {
                 rgb(0x000000).into()
@@ -42,7 +42,7 @@ pub(super) fn brand_logo_color(icon: &str, p: &ChatAppearance) -> Hsla {
                 rgb(0xffffff).into()
             }
         }
-        // chat.css: `--ghostex-codex-logo` resolves to the foreground on light chat.
+        // `--ghostex-codex-logo` resolved to the foreground on the React chat's light theme.
         "codex" if p.light => p.foreground,
         _ => {
             let accent = workspace_tab_agent_icon_accent_color(icon);

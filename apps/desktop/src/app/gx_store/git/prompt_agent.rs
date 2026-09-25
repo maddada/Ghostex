@@ -9,8 +9,9 @@
 //! missing-provider attach path treat a brand-new row as a trusted resume title; a failed lookup
 //! then leaves the workflow prompt in a plain shell.
 //!
-//! SEE-ALSO: the create-and-start work of family F4 (docs/2026-09-25/app-runtime-port/PLAN.md);
-//! when it lands as one gxserver call, these legs become that call.
+//! SEE-ALSO: the create-and-start work of family F4 (gx_store/create/, history in
+//! docs/2026-09-25/app-runtime-port/PLAN.md); when it lands as one gxserver call, these legs
+//! become that call.
 
 use ghostex_gx_core::SessionKey;
 use ghostex_gx_core::git_menu::DEFAULT_PROMPT_AGENT_ID;

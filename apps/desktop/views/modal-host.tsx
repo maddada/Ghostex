@@ -625,7 +625,7 @@ type AppModalHostMessage =
   | {
       /*
        * CDXC:TranscriptExport 2026-08-24:
-       * The sidebar runtime's answer to `runExportSessionTranscript`: the
+       * The app's answer to `runExportSessionTranscript` (gx_store/git/export_transcript.rs): the
        * export finished (path is on the machine that owns the transcript) or
        * failed with the daemon's structured message. Moves the open Export
        * Transcript dialog from its exporting stage to done/failed.
@@ -735,7 +735,7 @@ type StashedPromptsModalState = {
 /*
  * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
  * The Export Transcript dialog. It opens on its include-toggle options stage;
- * the export runs only when the user confirms it, and the sidebar runtime
+ * the export runs only when the user confirms it, and the app (gx_store/git/export_transcript.rs)
  * answers with `exportSessionTranscriptResult`, which moves `stage` to
  * done/failed. `path` on the done stage is absolute on the machine that owns
  * the transcript, so `canReveal` is false for a remote session's export: the
@@ -1199,7 +1199,7 @@ async function requestFirstLaunchInstallSelectedSkills(
 /*
  * CDXC:Onboarding 2026-09-11 WHY:
  * The onboarding's finished screen says "Ghostex is open, <project> is ready", so it may only appear once the
- * sidebar runtime has actually registered the folder and opened its first session. Same waiter shape as the
+ * app has actually registered the folder and opened its first session. Same waiter shape as the
  * Add Project dialog: mint a requestId, post the operation, resolve or reject on the matching
  * `firstLaunchCreateProjectSessionResult`, with the add-project budget as the ceiling.
  */
@@ -3539,8 +3539,8 @@ function AppModalHost() {
       CDXC:SessionNotes 2026-08-24:
       Saving posts the shared `setSessionNote` sidebar command exactly the way
       Rename posts `renameSession`: the dialog reports the typed text and the
-      session it belongs to, and the sidebar runtime owns the daemon call and
-      the provider-conversation resolution. An empty string is the explicit
+      session it belongs to, and the app's Rust store owns the daemon call and
+      the provider-conversation resolution (gx_store/terminal_lifecycle/session_edits.rs). An empty string is the explicit
       clear, so it is sent rather than suppressed.
       */}
       <SessionNoteModal
@@ -3565,9 +3565,10 @@ function AppModalHost() {
       />
       {/*
       CDXC:Spaces 2026-08-27:
-      New/Edit Space. The dialog reports field values only; the sidebar runtime
-      forwards them to SidebarApp, which is the one place that owns the Space
-      document and can apply an edit to the CURRENT one. That is the same
+      New/Edit Space. The dialog reports field values only; the app applies
+      them in Rust (gx_store/space_editor.rs), the one place that owns the Space
+      document and can apply an edit to the CURRENT one (until 2026-09-21 that
+      was SidebarApp). That is the same
       dialog-reports / host-writes split Rename Session and Session Note use, and
       the reason a Space edit can never clobber a concurrent membership change.
       */}
@@ -3908,7 +3909,7 @@ function useModalStateFromNative() {
 
   /*
    * CDXC:TranscriptExport 2026-08-24:
-   * The Export button's stage move. The sidebar runtime answers with
+   * The Export button's stage move. The app (gx_store/git/export_transcript.rs) answers with
    * `exportSessionTranscriptResult`, which lands the dialog on done/failed.
    */
   const beginExportTranscriptExport = useCallback(() => {

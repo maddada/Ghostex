@@ -43,8 +43,8 @@ pub(super) struct ChatImageVisual {
 }
 
 /// CDXC:SessionChat 2026-09-19 SEE-ALSO: The thumbnail's size, radius, hairline and row gaps come
-/// from packages/gx-chat-core/visual/image-visual.json, which mirrors the CSS in
-/// packages/core-ui/styles/chat.css.
+/// from packages/gx-chat-core/visual/image-visual.json, which mirrored the React chat's CSS in
+/// packages/core-ui/styles/chat.css until 2026-09-25 and is the only source now.
 pub(super) static VISUAL: LazyLock<ChatImageVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
         "../../../../../packages/gx-chat-core/visual/image-visual.json"

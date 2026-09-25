@@ -1,6 +1,6 @@
 //! The published agent model catalog, as the option pills read it.
 //!
-//! Port of `packages/shared/agent-model-catalog.ts`. The catalog is authored outside the app and
+//! Ported from the deleted `packages/shared/agent-model-catalog.ts`. The catalog is authored outside the app and
 //! refreshed at runtime, so it arrives as JSON and is validated here: anything that is not a
 //! complete, well-formed document of the supported schema version is rejected whole, and the last
 //! good catalog stays in effect.
@@ -73,7 +73,7 @@ pub struct CatalogAgent {
     /// Present only when the document declares at least one group.
     pub groups: Vec<CatalogGroup>,
     /// The quick picker's card order by model value; rows it does not name follow in catalog
-    /// order (`agent-model-catalog.ts`, `quickPickerOrder`).
+    /// order (`quickPickerOrder` in the document).
     pub quick_picker_order: Vec<String>,
     /// One flat list in display order; grouping is layered on top of it.
     pub models: Vec<CatalogModel>,

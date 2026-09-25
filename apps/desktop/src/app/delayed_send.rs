@@ -333,8 +333,8 @@ impl GhostexGpuiApp {
         CDXC:DelayedSend 2026-08-17:
         Remote sidebar rows carry their canonical machine/project/session id,
         but they do not belong to a local command tab or local Agents mapping.
-        Return that bounded command to the sidebar runtime so it can submit the
-        durable trigger to the gxserver that hosts the session.
+        Hand that bounded command to the Rust store (gx_store/terminal_lifecycle/session_edits.rs)
+        so it can submit the durable trigger to the gxserver that hosts the session.
         */
         if command
             .get("sessionId")
@@ -2040,9 +2040,9 @@ impl GhostexGpuiApp {
             CDXC:SessionNotes 2026-08-24:
             The Session Note dialog's confirm. Like `removeProject`, this is a
             sidebar-owned write that happens to be issued from an app-modal
-            window, so it is forwarded to the sidebar runtime rather than acted
-            on here: that runtime owns the gxserver client and the local/remote
-            machine routing. Only the sidebar session id and the note text
+            window, so it is handed to the Rust store rather than acted
+            on here: the store (gx_store/terminal_lifecycle/session_edits.rs) owns the
+            gxserver call and the local/remote machine routing. Only the sidebar session id and the note text
             cross this boundary, and the note is never logged.
             */
             "setSessionNote" => {
@@ -2076,10 +2076,9 @@ impl GhostexGpuiApp {
             CDXC:Spaces 2026-08-27:
             The New/Edit Space dialog's confirm and delete. Like `setSessionNote`
             this is a sidebar-owned write issued from an app-modal window, so it
-            is forwarded to the sidebar rather than acted on here — and unlike
-            `setSessionNote`, its owner is SidebarApp itself, because the Space
-            document lives in React state and the edit must be applied to the
-            CURRENT one.
+            is not acted on here. Its owner was SidebarApp until 2026-09-21; the
+            store applies it to the CURRENT Space document now
+            (gx_store/space_editor.rs, see `CDXC:Spaces 2026-09-21`).
             */
             "sidebarSpaceEditorResult" => {
                 self.forward_gpui_sidebar_space_editor_result_to_sidebar(command, cx);
@@ -2313,9 +2312,10 @@ impl GhostexGpuiApp {
                     /*
                     CDXC:Navigation 2026-08-19:
                     Back/Forward is shell navigation, not an app-modal command,
-                    and it is owned by the sidebar runtime rather than Rust —
-                    the keypress takes the exact same route as a click on the
-                    titlebar arrows.
+                    and it is owned by the navigation history controller
+                    (navigation_history/controller.rs; the sidebar runtime until
+                    2026-09-25): the keypress takes the exact same route as a
+                    click on the titlebar arrows.
                     */
                     self.request_navigation_history_navigation(direction, cx);
                     return;
@@ -3303,7 +3303,8 @@ impl GhostexGpuiApp {
             Saved Prompts rows carry the raw gxserver ids of the session they
             were stashed from plus that session's provider conversation id. The
             modal closes itself (like the Quick Access rows above), so this arm
-            only forwards the bounded selector into the sidebar runtime, which
+            only hands the bounded selector to the Rust store
+            (stashed_prompt_jump.rs, `gx_store_open_conversation`), which
             owns the present → restore → resume routing.
             */
             "jumpToStashedPromptSession" => {

@@ -55,7 +55,7 @@ impl GhostexGpuiApp {
             .filter(|project_id| gpui_remote_sidebar_project_id_allowed(project_id));
         match command {
             MissingProjectFolderModalCommand::Locate => {
-                // The dialog stays open: the sidebar runtime posts `close` once
+                // The dialog stays open: the store (gx_store/create/folder_pick.rs) closes it once
                 // the relocation succeeds, and a failed pick leaves it as is.
                 if let Some(project_id) = allowed_project_id {
                     self.handle_gpui_pick_replacement_project_folder_message(
@@ -82,8 +82,8 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Consumes the app-modal host's `close` message (the sidebar runtime's
-    /// answer to a successful relocation) by removing the native window.
+    /// Consumes the app-modal host's `close` message (the store's
+    /// answer to a successful relocation, gx_store/create/folder_pick.rs) by removing the native window.
     /// Returns false for any other message so the caller can route it elsewhere.
     pub(crate) fn receive_gpui_missing_project_folder_modal_message(
         &mut self,

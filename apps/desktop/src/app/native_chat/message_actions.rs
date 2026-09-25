@@ -69,7 +69,7 @@ impl NativeChatView {
     }
 
     /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
-    /// React's `CopyFooter` and `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css carried the user decision this mirrors: a final reply's actions sit in a row below it, Copy, Reply by Annotating, Save to md, then the time it arrived, starting at the prose column.
+    /// React's `CopyFooter` and `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (both deleted 2026-09-25) carried the user decision this mirrors: a final reply's actions sit in a row below it, Copy, Reply by Annotating, Save to md, then the time it arrived, starting at the prose column.
     pub(super) fn reply_actions(
         &self,
         message: &Value,
@@ -199,8 +199,8 @@ impl NativeChatView {
         let savable = self.snapshot["composerActions"]["stash"] == true;
         /*
         CDXC:SessionChat 2026-09-19 SEE-ALSO:
-        `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css carries the user decision
-        this mirrors: the prompt's actions sit right-aligned below the bubble, led by the time it
+        `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (deleted 2026-09-25)
+        carried the user decision this mirrors: the prompt's actions sit right-aligned below the bubble, led by the time it
         was sent, in the order Rewind, Save prompt, Copy, so Copy lands at the bubble's edge as in
         t3code.
         */

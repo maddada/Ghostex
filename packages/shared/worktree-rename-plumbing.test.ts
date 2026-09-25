@@ -6,8 +6,8 @@ import { describe, expect, test } from 'vitest';
  * `tsconfig.json` covers `packages/core-ui/assets/`, `packages/shared/`,
  * `packages/core-ui/`, `apps/desktop/views/` and `apps/mobile/views/chat/` — NOT
  * `apps/desktop/`, and there is no `apps/desktop/tsconfig.json` either. So
- * every edit to `apps/desktop/sidebar/gxserver-runtime.ts` compiles clean no matter what
- * it says, and `apps/desktop/src/main.rs` cannot be cargo-checked in a reasonable time
+ * every edit to `apps/desktop/sidebar/gxserver-runtime.ts` (deleted 2026-09-25) compiled clean
+ * no matter what it said, and `apps/desktop/src/main.rs` cannot be cargo-checked in a reasonable time
  * because its `build.rs` builds GhosttyKit via Zig plus CEF. Repo policy also
  * forbids tests inside `apps/desktop/`.
  *
@@ -19,7 +19,7 @@ import { describe, expect, test } from 'vitest';
  * `packages/shared/gpui-hotkey-defaults-parity.test.ts`.
  *
  * CDXC:RepoStructure 2026-08-22:
- * `gxserver-runtime.ts` is now a folder. The three hops this file used to find
+ * `gxserver-runtime.ts` became a folder (itself deleted on 2026-09-25; see the note below). The three hops this file used to find
  * in one text blob live in three different modules, so each read is aimed at the
  * module that owns its hop: the sidebar-message dispatch in `core.ts`, the two
  * rename handlers in `worktrees.ts`, and the error reader in

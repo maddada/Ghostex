@@ -8,7 +8,7 @@ impl GhostexGpuiApp {
     /// mounted pane sleeps through the pane-owned path so the tab, focus, and
     /// replacement logic stay local; a session the panel listed from the
     /// sidebar inventory without a pane is addressed by gxserver identity and
-    /// slept by the sidebar runtime, which owns the daemon lifecycle.
+    /// slept by the store's session action (gx_store/terminal_lifecycle/runtime_actions.rs).
     pub(crate) fn sleep_gpui_titlebar_resource_session(
         &mut self,
         session_id: &str,

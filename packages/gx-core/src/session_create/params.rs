@@ -1,13 +1,15 @@
 //! The gxserver parameters of every create the sidebar, the New Thread picker, Quick Access, the
 //! Help menu and the OS integrations make, built exactly as `session-create.ts` built them.
 //!
-//! One function per call shape, so a create and the gate that compares it cannot disagree about a
-//! key. Keys a TypeScript spread left out when their value was absent are left out here too: the
+//! One function per call shape, so a create and the parity gate that compared it (while the
+//! TypeScript still ran) could not disagree about a key. Keys a TypeScript spread left out when their value was absent are left out here too: the
 //! daemon treats an absent key and an empty one differently for several of them.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/session-create.ts (`createSession`,
-//! `createAgentSession`, `createAgentSessionRecordForProject`, `createOsIntegrationTerminal`,
-//! `startAgentSessionProviderAndSendPrompt`).
+//! Ported from `createSession`, `createAgentSession`, `createAgentSessionRecordForProject`,
+//! `createOsIntegrationTerminal` and `startAgentSessionProviderAndSendPrompt` in the deleted
+//! `gxserver-runtime/session-create.ts` (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/create/ (the host).
 
 use serde_json::{json, Map, Value};
 

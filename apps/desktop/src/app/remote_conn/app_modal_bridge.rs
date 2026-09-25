@@ -489,8 +489,8 @@ impl GhostexGpuiApp {
         /*
         CDXC:Resources 2026-07-08:
         React sends the exact inactive session ids it derived from the Resources
-        rows, but the GPUI sidebar runtime's existing batch path revalidates the
-        current inactive set itself. Reuse that owner instead of introducing a
+        rows, but the store's existing batch path (gx_store/terminal_lifecycle/runtime_actions.rs)
+        revalidates the current inactive set itself. Reuse that owner instead of introducing a
         second explicit-id lifecycle route in this phase.
         */
         let _ = self.dispatch_gpui_workspace_sleep_inactive_sessions(cx);
@@ -514,7 +514,7 @@ impl GhostexGpuiApp {
                 CDXC:Resources 2026-07-26:
                 Resources now also lists sessions this window has not mounted,
                 so Close cannot stop at the local pane map. Sessions that carry
-                a gxserver identity close through the sidebar runtime's existing
+                a gxserver identity close through the store's existing
                 lifecycle route, exactly like a sidebar card close.
                 */
                 if let Some(key) = gpui_combined_presentation_session_key(&session_id) {

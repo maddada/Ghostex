@@ -19,7 +19,8 @@ use serde_json::{Value, json};
  * CDXC:SessionChat 2026-09-18 SEE-ALSO:
  * The marks are written by the core's native Markdown pass
  * (packages/gx-chat-core/src/transcript/native_markdown.rs). Alert colours
- * mirror the --alert-* families in packages/core-ui/styles/chat.css.
+ * mirror the --alert-* families the React chat's theme rules defined in
+ * packages/core-ui/styles/chat.css until 2026-09-25.
  */
 
 const ALERT_OPEN: &str = "\u{E000}alert:";

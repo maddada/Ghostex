@@ -329,7 +329,7 @@ export const storageCatalog = Object.freeze({
   workspaceGroups: define(
     'workspaceGroups',
     'Workspace session groups',
-    desktop + 'sidebar/workspace-session-groups.ts',
+    desktop + 'src/app/gx_store/workspace_groups.rs',
     'ghostex-gpui-workspace-session-groups',
     objectCodec,
     { maxEntryBytes: 256 * KiB, maxBytes: 256 * KiB }
@@ -337,7 +337,7 @@ export const storageCatalog = Object.freeze({
   projectLastSession: define(
     'projectLastSession',
     'Last session per project',
-    desktop + 'sidebar/gxserver-runtime/project-activation.ts',
+    'packages/gx-core/src/project_activation.rs',
     'ghostex.gpui.project-last-session.v1:',
     textCodec,
     disk
@@ -345,21 +345,21 @@ export const storageCatalog = Object.freeze({
   closeAfterDone: define(
     'closeAfterDone',
     'Close after done',
-    desktop + 'sidebar/gxserver-runtime/helpers/close-after-done.ts',
+    desktop + 'src/app/gx_store/terminal_lifecycle/close_after_done.rs',
     'ghostex-gpui-close-after-done-session-ids',
     stringListCodec
   ),
   remoteOrder: define(
     'remoteOrder',
     'Remote project ordering',
-    desktop + 'sidebar/gxserver-runtime/helpers/recent-projects.ts',
+    'packages/client-storage-native/src/storage_catalog.rs',
     'ghostex-gpui-remote-group-order',
     objectCodec
   ),
   remoteRecents: define(
     'remoteRecents',
     'Remote recent projects',
-    desktop + 'sidebar/gxserver-runtime/helpers/recent-projects.ts',
+    desktop + 'src/app/gx_store/remote_recent_projects.rs',
     'ghostex-gpui-remote-recent-projects',
     arrayCodec
   ),
@@ -514,7 +514,7 @@ export const storageCatalog = Object.freeze({
   modelCatalog: define(
     'modelCatalog',
     'Agent model catalog',
-    'packages/shared/agent-model-catalog-store.ts',
+    'packages/gx-chat-core/src/menus/picker/settle.rs',
     'ghostex.agentModelCatalog.v1',
     objectCodec,
     { ...cache, collection: false, maxEntries: 1 }

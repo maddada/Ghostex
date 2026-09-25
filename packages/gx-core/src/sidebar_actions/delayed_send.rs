@@ -17,9 +17,11 @@
 //! After Done. The two `supports…` flags are constants in the TypeScript and are here too; the
 //! bridge's own enrichment recomputes the project-scope one for a local pane after this.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/session-actions.ts (`runNativeSessionAction`),
-//! apps/desktop/src/app/remote_conn/app_modal_bridge.rs (`open_app_modal_from_bridge`),
-//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs, tooling/gx-core/state-action-parity.ts.
+//! Ported from the sidebar page's `runNativeSessionAction` (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/session-actions.ts`; see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/remote_conn/app_modal_bridge.rs (`open_app_modal_from_bridge`),
+//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs.
 
 use serde_json::{Map, Value};
 

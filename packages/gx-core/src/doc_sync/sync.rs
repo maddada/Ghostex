@@ -29,8 +29,8 @@
 //! learns the client's document.
 //!
 //! SEE-ALSO: packages/gx-core/src/doc_sync/document.rs,
-//! apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts,
-//! apps/desktop/src/app/gx_store/workspace_groups.rs.
+//! apps/desktop/src/app/gx_store/workspace_groups.rs (the TypeScript twin,
+//! `gxserver-runtime/workspace-groups-sync.ts`, was deleted with QuickJS on 2026-09-25).
 
 use serde_json::Value;
 

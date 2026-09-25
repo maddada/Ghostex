@@ -15,9 +15,11 @@
 //! because the dialog would otherwise open empty over an existing note and overwrite it on
 //! confirm, and they are reported to a log as presence and never as content.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/session-actions.ts (`runNativeSessionAction`),
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`renameSession`,
-//! `saveSessionNote`), apps/desktop/src/app/gx_store/sidebar_modals.rs.
+//! Ported from the sidebar page's `runNativeSessionAction` (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/session-actions.ts`) and `renameSession` and
+//! `saveSessionNote` in the deleted `gxserver-runtime/sessions-and-focus.ts` (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_modals.rs.
 
 use serde_json::{json, Value};
 

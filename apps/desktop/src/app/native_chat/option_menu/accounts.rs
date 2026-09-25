@@ -432,7 +432,8 @@ impl Colors {
             muted: appearance.muted,
             border: gpui::rgba(if light { 0x0000001f } else { 0xffffff1f }).into(),
             hover: foreground.opacity(0.05),
-            // chat.css `--gx-account-meter-*` on light chat; accounts.css defaults on dark.
+            // The React chat's `--gx-account-meter-*` on light chat (chat.css until 2026-09-25);
+            // accounts.css defaults on dark.
             track: if light {
                 foreground.opacity(0.12)
             } else {

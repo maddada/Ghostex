@@ -26,11 +26,11 @@
 //! `sidebar_ui/`. The host asks those two files first. The two sort rows are not opens either; they are answered here with
 //! the empty plan that `sort.rs` explains, because their TypeScript path ends in a no-op.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/navigation.ts (`runNativeSidebarAction`),
-//! tooling/gx-core/sidebar-page-frozen/project-actions.ts (`runNativeProjectAction`),
-//! tooling/gx-core/sidebar-page-frozen/space-navigation.ts (`editNativeSidebarSpace`),
-//! the deleted sidebar page's `controller.ts` (the `machineAction` arm),
-//! packages/core-ui/app-modal-host-bridge.ts (`openQuickAccess`, the translation this reproduces),
+//! Ported from the deleted sidebar page's `runNativeSidebarAction`, `runNativeProjectAction`,
+//! `editNativeSidebarSpace` (all three frozen in the since-deleted
+//! `tooling/gx-core/sidebar-page-frozen/`) and its `controller.ts` (the `machineAction` arm).
+//!
+//! SEE-ALSO: packages/core-ui/app-modal-host-bridge.ts (`openQuickAccess`, the translation this reproduces),
 //! apps/desktop/src/app/gx_store/sidebar_open.rs.
 
 use serde_json::{json, Map, Value};

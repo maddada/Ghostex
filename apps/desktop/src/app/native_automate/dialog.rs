@@ -375,7 +375,7 @@ impl AutomationDialog {
         cx.notify();
     }
 
-    /// The sidebar runtime answered the session list request.
+    /// The store answered the session list request.
     pub(crate) fn set_sessions(
         &mut self,
         sessions: Vec<AutomationSessionOption>,

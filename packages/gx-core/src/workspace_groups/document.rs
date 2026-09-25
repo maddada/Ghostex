@@ -11,8 +11,8 @@
 //! the stored one is missing or below 2, which is what stops a new group reusing a name the user
 //! already has on screen.
 //!
-//! SEE-ALSO: tooling/gx-core/workspace-session-groups-frozen.ts,
-//! packages/gx-core/src/workspace_groups/sync.rs.
+//! SEE-ALSO: packages/gx-core/src/workspace_groups/sync.rs. (The TypeScript it was ported from,
+//! frozen in the deleted `tooling/gx-core/workspace-session-groups-frozen.ts`, is in git history.)
 
 use std::collections::BTreeMap;
 

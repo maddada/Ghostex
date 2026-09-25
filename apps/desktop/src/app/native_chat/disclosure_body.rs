@@ -2,7 +2,8 @@
 //! indent that hangs its content off that rail.
 //!
 //! React drew it with `SessionChatExpansion` (session-chat-expansion.tsx) and
-//! the `.ghostex-chat-expansion*` rules in styles/chat.css: a two-pixel line in
+//! the `.ghostex-chat-expansion*` rules in styles/chat.css (both deleted on
+//! 2026-09-25): a two-pixel line in
 //! `muted-foreground` at 42%, stretched over the whole body, with the content
 //! starting a fixed distance to the right of it. Everything that opens onto
 //! more rows uses it, so a reader can see at a glance which rows belong to the

@@ -3,7 +3,7 @@ use gpui::App;
 /// The transcript's monospace family: tool arguments and previews, command
 /// lines, and the code inside an expanded tool body. React resolved the same
 /// text through `var(--font-mono, …)` (`.ghostex-chat-work-preview` and
-/// `.ghostex-chat-tool-body` in styles/chat.css); this is the one family GPUI
+/// `.ghostex-chat-tool-body` in styles/chat.css, both deleted on 2026-09-25); this is the one family GPUI
 /// has registered for it, so a call site must never spell it out again.
 pub(crate) const CHAT_MONO: &str = "JetBrainsMono Nerd Font";
 

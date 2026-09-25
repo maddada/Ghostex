@@ -95,7 +95,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// The same route the Find Prompts modal takes: the sidebar runtime owns focus and the reveal
+    /// The same route the Find Prompts modal takes: the Rust store owns focus (gx_store/activation_focus.rs) and the reveal
     /// expands and scrolls the containers holding the row.
     fn focus_session_chat_fork_branch(
         &mut self,

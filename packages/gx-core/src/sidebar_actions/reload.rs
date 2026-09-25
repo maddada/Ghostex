@@ -23,8 +23,9 @@
 //! terminal, which is `CDXC:CefRuntime 2026-07-12`. It reaches the workspace through the request's
 //! `focus_options`, so the single-session path applies it on exactly the leg that asked for it.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`fullReloadSession`),
-//! packages/gx-core/src/sidebar_actions/lifecycle.rs,
+//! Ported from `fullReloadSession` in the deleted `gxserver-runtime/sessions-and-focus.ts`.
+//!
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/lifecycle.rs,
 //! apps/desktop/src/app/gx_store/sidebar_reload.rs.
 
 use serde_json::{json, Value};

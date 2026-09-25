@@ -306,7 +306,7 @@ pub(crate) fn relative_time(
     (format!("{}d", hours / 24), Some("ago"))
 }
 
-/// `formatFileSize` (native-quick-access/sessions.ts) for a known size. The value is a dyadic
+/// `formatFileSize` (the deleted native-quick-access/sessions.ts) for a known size. The value is a dyadic
 /// fraction of the byte count, so JavaScript's `toFixed(1)` and `Math.round` (both round half up on
 /// the exact value) are done in integers rather than through Rust's float formatting, which rounds
 /// half to even.

@@ -1,8 +1,9 @@
 //! One drawn group: its rows in display order, its sections, its counts, and its header tooltip.
 //!
-//! SEE-ALSO: the deleted sidebar page's `project-sections.ts`,
-//! apps/desktop/sidebar/gxserver-runtime/sidebar-groups.ts (`createSidebarGroups`, the focus and
-//! browser-row overrides) and packages/core-ui/group-session-summary.ts.
+//! Ported from the deleted sidebar page's `project-sections.ts` and `createSidebarGroups` (the focus
+//! and browser-row overrides) in the deleted `gxserver-runtime/sidebar-groups.ts`.
+//!
+//! SEE-ALSO: packages/core-ui/group-session-summary.ts.
 
 use std::sync::Arc;
 

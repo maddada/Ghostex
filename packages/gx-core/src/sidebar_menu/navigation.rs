@@ -1,6 +1,7 @@
 //! The sidebar's own "more" menu and the Sort & Filter page inside it.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/navigation.ts.
+//! Ported from the TypeScript sidebar page (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/navigation.ts`; see git history).
 
 use crate::sidebar_view::tags::{
     normalize_tag_list_items, tag_list_item_filter, tag_list_item_label, tag_presentation,
@@ -73,10 +74,10 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     /*
     CDXC:Sidebar 2026-09-21 DECISION:
     User: "Remove the manual sorting and last active sorting. I don't care about them right now."
-    The two rows did nothing on desktop (the runtime has no handler for the sort mode). Without
+    The two rows did nothing on desktop (the runtime had no handler for the sort mode). Without
     them the page can start or end on a separator, or be empty on a remote tab with no tag rows,
     so those separators are trimmed and an empty page is not drawn.
-    SEE-ALSO: tooling/gx-core/sidebar-page-frozen/navigation.ts builds the same page and must match.
+    The frozen TypeScript twin of this page (`tooling/gx-core/sidebar-page-frozen/navigation.ts`) is deleted; this is the only builder.
     */
     while sort.first().is_some_and(|item| item.separator) {
         sort.remove(0);
@@ -174,7 +175,7 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
     User: the sidebar menu has no Settings or Hotkeys entries; it ends at Join Discord. Settings is
     the gear beside the Commands row, and Hotkeys is a page inside Settings. This supersedes the
     2026-09-20 rule that kept both entries here as a deliberate duplicate of the gear.
-    SEE-ALSO: tooling/gx-core/sidebar-page-frozen/navigation.ts builds the same menu for React and must match.
+    The frozen TypeScript twin of this menu (`tooling/gx-core/sidebar-page-frozen/navigation.ts`) is deleted; this is the only builder.
     */
     more.push(MenuItem::row(
         "Join Discord",

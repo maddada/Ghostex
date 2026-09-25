@@ -22,9 +22,11 @@
 //! and only what that `catch` would have swallowed (transport, HTTP status, a bad envelope, and
 //! now also a timeout this client has and that one does not) brings the row back.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`transitionSession`),
-//! apps/desktop/sidebar/gxserver-runtime/presentation-stream.ts (`removePresentationSession`,
-//! `hideLocalPresentationSession`), apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
+//! Ported from `transitionSession` (`gxserver-runtime/sessions-and-focus.ts`) and
+//! `removePresentationSession` / `hideLocalPresentationSession`
+//! (`gxserver-runtime/presentation-stream.ts`), deleted with QuickJS on 2026-09-25.
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
 
 use serde_json::{json, Value};
 

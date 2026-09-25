@@ -1,8 +1,9 @@
 //! The Commands tab: the command population, ranking, grouping and rows of
 //! packages/core-ui/command-palette.tsx, and what running a row does.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/native-quick-access/commands.ts (the TypeScript this replaces),
-//! tooling/gx-core/quick-access-hotkey-table.ts (the generated hotkey rows).
+//! Ported from `apps/desktop/sidebar/native-quick-access/commands.ts` (deleted; see git history).
+//!
+//! SEE-ALSO: tooling/gx-core/quick-access-hotkey-table.ts (the generated hotkey rows).
 
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -1,8 +1,9 @@
 //! The Sessions tab: the open and closed merge, the scope, tag and project filters, paging, day
 //! grouping and rows of packages/core-ui/previous-sessions-modal.tsx.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/native-quick-access/sessions.ts,
-//! packages/core-ui/previous-session-search.ts (the search rules ported below).
+//! Ported from `apps/desktop/sidebar/native-quick-access/sessions.ts` (deleted; see git history).
+//!
+//! SEE-ALSO: packages/core-ui/previous-session-search.ts (the search rules ported below).
 
 use std::collections::BTreeMap;
 

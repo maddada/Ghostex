@@ -1,6 +1,7 @@
 //! A project header's context menu, and the one a user-made session group carries.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/project-menu.ts.
+//! Ported from the TypeScript sidebar page's project menu (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/project-menu.ts`; see git history).
 
 use crate::sidebar_view::collections::CollectionsState;
 use crate::sidebar_view::spaces::SpacesState;

@@ -1,8 +1,8 @@
 //! Session tags: built-in labels and glyphs, the custom tag catalog, tag filters, and the
 //! user-ordered tag filter list from settings.
 //!
-//! SEE-ALSO: packages/shared/session-tags.ts and
-//! apps/desktop/sidebar/native-quick-access/tag-presentation.ts.
+//! SEE-ALSO: packages/shared/session-tags.ts. (The Quick Access half, the deleted
+//! `native-quick-access/tag-presentation.ts`, is ported here too.)
 
 use std::collections::{BTreeMap, BTreeSet};
 

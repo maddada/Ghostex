@@ -10,7 +10,7 @@
 //! this store did not hold yet, until they were deleted.
 //!
 //! Every builder is a port of one file of the deleted sidebar page, named in its
-//! own `SEE-ALSO`. The command payloads are unchanged, so a row built here and a row built there
+//! own module comment. The command payloads are unchanged, so a row built here and a row built there
 //! reach the same handler.
 
 mod agent_logos;

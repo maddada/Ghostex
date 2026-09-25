@@ -17,13 +17,15 @@
 //! pane opens. That is the shipped behaviour and it is preserved rather than fixed, because taking
 //! the pane anyway would move the user away from the row they chose in the meantime.
 //!
-//! **The attention acknowledgement stays the old runtime's.** It is a subsystem, with a minimum
-//! visible window and its own timers keyed per session, and the store holds none of it; M3 already
-//! built the queue that tells the old runtime about a local selection, so a split queues the
-//! acknowledgement the same way a click does rather than growing a second copy.
+//! **The attention acknowledgement is not planned here.** It is a subsystem, with a minimum
+//! visible window and its own timers keyed per session (the old runtime's until 2026-09-25, now
+//! packages/gx-core/src/attention.rs); M3 built the queue a local selection feeds, so a split
+//! queues the acknowledgement the same way a click does rather than growing a second copy.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`splitSessionRight`),
-//! apps/desktop/src/app/gx_store/sidebar_reload.rs, apps/desktop/src/app/gx_store/burst.rs
+//! Ported from `splitSessionRight` in the deleted `gxserver-runtime/sessions-and-focus.ts` (see
+//! git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_reload.rs, apps/desktop/src/app/gx_store/burst.rs
 //! (`gx_store_queue_attention_acknowledge`).
 
 use serde_json::{json, Value};

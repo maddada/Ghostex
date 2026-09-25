@@ -11,12 +11,12 @@
 //!
 //! **A no-op drop is not a no-op.** Dropping a row exactly where it already is leaves
 //! `moveSessionIdsByDropTarget` returning the map unchanged, and `reorderNativeSidebar` posts
-//! `syncSessionOrder` anyway; the runtime then writes the key and books a push for a document that
-//! did not move. That is reproduced rather than optimized away, because the gate compares what the
-//! shipped code does and a port that wrote nothing there would make one fewer push per drag.
+//! `syncSessionOrder` anyway; the runtime then wrote the key and booked a push for a document that
+//! did not move. That is reproduced rather than optimized away, because the parity gate compared
+//! what the shipped code did and a port that wrote nothing there would make one fewer push per drag.
+//! The TypeScript was frozen in the deleted `tooling/gx-core/sidebar-page-frozen/reorder.ts`.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/reorder.ts,
-//! packages/core-ui/sidebar-dnd.ts (`moveSessionIdsByDropTarget`),
+//! SEE-ALSO: packages/core-ui/sidebar-dnd.ts (`moveSessionIdsByDropTarget`),
 //! apps/desktop/src/app/gx_store/sidebar_drag.rs.
 
 use serde_json::{json, Value};

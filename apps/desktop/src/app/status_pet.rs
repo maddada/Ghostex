@@ -544,7 +544,7 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:StatusPet 2026-06-26-05:07:
-        Visible GPUI status activation returns only a bounded session id to the sidebar runtime's existing focusSession path. Rust never wakes, creates, restores, or materializes a session from these clicks, and the transient callback shape is deliberately reusable for a later pet slice without exposing a generic event bus, paths, URLs, commands, tokens, titles, or terminal text.
+        Visible GPUI status activation returns only a bounded session id to the store's existing focusSession path (gx_store/activation_focus.rs; the sidebar runtime's until 2026-09-25). Rust never wakes, creates, restores, or materializes a session from these clicks, and the transient callback shape is deliberately reusable for a later pet slice without exposing a generic event bus, paths, URLs, commands, tokens, titles, or terminal text.
         */
         if !gpui_status_bridge_id_allowed(session_id) {
             return false;
@@ -597,8 +597,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         // The Kanban page's board request is first-party JSON, but Rust still
-        // bounds it and requires the envelope fields before it enters the
-        // sidebar runtime's script context.
+        // bounds it and requires the envelope fields before the store
+        // (gx_store/create/board.rs) handles it.
         if !request.is_object() {
             return false;
         }
@@ -665,9 +665,9 @@ impl GhostexGpuiApp {
     /*
     CDXC:AgentLauncher 2026-08-01-19:00:
     A run-by-id selector cannot tell a Global Action from a Project Action with
-    the same id, so the tab strip stamps its scope and the sidebar runtime
-    resolves that list exclusively. The Command Palette keeps sending no scope,
-    which the runtime reads as project — unchanged behaviour for every existing
+    the same id, so the tab strip stamps its scope and the store
+    (gx_store/sidebar_command_run.rs) resolves that list exclusively. The Command Palette keeps sending no scope,
+    which the store reads as project — unchanged behaviour for every existing
     caller.
     */
     pub(crate) fn dispatch_gpui_run_sidebar_command_with_scope(
@@ -678,8 +678,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         // The palette payload is an Action selector only (command id + optional
-        // run mode). The sidebar runtime resolves the trusted saved/HUD command
-        // and executes through the existing strict SidebarCommandAction bridge;
+        // run mode). The store (gx_store/sidebar_command_run.rs) resolves the trusted saved/HUD command
+        // and executes it;
         // renderer-supplied command text, URLs, or paths never enter this path.
         let bounded = |value: &str| {
             !value.is_empty()
@@ -708,7 +708,7 @@ impl GhostexGpuiApp {
         MacOS reattaches a stale locally sleeping pane tab when gxserver already reports that canonical session running. Send only a true `localWasSleeping` flag for that reconciliation check; ordinary tab selections remain one-way sidebar focus updates.
 
         CDXC:FocusRouting 2026-07-11:
-        Restored-after-restart Running tabs can have no live terminal owner, no parked owner, and no pending attach payload behind them; selecting one shows an empty body. Send only a true `localRuntimeMissing` flag so the sidebar runtime can reconcile through one bounded WorkspaceTerminalFocus when gxserver still reports that canonical session running, reusing the exact gxserver attach pipeline instead of mounting anything from renderer input.
+        Restored-after-restart Running tabs can have no live terminal owner, no parked owner, and no pending attach payload behind them; selecting one shows an empty body. Send only a true `localRuntimeMissing` flag so the store can reconcile through one bounded WorkspaceTerminalFocus when gxserver still reports that canonical session running, reusing the exact gxserver attach pipeline instead of mounting anything from renderer input.
 
         Sidebar visibility follows the actual rendered workspace rather than a
         click-history set. Carry the bounded gxserver ids for every active

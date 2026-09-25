@@ -339,7 +339,8 @@ impl Render for ImageViewerWindow {
                 the GPUI chat view that changes the cursor at all, so the arrow stays on a picture
                 that has nothing left to show, on the thumbnails, and everywhere else.
                 SEE-ALSO: apps/desktop/src/app/native_chat/cursor.rs,
-                packages/core-ui/styles/chat.css `.ghostex-chat-image-preview[data-zoom]`.
+                and the React viewer's `.ghostex-chat-image-preview[data-zoom]` (chat.css, deleted
+                2026-09-25).
                 */
                 .map(|element| match (zooms, zoom >= ZOOM_LEVEL_COUNT) {
                     (false, _) => element.chat_cursor_pointer(),

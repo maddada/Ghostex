@@ -229,8 +229,8 @@ impl ViewScope {
 
 impl GhostexGpuiApp {
     /// The spaces the ACTIVE project resolves into, as `sectionKey:spaceId` override keys, with group
-    /// and worktree-parent inheritance already applied by the sidebar runtime that owns the daemon
-    /// documents. A project only the built-in Other space holds resolves into no space at all.
+    /// and worktree-parent inheritance already applied by the store's HUD (gx-core
+    /// `hud/scopes.rs`, `active_project_space_refs`). A project only the built-in Other space holds resolves into no space at all.
     pub(crate) fn active_project_space_keys(&self) -> Vec<String> {
         self.native_sidebar
             .snapshot

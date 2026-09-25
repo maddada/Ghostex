@@ -1,8 +1,10 @@
 //! Which projects the list shows, in which order, and what rides on each of them: the chat
 //! projects, the parked ones, the icon, the worktree metadata, and the manual order.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/helpers/presentation-projection.ts
-//! (`createGpuiPresentationProjectProjectionMetadata`), packages/shared/project-worktree-order.ts,
+//! Ported from `createGpuiPresentationProjectProjectionMetadata` in the deleted
+//! `gxserver-runtime/helpers/presentation-projection.ts` (see git history).
+//!
+//! SEE-ALSO: packages/shared/project-worktree-order.ts,
 //! packages/shared/gxserver-presentation-sidebar-projection.ts
 //! (`orderGxserverPresentationSidebarProjects`).
 

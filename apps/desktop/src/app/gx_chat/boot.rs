@@ -2,7 +2,7 @@
 //!
 //! The deleted QuickJS brain's `start` awaited `composer('read')` and only then built its
 //! controller, and `ChatCore::republish` reproduces that: nothing ships until [`ComposerBootRead`] lands. This is
-//! the Rust port of `nativeComposerRequest(sessionKey, {operation: 'read'})` in
+//! the Rust port of `nativeComposerRequest(sessionKey, {operation: 'read'})` in the deleted
 //! `apps/desktop/sidebar/session-chat-runtime/native-composer.ts`, key for key and in the same
 //! write order.
 

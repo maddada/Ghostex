@@ -1,6 +1,7 @@
 //! The Spaces and Add to Group submenus a project or a collection carries.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/membership.ts.
+//! Ported from the TypeScript sidebar page's membership menus (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/membership.ts`; see git history).
 
 use crate::sidebar_view::collections::CollectionsState;
 use crate::sidebar_view::spaces::SpacesState;

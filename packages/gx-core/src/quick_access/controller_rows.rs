@@ -1,7 +1,8 @@
 //! What a Quick Access row does (activate, remove, the actions menu and its hotkeys, the prompt
 //! editor) and the snapshot the window paints.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/native-quick-access/controller.ts, the halves this file ports:
+//! Ported from the deleted `apps/desktop/sidebar/native-quick-access/controller.ts` (see git
+//! history), these halves of it:
 //! `activateRow`, `removeRow`, `runPromptAction`, `submitEditor`, `startAddPrompt`,
 //! `rowActionItems`, `primaryActionLabel`, `runRowAction` and `snapshot`.
 

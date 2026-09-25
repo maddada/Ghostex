@@ -84,10 +84,11 @@ const TERMINAL_AGENT_BAR_ACCENT_BUTTON_RADIUS: f32 = 6.0;
 const TERMINAL_AGENT_BAR_BUTTON_GAP: f32 = 6.0;
 const TERMINAL_AGENT_BAR_ICON_SIZE: f32 = 16.0;
 /*
-`.ghostex-chat-stash-control .n svg { width: 1.25rem }` in
-packages/core-ui/styles/chat.css: the stack-push glyph only inks 16x15 of its
-24px box, so at the shared 16px size it reads smaller than the paperclip beside
-it. The chat footer renders that one glyph a size up; the bar does the same.
+The React chat's `.ghostex-chat-stash-control .n svg { width: 1.25rem }` (in
+packages/core-ui/styles/chat.css until 2026-09-25): the stack-push glyph only
+inks 16x15 of its 24px box, so at the shared 16px size it reads smaller than the
+paperclip beside it. The chat footer rendered that one glyph a size up; the bar
+does the same.
 */
 const TERMINAL_AGENT_BAR_STASH_ICON_SIZE: f32 = 20.0;
 const TERMINAL_AGENT_BAR_MENU_ICON_SIZE: f32 = 14.0;
@@ -183,7 +184,7 @@ pub(crate) enum TerminalAgentBarAction {
     FullReload,
     /// CDXC:AgentProviders 2026-09-03: opens the same-family account flyout
     /// instead of emitting a terminal event; the pick is dispatched to the
-    /// sidebar runtime with the agent id. Hidden when the session has no
+    /// Rust store with the agent id (gx_store/terminal_lifecycle/runtime_actions.rs). Hidden when the session has no
     /// compatible account.
     SwitchAccount,
     ExportTranscript,
@@ -757,7 +758,8 @@ impl GhostexGpuiApp {
     }
 
     /// The Switch Account flyout: one row per compatible account. Picking one
-    /// closes the menu and hands the agent id to the sidebar runtime, which
+    /// closes the menu and hands the agent id to the Rust store
+    /// (gx_store/terminal_lifecycle/runtime_actions.rs), which
     /// asks gxserver to rewrite the row and then runs its Full reload.
     fn render_terminal_agent_bar_account_submenu(
         &self,
