@@ -297,7 +297,8 @@ impl GhostexGpuiApp {
         if let Some(account_id) = account_id {
             command["accountId"] = Value::String(account_id);
         }
-        // The runtime writes the primary agent id on this launch, which the menus read.
+        // This launch writes the primary agent id (gx_store/primary_launcher.rs; the runtime until
+        // 2026-09-25), which the menus read.
         self.gx_store_note_menu_host_write(&command);
         let message =
             plan_agent_run(self.gx_store.sidebar_list.view(), &command).and_then(|plan| {

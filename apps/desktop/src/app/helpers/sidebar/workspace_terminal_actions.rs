@@ -34,7 +34,7 @@ pub(crate) fn store_latest_gpui_project_snapshot_from_sidebar_contract_json(
     let snapshot = gpui_project_snapshot_from_sidebar_contract_value(&value)?;
     /*
     CDXC:FocusRouting 2026-09-19 WHY:
-    `focusStamp` is the newest store focus stamp the sidebar runtime had been told when it produced this payload, the same echo its focus state carries. A project context produced before the runtime heard of a newer local selection must not swap the workspace: the focus state that rides with it is judged stale and would swap it straight back (two workspace swaps and a lost click). The caller decides through `admit`; a payload it refuses is not stored, so the stored snapshot never names a project the workspace did not follow. The runtime posts the context again with its next publish.
+    `focusStamp` was the newest store focus stamp the sidebar runtime had been told when it produced this payload, the same echo its focus state carried. A project context produced before the runtime heard of a newer local selection must not swap the workspace: the focus state that rides with it is judged stale and would swap it straight back (two workspace swaps and a lost click). The caller decides through `admit`; a payload it refuses is not stored, so the stored snapshot never names a project the workspace did not follow. Since the runtime was deleted on 2026-09-25 the only producer is the store's own publish (gx_store/focus_publish.rs), which sends no stamp and publishes the context again on its next focus change.
     */
     let focus_stamp = match value.get("focusStamp") {
         None => None,

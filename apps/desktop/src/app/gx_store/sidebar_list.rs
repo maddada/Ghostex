@@ -45,7 +45,7 @@ const SLOW_UPDATE_US: u64 = 5_000;
 /// own source moved, so the comparison is four cheap numbers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SidebarCarryKey {
-    /// The runtime facts channel's HUD, which the snapshot and the menus read.
+    /// The runtime facts holder's HUD (gx_store/hud/), which the snapshot and the menus read.
     hud_generation: u64,
     /// The settings content hash the two hotkey labels were formatted at.
     shortcuts_hash: u64,
@@ -543,7 +543,7 @@ impl GhostexGpuiApp {
         // was deleted (gx_store/sidebar_self_check.rs).
         self.gx_store_sidebar_scratch_check();
         // The list itself moved, or a value it carries from outside the view model did (the HUD
-        // the runtime posts, the rename or reveal request, the two hotkey labels). Before step 3
+        // gx_store/hud/ composes, which the runtime posted until 2026-09-25, the rename or reveal request, the two hotkey labels). Before step 3
         // the second half was a publish's job; now every one of those arrives on a path that ends
         // here, so this is the one gate.
         if !self.gx_store_sidebar_list_ready() {

@@ -23,8 +23,9 @@ use super::resolve::{
     local_project_group_project_id, native_project_path_action, non_empty, text_field,
 };
 
-/// Every message type this file answers. The host checks it before it decides to keep a command
-/// out of the old runtime, and the parity gate enumerates it, so the set lives in one place.
+/// Every message type this file answers. The host checks it before it handles a command (it kept
+/// such commands out of the old runtime, and the deleted parity gate enumerated it), so the set
+/// lives in one place.
 pub const READ_ONLY_MESSAGE_TYPES: [&str; 7] = [
     "copySessionDetails",
     "copyResumeCommand",

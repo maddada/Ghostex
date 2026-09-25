@@ -2,9 +2,9 @@
 //! with what the row already shows.
 //!
 //! CDXC:DelayedSend 2026-09-21 WHY:
-//! Followed to its last function, the old path is ONE app-modal-host message and nothing else:
-//! `runNativeSessionAction` (sidebar-page-frozen/session-actions.ts) calls `openAppModal` with eleven
-//! fields read off the sidebar store's session, and `openAppModal` is `postAppModalHostMessage`,
+//! Followed to its last function, the old path was ONE app-modal-host message and nothing else:
+//! `runNativeSessionAction` (sidebar-page-frozen/session-actions.ts) called `openAppModal` with eleven
+//! fields read off the sidebar store's session, and `openAppModal` was `postAppModalHostMessage`,
 //! whose `open` arm is `open_app_modal_from_bridge`. Unlike Rename and Note there is NO close
 //! first, and the dialog forwards this payload VERBATIM (the Delayed Send kind is not on the
 //! bridge's flat-field allowlist), so every field, including the booleans and the specific-agent
@@ -14,7 +14,7 @@
 //! The seeds are the row's: the title Rename would show, the daemon's Delayed Send when it
 //! published one and the host's own timer otherwise (the projection's `serverDelayedSend ??
 //! resolveDelayedSend` precedence, reproduced in `sidebar_view/rows.rs`), and the host's Close
-//! After Done. The two `supports…` flags are constants in the TypeScript and are here too; the
+//! After Done. The two `supports…` flags were constants in the TypeScript and are here too; the
 //! bridge's own enrichment recomputes the project-scope one for a local pane after this.
 //!
 //! Ported from the sidebar page's `runNativeSessionAction` (frozen in the deleted

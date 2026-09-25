@@ -667,7 +667,7 @@ impl GhostexGpuiApp {
     A run-by-id selector cannot tell a Global Action from a Project Action with
     the same id, so the tab strip stamps its scope and the store
     (gx_store/sidebar_command_run.rs) resolves that list exclusively. The Command Palette keeps sending no scope,
-    which the store reads as project — unchanged behaviour for every existing
+    which the store reads as project: unchanged behaviour for every existing
     caller.
     */
     pub(crate) fn dispatch_gpui_run_sidebar_command_with_scope(

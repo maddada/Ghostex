@@ -37,7 +37,8 @@ use ghostex_gx_core::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 
-/// How long a read or a write waits for the service thread's own transaction.
+/// How long a read or a write waits for another writer's transaction (the QuickJS service thread's
+/// until 2026-09-25).
 const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 /// How long the sizes the storage bounds are measured against are reused before they are read
 /// again. They are a guard against filling a shared budget, so a few seconds of drift in what

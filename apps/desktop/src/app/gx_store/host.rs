@@ -135,7 +135,7 @@ pub(crate) struct GxStoreHost {
     pub(super) sidebar_drag: super::sidebar_drag::SidebarDragCounters,
     /// Close Project's successor, which the sidebar page used to fill in.
     pub(super) close_project: super::sidebar_close_project::CloseProjectCounters,
-    /// A local row's click, routed straight to the runtime instead of through the page.
+    /// A local row's click, performed by the store's focus route instead of through the page.
     pub(super) local_focus_route: super::sidebar_focus_route::LocalFocusRouteCounters,
     /// Drags dropped before the document they edit had been read.
     pub(super) drop_queue: super::sidebar_drop_queue::SidebarDropQueue,
@@ -170,7 +170,8 @@ pub(crate) struct GxStoreHost {
     pub(crate) last_seen: super::remote_last_seen::RemoteLastSeenWriter,
     /// What the fall-through of the sidebar dispatch did with each command.
     pub(super) runtime_route: super::sidebar_runtime_route::SidebarRuntimeRouteCounters,
-    /// The runtime's one-way facts channel, beside the publish it is compared with.
+    /// The facts the list reads from outside the store (the old runtime's one-way facts channel
+    /// until 2026-09-25; runtime_facts.rs).
     pub(crate) runtime_facts: super::runtime_facts::SidebarRuntimeFacts,
     /// Git, worktrees and transcript export (family F5, gx_store/git/).
     pub(crate) git: super::git::GitHost,

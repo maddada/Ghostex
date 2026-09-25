@@ -175,7 +175,8 @@ impl GhostexGpuiApp {
 
     /// Fork for a session's own chat or terminal controls, run as the same store fork its sidebar
     /// row's Fork runs. `false` when the store does not own that fork (a chat project's session, a
-    /// row it does not hold yet), which the caller hands to the runtime as before.
+    /// row it does not hold yet); the caller used to hand those to the runtime, which was deleted on
+    /// 2026-09-25.
     pub(crate) fn gx_store_run_workspace_session_fork(
         &mut self,
         project_id: &str,

@@ -69,7 +69,7 @@ pub enum ActionEffect {
 }
 
 impl ActionEffect {
-    /// The effect as the parity gate compares it. Keys are sorted by `serde_json`, so two sides
+    /// The effect as the parity gate compared it while the TypeScript ran. Keys are sorted by `serde_json`, so two sides
     /// that agree produce the same text.
     pub fn to_json(&self) -> Value {
         match self {

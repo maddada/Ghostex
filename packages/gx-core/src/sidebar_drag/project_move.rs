@@ -73,7 +73,7 @@ pub enum ProjectWrite {
 }
 
 impl ProjectWrite {
-    /// The write as the parity gate compares it. Each document is compared WHOLE, because it is
+    /// The write as the parity gate compared it while the TypeScript ran. Each document is compared WHOLE, because it is
     /// the thing a stale echo would undo and a subset would hide a member that moved.
     pub fn to_json(&self) -> Value {
         match self {
@@ -111,7 +111,7 @@ impl ProjectWrite {
 ///
 /// An EMPTY list is a real answer and not a refusal: every guard in `runNativeProjectDrop` and
 /// `reorderNativeSidebar` is a bare `return`, so "this drop is not allowed" and "nothing happens"
-/// are the same thing on both sides, and the gate compares that rather than skipping it.
+/// were the same thing on both sides, and the gate compared that rather than skipping it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProjectMovePlan {
     pub writes: Vec<ProjectWrite>,

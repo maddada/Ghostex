@@ -384,7 +384,7 @@ pub struct GhostexGpuiApp {
         HashMap<ProjectWorkareaCefSurfaceSlotKey, ProjectWorkareaRuntimeCefSurface>,
     /*
     CDXC:CefRuntime 2026-06-23-08:23:
-    GPUI stores the last sidebar runtime settings snapshot it installed or sent so polling and Settings-save refreshes can no-op unchanged strict debug/beta plus saved-settings payloads and refresh only the sidebar CEF bridge when they change. Docs titlebar visibility and active-mode fallback use project-context availability instead of this settings snapshot.
+    GPUI stores the last sidebar runtime settings snapshot it installed or sent so polling and Settings-save refreshes can no-op unchanged strict debug/beta plus saved-settings payloads and refresh their readers only when they change (since the CEF sidebar and its runtime were deleted, those readers are Rust: the store's HUD, remote reconnect, the workarea and code-server; see `refresh_sidebar_runtime_settings_if_changed`). Docs titlebar visibility and active-mode fallback use project-context availability instead of this settings snapshot.
     */
     pub(crate) sidebar_runtime_settings_snapshot: cef::SidebarRuntimeSettingsSnapshot,
     pub(crate) system_color_scheme_is_light: bool,
@@ -405,7 +405,7 @@ pub struct GhostexGpuiApp {
     Local sidebar session clicks need a runtime-only bridge from gxserver project/session identity to the GPUI Agents shell tab that owns the real attach process. Keep the latest focus key, map, pending attach set, and native tab lifecycle request ids process-local, prune them against the shell workspace, and store no titles, paths, commands, tokens, daemon bodies, terminal text, or persistent layout metadata here.
 
     CDXC:Workarea 2026-06-26-07:25:
-    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then hand the close to the Rust store for best-effort gxserver cleanup (the sidebar runtime did this until 2026-09-25). Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
+    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then hand the close to the Rust store (gx_store/terminal_lifecycle/lifecycle_requests.rs) for best-effort gxserver cleanup (the sidebar runtime did this until 2026-09-25). Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
 
     CDXC:SessionTitles 2026-06-27-02:27:
     Mapped workspace rename uses this same runtime-only gxserver project/session to shell-tab map, then requires a currently mounted Running Agents Ghostty surface before sending `/rename <title>` and a real Return key. Do not store rename titles, raw renderer JSON, command text, paths, output, or fallback target choices here.

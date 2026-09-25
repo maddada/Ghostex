@@ -1285,7 +1285,7 @@ impl GhostexGpuiApp {
         }
         /*
         CDXC:FocusRouting 2026-06-26-23:24:
-        Mapped sleeping Agents sessions must wake through SidebarApp/gxserver before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
+        Mapped sleeping Agents sessions must wake through the store/gxserver (formerly SidebarApp) before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
         */
         self.request_local_workspace_terminal_lifecycle(
             pane_id,

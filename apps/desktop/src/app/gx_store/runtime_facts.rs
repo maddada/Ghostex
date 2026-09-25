@@ -39,7 +39,7 @@ pub(crate) struct SidebarRuntimeFacts {
     /// (remote_recent_projects.rs): an input of the HUD.
     pub(super) remote_recent_projects: Vec<(String, Vec<Value>)>,
     /// Bumped when a post really replaced the HUD, and when one replaced the per-row facts. The
-    /// two are apart so a rows post, which arrives with every projection the runtime builds, does
+    /// two are apart so a rows post (which arrived with every projection the old runtime built) does
     /// not make the list re-read the HUD's Recent Projects.
     pub(super) hud_generation: u64,
     pub(super) rows_generation: u64,
@@ -116,7 +116,7 @@ impl GhostexGpuiApp {
     }
 
     /// Remembers a reveal this app asked for itself (the titlebar's Reveal Active Session), which
-    /// the runtime never sees, so the installed list carries it.
+    /// no publish carries back, so the installed list carries it.
     pub(crate) fn gx_store_note_local_sidebar_reveal(&mut self, session_id: &str, request_id: u64) {
         self.gx_store.runtime_facts.newest_reveal = Some(NativeSidebarRevealRequest {
             session_id: session_id.to_string(),

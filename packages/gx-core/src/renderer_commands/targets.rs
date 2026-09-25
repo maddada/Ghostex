@@ -1,8 +1,10 @@
 //! Which session or project a renderer command names.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/app-shot-and-misc.ts (the old runtime's
-//! `resolveGxserverRendererCommandSession` and `resolveEmbeddedBrowserRendererCommandProjectId`,
-//! which these replace), server/src/ghostex_cli/actions.rs (`with_renderer_session_target`).
+//! These replace the old runtime's `resolveGxserverRendererCommandSession` and
+//! `resolveEmbeddedBrowserRendererCommandProjectId` (in the deleted
+//! `gxserver-runtime/app-shot-and-misc.ts`).
+//!
+//! SEE-ALSO: server/src/ghostex_cli/actions.rs (`with_renderer_session_target`).
 
 use serde_json::Value;
 

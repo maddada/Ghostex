@@ -9,7 +9,7 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) rename_request: Option<NativeSidebarRenameRequest>,
     pub(crate) reveal_request: Option<NativeSidebarRevealRequest>,
     pub(crate) empty_state: Value,
-    /// Shared with the runtime facts channel rather than copied per install
+    /// Shared with the store's runtime facts holder rather than copied per install
     /// (gx_store/runtime_facts.rs).
     pub(crate) hud: std::sync::Arc<Value>,
     pub(crate) groups: Vec<NativeSidebarGroup>,

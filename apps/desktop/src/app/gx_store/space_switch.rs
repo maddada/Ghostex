@@ -8,7 +8,8 @@
 //! computer's.
 //!
 //! The focus itself still goes out as the `focusSession` / `focusGroup` the page posted, through
-//! the same message route, because the runtime owns what a focus does to the panes.
+//! the same message route, which ends in the store's focus (focus_perform.rs), the owner of what a
+//! focus does to the panes since the runtime was deleted on 2026-09-25.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/space_switch.rs (the rows it picks from, and the
 //! one declared difference).

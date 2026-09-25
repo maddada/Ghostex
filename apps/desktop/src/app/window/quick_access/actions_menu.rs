@@ -1,4 +1,4 @@
-//! A row's actions menu: the list the runtime sends back for a right-click, for the footer's
+//! A row's actions menu: the list the controller (gx-core `quick_access`) sends back for a right-click, for the footer's
 //! Actions panel (Cmd+K), and for a submenu one of those items opens (Tag…).
 //!
 //! The pointer menu opens where the click landed. The Actions panel opens above the footer's
@@ -94,7 +94,7 @@ impl QuickAccessOpenMenu {
 }
 
 impl GpuiQuickAccessWindow {
-    /// The runtime's answer to the last menu request. An empty list closes whatever is showing.
+    /// The controller's answer to the last menu request. An empty list closes whatever is showing.
     pub(crate) fn apply_menu(&mut self, items: Vec<QuickAccessMenuItem>, cx: &mut Context<Self>) {
         self.context_menu = match self.menu_request {
             Some(request) if !items.is_empty() => {

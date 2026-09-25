@@ -34,7 +34,7 @@ const BROWSER_ROW_PREFIX: &str = "gpui-browser:";
 ///
 /// An EMPTY list is a real answer and not a refusal. Every guard in `reorderNativeSidebar` is a
 /// bare `return`, so "this drop is not allowed" and "nothing happens" are the same thing on both
-/// sides, and the gate compares that rather than skipping it.
+/// sides, and the gate compared that rather than skipping it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SessionMovePlan {
     pub messages: Vec<Value>,
@@ -68,12 +68,12 @@ pub fn owns_session_move_command(command: &Value) -> bool {
 ///
 /// - The dragged row or the hovered row is a BROWSER row (`gpui-browser:`). The desktop host feeds
 ///   no browser tabs into the store since 2026-09-20, so a tab is not in any group's membership
-///   here while the old runtime's own `this.browserTabs` still lists it. A hovered tab would give
-///   the two sides different insert indices, so the payload is handed over whole. NOT EXERCISED BY
-///   THE GATE, and said here rather than left to look covered: the harness's projection comes from
+///   here while the old runtime's own `this.browserTabs` listed it (until 2026-09-25). A hovered tab would give
+///   the two sides different insert indices, so the store leaves the move unanswered. NOT EXERCISED BY
+///   THE PARITY GATE (deleted with the TypeScript), and said here rather than left to look covered: the harness's projection came from
 ///   `createSidebarGroups`, which does not splice browser rows (they are added later, in
-///   `createNativeSidebarSnapshot`), so the TypeScript half has none either and the two would agree
-///   for the wrong reason. Until the harness can carry a tab, this refusal is argued, not measured.
+///   `createNativeSidebarSnapshot`), so the TypeScript half had none either and the two would agree
+///   for the wrong reason. The harness never carried a tab, so this refusal is argued, not measured.
 /// - The payload is malformed (no `sessionId`, no `position`, no `groupId`). The TypeScript would
 ///   read `undefined` through its own guards; a port that guessed a default would post an order the
 ///   app never posts.

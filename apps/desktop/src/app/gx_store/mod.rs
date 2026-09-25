@@ -43,11 +43,11 @@
 //! `sidebar_ui_paths.rs` holds the three routes into the sidebar's own state that are NOT
 //! sidebar commands (the per-Space session memory, the Space-editor delete, and the project slot
 //! hotkey), and `sidebar_slot_jump.rs` the rest of that hotkey's jump, its focus and its reveal;
-//! `sidebar_runtime_route.rs` sends a command the store did not perform itself straight to the
-//! runtime, which is where the sidebar page used to forward it;
-//! `runtime_facts.rs` ingests the runtime's one-way channel of the facts the list still borrows
-//! from the old projection (the HUD, a project's git numbers, the two armed timers and a reveal
-//! request) and compares it with the publish, with `diagnostics_runtime_facts.rs` writing its
+//! `sidebar_runtime_route.rs` counts a command the store did not perform itself (it went to the
+//! runtime until QuickJS was deleted on 2026-09-25);
+//! `runtime_facts.rs` holds the facts the list borrows from outside the store (the HUD, a
+//! project's git numbers, the armed timers and a reveal request), which the old runtime's one-way
+//! channel carried until each moved to a Rust writer, with `diagnostics_runtime_facts.rs` writing its
 //! periodic line, and `sidebar_clock.rs` owns the once-a-second tick the armed-timer labels and
 //! the menu-host re-read ride;
 //! `diagnostics.rs` writes the log lines.

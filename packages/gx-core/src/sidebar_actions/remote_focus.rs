@@ -148,7 +148,7 @@ impl RemoteFocusPlan {
         })
     }
 
-    /// The plan in the shape the parity gate compares: the payload that opens the pane and the
+    /// The plan in the shape the parity gate compared while the TypeScript ran: the payload that opens the pane and the
     /// marks that follow it.
     pub fn to_json(&self) -> Value {
         json!({

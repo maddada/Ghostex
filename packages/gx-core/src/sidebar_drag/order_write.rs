@@ -59,7 +59,7 @@ pub enum OrderWrite {
 }
 
 impl OrderWrite {
-    /// The write as the parity gate compares it. The document is compared whole, because it is the
+    /// The write as the parity gate compared it while the TypeScript ran. The document is compared whole, because it is the
     /// thing a stale echo would undo.
     pub fn to_json(&self) -> Value {
         match self {
@@ -76,9 +76,9 @@ impl OrderWrite {
                     "params": { "projectId": project.project_id, "sessionIds": session_ids },
                 },
             }),
-            // Named the way the TypeScript names them, because these two fields ARE
-            // `activeProjectId` and `activeGroupId` and the gate compares them by name.
-            // The runtime's `activeProjectId` is this computer's projects only, so a remote
+            // Named the way the TypeScript named them, because these two fields ARE
+            // `activeProjectId` and `activeGroupId` and the gate compared them by name.
+            // The runtime's `activeProjectId` was this computer's projects only, so a remote
             // group moves its `activeGroupId` alone.
             Self::ActivateSubgroup { project, group_id } => {
                 let mut value = json!({

@@ -5,7 +5,7 @@
 //! to go to the QuickJS runtime through one of three doors: a wrapped `{type:'command', message}`
 //! at the end of `dispatch_native_sidebar_ui`, the `onSidebarHostMessage` allowlist behind
 //! `dispatch_gpui_sidebar_host_message`, or an app modal's `sidebarCommand`. A command answered here
-//! returns `true` and must go no further, because the runtime would perform it a second time. Each
+//! returns `true` and must go no further, because the runtime would have performed it a second time. Each
 //! type is answered at every door it can arrive through, since a port that closed one door and
 //! left another would run the action twice or not at all.
 //!
@@ -67,8 +67,8 @@ impl GhostexGpuiApp {
         if self.gx_store_run_group_command(command, message, cx) {
             return true;
         }
-        // Close Project carries the successor the store names from the list it draws, which the
-        // dispatch adds only on the way to the runtime (sidebar_close_project.rs).
+        // Close Project carries the successor the store names from the list it draws
+        // (sidebar_close_project.rs).
         if message.get("type").and_then(Value::as_str) == Some("closeWorkspaceProjectForGroup") {
             let command = self.gx_store_add_close_project_successor(command.clone());
             self.gx_store_close_project_for_group(&command["message"], cx);

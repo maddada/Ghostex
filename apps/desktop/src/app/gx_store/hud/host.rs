@@ -8,8 +8,8 @@
 //!   the HUD, and the recent projects when the project is or was parked
 //!   (`applyDomainProjectDelta`);
 //! - a remote machine's stream goes live or one of its projects changes: read that machine's HUD;
-//! - Settings saved (`gx_store_hud_settings_changed`), the runtime's facts rows (the remote
-//!   machines' client-parked projects, still the runtime's to write), and any store change the HUD
+//! - Settings saved (`gx_store_hud_settings_changed`), the remote machines' client-parked
+//!   projects (read once at launch, remote_recent_projects.rs), and any store change the HUD
 //!   reads (the Spaces and collections documents, the projects, the active project).
 //!
 //! Every composition that produces a different document replaces the HUD every reader takes

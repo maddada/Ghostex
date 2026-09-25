@@ -53,7 +53,7 @@ pub(crate) struct GxStoreDiagnostics {
     sidebar_summary_written: SidebarSelfCheckCounters,
     sidebar_ui_summary_considered_at: Option<Instant>,
     sidebar_ui_summary_written: SidebarUiCounters,
-    /// The runtime facts channel's periodic line (`diagnostics_runtime_facts.rs`).
+    /// The runtime facts holder's periodic line (`diagnostics_runtime_facts.rs`).
     pub(super) runtime_facts_summary_at: Option<Instant>,
     #[allow(clippy::type_complexity)]
     pub(super) runtime_facts_summary_written: Option<(

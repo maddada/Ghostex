@@ -4,12 +4,12 @@
 //! Three kinds of value meet here and the file keeps them apart on purpose. The sidebar's own
 //! state (collapse, Space, filters, hidden items, selection) is the Rust store's, owned since
 //! M4b. The stored collections, the machine tabs and the unavailable clock are this app's own
-//! facts. The rest are taken from the RUNTIME's one-way facts channel (`runtime_facts.rs`),
-//! because their real source has not moved into Rust yet: the Recent Projects come from the
-//! daemon's sidebar HUD, the git numbers from the old runtime's background probe, and the Close
-//! After Done and Delayed Send timers from the runtime that owns them. Each of those is handed to
-//! M5 with the HUD and the session lifecycle; until then they are mirrored here and nowhere else,
-//! so there is one list of what is still borrowed. This used to read the old projection's newest
+//! facts. The rest are taken from the runtime facts holder (`runtime_facts.rs`): the Recent
+//! Projects from the sidebar HUD (gx_store/hud/), the git numbers from gx_store/git/poll.rs, and
+//! the Delayed Send timers from local_delayed_sends.rs. They arrived on the old runtime's one-way
+//! facts channel until each moved to a Rust writer (the channel was deleted with QuickJS on
+//! 2026-09-25); they are still mirrored here and nowhere else, so there is one list of what the
+//! list borrows. This used to read the old projection's newest
 //! publish; the channel replaced it in M4d part 2 step 3.
 
 use ghostex_gx_core::{
@@ -89,7 +89,7 @@ pub(super) fn refresh_inputs(
     }
 }
 
-/// The parked projects, from the HUD the runtime posts.
+/// The parked projects, from the HUD (composed in gx_store/hud/; the runtime posted it until 2026-09-25).
 fn refresh_recent_projects(host: &mut SidebarHostInputs, hud: Option<&Value>) {
     let recent_projects = hud
         .and_then(|hud| hud.get("recentProjects"))

@@ -24,7 +24,7 @@ pub(crate) fn gpui_gxserver_presentation_focus_state_from_sidebar_contract_value
         .map(|(state, _echo)| state)
 }
 
-/// What a sidebar runtime payload carries beside the focus state itself.
+/// What a focus payload carried beside the focus state itself when the sidebar runtime produced it (until 2026-09-25). The store's publish (gx_store/focus_publish.rs) hands the state over directly, and the persisted focus file carries neither field.
 ///
 /// CDXC:FocusRouting 2026-09-20 WHY:
 /// `activeGroupId` rides here rather than inside `GpuiGxserverPresentationFocusState`, whose equality decides whether a payload changed anything, and whose persisted file has no such field. The store needs it because a user-made session group that holds no session cannot be derived from the focused session: without it the store stays on the project's own group and reads the empty tab list of the selected group as a disagreement.
@@ -35,7 +35,7 @@ pub(crate) struct GpuiGxserverPresentationFocusEcho {
 }
 
 /// CDXC:FocusRouting 2026-09-19 WHY:
-/// `focusStamp` is the newest store focus stamp Rust told the sidebar runtime before it produced this payload; Rust uses it to tell a payload that answers the current selection from one that was already overtaken. It is optional (the runtime sends none until it has been told one, and the persisted focus file never has one) and it is kept out of `GpuiGxserverPresentationFocusState`, whose equality decides whether a payload changed anything.
+/// `focusStamp` was the newest store focus stamp Rust had told the sidebar runtime before it produced this payload; Rust used it to tell a payload that answered the current selection from one that was already overtaken. Nothing sends it since the runtime was deleted on 2026-09-25 (the store's publish in gx_store/focus_publish.rs passes the state directly, and the persisted focus file never had one), so it stays optional and it is kept out of `GpuiGxserverPresentationFocusState`, whose equality decides whether a payload changed anything.
 fn gpui_gxserver_presentation_focus_state_and_stamp_from_sidebar_contract_value(
     value: &serde_json::Value,
 ) -> Result<
@@ -213,9 +213,9 @@ pub(crate) fn gxserver_workspace_tab_session_from_value(
             "projectId",
             // CDXC:SessionChat 2026-08-21: gxserver publishes a
             // session's queued-prompt count on the presentation snapshot the
-            // sidebar runtime already reads. Accepted here (unused for now, the
-            // pane chip reads the count itself) so that the day the runtime
-            // forwards it, one added key cannot invalidate the whole
+            // Rust store already reads. Accepted here (unused for now, the
+            // pane chip reads the count itself) so that the day the focus state
+            // carries it, one added key cannot invalidate the whole
             // focus-state message and blank the Agents tab strip.
             "queuedPromptCount",
             "hasSessionNote",

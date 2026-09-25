@@ -24,7 +24,8 @@
 //! apps/desktop/sidebar/gxserver-runtime/app-shot-and-misc.ts (`saveSidebarSettingsPatch`, deleted
 //! 2026-09-25 once nothing called it),
 //! apps/desktop/src/app/remote_conn/settings_and_install_probe.rs,
-//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs, tooling/gx-core/state-action-parity.ts.
+//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs. (The parity gate,
+//! `tooling/gx-core/state-action-parity.ts`, was deleted with the TypeScript.)
 
 use serde_json::{json, Value};
 

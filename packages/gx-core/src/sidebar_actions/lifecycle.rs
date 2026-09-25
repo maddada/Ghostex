@@ -127,7 +127,7 @@ impl FocusOptions {
 }
 
 impl LifecycleRequest {
-    /// The request in the shape the parity gate compares: the call and its payload, which is the
+    /// The request in the shape the parity gate compared while the TypeScript ran: the call and its payload, which is the
     /// half a list comparison cannot see.
     pub fn to_json(&self) -> Value {
         json!({

@@ -1103,7 +1103,7 @@ pub(crate) fn gpui_restore_remote_previous_session(
 ) -> Option<GpuiPreviousSessionRestoreResult> {
     /*
     CDXC:RemoteMachines 2026-07-04-14:15:
-    App-modal remote previous-session restore follows the SidebarApp runtime:
+    App-modal remote previous-session restore follows what the SidebarApp runtime did:
     recreate the workspace session on the owning remote gxserver, copy only
     metadata fields from that remote gxserver's previous-session row, then
     remove the old remote history row. No local gxserver session or renderer

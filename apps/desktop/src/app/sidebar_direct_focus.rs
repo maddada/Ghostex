@@ -9,14 +9,14 @@ use std::sync::Arc;
 pub(crate) enum NativeSidebarClickReaction {
     /// The session's tab has a live terminal and was selected.
     InProcess,
-    /// The session got a staged tab; the runtime's wake and attach fill it.
+    /// The session got a staged tab; the store's focus (wake and attach, gx_store/focus_perform.rs) fills it.
     Staged,
-    /// Not a local session row (a browser or remote row, or one the sidebar snapshot does not hold): the runtime's route owns it.
+    /// Not a local session row (a browser or remote row, or one the sidebar snapshot does not hold): the store's focus route owns it.
     NotApplied,
 }
 
 impl GhostexGpuiApp {
-    /// A row click's whole in-process reaction: the tab switch when the session already has a live tab, otherwise the staged tab the runtime's wake and attach will fill.
+    /// A row click's whole in-process reaction: the tab switch when the session already has a live tab, otherwise the staged tab the store's wake and attach will fill.
     pub(crate) fn react_to_native_sidebar_session_click(
         &mut self,
         sidebar_session_id: &str,
@@ -69,8 +69,8 @@ impl GhostexGpuiApp {
 
     /// CDXC:Sidebar 2026-09-19 WHY:
     /// A row click reached the workspace only after the service thread ran the sidebar command, the runtime routed the focus, and the bridge message came back, so the pane switched one service-thread turn after the row highlight even when the session already had a tab; Waku switches in the click's own frame.
-    /// A local, awake session of the active project whose tab already has a live terminal is selected here, synchronously, through the same tab selection the bridge path ends in. The runtime still receives the command so presentation focus, attention acknowledgement and the sidebar snapshot follow. Another project's session reaches this path once `swap_native_sidebar_click_workspace_project` has made it the active one, and only when the destination's remembered view is Agents; remote and browser sessions keep the bridge path, which owns their activation and gxserver attach plans.
-    /// The selection is a store intent (gx_store/local_focus.rs). The runtime's focus message for the same click is recognised by the store's stamp order, not by time: it is applied while the click is still the newest selection and dropped once the user has moved on. This supersedes the `sidebar_in_process_focus` marker and its three second echo window of earlier the same day.
+    /// A local, awake session of the active project whose tab already has a live terminal is selected here, synchronously, through the same tab selection the bridge path ends in. The store's focus route (gx_store/sidebar_focus_route.rs; the runtime until 2026-09-25) still performs the command so presentation focus, attention acknowledgement and the sidebar snapshot follow. Another project's session reaches this path once `swap_native_sidebar_click_workspace_project` has made it the active one, and only when the destination's remembered view is Agents; remote and browser sessions keep the bridge path, which owns their activation and gxserver attach plans.
+    /// The selection is a store intent (gx_store/local_focus.rs). Until the runtime was deleted on 2026-09-25, its focus message for the same click was recognised by the store's stamp order, not by time: it was applied while the click was still the newest selection and dropped once the user had moved on. This supersedes the `sidebar_in_process_focus` marker and its three second echo window of earlier the same day.
     pub(crate) fn focus_native_sidebar_session_in_process(
         &mut self,
         sidebar_session_id: &str,
@@ -117,7 +117,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:FocusRouting 2026-09-19 WHY:
-    /// The click is the new focus: record it here, and the runtime's own focus state confirms it a moment later.
+    /// The click is the new focus: record it here, and the store's published focus state (gx_store/focus_publish.rs) confirms it a moment later.
     fn advance_presentation_focus_to_in_process_click(
         &mut self,
         key: &GpuiLocalWorkspaceSessionKey,
@@ -130,7 +130,7 @@ impl GhostexGpuiApp {
 
     /// CDXC:Sidebar 2026-09-19 DECISION:
     /// User: clicking a sleeping session, or one not opened recently, must react on the pane at once and show that session, with its chat fading in once its transcript is ready (no skeleton since 2026-09-24), instead of waiting for the wake and attach while the current session stays on screen; people flip between sessions quickly.
-    /// The session's tab is selected now, or created now as a mounting placeholder mapped to the session, so the pane switches in the click's frame. The runtime's wake and attach then fill that same tab: the attach completion reuses a mapped tab in place. A session whose agent prefers Chat and that already has a transcript gets its chat surface immediately, so the chat runtime boots while the daemon is still waking the session.
+    /// The session's tab is selected now, or created now as a mounting placeholder mapped to the session, so the pane switches in the click's frame. The store's wake and attach (gx_store/focus_perform.rs) then fill that same tab: the attach completion reuses a mapped tab in place. A session whose agent prefers Chat and that already has a transcript gets its chat surface immediately, so the chat runtime boots while the daemon is still waking the session.
     fn stage_native_sidebar_session_tab(
         &mut self,
         sidebar_session_id: &str,

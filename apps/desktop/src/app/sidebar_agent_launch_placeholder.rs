@@ -61,7 +61,7 @@ impl GhostexGpuiApp {
         let Some(group) = snapshot.groups.iter().find(|group| {
             match command["groupId"].as_str() {
                 Some(group_id) => group.group_id == group_id,
-                // The New Thread picker targets the runtime's active group.
+                // The New Thread picker targets the active group.
                 None => picker_launch && group.is_active,
             }
         }) else {

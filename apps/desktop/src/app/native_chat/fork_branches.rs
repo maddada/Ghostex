@@ -1,11 +1,11 @@
-//! The chat's fork branch switcher, GPUI's half of
+//! The chat's fork branch switcher, GPUI's port of the deleted React
 //! `packages/core-ui/chat/session-chat-fork-branch-switcher.tsx`.
 //!
 //! CDXC:SessionFork 2026-09-18 SEE-ALSO:
-//! The button renders what `NativeForkBranches` projects
-//! (`packages/shared/session-chat-controller/native-fork-branches.ts`) from the shared copy and row
-//! rules in `packages/shared/session-chat-presentation/fork-branches.ts`; the same projection feeds
-//! the React switcher, so neither renderer decides what a row says. The pick travels back as the
+//! The button renders what the chat core projects
+//! (`packages/gx-chat-core/src/menus/picker/fork_branches.rs`, the port of the deleted
+//! `native-fork-branches.ts` and `fork-branches.ts`) from its copy and row rules, so the renderer
+//! does not decide what a row says. The pick travels back as the
 //! `selectForkBranch` host action, handled in
 //! `apps/desktop/src/app/session_chat_fork_branches.rs`.
 

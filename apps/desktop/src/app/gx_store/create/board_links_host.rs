@@ -321,8 +321,8 @@ pub(super) async fn start_work(
     .await
 }
 
-/// `focusProjectId(projectId)`: the runtime still owns project activation, so the board asks it
-/// the way a sidebar group click does.
+/// `focusProjectId(projectId)`: the board activates the project the way a sidebar group click
+/// does, through the store's `focusGroup` (focus_perform.rs; the runtime's until 2026-09-25).
 fn focus_project(this: &App, cx: &mut AsyncApp, project_id: &str) {
     let group_id = ProjectKey::local(project_id).to_sidebar_group_id();
     let _ = this.update(cx, |this, cx| {

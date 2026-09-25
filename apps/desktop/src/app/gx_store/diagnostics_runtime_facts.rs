@@ -1,4 +1,4 @@
-//! The periodic line of the runtime facts channel and of the command route that replaced the
+//! The periodic line of the runtime facts holder (once the old runtime's facts channel) and of the command route that replaced the
 //! sidebar page, in a sibling because `diagnostics.rs` is over the size ceiling and waiting for a
 //! quiet window.
 //!

@@ -44,7 +44,7 @@ pub(crate) fn gpui_sidebar_hud_from_gxserver(
     })
 }
 
-#[allow(dead_code)] // no caller: gxserver project settings are persisted through the sidebar runtime bridge instead
+#[allow(dead_code)] // no caller: gxserver project settings are persisted through the Rust store instead
 pub(crate) fn gpui_persist_sidebar_agents_to_gxserver_projects(
     domain_projects: &[serde_json::Value],
     agents: &[GpuiStoredSidebarAgent],
@@ -107,10 +107,11 @@ pub(crate) fn gpui_read_gxserver_app_user_data(timeout: Duration) -> GpuiAppModa
 }
 
 /// CDXC:Sessions 2026-09-11 WHY:
-/// The app-modal host hydrates from this Rust-built message, not from the
-/// sidebar runtime's hydrate, so the Settings modal only sees the custom session
-/// tag catalog if Rust reads it from the local daemon here. Remote catalogs stay
-/// with the sidebar runtime, which is the only side holding remote connections.
+/// The app-modal host hydrates from this Rust-built message (there is no
+/// sidebar runtime hydrate since 2026-09-25), so the Settings modal only sees the custom session
+/// tag catalog if Rust reads it from the local daemon here. Remote catalogs go
+/// down each machine's tunnel from the store (gx_store/custom_tags_sync.rs; the
+/// sidebar runtime's job until 2026-09-25).
 pub(crate) fn gpui_read_gxserver_custom_session_tags(
     timeout: Duration,
 ) -> Option<serde_json::Value> {

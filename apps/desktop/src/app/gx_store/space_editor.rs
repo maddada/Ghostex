@@ -9,8 +9,9 @@
 //! and there is still no local key, and only bounded metadata still crosses from the dialog.
 //!
 //! **A REMOTE machine's document goes down that machine's tunnel** since 2026-09-21: the dialog's
-//! result is applied to the machine's held copy and sent to the runtime as `updateSidebarSpaces`
-//! with a `remoteMachineId` (`gx_store/remote_project_docs.rs`). The page used to compute it in
+//! result is applied to the machine's held copy and sent down that machine's tunnel as
+//! `/api/updateSidebarSpaces` (`gx_store/remote_project_docs.rs`; until 2026-09-25 it went to the
+//! runtime as `updateSidebarSpaces` with a `remoteMachineId`). The page used to compute it in
 //! `metadata.ts`, and that leg is gone with the local one, so there is still exactly one writer.
 //!
 //! SEE-ALSO: packages/gx-core/src/project_docs/space_editor.rs,

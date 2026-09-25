@@ -26,8 +26,10 @@
 //! React sidebar's own and are never reached from the native path. A call that fails leaves the
 //! row exactly as the daemon has it, and shows nothing.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`updateSessionFlags`,
-//! `setSessionParked`), apps/desktop/src/app/gx_store/sidebar_flags.rs.
+//! Ported from `updateSessionFlags` and `setSessionParked` in the deleted
+//! `gxserver-runtime/sessions-and-focus.ts` (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_flags.rs.
 
 use serde_json::{json, Map, Value};
 

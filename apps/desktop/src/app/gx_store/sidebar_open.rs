@@ -2,8 +2,8 @@
 //!
 //! CDXC:Sidebar 2026-09-21 WHY:
 //! Every one of these arrives as a TOP-LEVEL renderer command (`sidebarAction`, `machineAction`,
-//! `editSpace`, `projectAction`), never wrapped as `{ type: 'command', message }`: the controller
-//! answers them itself rather than posting them to the runtime. Reading the wrong envelope is
+//! `editSpace`, `projectAction`), never wrapped as `{ type: 'command', message }`: the deleted
+//! page's controller answered them itself rather than posting them to the runtime. Reading the wrong envelope is
 //! silent and is exactly what made the whole dialog port dead in piece 3d while its gate passed,
 //! so the check is spelled out here and the gate drives the same top-level shape.
 //!

@@ -3,8 +3,8 @@
 //!
 //! Doors: a terminal the user typed or clicked in, a tab a held key stopped on and Split Right
 //! (queued with the selection tell, gx_store/burst.rs), a remote row click
-//! (gx_store/sidebar_remote_focus.rs), the old runtime's own focus paths while it still owns focus
-//! (the facts channel's `attentionAcknowledge`, gx_store/runtime_facts.rs), and Escape
+//! (gx_store/sidebar_remote_focus.rs), the store's own focus paths (gx_store/focus_perform.rs,
+//! which replaced the old runtime's facts channel `attentionAcknowledge`), and Escape
 //! (terminal_sync/workspace_terminal_dispatch.rs).
 //!
 //! CDXC:Notifications 2026-09-25 WHY:

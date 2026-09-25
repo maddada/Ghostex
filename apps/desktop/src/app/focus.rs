@@ -2030,10 +2030,10 @@ impl GhostexGpuiApp {
             });
         /*
         CDXC:Workarea 2026-06-26-05:23:
-        Direct mapped Close mirrors macOS pane tabs, including final-root close. When there is no pane-local replacement, tell the sidebar runtime not to focus a fallback session; Rust removes the shell tab immediately and leaves the workspace empty if this was the final terminal.
+        Direct mapped Close mirrors macOS pane tabs, including final-root close. When there is no pane-local replacement, tell the store (gx_store/terminal_lifecycle/lifecycle_requests.rs) not to focus a fallback session; Rust removes the shell tab immediately and leaves the workspace empty if this was the final terminal.
 
         CDXC:Workarea 2026-06-26-23:59:
-        Mapped GPUI workspace close bypasses Ghostty close-confirm, commits the Rust tab mutation locally, and routes only provider cleanup through SidebarApp. Mounted surface close-confirm remains for unmapped/local-only running terminals only.
+        Mapped GPUI workspace close bypasses Ghostty close-confirm, commits the Rust tab mutation locally, and routes only provider cleanup through the store (formerly SidebarApp). Mounted surface close-confirm remains for unmapped/local-only running terminals only.
         */
         let skip_replacement_fallback = replacement_key.is_none();
         match target_key {
@@ -2132,7 +2132,7 @@ impl GhostexGpuiApp {
             {
                 /*
                 CDXC:Workarea 2026-06-26-23:59:
-                Scoped mapped close follows macOS by removing the Rust tab immediately and asking SidebarApp to clean up the provider asynchronously, before considering any mounted Ghostty close-confirm path. This prevents either a retryable terminal prompt or a delayed external bridge from blocking local tab removal.
+                Scoped mapped close follows macOS by removing the Rust tab immediately and asking the store (formerly SidebarApp) to clean up the provider asynchronously, before considering any mounted Ghostty close-confirm path. This prevents either a retryable terminal prompt or a delayed external bridge from blocking local tab removal.
                 */
                 let requested = match workspace_key {
                     GpuiWorkspaceTerminalSessionKey::Local(_) => self
@@ -2353,7 +2353,7 @@ impl GhostexGpuiApp {
         User close on a real mounted Running Agents terminal asks Ghostty to run its normal close path instead of deleting the shell tab first. This is idempotent per surface and falls back to existing placeholder close behavior only when no exact current Running Ghostty owner exists.
 
         CDXC:Terminal 2026-06-26-23:59:
-        Callers must resolve mapped workspace sessions before this helper. The helper is the terminal-owned close path for unmapped/local-only mounted surfaces, not the SidebarApp-owned close path for gxserver sessions.
+        Callers must resolve mapped workspace sessions before this helper. The helper is the terminal-owned close path for unmapped/local-only mounted surfaces, not the store-owned close path for gxserver sessions (formerly SidebarApp's).
         */
         if !self
             .agents_workspace

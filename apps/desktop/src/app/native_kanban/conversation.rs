@@ -1,7 +1,7 @@
 //! The board's agent-conversation half: the agents Start work can use, the sessions linked to
 //! beads, Start work itself and jumping to a linked session. Like the React board, these go to the
-//! sidebar runtime, which owns agents, sessions and focus routing, through the same forwarded
-//! board request; its answer comes back through `native_kanban_receive_conversation_response`.
+//! Rust store (gx_store/create/board.rs), which owns agents, sessions and focus routing, through
+//! the same board request; its answer comes back through `native_kanban_receive_conversation_response`.
 
 use std::time::Duration;
 
@@ -171,7 +171,7 @@ impl GhostexGpuiApp {
         self.native_kanban_notify(cx);
     }
 
-    /// Takes the sidebar runtime's answer when it belongs to a native Kanban request. Returns
+    /// Takes the store's answer when it belongs to a native Kanban request. Returns
     /// whether it did.
     pub(crate) fn native_kanban_receive_conversation_response(
         &mut self,

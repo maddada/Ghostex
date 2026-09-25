@@ -10,7 +10,7 @@
 //! This was the QuickJS runtime's (`notification-feed.ts`), reached through a CustomEvent script;
 //! the app runtime port moved it here unchanged: the same two endpoints, the same order (the read
 //! state is written before the focus moves), the same focus path a sidebar row takes, and the same
-//! reveal. The focus itself still goes to the runtime until focus moves to Rust.
+//! reveal. The focus itself is the store's too since the runtime was deleted (focus_perform.rs).
 //!
 //! SEE-ALSO: packages/gx-core/src/notification_feed.rs, apps/desktop/src/notification_feed/mod.rs.
 

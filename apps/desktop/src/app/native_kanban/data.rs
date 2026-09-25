@@ -102,7 +102,7 @@ impl GhostexGpuiApp {
             };
             self.native_kanban.issue_prefix = normalize_issue_prefix(&prefix_source);
             self.native_kanban.load_state = Some(KanbanLoadState::Idle);
-            // Out of render: the conversation request reaches into the sidebar runtime.
+            // Out of render: the conversation request reaches into the store (gx_store/create/board.rs).
             let generation = self.native_kanban.generation;
             cx.defer_in(window, move |this, _window, cx| {
                 if this.native_kanban.generation == generation {

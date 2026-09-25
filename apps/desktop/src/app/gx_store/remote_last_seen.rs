@@ -23,8 +23,8 @@
 //! `/api/readPresentationSnapshot` deliver, which is why gx-core needs no codec of its own for it
 //! and why a build from before this port still reads what this one wrote.
 //!
-//! This is the only writer since 2026-09-25: the old runtime still READS the key for its own rows,
-//! and a machine removed from Settings loses its copy in `remote_last_seen_prune.rs`.
+//! This is the only writer since 2026-09-25 (the old runtime, which also read the key for its own
+//! rows, was deleted the same day), and a machine removed from Settings loses its copy in `remote_last_seen_prune.rs`.
 //!
 //! SEE-ALSO: packages/gx-core/src/presentation_store/snapshot_out.rs
 //! (the store written back out as one snapshot), packages/gx-core/src/presentation_store/apply.rs

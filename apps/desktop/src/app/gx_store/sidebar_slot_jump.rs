@@ -56,8 +56,9 @@ pub(crate) struct SlotJumpCounters {
     pub(crate) focuses: u64,
     pub(crate) in_process: u64,
     pub(crate) staged: u64,
-    /// The click reaction did not apply (a row the drawn snapshot does not hold): the runtime's
-    /// `focusSession`, reached through the same `selectSession`, owns the whole selection.
+    /// The click reaction did not apply (a row the drawn snapshot does not hold): the store's
+    /// `focusSession` (focus_perform.rs; the runtime's until 2026-09-25), reached through the same
+    /// `selectSession`, owns the whole selection.
     pub(crate) handed_to_runtime: u64,
     pub(crate) reveals: u64,
     /// Changes the reveals made to the sidebar's own state.

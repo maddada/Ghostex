@@ -58,7 +58,7 @@ pub(crate) struct GpuiQuickAccessWindow {
     editor_project_menu: QuickAccessMenuState,
     editor_tag_menu: QuickAccessMenuState,
     pub(crate) editor_input: Option<Entity<InputState>>,
-    /// Where the next menu the runtime sends belongs. Kept after a choice because
+    /// Where the next menu the controller sends belongs. Kept after a choice because
     /// an item may answer with a submenu (Tag…) that opens in the same place.
     pub(super) menu_request: Option<QuickAccessMenuRequest>,
     pub(super) context_menu: Option<QuickAccessOpenMenu>,
@@ -354,7 +354,7 @@ impl GpuiQuickAccessWindow {
     }
 
     /// CDXC:AppModal 2026-09-21 WHY:
-    /// The runtime publishes a snapshot a frame after it hears a command, so while Down is held a snapshot carrying an older selection arrives after the window has already moved on. Applying it moved the highlight back and the next key press continued from there, which made the list jump. A snapshot older than the window's newest selection keeps the window's row, as long as that row is still listed.
+    /// The controller (gx-core `quick_access`, hosted by app/quick_access/host.rs; the app runtime until 2026-09-25) publishes a snapshot a frame after it hears a command, so while Down is held a snapshot carrying an older selection arrives after the window has already moved on. Applying it moved the highlight back and the next key press continued from there, which made the list jump. A snapshot older than the window's newest selection keeps the window's row, as long as that row is still listed.
     fn keep_newer_local_selection(&self, snapshot: &mut QuickAccessSnapshot) {
         if snapshot.selection_seq >= self.selection_seq {
             return;
@@ -639,7 +639,7 @@ impl GpuiQuickAccessWindow {
     }
 }
 
-/// The pressed chord in the runtime's wire form (`cmd+shift+c`), when it carries a command modifier.
+/// The pressed chord in the controller's wire form (`cmd+shift+c`), when it carries a command modifier.
 fn wire_hotkey(event: &KeyDownEvent) -> Option<String> {
     let modifiers = event.keystroke.modifiers;
     if !modifiers.secondary() {
@@ -1138,7 +1138,7 @@ impl GpuiQuickAccessWindow {
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .on_scroll_wheel(cx.listener(|this, _, _window, cx| {
-                /* The runtime widens the visible history window and pages gxserver; the
+                /* The controller widens the visible history window and pages gxserver; the
                 window only has to say that the reader reached the end of what it has. */
                 let offset = this.scroll.offset().y;
                 let max = this.scroll.max_offset().y;

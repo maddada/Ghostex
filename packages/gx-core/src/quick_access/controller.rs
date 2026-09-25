@@ -2,7 +2,7 @@
 //! command, publishing one resolved snapshot per frame to the native window.
 //!
 //! CDXC:AppModal 2026-09-25 WHY:
-//! This is apps/desktop/sidebar/native-quick-access/controller.ts moved out of the app runtime, one
+//! This is apps/desktop/sidebar/native-quick-access/controller.ts (since deleted) moved out of the app runtime, one
 //! branch for one branch, so the window, the hotkeys and every request the host answers see exactly
 //! what they saw from QuickJS. The core performs nothing: every post, modal, clipboard write and
 //! timer comes back as a [`QuickAccessEffect`] and the host performs it, and the client storage the

@@ -11,7 +11,7 @@
 //! **Where each effect ends, read rather than assumed.** The press is a row click plus a reveal,
 //! exactly as `runNativeSidebarHotkey` made it (`selectNativeSidebarSession`, then
 //! `requestReveal`), so it goes through the slot jump's `gx_store_focus_and_reveal_slot_row`: the
-//! row click's `selectSession` (for a LOCAL row the runtime's `focusSession`, for a REMOTE row the
+//! row click's `selectSession` (for a LOCAL row the store's `focusSession` in `focus_perform.rs`, the runtime's until 2026-09-25, for a REMOTE row the
 //! store's remote click in `sidebar_remote_focus.rs`, which is all a click on that row does), the
 //! click's in-process reaction (`react_to_native_sidebar_session_click`, ending in
 //! `gx_store_select_local_session`), then `gx_store_apply_sidebar_reveal` and the walk's scroll.
@@ -47,7 +47,7 @@ pub(crate) struct SessionSlotCounters {
     /// A row on another machine: the store's remote open, as a click on it.
     pub(crate) remote: u64,
     /// A local row the click reaction did not apply to (a browser row, a project the store cannot
-    /// swap to in process): the runtime's `focusSession`, reached through the same `selectSession`.
+    /// swap to in process): the store's `focusSession` (focus_perform.rs; the runtime's until 2026-09-25), reached through the same `selectSession`.
     pub(crate) handed_to_runtime: u64,
     pub(crate) reveals: u64,
     pub(crate) reveal_changes: u64,

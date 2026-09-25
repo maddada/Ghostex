@@ -115,10 +115,11 @@ impl GhostexGpuiApp {
     ) {
         // CDXC:Sidebar 2026-09-21 WHY:
         // The list is not ready yet (the launch window: the sidebar's own state has not been read
-        // back, or the runtime has not posted the HUD), so the renderer is drawing the loading
+        // back; until 2026-09-25 also while the runtime had not posted the HUD), so the renderer is drawing the loading
         // skeleton and every id in this command names a row of a list nobody has seen. Dropped
         // here, once and counted, rather than let through: the planners below would each decline
-        // it and the fall-through would then hand a command nobody can perform to the runtime.
+        // it and the fall-through would then hand a command nobody can perform to the end of the
+        // dispatch (gx_store/sidebar_runtime_route.rs).
         if !self.gx_store_sidebar_list_ready() {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
@@ -268,8 +269,8 @@ impl GhostexGpuiApp {
             return;
         }
         // A click on a row of THIS computer: the page's half of it (the multi-selection cleared, an
-        // open app modal closed) is performed here and the runtime's own `focusSession` goes
-        // straight to the runtime, so the five senders that post this command share ONE route with
+        // open app modal closed) and the focus the runtime's `focusSession` used to make are both
+        // performed by the store, so the five senders that post this command share ONE route with
         // no page in it (gx_store/sidebar_focus_route.rs).
         if self.gx_store_focus_local_row(&command, cx) {
             return;
@@ -285,7 +286,7 @@ impl GhostexGpuiApp {
         // that follows only runs when the selection really changed (gx_store/space_switch.rs).
         let space_switch = self.gx_store_space_switch_before(&command);
         // A command that moves the sidebar's own state (collapse, Space, filters, hidden items,
-        // selection) moves the Rust state here, and that IS its whole answer: the runtime has no
+        // selection) moves the Rust state here, and that IS its whole answer: nothing else has an
         // arm for any of them (gx_store/sidebar_ui_commands.rs).
         let ui_only = self.gx_store_note_sidebar_command(&command, cx);
         // Close Project is focus-moving work the page used to do on the message's way past: the
@@ -296,8 +297,8 @@ impl GhostexGpuiApp {
         self.gx_store_note_unanswered_sidebar_command(&command, ui_only);
         // The Space the switch landed on reopens the session it was last left on, from the list the
         // intent above has just rebuilt. It posts the same `focusSession` the page posted, after
-        // the page has been told, so the order of the two messages is the one the runtime already
-        // sees (gx_store/space_switch.rs).
+        // the page has been told, so the order of the two messages is the one the runtime used
+        // to see (gx_store/space_switch.rs).
         if let Some(before) = space_switch {
             self.gx_store_restore_space_switch_focus(before, cx);
         }

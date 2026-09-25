@@ -652,7 +652,7 @@ type RenameSessionModalState = {
  * CDXC:SessionNotes 2026-08-24:
  * The session-note editor's open payload. `initialNote` is the note the sidebar
  * row was already rendering, so the dialog opens filled in without a round
- * trip; `projectId` is an optional scope hint the runtime may use to route the
+ * trip; `projectId` is an optional scope hint the app's Rust store may use to route the
  * write, and `sessionTitle` is heading copy only.
  */
 type SessionNoteModalState = {
@@ -3627,8 +3627,8 @@ function AppModalHost() {
       Copy Path is settled inside the dialog; the export itself, Reveal, and
       Start New Conversation are host side effects, so they leave through the
       same sidebarCommand boundary every other modal action uses. Neither
-      carries the exported path back out — the host still holds it from the
-      runtime's own result message.
+      carries the exported path back out: the host still holds it from its
+      own result message (gx_store/git/export_transcript.rs).
       */}
       <ExportTranscriptModal
         agents={agents}
@@ -4685,7 +4685,7 @@ function useModalStateFromNative() {
         if (message.type === "exportSessionTranscriptResult") {
           /*
            * CDXC:TranscriptExport 2026-08-24:
-           * Answers only the dialog that asked: the runtime posts this while
+           * Answers only the dialog that asked: the app (gx_store/git/export_transcript.rs) posts this while
            * the Export Transcript dialog sits on its exporting stage, so a
            * result arriving after the user closed it is dropped.
            */

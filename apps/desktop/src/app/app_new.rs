@@ -41,7 +41,7 @@ impl GhostexGpuiApp {
             sidebar_runtime_settings_snapshot_from_shared_settings(&shared_settings_snapshot);
         /*
         Restore eagerness (Decision #3, 2026-07-02): the persisted presentation
-        focus state seeds the first sidebar bootstrap so the runtime can
+        focus state seeds the first sidebar bootstrap so the store can
         re-materialize the previously focused running session after its first
         presentation hydrate.
         */
