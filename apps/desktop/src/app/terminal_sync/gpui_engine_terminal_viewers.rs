@@ -267,6 +267,15 @@ impl GhostexGpuiApp {
             return false;
         };
         self.agents_gpui_engine_terminals.insert(session_id, record);
+        if crate::support_logs::scenario_enabled(
+            crate::support_logs::GpuiDiagnosticScenario::TerminalFocus,
+        ) {
+            crate::support_logs::append(
+                crate::support_logs::GpuiSupportLog::TerminalFocus,
+                "engineViewerSpawned",
+                serde_json::json!({"session": session_id.0}),
+            );
+        }
         cx.notify();
         true
     }
@@ -453,6 +462,15 @@ impl GhostexGpuiApp {
             .collect::<Vec<_>>();
         for id in remove {
             if let Some(record) = self.agents_gpui_engine_terminals.remove(&id) {
+                if crate::support_logs::scenario_enabled(
+                    crate::support_logs::GpuiDiagnosticScenario::TerminalFocus,
+                ) {
+                    crate::support_logs::append(
+                        crate::support_logs::GpuiSupportLog::TerminalFocus,
+                        "engineViewerRetired",
+                        serde_json::json!({"session": id.0}),
+                    );
+                }
                 let owner = Self::terminal_viewer_owner(
                     self.agents_workspace_project_id.as_deref(),
                     GpuiEngineTerminalEventTarget::Agents(id),
