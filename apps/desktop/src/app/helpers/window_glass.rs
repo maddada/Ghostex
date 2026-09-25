@@ -134,16 +134,15 @@ static APPLIED_MAIN_WINDOW_GLASS: AtomicU8 = AtomicU8::new(0);
 /// with `window_glass_active_in` so they stay opaque there.
 static MAIN_WINDOW_ID: AtomicU64 = AtomicU64::new(u64::MAX);
 
-/// Default coverage of the sidebar's tint over the blurred desktop. Dark chrome is measured so
-/// white text and the muted sidebar text keep their contrast even over a white desktop; light
-/// chrome needs more because the desktop's colour bleeds through a light tint more readily.
-const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.80;
-const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.88;
-
-/// Default coverage of the work area's own tint: what the sidebar tint plus the retired 40% extra
-/// layer added up to, so the work area stays a step darker than the sidebar by default.
-const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.88;
-const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.93;
+/// Default coverage of the sidebar's and the work area's tints over the blurred desktop: point 20
+/// of the Transparency strength slider (`transparencyStrengthPatch` in
+/// packages/core-ui/settings-modal/theme-simple-controls.tsx), which keeps the sidebar 7 points
+/// more solid than the work area. SEE-ALSO: the CDXC:Theming 2026-09-25 DECISION on
+/// `DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT` in packages/shared/ghostex-settings/types.ts.
+const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.88;
+const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.93;
+const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.81;
+const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.86;
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User: "implement sliders for the glass for sidebar vs main area (2 different sliders for dark mode, and 2 for light mode)", then "can we make the sidebar darker than main area somehow? currently this isn't possible / i feel would be nicer if they are separate and each can be modified freely? not doubling up the transparency for workarea when i do for sidebar??". Under glass the sidebar and the work area each paint their own tint straight over the blurred desktop, and nothing tints the window underneath both, so either area can be the darker one. Settings holds four percentages (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`, `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`) whose defaults are the constants above. This supersedes the same day's shell tint under the whole window with the work area's value as an extra layer over it; a saved extra layer (`windowGlassMainOpacity*`) is carried over as the coverage the two layers added up to.

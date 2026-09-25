@@ -7433,7 +7433,7 @@
       "section": "theming",
       "sectionTitle": "Theme",
       "type": "number",
-      "default": 80,
+      "default": 88,
       "agentWritable": true
     },
     {
@@ -7447,7 +7447,7 @@
       "section": "theming",
       "sectionTitle": "Theme",
       "type": "number",
-      "default": 88,
+      "default": 81,
       "agentWritable": true
     },
     {
@@ -7461,7 +7461,7 @@
       "section": "theming",
       "sectionTitle": "Theme",
       "type": "number",
-      "default": 88,
+      "default": 93,
       "agentWritable": true
     },
     {
@@ -7475,7 +7475,7 @@
       "section": "theming",
       "sectionTitle": "Theme",
       "type": "number",
-      "default": 93,
+      "default": 86,
       "agentWritable": true
     },
     {

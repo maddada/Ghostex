@@ -385,6 +385,7 @@ impl GhostexGpuiApp {
             // menu's keyboard focus and its click-outside dismissal. It still owns the menu's
             // frame: as the key window it goes on getting pointer moves under the host, and the
             // rows beneath must not light up there (the same frame its panels occluded unhosted).
+            // CDXC:Sidebar 2026-09-25 DECISION: User approved ("Yes, keep it") this occluding region: while a hosted sidebar menu is open, the main window's area under it takes no hover or clicks, so only the menu reacts, as before menus were frosted.
             let layers = layers.occlude();
             // One window per panel, so a submenu stacked over its parent blurs the parent the way
             // a header dropdown blurs whatever is under it.

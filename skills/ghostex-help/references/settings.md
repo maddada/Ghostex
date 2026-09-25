@@ -218,10 +218,10 @@ How to use this file:
 - **Video for dark mode** `windowGlassVideoDark` (text, default (empty)): The video the glass plays in dark mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.
 - **Video for light mode** `windowGlassVideoLight` (text, default (empty)): The video the glass plays in light mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.
 - **Play only when plugged in** `windowGlassVideoOnlyOnPower` (boolean, default true): Pause the glass video while your computer runs on battery. It always pauses when Ghostex is in the background.
-- **Sidebar tint in dark mode** `windowGlassSidebarOpacityDark` (number default 80): How much of the desktop the sidebar hides in dark mode. Lower shows more of your desktop through it.
-- **Work area tint in dark mode** `windowGlassWorkAreaTintDark` (number default 88): How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
-- **Sidebar tint in light mode** `windowGlassSidebarOpacityLight` (number default 88): How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it.
-- **Work area tint in light mode** `windowGlassWorkAreaTintLight` (number default 93): How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
+- **Sidebar tint in dark mode** `windowGlassSidebarOpacityDark` (number default 88): How much of the desktop the sidebar hides in dark mode. Lower shows more of your desktop through it.
+- **Work area tint in dark mode** `windowGlassWorkAreaTintDark` (number default 81): How much of the desktop the work area hides in dark mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
+- **Sidebar tint in light mode** `windowGlassSidebarOpacityLight` (number default 93): How much of the desktop the sidebar hides in light mode. Lower shows more of your desktop through it.
+- **Work area tint in light mode** `windowGlassWorkAreaTintLight` (number default 86): How much of the desktop the work area hides in light mode, set on its own so either area can be the darker one. Lower shows more of your desktop through it.
 - **Show active pane outline** `showActivePaneOutline` (boolean, default false) [advanced]: Show an outline around the currently focused pane.
 - **Active pane outline colour** `workspaceActivePaneBorderColor` (text, default #3b82f6) [advanced]: Color of the outline around the currently focused pane.
 - **Pane gap** `workspacePaneGap` (number default 0): Gap in pixels between split panes in the Agents view.
