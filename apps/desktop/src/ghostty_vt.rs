@@ -248,6 +248,10 @@ pub mod ffi {
     pub const GHOSTTY_MODE_ALT_SCROLL: GhosttyMode = 1007;
     pub const GHOSTTY_MODE_FOCUS_EVENT: GhosttyMode = 1004;
     pub const GHOSTTY_MODE_BRACKETED_PASTE: GhosttyMode = 2004;
+    /// DECSET 2026, synchronized output: the producer asks the terminal to
+    /// defer painting until the matching reset, so a redraw that spans
+    /// several reads never shows its intermediate states.
+    pub const GHOSTTY_MODE_SYNCHRONIZED_OUTPUT: GhosttyMode = 2026;
 
     pub type GhosttyTerminalScrollViewportTag = c_int;
     pub const GHOSTTY_SCROLL_VIEWPORT_TOP: GhosttyTerminalScrollViewportTag = 0;

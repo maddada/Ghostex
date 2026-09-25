@@ -260,6 +260,7 @@ impl GhostexGpuiApp {
                     .local_workspace_session_mappings,
                 local_workspace_attach_pending: HashSet::new(),
                 agents_chat_mode_sessions: shell_layout_state.agents_chat_mode_sessions,
+                terminal_agent_bar_sessions: HashSet::new(),
                 agents_terminal_action_bar_menu_session: None,
                 agents_terminal_action_bar_account_submenu_open: false,
                 agents_chat_auto_switch_observed_sessions: HashMap::new(),
