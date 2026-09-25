@@ -184,8 +184,12 @@ function reusePublishedAsset({ assetDir, component, componentVersion, platform, 
   return true;
 }
 
+/**
+ * CDXC:Release 2026-09-25 WHY:
+ * Local Windows packaging reads public component metadata; gh release view adds an authenticated GraphQL lookup that can fail even when the release REST endpoint is accessible.
+ */
 export function inspectRelease({ repo, tag }) {
-  const result = runGh(['release', 'view', tag, '--repo', repo, '--json', 'assets'], { allowFailure: true });
+  const result = runGh(['api', `repos/${repo}/releases/tags/${encodeURIComponent(tag)}`], { allowFailure: true });
   if (result.status !== 0) {
     const diagnostic = `${result.stderr ?? ''}\n${result.stdout ?? ''}`.toLowerCase();
     if (diagnostic.includes('release not found') || diagnostic.includes('not found') || diagnostic.includes('404')) {
