@@ -10,13 +10,9 @@ pub(crate) enum SidebarBridgeFunctionId {
     CreateProjectTerminal,
     WorkspaceTerminalFocus,
     WorkspaceTerminalRenameCommand,
-    WorkspaceTerminalLifecycleResult,
-    SessionCompletionSound,
     SessionStatusIndicators,
     PetOverlayState,
     GlobalActions,
-    TitlebarGitMenuState,
-    OpenBrowserUrl,
     BrowserTabFocus,
     ProjectBoardConversationResponse,
     SidebarRuntimeFacts,
@@ -80,17 +76,10 @@ const SIDEBAR_WORKSPACE_TERMINAL_FOCUS_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.workspaceTerminalFocus";
 const SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.workspaceTerminalRenameCommand";
-const SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_PROCESS_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.workspaceTerminalLifecycleResult";
-const SIDEBAR_SESSION_COMPLETION_SOUND_PROCESS_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.sessionCompletionSound";
 const SIDEBAR_SESSION_STATUS_INDICATORS_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.sessionStatusIndicators";
 const SIDEBAR_PET_OVERLAY_STATE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.petOverlayState";
 const SIDEBAR_GLOBAL_ACTIONS_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.globalActions";
-const SIDEBAR_TITLEBAR_GIT_MENU_STATE_PROCESS_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.titlebarGitMenuState";
-const SIDEBAR_OPEN_BROWSER_URL_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.openBrowserUrl";
 const SIDEBAR_BROWSER_TAB_FOCUS_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.sidebar.browserTabFocus";
 const SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_PROCESS_MESSAGE_NAME: &str =
     "ghostex.gpui.sidebar.projectBoardConversationResponse";
@@ -107,14 +96,9 @@ const SIDEBAR_CREATE_PROJECT_TERMINAL_JS_FUNCTION: &str = "postCreateProjectTerm
 const SIDEBAR_WORKSPACE_TERMINAL_FOCUS_JS_FUNCTION: &str = "postWorkspaceTerminalFocus";
 const SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_JS_FUNCTION: &str =
     "postWorkspaceTerminalRenameCommand";
-const SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_JS_FUNCTION: &str =
-    "postWorkspaceTerminalLifecycleResult";
-const SIDEBAR_SESSION_COMPLETION_SOUND_JS_FUNCTION: &str = "postSessionCompletionSound";
 const SIDEBAR_SESSION_STATUS_INDICATORS_JS_FUNCTION: &str = "postSessionStatusIndicators";
 const SIDEBAR_PET_OVERLAY_STATE_JS_FUNCTION: &str = "postPetOverlayState";
 const SIDEBAR_GLOBAL_ACTIONS_JS_FUNCTION: &str = "postGlobalActions";
-const SIDEBAR_TITLEBAR_GIT_MENU_STATE_JS_FUNCTION: &str = "postTitlebarGitMenuState";
-const SIDEBAR_OPEN_BROWSER_URL_JS_FUNCTION: &str = "postOpenBrowserUrl";
 const SIDEBAR_BROWSER_TAB_FOCUS_JS_FUNCTION: &str = "postBrowserTabFocus";
 const SIDEBAR_PROJECT_BOARD_CONVERSATION_RESPONSE_JS_FUNCTION: &str =
     "postProjectBoardConversationResponse";
@@ -384,7 +368,7 @@ The sidebar CEF post-function allowlist must have one Rust manifest shared by ma
 CDXC:CefRuntime 2026-06-29-14:45:
 GPUI CEF bridge names, payload budgets, and allowed app-modal/project-workarea surfaces live in this Rust manifest so the macOS browser process and helper renderer consume one ownership point. Keep sidebar, project-workarea, and app-modal handlers surface-specific; this manifest is an allowlist, not a generic IPC bus.
 */
-pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 20] = [
+pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 16] = [
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::SidebarRuntimeFacts,
         js_function_name: "postSidebarRuntimeFacts",
@@ -441,16 +425,6 @@ pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 20] 
         process_message_name: SIDEBAR_WORKSPACE_TERMINAL_RENAME_COMMAND_PROCESS_MESSAGE_NAME,
     },
     SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::WorkspaceTerminalLifecycleResult,
-        js_function_name: SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_JS_FUNCTION,
-        process_message_name: SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::SessionCompletionSound,
-        js_function_name: SIDEBAR_SESSION_COMPLETION_SOUND_JS_FUNCTION,
-        process_message_name: SIDEBAR_SESSION_COMPLETION_SOUND_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::SessionStatusIndicators,
         js_function_name: SIDEBAR_SESSION_STATUS_INDICATORS_JS_FUNCTION,
         process_message_name: SIDEBAR_SESSION_STATUS_INDICATORS_PROCESS_MESSAGE_NAME,
@@ -464,16 +438,6 @@ pub(crate) const SIDEBAR_BRIDGE_FUNCTION_SPECS: [SidebarBridgeFunctionSpec; 20] 
         id: SidebarBridgeFunctionId::GlobalActions,
         js_function_name: SIDEBAR_GLOBAL_ACTIONS_JS_FUNCTION,
         process_message_name: SIDEBAR_GLOBAL_ACTIONS_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::TitlebarGitMenuState,
-        js_function_name: SIDEBAR_TITLEBAR_GIT_MENU_STATE_JS_FUNCTION,
-        process_message_name: SIDEBAR_TITLEBAR_GIT_MENU_STATE_PROCESS_MESSAGE_NAME,
-    },
-    SidebarBridgeFunctionSpec {
-        id: SidebarBridgeFunctionId::OpenBrowserUrl,
-        js_function_name: SIDEBAR_OPEN_BROWSER_URL_JS_FUNCTION,
-        process_message_name: SIDEBAR_OPEN_BROWSER_URL_PROCESS_MESSAGE_NAME,
     },
     SidebarBridgeFunctionSpec {
         id: SidebarBridgeFunctionId::BrowserTabFocus,

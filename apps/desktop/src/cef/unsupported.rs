@@ -105,13 +105,9 @@ pub enum SidebarBridgeEvent {
     CreateProjectTerminal(String),
     WorkspaceTerminalFocus(String),
     WorkspaceTerminalRenameCommand(String),
-    WorkspaceTerminalLifecycleResult(String),
-    SessionCompletionSound(String),
     SessionStatusIndicators(String),
     PetOverlayState(String),
     GlobalActions(String),
-    TitlebarGitMenuState(String),
-    OpenBrowserUrl(String),
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
     /// A first-party page tried to navigate its own main frame somewhere else; the payload is the refused URL.

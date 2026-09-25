@@ -365,23 +365,11 @@ pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_VERSI
 pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.workspaceTerminalLifecycleRequest";
 
-pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_VERSION: u64 = 1;
-
-pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_TYPE: &str =
-    "ghostex.gpui.sidebar.workspaceTerminalLifecycleResult";
-
 pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_ID_MAX: u64 =
     9_007_199_254_740_991;
 
 #[cfg(target_os = "windows")]
 pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_TITLE_MAX_CHARS: usize = 512;
-
-pub(crate) const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_VERSION: u64 = 1;
-
-pub(crate) const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MESSAGE_TYPE: &str =
-    "ghostex.gpui.sidebar.sessionCompletionSound";
-
-pub(crate) const GPUI_SIDEBAR_SESSION_COMPLETION_SOUND_MAX_CHARS: usize = 64;
 
 pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION: u64 = 1;
 

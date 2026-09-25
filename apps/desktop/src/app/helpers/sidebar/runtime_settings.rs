@@ -103,59 +103,6 @@ pub(crate) fn gpui_sidebar_open_browser_url_from_json(
     })
 }
 
-pub(crate) fn gpui_sidebar_workspace_terminal_lifecycle_result_from_json(
-    text: &str,
-) -> Result<
-    GpuiSidebarWorkspaceTerminalLifecycleResultMessage,
-    GpuiGxserverPresentationFocusStateContractError,
-> {
-    let value = serde_json::from_str::<serde_json::Value>(text)
-        .map_err(|_| GpuiGxserverPresentationFocusStateContractError::MalformedJson)?;
-    gpui_sidebar_workspace_terminal_lifecycle_result_from_value(&value)
-}
-
-pub(crate) fn gpui_sidebar_workspace_terminal_lifecycle_result_from_value(
-    value: &serde_json::Value,
-) -> Result<
-    GpuiSidebarWorkspaceTerminalLifecycleResultMessage,
-    GpuiGxserverPresentationFocusStateContractError,
-> {
-    let object = gpui_gxserver_focus_contract_object(value)?;
-    reject_unexpected_gxserver_focus_contract_keys(
-        object,
-        &["version", "type", "requestId", "ok"],
-    )?;
-
-    let version = object
-        .get("version")
-        .and_then(serde_json::Value::as_u64)
-        .ok_or(GpuiGxserverPresentationFocusStateContractError::UnexpectedVersion)?;
-    if version != GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_VERSION {
-        return Err(GpuiGxserverPresentationFocusStateContractError::UnexpectedVersion);
-    }
-
-    let message_type = object
-        .get("type")
-        .and_then(serde_json::Value::as_str)
-        .ok_or(GpuiGxserverPresentationFocusStateContractError::UnexpectedMessageType)?;
-    if message_type != GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_RESULT_MESSAGE_TYPE {
-        return Err(GpuiGxserverPresentationFocusStateContractError::UnexpectedMessageType);
-    }
-
-    let request_id = object
-        .get("requestId")
-        .and_then(serde_json::Value::as_u64)
-        .filter(|request_id| {
-            (1..=GPUI_SIDEBAR_WORKSPACE_TERMINAL_LIFECYCLE_REQUEST_ID_MAX).contains(request_id)
-        })
-        .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?;
-    let ok = object
-        .get("ok")
-        .and_then(serde_json::Value::as_bool)
-        .ok_or(GpuiGxserverPresentationFocusStateContractError::MalformedField)?;
-    Ok(GpuiSidebarWorkspaceTerminalLifecycleResultMessage { ok, request_id })
-}
-
 pub(crate) fn sidebar_runtime_settings_snapshot_from_shared_settings(
     settings: &shared_settings::SharedSidebarSettingsSnapshot,
 ) -> cef::SidebarRuntimeSettingsSnapshot {

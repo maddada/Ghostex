@@ -42,12 +42,6 @@ pub(crate) enum GpuiLocalWorkspaceAttachOrigin {
     BackgroundSelect,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct GpuiSidebarWorkspaceTerminalLifecycleResultMessage {
-    pub(crate) ok: bool,
-    pub(crate) request_id: u64,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiLocalWorkspaceLifecycleAction {
     Close,

@@ -18,13 +18,9 @@ pub(crate) enum SidebarBridgeEventKind {
     CreateProjectTerminal,
     WorkspaceTerminalFocus,
     WorkspaceTerminalRenameCommand,
-    WorkspaceTerminalLifecycleResult,
-    SessionCompletionSound,
     SessionStatusIndicators,
     PetOverlayState,
     GlobalActions,
-    TitlebarGitMenuState,
-    OpenBrowserUrl,
     BrowserTabFocus,
     ProjectBoardConversationResponse,
     SidebarRuntimeFacts,
@@ -54,15 +50,9 @@ impl SidebarBridgeEventKind {
             SidebarBridgeFunctionId::WorkspaceTerminalRenameCommand => {
                 Self::WorkspaceTerminalRenameCommand
             }
-            SidebarBridgeFunctionId::WorkspaceTerminalLifecycleResult => {
-                Self::WorkspaceTerminalLifecycleResult
-            }
-            SidebarBridgeFunctionId::SessionCompletionSound => Self::SessionCompletionSound,
             SidebarBridgeFunctionId::SessionStatusIndicators => Self::SessionStatusIndicators,
             SidebarBridgeFunctionId::PetOverlayState => Self::PetOverlayState,
             SidebarBridgeFunctionId::GlobalActions => Self::GlobalActions,
-            SidebarBridgeFunctionId::TitlebarGitMenuState => Self::TitlebarGitMenuState,
-            SidebarBridgeFunctionId::OpenBrowserUrl => Self::OpenBrowserUrl,
             SidebarBridgeFunctionId::BrowserTabFocus => Self::BrowserTabFocus,
             SidebarBridgeFunctionId::ProjectBoardConversationResponse => {
                 Self::ProjectBoardConversationResponse
@@ -199,13 +189,9 @@ pub enum SidebarBridgeEvent {
     CreateProjectTerminal(String),
     WorkspaceTerminalFocus(String),
     WorkspaceTerminalRenameCommand(String),
-    WorkspaceTerminalLifecycleResult(String),
-    SessionCompletionSound(String),
     SessionStatusIndicators(String),
     PetOverlayState(String),
     GlobalActions(String),
-    TitlebarGitMenuState(String),
-    OpenBrowserUrl(String),
     BrowserTabFocus(String),
     ProjectBoardConversationResponse(String),
     /// The runtime's one-way channel of the facts the Rust sidebar still takes from outside the
@@ -267,15 +253,9 @@ impl SidebarBridgeEventKind {
             Self::WorkspaceTerminalRenameCommand => {
                 SidebarBridgeEvent::WorkspaceTerminalRenameCommand(payload)
             }
-            Self::WorkspaceTerminalLifecycleResult => {
-                SidebarBridgeEvent::WorkspaceTerminalLifecycleResult(payload)
-            }
-            Self::SessionCompletionSound => SidebarBridgeEvent::SessionCompletionSound(payload),
             Self::SessionStatusIndicators => SidebarBridgeEvent::SessionStatusIndicators(payload),
             Self::PetOverlayState => SidebarBridgeEvent::PetOverlayState(payload),
             Self::GlobalActions => SidebarBridgeEvent::GlobalActions(payload),
-            Self::TitlebarGitMenuState => SidebarBridgeEvent::TitlebarGitMenuState(payload),
-            Self::OpenBrowserUrl => SidebarBridgeEvent::OpenBrowserUrl(payload),
             Self::BrowserTabFocus => SidebarBridgeEvent::BrowserTabFocus(payload),
             Self::ProjectBoardConversationResponse => {
                 SidebarBridgeEvent::ProjectBoardConversationResponse(payload)

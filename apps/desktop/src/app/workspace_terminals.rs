@@ -227,26 +227,8 @@ impl GhostexGpuiApp {
         GpuiWorkspaceRenameCommandDelivery::Delivered
     }
 
-    pub(crate) fn receive_sidebar_session_completion_sound_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        The old runtime's completion sound post. Nothing posts it since the attention edge, the
-        event dedupe and the gate moved to gx-core (`attention.rs`, played through
-        gx_store/attention/); the bridge entry goes with the manifest in the app runtime port's
-        step 3. The sound id still goes through the whitelist normalization.
-        */
-        let Ok((sound, session_id)) = gpui_sidebar_session_completion_sound_from_json(payload)
-        else {
-            return;
-        };
-        self.play_session_completion(&sound, session_id, cx);
-    }
-
     /// The completion sound and the sidebar card's completion flash, which are one event. Called by
-    /// the store's attention host (gx_store/attention/) and by the bridge payload above.
+    /// the store's attention host (gx_store/attention/).
     pub(crate) fn play_session_completion(
         &mut self,
         sound: &str,
@@ -1122,25 +1104,6 @@ impl GhostexGpuiApp {
         false
     }
 
-    pub(crate) fn receive_sidebar_workspace_terminal_lifecycle_result_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:Workarea 2026-06-26-07:25:
-        The sidebar may acknowledge only a pending native Sleep/Wake request by request id and success boolean. Apply the matching local shell transition after a successful result, drop failed or stale results without mutation, and never trust project/session/title/path/command data from the result payload. Local-first Close notifications are not registered as pending, so their cleanup acknowledgements are intentionally ignored here.
-
-        CDXC:CommandPane 2026-06-26-23:59:
-        Mapped close requests no longer wait here: Rust consumes valid close confirmation and commits the shell close before notifying SidebarApp for best-effort gxserver transition.
-        */
-        let Ok(message) = gpui_sidebar_workspace_terminal_lifecycle_result_from_json(payload)
-        else {
-            return;
-        };
-        self.finish_local_workspace_lifecycle_request(message.request_id, message.ok, cx);
-    }
-
     /// The daemon's answer to a pending Sleep or Wake of a tab: apply it when it succeeded, drop
     /// the request either way. Close is never pending, so its answer finds nothing here.
     pub(crate) fn finish_local_workspace_lifecycle_request(
@@ -1165,7 +1128,7 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:Workarea 2026-06-27-00:33:
-        Local-first Close invokes this reducer directly, while acknowledged Sleep/Wake invokes it from the result bridge. If a close request carries native confirmation state, clear that exact slot as part of the same committed local mutation.
+        Local-first Close invokes this reducer directly, while acknowledged Sleep/Wake invokes it from the daemon's answer. If a close request carries native confirmation state, clear that exact slot as part of the same committed local mutation.
         */
         // Close-confirm bookkeeping belongs to the macOS-only native Ghostty
         // tab state; the GPUI engine path confirms closes in the terminal

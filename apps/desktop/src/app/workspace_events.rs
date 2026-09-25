@@ -413,9 +413,6 @@ impl GhostexGpuiApp {
             cef::SidebarBridgeEvent::WorkspaceTerminalRenameCommand(payload) => {
                 self.receive_sidebar_workspace_terminal_rename_command_payload(&payload, cx);
             }
-            cef::SidebarBridgeEvent::WorkspaceTerminalLifecycleResult(payload) => {
-                self.receive_sidebar_workspace_terminal_lifecycle_result_payload(&payload, cx);
-            }
             cef::SidebarBridgeEvent::NativeProjectPathAction(payload) => {
                 self.receive_sidebar_native_project_path_action_payload(&payload, cx);
             }
@@ -428,9 +425,6 @@ impl GhostexGpuiApp {
             cef::SidebarBridgeEvent::SidebarCommandRunEnd(payload) => {
                 self.receive_sidebar_command_run_end_payload(&payload, cx);
             }
-            cef::SidebarBridgeEvent::SessionCompletionSound(payload) => {
-                self.receive_sidebar_session_completion_sound_payload(&payload, cx);
-            }
             cef::SidebarBridgeEvent::SessionStatusIndicators(payload) => {
                 self.receive_sidebar_session_status_indicators_payload(&payload, cx);
             }
@@ -439,12 +433,6 @@ impl GhostexGpuiApp {
             }
             cef::SidebarBridgeEvent::GlobalActions(payload) => {
                 self.receive_sidebar_global_actions_payload(&payload, cx);
-            }
-            cef::SidebarBridgeEvent::TitlebarGitMenuState(payload) => {
-                self.receive_sidebar_titlebar_git_menu_state_payload(&payload, window, cx);
-            }
-            cef::SidebarBridgeEvent::OpenBrowserUrl(payload) => {
-                self.receive_sidebar_open_browser_url_payload(&payload, window, cx);
             }
             cef::SidebarBridgeEvent::BrowserTabFocus(payload) => {
                 self.receive_sidebar_browser_tab_focus_payload(&payload, window, cx);
@@ -517,18 +505,6 @@ impl GhostexGpuiApp {
                 cx,
             );
         }
-    }
-
-    pub(crate) fn receive_sidebar_open_browser_url_payload(
-        &mut self,
-        payload: &str,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Ok(message) = gpui_sidebar_open_browser_url_from_json(payload) else {
-            return;
-        };
-        self.open_browser_url_from_renderer_command(message, window, cx);
     }
 
     pub(crate) fn receive_sidebar_browser_tab_focus_payload(
@@ -760,23 +736,6 @@ impl GhostexGpuiApp {
         self.sync_active_browser_tab_to_surface(window, cx);
         self.scroll_focused_browser_pane_active_tab();
         self.persist_shell_layout_state();
-        cx.notify();
-    }
-
-    pub(crate) fn receive_sidebar_titlebar_git_menu_state_payload(
-        &mut self,
-        payload: &str,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(state) = gpui_titlebar_git_menu_state_from_payload(payload) else {
-            return;
-        };
-        if self.titlebar_git_menu_state.as_ref() == Some(&state) {
-            return;
-        }
-        self.titlebar_git_menu_state = Some(state);
-        self.refresh_open_git_popup(window, cx);
         cx.notify();
     }
 
