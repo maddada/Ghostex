@@ -253,7 +253,7 @@ impl GhostexGpuiApp {
     /// Types an App Shot prompt into a local Agents tab (gx_store/app_shot.rs picks the session).
     ///
     /// CDXC:AppShots 2026-06-25-23:28:
-    /// Existing-session App Shot insertion takes a gxserver presentation session id plus the already formatted prompt string. Rust maps that id to a live Agents shell tab, selects it through normal workspace state if needed, verifies the exact mounted Ghostty owner/runtime id, and answers only whether it wrote.
+    /// Existing-session App Shot insertion takes a gxserver presentation session id plus the already formatted prompt string. Rust maps that id to a live Agents shell tab, selects it through normal workspace state if needed, writes into that tab's chat composer or terminal (`app_shot_write_into_agents_tab` in gx_store/app_shot.rs), and answers only whether it wrote.
     ///
     /// CDXC:AppShots 2026-06-26-04:27:
     /// Remote App Shot insertion (`insert_native_app_shot_prompt_into_remote_agents_session`) may write only to an already-mounted remote attach Agents terminal in `remote_attach_sessions`; it must not wake, create, or materialize remote tabs, and it stores no prompt, path, SSH, title, URL, or terminal content.
@@ -295,14 +295,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
-            let slot_id = AgentsTerminalBodyMountSlotId {
-                pane_id,
-                session_id: shell_session_id,
-            };
-            if !self.agents_terminal_ghostty_surface_matches(slot_id) {
-                return false;
-            }
-            if !self.send_text_bytes_to_focused_agents_terminal_surface(prompt.as_bytes()) {
+            if !self.app_shot_write_into_agents_tab(shell_session_id, prompt, cx) {
                 return false;
             }
             self.persist_shell_layout_state();
@@ -349,14 +342,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
-            let slot_id = AgentsTerminalBodyMountSlotId {
-                pane_id,
-                session_id: shell_session_id,
-            };
-            if !self.agents_terminal_ghostty_surface_matches(slot_id) {
-                return false;
-            }
-            if !self.send_text_bytes_to_focused_agents_terminal_surface(prompt.as_bytes()) {
+            if !self.app_shot_write_into_agents_tab(shell_session_id, prompt, cx) {
                 return false;
             }
             self.persist_shell_layout_state();

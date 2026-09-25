@@ -286,6 +286,33 @@ impl GhostexGpuiApp {
         .detach();
     }
 
+    /// Writes the prompt into the tab's live input: the chat composer when the session shows its
+    /// Chat view, the terminal otherwise (a paste, so the prompt's line breaks do not submit it).
+    /// `false` when the tab has neither yet, which the caller retries until its deadline.
+    ///
+    /// CDXC:AppShots 2026-09-25 WHY:
+    /// The insert wrote only to the AppKit Ghostty surface map, which nothing has filled since the Agents terminals moved to the GPUI engine and the chat view, so every App Shot declined the focused agent and started a new session (before and after the app runtime port alike). It now writes where Add to Session Context and a restored stash write: the chat composer or the engine terminal.
+    pub(crate) fn app_shot_write_into_agents_tab(
+        &mut self,
+        shell_session_id: crate::app::model::TerminalSessionId,
+        prompt: &str,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if self.agents_chat_mode_sessions.contains(&shell_session_id) {
+            return self.insert_prompt_into_session_chat(shell_session_id, prompt, cx);
+        }
+        self.ensure_agents_gpui_engine_terminal_view(shell_session_id, cx);
+        let Some(view) = self
+            .agents_gpui_engine_terminals
+            .get(&shell_session_id)
+            .map(|record| record.view.clone())
+        else {
+            return false;
+        };
+        view.update(cx, |view, cx| view.paste_text(prompt, cx));
+        true
+    }
+
     fn app_shot_remember(&mut self, session: SessionKey) {
         self.gx_store.app_shot.recent = Some(AppShotRecentTarget {
             session,
