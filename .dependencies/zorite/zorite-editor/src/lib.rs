@@ -1391,6 +1391,11 @@ impl EditorState {
         f: impl Fn(&str, &str) -> Vec<(Range<usize>, HighlightStyle)> + 'static,
     ) {
         self.code_highlight = Some(Box::new(f));
+        let caches = &self.shape_caches;
+        caches
+            .highlighter_gen
+            .set(caches.highlighter_gen.get().wrapping_add(1));
+        caches.code_highlights.borrow_mut().take();
     }
 
     /// The text the most recent keystroke edit replaced (its selection), if
@@ -6852,7 +6857,17 @@ struct ShapeCaches {
     /// hashes three u64s per line instead of every line's bytes. Diagnostics
     /// changes invalidate explicitly (see `set_diagnostics`).
     row_keys: std::cell::RefCell<RowKeys>,
+    /// The fenced code blocks' per-line token colors, keyed by (scan generation,
+    /// `highlighter_gen`): the host highlighter runs once per edit rather than
+    /// for every block of the document on every frame (a scroll repaints).
+    code_highlights: std::cell::RefCell<Option<((u64, u64), std::rc::Rc<CodeLineHighlights>)>>,
+    /// Bumped by `set_code_highlighter`, retiring `code_highlights`.
+    highlighter_gen: std::cell::Cell<u64>,
 }
+
+/// Token colors per code line (line index → in-line ranges).
+pub(crate) type CodeLineHighlights =
+    std::collections::HashMap<usize, Vec<(Range<usize>, HighlightStyle)>>;
 
 /// A hash of the inputs shared by every line's run build (font + palette) —
 /// part of the per-line cache key, so a theme or font change misses cleanly.

@@ -2993,8 +2993,17 @@ fn shape_document(
     // Token colors per code line (line index → in-line ranges), from the host
     // highlighter: each fenced block with a language tag is highlighted whole
     // (tree-sitter-style engines need full-block context), then split per line.
-    let line_highlights: std::collections::HashMap<usize, Vec<(Range<usize>, HighlightStyle)>> =
-        match (code_highlight, md) {
+    let highlight_key = (scan.generation, caches.highlighter_gen.get());
+    let highlighting = md.is_some() && code_highlight.is_some();
+    let cached_highlights = caches
+        .code_highlights
+        .borrow()
+        .as_ref()
+        .filter(|(key, _)| highlighting && *key == highlight_key)
+        .map(|(_, map)| map.clone());
+    let line_highlights: std::rc::Rc<CodeLineHighlights> = match cached_highlights {
+        Some(map) => map,
+        None => std::rc::Rc::new(match (code_highlight, md) {
             (Some(hl), Some(_)) => {
                 let mut map = std::collections::HashMap::new();
                 let mut i = 0;
@@ -3036,7 +3045,11 @@ fn shape_document(
                 map
             }
             _ => std::collections::HashMap::new(),
-        };
+        }),
+    };
+    if highlighting {
+        *caches.code_highlights.borrow_mut() = Some((highlight_key, line_highlights.clone()));
+    }
     let mut line_start = 0;
     let mut in_fence = false;
     // Active GitHub alert run (`> [!NOTE]` …): set by a marker line, carried
