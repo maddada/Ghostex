@@ -95,28 +95,6 @@ impl BrowserMediaAccessRequest {
 pub type BrowserMediaAccessHandler = Rc<dyn Fn(BrowserMediaAccessRequest)>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SidebarBridgeEvent {
-    ActiveProjectContext(String),
-    NativeProjectPathAction(String),
-    SidebarCommandAction(String),
-    SidebarCommandRunEnd(String),
-    GxserverPresentationFocusState(String),
-    CreateProjectAgent(String),
-    CreateProjectTerminal(String),
-    WorkspaceTerminalFocus(String),
-    WorkspaceTerminalRenameCommand(String),
-    SessionStatusIndicators(String),
-    PetOverlayState(String),
-    GlobalActions(String),
-    BrowserTabFocus(String),
-    ProjectBoardConversationResponse(String),
-    /// A first-party page tried to navigate its own main frame somewhere else; the payload is the refused URL.
-    RefusedPageNavigation(String),
-}
-
-pub type SidebarBridgeEventHandler = Rc<dyn Fn(SidebarBridgeEvent)>;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectWorkareaBridgeEvent {
     ProjectBeadsRequest(String),
     ProjectBoardRequest(String),
@@ -198,9 +176,7 @@ impl CefBrowser {
         _popup_open_handler: Option<BrowserPopupOpenHandler>,
         _page_metadata_handler: Option<BrowserPageMetadataHandler>,
         _media_access_handler: Option<BrowserMediaAccessHandler>,
-        _sidebar_runtime_settings: Option<SidebarRuntimeSettingsSnapshot>,
         _sidebar_gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-        _sidebar_bridge_event_handler: Option<SidebarBridgeEventHandler>,
         _project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
         _manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         _app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
@@ -250,22 +226,6 @@ impl CefBrowser {
 
     pub fn execute_java_script_in_main_frame(&self, _script: &str) -> bool {
         false
-    }
-
-    pub fn refresh_sidebar_runtime_settings(
-        &self,
-        _runtime_settings: SidebarRuntimeSettingsSnapshot,
-    ) {
-    }
-
-    pub fn refresh_sidebar_gxserver_bootstrap(
-        &self,
-        _gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-    ) {
-        /*
-        CDXC:ServerDaemon 2026-06-24-11:17:
-        Non-macOS CEF remains explicitly unsupported, but its Rust API mirrors the macOS sidebar gxserver bootstrap refresh surface so shared GPUI code can compile when platform backends are added. This no-op must not create fallback gxserver data, expose tokens, log, persist, or pretend a CEF renderer exists.
-        */
     }
 
     pub fn refresh_session_chat_gxserver_bootstrap(

@@ -70,9 +70,7 @@ impl CefBrowser {
         popup_open_handler: Option<BrowserPopupOpenHandler>,
         page_metadata_handler: Option<BrowserPageMetadataHandler>,
         media_access_handler: Option<BrowserMediaAccessHandler>,
-        sidebar_runtime_settings: Option<SidebarRuntimeSettingsSnapshot>,
         sidebar_gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-        sidebar_bridge_event_handler: Option<SidebarBridgeEventHandler>,
         project_workarea_bridge_event_handler: Option<ProjectWorkareaBridgeEventHandler>,
         manage_docs_resource_scope: Option<ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<AppModalHostBridgeSurface>,
@@ -140,9 +138,7 @@ impl CefBrowser {
         let trusted_clipboard_origin = trusted_clipboard_origin
             .as_deref()
             .and_then(cef_normalized_origin);
-        let allow_first_party_loopback_requests =
-            sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some())
-                || sidebar_gxserver_bootstrap.is_some();
+        let allow_first_party_loopback_requests = sidebar_gxserver_bootstrap.is_some();
         let mut browser_settings = cef::BrowserSettings::default();
         if trusted_clipboard_origin.is_some() {
             browser_settings.javascript_access_clipboard = State::ENABLED;
@@ -216,22 +212,9 @@ impl CefBrowser {
         let manage_docs_resource_base_url = manage_docs_resource_scope
             .as_ref()
             .map(|scope| scope.base_url().to_string());
-        let is_shared_sidebar_surface =
-            sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some());
         let request_handler = manage_docs_resource_scope
             .as_ref()
             .map(ManageDocsResourceScope::request_handler)
-            .or_else(|| {
-                sidebar_bridge_event_handler
-                    .clone()
-                    .filter(|_| is_shared_sidebar_surface)
-                    .map(|handler| {
-                        GhostexGpuiSidebarRendererRequestHandler::new(
-                            sidebar_page_entry_identity(url),
-                            handler,
-                        )
-                    })
-            })
             .or_else(|| {
                 // Browser panes and project website views use the same shell popup
                 // route for middle-click and Cmd/Ctrl-click links.
@@ -250,12 +233,6 @@ impl CefBrowser {
         {
             Some(GhostexGpuiExtensionBridgeLoadHandler::new(
                 surface,
-                page_load_end_handler,
-            ))
-        } else if sidebar_bridge_installed_for_handler(sidebar_bridge_event_handler.is_some()) {
-            Some(GhostexGpuiSidebarProjectContextLoadHandler::new(
-                sidebar_runtime_settings.unwrap_or_default(),
-                sidebar_gxserver_bootstrap,
                 page_load_end_handler,
             ))
         } else if sidebar_gxserver_bootstrap.is_some() {
@@ -308,7 +285,6 @@ impl CefBrowser {
             display_handler,
             find_handler,
             load_handler,
-            sidebar_bridge_event_handler,
             project_workarea_bridge_event_handler,
             app_modal_host_bridge_event_handler,
             extension_bridge_surface,
@@ -346,27 +322,13 @@ impl CefBrowser {
             platform::prepare_native_view_for_focus(native_view);
             #[cfg(target_os = "macos")]
             platform::set_native_view_pinch_zoom_disabled(native_view, pinch_zoom_disabled);
-            /*
-            CDXC:FocusRouting 2026-07-22:
-            The shared sidebar is chrome, not a work surface: clicking its
-            background must never pull the keyboard away from the active
-            terminal/pane. Mark exactly this surface mouse-focus passive so
-            the AppKit focus subclass stops claiming first responder on its
-            mouse-downs; keyboard focus arrives only through the fixed
-            editable-focus bridge grant when the page focuses a text input.
-            */
-            if is_shared_sidebar_surface {
-                platform::set_native_view_mouse_focus_passive(native_view, true);
-            }
             register_native_view_browser(
                 native_view,
                 &browser,
                 uses_system_page_appearance,
                 keyboard_zoom_enabled,
             );
-            if (profile == "session-chat" || is_shared_sidebar_surface || profile == "app-modal")
-                && !native_view.is_null()
-            {
+            if (profile == "session-chat" || profile == "app-modal") && !native_view.is_null() {
                 SYSTEM_APP_PAGE_APPEARANCE_CEF_NATIVE_VIEWS.with(|views| {
                     views.borrow_mut().insert(native_view as usize);
                 });
@@ -714,32 +676,6 @@ impl CefBrowser {
         true
     }
 
-    pub fn refresh_sidebar_runtime_settings(
-        &self,
-        runtime_settings: SidebarRuntimeSettingsSnapshot,
-    ) {
-        let browser = self.browser.borrow();
-        let Some(mut frame) = browser.main_frame() else {
-            return;
-        };
-        send_sidebar_runtime_settings_process_message(
-            &mut frame,
-            SIDEBAR_RUNTIME_SETTINGS_UPDATE_MESSAGE_NAME,
-            runtime_settings,
-        );
-    }
-
-    pub fn refresh_sidebar_gxserver_bootstrap(
-        &self,
-        gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-    ) {
-        let browser = self.browser.borrow();
-        let Some(mut frame) = browser.main_frame() else {
-            return;
-        };
-        send_sidebar_gxserver_bootstrap_process_message(&mut frame, gxserver_bootstrap);
-    }
-
     pub fn refresh_session_chat_gxserver_bootstrap(
         &self,
         gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
@@ -747,9 +683,8 @@ impl CefBrowser {
         /*
         CDXC:SessionChat 2026-07-31:
         Session Chat surfaces refresh through their dedicated bootstrap
-        message because the sidebar update path refuses pages without the
-        installed sidebar bridge. Same scope rules as the sidebar refresh:
-        app-owned snapshot only, main frame only, never logged or persisted.
+        message: app-owned snapshot only, main frame only, never logged or
+        persisted.
         */
         // CDXC:SessionChat 2026-09-12 WHY:
         // Revocation must replace the load-replay snapshot too; keeping its old token made a later reload silently reauthenticate.
@@ -1081,12 +1016,6 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
     });
     set_cef_native_view_hidden(native_view, false);
     clear_active_native_view_if_matching(native_view);
-    let _ = SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW.compare_exchange(
-        native_view as usize,
-        0,
-        Ordering::AcqRel,
-        Ordering::Acquire,
-    );
 }
 
 pub(crate) fn refresh_system_page_appearance_for_native_view(native_view: *mut c_void) -> c_int {

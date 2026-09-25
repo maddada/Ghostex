@@ -23,8 +23,6 @@ pub(super) fn create(window: &Window, cx: &mut App) -> Result<Entity<crate::CefS
         None,
         None,
         None,
-        None,
-        None,
         cx,
     )
 }

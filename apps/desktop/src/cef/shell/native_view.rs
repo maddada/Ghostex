@@ -345,60 +345,6 @@ pub(crate) fn zoom_command_for_native_view(
     1
 }
 
-/*
-CDXC:FocusRouting 2026-07-22:
-App-owned focus grant/release for the mouse-focus-passive sidebar surface.
-"focused" repeats the exact sequence every sanctioned grant already uses
-(mark the explicit active view, then native first responder, then Chromium
-focus) so the OnSetFocus arbitration recognizes it as app-owned. "blurred"
-releases only if the sidebar actually owns the first responder, handing the
-keyboard back to the GPUI root so the previously focused terminal types
-again without requiring a click.
-*/
-pub(crate) fn handle_sidebar_editable_focus(browser: Option<&mut cef::Browser>, payload: &str) {
-    let focused = match payload {
-        "focused" => true,
-        "blurred" => false,
-        _ => return,
-    };
-    let Some(host) = browser.and_then(|browser| browser.host()) else {
-        return;
-    };
-    let native_view = platform::native_view_ptr(host.window_handle());
-    if native_view.is_null() {
-        return;
-    }
-
-    let owned_first_responder = platform::native_view_owns_first_responder(native_view);
-    if focused {
-        SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW.store(native_view as usize, Ordering::Release);
-        set_active_cef_native_view(native_view as usize);
-        platform::set_native_view_passive_focus_grant(native_view, true);
-        platform::focus_native_view(native_view);
-        host.set_focus(1);
-    } else {
-        let _ = SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW.compare_exchange(
-            native_view as usize,
-            0,
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-        platform::set_native_view_passive_focus_grant(native_view, false);
-        if owned_first_responder {
-            host.set_focus(0);
-            platform::return_focus_to_gpui_root(native_view);
-        }
-    }
-    crate::support_logs::append(
-        crate::support_logs::GpuiSupportLog::TerminalFocus,
-        "gpui.cef.sidebarEditableFocus",
-        serde_json::json!({
-            "focused": focused,
-            "ownedFirstResponder": owned_first_responder,
-        }),
-    );
-}
-
 pub(crate) fn mark_native_view_focused(native_view: *mut c_void) -> c_int {
     if native_view.is_null() {
         return 0;

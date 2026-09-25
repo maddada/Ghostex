@@ -267,8 +267,6 @@ impl GhostexGpuiApp {
                         None,
                         None,
                         None,
-                        None,
-                        None,
                         Some(page_load_end_handler.clone()),
                         cx,
                     )
@@ -307,8 +305,6 @@ impl GhostexGpuiApp {
                 surface_background,
                 trusted_clipboard_origin,
                 true,
-                None,
-                None,
                 None,
                 None,
                 None,

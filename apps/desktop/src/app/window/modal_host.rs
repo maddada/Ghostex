@@ -131,7 +131,6 @@ impl GpuiAppModalHostWindow {
                 None,
                 None,
                 None,
-                None,
                 /*
                 CDXC:Extensions 2026-08-30:
                 The extensions store's registry/catalog transport reads
@@ -149,7 +148,6 @@ impl GpuiAppModalHostWindow {
                     .needs_gxserver_bootstrap()
                     .then_some(sidebar_gxserver_bootstrap)
                     .flatten(),
-                None,
                 None,
                 None,
                 bridge_surface,

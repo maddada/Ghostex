@@ -1,78 +1,5 @@
 use super::*;
 
-pub(super) fn install_sidebar_project_context_v8_bridge(
-    context: Option<&mut cef::V8Context>,
-    runtime_settings: SidebarRuntimeSettingsSnapshot,
-    gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-) {
-    /*
-    CDXC:CefRuntime 2026-06-24-11:17:
-    The CEF helper exposes fixed renderer-side GPUI bridge functions, runtimeSettings, and the real sidebar gxserver bootstrap only after the sidebar browser sends the private install message to its own main frame. gxserverBootstrap may carry only the loopback base URL, bearer token, protocol version, stable client id, and explicit gxserver ids supplied by app state; this helper is not a generic event bus and does not inspect projects, paths, URLs, titles, terminal content, cookies, filesystem markers, logs, or persistence.
-
-    CDXC:CefRuntime 2026-06-23-06:57:
-    Initial install publishes runtime settings through an already-registered `window.ghostexGpui.onRuntimeSettingsChanged(settings)` callback because the sidebar runtime can mount before CEF's load-end install message. If install wins the race, the runtime reads the installed object directly. Later refreshes use a private post-install CEF message with the same callback contract. This does not add a settings bus, project detection path, logging path, or Browser-tab bridge.
-
-    CDXC:Settings 2026-06-24-11:22:
-    The helper must mirror the macOS renderer bridge by parsing the bounded saved Settings JSON into `runtimeSettings.settings` for SidebarApp normalization while keeping Manage availability tied only to strict debuggingMode/showBetaFeatures booleans.
-
-    CDXC:ServerDaemon 2026-06-24-11:17:
-    Post-load bootstrap refresh uses a separate private sidebar message that may replace only `window.ghostexGpui.gxserverBootstrap` and call `onGxserverBootstrapChanged(bootstrap)`. Keep the helper bridge in sync with the macOS renderer bridge so ordinary Browser/workarea/modal CEF pages never receive tokens.
-
-    CDXC:Projects 2026-06-24-14:18:
-    The helper must expose the sidebar-native project path action as a named bridge function, not a generic IPC method. It forwards only one bounded string payload to the browser process; app-side Rust resolves trusted project ids through gxserver before clipboard or Finder side effects.
-
-    CDXC:Git 2026-06-24-15:43:
-    Existing-PR browser open and changed-file IDE open reuse this fixed sidebar-native bridge instead of adding renderer-owned URL/path launch APIs. The helper still forwards only one bounded string; Rust must parse the allowlisted action contract and re-query gxserver before any browser or editor side effect.
-
-    CDXC:FocusRouting 2026-06-26-06:08:
-    Workspace terminal focus is a fixed sidebar-only bridge function carrying one bounded project/session id JSON payload. The helper must not add renderer-provided commands, cwd, paths, titles, terminal text, logs, or generic native IPC for local attach behavior.
-
-    CDXC:StatusPet 2026-06-26-04:38:
-    The helper mirrors the main CEF bridge for status indicator and pet overlay state as fixed sidebar-only functions. These functions are not activation callbacks or a generic native bus; they forward only bounded presentation JSON for app-side parsing.
-    */
-    let Some(context) = context else {
-        return;
-    };
-    let Some(global) = context.global() else {
-        return;
-    };
-
-    let namespace_key = CefString::from(SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE);
-    let mut namespace = global
-        .value_bykey(Some(&namespace_key))
-        .filter(|value| value.is_object() != 0)
-        .or_else(|| cef::v8_value_create_object(None, None));
-    let Some(namespace) = namespace.as_mut() else {
-        return;
-    };
-
-    for spec in SIDEBAR_BRIDGE_FUNCTION_SPECS {
-        let mut handler = GhostexGpuiSidebarBridgeV8Handler::new();
-        let function_name = CefString::from(spec.js_function_name);
-        let mut function = cef::v8_value_create_function(Some(&function_name), Some(&mut handler));
-        let Some(function) = function.as_mut() else {
-            return;
-        };
-
-        namespace.set_value_bykey(
-            Some(&function_name),
-            Some(function),
-            V8Propertyattribute::default(),
-        );
-    }
-    let runtime_settings_object =
-        install_sidebar_runtime_settings_v8_object(context, namespace, runtime_settings);
-    let _ = install_sidebar_gxserver_bootstrap_v8_object(namespace, gxserver_bootstrap);
-    global.set_value_bykey(
-        Some(&namespace_key),
-        Some(namespace),
-        V8Propertyattribute::default(),
-    );
-    if let Some(runtime_settings_object) = runtime_settings_object {
-        notify_sidebar_runtime_settings_changed(context, namespace, runtime_settings_object);
-    }
-}
-
 pub(super) fn install_project_workarea_v8_bridge(
     context: Option<&mut cef::V8Context>,
     manage_docs_resource_base_url: Option<&str>,
@@ -182,16 +109,12 @@ pub(super) fn install_app_modal_host_v8_bridge(
 
     /*
     CDXC:CefRuntime 2026-07-14:
-    Helper-backed titlebar and sidebar renderers must install the same
-    `ghostexNativeHost` bridge as the shell CEF path (apps/desktop/src/cef/shell.rs).
-    The titlebar uses it for Resources actions, while the sidebar uses it for
-    explicit native lifecycle actions such as starting gxserver. Without the
-    sidebar branch, its optional bridge call silently becomes a no-op.
+    Helper-backed titlebar renderers must install the same `ghostexNativeHost`
+    bridge as the shell CEF path (apps/desktop/src/cef/shell.rs); the titlebar
+    uses it for Resources actions. (The sidebar page that also used it was
+    deleted on 2026-09-21.)
     */
-    if matches!(
-        surface,
-        AppModalHostBridgeSurface::Sidebar | AppModalHostBridgeSurface::Titlebar
-    ) {
+    if surface == AppModalHostBridgeSurface::Titlebar {
         let Some(mut native_host) = cef::v8_value_create_object(None, None) else {
             return;
         };
@@ -279,78 +202,6 @@ pub(super) fn install_extension_v8_bridge(context: Option<&mut cef::V8Context>) 
         Some(&mut webkit),
         V8Propertyattribute::default(),
     );
-}
-
-pub(super) fn update_sidebar_runtime_settings_v8_bridge(
-    context: Option<&mut cef::V8Context>,
-    runtime_settings: SidebarRuntimeSettingsSnapshot,
-) {
-    let Some(context) = context else {
-        return;
-    };
-    let Some(global) = context.global() else {
-        return;
-    };
-    let namespace_key = CefString::from(SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE);
-    let mut namespace = global
-        .value_bykey(Some(&namespace_key))
-        .filter(|value| value.is_object() != 0);
-    let Some(namespace) = namespace.as_mut() else {
-        return;
-    };
-    for spec in SIDEBAR_BRIDGE_FUNCTION_SPECS {
-        let function_key = CefString::from(spec.js_function_name);
-        if namespace
-            .value_bykey(Some(&function_key))
-            .filter(|value| value.is_function() != 0)
-            .is_none()
-        {
-            return;
-        }
-    }
-
-    let Some(runtime_settings_object) =
-        install_sidebar_runtime_settings_v8_object(context, namespace, runtime_settings)
-    else {
-        return;
-    };
-    notify_sidebar_runtime_settings_changed(context, namespace, runtime_settings_object);
-}
-
-pub(super) fn update_sidebar_gxserver_bootstrap_v8_bridge(
-    context: Option<&mut cef::V8Context>,
-    gxserver_bootstrap: Option<SidebarGxserverBootstrap>,
-) {
-    let Some(context) = context else {
-        return;
-    };
-    let Some(global) = context.global() else {
-        return;
-    };
-    let namespace_key = CefString::from(SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE);
-    let mut namespace = global
-        .value_bykey(Some(&namespace_key))
-        .filter(|value| value.is_object() != 0);
-    let Some(namespace) = namespace.as_mut() else {
-        return;
-    };
-    for spec in SIDEBAR_BRIDGE_FUNCTION_SPECS {
-        let function_key = CefString::from(spec.js_function_name);
-        if namespace
-            .value_bykey(Some(&function_key))
-            .filter(|value| value.is_function() != 0)
-            .is_none()
-        {
-            return;
-        }
-    }
-
-    let Some(bootstrap_object) =
-        install_sidebar_gxserver_bootstrap_v8_object(namespace, gxserver_bootstrap)
-    else {
-        return;
-    };
-    notify_sidebar_gxserver_bootstrap_changed(context, namespace, bootstrap_object);
 }
 
 pub(super) fn install_session_chat_gxserver_bootstrap_v8_bridge(

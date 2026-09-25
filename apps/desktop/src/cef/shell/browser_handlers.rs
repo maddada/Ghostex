@@ -32,7 +32,6 @@ pub(crate) fn show_browser_dev_tools(
         None,
         None,
         None,
-        None,
         Some(GhostexGpuiCefFocusHandler::new()),
         None,
     ));
