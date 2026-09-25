@@ -315,6 +315,8 @@ pub(crate) struct NativeDocsState {
     pub(crate) drawer_opening: bool,
     /// The Docs view drew, and synced the drawer, since the main window's last frame began.
     pub(crate) drawer_synced: bool,
+    /// The task that closes the drawer on a click elsewhere in the main window is running.
+    pub(crate) drawer_click_watch: bool,
     /// A field of the floating list to focus once its window draws (the search, a rename).
     pub(crate) drawer_focus: Option<gpui::Entity<gpui_component::input::InputState>>,
 }

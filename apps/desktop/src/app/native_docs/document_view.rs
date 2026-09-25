@@ -425,6 +425,13 @@ impl GhostexGpuiApp {
                 let caret = state.cursor().min(text.len());
                 let caret_line = text[..caret].bytes().filter(|byte| *byte == b'\n').count();
                 let source = document.mode == DocsMarkdownMode::Source;
+                // The viewport in the gutter's y (it starts below the column's 14px top pad), one
+                // screen of margin each side.
+                let band = {
+                    let viewport = document.scroll.bounds().size.height;
+                    let top = -document.scroll.offset().y - px(14.0);
+                    (viewport > px(0.0)).then(|| (top - viewport, top + viewport * 2.0))
+                };
                 let gutter = super::gutter::render(
                     super::gutter::GutterModel {
                         rows: &rows,
@@ -435,6 +442,7 @@ impl GhostexGpuiApp {
                             .git_changes
                             .then_some(document.changes.as_ref())
                             .flatten(),
+                        band,
                     },
                     p,
                     body,

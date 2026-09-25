@@ -19,6 +19,14 @@ pub(crate) fn document_text(
     Some(document.editor.as_ref()?.read(cx).value().to_string())
 }
 
+/// Backspace, Delete, the arrows, Enter, Tab and the editing shortcuts are key bindings in the
+/// editor's own key context; typed text arrives without them, so an editor with none of them bound
+/// takes letters but not a single Backspace or arrow key.
+fn bind_editor_keys(cx: &mut gpui::App) {
+    static BOUND: std::sync::Once = std::sync::Once::new();
+    BOUND.call_once(|| zorite_editor::bind_keys(cx));
+}
+
 impl GhostexGpuiApp {
     /// Builds the live editor for a Markdown document whose text has arrived.
     pub(crate) fn native_docs_create_live_editor(
@@ -29,6 +37,7 @@ impl GhostexGpuiApp {
         cx: &mut Context<Self>,
     ) {
         super::fonts::register(cx);
+        bind_editor_keys(cx);
         let p = self
             .native_docs
             .palette

@@ -116,13 +116,6 @@ impl GhostexGpuiApp {
         let focus = self.native_docs.focus.clone()?;
 
         let layout = self.native_docs_sidebar_layout();
-        let (slide_offset, closing) = self.native_docs_slide_offset();
-        if self.native_docs_slide_running() {
-            window.request_animation_frame();
-        }
-        // The panel is drawn over the document while it is a drawer or a peek, and for as long
-        // as its closing slide plays.
-        let floating = layout.overlay || (closing && !layout.docked);
 
         let probe = gpui::canvas(
             |bounds, window, _| {
@@ -144,7 +137,7 @@ impl GhostexGpuiApp {
             .then(|| self.render_native_docs_files_list(&p, layout, false, window, cx));
         // A floating list draws in a child window of its own (`drawer.rs`).
         let view = VIEW_BOUNDS.with(|cell| cell.get());
-        self.native_docs_sync_drawer(floating && !layout.docked, slide_offset, view, cx);
+        self.native_docs_sync_drawer(layout.overlay, view, cx);
         let restore = (!layout.visible()).then(|| self.render_native_docs_restore_button(&p, cx));
         let header_bottom = super::document_view::HEADER_BOUNDS
             .with(|cell| cell.get())

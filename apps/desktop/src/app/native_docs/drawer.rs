@@ -2,30 +2,29 @@
 //! right edge of the Docs view.
 //!
 //! CDXC:Docs 2026-09-25 DECISION:
-//! User: "make the sidebar for the files list work like the sessions sidebar. it has glass effect and it's able to appear on top of cef panes without any issue". The floating list is drawn in a child window over the Docs view, exactly as the floating sessions sidebar is, so it shows over an HTML file or a drawing without hiding the page, and under glass its backdrop is the main window's glass picture (`sync_overlay_window_glass`) with the sidebar's own tint over it. Docked, the list stays in the main window beside the document.
-//!
-//! CDXC:Docs 2026-09-25 WHY:
-//! The window slides by moving its frame, one step per frame of the slide, with the list laid out at full width against the window's right edge so nothing reflows. Windows cannot move a GPUI window, so there the list opens and closes in one step.
+//! User: "make the sidebar for the files list work like the sessions sidebar. it has glass effect and it's able to appear on top of cef panes without any issue". The floating list is drawn in a child window over the Docs view, exactly as the floating sessions sidebar is, so it shows over an HTML file or a drawing without hiding the page, and under glass its backdrop is the main window's glass picture (`sync_overlay_window_glass`) with the sidebar's own tint over it. Docked, the list stays in the main window beside the document. On macOS AppKit slides the window (`native/macos/GpuiDocsDrawer.m`); elsewhere it opens and closes in one step.
 
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _,
-    Subscription, WeakEntity, Window, div, point, px, size,
+    ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _, Subscription,
+    WeakEntity, Window, WindowBackgroundAppearance, div, point, px, size,
 };
 
 use super::render::SIDEBAR_WIDTH;
 use crate::GhostexGpuiApp;
+use crate::app::floating_reveal::model::FLOATING_PANEL_CORNER_RADIUS;
 use crate::app::helpers::{
     cef_parent_native_view, set_docs_drawer_glass_window, sync_overlay_window_glass,
-    window_glass_background_appearance, window_shell_background,
+    window_glass_active,
 };
 
-/// Whether this platform can move a child window, which the slide needs.
-const CAN_SLIDE: bool = cfg!(any(target_os = "macos", target_os = "linux"));
-
-/// The open drawer window.
+/// The drawer's window, kept between uses once opened.
 pub(crate) struct DocsDrawerHost {
     pub(crate) window: gpui::WindowHandle<gpui_component::Root>,
+    /// The window's GPUI view, which AppKit slides.
+    native_view: *mut std::ffi::c_void,
+    /// The list is out (or sliding out); false while it is hidden or sliding away.
+    shown: bool,
 }
 
 /// The drawer window's root. It borrows the app entity and draws the same files list the docked
@@ -78,88 +77,81 @@ impl GhostexGpuiApp {
         super::actions::focus_and_select_all(input, window);
     }
 
-    /// Opens, moves or closes the drawer window to match the list's state. Runs in the main
+    /// Shows, moves or hides the drawer window to match the list's state. Runs in the main
     /// window's render, after the layout that decided whether the list floats.
     pub(crate) fn native_docs_sync_drawer(
         &mut self,
         floating: bool,
-        slide_offset: f32,
         view: Bounds<Pixels>,
         cx: &mut Context<Self>,
     ) {
-        let wanted = (floating && view.size.width > px(0.0)).then(|| {
-            let full = SIDEBAR_WIDTH.min(view.size.width.as_f32());
-            let shown = if CAN_SLIDE {
-                (full * (1.0 - slide_offset)).clamp(1.0, full)
-            } else {
-                full
-            };
-            Bounds::new(
-                point(view.right() - px(shown), view.top()),
-                size(px(shown), view.size.height),
-            )
-        });
-        let Some(frame) = wanted else {
-            self.native_docs.drawer_frame = None;
+        if !floating || view.size.width <= px(0.0) {
             self.native_docs.drawer_focus = None;
-            self.native_docs_close_drawer_window(cx);
+            self.native_docs_hide_drawer_window(cx);
             return;
-        };
+        }
         self.native_docs.drawer_synced = true;
+        let width = SIDEBAR_WIDTH.min(view.size.width.as_f32());
+        let frame = Bounds::new(
+            point(view.right() - px(width), view.top()),
+            size(px(width), view.size.height),
+        );
         let moved = self.native_docs.drawer_frame != Some(frame);
         self.native_docs.drawer_frame = Some(frame);
-        match self.native_docs.drawer.as_ref() {
-            Some(drawer) if moved => {
-                let handle = drawer.window;
-                let parent = self.parent_ns_view;
-                cx.defer(move |cx| {
-                    crate::app::native_chat::child_window::move_child_window(
-                        handle.into(),
-                        parent,
-                        frame,
-                        cx,
-                    );
-                    // The move runs on a task of its own; GPUI rereads the size after it, the way
-                    // the floating reveal panel does (`schedule_floating_reveal_bounds_refresh`).
-                    cx.spawn(async move |cx| {
-                        let _ = handle.update(cx, |_, window, cx| window.bounds_changed(cx));
-                    })
-                    .detach();
-                });
+        let parent = self.parent_ns_view;
+        let Some(drawer) = self.native_docs.drawer.as_mut() else {
+            if !self.native_docs.drawer_opening {
+                self.native_docs_open_drawer_window(cx);
             }
-            Some(_) => {}
-            None if !self.native_docs.drawer_opening => self.native_docs_open_drawer_window(cx),
-            None => {}
+            return;
+        };
+        if drawer.shown && !moved && drawer_window_visible(drawer.native_view) {
+            return;
         }
+        drawer.shown = true;
+        let (handle, native_view) = (drawer.window, drawer.native_view);
+        let slide = Self::native_docs_slide_duration().as_secs_f64();
+        self.native_docs_watch_outside_clicks(cx);
+        // AppKit reports the new size to GPUI from inside `setFrame:`, which GPUI drops while the
+        // app is borrowed, so the frame is set once this update has ended.
+        cx.defer(move |cx| show_drawer_window(handle, native_view, parent, frame, slide, cx));
+    }
+
+    fn native_docs_hide_drawer_window(&mut self, cx: &mut Context<Self>) {
+        let Some(drawer) = self.native_docs.drawer.as_mut() else {
+            return;
+        };
+        if !drawer.shown {
+            return;
+        }
+        drawer.shown = false;
+        let (handle, native_view) = (drawer.window, drawer.native_view);
+        let slide = Self::native_docs_slide_duration().as_secs_f64();
+        #[cfg(not(target_os = "macos"))]
+        {
+            self.native_docs.drawer = None;
+        }
+        cx.defer(move |cx| hide_drawer_window(handle, native_view, slide, cx));
     }
 
     /// Runs as the main window's frame begins: a drawer the Docs view did not draw last frame
     /// belongs to a view that went away (another view, a closed panel), so it goes too.
     pub(crate) fn native_docs_drop_unseen_drawer(&mut self, cx: &mut Context<Self>) {
         let seen = std::mem::replace(&mut self.native_docs.drawer_synced, false);
-        if seen || self.native_docs.drawer.is_none() {
+        if seen
+            || !self
+                .native_docs
+                .drawer
+                .as_ref()
+                .is_some_and(|drawer| drawer.shown)
+        {
             return;
         }
         self.native_docs.transient = None;
         self.native_docs.slide = None;
         self.native_docs.peek_timer = None;
-        self.native_docs.drawer_frame = None;
         self.native_docs.drawer_focus = None;
-        self.native_docs_close_drawer_window(cx);
-    }
-
-    fn native_docs_close_drawer_window(&mut self, cx: &mut Context<Self>) {
-        let Some(drawer) = self.native_docs.drawer.take() else {
-            return;
-        };
-        set_docs_drawer_glass_window(None);
-        let handle = drawer.window;
-        cx.defer(move |cx| {
-            let _ = handle.update(cx, |_, window, _| {
-                detach_child_window(window);
-                window.remove_window();
-            });
-        });
+        self.native_docs_hide_drawer_window(cx);
     }
 
     /// Opening a window draws its root at once, and the root updates this entity, so the window is
@@ -169,7 +161,7 @@ impl GhostexGpuiApp {
             return;
         };
         self.native_docs.drawer_opening = true;
-        let parent_view = self.parent_ns_view;
+        let parent = self.parent_ns_view;
         let app = cx.weak_entity();
         gpui::App::defer(cx, move |cx| {
             let Some(app) = app.upgrade() else {
@@ -197,9 +189,16 @@ impl GhostexGpuiApp {
                 display_id: crate::app::window::popup_frame::display_at(screen.center(), cx)
                     .or(display_id),
                 focus: false,
-                show: true,
+                // AppKit orders the window in as it slides it out; elsewhere the platform shows it
+                // as it opens.
+                show: !cfg!(target_os = "macos"),
                 kind: gpui::WindowKind::PopUp,
-                window_background: window_glass_background_appearance(),
+                // Clear outside its rounded corners when the window is not glass.
+                window_background: if window_glass_active() {
+                    WindowBackgroundAppearance::Blurred
+                } else {
+                    WindowBackgroundAppearance::Transparent
+                },
                 is_movable: false,
                 is_resizable: false,
                 is_minimizable: false,
@@ -210,6 +209,7 @@ impl GhostexGpuiApp {
             };
             let observed = app.clone();
             let result = cx.open_window(options, move |window, cx| {
+                window.set_background_corner_radius(px(FLOATING_PANEL_CORNER_RADIUS));
                 let view = cx.new(|cx| DocsDrawerWindow {
                     app: observed.downgrade(),
                     _subscription: cx.observe(&observed, |_, _, cx| cx.notify()),
@@ -222,15 +222,68 @@ impl GhostexGpuiApp {
                 finish(&app, cx);
                 return;
             };
-            let _ = handle.update(cx, |_, window, _| attach_child_window(window, parent_view));
+            let native_view = handle
+                .update(cx, |_, window, _| cef_parent_native_view(window))
+                .ok()
+                .and_then(Result::ok);
+            let Some(native_view) = native_view else {
+                let _ = handle.update(cx, |_, window, _| window.remove_window());
+                finish(&app, cx);
+                return;
+            };
+            round_floating_panel(native_view);
             set_docs_drawer_glass_window(Some(handle.into()));
+            let slide = GhostexGpuiApp::native_docs_slide_duration().as_secs_f64();
+            show_drawer_window(handle, native_view, parent, frame, slide, cx);
             app.update(cx, |app, cx| {
                 app.native_docs.drawer_opening = false;
-                app.native_docs.drawer = Some(DocsDrawerHost { window: handle });
-                // The list may have closed while the window was opening; the next sync closes it.
+                app.native_docs.drawer = Some(DocsDrawerHost {
+                    window: handle,
+                    native_view,
+                    shown: true,
+                });
+                app.native_docs_watch_outside_clicks(cx);
+                // The list may have closed while the window was opening; the next sync hides it.
                 cx.notify();
             });
         });
+    }
+
+    /// A click anywhere else in the main window closes a drawer or a peek, as a click on the
+    /// document does. AppKit records it (a browser page under an HTML file takes its clicks
+    /// natively, so no GPUI handler sees them) and this picks it up while the list is out.
+    fn native_docs_watch_outside_clicks(&mut self, cx: &mut Context<Self>) {
+        if !cfg!(target_os = "macos") || self.native_docs.drawer_click_watch {
+            return;
+        }
+        self.native_docs.drawer_click_watch = true;
+        cx.spawn(async move |this, cx| {
+            loop {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(50))
+                    .await;
+                let watching = this.update(cx, |this, cx| {
+                    let Some(native_view) = this
+                        .native_docs
+                        .drawer
+                        .as_ref()
+                        .filter(|drawer| drawer.shown)
+                        .map(|drawer| drawer.native_view)
+                    else {
+                        this.native_docs.drawer_click_watch = false;
+                        return false;
+                    };
+                    if take_outside_click(native_view) {
+                        this.native_docs_close_transient(cx);
+                    }
+                    true
+                });
+                if !matches!(watching, Ok(true)) {
+                    break;
+                }
+            }
+        })
+        .detach();
     }
 
     /// The pointer left the drawer window or came back to it: a peek closes after the grace once
@@ -245,7 +298,11 @@ impl GhostexGpuiApp {
         self.native_docs_leave_peek(cx);
     }
 
-    fn render_native_docs_drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_native_docs_drawer(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
         let (Some(p), Some(frame)) = (
             self.native_docs.palette.clone(),
             self.native_docs.drawer_frame,
@@ -258,13 +315,12 @@ impl GhostexGpuiApp {
             super::actions::focus_and_select_all(&input, window);
         }
         let layout = self.native_docs_sidebar_layout();
-        let offset = window.viewport_size().width.as_f32() - SIDEBAR_WIDTH;
         let list = self.render_native_docs_files_list(&p, layout, true, window, cx);
+        // Laid out at the full width against the window's left edge, which is where AppKit pins
+        // the drawn frame while the window slides.
         div()
             .id("native-docs-drawer")
             .size_full()
-            .overflow_hidden()
-            .bg(window_shell_background())
             .key_context("NativeDocs")
             .on_action(cx.listener(Self::handle_native_docs_action))
             .on_key_down(cx.listener(Self::native_docs_key_down))
@@ -276,8 +332,8 @@ impl GhostexGpuiApp {
                     .absolute()
                     .top_0()
                     .bottom_0()
-                    .left(px(offset))
-                    .w(px(SIDEBAR_WIDTH))
+                    .left_0()
+                    .w(frame.size.width)
                     .child(list),
             )
             .into_any_element()
@@ -285,36 +341,114 @@ impl GhostexGpuiApp {
 }
 
 #[cfg(target_os = "macos")]
-fn attach_child_window(window: &Window, parent: *mut std::ffi::c_void) {
+fn show_drawer_window(
+    _: gpui::WindowHandle<gpui_component::Root>,
+    native_view: *mut std::ffi::c_void,
+    parent: *mut std::ffi::c_void,
+    frame: Bounds<Pixels>,
+    slide_seconds: f64,
+    _: &mut gpui::App,
+) {
     unsafe extern "C" {
-        fn GhostexGpuiAttachToastPopupToMainWindow(
-            view: *mut std::ffi::c_void,
-            parent: *mut std::ffi::c_void,
+        fn GhostexGpuiDocsDrawerShow(
+            drawer: *mut std::ffi::c_void,
+            main: *mut std::ffi::c_void,
+            x: f64,
+            y: f64,
+            width: f64,
+            height: f64,
+            slide_seconds: f64,
         );
     }
-    if let Ok(view) = cef_parent_native_view(window) {
-        unsafe { GhostexGpuiAttachToastPopupToMainWindow(view, parent) };
+    unsafe {
+        GhostexGpuiDocsDrawerShow(
+            native_view,
+            parent,
+            f64::from(frame.origin.x.as_f32()),
+            f64::from(frame.origin.y.as_f32()),
+            f64::from(frame.size.width.as_f32()),
+            f64::from(frame.size.height.as_f32()),
+            slide_seconds,
+        );
     }
 }
 
+/// Without an AppKit slide the window is placed at its frame (where the platform can move a
+/// window) and shown as it is.
 #[cfg(not(target_os = "macos"))]
-fn attach_child_window(_: &Window, _: *mut std::ffi::c_void) {}
+fn show_drawer_window(
+    handle: gpui::WindowHandle<gpui_component::Root>,
+    _: *mut std::ffi::c_void,
+    parent: *mut std::ffi::c_void,
+    frame: Bounds<Pixels>,
+    _: f64,
+    cx: &mut gpui::App,
+) {
+    crate::app::native_chat::child_window::move_child_window(handle.into(), parent, frame, cx);
+}
 
-/// Orders the window out before it closes: an attached child window that closes stays in its
-/// parent's list and can be ordered back in with it.
 #[cfg(target_os = "macos")]
-fn detach_child_window(window: &Window) {
+fn hide_drawer_window(
+    _: gpui::WindowHandle<gpui_component::Root>,
+    native_view: *mut std::ffi::c_void,
+    slide_seconds: f64,
+    _: &mut gpui::App,
+) {
     unsafe extern "C" {
-        fn GhostexGpuiSetFrostedChildWindowVisible(
-            child: *mut std::ffi::c_void,
-            parent: *mut std::ffi::c_void,
-            visible: bool,
-        );
+        fn GhostexGpuiDocsDrawerHide(drawer: *mut std::ffi::c_void, slide_seconds: f64);
     }
-    if let Ok(view) = cef_parent_native_view(window) {
-        unsafe { GhostexGpuiSetFrostedChildWindowVisible(view, std::ptr::null_mut(), false) };
+    unsafe { GhostexGpuiDocsDrawerHide(native_view, slide_seconds) };
+}
+
+/// Without an AppKit slide there is nothing to keep the window for: it closes, and the next show
+/// opens a new one.
+#[cfg(not(target_os = "macos"))]
+fn hide_drawer_window(
+    handle: gpui::WindowHandle<gpui_component::Root>,
+    _: *mut std::ffi::c_void,
+    _: f64,
+    cx: &mut gpui::App,
+) {
+    set_docs_drawer_glass_window(None);
+    let _ = handle.update(cx, |_, window, _| window.remove_window());
+}
+
+/// Cuts the window's corners to the floating panels' radius (`GhostexGpuiRoundFloatingPanel`).
+#[cfg(target_os = "macos")]
+pub(crate) fn round_floating_panel(native_view: *mut std::ffi::c_void) {
+    unsafe extern "C" {
+        fn GhostexGpuiRoundFloatingPanel(view: *mut std::ffi::c_void, radius: f64);
     }
+    unsafe { GhostexGpuiRoundFloatingPanel(native_view, f64::from(FLOATING_PANEL_CORNER_RADIUS)) };
 }
 
 #[cfg(not(target_os = "macos"))]
-fn detach_child_window(_: &Window) {}
+pub(crate) fn round_floating_panel(_: *mut std::ffi::c_void) {}
+
+/// Whether AppKit has the drawer on screen, which Docs cannot learn any other way when the system
+/// orders it out.
+#[cfg(target_os = "macos")]
+fn drawer_window_visible(native_view: *mut std::ffi::c_void) -> bool {
+    unsafe extern "C" {
+        fn GhostexGpuiDocsDrawerVisible(drawer: *mut std::ffi::c_void) -> bool;
+    }
+    unsafe { GhostexGpuiDocsDrawerVisible(native_view) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn drawer_window_visible(_: *mut std::ffi::c_void) -> bool {
+    true
+}
+
+#[cfg(target_os = "macos")]
+fn take_outside_click(native_view: *mut std::ffi::c_void) -> bool {
+    unsafe extern "C" {
+        fn GhostexGpuiDocsDrawerTakeOutsideClick(drawer: *mut std::ffi::c_void) -> bool;
+    }
+    unsafe { GhostexGpuiDocsDrawerTakeOutsideClick(native_view) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn take_outside_click(_: *mut std::ffi::c_void) -> bool {
+    false
+}

@@ -56,6 +56,8 @@ pub(crate) struct GutterModel<'a> {
     pub(crate) caret_line: usize,
     pub(crate) numbers: bool,
     pub(crate) changes: Option<&'a (Vec<LineChange>, Vec<usize>)>,
+    /// The rows on screen, in the gutter's own y, with a margin; `None` draws every row.
+    pub(crate) band: Option<(Pixels, Pixels)>,
 }
 
 pub(crate) fn render(
@@ -95,12 +97,21 @@ pub(crate) fn render(
         }
         visible.push(shows);
     }
+    // CDXC:Docs 2026-09-25 WHY:
+    // A scroll redraws the whole view every frame, and one element per line of a long document
+    // (numbers and stripes alike) made the gutter the costliest part of each frame. Only the rows
+    // near the viewport get elements; the gutter keeps its full height, so layout is unchanged.
+    let on_screen = move |top: Pixels, height: Pixels| {
+        model
+            .band
+            .is_none_or(|(low, high)| top + height >= low && top <= high)
+    };
     let numbers = model.numbers.then(|| {
         model
             .rows
             .iter()
             .enumerate()
-            .filter(|(index, _)| visible[*index])
+            .filter(|(index, (top, height))| visible[*index] && on_screen(*top, *height))
             .map(|(index, (top, row_height))| {
                 let current = index == model.caret_line;
                 div()
@@ -130,7 +141,9 @@ pub(crate) fn render(
             .enumerate()
             .filter(|(_, change)| **change != LineChange::Same)
             .filter_map(move |(line, change)| {
-                let (top, height) = rows.get(line)?;
+                let (top, height) = rows
+                    .get(line)
+                    .filter(|(top, height)| on_screen(*top, *height))?;
                 Some(
                     div()
                         .absolute()
@@ -150,7 +163,8 @@ pub(crate) fn render(
             let top = rows
                 .get(*line)
                 .map(|(top, _)| *top)
-                .or_else(|| rows.last().map(|(top, height)| *top + *height))?;
+                .or_else(|| rows.last().map(|(top, height)| *top + *height))
+                .filter(|top| on_screen(*top, px(0.)))?;
             Some(
                 div()
                     .absolute()

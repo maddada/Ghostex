@@ -142,7 +142,12 @@ impl GhostexGpuiApp {
             .w(px(SIDEBAR_WIDTH))
             .h_full()
             .min_h_0()
-            .border_l_1()
+            .when(floating, |this| {
+                this.border_1().rounded(px(
+                    crate::app::floating_reveal::model::FLOATING_PANEL_CORNER_RADIUS,
+                ))
+            })
+            .when(!floating, |this| this.border_l_1())
             .border_color(if floating { p.border } else { p.divider })
             .bg(match (floating, p.glass) {
                 // The floating list's window shows the glass picture; like the floating sessions
@@ -152,7 +157,15 @@ impl GhostexGpuiApp {
                 (false, _) => p.chrome,
             })
             .when(floating && p.glass, |this| {
-                this.child(div().absolute().inset_0().bg(p.chrome))
+                this.child(
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .rounded(px(
+                            crate::app::floating_reveal::model::FLOATING_PANEL_CORNER_RADIUS,
+                        ))
+                        .bg(p.chrome),
+                )
             })
             .child(header)
             .child(search)
@@ -496,7 +509,7 @@ impl GhostexGpuiApp {
                 .flex_none()
                 .max_h(gpui::relative(0.34))
                 .min_h_0()
-                .child(section_label("Open Files", p))
+                .child(self.render_native_docs_open_files_header(p, cx))
                 .child(
                     div()
                         .id("native-docs-open-files")
@@ -511,6 +524,49 @@ impl GhostexGpuiApp {
                 )
                 .into_any_element(),
         )
+    }
+
+    /// The "Open Files" label with its close-all "x" beside the words, centred in its row.
+    ///
+    /// CDXC:Docs 2026-09-25 DECISION:
+    /// User: "add a new button that just says x that closes all open files (next to the word open files) also please adjust the alignment for open files label there so it has equal gap above and below it".
+    fn render_native_docs_open_files_header(
+        &mut self,
+        p: &DocsPalette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let hover = p.row_hover;
+        div()
+            .flex()
+            .flex_none()
+            .items_center()
+            .gap(px(4.0))
+            .py(px(6.0))
+            .px(px(14.0))
+            .text_size(px(11.0))
+            .line_height(px(14.0))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(p.subtle)
+            .child("Open Files")
+            .child(
+                div()
+                    .id("native-docs-close-all")
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .h(px(14.0))
+                    .px(px(3.0))
+                    .rounded(px(3.0))
+                    .cursor_pointer()
+                    .hover(move |style| style.bg(hover))
+                    .child("x")
+                    .tooltip(|window, cx| titlebar_tooltip("Close all open files", window, cx))
+                    .on_click(cx.listener(|this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.native_docs_request_close_all(window, cx);
+                    })),
+            )
+            .into_any_element()
     }
 
     /// Folders that have listed children, the ones the chevron can open.

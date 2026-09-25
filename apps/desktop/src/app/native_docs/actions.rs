@@ -280,8 +280,7 @@ impl GhostexGpuiApp {
                 "titlebar/edit.svg",
                 false,
                 create("excalidraw"),
-            )
-;
+            );
         let trigger = CREATE_MENU_ANCHOR.with(|cell| cell.get());
         self.native_docs_show_list_menu(menu, trigger, true, window, cx);
     }
@@ -305,8 +304,7 @@ impl GhostexGpuiApp {
                 "titlebar/settings.svg",
                 false,
                 action(json!({ "type": "configureFolders" })),
-            )
-;
+            );
         let trigger = OVERFLOW_MENU_ANCHOR.with(|cell| cell.get());
         self.native_docs_show_list_menu(menu, trigger, true, window, cx);
     }
@@ -727,12 +725,112 @@ impl GhostexGpuiApp {
 
     /// CDXC:Docs 2026-09-15 DECISION:
     /// User: closing an open file that has unsaved changes asks first, with Save, Discard, and Cancel, the way familiar editors do.
+    /// Runs `f` against the main window when `window` is the drawer's: a prompt asked from the
+    /// floating list belongs over the app, not inside the list's narrow window. False when `window`
+    /// is already the main window and the caller goes on itself.
+    fn native_docs_defer_to_main_window(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+        f: impl FnOnce(&mut Self, &mut Window, &mut Context<Self>) + 'static,
+    ) -> bool {
+        if !self.native_docs_in_drawer(window) {
+            return false;
+        }
+        let Some(main) = self.main_window_handle else {
+            return true;
+        };
+        let app = cx.entity();
+        cx.defer(move |cx| {
+            let _ = main.update(cx, |_, window, cx| {
+                app.update(cx, |this, cx| f(this, window, cx));
+            });
+        });
+        true
+    }
+
+    /// The Open Files "x": closes every open file, asking once about the unsaved ones.
+    pub(crate) fn native_docs_request_close_all(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.native_docs_defer_to_main_window(window, cx, |this, window, cx| {
+            this.native_docs_request_close_all(window, cx)
+        }) {
+            return;
+        }
+        let (dirty, clean): (Vec<_>, Vec<_>) = self
+            .native_docs
+            .documents
+            .iter()
+            .map(|document| (document.path.clone(), document.dirty))
+            .partition(|(_, dirty)| *dirty);
+        let close_clean = move |this: &mut Self, cx: &mut Context<Self>| {
+            for (path, _) in &clean {
+                this.native_docs_close(path, cx);
+            }
+        };
+        if dirty.is_empty() {
+            close_clean(self, cx);
+            return;
+        }
+        let message = if dirty.len() == 1 {
+            let name = self
+                .native_docs
+                .document(&dirty[0].0)
+                .map(|document| document.name.clone())
+                .unwrap_or_default();
+            format!("Save changes to {name}?")
+        } else {
+            format!("Save changes to {} files?", dirty.len())
+        };
+        let answer = window.prompt(
+            gpui::PromptLevel::Warning,
+            &message,
+            Some("Your changes will be lost if you close the files without saving."),
+            &["Save", "Discard", "Cancel"],
+            cx,
+        );
+        cx.spawn(async move |this, cx| {
+            let choice = answer.await;
+            let _ = this.update(cx, |this, cx| {
+                let dirty: Vec<String> = dirty.into_iter().map(|(path, _)| path).collect();
+                match choice {
+                    Ok(0) => {
+                        close_clean(this, cx);
+                        for path in dirty {
+                            let closing = path.clone();
+                            this.native_docs_save(&path, cx, move |this, cx| {
+                                this.native_docs_close(&closing, cx)
+                            });
+                        }
+                    }
+                    Ok(1) => {
+                        close_clean(this, cx);
+                        for path in dirty {
+                            this.native_docs_close(&path, cx);
+                        }
+                    }
+                    _ => {}
+                }
+            });
+        })
+        .detach();
+    }
+
     pub(crate) fn native_docs_confirm_close(
         &mut self,
         path: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let deferred_path = path.to_string();
+        if self.native_docs_defer_to_main_window(window, cx, move |this, window, cx| {
+            this.native_docs_confirm_close(&deferred_path, window, cx)
+        }) {
+            return;
+        }
         let name = self
             .native_docs
             .document(path)
