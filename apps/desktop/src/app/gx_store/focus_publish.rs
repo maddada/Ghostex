@@ -320,6 +320,28 @@ impl GhostexGpuiApp {
         });
     }
 
+    /// Whether the store's newest selection is this local session: its focus, or the selection it
+    /// holds for a row that has not arrived yet. An attach that completes late asks this before it
+    /// selects its tab.
+    ///
+    /// CDXC:FocusRouting 2026-09-25 WHY:
+    /// A sidebar attach used to check the workspace's focus state copy, which lags the store while a project switch is coalesced (the publish waits for the trailing flush). A fast Ctrl+Tab walk across projects then let the attach of a row it had already left select that row again, and the next step walked on from there, landing rows short. The store's own selection is the planned target, so a newer step always wins.
+    pub(crate) fn gx_store_selection_names_local_session(
+        &self,
+        key: &GpuiLocalWorkspaceSessionKey,
+    ) -> bool {
+        let focus = self.gx_store.core.focus();
+        let selected = match self.gx_store.focus_publish.unplaced_for(focus.local_stamp) {
+            Some(held) => Some(&held.session),
+            None => focus.focused_session.as_ref(),
+        };
+        selected.is_some_and(|session| {
+            session.machine.is_local()
+                && session.project_id == key.project_id
+                && session.session_id == key.session_id
+        })
+    }
+
     /// A session this app has just created or forked and is opening in its project's workspace:
     /// the store's focus takes it now when its row is there, and holds it until the row arrives
     /// otherwise, so no publish in between pulls the workspace back to the session it came from.

@@ -1068,13 +1068,12 @@ impl GhostexGpuiApp {
                         "sessionId": key.session_id,
                     }),
                 );
+                // The store's newest selection, not the workspace's focus state copy, which lags
+                // it while a project switch is coalesced (gx_store_selection_names_local_session).
+                let selected = this.gx_store_selection_names_local_session(&key);
                 let completion_origin = if origin == GpuiLocalWorkspaceAttachOrigin::SurfacedRestore
                     && this.local_workspace_latest_focus_key.as_ref() == Some(&key)
-                    && this
-                        .sidebar_gxserver_presentation_focus_state
-                        .focused_session_id
-                        .as_deref()
-                        == Some(key.session_id.as_str())
+                    && selected
                 {
                     GpuiLocalWorkspaceAttachOrigin::SidebarFocus
                 } else {
@@ -1082,15 +1081,7 @@ impl GhostexGpuiApp {
                 };
                 match completion_origin {
                     GpuiLocalWorkspaceAttachOrigin::SidebarFocus => {
-                        if this.local_workspace_latest_focus_key.as_ref() != Some(&key) {
-                            return;
-                        }
-                        if this
-                            .sidebar_gxserver_presentation_focus_state
-                            .focused_session_id
-                            .as_deref()
-                            != Some(key.session_id.as_str())
-                        {
+                        if this.local_workspace_latest_focus_key.as_ref() != Some(&key) || !selected {
                             return;
                         }
                     }
@@ -1150,12 +1141,7 @@ impl GhostexGpuiApp {
                         // wrong workspace or override a newer selection.
                         if this.agents_workspace_project_id.as_deref()
                             != Some(key.project_id.as_str())
-                            || this
-                                .sidebar_gxserver_presentation_focus_state
-                                .focused_session_id
-                                .as_deref()
-                                != Some(key.session_id.as_str())
-                                && !this.gx_store_is_created_attach(&key)
+                            || !selected && !this.gx_store_is_created_attach(&key)
                         {
                             return;
                         }
