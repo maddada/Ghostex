@@ -49,9 +49,8 @@ pub(crate) fn read_record_raw(
 /// `Storage::call` had `recordScan` on the JavaScript side and this door had no equivalent, so the
 /// Rust chat host could only read a record whose whole key it already knew. Two of the chat's own
 /// records are keyed by a SCOPE it cannot know in advance (`<sessionKey>#<scope>` for the option
-/// pills and the model-selection outbox, `storedSessionChatOptionKeys` in
-/// `packages/core-ui/chat/session-chat-session-options.ts`), and the draft save outbox is keyed by
-/// a revision, so a prefix scan is the only way to find them.
+/// pills and the model-selection outbox, `packages/gx-chat-core/src/menus/option_storage.rs`), and
+/// the draft save outbox is keyed by a revision, so a prefix scan is the only way to find them.
 ///
 /// The scan is a RANGE over the primary key rather than a pattern, so it reads the rows it returns
 /// and not the table: `key >= prefix AND key < <prefix with its last byte raised>`. A prefix whose
