@@ -1046,6 +1046,25 @@ fn to_cli_session(
         &[p("delayedSendDeadlineAt")],
     );
     /*
+     * CDXC:SessionStatus 2026-09-25 WHY:
+     * The phone's session row draws the same status as the desktop sidebar row, which reads these three off the presentation session: the pink question dot (`pendingQuestionCount`), the grey background-work dot (`backgroundWorkDetectedAt`) and the Close After Done countdown (`closeAfterDoneDeadlineAt`). Presentation is the only source; an older daemon omits them. `to_mobile_session_summary` below forwards them again, and the phone reads them in apps/mobile/app/src/components/sessions/sessionStatus.ts.
+     */
+    insert_js(
+        &mut map,
+        "pendingQuestionCount",
+        &[p("pendingQuestionCount")],
+    );
+    insert_js(
+        &mut map,
+        "backgroundWorkDetectedAt",
+        &[p("backgroundWorkDetectedAt")],
+    );
+    insert_js(
+        &mut map,
+        "closeAfterDoneDeadlineAt",
+        &[p("closeAfterDoneDeadlineAt")],
+    );
+    /*
      * CDXC:SessionChat 2026-08-21-b:
      * The phone's session-list badge reads these two off the mobile summary, so
      * the inventory has to forward them from the presentation snapshot the same
@@ -2125,6 +2144,33 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         &[s("sendWhenAllProjectSessionsStopActive")],
     );
     insert_js(&mut map, "closeAfterDone", &[s("closeAfterDone")]);
+    /*
+     * CDXC:SessionStatus 2026-09-25 WHY:
+     * Same SECOND-whitelist trap: the phone row draws the desktop row's status, so it needs the question count, the background-work marker, the Close After Done deadline it counts down from, and, while the session is in attention, the attention event the completion flash is keyed by. Each is absent when it has nothing to say (a zero count, no attention), which keeps the summary as small as before for idle rows and is also what an older daemon sends.
+     */
+    if s("pendingQuestionCount")
+        .and_then(Value::as_u64)
+        .is_some_and(|count| count > 0)
+    {
+        insert_js(
+            &mut map,
+            "pendingQuestionCount",
+            &[s("pendingQuestionCount")],
+        );
+    }
+    insert_js(
+        &mut map,
+        "backgroundWorkDetectedAt",
+        &[s("backgroundWorkDetectedAt")],
+    );
+    insert_js(
+        &mut map,
+        "closeAfterDoneDeadlineAt",
+        &[s("closeAfterDoneDeadlineAt")],
+    );
+    if s("activity").and_then(Value::as_str) == Some("attention") {
+        insert_js(&mut map, "attention", &[s("attention")]);
+    }
     insert_js(&mut map, "sortOrder", &[s("sortOrder")]);
     insert_js(&mut map, "status", &[s("status")]);
     insert_js(&mut map, "surface", &[s("surface")]);

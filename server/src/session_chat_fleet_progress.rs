@@ -11,6 +11,9 @@ pub(crate) struct ClaudeChild {
     pub agent: SessionChatSubAgent,
     pub launched_at: Option<i64>,
     pub sampled_at: i64,
+    /// Listed while idle without a footer row of its own: a finished agent of a still-running
+    /// workflow, whose single footer row ("4/6 agents done") stands for every agent in it.
+    pub resident: bool,
 }
 
 struct Progress<'a> {
@@ -104,6 +107,8 @@ pub(crate) fn reconcile(
     children
         .into_iter()
         .zip(visible)
-        .filter_map(|(child, visible)| (child.agent.working || visible).then_some(child.agent))
+        .filter_map(|(child, visible)| {
+            (child.agent.working || visible || child.resident).then_some(child.agent)
+        })
         .collect()
 }
