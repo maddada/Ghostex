@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-# CDXC:WebGpui 2026-09-22 WHY: the browser build is its own crate because `ghostex-gpui` is binary-only and links CEF, libghostty, PTYs, SQLite and QuickJS, none of which exist on wasm32. This crate compiles the desktop's drawing code straight from `apps/desktop/src` (symlinks under `src/`, plus the items `build.rs` lifts out of mixed files) and feeds it from the platform-neutral cores, so the desktop crate does not change shape for an experiment.
+# CDXC:WebGpui 2026-09-22 WHY: the browser build is its own crate because `ghostex-gpui` is binary-only and links CEF, libghostty, PTYs and SQLite (and QuickJS until 2026-09-25), none of which exist on wasm32. This crate compiles the desktop's drawing code straight from `apps/desktop/src` (symlinks under `src/`, plus the items `build.rs` lifts out of mixed files) and feeds it from the platform-neutral cores, so the desktop crate does not change shape for an experiment.
 [lib]
 crate-type = ["cdylib", "rlib"]
 

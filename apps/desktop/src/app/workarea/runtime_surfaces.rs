@@ -140,9 +140,7 @@ impl GhostexGpuiApp {
         CDXC:Workarea 2026-06-24-10:12:
         Project-workarea CEF creation happens only at the visible replacement edge after the slot gate already permits placeholder replacement and a real runtime URL value has been supplied. This avoids hidden/offscreen preparatory mounts and keeps URL values out of app shell state while still using the existing CefSurface child-view wrapper for Source, Kanban, Automate, and Manage.
         */
-        if self.sidebar.is_none()
-            || !self.project_workarea_runtime_cef_surface_should_be_visible(slot_key)
-        {
+        if !self.project_workarea_runtime_cef_surface_should_be_visible(slot_key) {
             return None;
         }
         if let Some(owned_surface) = self.project_workarea_runtime_cef_surfaces.get(&slot_key) {

@@ -94,11 +94,6 @@ impl GhostexGpuiApp {
         self.gx_store.sidebar_ui.restored() || self.gx_store.sidebar_list.ready_recovery().state
     }
 
-    /// The runtime failed to start: the list is rebuilt now rather than on the next state change.
-    pub(crate) fn gx_store_runtime_start_failed(&mut self, cx: &mut gpui::Context<Self>) {
-        self.gx_store_sidebar_state_changed(cx);
-    }
-
     /// The HUD the installed list carries (gx_store/hud/). Every reader of it indexes and
     /// defaults, so the empty object it is before the store's first composition is the built-in
     /// appearance and an empty launcher rather than a list that is not drawn.
@@ -162,8 +157,8 @@ impl GxStoreDiagnostics {
         self.warning(
             "gxStore.sidebarList.legMissing.error",
             json!({
-                // The runtime never posted the sidebar HUD: its service threw before
-                // `runtime.start()`, or the facts channel is not connected.
+                // Always false since the HUD is composed in Rust (gx_store/hud/); kept so the line
+                // keeps its shape for the logs already written.
                 "hudMissing": hud_missing,
                 // Client storage never answered with the sidebar's own state. The list is drawn on
                 // defaults and no write is made until a read succeeds.

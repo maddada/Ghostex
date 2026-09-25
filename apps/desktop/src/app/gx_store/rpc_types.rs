@@ -62,12 +62,3 @@ impl std::fmt::Display for GxRpcError {
         formatter.write_str(&self.message)
     }
 }
-
-/// The parameter NAMES of one call, for the `native.runtime.trace` meter. Values are never read.
-#[cfg_attr(target_family = "wasm", allow(dead_code))]
-pub(crate) fn gx_rpc_param_names(params: &Value) -> Vec<String> {
-    params
-        .as_object()
-        .map(|object| object.keys().cloned().collect())
-        .unwrap_or_default()
-}

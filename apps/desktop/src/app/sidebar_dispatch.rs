@@ -169,9 +169,6 @@ impl GhostexGpuiApp {
         self.sidebar_runtime_settings_snapshot = next_snapshot.clone();
         self.gx_store_hud_settings_changed(cx);
         self.remote_reconnect_sync_with_settings(cx);
-        if let Some(sidebar) = self.sidebar.clone() {
-            sidebar.update(cx, |surface, _| surface.refresh_sidebar_runtime_settings());
-        }
         if self.coerce_active_mode_to_available_project_context(cx) {
             self.update_project_workarea_runtime_cef_surface_visibility(cx);
         }
@@ -266,11 +263,6 @@ impl GhostexGpuiApp {
             });
         }
         self.refresh_extensions_in_background(cx);
-        if let Some(sidebar) = self.sidebar.clone() {
-            sidebar.update(cx, |surface, _| {
-                surface.refresh_sidebar_gxserver_bootstrap(next_bootstrap.clone());
-            });
-        }
         self.reconcile_agents_pane_surfaces(cx);
         true
     }
@@ -1444,10 +1436,6 @@ impl GhostexGpuiApp {
             .apply_run_state(run_id, state);
     }
 
-    pub(crate) fn dispatch_gpui_sidebar_command_run_state_cleared(&mut self, command_id: &str) {
-        self.sidebar_command_run_feedback_states.remove(command_id);
-    }
-
     pub(crate) fn dispatch_gpui_command_action_completions(
         &mut self,
         completions: Vec<CommandPaneActionRunCompletion>,
@@ -1523,52 +1511,6 @@ impl GhostexGpuiApp {
             self.restore_non_command_focus_after_surface_removed(keyboard_owner_before, cx);
         }
         self.scroll_command_group_active_tab(completed_tab.group_id);
-        self.scroll_focused_command_active_tab();
-        self.persist_shell_layout_state();
-        self.sync_gpui_keep_awake_automation_from_current_settings(cx);
-        self.refresh_sidebar_command_pane_sessions_if_changed(cx);
-        cx.notify();
-        true
-    }
-
-    pub(crate) fn close_gpui_sidebar_command_run(
-        &mut self,
-        command_id: &str,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        /*
-        CDXC:CommandPane 2026-06-25-10:34:
-        Ending a sidebar command run closes only the live command-pane Action tab mapped to that command id and clears sidebar button feedback. The tab is removed from the command-pane model immediately (macOS command close parity); render reconciliation drops any mounted surface. This path must not inspect command text, terminal output, titles, status-file contents, paths, URLs, or persisted shell JSON.
-        */
-        let slot = self
-            .command_pane
-            .take_action_session_slot_for_action_close(command_id);
-        self.dispatch_gpui_sidebar_command_run_state_cleared(command_id);
-        let Some(slot) = slot else {
-            cx.notify();
-            return false;
-        };
-        let slot = CommandTerminalBodyMountSlotId {
-            group_id: slot.0,
-            session_id: slot.1,
-        };
-        self.clear_gpui_command_delayed_send_timer(slot.session_id);
-        self.clear_gpui_command_close_after_done_timer(slot.session_id);
-        if !self
-            .command_pane
-            .close_session(slot.group_id, slot.session_id)
-        {
-            cx.notify();
-            return false;
-        }
-        self.forget_command_gxserver_session_for_closed_tab(slot.session_id, cx);
-        self.clear_command_resize_hover_state_if_command_pane_hidden();
-        if self.command_pane.has_sessions() {
-            self.focus_command_pane(cx);
-        } else {
-            self.restore_previous_non_command_focus_or_default(cx);
-        }
-        self.scroll_command_group_active_tab(slot.group_id);
         self.scroll_focused_command_active_tab();
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);

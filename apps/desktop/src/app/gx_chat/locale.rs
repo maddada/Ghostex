@@ -7,11 +7,12 @@
 //! [`ChatContext::formatted_times`](ghostex_gx_chat_core::ChatContext) and falls back to its own
 //! `en-US` form.
 //!
-//! **That fallback is not what the desktop prints.** The chat brain runs in QuickJS, which is built
+//! **That fallback is not what the desktop printed.** The chat brain ran in QuickJS, which is built
 //! with no `Intl` and no locale data at all (`typeof Intl === 'undefined'` inside the runtime), so
 //! its `toLocaleString()` ignores the user's locale AND V8's `en-US` shape and always writes a
 //! zero-padded `MM/DD/YYYY, hh:mm:ss AM/PM` in the machine's local timezone. Measured against
-//! `rquickjs` 0.12, the engine the app embeds:
+//! `rquickjs` 0.12, the engine the app embedded until 2026-09-25 (this format is kept so the text
+//! did not change when the brain moved to Rust):
 //!
 //! | stamp (UTC) | QuickJS, `TZ=UTC` |
 //! |---|---|

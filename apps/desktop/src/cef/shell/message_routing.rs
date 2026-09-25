@@ -203,14 +203,6 @@ pub enum SidebarBridgeEvent {
 
 pub type SidebarBridgeEventHandler = StdRc<dyn Fn(SidebarBridgeEvent)>;
 
-pub(crate) fn sidebar_event_for_function(
-    name: &str,
-    payload: String,
-) -> Option<SidebarBridgeEvent> {
-    let spec = sidebar_bridge_function_spec_for_js_function(name)?;
-    Some(SidebarBridgeEventKind::forwarded_from(spec.id)?.with_payload(payload))
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProjectWorkareaBridgeEvent {
     ProjectBeadsRequest(String),

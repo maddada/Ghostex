@@ -37,7 +37,6 @@ impl GhostexGpuiApp {
                     let _ = this.update(cx, |this, _| {
                         this.gx_store_answer_renderer_command_id(
                             &command_id,
-                            &command.action,
                             Err(RendererCommandError::BridgeUnavailable),
                         );
                     });
@@ -52,16 +51,14 @@ impl GhostexGpuiApp {
         command: &RendererCommand,
         result: Result<Value, RendererCommandError>,
     ) {
-        self.gx_store_answer_renderer_command_id(&command.command_id, &command.action, result);
+        self.gx_store_answer_renderer_command_id(&command.command_id, result);
     }
 
     fn gx_store_answer_renderer_command_id(
         &mut self,
         command_id: &str,
-        action: &str,
         result: Result<Value, RendererCommandError>,
     ) {
-        super::super::runtime_trace::trace_renderer_command(action, result.is_ok());
         let Some(client) = &self.gx_store.client else {
             return;
         };

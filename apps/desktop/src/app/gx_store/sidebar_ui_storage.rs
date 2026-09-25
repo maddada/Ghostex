@@ -22,7 +22,7 @@
 //! by one writer while the other replaces it.
 //!
 //! SEE-ALSO: packages/client-storage/catalog.ts (the entry and store bounds this mirrors),
-//! packages/chat-runtime/src/storage.rs (the service's own door to the same file).
+//! packages/chat-runtime/src/storage_records.rs (the `records` door to the same file).
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};

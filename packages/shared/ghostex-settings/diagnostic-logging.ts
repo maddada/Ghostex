@@ -214,14 +214,6 @@ export const DIAGNOSTIC_LOGGING_SCENARIOS = [
     logFiles: ['gpui-session-chat-debug.jsonl'],
   },
   {
-    description:
-      'App runtime port meter: gxserver endpoint and parameter names (never values) sent by the old app runtime and by the Rust host, and the name of every call or command that still reaches the old runtime.',
-    group: 'GPUI',
-    id: 'native.runtime.trace',
-    label: 'App runtime port trace',
-    logFiles: ['gpui-runtime-trace.jsonl'],
-  },
-  {
     description: 'gxserver process startup, shutdown, and daemon lifecycle breadcrumbs.',
     group: 'gxserver',
     id: 'gxserver.lifecycle',

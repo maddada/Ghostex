@@ -88,7 +88,7 @@ All are no-ops for native builds; `cargo check --bins` of the desktop crate pass
 - **The chat host is host-neutral too.** Only its runner, its storage door and its clock differ between the desktop and the page; the rules, the effects, the retention and the socket's routing are the same files.
 - **An idle page stops answering after 30 to 40 seconds in headless Chrome** (2026-09-25): `shot.mjs` screenshots hang with no chat open and with the chat host and client storage switched off, so it is not the chat. Keep a headless run under half a minute until it is found.
 - **`gx-core` pays off.** The list, the menus, the sidebar's own state, its storage formats and the daemon call plans are host-neutral.
-- **What does not port is the migration scaffolding.** Most of `apps/desktop/src/app/gx_store/` keeps the old QuickJS runtime in step. Including the whole folder gives 916 errors; it should stay out.
+- **What does not port is the desktop-only half of `gx_store/`** (remote tunnels, CEF dialogs, panes and AppKit). Including the whole folder gave 916 errors before the QuickJS runtime was deleted; symlink executor files one by one instead.
 - **Debug assertions are off in this crate's dev profile**: gpui's `shape_line` asserts on newlines the shared chat code passes it, and a panic in wasm takes the page down.
 - **Three clock types meet here**: `web_time` (gpui), `instant` (gpui-component) and std. Shared files have to name the one their callee takes.
 

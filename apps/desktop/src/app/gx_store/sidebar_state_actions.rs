@@ -42,15 +42,13 @@ pub(crate) struct SidebarStateActionCounters {
     /// A Delayed Send on a row the drawn list does not hold, handed to the old runtime. A context
     /// menu opens only on a drawn row, so this should stay at zero.
     pub(crate) delayed_sends_declined_row: u64,
-    /// Launches sent to the runtime's `runSidebarAgent`.
+    /// Launches handed to `runSidebarAgent`.
     pub(crate) agent_runs: u64,
     /// The launcher's Configure row (a run with no agent).
     pub(crate) configure_agents: u64,
     /// A run on a group the drawn list does not hold, or one with no project: the TypeScript's own
     /// early return.
     pub(crate) agent_nothing: u64,
-    /// A launch with no sidebar page to receive it: the old dispatcher did nothing then either.
-    pub(crate) agent_runs_without_runtime: u64,
     /// Hide Machine settings patches saved.
     pub(crate) machine_hides: u64,
     /// Commands of the three that went to the old runtime because the store's list is not drawn.
@@ -134,12 +132,6 @@ impl GhostexGpuiApp {
                     self.open_app_modal_from_bridge(payload.clone(), cx);
                 }
                 ActionEffect::SidebarHostMessage { message } => {
-                    // The old dispatcher returned before staging anything when there was no page
-                    // to send the command to, and a launch with no runtime cannot happen.
-                    if self.sidebar.is_none() {
-                        self.gx_store.sidebar_open.state.agent_runs_without_runtime += 1;
-                        continue;
-                    }
                     self.gx_store.sidebar_open.state.agent_runs += 1;
                     self.stage_agent_launch_placeholder(command, cx);
                     // Tells the runtime the newest local selection first (gx_store/burst.rs).

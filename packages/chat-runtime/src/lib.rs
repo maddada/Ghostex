@@ -1,12 +1,8 @@
-//! The QuickJS host for the desktop's app runtime (`apps/desktop/sidebar/service/`, evaluated by
-//! [`ServiceRuntime`]) and the client-storage records it shares with the Rust store. The chat's own
-//! QuickJS runtime was deleted on 2026-09-25: the desktop chat runs on `packages/gx-chat-core`.
+//! The desktop's client storage (`client-storage.sqlite3`): its start-up (tables, the browser-era
+//! import, the catalog migrations) and the records and preferences doors the Rust store reads and
+//! writes. The QuickJS host that also lived here (the chat's runtime, then the app runtime) was
+//! deleted on 2026-09-25 with QuickJS itself.
 
-mod call;
-mod network;
-mod platform;
-mod service;
-mod service_worker;
 mod storage;
 mod storage_catalog;
 mod storage_import;
@@ -14,8 +10,6 @@ mod storage_import_docs;
 mod storage_init;
 mod storage_metadata;
 mod storage_records;
-pub use service::ServiceRuntime;
-pub use service_worker::ServiceWorker;
 pub use storage_catalog::{CATALOG, CatalogBackend, CatalogStore, definition_for_key};
 pub use storage_import_docs::import_docs_browser_state;
 pub use storage_init::{StorageInitReport, initialize_client_storage};

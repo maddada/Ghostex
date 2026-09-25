@@ -80,9 +80,6 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn start_gpui_first_run_onboarding(&mut self, cx: &mut gpui::Context<Self>) {
-        if self.sidebar.is_none() {
-            return;
-        }
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
             return;

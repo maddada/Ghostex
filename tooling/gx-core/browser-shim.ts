@@ -35,9 +35,6 @@ class MemoryStorage {
 }
 
 const globals = globalThis as Record<string, unknown>;
-// The runtime's trace post (`nativePost`, packages/shared/native-runtime/bridge.ts) needs the service's
-// native function; a harness has no service, so the post goes nowhere.
-if (globals.ghostexNativePost === undefined) globals.ghostexNativePost = () => {};
 if (globals.Storage === undefined) globals.Storage = MemoryStorage;
 if (globals.window === undefined) {
   globals.window = {

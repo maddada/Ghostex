@@ -157,27 +157,6 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn sidebar_bridge_event_handler(
-        &self,
-        cx: &mut gpui::Context<Self>,
-    ) -> cef::SidebarBridgeEventHandler {
-        let app = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        let foreground = cx.foreground_executor().clone();
-
-        Rc::new(move |event: cef::SidebarBridgeEvent| {
-            let app = app.clone();
-            let mut async_cx = async_cx.clone();
-            foreground
-                .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        this.receive_sidebar_bridge_event(event, window, cx);
-                    });
-                })
-                .detach();
-        })
-    }
-
     /*
     CDXC:Onboarding 2026-08-18:
     The tutorial video should play fullscreen inside its own modal window. The

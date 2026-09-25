@@ -44,13 +44,10 @@ impl GxStoreDiagnostics {
             "gxStore.runtimeFacts.summary",
             json!({
                 "hudPosts": counters.hud_posts,
-                "rowPosts": counters.row_posts,
-                "revealPosts": counters.reveal_posts,
                 // Held through the loading skeleton and answered once it lifted. The two move
                 // together; a held one with no replay is a reveal that was dropped.
                 "revealsHeld": counters.reveals_held,
                 "revealsReplayed": counters.reveals_replayed,
-                "unparsable": counters.unparsable,
                 // The other half of "no page in the route": what the sidebar dispatch's
                 // fall-through did with a command the store did not perform itself.
                 "runtimeRoute": {

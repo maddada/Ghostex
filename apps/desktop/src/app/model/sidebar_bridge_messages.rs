@@ -119,26 +119,6 @@ pub(crate) struct GpuiSidebarCreateProjectTerminalMessage {
     pub(crate) request_id: Option<String>,
 }
 
-/// True for sidebar bridge events that act on per-project runtime state, so
-/// they must not run ahead of a project switch that is still queued behind the
-/// settle window. The listed pass-through events are project-agnostic status,
-/// telemetry, and compatibility no-ops; flushing on those would defeat the
-/// debounce because they arrive on every presentation publish.
-pub(crate) fn gpui_sidebar_bridge_event_must_follow_pending_project_switch(
-    event: &cef::SidebarBridgeEvent,
-) -> bool {
-    !matches!(
-        event,
-        cef::SidebarBridgeEvent::ActiveProjectContext(_)
-            | cef::SidebarBridgeEvent::GxserverPresentationFocusState(_)
-            | cef::SidebarBridgeEvent::WorkspaceTerminalFocus(_)
-            | cef::SidebarBridgeEvent::SessionStatusIndicators(_)
-            | cef::SidebarBridgeEvent::PetOverlayState(_)
-            | cef::SidebarBridgeEvent::ProjectBoardConversationResponse(_)
-            | cef::SidebarBridgeEvent::RefusedPageNavigation(_)
-    )
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiBrowserRendererOpenReuse {
     Exact,
@@ -152,12 +132,6 @@ pub(crate) struct GpuiSidebarOpenBrowserUrlMessage {
     pub(crate) reuse: GpuiBrowserRendererOpenReuse,
     pub(crate) from_quick_header: bool,
     pub(crate) project_id: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct GpuiSidebarBrowserTabFocusMessage {
-    pub(crate) project_id: String,
-    pub(crate) tab_id: BrowserTabId,
 }
 
 /*

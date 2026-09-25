@@ -8,7 +8,7 @@ import {
 import {
   createGpuiPresentationProjectProjectionMetadata,
   resolveGpuiSidebarAgentIcon,
-} from '@/apps/desktop/sidebar/gxserver-runtime/helpers/presentation-projection';
+} from './presentation-projection';
 import { createGpuiWorkspaceSessionSubgroupId } from '@/packages/shared/workspace-session-subgroup-id';
 import { parseSidebarSpacesFromGxserver } from '@/packages/core-ui/spaces';
 import { parseSidebarProjectCollectionsFromGxserver } from '@/packages/core-ui/project-collections';

@@ -41,7 +41,6 @@ pub enum GpuiSupportLog {
     TitlebarPopupRepro,
     CrashReports,
     Performance,
-    RuntimeTrace,
 }
 
 impl GpuiSupportLog {
@@ -60,7 +59,6 @@ impl GpuiSupportLog {
             Self::TitlebarPopupRepro => "gpui-titlebar-popup-repro.jsonl",
             Self::CrashReports => "gpui-crash-reports.log",
             Self::Performance => "gpui-performance.jsonl",
-            Self::RuntimeTrace => "gpui-runtime-trace.jsonl",
         }
     }
 
@@ -75,7 +73,6 @@ impl GpuiSupportLog {
             Self::SessionChat => Some(GpuiDiagnosticScenario::SessionChat),
             Self::ProjectBoard => Some(GpuiDiagnosticScenario::ProjectBoard),
             Self::AppModal => Some(GpuiDiagnosticScenario::AppModal),
-            Self::RuntimeTrace => Some(GpuiDiagnosticScenario::RuntimeTrace),
             Self::TitlebarPopupRepro => None,
             // Crash reports are always-on failure diagnostics.
             Self::CrashReports => None,
@@ -94,7 +91,6 @@ pub enum GpuiDiagnosticScenario {
     SessionChat,
     ProjectBoard,
     AppModal,
-    RuntimeTrace,
 }
 
 impl GpuiDiagnosticScenario {
@@ -111,7 +107,6 @@ impl GpuiDiagnosticScenario {
             Self::SessionChat => "gpui.sessionChat.viewState",
             Self::ProjectBoard => "native.project.board",
             Self::AppModal => "gpui.app.modal",
-            Self::RuntimeTrace => "native.runtime.trace",
         }
     }
 }
@@ -405,7 +400,6 @@ pub fn prune_gpui_support_logs() {
         GpuiSupportLog::TerminalFocus,
         GpuiSupportLog::ProjectBoard,
         GpuiSupportLog::AppModal,
-        GpuiSupportLog::RuntimeTrace,
         GpuiSupportLog::TitlebarPopupRepro,
         GpuiSupportLog::CrashReports,
     ] {

@@ -328,20 +328,10 @@ pub(crate) const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION: u64 = 1;
 pub(crate) const GPUI_SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.commandAction";
 
-pub(crate) const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_VERSION: u64 = 1;
-
-pub(crate) const GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE: &str =
-    "ghostex.gpui.sidebar.commandRunEnd";
-
 pub(crate) const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_VERSION: u64 = 1;
 
 pub(crate) const GPUI_SIDEBAR_GXSERVER_FOCUS_STATE_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.gxserverPresentationFocusState";
-
-pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_VERSION: u64 = 1;
-
-pub(crate) const GPUI_SIDEBAR_WORKSPACE_TERMINAL_FOCUS_MESSAGE_TYPE: &str =
-    "ghostex.gpui.sidebar.workspaceTerminalFocus";
 
 pub(crate) const GPUI_SIDEBAR_CREATE_PROJECT_AGENT_MESSAGE_VERSION: u64 = 1;
 
@@ -375,9 +365,6 @@ pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION: u64 = 1;
 
 pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE: &str =
     "ghostex.gpui.sidebar.openBrowserUrl";
-
-pub(crate) const GPUI_SIDEBAR_BROWSER_TAB_FOCUS_MESSAGE_TYPE: &str =
-    "ghostex.gpui.sidebar.browserTabFocus";
 
 pub(crate) const GPUI_SIDEBAR_OPEN_BROWSER_URL_MAX_CHARS: usize = 16 * 1024;
 

@@ -73,8 +73,6 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) latest_sidebar_project_snapshot: Option<crate::app::model::GpuiProjectSnapshot>,
     /// The desktop queues project switches behind a pane attach; the page switches at once, so this stays empty.
     pub(crate) project_switch_pending_requests: Vec<()>,
-    /// The desktop's sidebar page handle, which its agent launcher checks before staging a launch. The page is its own sidebar, so it is always present.
-    pub(crate) sidebar: Option<()>,
     /// Quick Access (`app/quick_access/`, the desktop's host and window).
     pub(crate) quick_access: crate::app::quick_access::host::QuickAccessHost,
     /// Action run states for Quick Access's Commands rows; the page runs no Actions, so it stays empty.
@@ -112,7 +110,6 @@ impl GhostexGpuiApp {
             sidebar_runtime_settings_snapshot: Default::default(),
             latest_sidebar_project_snapshot: None,
             project_switch_pending_requests: Vec::new(),
-            sidebar: Some(()),
             quick_access: Default::default(),
             sidebar_command_run_feedback_states: HashMap::new(),
             app_modal_command_return_focus_target: None,

@@ -27,14 +27,15 @@
  * `ATTENTION_BASE`, and through gx-core's `Core`, and compares what each reported to a daemon,
  * which completion sounds it played, and the activity every row shows after each step.
  *
- * Deleted with the runtime in step 3 (docs/2026-09-25/app-runtime-port/PLAN.md).
+ * The runtime was deleted in step 3 (docs/2026-09-25/app-runtime-port/PLAN.md); what this gate reads
+ * of it as it last was comes out of git at `FROZEN_RUNTIME_REVISION` (frozen-runtime.ts).
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { reduceGxserverPresentationDelta } from '@/packages/shared/gxserver-presentation-cache';
+import { frozenRuntimeRoot } from './frozen-runtime';
 import { normalizeNotificationFeedState } from '@/packages/shared/notification-feed/notification-feed-contract';
 
 type Json = any;
@@ -47,6 +48,8 @@ const option = (name: string) => {
 const inject = option('--inject');
 const keep = option('--keep');
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const frozen = frozenRuntimeRoot();
+const { reduceGxserverPresentationDelta } = await import(`${frozen}/packages/shared/gxserver-presentation-cache`);
 
 // ---------------------------------------------------------------- notification feed
 
@@ -292,7 +295,7 @@ function attentionFixtures(): Json[] {
 async function loadOldAttention(dir: string): Promise<Json> {
   const out = join(dir, 'old');
   mkdirSync(join(out, 'helpers'), { recursive: true });
-  const current = `${root}${RUNTIME}`;
+  const current = `${frozen}/${RUNTIME}`;
   const read = (path: string) =>
     execFileSync('git', ['show', `${ATTENTION_BASE}:${RUNTIME}/${path}`], { cwd: root, encoding: 'utf8' }).replaceAll(
       "'@/",
@@ -925,7 +928,7 @@ const INDICATORS_BASE = '912fcb0af';
 async function loadOldIndicators(dir: string): Promise<Json> {
   const out = join(dir, 'old-indicators');
   mkdirSync(join(out, 'helpers'), { recursive: true });
-  const current = `${root}${RUNTIME}`;
+  const current = `${frozen}/${RUNTIME}`;
   const read = (path: string) =>
     execFileSync('git', ['show', `${INDICATORS_BASE}:${RUNTIME}/${path}`], { cwd: root, encoding: 'utf8' })
       .replaceAll("'@/", `'${root}`)
@@ -944,10 +947,10 @@ async function loadOldIndicators(dir: string): Promise<Json> {
 async function indicatorsTypescript(dir: string, cases: Json[]): Promise<Json[]> {
   const indicators = await loadOldIndicators(dir);
   const { createGpuiPresentationProjectProjectionMetadata, resolveGpuiSidebarAgentIcon } = await import(
-    `${root}${RUNTIME}/helpers/presentation-projection`
+    `${frozen}/${RUNTIME}/helpers/presentation-projection`
   );
-  const { createGpuiRemotePresentationSidebarGroups } = await import(`${root}${RUNTIME}/helpers/remote-presentation`);
-  const { createGpuiSidebarSettings } = await import(`${root}${RUNTIME}/helpers/bootstrap`);
+  const { createGpuiRemotePresentationSidebarGroups } = await import(`${frozen}/${RUNTIME}/helpers/remote-presentation`);
+  const { createGpuiSidebarSettings } = await import(`${frozen}/${RUNTIME}/helpers/bootstrap`);
   const { createGxserverPresentationSidebarGroups } =
     await import('@/packages/shared/gxserver-presentation-sidebar-projection');
   return cases.map((fixture) => {

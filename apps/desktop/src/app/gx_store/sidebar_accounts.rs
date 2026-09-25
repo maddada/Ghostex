@@ -110,8 +110,8 @@ impl GhostexGpuiApp {
         let launcher = command["type"] == "agentAccounts";
         // What the old dispatcher did for this command before handing it on, and which it now
         // never reaches: the instant mounting tab of a launch (CDXC:AgentLauncher 2026-09-19
-        // DECISION), only when there is a sidebar page, since it returned before staging otherwise.
-        if launcher && command["action"] == "launch" && self.sidebar.is_some() {
+        // DECISION).
+        if launcher && command["action"] == "launch" {
             self.stage_agent_launch_placeholder(command, cx);
         }
         let menu_host = self.gx_store_menu_host();
@@ -307,7 +307,7 @@ impl GhostexGpuiApp {
                 })
             });
         match message {
-            Some(message) if self.sidebar.is_some() => {
+            Some(message) => {
                 self.gx_store.sidebar_accounts.counters.launches += 1;
                 self.dispatch_gpui_sidebar_host_message(message, cx);
             }

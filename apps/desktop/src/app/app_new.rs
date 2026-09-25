@@ -500,7 +500,6 @@ impl GhostexGpuiApp {
                 titlebar_tips_agent_hook_status: None,
                 titlebar_tips_sidebar_agent_ids: None,
                 agent_hook_status_request_in_flight: false,
-                sidebar: None,
                 native_sidebar: Default::default(),
                 native_docs: Default::default(),
                 native_kanban: Default::default(),

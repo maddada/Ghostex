@@ -6,17 +6,10 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-rquickjs = "0.12.2"
 # `preserve_order`: the start-up migrations rebuild browser-era rows with `JSON.stringify`, which keeps key order. The desktop already unifies this feature through gx-chat-core.
 serde_json = { version = "1", features = ["preserve_order"] }
-base64 = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
-url = "2"
-uuid = { version = "1", features = ["v4"] }
-ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
-tungstenite = "0.28"
 chromium-storage-indexeddb-core = "0.2"
 chromium-storage-localstorage-core = "0.2"
 leveldb-core = "0.1.2"
-blob-decoder = { version = "0.2.2", default-features = false }
 snap = "1"

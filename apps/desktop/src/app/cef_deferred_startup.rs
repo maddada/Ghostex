@@ -22,9 +22,8 @@ pub(crate) struct GpuiAppModalOpenDeferredForCef {
 impl GhostexGpuiApp {
     /// CDXC:CefRuntime 2026-09-19 DECISION:
     /// User: make startup as fast as possible by deferring CEF until it is actually needed, and warm it once launch has settled so Settings and quick access still open instantly.
-    /// Launch starts only the QuickJS sidebar and chat service. CEF starts on the first browser-creation signal (a woken web pane, a modal) or after the warm-up delay, so Chromium's framework load and helper processes no longer compete with session restore.
+    /// Launch starts no web runtime (the sidebar and chat are Rust). CEF starts on the first browser-creation signal (a woken web pane, a modal) or after the warm-up delay, so Chromium's framework load and helper processes no longer compete with session restore.
     pub(crate) fn begin_deferred_cef_startup(&mut self, cx: &mut gpui::Context<Self>) {
-        self.ensure_native_service(cx);
         self.gx_store_load_remote_recent_projects(cx);
         if let Some(mut demand) = cef::take_runtime_demand_receiver() {
             cx.spawn(async move |this, cx| {

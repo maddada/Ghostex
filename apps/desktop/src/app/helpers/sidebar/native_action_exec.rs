@@ -282,33 +282,6 @@ pub(crate) fn gpui_sidebar_command_action_from_json(text: &str) -> Result<GpuiTi
     })
 }
 
-pub(crate) fn gpui_sidebar_command_run_end_from_json(text: &str) -> Result<String, ()> {
-    /*
-    CDXC:CommandPane 2026-06-25-10:34:
-    Sidebar command-run-end payloads close the existing live Action tab by command id only. Keep the parser stricter than the launch bridge so closing a run cannot carry command text, URLs, project paths, cwd/env, run ids, status paths, terminal output, persisted shell state, or generic IPC fields.
-    */
-    let value = serde_json::from_str::<serde_json::Value>(text).map_err(|_| ())?;
-    let object = value.as_object().ok_or(())?;
-    if object
-        .keys()
-        .any(|key| !["version", "type", "commandId"].contains(&key.as_str()))
-    {
-        return Err(());
-    }
-    if object.get("version").and_then(serde_json::Value::as_u64)
-        != Some(GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_VERSION)
-        || object.get("type").and_then(serde_json::Value::as_str)
-            != Some(GPUI_SIDEBAR_COMMAND_RUN_END_MESSAGE_TYPE)
-    {
-        return Err(());
-    }
-    let command_id = gpui_trimmed_json_string_field(object, "commandId")
-        .filter(|value| value.chars().count() <= GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS)
-        .ok_or(())?
-        .to_string();
-    Ok(command_id)
-}
-
 pub(crate) fn execute_gpui_sidebar_native_project_path_action(
     message: GpuiSidebarNativeProjectPathActionMessage,
 ) -> Result<GpuiSidebarNativeProjectPathActionResult, String> {

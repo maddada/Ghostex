@@ -75,4 +75,4 @@ A chat bug that is really about the session (what reaches the terminal, what the
 - **The TypeScript chat brain** (`packages/shared/session-chat-controller/`, `packages/shared/session-chat-presentation/`): being replaced by `gx-chat-core`; see above.
 - **React Kanban and Automate pages** (`apps/desktop/views/tasks-placeholder.tsx`, `apps/desktop/views/project-board/`): retired; the native views are `native_kanban/` and `native_automate/`.
 - **The old TypeScript gxserver**: gone; gxserver is Rust only.
-- **The desktop QuickJS app runtime** (`apps/desktop/sidebar/gxserver-runtime/`): fix bugs there only. It is scheduled to move to Rust, so new behaviour goes into gxserver or `gx-core`.
+- **The desktop QuickJS app runtime**: deleted on 2026-09-25. Its behaviour lives in gxserver, `gx-core` and `apps/desktop/src/app/gx_store/`; do not add a JavaScript engine or service back to the desktop.

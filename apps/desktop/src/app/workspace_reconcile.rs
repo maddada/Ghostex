@@ -503,21 +503,6 @@ impl GhostexGpuiApp {
         self.run_gpui_titlebar_action(action, window, cx);
     }
 
-    pub(crate) fn receive_sidebar_command_run_end_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:CommandPane 2026-06-25-10:34:
-        Shared SidebarApp `endSidebarCommandRun` must close the GPUI command-pane Action tab mapped to the command id and clear sidebar button feedback, matching macOS. Accept only the fixed command-run-end payload; do not accept command text, URLs, cwd/env, run ids, status-file paths, terminal output, project paths, or generic IPC fields.
-        */
-        let Ok(command_id) = gpui_sidebar_command_run_end_from_json(payload) else {
-            return;
-        };
-        self.close_gpui_sidebar_command_run(&command_id, cx);
-    }
-
     pub(crate) fn land_quick_automations_active_project_on_automate_mode(
         &mut self,
         window: &mut Window,

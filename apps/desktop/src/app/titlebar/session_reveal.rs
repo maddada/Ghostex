@@ -54,9 +54,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let focus = &self.sidebar_gxserver_presentation_focus_state;
-        let enabled = self.sidebar.is_some()
-            && focus.focused_session_id.is_some()
-            && focus.active_project_id.is_some();
+        let enabled = focus.focused_session_id.is_some() && focus.active_project_id.is_some();
         div()
             .id("ghostex-gpui-titlebar-reveal-active-session")
             .flex()

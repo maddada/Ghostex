@@ -6,8 +6,8 @@
 //! editor, focus and Action runs), and the sidebar's own state (collapse, filters, hidden items,
 //! selection) is the store's, which is what `uiOnly` counts. The app runtime handles nothing a
 //! sidebar command can carry any more, so nothing is sent to it from here; this supersedes the
-//! 2026-09-21 hop that posted the `{type:'command'}` family on `onSidebarCommand`. The remote
-//! Project Group and Space edits still reach the runtime, straight from remote_project_docs.rs.
+//! 2026-09-21 hop that posted the `{type:'command'}` family on `onSidebarCommand`. The runtime
+//! itself was deleted with QuickJS on 2026-09-25.
 //!
 //! An `unroutable` above zero is the one thing to watch: a command reached the end of the dispatch
 //! with no owner on either side.

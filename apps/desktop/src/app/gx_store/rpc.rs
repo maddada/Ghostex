@@ -15,11 +15,7 @@
 //! caller may await it from `cx.spawn` on the main thread as well as from the background
 //! executor. The future is `Send`.
 //!
-//! Every call is recorded in the `native.runtime.trace` meter (endpoint and parameter names only),
-//! so a family's port can be compared call for call with what the old runtime sent.
-//!
 //! SEE-ALSO: apps/desktop/src/app/gx_store/rpc_types.rs (the shared error type),
-//! apps/desktop/src/app/gx_store/runtime_trace.rs (the meter),
 //! docs/2026-09-25/app-runtime-port/LEDGER.md (how families use it).
 
 use std::time::Duration;
@@ -33,12 +29,11 @@ use crate::app::helpers::{
 };
 use crate::app::model::GpuiRemoteGxserverRequestTarget;
 
-/// The old runtime's `fetch` ran under the same 60-second global timeout (`packages/chat-runtime/src/network.rs`).
+/// The old QuickJS runtime's `fetch` ran under the same 60-second global timeout.
 const GX_RPC_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Calls `path` (`/api/...`) with `params` on the local gxserver, or on the remote machine whose
 /// tunnel `remote` names, and returns the envelope's `result`.
-#[allow(dead_code)] // the first callers arrive with the runtime port's family commits
 pub(crate) async fn gx_rpc(
     remote: Option<GpuiRemoteGxserverRequestTarget>,
     path: &str,
@@ -55,7 +50,6 @@ pub(crate) async fn gx_rpc_with_timeout(
     params: Value,
     timeout: Duration,
 ) -> Result<Value, GxRpcError> {
-    super::runtime_trace::trace_gx_rpc(path, &params, remote.is_some());
     let (sender, receiver) = oneshot::channel();
     let owned_path = path.to_string();
     let spawned = std::thread::Builder::new()

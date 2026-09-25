@@ -74,10 +74,8 @@ impl GhostexGpuiApp {
             message["accountId"] = json!(account_id);
         }
         self.sidebar_primary_agent_launcher_id = Some(agent_id);
-        if self.sidebar.is_some() {
-            self.stage_agent_launch_placeholder(&message, cx);
-            self.focus_staged_chat_after_picker(cx);
-        }
+        self.stage_agent_launch_placeholder(&message, cx);
+        self.focus_staged_chat_after_picker(cx);
         self.dispatch_gpui_sidebar_host_message(message, cx);
     }
 
