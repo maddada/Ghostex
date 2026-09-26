@@ -81,7 +81,7 @@
 - **Move or close a pane from its grip.** While the screen is split, the focused pane has a small bar along its top: click it to close the pane (its sessions keep running) or merge all panes, or drag it onto another pane.
 - **Drop a session in the middle of a pane to show it there.** Dropping on a pane's edge still opens a new split.
 - **Sleeping panes show a slim pill** with the session's icon, title and Resume, instead of a large card.
-- **Opening a project or restarting Ghostex no longer wakes its sleeping sessions.** They show their Resume bar until you click the pane or press a key, while clicking a sidebar row still wakes them, thanks to @banozz.
+- **Opening a project or restarting Ghostex no longer wakes its sleeping sessions.** They show their Resume bar until you click the pane or press a key, while clicking a sidebar row still wakes them, thanks to @banozz0.
 - **Cmd+Option+Arrow moves between session panes and Commands**, skipping the view panel.
 - **Middle-click an empty spot in a command pane's tab bar** to close all of its terminals at once.
 
@@ -110,7 +110,7 @@
 - **Claude sends go through even when its chat box was partly erased on screen.**
 - **Waking a Claude session never resumes a conversation from another project.**
 - **A new agent started right after a restart appears straight away** instead of being replaced by a woken session.
-- **Custom Claude profiles and projects on different Windows drives are told apart correctly,** thanks to @banozz.
+- **Custom Claude profiles and projects on different Windows drives are told apart correctly,** thanks to @banozz0.
 
 ## 10.1.0 - 2026-09-23
 
@@ -621,7 +621,7 @@
 
 - New Features
 
-  - Slash commands you send from chat now stay in the conversation after a reload, together with their output. Long output expands when clicked, and model, effort, Fast mode and compaction results keep their status rows, thanks to @banozz.
+  - Slash commands you send from chat now stay in the conversation after a reload, together with their output. Long output expands when clicked, and model, effort, Fast mode and compaction results keep their status rows, thanks to @banozz0.
   - Bundled skills (Ghostex CLI, Ghostex Help, Browser Use and the rest) update themselves from GitHub, so a skill fix reaches you without waiting for a release. Installed skills refresh each time Ghostex starts; offline installs use the copy inside the app.
   - Park selected: select several sessions and park or unpark them together. Parking is on by default now, and its settings no longer hide behind Show Advanced.
   - The Extensions page has a Titlebar account usage section: star the Claude and Codex accounts whose usage you want to see in the titlebar.
@@ -745,7 +745,7 @@
 - Stabilization
 
   - Agent finished and stopped notifications no longer show up twice in a row.
-  - Codex's local commands now show their full output, thanks to banozz.
+  - Codex's local commands now show their full output, thanks to banozz0.
   - A rewind that works but cannot tidy the terminal keeps your draft and tells you, instead of dropping it.
   - Closing the last browser tab takes you back to Agents rather than leaving an empty browser.
   - The menu bar dropdown stays open when you switch to another app.
@@ -874,7 +874,7 @@
   - Model, reasoning effort and Fast mode choices in the chat composer come from a published catalog that updates without an app release, and Codex sessions gain a Fast mode pill.
   - Sessions whose agent process dies outside Ghostex, including Quit Ghostex & BG Service, a crash or a reboot, now go to sleep instead of disappearing into history, keep their chat, and wake on the next launch.
 - Minor
-  - Native alert dialogs such as the paste-protection and close-terminal confirmations appear again instead of invisibly holding keyboard focus, thanks to banozz.
+  - Native alert dialogs such as the paste-protection and close-terminal confirmations appear again instead of invisibly holding keyboard focus, thanks to banozz0.
   - Codex hooks are now marked trusted when installed, so Codex actually runs them instead of showing Installed while silently skipping them, and Settings says when a hook update is required.
   - A session started from Handoff or Export is created as a draft, so Chat View is available immediately and, when your default agent view is Chat, it opens straight into chat with the handed-off prompt in the composer.
   - Forked Claude and Codex sessions no longer share the parent's identity, so the fork and its parent stop showing the same chat and title.
@@ -917,9 +917,9 @@
   - The agents tab context menu opens with Rename and Sleep for the session you clicked, above the scoped Sleep Right, Sleep Left, and Sleep Others actions.
   - File references in the transcript read as ordinary links, and composer reference pills show their full path in a tooltip rather than a native title popup.
   - Installed extensions show their author, and version labels are written the same way across the Store, your installed list, and Settings.
-  - Hermes sessions running under a named profile are recognized again, so chat no longer refuses every send while the composer is plainly on screen, thanks to @banozz.
-  - Agent commands that hop to another user or host, such as through `ssh`, no longer leave the agent CLI wedged in an editor at launch, thanks to @banozz.
-  - Project Board `start-work` dispatches the worker into the project you name instead of whichever project was touched most recently, thanks to @banozz.
+  - Hermes sessions running under a named profile are recognized again, so chat no longer refuses every send while the composer is plainly on screen, thanks to @banozz0.
+  - Agent commands that hop to another user or host, such as through `ssh`, no longer leave the agent CLI wedged in an editor at launch, thanks to @banozz0.
+  - Project Board `start-work` dispatches the worker into the project you name instead of whichever project was touched most recently, thanks to @banozz0.
 
 ## 8.3.0 - 2026-08-30
 
@@ -1021,7 +1021,7 @@
   - The macOS titlebar zooms on a double-click, the traffic lights and project name sit at a comfortable inset, and workarea switch hotkeys work from every surface.
   - Resources now attributes an orphaned listener to the project that owns it.
   - Browser and editor panes wait ten minutes before sleeping instead of five, and an agent terminal that has never been prompted is never put to sleep.
-  - Card association from an agent session contributed by [@banozz](https://github.com/banozz).
+  - Card association from an agent session contributed by [@banozz0](https://github.com/banozz0).
 
 ## 7.13.0 - 2026-08-22
 
@@ -1129,7 +1129,7 @@
 - Major
   - Remote terminals now reconnect automatically through network interruptions and system sleep, preserving the remote session and scrollback instead of dropping to a local shell, thanks to @NiTE.
 - Minor
-  - Session Chat adds a per-session Verbose control that remembers whether thinking and tool activity should start expanded, thanks to @banozz.
+  - Session Chat adds a per-session Verbose control that remembers whether thinking and tool activity should start expanded, thanks to @banozz0.
   - Default Agent View now switches compatible agents into Chat automatically, remembers each session's chosen view across restarts, and keeps the terminal live in the background.
   - Session Chat detects model and reasoning options during agent startup instead of leaving them blank until a later refresh.
   - Supported agents launched inside an existing terminal are recognized as soon as their identity appears, making Chat available without reopening the session.
@@ -1189,8 +1189,8 @@
 ## 7.6.0 - 2026-08-12
 
 - Major
-  - Docs can mount an additional folder beside each project's own files, with clear copyable paths for everything in that collection, thanks to @banozz.
-  - Worktrees can rename both their folder and branch directly from the sidebar, thanks to @banozz.
+  - Docs can mount an additional folder beside each project's own files, with clear copyable paths for everything in that collection, thanks to @banozz0.
+  - Worktrees can rename both their folder and branch directly from the sidebar, thanks to @banozz0.
   - Project sessions are organized into collapsible Browser, Pinned, and Sessions sections so busy workspaces stay easier to scan.
 - Minor
   - Session Chat presents tool activity and hidden work more clearly, keeps long output manageable, and adds a focused copy action to each final response.
@@ -1201,7 +1201,7 @@
 
 - Major
   - Session Chat now protects unfinished drafts, moves prompts safely between chat and terminal, detects agent model and effort details, and keeps completed work compact until you choose to expand it.
-  - Project Board can start work with the agent assigned to a ticket, making it faster to move directly from planning into the right conversation, thanks to @banozz.
+  - Project Board can start work with the agent assigned to a ticket, making it faster to move directly from planning into the right conversation, thanks to @banozz0.
 - Minor
   - Docs now discovers files in artifact and AI folders by default and handles find, replace, redo, and common editing shortcuts more naturally.
   - Quick Access and sidebar modals rank results more clearly, preserve pinned-section boundaries, group stashed prompts by day, and make keyboard selection more dependable.
@@ -1215,9 +1215,9 @@
   - Project Board now remembers your filters and sorting, offers both sort directions, shows ticket creators and assignees, and can resume linked conversations even after project or ticket names change.
   - Quick Access can progressively load older sessions, while command panes and existing agent conversations reconnect more reliably when you return to them.
 - Minor
-  - Global Actions are available directly from project rows and refresh immediately after changes, thanks to @banozz.
+  - Global Actions are available directly from project rows and refresh immediately after changes, thanks to @banozz0.
   - Stashed Prompts, Previous Sessions, project collections, session groups, and sidebar drag-and-drop have clearer controls and more dependable behavior.
-  - Project Board scrollbars can be clicked and dragged normally, and completed lanes default to showing the newest work first, thanks to @banozz.
+  - Project Board scrollbars can be clicked and dragged normally, and completed lanes default to showing the newest work first, thanks to @banozz0.
   - Session Chat loads images and completed Codex messages more smoothly, while the Android chat stays ready in the background and handles the on-screen keyboard more reliably.
   - Windows terminal sessions, agent hooks, remote cloning, project icons, support diagnostics, and long-running gxserver connections are more dependable.
 
@@ -1264,7 +1264,7 @@
   - Ghostex can download large app components only when needed and provides a dedicated Plugins window, reducing the size of the core desktop installation.
 - Minor
   - Existing Codex and other agent integrations automatically repair Ghostex hook paths after the storage-folder migration, preventing PreToolUse and UserPromptSubmit hook failures.
-  - Global Actions can appear directly in the tab strip, and Global Defaults can configure common project settings once for every project, thanks to @banozz.
+  - Global Actions can appear directly in the tab strip, and Global Defaults can configure common project settings once for every project, thanks to @banozz0.
   - Remote project collections, flexible GitHub clone inputs, terminal background images, multi-monitor popup placement, session reconciliation, and Windows startup reliability make everyday workspace management steadier, with Windows startup improvements from @yossifyahya16.
   - The Android app adds Session Automations, chat attachment uploads, a simpler unified terminal menu, clearer quick actions, and the latest session-status improvements.
 

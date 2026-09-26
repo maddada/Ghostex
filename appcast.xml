@@ -40,7 +40,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 - **Move or close a pane from its grip.** While the screen is split, the focused pane has a small bar along its top: click it to close the pane (its sessions keep running) or merge all panes, or drag it onto another pane.
 - **Drop a session in the middle of a pane to show it there.** Dropping on a pane's edge still opens a new split.
 - **Sleeping panes show a slim pill** with the session's icon, title and Resume, instead of a large card.
-- **Opening a project or restarting Ghostex no longer wakes its sleeping sessions.** They show their Resume bar until you click the pane or press a key, while clicking a sidebar row still wakes them, thanks to @banozz.
+- **Opening a project or restarting Ghostex no longer wakes its sleeping sessions.** They show their Resume bar until you click the pane or press a key, while clicking a sidebar row still wakes them, thanks to @banozz0.
 - **Cmd+Option+Arrow moves between session panes and Commands**, skipping the view panel.
 - **Middle-click an empty spot in a command pane's tab bar** to close all of its terminals at once.
 
@@ -69,7 +69,7 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 - **Claude sends go through even when its chat box was partly erased on screen.**
 - **Waking a Claude session never resumes a conversation from another project.**
 - **A new agent started right after a restart appears straight away** instead of being replaced by a woken session.
-- **Custom Claude profiles and projects on different Windows drives are told apart correctly,** thanks to @banozz.
+- **Custom Claude profiles and projects on different Windows drives are told apart correctly,** thanks to @banozz0.
 ]]></description>
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.2.0/ghostex-10.2.0-arm64.dmg" length="119536468" type="application/octet-stream" sparkle:edSignature="NAgsK8laiISp6gFtWyRM3G2vVmgqpOaw27BOmroxLaIpeYO66nMmjO2o9oqV7C/1w6hFWfC26TSj73WsEcf/Bg=="/>
         </item>
