@@ -5,6 +5,7 @@ use gpui::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     Render, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
+use gpui_component::tooltip::{ManagedTooltipExt as _, ManagedTooltipPlacement};
 use serde_json::{Value, json};
 
 #[derive(Clone)]
@@ -34,6 +35,44 @@ impl Render for QueuedPromptDrag {
             .text_ellipsis()
             .child(self.preview.clone())
     }
+}
+
+/// CDXC:SessionChat 2026-09-26 DECISION:
+/// User: an undelivered row shows a small info icon whose tooltip holds the full reason, not a wrapped line of text. The tooltip is the stock chat tooltip (frosted under window glass) with a sensible maximum width, held inside the composer card so it never leaves the chat.
+fn undelivered_info(
+    id: &str,
+    reason: String,
+    composer: gpui::Bounds<gpui::Pixels>,
+    color: gpui::Hsla,
+    s: f32,
+) -> AnyElement {
+    // The tooltip's own 12px side margins sit inside these edges.
+    let (left, right) = (composer.left(), composer.right());
+    let max_width = (right - left - px(24.0)).min(px(320.0)).max(px(160.0));
+    div()
+        .id(format!("queue-undelivered:{id}"))
+        .role(gpui::Role::Button)
+        .aria_label(reason.clone())
+        .size(px(20.0 * s))
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .justify_center()
+        .managed_tooltip_with_placement(
+            ManagedTooltipPlacement::BelowWithin { left, right },
+            move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(reason.clone())
+                    .max_w(max_width)
+                    .build(window, cx)
+            },
+        )
+        .child(
+            gpui::svg()
+                .path("titlebar/info-circle.svg")
+                .size(px(14.0 * s))
+                .text_color(color),
+        )
+        .into_any_element()
 }
 
 fn grip(p: &ChatAppearance) -> AnyElement {
@@ -107,6 +146,7 @@ impl NativeChatView {
         let can_drag = !blocked && prompts.len() > 1 && capabilities["canReorder"] == true;
         let s = p.scale;
         let session = cx.entity_id();
+        let composer = self.composer_bounds.get();
         let rows = prompts.iter().map(|prompt| {
             let id = text(prompt, "id");
             let busy = prompt["busy"] == true;
@@ -211,6 +251,15 @@ impl NativeChatView {
                         .when(busy, |this| this.opacity(0.7))
                         .child(preview),
                 )
+                .when(failed, |this| {
+                    let reason = format!(
+                        "Not delivered: {}",
+                        prompt["errorMessage"]
+                            .as_str()
+                            .unwrap_or("the send failed.")
+                    );
+                    this.child(undelivered_info(&id, reason, composer, failed_color, s))
+                })
                 .child(actions);
             div()
                 .id(format!("queued-prompt:{id}"))
@@ -246,35 +295,6 @@ impl NativeChatView {
                     }))
                 })
                 .child(line)
-                // The reason gets its own wrapped line under the prompt, so neither is cut off.
-                .when(failed, |this| {
-                    this.child(
-                        div()
-                            .flex()
-                            .items_start()
-                            .gap(px(5.0 * s))
-                            .pl(px(22.0 * s))
-                            .pr(px(8.0 * s))
-                            .pb(px(6.0 * s))
-                            .text_size(px(11.0 * s))
-                            .line_height(px(15.0 * s))
-                            .text_color(failed_color)
-                            .child(
-                                gpui::svg()
-                                    .path("titlebar/alert-triangle.svg")
-                                    .flex_shrink_0()
-                                    .mt(px(1.0 * s))
-                                    .size(px(12.0 * s))
-                                    .text_color(failed_color),
-                            )
-                            .child(div().flex_1().min_w_0().child(format!(
-                                "Not delivered: {}",
-                                prompt["errorMessage"]
-                                    .as_str()
-                                    .unwrap_or("the send failed.")
-                            ))),
-                    )
-                })
         });
         Some(
             div()
