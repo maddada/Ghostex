@@ -54,7 +54,6 @@ const appVersion = JSON.parse(readFileSync(path.join(repoRoot, 'package.json'), 
 const gpuiDir = path.join(repoRoot, 'apps', 'desktop');
 const isolatedVariant = resolveIsolatedStartVariant(process.argv.slice(2));
 const isolatedInstance = isolatedVariant ? isolatedGpuiConfiguration(isolatedVariant) : undefined;
-const startCommandHint = isolatedInstance ? isolatedGpuiStartCommand(isolatedInstance.variant) : 'bun run start';
 const appName = isolatedInstance?.appName ?? 'Ghostex';
 const bundleId = isolatedInstance?.bundleId ?? 'com.madda.ghostex.gpui';
 const isDarwin = process.platform === 'darwin';
@@ -111,6 +110,9 @@ const localStartLockFile = path.join(repoRoot, 'build', 'ghostex-gpui-local-star
 const localStartCodeServerStoreRoot = path.join(repoRoot, 'build', 'dev-components.noindex', 'code-server');
 const dependenciesRoot = path.join(repoRoot, '.dependencies');
 const startOptions = validateStartArguments(process.argv.slice(2));
+const startCommandHint =
+  (isolatedInstance ? isolatedGpuiStartCommand(isolatedInstance.variant) : 'bun run start') +
+  (startOptions.prepareOnly ? ' --prepare-only' : '');
 const startVerbose = startOptions.verbose;
 const startEnvironment = withoutPowerShell7ModulePaths(
   withoutColorDisablingEnvironment({ ...process.env, ...isolatedInstance?.environment })
