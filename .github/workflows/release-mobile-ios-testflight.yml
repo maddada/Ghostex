@@ -56,6 +56,16 @@ jobs:
           apps/mobile/tailcat-bridge/build.sh --target ios
           test -s apps/mobile/app/modules/ghostex-native/ios/Vendor/Tailcatbridge.xcframework/ios-arm64/Tailcatbridge.framework/Tailcatbridge
           test -s apps/mobile/app/modules/ghostex-native/ios/Vendor/Tailcatbridge.xcframework/ios-arm64_x86_64-simulator/Tailcatbridge.framework/Tailcatbridge
+      - name: Build the Rust chat core for iOS
+        run: |
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' packages/gx-chat-mobile/rust-toolchain.toml)"
+          test -n "$toolchain"
+          tooling/release-gpui/retry.sh 3 5 -- rustup toolchain install "$toolchain" --profile minimal
+          packages/gx-chat-mobile/build.sh --target ios
+          MODULE=apps/mobile/app/modules/gx-chat-core/ios
+          test -s "$MODULE/Generated/gx_chat_mobile.swift"
+          test -s "$MODULE/Vendor/GxChatMobile.xcframework/ios-arm64/libgx_chat_mobile.a"
+          test -s "$MODULE/Vendor/GxChatMobile.xcframework/ios-arm64-simulator/libgx_chat_mobile.a"
       - name: Install repository dependencies
         run: bun install --frozen-lockfile
       - name: Install JavaScript dependencies
