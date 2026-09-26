@@ -46,6 +46,7 @@ import {
   codeServerComponentIdentity,
   codeServerComponentNames,
 } from './release-gpui/code-server-component-identity.mjs';
+import { componentsGithubRepo } from './release-gpui/components-repo.mjs';
 
 const scriptPath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptPath), '..');
@@ -122,6 +123,35 @@ const windowsArch = process.arch === 'arm64' ? 'arm64' : 'x64';
 const requireWindowsWslRuntime = process.env.GHOSTEX_WINDOWS_REQUIRE_WSL_RUNTIME !== '0';
 const explicitWindowsWslArchive = process.env.GHOSTEX_WINDOWS_WSL_GXSERVER_ARCHIVE?.trim();
 const explicitWindowsWslCodeServerArchive = process.env.GHOSTEX_WINDOWS_WSL_CODE_SERVER_ARCHIVE?.trim();
+const configuration = isDarwin ? resolveLocalStartConfiguration(process.env.CONFIGURATION) : undefined;
+const arch = isDarwin ? resolveLocalMacosArch(process.env.GHOSTEX_MACOS_ARCH) : undefined;
+let startStep = 0;
+let activeStartStep;
+
+ensureSupportedHost();
+if (isolatedInstance) prepareIsolatedGpui(isolatedInstance);
+if (isWindows) {
+  acquireWindowsLocalStartLock();
+} else {
+  reexecUnderLocalStartLock();
+}
+const platformLabel = isDarwin
+  ? `${configuration}, ${arch}`
+  : targetsWindows
+    ? isWsl
+      ? 'Windows via WSL2'
+      : requireWindowsWslRuntime ? 'Windows, WSL2' : 'Windows, PowerShell'
+    : 'Linux';
+logStartStep(`Checking local GPUI resources (${platformLabel})...`);
+if (isWindows) {
+  run(windowsPowerShellExecutable(), [
+    '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+    path.join(repoRoot, 'tooling', 'prepare-windows-build.ps1'),
+  ], { quietLabel: 'Windows build prerequisites' });
+}
+ensureLocalReferenceCheckouts();
+logStartDetail('Reference checkouts are ready.');
+
 const windowsCodeServerIdentity = targetsWindows
   ? await codeServerComponentIdentity({ codeServerRoot: path.join(repoRoot, '.dependencies/code-server') })
   : undefined;
@@ -152,8 +182,6 @@ const windowsWslCodeServerArchive = targetsWindows
     ? path.resolve(explicitWindowsWslCodeServerArchive)
     : path.join(repoRoot, 'build', 'runtime-artifacts', windowsArch, windowsCodeServerNames.archiveName)
   : undefined;
-const configuration = isDarwin ? resolveLocalStartConfiguration(process.env.CONFIGURATION) : undefined;
-const arch = isDarwin ? resolveLocalMacosArch(process.env.GHOSTEX_MACOS_ARCH) : undefined;
 // Probed only in the locked child: the parent just re-executes, and the probe runs security and codesign.
 const localStartCodeSignIdentity =
   isDarwin && localStartOwnsLock ? resolveLocalStartCodeSignIdentity(startEnvironment, installedAppPath) : undefined;
@@ -192,29 +220,14 @@ const buildEnvironment = {
       }
     : {}),
 };
-let startStep = 0;
-let activeStartStep;
-
-ensureSupportedHost();
-if (isolatedInstance) prepareIsolatedGpui(isolatedInstance);
-if (isWindows) {
-  acquireWindowsLocalStartLock();
-} else {
-  reexecUnderLocalStartLock();
-}
 if (targetsWindows) {
   await ensureWindowsWslRuntimeArchive();
 }
-const platformLabel = isDarwin
-  ? `${configuration}, ${arch}`
-  : targetsWindows
-    ? isWsl
-      ? 'Windows via WSL2'
-      : requireWindowsWslRuntime ? 'Windows, WSL2' : 'Windows, PowerShell'
-    : 'Linux';
-logStartStep(`Checking local GPUI resources (${platformLabel})...`);
-ensureLocalReferenceCheckouts();
-logStartDetail('Reference checkouts are ready.');
+if (startOptions.prepareOnly) {
+  finishStartStep();
+  console.log('Windows sources and build prerequisites are ready. Run bun run start to build and launch Ghostex.');
+  process.exit(0);
+}
 if (!isDarwin && !targetsWindows) {
   await closeRunningGpuiBundle(appPath, {
     action: `before rebuilding ${appPath}`,
@@ -516,6 +529,7 @@ function validateStartArguments(args) {
     truthyStartFlag(process.env.GHOSTEX_GPUI_START_VERBOSE) || truthyStartFlag(process.env.GHOSTEX_START_VERBOSE);
   let profile = false;
   let optimized = truthyStartFlag(process.env.GHOSTEX_START_OPTIMIZED);
+  let prepareOnly = false;
   for (const arg of args) {
     if (arg === '--') {
       continue;
@@ -525,6 +539,10 @@ function validateStartArguments(args) {
     }
     if (arg === '--profile') {
       profile = true;
+      continue;
+    }
+    if (arg === '--prepare-only' && targetsWindows) {
+      prepareOnly = true;
       continue;
     }
     // macOS only: build the app and gxserver crates with full release optimization (see build-macos-rust.sh).
@@ -537,10 +555,10 @@ function validateStartArguments(args) {
       continue;
     }
     throw new Error(
-      `Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose, --profile, --optimized, and --isolated[=<variant>] flags.`
+      `Unknown GPUI start argument: ${arg}. Use "bun run start" with optional --verbose, --profile, --optimized, --isolated[=<variant>], or --prepare-only (Windows) flags.`
     );
   }
-  return { verbose, profile, optimized };
+  return { verbose, profile, optimized, prepareOnly };
 }
 
 function truthyStartFlag(value) {
@@ -608,8 +626,8 @@ GitHub CLI refuses to run unauthenticated and answers 401 whenever its stored
 token has expired, which blocked `bun run start` on a machine that never needed
 GitHub credentials to build the app.
 */
-async function downloadPublicReleaseAsset(tag, assetName, destination) {
-  const url = `https://github.com/maddada/Ghostex/releases/download/${tag}/${encodeURIComponent(assetName)}`;
+async function downloadPublicReleaseAsset(tag, assetName, destination, repository = 'maddada/Ghostex') {
+  const url = `https://github.com/${repository}/releases/download/${tag}/${encodeURIComponent(assetName)}`;
   const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok || !response.body) {
     throw new Error(`Could not download ${url}: HTTP ${response.status} ${response.statusText}`);
@@ -647,25 +665,22 @@ async function ensureWindowsWslRuntimeArchive() {
     }
     mkdirSync(path.dirname(windowsWslCodeServerArchive), { recursive: true });
     logStartStep(`Downloading the Ghostex WSL2 Source runtime ${windowsCodeServerIdentity.componentVersion}...`);
-    run(
-      'gh',
-      [
-        'run',
-        'download',
-        '--repo',
-        'maddada/Ghostex',
-        '--name',
-        windowsCodeServerNames.artifactName,
-        '--dir',
-        path.dirname(windowsWslCodeServerArchive),
-      ],
-      {
-        quietLabel: 'Windows WSL2 Source runtime download',
-      }
+    const repository = componentsGithubRepo(startEnvironment);
+    await downloadPublicReleaseAsset(
+      windowsCodeServerNames.downloadTag,
+      windowsCodeServerNames.archiveName,
+      windowsWslCodeServerArchive,
+      repository
+    );
+    await downloadPublicReleaseAsset(
+      windowsCodeServerNames.downloadTag,
+      `${windowsCodeServerNames.archiveName}.sha256`,
+      windowsWslCodeServerSidecar,
+      repository
     );
     if (!existsSync(windowsWslCodeServerArchive) || !existsSync(windowsWslCodeServerSidecar)) {
       throw new Error(
-        `The code-server producer artifact did not contain ${path.basename(windowsWslCodeServerArchive)} and its filename-bound .sha256 sidecar.`
+        `The code-server component release did not contain ${path.basename(windowsWslCodeServerArchive)} and its filename-bound .sha256 sidecar.`
       );
     }
   }
@@ -752,6 +767,16 @@ function reexecUnderLocalStartLock() {
 
 function ensureLocalReferenceCheckouts() {
   mkdirSync(dependenciesRoot, { recursive: true });
+  if (targetsWindows) {
+    ensureReferenceCheckout({
+      name: 'code-server',
+      requiredRelativePath: path.join('ci', 'build', 'build-code-server.sh'),
+    });
+    ensureReferenceCheckout({
+      name: 'wmx',
+      requiredRelativePath: 'Cargo.toml',
+    });
+  }
   ensureReferenceCheckout({
     name: 'zed',
     requiredRelativePath: path.join('crates', 'gpui', 'Cargo.toml'),
