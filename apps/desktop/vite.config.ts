@@ -361,6 +361,10 @@ async function buildInlineCefEntryScript(
   return script.text;
 }
 
+/**
+ * CDXC:Build 2026-09-26 WHY:
+ * esbuild can load thousands of icon modules at once. Synchronous reads close each file before the next loader runs, avoiding Windows EMFILE errors from unbounded asynchronous opens.
+ */
 function createCefSingleFileEsbuildPlugin(stagedImages: CefStagedImages): esbuild.Plugin {
   return {
     name: 'ghostex-gpui-cef-single-file',
@@ -373,8 +377,8 @@ function createCefSingleFileEsbuildPlugin(stagedImages: CefStagedImages): esbuil
         contents: '',
         loader: 'js',
       }));
-      build.onLoad({ filter: CEF_STAGED_IMAGE_FILTER }, async (args) => {
-        const contents = await fs.promises.readFile(args.path);
+      build.onLoad({ filter: CEF_STAGED_IMAGE_FILTER }, (args) => {
+        const contents = fs.readFileSync(args.path);
         if (contents.byteLength <= CEF_INLINE_IMAGE_BYTE_LIMIT) {
           return undefined;
         }
@@ -390,8 +394,8 @@ function createCefSingleFileEsbuildPlugin(stagedImages: CefStagedImages): esbuil
       // before esbuild can inline the highlighter into every chat pane.
       shikiClassicScriptEsbuildPlugin().setup(build);
       mermaidClassicScriptEsbuildPlugin().setup(build);
-      build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, async (args) => {
-        const contents = await fs.promises.readFile(args.path, 'utf8');
+      build.onLoad({ filter: /\.[cm]?[jt]sx?$/ }, (args) => {
+        const contents = fs.readFileSync(args.path, 'utf8');
         return {
           contents: contents.replace(/\s+with\s*\{\s*type\s*:\s*["']text["']\s*\}/g, ''),
           loader: args.path.endsWith('.tsx') || args.path.endsWith('.jsx') ? 'tsx' : 'ts',
