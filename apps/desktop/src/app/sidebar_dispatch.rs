@@ -790,7 +790,6 @@ impl GhostexGpuiApp {
     /// through the runtime, and wake the Source project editor. File/line/
     /// column targeting into code-server is deferred (the Source runtime URL
     /// gate carries folder identity only).
-    #[cfg(target_os = "macos")]
     pub(crate) fn open_gpui_os_integration_paths(
         &mut self,
         paths: Vec<PathBuf>,

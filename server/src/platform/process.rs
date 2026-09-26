@@ -20,11 +20,14 @@ pub(crate) fn background_command(program: impl AsRef<OsStr>) -> Command {
 /// waits forever for EOF. Spawn this detached control plane without handle inheritance.
 #[cfg(windows)]
 pub(crate) fn spawn_detached_server(executable: &OsStr) -> std::io::Result<u32> {
-    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::{ffi::OsStrExt, io::AsRawHandle};
     use windows_sys::Win32::{
         Foundation::CloseHandle,
-        System::Threading::{CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW},
+        System::Threading::{
+            CreateProcessAsUserW, CreateProcessW, PROCESS_INFORMATION, STARTUPINFOW,
+        },
     };
+    let standard_user = super::standard_user::standard_user_token_if_elevated()?;
     let application: Vec<u16> = executable.encode_wide().chain(Some(0)).collect();
     let mut arguments = vec![u16::from(b'"')];
     arguments.extend(executable.encode_wide());
@@ -36,18 +39,33 @@ pub(crate) fn spawn_detached_server(executable: &OsStr) -> std::io::Result<u32> 
     for flags in [0x0100_0208, 0x0000_0208] {
         let mut command_line = arguments.clone();
         let created = unsafe {
-            CreateProcessW(
-                application.as_ptr(),
-                command_line.as_mut_ptr(),
-                std::ptr::null(),
-                std::ptr::null(),
-                0,
-                flags,
-                std::ptr::null(),
-                std::ptr::null(),
-                &startup,
-                &mut process,
-            )
+            match &standard_user {
+                Some(token) => CreateProcessAsUserW(
+                    token.as_raw_handle(),
+                    application.as_ptr(),
+                    command_line.as_mut_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    flags,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    &startup,
+                    &mut process,
+                ),
+                None => CreateProcessW(
+                    application.as_ptr(),
+                    command_line.as_mut_ptr(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    0,
+                    flags,
+                    std::ptr::null(),
+                    std::ptr::null(),
+                    &startup,
+                    &mut process,
+                ),
+            }
         };
         if created != 0 {
             unsafe {
