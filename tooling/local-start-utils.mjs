@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -211,11 +211,19 @@ export function withoutPowerShell7ModulePaths(environment) {
       .trim()
       .replace(/[\\/]+$/u, '')
       .toLowerCase();
-    return (
+    if (
       /[\\/]powershell[\\/]7[^\\/]*[\\/]modules$/u.test(normalized) ||
       /[\\/]documents[\\/]powershell[\\/]modules$/u.test(normalized) ||
       /^[a-z]:[\\/]program files[\\/]powershell[\\/]modules$/u.test(normalized)
-    );
+    ) {
+      return true;
+    }
+    // Portable PowerShell installs can use any directory name. Their Core-only
+    // built-ins must not shadow Windows PowerShell's Desktop modules.
+    const manifest = path.join(entry.trim(), 'Microsoft.PowerShell.Utility', 'Microsoft.PowerShell.Utility.psd1');
+    if (!existsSync(manifest)) return false;
+    const editions = readFileSync(manifest, 'utf8').match(/^\s*CompatiblePSEditions\s*=\s*@\(([^)]*)\)/imu)?.[1];
+    return Boolean(editions && /['"]Core['"]/iu.test(editions) && !/['"]Desktop['"]/iu.test(editions));
   };
   return {
     ...environment,
