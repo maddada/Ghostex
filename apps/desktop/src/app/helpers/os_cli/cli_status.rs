@@ -115,6 +115,14 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
 }
 
 pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> serde_json::Value {
+    gpui_ghostex_cli_status_message_with_cua_update_check(detail_override, false)
+}
+
+/// `fresh_cua_update_check` bypasses cua-driver's cached update answer for an explicit check.
+pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
+    detail_override: Option<&str>,
+    fresh_cua_update_check: bool,
+) -> serde_json::Value {
     /*
     CDXC:StatusPet 2026-06-24-11:36:
     GPUI Settings must answer CLI/status refreshes with the shared React contract so integration rows stop loading. The read-only GPUI probe may inspect PATH, fixed Ghostex-owned skill paths, the app bundle/local CEF resources, and Cua Driver presence, but it must not run installers, repair commands, permission prompts, or log raw paths.
@@ -139,7 +147,8 @@ pub(crate) fn gpui_ghostex_cli_status_message(detail_override: Option<&str>) -> 
     let cua_app_installed = gpui_is_dir(Path::new("/Applications/CuaDriver.app"));
     let cua_driver_installed = cua_driver_path.is_some() || cua_app_installed;
     let desktop_control_installed = cua_driver_installed && computer_use_skill_installed;
-    let cua_driver_update_status = gpui_cua_driver_update_status(cua_driver_path.as_deref());
+    let cua_driver_update_status =
+        gpui_cua_driver_update_status(cua_driver_path.as_deref(), fresh_cua_update_check);
     let cua_permission_status =
         gpui_cua_driver_permission_status(cua_driver_path.as_deref(), cua_app_installed);
     let detail = detail_override

@@ -1480,6 +1480,14 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            if completion.command_id == GPUI_CUA_DRIVER_UNINSTALL_COMMAND_ID {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::FinishTrycuaUninstall {
+                        succeeded: completion.exit_code == 0,
+                    },
+                    cx,
+                );
+            }
             self.close_completed_gpui_command_action_tab_if_requested(&completion, cx);
         }
     }

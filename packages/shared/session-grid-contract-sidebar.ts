@@ -1725,7 +1725,10 @@ export type SidebarToExtensionMessage =
         | 'installMoveCodexSessionSkill'
         | 'installHelpSkill'
         | 'uninstallBundledAgentSkills'
-        | 'installCuaDriver';
+        | 'installCuaDriver'
+        | 'reinstallCuaDriver'
+        | 'uninstallCuaDriver'
+        | 'checkCuaDriverUpdate';
     }
   | {
       /**
@@ -3309,6 +3312,24 @@ export type SidebarToExtensionMessage =
   | {
       appearance: 'dark' | 'light';
       type: 'pickWindowGlassVideoFile';
+    }
+  /** Settings -> Window glass -> Video: the glass video library, answered as glassVideoLibraryListed. */
+  | {
+      type: 'listGlassVideoLibrary';
+    }
+  /** Downloads one library video, reported as glassVideoDownloadProgress then glassVideoDownloadFinished. */
+  | {
+      id: string;
+      type: 'downloadGlassVideo';
+    }
+  | {
+      id: string;
+      type: 'cancelGlassVideoDownload';
+    }
+  /** Deletes a downloaded library video, answered with a fresh glassVideoLibraryListed. */
+  | {
+      id: string;
+      type: 'removeGlassVideo';
     }
   /**
    * CDXC:Onboarding 2026-08-24:

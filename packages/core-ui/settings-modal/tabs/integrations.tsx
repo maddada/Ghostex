@@ -99,6 +99,9 @@ export function IntegrationsSettingsTab({
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
   onInstallCuaDriver,
+  onReinstallCuaDriver,
+  onUninstallCuaDriver,
+  onCheckCuaDriverUpdate,
   onInstallAgentsOrchestrationSkill,
   onInstallManageBeadsSkill,
   onInstallGenerateTitleSkill,
@@ -126,6 +129,9 @@ export function IntegrationsSettingsTab({
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
+  onReinstallCuaDriver?: () => void;
+  onUninstallCuaDriver?: () => void;
+  onCheckCuaDriverUpdate?: () => void;
   onInstallAgentsOrchestrationSkill?: () => void;
   onInstallManageBeadsSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
@@ -231,6 +237,9 @@ export function IntegrationsSettingsTab({
             ghostexCliStatus={ghostexCliStatus}
             ghostexCliStatusLoading={ghostexCliStatusChecking}
             onInstallCuaDriver={onInstallCuaDriver}
+            onReinstallCuaDriver={onReinstallCuaDriver}
+            onUninstallCuaDriver={onUninstallCuaDriver}
+            onCheckCuaDriverUpdate={onCheckCuaDriverUpdate}
             onOpenAccessibilityPreferences={onOpenAccessibilityPreferences}
             onOpenScreenRecordingPreferences={onOpenScreenRecordingPreferences}
             permissionStatus={cuaPermissionStatus}

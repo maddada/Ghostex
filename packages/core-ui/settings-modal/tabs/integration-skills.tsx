@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import {
+  IconCircleArrowUp,
+  IconCircleCheck,
   IconCircleCheckFilled,
+  IconCloudSearch,
   IconCopy,
   IconDownload,
   IconRefresh,
@@ -80,23 +83,31 @@ export function IntegrationRowTitle({
 export function DesktopControlSection({
   ghostexCliStatus,
   ghostexCliStatusLoading,
+  onCheckCuaDriverUpdate,
   onInstallCuaDriver,
   onOpenAccessibilityPreferences,
   onOpenScreenRecordingPreferences,
+  onReinstallCuaDriver,
+  onUninstallCuaDriver,
   permissionStatus,
   showPermissions,
   showTrycua,
 }: {
   ghostexCliStatus?: SidebarGhostexCliStatusMessage;
   ghostexCliStatusLoading: boolean;
+  onCheckCuaDriverUpdate?: () => void;
+  /** Installs Trycua when missing; on hosts with managed updates it updates an installed Trycua. */
   onInstallCuaDriver?: () => void;
   onOpenAccessibilityPreferences?: () => void;
   onOpenScreenRecordingPreferences?: () => void;
+  onReinstallCuaDriver?: () => void;
+  onUninstallCuaDriver?: () => void;
   permissionStatus: { status: string; tone: IntegrationStatusTone };
   showPermissions: boolean;
   showTrycua: boolean;
 }) {
   const cuaDriverInstalled = ghostexCliStatus?.cuaDriverInstalled === true;
+  const cuaDriverVersion = ghostexCliStatus?.cuaDriverVersion;
   const installCommand = ghostexCliStatus?.cuaDriverInstallCommand;
   const installDisabled = ghostexCliStatusLoading || cuaDriverInstalled || !onInstallCuaDriver;
   if (!showTrycua && !showPermissions) {
@@ -110,12 +121,21 @@ export function DesktopControlSection({
           status={ghostexCliStatusLoading ? 'neutral' : cuaDriverInstalled ? 'success' : 'warning'}
           title={
             <IntegrationRowTitle
-              description={`${cuaDriverInstalled ? 'Installed. ' : ''}${GHOSTEX_TRYCUA_PRODUCT_NAME} is a utility that lets any agent control your machine: clicking, typing, and seeing what is on screen. Ghostex Computer Use and Ghostex Browser Use run through it, so install it once and then install those skills below.`}
+              description={`${cuaDriverInstalled ? (cuaDriverVersion ? `Version ${cuaDriverVersion} installed. ` : 'Installed. ') : ''}${GHOSTEX_TRYCUA_PRODUCT_NAME} is a utility that lets any agent control your machine: clicking, typing, and seeing what is on screen. Ghostex Computer Use and Ghostex Browser Use run through it, so install it once and then install those skills below.`}
               label={GHOSTEX_TRYCUA_PRODUCT_NAME}
             />
           }
         >
-          {cuaDriverInstalled ? null : (
+          {cuaDriverInstalled ? (
+            <TrycuaInstalledActions
+              ghostexCliStatus={ghostexCliStatus}
+              ghostexCliStatusLoading={ghostexCliStatusLoading}
+              onCheckUpdate={onCheckCuaDriverUpdate}
+              onReinstall={onReinstallCuaDriver}
+              onUninstall={onUninstallCuaDriver}
+              onUpdate={onInstallCuaDriver}
+            />
+          ) : (
             <SettingButton
               disabled={installDisabled}
               disabledReason={
@@ -178,6 +198,104 @@ export function DesktopControlSection({
         </SettingsListItem>
       ) : null}
     </SettingsSection>
+  );
+}
+
+/**
+ * CDXC:Settings 2026-09-26 DECISION:
+ * An installed Trycua row gets one-click Update, an "up to date" state, Reinstall and Uninstall (which keeps the system permissions), as icon-only buttons so the Desktop control area stays quiet; versions live in the tooltips, not in row text.
+ */
+function TrycuaInstalledActions({
+  ghostexCliStatus,
+  ghostexCliStatusLoading,
+  onCheckUpdate,
+  onReinstall,
+  onUninstall,
+  onUpdate,
+}: {
+  ghostexCliStatus?: SidebarGhostexCliStatusMessage;
+  ghostexCliStatusLoading: boolean;
+  onCheckUpdate?: () => void;
+  onReinstall?: () => void;
+  onUninstall?: () => void;
+  onUpdate?: () => void;
+}) {
+  const name = GHOSTEX_TRYCUA_PRODUCT_NAME;
+  const current = ghostexCliStatus?.cuaDriverVersion;
+  const latest = ghostexCliStatus?.cuaDriverLatestVersion;
+  const updateAvailable = ghostexCliStatus?.cuaDriverUpdateAvailable;
+  const checkingReason = `${name} status is being checked.`;
+  const installedSuffix = current ? ` (installed v${current})` : '';
+  const upToDateVersion = current ?? latest;
+  const update =
+    updateAvailable === true
+      ? {
+          Icon: IconCircleArrowUp,
+          className: 'text-sky-400',
+          label: `Update ${name}`,
+          onClick: onUpdate,
+          tooltip: latest ? `Update ${name} to v${latest}${installedSuffix}` : `Update ${name}${installedSuffix}`,
+        }
+      : updateAvailable === false
+        ? {
+            Icon: IconCircleCheck,
+            className: 'text-muted-foreground',
+            label: `Check for ${name} updates`,
+            onClick: onCheckUpdate,
+            tooltip: `${name}${upToDateVersion ? ` v${upToDateVersion}` : ''} is up to date. Click to check again.`,
+          }
+        : {
+            Icon: IconCloudSearch,
+            className: undefined,
+            label: `Check for ${name} updates`,
+            onClick: onCheckUpdate,
+            tooltip: `Check for ${name} updates${installedSuffix}`,
+          };
+  return (
+    <>
+      {ghostexCliStatus?.cuaDriverManagedUpdatesSupported === true ? (
+        <AppTooltip content={update.tooltip}>
+          <SettingButton
+            aria-label={update.label}
+            className={update.className}
+            disabled={ghostexCliStatusLoading || !update.onClick}
+            disabledReason={ghostexCliStatusLoading ? checkingReason : `${name} updates aren’t available here.`}
+            onClick={update.onClick}
+            size='icon'
+            type='button'
+            variant='ghost'
+          >
+            <update.Icon aria-hidden='true' />
+          </SettingButton>
+        </AppTooltip>
+      ) : null}
+      <AppTooltip content={`Reinstall the latest ${name} with the official installer${installedSuffix}`}>
+        <SettingButton
+          aria-label={`Reinstall ${name}`}
+          disabled={ghostexCliStatusLoading || !onReinstall}
+          disabledReason={ghostexCliStatusLoading ? checkingReason : `${name} reinstall isn’t available here.`}
+          onClick={onReinstall}
+          size='icon'
+          type='button'
+          variant='ghost'
+        >
+          <IconRefresh aria-hidden='true' />
+        </SettingButton>
+      </AppTooltip>
+      <AppTooltip content={`Uninstall ${name} (keeps Accessibility and Screen Recording permissions)`}>
+        <SettingButton
+          aria-label={`Uninstall ${name}`}
+          disabled={ghostexCliStatusLoading || !onUninstall}
+          disabledReason={ghostexCliStatusLoading ? checkingReason : `${name} removal isn’t available here.`}
+          onClick={onUninstall}
+          size='icon'
+          type='button'
+          variant='ghost'
+        >
+          <IconTrash aria-hidden='true' />
+        </SettingButton>
+      </AppTooltip>
+    </>
   );
 }
 

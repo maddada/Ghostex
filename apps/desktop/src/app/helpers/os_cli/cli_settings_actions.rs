@@ -20,6 +20,9 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
         driver_installed: bool,
         was_update: bool,
     },
+    FinishTrycuaUninstall {
+        succeeded: bool,
+    },
     UninstallBundledAgentSkill(&'static str),
     UninstallBundledAgentSkills,
 }
@@ -38,6 +41,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::InstallHelpSkill => "installHelpSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
+            Self::FinishTrycuaUninstall { .. } => "uninstallCuaDriver",
             Self::UninstallBundledAgentSkill(_) => "uninstallBundledAgentSkill",
             Self::UninstallBundledAgentSkills => "uninstallBundledAgentSkills",
         }
@@ -59,6 +63,7 @@ impl GpuiGhostexCliSettingsAction {
                 was_update: true, ..
             } => "Trycua updated",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control installed",
+            Self::FinishTrycuaUninstall { .. } => "Trycua uninstalled",
             Self::UninstallBundledAgentSkill(_) => "Agent skill uninstalled",
             Self::UninstallBundledAgentSkills => "Bundled agent skills uninstalled",
         }
@@ -80,6 +85,7 @@ impl GpuiGhostexCliSettingsAction {
                 was_update: true, ..
             } => "Trycua update failed",
             Self::FinishDesktopControlSetup { .. } => "Desktop Control setup incomplete",
+            Self::FinishTrycuaUninstall { .. } => "Trycua uninstall failed",
             Self::UninstallBundledAgentSkill(_) => "Bundled agent skill uninstall failed",
             Self::UninstallBundledAgentSkills => "Bundled agent skill uninstall failed",
         }
@@ -199,6 +205,24 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 Err(message) => GpuiGhostexCliActionResult::failure(action, message),
             }
         }
+        GpuiGhostexCliSettingsAction::FinishTrycuaUninstall { succeeded: true } => {
+            GpuiGhostexCliActionResult::success(
+                action,
+                if cfg!(target_os = "macos") {
+                    "Trycua was removed. Its Accessibility and Screen Recording permissions were kept for a later reinstall."
+                } else {
+                    "Trycua was removed. You can reinstall it from Settings."
+                }
+                .to_string(),
+            )
+        }
+        GpuiGhostexCliSettingsAction::FinishTrycuaUninstall { succeeded: false } => {
+            GpuiGhostexCliActionResult::failure(
+                action,
+                "The Trycua uninstaller did not finish successfully. Its terminal tab shows what happened; plugin status was refreshed."
+                    .to_string(),
+            )
+        }
         GpuiGhostexCliSettingsAction::UninstallBundledAgentSkill(skill_name) => {
             match gpui_uninstall_bundled_agent_skill(skill_name) {
                 Ok(true) => GpuiGhostexCliActionResult::success(
@@ -270,10 +294,15 @@ pub(crate) fn gpui_gte_install_result_from_command_result(
 
 pub(crate) const GPUI_CUA_DRIVER_INSTALL_COMMAND_ID: &str = "ghostex.gpui.installCuaDriver";
 pub(crate) const GPUI_CUA_DRIVER_UPDATE_COMMAND_ID: &str = "ghostex.gpui.updateCuaDriver";
+pub(crate) const GPUI_CUA_DRIVER_UNINSTALL_COMMAND_ID: &str = "ghostex.gpui.uninstallCuaDriver";
 pub(crate) const GPUI_CUA_DRIVER_INSTALL_TAB_TITLE: &str = "Install Trycua";
 #[cfg(target_os = "macos")]
 pub(crate) const GPUI_CUA_DRIVER_UPDATE_TAB_TITLE: &str = "Update Trycua";
 pub(crate) const GPUI_CUA_DRIVER_INSTALL_RUNNING_MESSAGE: &str = "The official Trycua installer is running in a command terminal tab. Plugin status updates when it finishes.";
+pub(crate) const GPUI_CUA_DRIVER_REINSTALL_TAB_TITLE: &str = "Reinstall Trycua";
+pub(crate) const GPUI_CUA_DRIVER_REINSTALL_RUNNING_MESSAGE: &str = "The official Trycua installer is reinstalling the latest release in a command terminal tab. Plugin status updates when it finishes.";
+pub(crate) const GPUI_CUA_DRIVER_UNINSTALL_TAB_TITLE: &str = "Uninstall Trycua";
+pub(crate) const GPUI_CUA_DRIVER_UNINSTALL_RUNNING_MESSAGE: &str = "The official Trycua uninstaller is running in a command terminal tab. Plugin status updates when it finishes.";
 #[cfg(target_os = "macos")]
 pub(crate) const GPUI_CUA_DRIVER_UPDATE_RUNNING_MESSAGE: &str = "Trycua is checking for and applying the latest official update in a command terminal tab. Plugin status updates when it finishes.";
 
@@ -297,6 +326,16 @@ pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
 #[cfg(target_os = "windows")]
 pub(crate) const GPUI_TRYCUA_INSTALL_COMMAND: &str =
     "powershell.exe -NoProfile -Command \"irm https://cua.ai/driver/install.ps1 | iex\"";
+/*
+CDXC:Extensions 2026-09-26 DECISION:
+Settings' Uninstall Trycua button runs the official uninstaller with `--keep-tcc`: the user chose to keep the Accessibility and Screen Recording grants (the uninstaller revokes them by default) so a later reinstall needs no new permission prompts. Windows has no such grants to keep.
+*/
+#[cfg(not(target_os = "windows"))]
+pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str =
+    "/bin/bash -c \"$(curl -fsSL https://cua.ai/driver/uninstall.sh)\" -- --keep-tcc";
+#[cfg(target_os = "windows")]
+pub(crate) const GPUI_TRYCUA_UNINSTALL_COMMAND: &str =
+    "powershell.exe -NoProfile -Command \"irm https://cua.ai/driver/uninstall.ps1 | iex\"";
 #[cfg(target_os = "macos")]
 pub(crate) const GPUI_CUA_DRIVER_START_COMMAND: &str =
     "/usr/bin/open -n -g -a CuaDriver --args serve";
@@ -324,6 +363,31 @@ pub(crate) fn gpui_cua_driver_command_action() -> GpuiCuaDriverCommandAction {
         };
     }
 
+    gpui_cua_driver_installer_command_action()
+}
+
+/// Reinstall runs the official installer even when Trycua is present, so its
+/// exit finishes Desktop Control setup exactly like a first install.
+pub(crate) fn gpui_cua_driver_reinstall_command_action() -> GpuiCuaDriverCommandAction {
+    GpuiCuaDriverCommandAction {
+        running_message: GPUI_CUA_DRIVER_REINSTALL_RUNNING_MESSAGE,
+        tab_title: GPUI_CUA_DRIVER_REINSTALL_TAB_TITLE,
+        toast_title: "Reinstalling Trycua",
+        ..gpui_cua_driver_installer_command_action()
+    }
+}
+
+pub(crate) fn gpui_cua_driver_uninstall_command_action() -> GpuiCuaDriverCommandAction {
+    GpuiCuaDriverCommandAction {
+        command: GPUI_TRYCUA_UNINSTALL_COMMAND.to_string(),
+        command_id: GPUI_CUA_DRIVER_UNINSTALL_COMMAND_ID,
+        running_message: GPUI_CUA_DRIVER_UNINSTALL_RUNNING_MESSAGE,
+        tab_title: GPUI_CUA_DRIVER_UNINSTALL_TAB_TITLE,
+        toast_title: "Uninstalling Trycua",
+    }
+}
+
+fn gpui_cua_driver_installer_command_action() -> GpuiCuaDriverCommandAction {
     #[cfg(target_os = "macos")]
     let command = format!("{GPUI_TRYCUA_INSTALL_COMMAND} && {GPUI_CUA_DRIVER_START_COMMAND}");
     #[cfg(not(target_os = "macos"))]

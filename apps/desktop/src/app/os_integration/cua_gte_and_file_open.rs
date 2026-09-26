@@ -30,11 +30,55 @@ impl GhostexGpuiApp {
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.start_gpui_cua_driver_install_or_update_terminal(window, cx);
+        self.start_gpui_cua_driver_command_terminal(gpui_cua_driver_command_action(), window, cx);
     }
 
-    pub(crate) fn start_gpui_cua_driver_install_or_update_terminal(
+    pub(crate) fn handle_gpui_cua_driver_reinstall(
         &mut self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.start_gpui_cua_driver_command_terminal(
+            gpui_cua_driver_reinstall_command_action(),
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn handle_gpui_cua_driver_uninstall(
+        &mut self,
+        window: &Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.start_gpui_cua_driver_command_terminal(
+            gpui_cua_driver_uninstall_command_action(),
+            window,
+            cx,
+        );
+    }
+
+    pub(crate) fn check_gpui_cua_driver_update(&mut self, cx: &mut gpui::Context<Self>) {
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let payload =
+                background
+                    .spawn(async move {
+                        gpui_ghostex_cli_status_message_with_cua_update_check(None, true)
+                    })
+                    .await;
+            let (level, title, message) = gpui_cua_driver_update_check_toast(&payload);
+            let _ = this.update(cx, |this, cx| {
+                this.dispatch_open_gpui_app_modal_sidebar_state_payload(payload.clone(), cx);
+                this.dispatch_gpui_titlebar_tips_sidebar_state_payload(&payload, cx);
+                this.dispatch_gpui_app_modal_toast(level, title, &message, cx);
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn start_gpui_cua_driver_command_terminal(
+        &mut self,
+        action: GpuiCuaDriverCommandAction,
         window: &Window,
         cx: &mut gpui::Context<Self>,
     ) {
@@ -57,7 +101,7 @@ impl GhostexGpuiApp {
             running_message,
             tab_title,
             toast_title,
-        } = gpui_cua_driver_command_action();
+        } = action;
         self.open_gpui_command_action_terminal(
             command_id.to_string(),
             tab_title.to_string(),
@@ -133,13 +177,6 @@ impl GhostexGpuiApp {
     pub(crate) fn gpui_app_modal_active_project_id(&self) -> Option<String> {
         gpui_active_project_id_from_snapshot(self.latest_sidebar_project_snapshot.as_ref())
             .map(str::to_string)
-    }
-
-    pub(crate) fn gpui_titlebar_browser_url_allowed(&self, url: &str) -> bool {
-        if self.titlebar_tips_panel_open && gpui_titlebar_tips_browser_url_allowed(url) {
-            return true;
-        }
-        self.titlebar_resources_panel_open && gpui_titlebar_resources_browser_url_allowed(url)
     }
 
     pub(crate) fn update_gpui_ghostty_visible_settings(
