@@ -90,6 +90,16 @@ pub(crate) struct DisclosureMotions {
     observed: HashMap<String, bool>,
     motions: HashMap<String, FoldMotion>,
     heights: HashMap<String, Rc<Cell<f32>>>,
+    /// The reader toggled a disclosure while the transcript was following its tail; following
+    /// is paused until the motion settles (`disclosure_anchor.rs`).
+    pub(super) follow_paused: bool,
+    /// The toggled disclosure whose change has not been drawn yet, and when it was pressed: until
+    /// it is drawn nothing is moving, and handing following back then would pin the bottom again.
+    pub(super) awaiting: Option<(String, Instant)>,
+    /// A toggle whose revealed rows ease in above it, whether it is opening, and the height of
+    /// those rows the scroll position already accounts for (`None` until a closing group's rows
+    /// have been measured, since they start fully grown).
+    pub(super) grows_above: Option<(String, bool, Option<f32>)>,
 }
 
 fn progress(elapsed_ms: f32, delay_ms: f32, span_ms: f32) -> f32 {
@@ -133,6 +143,14 @@ impl DisclosureMotions {
         reduce_motion: bool,
     ) -> Option<FoldFrame> {
         let previous = self.observed.insert(key.to_string(), open);
+        if previous.is_some_and(|before| before != open)
+            && self
+                .awaiting
+                .as_ref()
+                .is_some_and(|(awaited, _)| awaited == key)
+        {
+            self.awaiting = None;
+        }
         match previous {
             Some(before) if before != open => {
                 if reduce_motion {
@@ -165,6 +183,13 @@ impl DisclosureMotions {
     /// True while any disclosure still needs frames.
     pub(super) fn running(&self) -> bool {
         !self.motions.is_empty()
+    }
+
+    /// The natural height `key`'s moving body measured on its last paint.
+    pub(super) fn natural(&self, key: &str) -> f32 {
+        self.heights
+            .get(&format!("{key}#"))
+            .map_or(0.0, |height| height.get())
     }
 
     /// This frame of the motion on `key`, or `None` once it is at rest.
@@ -315,24 +340,27 @@ pub(super) fn motion_clip_trailing(
     gap: f32,
     content: AnyElement,
 ) -> AnyElement {
+    // The measured height includes the gap the part carries, so a part eased to `f` adds exactly
+    // `f` of its full height to the column: the gap after it is taken back with the negative
+    // margin, and `disclosure_anchor.rs` scrolls by the same amount to keep the toggle below still.
     let natural = height.get();
     let factor = frame.log.clamp(0.0, 1.0);
     let clip = div().w_full().min_w_0().overflow_hidden().mb(px(-gap));
     let clip = if factor >= 1.0 || (natural <= 0.0 && factor >= 0.5) {
         clip
-    } else if natural <= 0.0 {
-        clip.h(px(gap))
     } else {
-        clip.h(px(gap + natural * factor))
+        clip.h(px(natural.max(0.0) * factor))
     };
     clip.child(
         div()
-            .pb(px(gap))
             .w_full()
             .min_w_0()
             .flex_shrink_0()
             .opacity(frame.rows_opacity)
-            .child(measured(height, content)),
+            .child(measured(
+                height,
+                div().pb(px(gap)).child(content).into_any_element(),
+            )),
     )
     .into_any_element()
 }

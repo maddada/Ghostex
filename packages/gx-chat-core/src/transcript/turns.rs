@@ -27,6 +27,8 @@ pub struct CompletedWorkTurn {
 pub struct SummaryModeTurn {
     pub active: bool,
     pub active_work: Vec<ChatMessage>,
+    /// The replies the agent gave before `final_message` in the same turn, oldest first.
+    pub earlier_replies: Vec<ChatMessage>,
     pub final_message: Option<ChatMessage>,
     pub user: ChatMessage,
 }
@@ -75,6 +77,7 @@ pub fn summary_mode_turns(
             turns.push(SummaryModeTurn {
                 active: false,
                 active_work: Vec::new(),
+                earlier_replies: Vec::new(),
                 final_message: None,
                 user: message.clone(),
             });
@@ -85,12 +88,36 @@ pub fn summary_mode_turns(
             }
         }
     }
+    for turn in &mut turns {
+        if let Some(final_message) = &turn.final_message {
+            turn.earlier_replies = earlier_replies(&turn.active_work, final_message);
+        }
+    }
     if is_working {
         if let Some(newest) = turns.last_mut() {
             newest.active = true;
         }
     }
     turns
+}
+
+/// CDXC:SessionChat 2026-09-26 DECISION: User: in summary mode, expanding "Agent reply" must show all of the agent's replies to that prompt, not only the last one. A turn the harness broke up (a background task finishing, a held prompt) gets one reply per stretch, the same replies verbose mode leaves outside its "Worked for" folds; text before the final reply inside its own stretch is still commentary.
+fn earlier_replies(work: &[ChatMessage], final_message: &ChatMessage) -> Vec<ChatMessage> {
+    let Some(final_at) = work.iter().position(|row| row.id == final_message.id) else {
+        return Vec::new();
+    };
+    let mut replies = Vec::new();
+    let mut reply: Option<&ChatMessage> = None;
+    for row in &work[..final_at] {
+        if row.role == ChatRole::User {
+            if let Some(settled) = reply.take() {
+                replies.push(settled.clone());
+            }
+        } else if has_agent_response_content(row) {
+            reply = Some(row);
+        }
+    }
+    replies
 }
 
 pub fn is_visible_assistant_artifact(message: &ChatMessage) -> bool {

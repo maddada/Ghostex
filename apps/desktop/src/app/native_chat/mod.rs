@@ -94,6 +94,7 @@ mod suggestions;
 
 mod clipboard;
 
+mod disclosure_anchor;
 mod disclosure_motion;
 mod working_spark;
 mod working_strip;

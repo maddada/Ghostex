@@ -53,7 +53,6 @@ impl NativeChatView {
 impl Render for NativeChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         super::scroll_bottom::register(cx);
-        super::chat_hotkeys::register(cx);
         super::search::register(cx);
         super::zoom::register(cx);
         self.last_render = Some(web_time::Instant::now());
@@ -73,6 +72,7 @@ impl Render for NativeChatView {
         if self.disclosure_motion.borrow().running() {
             window.request_animation_frame();
         }
+        self.sync_disclosure_anchor(window);
         /*
         CDXC:SessionChat 2026-09-18 WHY:
         React's maximized composer is a fixed overlay across the whole chat pane, so nothing of the
@@ -103,7 +103,9 @@ impl Render for NativeChatView {
         } else {
             self.composer_frame(cx).transcript_inset
         };
-        crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(cx.entity_id());
+        crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(
+            cx.entity_id(),
+        );
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
         /*
@@ -194,7 +196,6 @@ impl Render for NativeChatView {
                 },
             ))
             .capture_action(cx.listener(Self::scroll_bottom_action))
-            .capture_action(cx.listener(Self::run_chat_hotkey))
             .capture_action(cx.listener(Self::open_search_action))
             .capture_action(cx.listener(Self::chat_zoom_in_action))
             .capture_action(cx.listener(Self::chat_zoom_out_action))

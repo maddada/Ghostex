@@ -423,6 +423,7 @@ impl NativeChatView {
                     .text_color(p.muted),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
+                this.anchor_disclosure_toggle(&key, !expanded);
                 if expanded {
                     this.expanded.remove(&key);
                     this.collapsed.insert(key.clone());
@@ -430,7 +431,6 @@ impl NativeChatView {
                     this.collapsed.remove(&key);
                     this.expanded.insert(key.clone());
                 }
-                this.list.remeasure();
                 cx.notify();
             }))
             .into_any_element()

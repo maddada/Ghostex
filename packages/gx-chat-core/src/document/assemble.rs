@@ -72,9 +72,10 @@ fn item_identity(state: &ChatState, item: &TranscriptItem) -> u64 {
         TranscriptItem::Summary {
             user,
             final_message,
+            earlier_replies,
             work,
             ..
-        } => work.iter().fold(
+        } => earlier_replies.iter().chain(work.iter()).fold(
             mix(
                 placeholder(user),
                 final_message.as_ref().map_or(0, placeholder),

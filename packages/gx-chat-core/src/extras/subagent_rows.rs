@@ -16,6 +16,7 @@ use serde_json::Value;
 use crate::document::TranscriptItem;
 use crate::extras::subagent::{agent_path, messages};
 use crate::state::{ChatContext, ChatState, ProjectionInputs, TranscriptViewState};
+use crate::transcript::line_breaks::AgentLineBreaks;
 use crate::transcript::presentation::{build_scope, row_detail_scope, ProjectionScope};
 
 /// The page's messages, as the rows the projection reads.
@@ -40,6 +41,7 @@ fn scope<'a>(
     messages: &'a [ChatMessage],
     working: bool,
     working_directory: Option<&'a str>,
+    line_breaks: AgentLineBreaks,
 ) -> ProjectionScope<'a> {
     ProjectionScope {
         messages,
@@ -49,6 +51,7 @@ fn scope<'a>(
         deferred: &view.deferred,
         agent_path: &view.agent_path,
         working_directory,
+        line_breaks,
     }
 }
 
@@ -93,15 +96,23 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         detail_revision: 0,
         backfill_revision: state.extras.subagent.view.backfill_revision,
         queue: None,
+        line_breaks: crate::transcript::presentation::line_breaks(state),
     };
     if state.extras.subagent.view.projection_inputs.as_ref() == Some(&inputs) {
         return;
     }
+    let line_breaks = crate::transcript::presentation::line_breaks(state);
     let mut cache = std::mem::take(&mut state.extras.subagent.view.projected);
     let projection = {
         let view = &state.extras.subagent.view;
         build_scope(
-            &scope(view, &rows, working, view.working_directory.as_deref()),
+            &scope(
+                view,
+                &rows,
+                working,
+                view.working_directory.as_deref(),
+                line_breaks,
+            ),
             context,
             &mut cache,
         )
@@ -175,6 +186,7 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> bool {
             &rows,
             state.extras.subagent.working,
             view.working_directory.as_deref(),
+            crate::transcript::presentation::line_breaks(state),
         );
         for message in &batch {
             crate::transcript::presentation::project_cached(&mut cache, &scope, context, message);

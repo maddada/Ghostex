@@ -135,12 +135,12 @@ impl NativeChatView {
                                 )
                                 .child(if expanded { "Show less" } else { "Show more" })
                                 .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.anchor_disclosure_toggle(&toggle_key, !expanded);
                                     if expanded {
                                         this.expanded.remove(&toggle_key);
                                     } else {
                                         this.expanded.insert(toggle_key.clone());
                                     }
-                                    this.list.remeasure();
                                     cx.notify();
                                 })),
                         )

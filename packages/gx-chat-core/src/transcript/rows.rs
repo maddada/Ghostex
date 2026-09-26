@@ -78,6 +78,7 @@ pub fn refresh(state: &mut ChatState, context: &ChatContext) {
         detail_revision: state.transcript_view.detail_revision,
         backfill_revision: state.transcript_view.backfill_revision,
         queue: state.session.queue_prompts.clone(),
+        line_breaks: presentation::line_breaks(state),
     };
     if state.transcript_view.projection_inputs.as_ref() == Some(&inputs) {
         return;

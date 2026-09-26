@@ -18,6 +18,7 @@ pub mod image_markers;
 pub mod images;
 pub mod json_text;
 pub mod jsstr;
+pub mod line_breaks;
 pub mod links;
 pub mod local_command;
 pub mod markdown_links;
@@ -44,5 +45,5 @@ pub mod settle;
 
 pub use crate::transcript::actions::handle;
 pub use crate::transcript::document::document;
-pub use crate::transcript::settle::settle;
 pub use crate::transcript::rows::{advance, refresh, row_details, rows};
+pub use crate::transcript::settle::settle;

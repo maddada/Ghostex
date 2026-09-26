@@ -31,8 +31,15 @@ pub enum TranscriptItem {
         /// The turn's reply, or `null` while the turn is still running.
         #[serde(rename = "final")]
         final_message: Option<ProjectedMessage>,
+        /// The replies before `final` in the same turn, oldest first: one per stretch a harness
+        /// row (a background task finishing) broke the turn into. Drawn above `final`.
+        #[serde(default)]
+        earlier_replies: Vec<ProjectedMessage>,
         active: bool,
         work: Vec<ProjectedMessage>,
+        /// The newest turn that has a reply: its "Agent reply" fold starts open.
+        #[serde(default)]
+        latest_reply: bool,
     },
     /// A finished turn in verbose mode: its file changes collapse into one fold.
     #[serde(rename = "completed-work", rename_all = "camelCase")]

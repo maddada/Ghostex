@@ -58,7 +58,7 @@ pub fn is_sidebar_agent_icon(candidate: Option<&str>) -> bool {
 }
 
 /// `resolveSessionChatTranscriptAgent`: the transcript family an agent label belongs to.
-fn transcript_agent(candidates: [Option<&str>; 2]) -> Option<&'static str> {
+pub fn transcript_agent(candidates: [Option<&str>; 2]) -> Option<&'static str> {
     for candidate in candidates.into_iter().flatten() {
         let normalized = crate::extras::agent_tasks::js_trim(candidate).to_lowercase();
         let resolved = match normalized.as_str() {

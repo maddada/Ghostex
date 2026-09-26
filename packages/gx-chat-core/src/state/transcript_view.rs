@@ -124,6 +124,8 @@ pub struct TranscriptViewState {
 pub struct ProjectedMessage {
     pub source: ChatMessage,
     pub model: Value,
+    /// The line-break rule the model was projected under; a change of agent family re-projects.
+    pub line_breaks: crate::transcript::line_breaks::AgentLineBreaks,
 }
 
 /// What `NativeChatPresentation.update` decides on.
@@ -144,6 +146,7 @@ pub struct ProjectionInputs {
     /// answer hands `setQueuePrompts` a new array, the memo re-runs, and `update` therefore ships
     /// the degenerate splice the host compares by identity.
     pub queue: Option<Vec<serde_json::Value>>,
+    pub line_breaks: crate::transcript::line_breaks::AgentLineBreaks,
 }
 
 impl Default for TranscriptViewState {

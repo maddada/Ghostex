@@ -28,6 +28,7 @@ impl NativeChatView {
         expanded: bool,
         cx: &mut Context<Self>,
     ) {
+        self.anchor_disclosure_toggle(&id, !expanded);
         if expanded {
             self.expanded.remove(&id);
             self.collapsed.insert(id);
@@ -35,18 +36,17 @@ impl NativeChatView {
             self.collapsed.remove(&id);
             self.expanded.insert(id);
         }
-        self.list.remeasure();
         cx.notify();
     }
 
     /// Flip a row that defaults to closed, and remeasure the list its height changed.
     pub(super) fn toggle_disclosure(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.anchor_disclosure_toggle(id, !self.expanded.contains(id));
         if self.expanded.contains(id) {
             self.expanded.remove(id);
         } else {
             self.expanded.insert(id.to_string());
         }
-        self.list.remeasure();
         cx.notify();
     }
     pub(crate) fn transcript_row(
@@ -87,7 +87,7 @@ impl NativeChatView {
         let s = p.scale;
         let content = if item["kind"] == "summary" {
             let id = format!("summary:{}", text(&item, "id"));
-            let expanded = self.expanded.contains(&id);
+            let expanded = self.is_expanded(&id, item["latestReply"] == true);
             let motion = self.disclosure_frame(&id, expanded, cx);
             let mut row = div()
                 .flex()
@@ -114,6 +114,9 @@ impl NativeChatView {
                 if expanded || motion.is_some() {
                     let mut body = div().flex().flex_col().w_full().gap(px(8.0 * s));
                     if item["final"].is_object() {
+                        for reply in item["earlierReplies"].as_array().into_iter().flatten() {
+                            body = body.child(self.message_row(reply, &p, window, cx));
+                        }
                         body = body.child(self.message_row(&item["final"], &p, window, cx));
                     } else {
                         for message in item["work"].as_array().into_iter().flatten() {
@@ -274,6 +277,7 @@ impl NativeChatView {
             )
             .child(div().flex_1().min_w_0().child(label))
             .on_click(cx.listener(move |this, _, _, cx| {
+                this.anchor_disclosure_toggle(&id, !expanded);
                 if expanded {
                     this.expanded.remove(&id);
                     this.collapsed.insert(id.clone());
@@ -284,7 +288,6 @@ impl NativeChatView {
                         this.invoke(action.clone(), cx);
                     }
                 }
-                this.list.remeasure();
                 cx.notify();
             }))
             .into_any_element()
