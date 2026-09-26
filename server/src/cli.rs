@@ -50,6 +50,18 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         crate::setup::run_setup(args.iter().skip(1).cloned().collect())?;
         return Ok(());
     }
+    // Hands off before touching storage, so nothing is created with administrator ownership.
+    #[cfg(windows)]
+    if matches!(command, None | Some("--foreground"))
+        && crate::platform::standard_user::current_process_is_elevated()
+            .context("check gxserver's administrator rights")?
+    {
+        let executable = env::current_exe().context("resolve current gxserver binary")?;
+        let pid = crate::platform::process::spawn_detached_server(executable.as_os_str())
+            .context("restart gxserver without administrator rights")?;
+        println!("gxserver restarted without administrator rights as pid {pid}.");
+        return Ok(());
+    }
     migrate_legacy_storage().context("migrate legacy Ghostex storage")?;
     if matches!(command, None | Some("--foreground")) {
         let paths = get_gxserver_paths(None);
