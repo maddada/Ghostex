@@ -237,9 +237,11 @@ EOF
 	exit 1
 fi
 
+# CDXC:Release 2026-09-26 WHY: cargo builds inside server/, whose rust-toolchain.toml pins the compiler, so the musl target check, the host triple and rust-lld must come from that toolchain. Asked from the repo root they read the runner's default toolchain, which the release workflow no longer gives the musl targets, and the 10.2.1 and 10.3.0 runs failed here before building.
+SERVER_DIR="$REPO_ROOT/server"
 if command -v rustup >/dev/null 2>&1; then
 	for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
-		if ! rustup target list --installed 2>/dev/null | grep -Fxq "$target"; then
+		if ! (cd "$SERVER_DIR" && rustup target list --installed 2>/dev/null) | grep -Fxq "$target"; then
 			cat >&2 <<EOF
 Rust target $target is not installed.
 
@@ -254,8 +256,8 @@ fi
 WRAPPER_DIR="$(mktemp -d /tmp/ghostex-linux-cross-cc-XXXXXX)"
 trap 'rm -rf "$WRAPPER_DIR"' EXIT
 
-RUST_HOST_TRIPLE="$(rustc -vV | sed -n 's/^host: //p')"
-RUST_LLD="$(rustc --print sysroot)/lib/rustlib/$RUST_HOST_TRIPLE/bin/rust-lld"
+RUST_HOST_TRIPLE="$(cd "$SERVER_DIR" && rustc -vV | sed -n 's/^host: //p')"
+RUST_LLD="$(cd "$SERVER_DIR" && rustc --print sysroot)/lib/rustlib/$RUST_HOST_TRIPLE/bin/rust-lld"
 if [[ ! -x "$RUST_LLD" ]]; then
 	echo "Rust LLD linker is missing: $RUST_LLD" >&2
 	exit 1
