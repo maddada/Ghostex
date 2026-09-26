@@ -8,6 +8,7 @@
   "scripts": {
     "//start": "CLONE-LOCAL (ghostex-ui-revamp, 2026-09-20): this checkout starts the isolated Ghostex-UI-Revamp variant so it runs beside the normal Ghostex. Do not merge this \"start\" line back to main; upstream \"start\" is \"bun tooling/start-gpui.mjs\".",
     "start": "bun tooling/start-gpui.mjs",
+    "setup:windows": "bun tooling/setup-windows.mjs",
     "start:isolated": "bun tooling/start-gpui.mjs --isolated",
     "start:server": "bun tooling/start-gxserver.mjs",
     "gx:isolated": "bun tooling/isolated-gpui.mjs",

@@ -272,7 +272,7 @@ describe('active WSL2 code-server consumer contract', () => {
     expect(windowsConsumer).toContain('code_server_payload_shell_validation_script');
   });
 
-  test('routes start-gpui through the WSL builder and downloads the canonical producer archive plus sidecar', () => {
+  test('routes start-gpui through the WSL builder and downloads the public component archive plus sidecar', () => {
     const launcher = repoFile('tooling/start-gpui.mjs');
 
     expect(launcher).toContain("isWsl\n        ? 'build-windows-app-wsl.sh'\n        : 'build-windows-app.ps1'");
@@ -283,7 +283,8 @@ describe('active WSL2 code-server consumer contract', () => {
       'codeServerComponentNames(windowsCodeServerIdentity.componentVersion, `linux-${windowsArch}`)'
     );
     expect(launcher).toContain('windowsCodeServerNames.archiveName');
-    expect(launcher).toContain('windowsCodeServerNames.artifactName');
+    expect(launcher).toContain('windowsCodeServerNames.downloadTag');
+    expect(launcher).toContain('componentsGithubRepo(startEnvironment)');
     expect(launcher).toContain('hasWindowsWslCodeServerArchive !== hasWindowsWslCodeServerSidecar');
     expect(launcher).toContain('GHOSTEX_CODE_SERVER_COMPONENT_VERSION: windowsCodeServerIdentity.componentVersion');
     expect(launcher).not.toContain('Windows WSL2 Source runtime extraction');

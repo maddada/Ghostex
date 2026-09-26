@@ -23,6 +23,8 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $GpuiDir = Resolve-Path (Join-Path $ScriptDir "..")
 $RepoRoot = Resolve-Path (Join-Path $GpuiDir "../..")
 
+& (Join-Path $RepoRoot "tooling/prepare-windows-build.ps1")
+
 <#
 CDXC:Build 2026-09-18 WHY:
 create-deterministic-tar.sh is a Git for Windows script: it takes Windows paths

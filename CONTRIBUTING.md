@@ -17,16 +17,43 @@ Its README covers the toolchain it needs (`wasm-bindgen-cli`, Zig 0.16) and the 
 
 ### Building from source
 
-`bun run start` builds and launches the desktop app; `bun run build` only packages it. Both compile
-the desktop crate (`apps/desktop/`, Rust 1.95.0 pinned by its `rust-toolchain.toml`) and the gxserver
-crate (`server/`, your default `rustup` toolchain). Besides Bun, Rust, CMake, Ninja, and Zig 0.16, local
+`bun run start` builds and launches the desktop app. On macOS, `bun run build` only packages it.
+The desktop crate (`apps/desktop/`) and the gxserver crate (`server/`) both pin Rust 1.95.0 in
+their `rust-toolchain.toml` files. Besides Bun, Rust, CMake, Ninja, and Zig 0.16, local
 Rust builds require **sccache**:
 
 ```sh
 brew install sccache
 ```
 
-Windows builds also compile the native Code editor. Initialize
+#### Windows
+
+Install Git for Windows, Bun, Node.js, rustup, and Visual Studio Build Tools with the
+**Desktop development with C++** workload, a Windows SDK, and CMake tools for Windows.
+Then run these commands from a native PowerShell window in the repository root:
+
+```powershell
+bun install --frozen-lockfile
+bun run setup:windows
+bun run start
+```
+
+`setup:windows` installs the pinned Rust toolchain without changing your global default,
+downloads and verifies Zig 0.16.0 into `build/toolchains/`, and installs sccache through
+WinGet if it is missing. Without WinGet, install sccache with `cargo install sccache --locked`.
+It also prepares the pinned desktop submodules and downloads the published WSL components.
+It does not build, install, or launch the desktop app. Use `bun run start --prepare-only` to
+repeat source preparation without launching the app.
+Open a new PowerShell window after installing sccache if it is not yet on PATH.
+The build loads the installed Visual Studio environment, so a Developer PowerShell window
+is not required. Set `GHOSTEX_ZIG` to use an existing Zig 0.16.0 executable.
+
+`start` initializes missing desktop submodules at their pinned revisions and preserves
+existing checkouts. It checks the build tools before downloading the WSL runtime components.
+There is no `dev` script; use `start` for the desktop or `start:web` for the browser build.
+
+Windows builds also prepare the native Code editor. A clean editor checkout can reuse its
+published component when an authenticated GitHub CLI is available. To build it from source, initialize
 `.dependencies/code-server` and its nested VS Code submodule, and install the
 Node version pinned in `.dependencies/code-server/.node-version`, Python 3,
 Git for Windows with Git LFS, jq, and Visual Studio C++ Build Tools with a Windows
@@ -35,6 +62,8 @@ shell's PATH; `PYTHON` and `npm_config_msvs_version` can select a specific Pytho
 executable and Visual Studio installation. The Windows build invokes
 `apps/desktop/scripts/build-windows-code-server.ps1` and reuses its output when
 the editor sources and toolchain have not changed.
+
+#### Shared Rust build cache
 
 Both crates set `rustc-wrapper = "sccache"` in their `.cargo/config.toml`, so every `cargo` invocation
 run from inside `apps/desktop/` or `server/` (the build scripts, `bun run release:preflight --cargo`,
