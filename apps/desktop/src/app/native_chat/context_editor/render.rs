@@ -76,7 +76,11 @@ impl Render for ContextEditorWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let snapshot = self.chat.read(cx).snapshot.clone();
         let editor = &snapshot["contextEditor"];
-        let p = ChatAppearance::current(&snapshot);
+        // CDXC:Theming 2026-09-26 WHY: under window glass this window is frosted
+        // (`menu_surface`), so its fills take the glass washes like the suggestions popup;
+        // the solid input tone, a lift of the theme colour, showed as a tinted (green) box.
+        let p = ChatAppearance::current(&snapshot)
+            .on_window_glass(crate::app::helpers::window_glass_active());
         let s = p.scale;
         let mut groups = div()
             .id("context-detail-groups")
