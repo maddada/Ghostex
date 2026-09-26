@@ -7,7 +7,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::env;
-use std::time::Instant;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
@@ -629,13 +628,6 @@ impl GhostexGpuiApp {
             self.view_panel_picker_open && target_mode == TitlebarMode::Agents;
         self.view_panel_maximized = self.view_panel_maximized
             && (target_mode != TitlebarMode::Agents || self.view_panel_picker_open);
-        // Woken before focus and visibility below read the lifecycle (`active_view_awake`).
-        if state.active_view_awake
-            && target_mode == state.active_mode
-            && !self.project_editor_shell.is_mode_awake(target_mode)
-        {
-            self.mark_project_editor_mode_awake(target_mode, cx);
-        }
         self.apply_view_pane_state(cx);
         self.seed_terminal_view_for_open(cx);
         self.focus_shell_target(
@@ -1510,7 +1502,6 @@ impl GhostexGpuiApp {
         key: &GpuiLocalWorkspaceSessionKey,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let focus_started_at = Instant::now();
         self.prune_local_workspace_session_mappings();
         let Some(shell_session_id) = self.local_workspace_session_mappings.get(key).copied() else {
             return false;
@@ -1537,15 +1528,6 @@ impl GhostexGpuiApp {
             &mut self.agents_terminal_runtime_sessions,
             pane_id,
             shell_session_id,
-        );
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.tabModelSelected",
-            serde_json::json!({
-                "elapsedMs": focus_started_at.elapsed().as_millis() as u64,
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-            }),
         );
         self.activate_preferred_agents_chat_launch_intent(shell_session_id, cx);
         self.adopt_preferred_chat_view_on_selection(shell_session_id, cx);

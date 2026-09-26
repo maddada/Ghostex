@@ -17,12 +17,30 @@ impl GhostexGpuiApp {
         mode: TitlebarMode,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let marked = self.project_editor_shell.mark_mode_awake(mode);
+        let kept_awake = self.view_modes_kept_awake_by_parked_projects();
+        let marked = self.project_editor_shell.mark_mode_awake(mode, &kept_awake);
         if marked {
             self.release_capped_view_surfaces(cx);
             self.schedule_project_editor_auto_sleep_for_inactive_modes(cx);
         }
         marked
+    }
+
+    /// The active views of the projects the user left while they were awake (`active_view_awake`):
+    /// neither the idle timer nor the awake cap may sleep them. The live project's entry is stale
+    /// until it is left again, and its own active view is already exempt as `active_mode`.
+    pub(crate) fn view_modes_kept_awake_by_parked_projects(&self) -> Vec<TitlebarMode> {
+        let live_project_id = self.agents_workspace_project_id.as_deref();
+        let mut modes = Vec::new();
+        for (project_id, state) in &self.project_view_states_by_project {
+            if state.active_view_awake
+                && live_project_id != Some(project_id.as_str())
+                && !modes.contains(&state.active_mode)
+            {
+                modes.push(state.active_mode);
+            }
+        }
+        modes
     }
 
     /// CDXC:Workarea 2026-09-20 WHY:
@@ -122,6 +140,12 @@ impl GhostexGpuiApp {
             cx.background_executor().timer(duration).await;
 
             let _ = this.update(cx, |this, cx| {
+                if this
+                    .view_modes_kept_awake_by_parked_projects()
+                    .contains(&mode)
+                {
+                    return;
+                }
                 this.sleep_project_editor_mode_from_timer(mode, token, cx);
             });
         })
