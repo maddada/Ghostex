@@ -100,7 +100,14 @@ pub fn surface_skill_invocation_user_turns(
             continue;
         };
         let catalog_name = envelope.name.trim_start_matches('/').to_lowercase();
-        if catalog_name != "compact" && catalog_command_names.contains(&catalog_name) {
+        // CDXC:SessionChat 2026-09-26 WHY:
+        // The model, effort and Fast mode controls type `/model`, `/effort` and `/fast`; their
+        // result row is the one user-facing record. Claude 2.1.283's command list leaves `/effort`
+        // out, so a session-only effort change surfaced as a "/effort" user bubble.
+        if catalog_name != "compact"
+            && (catalog_command_names.contains(&catalog_name)
+                || matches!(catalog_name.as_str(), "model" | "effort" | "fast"))
+        {
             out.push(message.clone());
             continue;
         }
