@@ -200,7 +200,12 @@ fn notice_answer(
     }
     let notice = notice?;
     let choices = notice.visible_choices();
-    match choices.get(if primary { 0 } else { 1 }) {
+    let position = if primary {
+        Some(0)
+    } else {
+        notice.secondary_choice_position()
+    };
+    match position.and_then(|position| choices.get(position)) {
         Some(choice) => Some(terminal_notice_choice_answer(Some(notice), choice.index)),
         None if primary => notice
             .actions

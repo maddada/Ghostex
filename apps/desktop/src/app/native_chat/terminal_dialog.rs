@@ -196,20 +196,23 @@ impl NativeChatView {
                     .text_size(px(14.0 * p.scale))
                     .into_any_element(),
             });
+            let submit_label = if dialog["input"] == "search" {
+                "Search".to_string()
+            } else {
+                text(&dialog["presentation"], "submitLabel")
+            };
             actions.push(
                 div()
                     .id("terminal-dialog-submit")
+                    .role(gpui::Role::Button)
+                    .aria_label(submit_label.clone())
                     .chat_cursor_pointer()
                     .px(px(8.0 * p.scale))
                     .py(px(4.0 * p.scale))
                     .rounded(px(6.0 * p.scale))
                     .border_1()
                     .border_color(p.border)
-                    .child(if dialog["input"] == "search" {
-                        "Search".to_string()
-                    } else {
-                        text(&dialog["presentation"], "submitLabel")
-                    })
+                    .child(submit_label)
                     .on_click(cx.listener(|this, _, _, cx| this.submit_terminal_dialog(cx)))
                     .into_any_element(),
             );

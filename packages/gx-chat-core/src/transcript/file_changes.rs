@@ -281,7 +281,7 @@ pub fn split_file_changes<'a>(
     let mut changes: Vec<FileChange<'a>> = Vec::new();
     for pair in pair_tool_blocks(blocks.iter().copied()) {
         let files = match pair.call {
-            Some(ChatBlock::ToolCall { name, input }) => file_changes(name, input),
+            Some(ChatBlock::ToolCall { name, input, .. }) => file_changes(name, input),
             _ => Vec::new(),
         };
         // Deliberately case-sensitive, unlike the classification above: the TypeScript retains a

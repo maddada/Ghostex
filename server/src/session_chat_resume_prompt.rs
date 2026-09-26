@@ -200,6 +200,7 @@ row is never stale.
 pub const SESSION_CHAT_PERMISSION_PROMPT_KIND: &str = "permissionPrompt";
 
 const PERMISSION_PROMPT_HEADING: &str = "Do you want to proceed?";
+const PERMISSION_PROMPT_HEADING_LEAD: &str = "Do you want to ";
 const PERMISSION_PROMPT_YES_PREFIX: &str = "Yes";
 const PERMISSION_PROMPT_NO_PREFIX: &str = "No";
 
@@ -574,9 +575,15 @@ fn permission_prompt_run_kind(
     let heading = first_row_line
         .checked_sub(1)
         .map(|line| strip_box_border(&window[line]))?;
-    heading
-        .contains(PERMISSION_PROMPT_HEADING)
+    is_permission_prompt_heading(&heading)
         .then_some(SessionChatTerminalPickerKind::PermissionPrompt)
+}
+
+/// CDXC:AgentScreenDetection 2026-09-26 WHY: a file write or edit asks "Do you want to create approve.txt?" or "Do you want to make this edit to notes.md?" over the same Yes / "Yes, allow all edits during this session" / No rows, so matching only "Do you want to proceed?" left those prompts with the hook card's Allow and Deny alone and no way to pick the session-wide row from chat. Any "Do you want to …?" heading counts; the Yes and No rows are still required.
+fn is_permission_prompt_heading(heading: &str) -> bool {
+    let heading = heading.trim();
+    heading.contains(PERMISSION_PROMPT_HEADING)
+        || (heading.starts_with(PERMISSION_PROMPT_HEADING_LEAD) && heading.ends_with('?'))
 }
 
 /// `Some` only when a known Claude picker is live on screen and its highlight

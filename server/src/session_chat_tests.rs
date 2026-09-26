@@ -23,10 +23,12 @@ mod tests {
                 SessionChatBlock::ToolCall {
                     name: "Bash".to_string(),
                     input: json!({"command": "ls"}),
+                    call_id: None,
                 },
                 SessionChatBlock::ToolResult {
                     output: "ok".to_string(),
                     is_error: Some(true),
+                    call_id: None,
                 },
                 SessionChatBlock::ImageRef {
                     path: Some("/tmp/a.png".to_string()),
@@ -365,6 +367,7 @@ mod tests {
             vec![SessionChatBlock::ToolCall {
                 name: "exec".to_string(),
                 input: json!("const r = await tools.exec_command({cmd:\"ls\"});"),
+                call_id: Some("call_Nx1m".to_string())
             }]
         );
 
@@ -380,6 +383,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "Script completed\ntotal 4".to_string(),
                 is_error: None,
+                call_id: Some("call_Nx1m".to_string())
             }]
         );
 
@@ -394,6 +398,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "Exit code: 0".to_string(),
                 is_error: None,
+                call_id: Some("call_x".to_string())
             }]
         );
 
@@ -417,6 +422,7 @@ mod tests {
             vec![SessionChatBlock::ToolCall {
                 name: "tool_search".to_string(),
                 input: json!({"query": "GitHub issue details"}),
+                call_id: None
             }]
         );
         let tool_search_output = decode_codex_transcript_line(
@@ -429,6 +435,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "mcp__codex_apps__github".to_string(),
                 is_error: None,
+                call_id: None
             }]
         );
 
@@ -608,6 +615,7 @@ mod tests {
             blocks: vec![SessionChatBlock::ToolCall {
                 name: "AskUserQuestion".to_string(),
                 input,
+                call_id: None,
             }],
             timestamp: None,
             source: SessionChatSource::Transcript,
@@ -622,6 +630,7 @@ mod tests {
             blocks: vec![SessionChatBlock::ToolResult {
                 output: "Fast".to_string(),
                 is_error: None,
+                call_id: None,
             }],
             timestamp: None,
             source: SessionChatSource::Transcript,
@@ -731,6 +740,7 @@ mod tests {
             blocks: vec![SessionChatBlock::ToolCall {
                 name: "AskUserQuestion".to_string(),
                 input,
+                call_id: None,
             }],
             timestamp: None,
             source: SessionChatSource::Transcript,
@@ -745,6 +755,7 @@ mod tests {
             blocks: vec![SessionChatBlock::ToolResult {
                 output: "Red".to_string(),
                 is_error: None,
+                call_id: None,
             }],
             timestamp: None,
             source: SessionChatSource::Transcript,
@@ -1503,6 +1514,7 @@ mod tests {
             vec![SessionChatBlock::ToolCall {
                 name: "Edit".to_string(),
                 input: json!({"file_path": "/a"}),
+                call_id: None
             }],
         );
         // An in-flight update only re-describes the pending call.
@@ -1521,6 +1533,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "file body".to_string(),
                 is_error: None,
+                call_id: None
             }],
         );
         let failed = decode_grok_transcript_line(
@@ -1533,6 +1546,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "fetch failed".to_string(),
                 is_error: Some(true),
+                call_id: None
             }],
         );
     }
@@ -1582,6 +1596,7 @@ mod tests {
                 SessionChatBlock::ToolCall {
                     name: "read".to_string(),
                     input: json!({"path": "/tmp/example"}),
+                    call_id: None
                 },
             ]
         );
@@ -1597,6 +1612,7 @@ mod tests {
             vec![SessionChatBlock::ToolResult {
                 output: "contents".to_string(),
                 is_error: None,
+                call_id: None
             }]
         );
     }

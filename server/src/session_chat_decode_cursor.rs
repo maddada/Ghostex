@@ -141,6 +141,7 @@ fn cursor_message_blocks(role: &str, content: Option<&Value>) -> (Vec<SessionCha
             Some("tool_use") => blocks.push(SessionChatBlock::ToolCall {
                 name: extract_string(record.get("name")).unwrap_or_else(|| "tool".to_string()),
                 input: record.get("input").cloned().unwrap_or(Value::Null),
+                call_id: None,
             }),
             _ => {}
         }

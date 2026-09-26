@@ -61,6 +61,10 @@ pub fn document(state: &ChatState, _context: &ChatContext, into: &mut Document) 
         answering: card.answering,
         busy: card.answering || card.transition,
         loading: card.loading,
+        approval_ask: match prompt.as_ref() {
+            Some(InteractivePrompt::Approval { tool, .. }) => approval_ask(tool).to_string(),
+            _ => String::new(),
+        },
     };
 
     into.async_questions = async_controller::project(
@@ -72,6 +76,17 @@ pub fn document(state: &ChatState, _context: &ChatContext, into: &mut Document) 
     );
 }
 
+/// What an approval card asks, by the kind of tool waiting: a file write is an edit, not a command.
+fn approval_ask(tool: &str) -> &'static str {
+    match crate::transcript::tool_rows::tool_glyph(tool) {
+        "edit" => "Allow this edit?",
+        "terminal" => "Allow this command?",
+        "web" => "Allow this request?",
+        "file" => "Allow reading this?",
+        _ => "Allow this tool?",
+    }
+}
+
 /// The folded notice plus what the card needs: the collapsed row count, the dialog's own
 /// presentation, and the answer each row and each action sends.
 fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
@@ -79,6 +94,11 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
     object.insert(
         "collapsedChoiceCount".to_string(),
         json!(COLLAPSED_CHOICE_COUNT),
+    );
+    // The visible row Escape answers, so the card puts its hint on that row.
+    object.insert(
+        "secondaryChoice".to_string(),
+        json!(notice.secondary_choice_position()),
     );
     match notice.dialog.as_ref() {
         Some(dialog) => {

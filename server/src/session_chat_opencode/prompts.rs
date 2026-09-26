@@ -1,6 +1,6 @@
-use super::{Client, Snapshot, error, invalidate, safe_id, snapshot};
+use super::{error, invalidate, safe_id, snapshot, Client, Snapshot};
 use crate::{domain::DomainStateError, session_chat::*};
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 
 pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInteractivePrompt> {
     if let Some(permission) = snapshot.permissions.first() {
@@ -37,6 +37,7 @@ pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInter
             .map(|option| SessionChatQuestionOption {
                 label: option["label"].as_str().unwrap_or("").into(),
                 description: option["description"].as_str().map(str::to_string),
+                preview: None,
             })
             .collect::<Vec<_>>();
         if field["type"] == "boolean" {
@@ -44,10 +45,12 @@ pub(crate) fn interactive_prompt(snapshot: &Snapshot) -> Option<SessionChatInter
                 SessionChatQuestionOption {
                     label: "Yes".into(),
                     description: None,
+                    preview: None,
                 },
                 SessionChatQuestionOption {
                     label: "No".into(),
                     description: None,
+                    preview: None,
                 },
             ];
         }

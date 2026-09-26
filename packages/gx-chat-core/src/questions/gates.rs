@@ -62,13 +62,13 @@ pub fn question_card_visible(
         return false;
     }
     let approval = matches!(prompt, Some(InteractivePrompt::Approval { .. }));
-    let permission_prompt = notice.is_some_and(|notice| {
-        notice.kind == "permissionPrompt"
-            && (notice.choices.as_ref().is_some_and(|rows| !rows.is_empty())
-                || notice.dialog.is_some())
+    // CDXC:SessionChat 2026-09-26 WHY: a screen dialog with rows owns the agent's input, so an approval card beside it offers keys that land in that dialog; ExitPlanMode drew its hook card (the plan as JSON, Allow and Deny) under the "Ready to code?" card. The dialog's own rows are the one card, as they already were for permission prompts.
+    let answerable_dialog = notice.is_some_and(|notice| {
+        (notice.choices.as_ref().is_some_and(|rows| !rows.is_empty())
+            || notice.dialog.is_some())
             && notice_dismiss_key(Some(notice)) != questions.retired_notice_key
     });
-    !(approval && permission_prompt)
+    !(approval && answerable_dialog)
 }
 
 /// Whether the async strip may send at all.

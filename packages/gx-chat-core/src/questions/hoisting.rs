@@ -48,49 +48,27 @@ pub fn hoisted_question_exchanges(work: &[ChatMessage]) -> Vec<HoistedExchange> 
     out
 }
 
-/// A tool call with the result that answered it.
-///
-/// This and [`pair_tool_blocks`] are a two-function stand-in for
-/// `packages/core-ui/chat/session-chat-tool-fold.ts`, which belongs to family b. Fold it into
-/// family b's port and delete this when `splitSessionChatBlocks` and `pairSessionChatToolBlocks`
-/// land there; the pairing rule is FIFO in document order, because a result carries no back
-/// reference to its call.
+/// A tool call with the result that answered it, as the question hoisting reads them.
 struct ToolPair<'a> {
     call: Option<(&'a str, &'a serde_json::Value)>,
     result: Option<(&'a str, bool)>,
 }
 
-/// Per-message FIFO pairing of the tool blocks, prose blocks skipped.
+/// The transcript's own pairing (`tool_fold::pair_tool_blocks`), in this module's shape.
 fn pair_tool_blocks(blocks: &[ChatBlock]) -> Vec<ToolPair<'_>> {
-    let mut pairs: Vec<ToolPair<'_>> = Vec::new();
-    let mut call_slots: Vec<usize> = Vec::new();
-    let mut result_ordinal = 0usize;
-    for block in blocks {
-        match block {
-            ChatBlock::ToolCall { name, input } => {
-                call_slots.push(pairs.len());
-                pairs.push(ToolPair {
-                    call: Some((name.as_str(), input)),
-                    result: None,
-                });
-            }
-            ChatBlock::ToolResult { output, is_error } => {
-                let answer = (output.as_str(), *is_error == Some(true));
-                match call_slots.get(result_ordinal) {
-                    // Orphan result: more results than calls.
-                    None => pairs.push(ToolPair {
-                        call: None,
-                        result: Some(answer),
-                    }),
-                    Some(slot) => {
-                        let slot = *slot;
-                        result_ordinal += 1;
-                        pairs[slot].result = Some(answer);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    pairs
+    crate::transcript::tool_fold::pair_tool_blocks(blocks)
+        .into_iter()
+        .map(|pair| ToolPair {
+            call: match pair.call {
+                Some(ChatBlock::ToolCall { name, input, .. }) => Some((name.as_str(), input)),
+                _ => None,
+            },
+            result: match pair.result {
+                Some(ChatBlock::ToolResult {
+                    output, is_error, ..
+                }) => Some((output.as_str(), *is_error == Some(true))),
+                _ => None,
+            },
+        })
+        .collect()
 }

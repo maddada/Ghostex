@@ -77,6 +77,7 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
         Some("tool_use") => Some(SessionChatBlock::ToolCall {
             name: extract_string(record.get("name")).unwrap_or_else(|| "tool".to_string()),
             input: record.get("input").cloned().unwrap_or(Value::Null),
+            call_id: extract_string(record.get("id")),
         }),
         Some("tool_result") => Some(SessionChatBlock::ToolResult {
             output: tool_result_output(record.get("content")),
@@ -85,6 +86,7 @@ pub(crate) fn claude_content_block(record: &Map<String, Value>) -> Option<Sessio
             } else {
                 None
             },
+            call_id: extract_string(record.get("tool_use_id")),
         }),
         Some("image" | "input_image") => image_ref_block(record),
         _ => None,

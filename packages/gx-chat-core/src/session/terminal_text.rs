@@ -15,7 +15,7 @@ use crate::session::text::{collapse_whitespace, is_js_space};
 ///
 /// `.replace(/[*`_~]/g, '').replace(/\s+/g, ' ').replace(/(?:…|\.{3})\s*$/u, '').trim()`
 pub fn terminal_status_text(text: &str) -> String {
-    let undecorated: String = text
+    let undecorated: String = link_labels(text)
         .chars()
         .filter(|value| !matches!(value, '*' | '`' | '_' | '~'))
         .collect();
@@ -23,6 +23,40 @@ pub fn terminal_status_text(text: &str) -> String {
     strip_trailing_ellipsis(&collapsed)
         .trim_matches(is_js_space)
         .to_string()
+}
+
+/// CDXC:AgentScreenDetection 2026-09-26 WHY: the agent paints a Markdown link as its label alone, so a reply with links never contained its own screen sample once the transcript had it: the streaming bubble never retired, and the stale block on screen came back as the reply to the next prompt (a `/effort` run showed the previous answer again). Both sides compare `[label](target)` as `label`.
+fn link_labels(text: &str) -> std::borrow::Cow<'_, str> {
+    if !text.contains("](") {
+        return std::borrow::Cow::Borrowed(text);
+    }
+    let mut output = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(open) = rest.find('[') {
+        let after_open = &rest[open + 1..];
+        let link = after_open.find("](").and_then(|close| {
+            let label = &after_open[..close];
+            let target = &after_open[close + 2..];
+            (!label.contains(['[', ']', '\n']))
+                .then(|| target.find(')'))
+                .flatten()
+                .filter(|end| !target[..*end].contains(char::is_whitespace))
+                .map(|end| (label, close + 2 + end + 1))
+        });
+        match link {
+            Some((label, consumed)) => {
+                output.push_str(&rest[..open]);
+                output.push_str(label);
+                rest = &after_open[consumed..];
+            }
+            None => {
+                output.push_str(&rest[..open + 1]);
+                rest = after_open;
+            }
+        }
+    }
+    output.push_str(rest);
+    std::borrow::Cow::Owned(output)
 }
 
 /// `/(?:…|\.{3})\s*$/u` removed. The whitespace tail is already gone after the collapse, so only

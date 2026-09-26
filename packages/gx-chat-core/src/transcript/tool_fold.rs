@@ -1,9 +1,9 @@
 //! FIFO tool-call/result pairing, the fold of consecutive tool-only messages, and the prose/tool
 //! split of one message's blocks.
 //!
-//! Ported from `packages/core-ui/chat/session-chat-tool-fold.ts`. Our model's tool results carry no
-//! back-reference to a call id, so the Nth call gets the Nth result in document order, which is the
-//! order providers emit them in.
+//! Ported from `packages/core-ui/chat/session-chat-tool-fold.ts`. A result pairs with the call its
+//! `callId` names (Claude and Codex record one; their parallel calls finish out of order), and a
+//! result without one with the oldest call still unanswered, in document order.
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
@@ -95,35 +95,52 @@ pub fn fold_tool_messages(
     output
 }
 
-/// Per-message-block-list FIFO pairing.
+/// Per-message-block-list pairing: by call id when the result names one, else first in first out.
 ///
-/// Takes an iterator rather than a slice because the file-change split hands back a filtered list
-/// of borrowed blocks, which is then paired a second time.
+/// A result whose id names no call in the list stays an orphan rather than taking another call's
+/// slot. Takes an iterator rather than a slice because the file-change split hands back a filtered
+/// list of borrowed blocks, which is then paired a second time.
 pub fn pair_tool_blocks<'a>(blocks: impl IntoIterator<Item = &'a ChatBlock>) -> Vec<ToolPair<'a>> {
     let mut pairs: Vec<ToolPair<'a>> = Vec::new();
     let mut call_slots: Vec<usize> = Vec::new();
-    let mut result_ordinal = 0;
+    let mut slots_by_id: std::collections::HashMap<&'a str, usize> = Default::default();
+    let mut oldest_open = 0;
     for block in blocks {
         match block {
-            ChatBlock::ToolCall { .. } => {
+            ChatBlock::ToolCall { call_id, .. } => {
+                if let Some(id) = call_id.as_deref() {
+                    slots_by_id.entry(id).or_insert(pairs.len());
+                }
                 call_slots.push(pairs.len());
                 pairs.push(ToolPair {
                     call: Some(block),
                     result: None,
                 });
             }
-            ChatBlock::ToolResult { .. } => match call_slots.get(result_ordinal) {
-                // Orphan result.
-                None => pairs.push(ToolPair {
-                    call: None,
-                    result: Some(block),
-                }),
-                Some(slot) => {
-                    let slot = *slot;
-                    result_ordinal += 1;
-                    pairs[slot].result = Some(block);
+            ChatBlock::ToolResult { call_id, .. } => {
+                let slot = match call_id.as_deref() {
+                    Some(id) => slots_by_id
+                        .get(id)
+                        .copied()
+                        .filter(|slot| pairs[*slot].result.is_none()),
+                    None => {
+                        while call_slots
+                            .get(oldest_open)
+                            .is_some_and(|slot| pairs[*slot].result.is_some())
+                        {
+                            oldest_open += 1;
+                        }
+                        call_slots.get(oldest_open).copied()
+                    }
+                };
+                match slot {
+                    Some(slot) => pairs[slot].result = Some(block),
+                    None => pairs.push(ToolPair {
+                        call: None,
+                        result: Some(block),
+                    }),
                 }
-            },
+            }
             _ => {}
         }
     }

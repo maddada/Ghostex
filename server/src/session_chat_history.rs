@@ -286,7 +286,7 @@ impl Turn {
         }
         self.count += 1;
         for block in &message.blocks {
-            if let SessionChatBlock::ToolCall { name, input } = block {
+            if let SessionChatBlock::ToolCall { name, input, .. } = block {
                 collect_file_paths(name, input, &mut self.files);
             }
         }

@@ -2032,7 +2032,10 @@ fn parse_opencode_record(builder: &mut TranscriptBuilder, line: &str) {
     }
 }
 
-fn parse_normalized_record(builder: &mut TranscriptBuilder, message: crate::session_chat::SessionChatMessage) {
+fn parse_normalized_record(
+    builder: &mut TranscriptBuilder,
+    message: crate::session_chat::SessionChatMessage,
+) {
     use crate::session_chat::{SessionChatBlock, SessionChatRole};
     for block in message.blocks {
         match block {
@@ -2045,16 +2048,20 @@ fn parse_normalized_record(builder: &mut TranscriptBuilder, message: crate::sess
                 };
                 builder.push_dialog(section, text);
             }
-            SessionChatBlock::ToolCall { name, input } => {
+            SessionChatBlock::ToolCall { name, input, .. } => {
                 let section = classify_tool(&name);
                 builder.push_call(
                     ExportEntry::new(section, pretty_arguments(&input))
                         .with_tool(name, Some(message.id.clone())),
                 );
             }
-            SessionChatBlock::ToolResult { output, is_error } => {
-                builder.push_output(Some(message.id.trim_end_matches(":result").to_string()), output, is_error.unwrap_or(false))
-            }
+            SessionChatBlock::ToolResult {
+                output, is_error, ..
+            } => builder.push_output(
+                Some(message.id.trim_end_matches(":result").to_string()),
+                output,
+                is_error.unwrap_or(false),
+            ),
             SessionChatBlock::ImageRef { path, url, alt } => builder.push_dialog(
                 TranscriptExportSection::UserMessage,
                 format!(

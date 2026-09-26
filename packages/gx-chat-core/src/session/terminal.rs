@@ -117,6 +117,7 @@ pub fn terminal_tool_message(activity: &Value, context: &ChatContext) -> Option<
             ChatBlock::ToolResult {
                 output: detail.to_string(),
                 is_error: None,
+                call_id: None,
             },
         ]
     };
@@ -312,7 +313,7 @@ pub fn terminal_tool_retired(tool: &ChatMessage, transcript: &[ChatMessage]) -> 
         }
         let mut has_call = false;
         for block in &message.blocks {
-            let ChatBlock::ToolCall { name, input } = block else {
+            let ChatBlock::ToolCall { name, input, .. } = block else {
                 continue;
             };
             has_call = true;

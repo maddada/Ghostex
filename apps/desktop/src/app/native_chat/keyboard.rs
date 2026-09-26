@@ -321,9 +321,15 @@ impl NativeChatView {
             && !event.is_held
         {
             let notice = &this.snapshot["terminalNotice"];
+            let position = if primary {
+                Some(0)
+            } else {
+                notice["secondaryChoice"].as_u64().map(|index| index as usize)
+            };
             let choice = notice["choices"]
                 .as_array()
-                .and_then(|choices| choices.get(if primary { 0 } else { 1 }));
+                .zip(position)
+                .and_then(|(choices, position)| choices.get(position));
             // Trust and Remember is click-only, like the host's
             // `terminalNoticeActionShortcutEligible` says.
             let has_action = primary

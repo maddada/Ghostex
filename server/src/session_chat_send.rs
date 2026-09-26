@@ -2943,6 +2943,7 @@ mod tests {
                 .map(|label| SessionChatQuestionOption {
                     label: (*label).to_string(),
                     description: None,
+                    preview: None,
                 })
                 .collect(),
         }
@@ -4575,6 +4576,11 @@ pub(crate) async fn handle_interrupt_session_chat_http(
         "/api/updateAgentActivity".to_string(),
         request_id.clone(),
         escape_params,
+    );
+    crate::session_chat_interactive::retire_interrupted_session_chat_prompt(
+        state,
+        &target.project_id,
+        &target.session_id,
     );
     // Claude Code may answer this Escape by handing the prompt back to its
     // composer; the detector decides after the write lands (CDXC:SessionChat

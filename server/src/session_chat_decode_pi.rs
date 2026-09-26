@@ -49,6 +49,7 @@ fn pi_message_content(content: Option<&Value>) -> (Vec<SessionChatBlock>, Vec<Se
                 visible.push(SessionChatBlock::ToolCall {
                     name: extract_string(record.get("name")).unwrap_or_else(|| "tool".to_string()),
                     input: record.get("arguments").cloned().unwrap_or(Value::Null),
+                    call_id: None,
                 });
             }
             Some("image") => {
@@ -142,6 +143,7 @@ pub fn decode_pi_transcript_line(line: &str, fallback_id: &str) -> Option<Sessio
             let mut tool_blocks = vec![SessionChatBlock::ToolResult {
                 output,
                 is_error: if is_error { Some(true) } else { None },
+                call_id: None,
             }];
             tool_blocks.extend(
                 blocks
@@ -168,6 +170,7 @@ pub fn decode_pi_transcript_line(line: &str, fallback_id: &str) -> Option<Sessio
                 vec![SessionChatBlock::ToolResult {
                     output: text,
                     is_error: None,
+                    call_id: None,
                 }],
                 timestamp,
             ))

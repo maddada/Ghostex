@@ -18,6 +18,9 @@ pub struct QuestionCard {
     pub busy: bool,
     /// The saved answers are still being read back.
     pub loading: bool,
+    /// An approval card's question, worded for its tool ("Allow this edit?"); empty for a question.
+    #[serde(default)]
+    pub approval_ask: String,
 }
 
 /// The card's primary button.

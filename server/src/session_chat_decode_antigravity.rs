@@ -49,6 +49,7 @@ fn antigravity_tool_call_blocks(record: &Map<String, Value>) -> Vec<SessionChatB
             Some(SessionChatBlock::ToolCall {
                 name: extract_string(tool_call.get("name")).unwrap_or_else(|| "tool".to_string()),
                 input: tool_call.get("args").cloned().unwrap_or(Value::Null),
+                call_id: None,
             })
         })
         .collect()
@@ -96,6 +97,7 @@ pub fn decode_antigravity_transcript_line(
                 vec![SessionChatBlock::ToolResult {
                     output: text.unwrap_or_default(),
                     is_error,
+                    call_id: None,
                 }],
             ))
         }

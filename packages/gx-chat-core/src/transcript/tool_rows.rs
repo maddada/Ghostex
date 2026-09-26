@@ -12,7 +12,8 @@ use serde_json::{json, Value};
 use crate::transcript::jsstr::{ascii_lower, js_trim, utf16_len, utf16_take};
 use crate::transcript::tool_fold::ToolPair;
 use crate::transcript::tool_summary::{
-    summarize_command_input, summarize_tool_input, truncate_tool_preview,
+    summarize_command_input, summarize_primary_argument, summarize_tool_input,
+    truncate_tool_preview,
 };
 
 /// The first line of a result is the preview when the call has nothing to say.
@@ -59,14 +60,15 @@ pub fn is_command_tool(name: &str) -> bool {
 }
 
 /// The compact text beside a tool row's name.
-pub fn tool_preview(pair: &ToolPair<'_>) -> String {
+pub fn tool_preview(pair: &ToolPair<'_>, working_directory: Option<&str>) -> String {
     if let Some(name) = pair.call_name() {
         if is_command_tool(name) {
             return summarize_command_input(pair.call_input().unwrap_or(&Value::Null));
         }
     }
     let input = match pair.call_input() {
-        Some(input) => summarize_tool_input(input),
+        Some(input) => summarize_primary_argument(input, working_directory)
+            .unwrap_or_else(|| summarize_tool_input(input)),
         None => String::new(),
     };
     if !input.is_empty() {

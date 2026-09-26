@@ -12,7 +12,14 @@ pub struct SessionChatQuestionOption {
     pub label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// The mockup or code Claude shows beside this option (AskUserQuestion's `preview`), which the
+    /// card draws under it; capped at [`SESSION_CHAT_OPTION_PREVIEW_MAX_CHARS`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
 }
+
+/// A preview is a small mockup; anything longer is cut, since the card only has room for a glance.
+const SESSION_CHAT_OPTION_PREVIEW_MAX_CHARS: usize = 4000;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionChatQuestion {
@@ -302,6 +309,7 @@ fn parse_session_chat_question_options(raw: Option<&Value>) -> Vec<SessionChatQu
             Value::String(label) => Some(SessionChatQuestionOption {
                 label: label.clone(),
                 description: None,
+                preview: None,
             }),
             // Pi options carry `{label, value}`; the label is what its select
             // renders, with `value` as the fallback the bridge also uses.
@@ -315,6 +323,17 @@ fn parse_session_chat_question_options(raw: Option<&Value>) -> Vec<SessionChatQu
                     .get("description")
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                preview: record
+                    .get("preview")
+                    .and_then(Value::as_str)
+                    .map(str::trim_end)
+                    .filter(|preview| !preview.trim().is_empty())
+                    .map(|preview| {
+                        preview
+                            .chars()
+                            .take(SESSION_CHAT_OPTION_PREVIEW_MAX_CHARS)
+                            .collect()
+                    }),
             }),
             _ => None,
         })
@@ -410,6 +429,7 @@ pub fn detect_cursor_question_prompt(
             options.push(SessionChatQuestionOption {
                 label: label.to_string(),
                 description: None,
+                preview: None,
             });
         }
     }
@@ -572,9 +592,10 @@ pub fn session_chat_prompt_clear_decision(
     if event.next_activity == Some("idle") {
         return true;
     }
+    // A new prompt reached the agent, which it cannot take while a question or approval owns its input: whatever the card asked is over (answered in the terminal, or its tool call interrupted, which no hook reports).
     matches!(
         normalize_hook_event_name(event.event_name.unwrap_or_default()).as_str(),
-        "stop" | "session_end" | "idle"
+        "stop" | "session_end" | "idle" | "user_prompt_submit"
     )
 }
 
@@ -655,7 +676,7 @@ impl SessionChatTranscriptPromptState {
             }
             for block in &message.blocks {
                 match block {
-                    SessionChatBlock::ToolCall { name, input }
+                    SessionChatBlock::ToolCall { name, input, .. }
                         if is_ask_user_question_tool(name) =>
                     {
                         self.answered = false;
@@ -829,6 +850,25 @@ pub(crate) fn retire_denied_session_chat_approval(
     session_id: &str,
     answered: &SessionChatInteractivePrompt,
 ) {
+    retire_stored_session_chat_prompt(state, project_id, session_id, Some(answered));
+}
+
+/// CDXC:SessionChat 2026-09-26 WHY: the chat's Stop is the same daemon-sent Escape as Deny, and it ends the tool call a card was asking about just as silently, so a card answered Yes and then stopped came back as a live Allow/Deny on the next open.
+pub(crate) fn retire_interrupted_session_chat_prompt(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    retire_stored_session_chat_prompt(state, project_id, session_id, None);
+}
+
+/// Drops the stored card, or only the one `answered` names.
+fn retire_stored_session_chat_prompt(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+    answered: Option<&SessionChatInteractivePrompt>,
+) {
     let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
         return;
     };
@@ -836,10 +876,13 @@ pub(crate) fn retire_denied_session_chat_approval(
     let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
         return;
     };
-    let stored = crate::agents::session_chat_prompt_setting(&session)
-        .as_deref()
-        .and_then(parse_stored_session_chat_prompt);
-    if stored.as_ref() != Some(answered) {
+    let stored = crate::agents::session_chat_prompt_setting(&session);
+    let Some(stored) = stored else {
+        return;
+    };
+    if answered.is_some_and(|answered| {
+        parse_stored_session_chat_prompt(&stored).as_ref() != Some(answered)
+    }) {
         return;
     }
     let mut runtime = session

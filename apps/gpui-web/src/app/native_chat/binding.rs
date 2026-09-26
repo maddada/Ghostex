@@ -27,7 +27,7 @@ impl GhostexGpuiApp {
             client_id: format!("gpui-web-{}", crate::app::helpers::gpui_random_uuid_string().unwrap_or_default()),
             remote: None,
             initial_snapshot: None,
-            initial_presentation: self.chat_presentations.get(session).cloned(),
+            initial_presentation: self.initial_web_chat_presentation(session),
         };
         let view = cx.new(|cx| NativeChatView::new(config, cx));
         let key = session.clone();
@@ -42,5 +42,31 @@ impl GhostexGpuiApp {
         self.native_chats
             .insert(session.clone(), (shell_session_id, view.clone()));
         view
+    }
+
+    /// The cached presentation plus the session's folder (its cwd, else its project's), as the
+    /// desktop's `initial_session_chat_presentation` seeds it, so tool rows and file cards show
+    /// paths relative to it from the first render.
+    fn initial_web_chat_presentation(&self, session: &SessionKey) -> Option<serde_json::Value> {
+        let mut state = self.chat_presentations.get(session).cloned();
+        let presentation = self.gx_store.core.presentation();
+        let working_directory = presentation
+            .session(session)
+            .and_then(|record| record.cwd.clone())
+            .filter(|cwd| !cwd.trim().is_empty())
+            .or_else(|| {
+                presentation
+                    .project(&ghostex_gx_core::ProjectKey {
+                        machine: session.machine.clone(),
+                        project_id: session.project_id.clone(),
+                    })
+                    .and_then(|project| project.path.clone())
+                    .filter(|path| !path.trim().is_empty())
+            });
+        if let Some(working_directory) = working_directory {
+            state.get_or_insert_with(|| serde_json::json!({}))["workingDirectory"] =
+                serde_json::json!(working_directory);
+        }
+        state
     }
 }

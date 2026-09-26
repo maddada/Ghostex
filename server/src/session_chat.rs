@@ -144,12 +144,19 @@ pub enum SessionChatBlock {
         name: String,
         #[serde(default)]
         input: Value,
+        /// The agent's id for this call (Claude's `tool_use.id`, Codex's `call_id`), which its
+        /// result names: parallel calls can finish out of order.
+        #[serde(rename = "callId", skip_serializing_if = "Option::is_none", default)]
+        call_id: Option<String>,
     },
     #[serde(rename = "tool-result")]
     ToolResult {
         output: String,
         #[serde(rename = "isError", skip_serializing_if = "Option::is_none", default)]
         is_error: Option<bool>,
+        /// The id of the call this answers, when the agent records one.
+        #[serde(rename = "callId", skip_serializing_if = "Option::is_none", default)]
+        call_id: Option<String>,
     },
     #[serde(rename = "image-ref")]
     ImageRef {
@@ -330,7 +337,9 @@ pub fn session_chat_lifecycle_decoder(
         SessionChatTranscriptAgent::Cursor => Some(decode_cursor_turn_lifecycle),
         SessionChatTranscriptAgent::Grok => Some(decode_grok_turn_lifecycle),
         SessionChatTranscriptAgent::Hermes => Some(decode_hermes_turn_lifecycle),
-        SessionChatTranscriptAgent::OpenCode => Some(crate::session_chat_opencode::decode_lifecycle),
+        SessionChatTranscriptAgent::OpenCode => {
+            Some(crate::session_chat_opencode::decode_lifecycle)
+        }
         SessionChatTranscriptAgent::Pi => None,
         SessionChatTranscriptAgent::Zcode => Some(decode_zcode_turn_lifecycle),
     }

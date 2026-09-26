@@ -51,7 +51,11 @@ fn hermes_tool_call_blocks(record: &Map<String, Value>) -> Vec<SessionChatBlock>
                     other => other.clone(),
                 })
                 .unwrap_or(Value::Null);
-            Some(SessionChatBlock::ToolCall { name, input })
+            Some(SessionChatBlock::ToolCall {
+                name,
+                input,
+                call_id: None,
+            })
         })
         .collect()
 }
@@ -128,7 +132,11 @@ pub fn decode_hermes_transcript_line(line: &str, fallback_id: &str) -> Option<Se
             let (output, is_error) = hermes_tool_result(&content?);
             Some(message(
                 SessionChatRole::Tool,
-                vec![SessionChatBlock::ToolResult { output, is_error }],
+                vec![SessionChatBlock::ToolResult {
+                    output,
+                    is_error,
+                    call_id: None,
+                }],
             ))
         }
         _ => None,

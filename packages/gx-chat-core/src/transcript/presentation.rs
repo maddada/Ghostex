@@ -128,7 +128,7 @@ pub fn project_message(
     // Code-block headers, GitHub alerts, and typed file paths, marked for the native renderer.
     let native_body = native_markdown(&displayed_body, is_user);
     let suppressed = suppressed_turn_presentation(message);
-    let rows = tool_rows(&tool_pairs, agent_path);
+    let rows = tool_rows(&tool_pairs, agent_path, working_directory);
     let system_card = classify_system_card(message, &displayed_body);
     let reasoning = split_reasoning_headline(&body);
     let questions: Vec<Value> = {
@@ -504,6 +504,11 @@ pub fn build_scope(
                     active: turn.active,
                     work: turn
                         .active_work
+                        .iter()
+                        .map(|message| builder.message_or_placeholder(message, eager))
+                        .collect(),
+                    outcome: turn
+                        .outcome
                         .iter()
                         .map(|message| builder.message_or_placeholder(message, eager))
                         .collect(),

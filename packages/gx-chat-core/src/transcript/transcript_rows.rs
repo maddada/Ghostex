@@ -15,13 +15,19 @@ use crate::transcript::file_changes::FileChange;
 use crate::transcript::question_exchange::answered_question_exchange;
 use crate::transcript::subagent::{is_subagent_self, tool_subagent};
 use crate::transcript::tool_fold::ToolPair;
-use crate::transcript::tool_rows::{clip_tool_body, tool_glyph, tool_preview, tool_run_fold};
-use crate::transcript::tool_summary::format_tool_input;
+use crate::transcript::tool_rows::{
+    clip_tool_body, is_command_tool, tool_glyph, tool_preview, tool_run_fold,
+};
+use crate::transcript::tool_summary::{command_detail, format_tool_input};
 
 /// A tool's arguments and result as its open row shows them.
 pub fn tool_detail(pair: &ToolPair<'_>) -> Value {
     let input = match pair.call_input() {
-        Some(input) => format_tool_input(input),
+        Some(input) => pair
+            .call_name()
+            .filter(|name| is_command_tool(name))
+            .and_then(|_| command_detail(input))
+            .unwrap_or_else(|| format_tool_input(input)),
         None => String::new(),
     };
     json!({
@@ -34,7 +40,11 @@ pub fn tool_detail(pair: &ToolPair<'_>) -> Value {
 ///
 /// The arguments and result stay behind: GPUI asks for them only while the row is open
 /// (`row_details.rs`).
-pub fn tool_rows(pairs: &[ToolPair<'_>], agent_path: &str) -> Vec<Value> {
+pub fn tool_rows(
+    pairs: &[ToolPair<'_>],
+    agent_path: &str,
+    working_directory: Option<&str>,
+) -> Vec<Value> {
     pairs
         .iter()
         .map(|pair| {
@@ -74,7 +84,10 @@ pub fn tool_rows(pairs: &[ToolPair<'_>], agent_path: &str) -> Vec<Value> {
                 "glyph".to_string(),
                 tool_glyph(pair.call_name().unwrap_or_default()).into(),
             );
-            row.insert("preview".to_string(), tool_preview(pair).into());
+            row.insert(
+                "preview".to_string(),
+                tool_preview(pair, working_directory).into(),
+            );
             row.insert("failed".to_string(), pair.result_is_error().into());
             row.insert("hasDetail".to_string(), has_detail.into());
             row.insert("subagent".to_string(), subagent);

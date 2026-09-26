@@ -128,6 +128,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
                     .filter(|value| !value.is_null())
                     .cloned()
                     .unwrap_or(Value::Null),
+                call_id: None,
             }],
         )),
         /*
@@ -146,6 +147,7 @@ pub fn decode_grok_transcript_line(line: &str, fallback_id: &str) -> Option<Sess
                 vec![SessionChatBlock::ToolResult {
                     output: grok_tool_result_output(update),
                     is_error,
+                    call_id: None,
                 }],
             ))
         }

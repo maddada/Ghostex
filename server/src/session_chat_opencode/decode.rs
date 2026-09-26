@@ -1,5 +1,5 @@
 use crate::session_chat::*;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 fn row(
     id: String,
@@ -107,7 +107,11 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                             result.push(row(
                                 part_id.clone(),
                                 SessionChatRole::Assistant,
-                                vec![SessionChatBlock::ToolCall { name, input }],
+                                vec![SessionChatBlock::ToolCall {
+                                    name,
+                                    input,
+                                    call_id: None,
+                                }],
                                 timestamp,
                                 turn.as_deref(),
                             ));
@@ -132,6 +136,7 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                                     vec![SessionChatBlock::ToolResult {
                                         output: output.join("\n"),
                                         is_error: Some(state["status"] == "error"),
+                                        call_id: None,
                                     }],
                                     timestamp,
                                     turn.as_deref(),
@@ -181,6 +186,7 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                     vec![SessionChatBlock::ToolCall {
                         name: "bash".into(),
                         input: json!({"command":message["command"]}),
+                        call_id: None,
                     }],
                     timestamp,
                     turn.as_deref(),
@@ -192,6 +198,7 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                         vec![SessionChatBlock::ToolResult {
                             output: output.into(),
                             is_error: Some(message["exit"].as_i64().is_some_and(|code| code != 0)),
+                            call_id: None,
                         }],
                         timestamp,
                         turn.as_deref(),

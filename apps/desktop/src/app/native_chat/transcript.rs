@@ -95,6 +95,9 @@ impl NativeChatView {
                 .w_full()
                 .gap(px(8.0 * s))
                 .child(self.message_row(&item["user"], &p, window, cx));
+            for output in item["outcome"].as_array().into_iter().flatten() {
+                row = row.child(self.message_row(output, &p, window, cx));
+            }
             if item["final"].is_object() || item["active"] == true {
                 row = row.child(
                     self.disclosure(

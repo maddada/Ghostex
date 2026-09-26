@@ -67,6 +67,7 @@ pub fn decode_zcode_transcript_line(line: &str, fallback_id: &str) -> Option<Ses
                     .unwrap_or("tool")
                     .to_string(),
                 input: state.get("input").cloned().unwrap_or(Value::Null),
+                call_id: None,
             }];
             let status = state.get("status").and_then(Value::as_str);
             if matches!(status, Some("completed" | "error")) {
@@ -81,6 +82,7 @@ pub fn decode_zcode_transcript_line(line: &str, fallback_id: &str) -> Option<Ses
                 blocks.push(SessionChatBlock::ToolResult {
                     output: bounded_tool_payload(output),
                     is_error: (status == Some("error")).then_some(true),
+                    call_id: None,
                 });
             }
             blocks
@@ -186,7 +188,7 @@ mod tests {
         assert_eq!(thinking.id, "part_test");
         let tool = decode_zcode_transcript_line(&row(json!({"type":"tool","tool":"Bash","state":{"status":"error","input":{"command":"false"},"error":"Exit 1"}})), "fallback").unwrap();
         assert!(
-            matches!(&tool.blocks[1], SessionChatBlock::ToolResult { is_error: Some(true), output } if output == "Exit 1")
+            matches!(&tool.blocks[1], SessionChatBlock::ToolResult { is_error: Some(true), output, call_id: None } if output == "Exit 1")
         );
         assert!(decode_zcode_transcript_line(
             &row(json!({"type":"text","text":"hidden","ignored":true})),

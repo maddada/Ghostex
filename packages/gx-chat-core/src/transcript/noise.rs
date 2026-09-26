@@ -711,6 +711,15 @@ pub fn classify_suppressed_turn(message: &ChatMessage) -> Option<SuppressedTurn>
     Some(SuppressedTurn::Collapsed { label })
 }
 
+/// A local or slash command's printed output (`<local-command-stdout>`, Codex's `bash-stdout`), which
+/// is the command's answer: the agent writes no reply to one.
+pub fn is_command_output_turn(message: &ChatMessage) -> bool {
+    message.role == ChatRole::User
+        && !is_hidden_message(message)
+        && harness_injected_turn_label(js_trim(&joined_text(&message.blocks))).as_deref()
+            == Some("Local command output")
+}
+
 /// True only for turns that must not reach the list at all.
 pub fn is_hidden_message(message: &ChatMessage) -> bool {
     matches!(

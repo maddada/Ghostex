@@ -73,7 +73,7 @@ fn non_text_block_digest(message: &ChatMessage) -> String {
     let mut parts: Vec<String> = Vec::new();
     for block in &message.blocks {
         match block {
-            ChatBlock::ToolCall { name, input } => {
+            ChatBlock::ToolCall { name, input, .. } => {
                 parts.push(format!("call:{name}:{}", stable_stringify(input)));
             }
             ChatBlock::ToolResult { output, .. } => parts.push(format!("result:{output}")),

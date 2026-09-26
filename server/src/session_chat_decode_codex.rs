@@ -81,19 +81,24 @@ fn codex_response_item(
                 vec![SessionChatBlock::ToolCall {
                     name,
                     input: codex_call_input(payload),
+                    call_id: extract_string(payload.get("call_id")),
                 }],
             ))
         }
-        Some("function_call_output" | "custom_tool_call_output") => Some(transcript_message(
-            SessionChatRole::Tool,
-            vec![codex_tool_result(payload.get("output"))],
-        )),
+        Some("function_call_output" | "custom_tool_call_output") => {
+            let mut result = codex_tool_result(payload.get("output"));
+            if let SessionChatBlock::ToolResult { call_id, .. } = &mut result {
+                *call_id = extract_string(payload.get("call_id"));
+            }
+            Some(transcript_message(SessionChatRole::Tool, vec![result]))
+        }
         // Hosted-tool lanes: the call carries no name field of its own.
         Some("web_search_call") => Some(transcript_message(
             SessionChatRole::Assistant,
             vec![SessionChatBlock::ToolCall {
                 name: "web_search".to_string(),
                 input: codex_call_input(payload),
+                call_id: None,
             }],
         )),
         Some("tool_search_call") => Some(transcript_message(
@@ -101,6 +106,7 @@ fn codex_response_item(
             vec![SessionChatBlock::ToolCall {
                 name: "tool_search".to_string(),
                 input: codex_call_input(payload),
+                call_id: None,
             }],
         )),
         Some("tool_search_output") => Some(transcript_message(
@@ -108,6 +114,7 @@ fn codex_response_item(
             vec![SessionChatBlock::ToolResult {
                 output: codex_tool_search_output(payload.get("tools")),
                 is_error: None,
+                call_id: None,
             }],
         )),
         /*
@@ -285,6 +292,7 @@ fn codex_event_message(
                 blocks.push(SessionChatBlock::ToolCall {
                     name: "Generated Image".to_string(),
                     input: Value::String(detail),
+                    call_id: None,
                 });
                 return Some(SessionChatMessage {
                     id: generation_id,
@@ -539,6 +547,7 @@ fn codex_tool_result(output: Option<&Value>) -> SessionChatBlock {
     SessionChatBlock::ToolResult {
         output: tool_result_output(content),
         is_error: if is_error { Some(true) } else { None },
+        call_id: None,
     }
 }
 

@@ -1131,9 +1131,10 @@ const CODEX_RULES: &[NoticeRule] = &[
         signatures: &[
             NoticeSignature {
                 scope: NoticeScope::Dialog,
+                // "Update available! 0.1…" and, since Codex 0.156, "Update available · 0.156.1 → …".
                 parts: &[
-                    NoticePart::Text("Update available!"),
-                    NoticePart::Gap(1),
+                    NoticePart::Text("Update available"),
+                    NoticePart::Gap(3),
                     NoticePart::Digit,
                 ],
                 // Only the blocking MODAL warrants a notice; the harmless

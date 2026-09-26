@@ -76,12 +76,19 @@ pub enum ChatBlock {
         /// Any JSON; bounded to 64 KiB of characters by the server.
         #[serde(default)]
         input: Value,
+        /// The agent's id for this call, which its result names (Claude, Codex); absent for agents
+        /// that record none.
+        #[serde(rename = "callId", default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
     },
     #[serde(rename = "tool-result")]
     ToolResult {
         output: String,
         #[serde(rename = "isError", default, skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
+        /// The id of the call this answers, when the agent records one.
+        #[serde(rename = "callId", default, skip_serializing_if = "Option::is_none")]
+        call_id: Option<String>,
     },
     #[serde(rename = "image-ref")]
     ImageRef {

@@ -93,6 +93,43 @@ fn raw_preview(input: &Value) -> String {
     }
 }
 
+/// CDXC:SessionChat 2026-09-26 WHY: a tool row used to preview its whole argument object as JSON, so a Read of a file under a long temporary folder showed `{"file_path":"/private/tmp/claude-501/…` with the file name cut off. A row now previews the argument that names the call: the search pattern or query, the URL, the file (relative to the session's folder, or `~/…`), the task's description, the skill, or the stopped task; the JSON stays for tools with none of these.
+pub fn summarize_primary_argument(
+    input: &Value,
+    working_directory: Option<&str>,
+) -> Option<String> {
+    let Value::Object(entries) = input else {
+        return None;
+    };
+    let text = |key: &str| non_empty_string(entries.get(key)).map(str::to_string);
+    let primary = text("pattern")
+        .or_else(|| text("query"))
+        .or_else(|| text("url"))
+        .or_else(|| {
+            tool_file_path(input).map(|path| {
+                crate::transcript::file_change_rows::file_change_display_path(
+                    path,
+                    working_directory,
+                )
+            })
+        })
+        .or_else(|| text("description"))
+        .or_else(|| text("skill"))
+        .or_else(|| text("task_id"))
+        .or_else(|| text("shell_id"))
+        .or_else(|| text("subject"))
+        .or_else(|| match entries.get("todos") {
+            Some(Value::Array(todos)) => Some(format!(
+                "{} {}",
+                todos.len(),
+                if todos.len() == 1 { "item" } else { "items" }
+            )),
+            _ => None,
+        })?;
+    let collapsed = js_trim(&collapse_whitespace(&primary)).to_string();
+    (!collapsed.is_empty()).then(|| truncate_tool_preview(&collapsed, MAX_PREVIEW_LENGTH))
+}
+
 /// The compact one-line form of a tool's arguments.
 pub fn summarize_tool_input(input: &Value) -> String {
     let collapsed = js_trim(&collapse_whitespace(&raw_preview(input))).to_string();
@@ -220,6 +257,27 @@ fn command_text(input: &Value) -> String {
         Value::Null => String::new(),
         Value::Array(_) => raw_preview(input),
         other => primitive_text(other),
+    }
+}
+
+/// The whole command a shell tool ran, for its open row's "Command" block: `command`, `cmd` or
+/// `script` (an argv array joined), or Codex's freeform input. `None` for any other shape, which
+/// keeps its full arguments.
+pub fn command_detail(input: &Value) -> Option<String> {
+    match input {
+        Value::Object(entries) => ["command", "cmd", "script"]
+            .iter()
+            .find_map(|key| match entries.get(*key) {
+                Some(Value::String(text)) if !text.trim().is_empty() => Some(text.clone()),
+                Some(Value::Array(parts)) if !parts.is_empty() => parts
+                    .iter()
+                    .map(|part| part.as_str().map(str::to_string))
+                    .collect::<Option<Vec<_>>>()
+                    .map(|parts| parts.join(" ")),
+                _ => None,
+            }),
+        Value::String(_) => Some(command_text(input)).filter(|text| !text.trim().is_empty()),
+        _ => None,
     }
 }
 

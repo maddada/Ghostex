@@ -83,19 +83,22 @@ impl NativeChatView {
             } else {
                 choices.len()
             };
+            let secondary = notice["secondaryChoice"].as_u64().map(|index| index as usize);
             for (index, choice) in choices.iter().take(count).enumerate() {
                 let shortcut = if self.snapshot["showShortcutLabels"] != false {
-                    match index {
-                        0 => Some(
+                    if index == 0 {
+                        Some(
                             if cfg!(target_os = "macos") {
                                 "⌘Enter"
                             } else {
                                 "Ctrl+Enter"
                             }
                             .to_string(),
-                        ),
-                        1 => Some("Esc".to_string()),
-                        _ => None,
+                        )
+                    } else if Some(index) == secondary {
+                        Some("Esc".to_string())
+                    } else {
+                        None
                     }
                 } else {
                     None
@@ -251,7 +254,39 @@ impl NativeChatView {
             .filter(|action| !collapsed || action["kind"] == "trustAndRemember")
         {
             if action["kind"] == "switchToTerminal" {
-                actions.push(self.host_button("terminalView", "titlebar/terminal-2.svg", p, cx));
+                actions.push(
+                    div()
+                        .id("notice-terminal-view")
+                        .role(gpui::Role::Button)
+                        .aria_label("Terminal View")
+                        .chat_cursor_pointer()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * p.scale))
+                        .px(px(8.0 * p.scale))
+                        .py(px(4.0 * p.scale))
+                        .rounded(px(6.0 * p.scale))
+                        .border_1()
+                        .border_color(p.border)
+                        .text_color(p.primary)
+                        .hover(|style| style.bg(p.border))
+                        .child(
+                            gpui::svg()
+                                .path("titlebar/terminal-2.svg")
+                                .size(px(14.0 * p.scale))
+                                .text_color(p.primary),
+                        )
+                        .child("Terminal View")
+                        .on_click(cx.listener(|this, event: &gpui::ClickEvent, window, cx| {
+                            this.perform_composer_action(
+                                "terminalView",
+                                event.position(),
+                                window,
+                                cx,
+                            )
+                        }))
+                        .into_any_element(),
+                );
             } else {
                 let answer = action["answer"].clone();
                 actions.push(self.chat_button(
@@ -264,16 +299,13 @@ impl NativeChatView {
             }
         }
         if notice["choices"].is_null() && notice["dialog"].is_null() {
-            actions.push(
-                div()
-                    .id("dismiss-notice")
-                    .chat_cursor_pointer()
-                    .child("Dismiss")
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.invoke(json!({"type":"dismissNotice"}), cx);
-                    }))
-                    .into_any_element(),
-            );
+            actions.push(self.chat_button(
+                "dismiss-notice".into(),
+                "Dismiss".into(),
+                json!({"type":"dismissNotice"}),
+                p,
+                cx,
+            ));
         }
         if let Some(error) = snapshot["noticeError"].as_str() {
             body.push(

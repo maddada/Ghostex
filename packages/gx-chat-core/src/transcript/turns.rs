@@ -12,7 +12,7 @@ use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 
 use crate::transcript::foreign::STREAMING_ID;
 use crate::transcript::jsstr::js_trim;
-use crate::transcript::noise::{is_command_turn, suppressed_turn_label};
+use crate::transcript::noise::{is_command_output_turn, is_command_turn, suppressed_turn_label};
 
 /// One finished user turn: the prompt, the work under it, and the reply that settled it.
 #[derive(Clone, Debug, PartialEq)]
@@ -31,6 +31,8 @@ pub struct SummaryModeTurn {
     pub earlier_replies: Vec<ChatMessage>,
     pub final_message: Option<ChatMessage>,
     pub user: ChatMessage,
+    /// The rows that end a turn the agent wrote no reply to (a command's output, an interruption).
+    pub outcome: Vec<ChatMessage>,
 }
 
 /// One entry of the verbose transcript.
@@ -80,6 +82,7 @@ pub fn summary_mode_turns(
                 earlier_replies: Vec::new(),
                 final_message: None,
                 user: message.clone(),
+                outcome: Vec::new(),
             });
         } else if let Some(current) = turns.last_mut() {
             current.active_work.push(message.clone());
@@ -92,6 +95,15 @@ pub fn summary_mode_turns(
         if let Some(final_message) = &turn.final_message {
             turn.earlier_replies = earlier_replies(&turn.active_work, final_message);
         }
+        turn.outcome = turn
+            .active_work
+            .iter()
+            .filter(|row| {
+                is_command_output_turn(row)
+                    || suppressed_turn_label(row).as_deref() == Some("Interrupted")
+            })
+            .cloned()
+            .collect();
     }
     if is_working {
         if let Some(newest) = turns.last_mut() {

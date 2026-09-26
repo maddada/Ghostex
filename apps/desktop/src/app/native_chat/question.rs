@@ -98,6 +98,26 @@ impl NativeChatView {
                 p,
                 cx,
             ));
+            // The mockup Claude shows beside the option, under the row that picks it.
+            let preview = text(option, "preview");
+            if !preview.is_empty() {
+                choices = choices.child(
+                    div()
+                        .id(format!("question-option-preview:{index}:{option_index}"))
+                        .ml(px(12.0 * s))
+                        .max_h(px(160.0 * s))
+                        .overflow_y_scroll()
+                        .px(px(10.0 * s))
+                        .py(px(8.0 * s))
+                        .rounded(px(6.0 * s))
+                        .bg(p.input)
+                        .font_family(super::fonts::CHAT_MONO)
+                        .text_size(px(12.6 * s))
+                        .line_height(px(18.0 * s))
+                        .text_color(p.muted)
+                        .child(preview),
+                );
+            }
         }
         body.push(choices.into_any_element());
         if index > 0 {
