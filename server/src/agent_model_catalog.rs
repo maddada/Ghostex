@@ -261,7 +261,10 @@ fn poll_once(
             .map_err(|_| "catalog state poisoned".to_string())?;
         state.etag = etag;
         state.published = true;
-        let changed = *state.catalog != catalog;
+        // A published copy older than the one in effect (this build's bundle, before main has
+        // caught up) never rolls the lineup back; `updatedAt` orders every copy.
+        let changed =
+            *state.catalog != catalog && updated_at(&catalog) >= updated_at(&state.catalog);
         if changed {
             state.catalog = Arc::new(catalog.clone());
         }

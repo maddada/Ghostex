@@ -67,11 +67,15 @@ pub fn settle(
         // both before the controller starts. The catalog the host has cached is what every pill
         // and menu draws from until a push arrives, and it can be newer than the bundled one.
         Event::ComposerBootRead(read) => {
-            // `adoptAgentModelCatalog` replaces the lineup outright: the host's copy is the
-            // service's, and only a gxserver push is compared by `updatedAt` (in the socket,
-            // before it ever reaches the brain).
+            // CDXC:SessionChat 2026-09-26 WHY:
+            // The host's copy is the last push it adopted, which an update can leave older than
+            // the catalog this build bundles; adopting it outright hid the bundled Opus 5.5 200K
+            // twin until GitHub caught up. The later `updatedAt` wins, as for every other copy.
             if let Some(parsed) = parse_agent_model_catalog(&read.model_catalog) {
-                state.menus.model_catalog = parsed;
+                state.menus.model_catalog = match bundled_agent_model_catalog() {
+                    Some(bundled) => bundled.newer(parsed),
+                    None => parsed,
+                };
                 state.menus.model_catalog_generation =
                     state.menus.model_catalog_generation.wrapping_add(1);
             }
