@@ -47,6 +47,9 @@ fn row(line: &str) -> Option<TerminalDialogRow> {
 }
 
 const DIRECTORY_TRUST_ID_PREFIX: &str = "codex-directory-trust:";
+/// Codex 0.156's "Folder access" trust dialog. A separate prefix because it
+/// is answered differently from the onboarding one (see `payload`).
+const FOLDER_ACCESS_TRUST_ID_PREFIX: &str = "codex-folder-access-trust:";
 const UPDATE_PROMPT_ID_PREFIX: &str = "codex-update-prompt:";
 
 /// CDXC:AgentScreenDetection 2026-09-11 DECISION:
@@ -266,6 +269,68 @@ fn directory_trust_dialog(content: &[&str]) -> Option<TerminalDialog> {
     })
 }
 
+/// CDXC:AgentScreenDetection 2026-09-26 WHY:
+/// Codex 0.156 replaced the onboarding trust screen with a "Folder access" list (a folder path, a "Trust this folder?" sentence, rows "Trust and continue" and "Quit", footer "enter continue · esc quit"). Unrecognized, it surfaced as a generic Codex dialog, so chat never treated it as a trust prompt.
+/// Its list wraps, so the onboarding answer (Up, then Enter) would land on Quit: rows are reached by moving from the captured highlight like the other numbered menus.
+fn folder_access_trust_dialog(content: &[&str]) -> Option<TerminalDialog> {
+    let heading = content.iter().position(|line| !clean(line).is_empty())?;
+    if clean(content[heading]) != "Folder access" {
+        return None;
+    }
+    let path_end = (heading + 1..content.len()).find(|&i| clean(content[i]).is_empty())?;
+    let folder = content[heading + 1..path_end]
+        .iter()
+        .map(|line| clean(line))
+        .collect::<String>();
+    if folder.is_empty() {
+        return None;
+    }
+    let first_row = content.iter().position(|line| row(line).is_some())?;
+    let mut rows: Vec<_> = content.iter().filter_map(|line| row(line)).collect();
+    if rows.len() != 2
+        || rows[0].number != 1
+        || rows[0].label != "Trust and continue"
+        || rows[1].number != 2
+        || rows[1].label != "Quit"
+        || rows.iter().filter(|row| row.selected).count() != 1
+        || path_end >= first_row
+    {
+        return None;
+    }
+    let context = content[path_end..first_row]
+        .iter()
+        .map(|line| clean(line))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    // In a subfolder of a repository Codex adds a note that trust applies to
+    // the repository root before this sentence.
+    if !context.contains("Trust this folder?") {
+        return None;
+    }
+    let identity = serde_json::to_string(&(&folder, &context, &rows)).ok()?;
+    rows[1].label = "Quit Codex".to_string();
+    let name = folder
+        .trim_end_matches(['/', '\\'])
+        .rsplit(['/', '\\'])
+        .next()?;
+    Some(TerminalDialog {
+        id: format!(
+            "{FOLDER_ACCESS_TRUST_ID_PREFIX}{:x}",
+            Sha256::digest(identity.as_bytes())
+        ),
+        title: format!("Trust folder \"{name}\"?"),
+        body: format!("{folder}\n\n{context}"),
+        footer: "Choose an option to continue.".to_string(),
+        rows,
+        input: None,
+        input_value: String::new(),
+        actions: Vec::new(),
+    })
+}
+
 /// CDXC:AgentScreenDetection 2026-09-05 DECISION:
 /// User: expose the "Implement this plan?" picker in chat so switching to the terminal is unnecessary.
 /// User: audit every Codex command and make its messages and interactions usable in chat, using the existing UX and improving it where needed.
@@ -353,6 +418,24 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
             .rposition(|line| clean(line).starts_with("> You are in "))
         {
             if let Some(dialog) = directory_trust_dialog(
+                &lines[trust_heading..footer_index]
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>(),
+            ) {
+                return Some(dialog);
+            }
+        }
+    }
+    if clean(&lines[footer_index])
+        .to_ascii_lowercase()
+        .starts_with("enter continue")
+    {
+        if let Some(trust_heading) = lines[..footer_index]
+            .iter()
+            .rposition(|line| clean(line) == "Folder access")
+        {
+            if let Some(dialog) = folder_access_trust_dialog(
                 &lines[trust_heading..footer_index]
                     .iter()
                     .map(String::as_str)
@@ -592,6 +675,7 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
 impl TerminalDialog {
     pub(crate) fn is_codex_directory_trust(&self) -> bool {
         self.id.starts_with(DIRECTORY_TRUST_ID_PREFIX)
+            || self.id.starts_with(FOLDER_ACCESS_TRUST_ID_PREFIX)
     }
 
     pub(crate) fn is_codex_update_prompt(&self) -> bool {
@@ -605,7 +689,7 @@ impl TerminalDialog {
         };
         if let Some(index) = params.get("choiceIndex").and_then(Value::as_u64) {
             let row = self.rows.get(index as usize).ok_or_else(invalid)?;
-            if self.is_codex_directory_trust() {
+            if self.id.starts_with(DIRECTORY_TRUST_ID_PREFIX) {
                 return Ok(match row.number {
                     1 => "\x1b[A\r",
                     2 => "2",

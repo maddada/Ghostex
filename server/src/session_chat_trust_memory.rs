@@ -47,9 +47,17 @@ has to be answered in the terminal even when the folder is remembered.
 
 const STORE_FILE: &str = "workspace-trust.json";
 const STORE_VERSION: u64 = 1;
-/// A prompt that survives an accept is not retried faster than this, so a
-/// dialog that refuses to close never receives a stream of keystrokes.
+/// How long a session whose automatic accepts all failed shows its card
+/// again before the funnel tries once more.
 const AUTO_TRUST_RETRY_INTERVAL: Duration = Duration::from_secs(20);
+/// Accepts tried per dispatch before the card is shown again.
+const AUTO_TRUST_ATTEMPTS_PER_DISPATCH: usize = 4;
+/// The prompt must read the same across this gap before a key is sent: a
+/// TUI that has painted its picker may not be reading input yet, and a key
+/// sent in that window is lost (seen with Claude Code at launch).
+const AUTO_TRUST_SETTLE: Duration = Duration::from_millis(700);
+/// How long one accept is given to clear the prompt before the next try.
+const AUTO_TRUST_CLEAR_WAIT: Duration = Duration::from_millis(2500);
 
 fn store_path() -> std::path::PathBuf {
     ghostex_paths::GhostexPaths::resolve()
@@ -76,11 +84,12 @@ fn normalize_folder(path: &str) -> Option<String> {
     }
 }
 
+/// Exact folder identity. A remembered folder does not cover the folders
+/// inside it: remembering a session that ran in the home folder must not
+/// trust every project under home. Worktrees are covered through their
+/// parent project's root instead (see `session_trust_folders`).
 fn folder_covers(remembered: &str, candidate: &str) -> bool {
     candidate == remembered
-        || candidate
-            .strip_prefix(remembered)
-            .is_some_and(|rest| rest.starts_with(['/', '\\']))
 }
 
 /// Every remembered folder, oldest first. A missing or unreadable store is an
@@ -137,7 +146,7 @@ pub fn remember_trust_folders(folders: &[String]) -> std::io::Result<Vec<String>
     Ok(added)
 }
 
-/// True when any candidate folder is a remembered folder or lies inside one.
+/// True when any candidate folder is a remembered folder.
 pub fn folders_remembered(candidates: &[String]) -> bool {
     let remembered = remembered_trust_folders();
     if remembered.is_empty() {
@@ -431,12 +440,16 @@ fn auto_trust_failed_recently(project_id: &str, session_id: &str) -> bool {
         .lock()
         .ok()
         .and_then(|failures| failures.get(&attempt_key(project_id, session_id)).copied())
-        .is_some_and(|failed_at| failed_at.elapsed() < AUTO_TRUST_RETRY_INTERVAL * 4)
+        .is_some_and(|failed_at| failed_at.elapsed() < AUTO_TRUST_RETRY_INTERVAL)
 }
 
-/// One accept per prompt per retry interval; `false` means an attempt is
-/// still fresh and the screen has not had time to change.
+/// One dispatch per session at a time. A session whose dispatch gave up is
+/// not claimed again until its failure mark expires, so a dialog that
+/// refuses to close never receives a stream of keystrokes.
 pub(crate) fn claim_auto_trust_attempt(project_id: &str, session_id: &str) -> bool {
+    if auto_trust_failed_recently(project_id, session_id) {
+        return false;
+    }
     let key = attempt_key(project_id, session_id);
     let Ok(mut attempts) = AUTO_TRUST_ATTEMPTS
         .get_or_init(|| Mutex::new(HashMap::new()))
@@ -444,22 +457,45 @@ pub(crate) fn claim_auto_trust_attempt(project_id: &str, session_id: &str) -> bo
     else {
         return false;
     };
-    let now = Instant::now();
-    if attempts
-        .get(&key)
-        .is_some_and(|last| now.duration_since(*last) < AUTO_TRUST_RETRY_INTERVAL)
-    {
+    if attempts.contains_key(&key) {
         return false;
     }
-    attempts.retain(|_, last| now.duration_since(*last) < AUTO_TRUST_RETRY_INTERVAL * 4);
-    attempts.insert(key, now);
+    attempts.insert(key, Instant::now());
     true
 }
 
-/// Accept the prompt from a fresh capture, then re-probe and republish so the
-/// card retires as soon as the dialog is gone instead of on the next
-/// follower probe. Runs detached; a failed accept leaves the card standing
-/// with its own Trust button.
+fn release_auto_trust_attempt(project_id: &str, session_id: &str) {
+    if let Ok(mut attempts) = AUTO_TRUST_ATTEMPTS
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+    {
+        attempts.remove(&attempt_key(project_id, session_id));
+    }
+}
+
+/// The accept keys for a trust prompt that reads the same on two captures
+/// `AUTO_TRUST_SETTLE` apart, or `None` when no answerable prompt is on
+/// screen or it is still changing.
+async fn settled_accept_steps(
+    zmx_name: &str,
+    agent: Option<&str>,
+) -> Option<Vec<SessionChatSendStep>> {
+    let first = capture_session_terminal_text(zmx_name).await?;
+    workspace_trust_accept_steps(agent, &first)?;
+    tokio::time::sleep(AUTO_TRUST_SETTLE).await;
+    let second = capture_session_terminal_text(zmx_name).await?;
+    let steps = workspace_trust_accept_steps(agent, &second)?;
+    let identity = |screen: &str| {
+        classify_session_chat_terminal_notice(agent, screen).map(|notice| notice.identity())
+    };
+    (identity(&first) == identity(&second)).then_some(steps)
+}
+
+/// Accept the prompt, then re-probe and republish so the chat never shows a
+/// card for it. The card stays hidden while this runs: each try waits for a
+/// settled screen, sends the agent's own accept keys, and gives the prompt
+/// time to clear. Only when every try fails is the session marked, which
+/// shows the card again (its Yes/No rows still work) until the mark expires.
 pub(crate) fn dispatch_auto_trust(
     detector: crate::session_chat_options::SessionChatOptionDetector,
     plan: AutoTrustPlan,
@@ -468,40 +504,52 @@ pub(crate) fn dispatch_auto_trust(
     agent: Option<&str>,
 ) {
     let Ok(handle) = tokio::runtime::Handle::try_current() else {
+        release_auto_trust_attempt(project_id, session_id);
         return;
     };
     let project_id = project_id.to_string();
     let session_id = session_id.to_string();
     let agent = agent.map(str::to_string);
     handle.spawn(async move {
-        let Some(screen) = capture_session_terminal_text(&plan.zmx_name).await else {
-            return;
-        };
-        let Some(steps) = workspace_trust_accept_steps(agent.as_deref(), &screen) else {
-            // The prompt left the screen between the probe and this capture
-            // (answered in the terminal, or the agent moved on): nothing to do.
-            return;
-        };
-        let sent = execute_session_chat_send(
-            &project_id,
-            &session_id,
-            &plan.zmx_name,
-            "workspace-trust-remembered",
-            steps,
-        )
-        .await
-        .is_ok();
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-        // A prompt that is still on screen after the accept is a failure the
-        // user has to see: the next probe shows the card again.
-        let still_prompting = capture_session_terminal_text(&plan.zmx_name)
+        let mut cleared = false;
+        for _ in 0..AUTO_TRUST_ATTEMPTS_PER_DISPATCH {
+            let Some(steps) = settled_accept_steps(&plan.zmx_name, agent.as_deref()).await else {
+                // Gone (answered in the terminal, or the agent moved on), or
+                // still repainting: look again on the next try.
+                cleared = !capture_session_terminal_text(&plan.zmx_name)
+                    .await
+                    .is_some_and(|screen| trust_prompt_on_screen(agent.as_deref(), &screen));
+                if cleared {
+                    break;
+                }
+                continue;
+            };
+            let sent = execute_session_chat_send(
+                &project_id,
+                &session_id,
+                &plan.zmx_name,
+                "workspace-trust-remembered",
+                steps,
+            )
             .await
-            .is_some_and(|screen| trust_prompt_on_screen(agent.as_deref(), &screen));
-        if !sent || still_prompting {
-            mark_auto_trust_failed(&project_id, &session_id);
-        } else {
-            clear_auto_trust_failure(&project_id, &session_id);
+            .is_ok();
+            if !sent {
+                continue;
+            }
+            tokio::time::sleep(AUTO_TRUST_CLEAR_WAIT).await;
+            cleared = !capture_session_terminal_text(&plan.zmx_name)
+                .await
+                .is_some_and(|screen| trust_prompt_on_screen(agent.as_deref(), &screen));
+            if cleared {
+                break;
+            }
         }
+        if cleared {
+            clear_auto_trust_failure(&project_id, &session_id);
+        } else {
+            mark_auto_trust_failed(&project_id, &session_id);
+        }
+        release_auto_trust_attempt(&project_id, &session_id);
         detector
             .detect(&project_id, &session_id, agent.as_deref(), true)
             .await;
