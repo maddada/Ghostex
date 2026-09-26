@@ -194,6 +194,11 @@ impl GhostexGpuiApp {
     /// User: closing the last tab in the side panel goes back to the "Open a view" picker instead of
     /// closing the panel, so the panel stays where it was with the next thing to open in front of
     /// you. This supersedes the 2026-09-20 rule that a close with no successor closed the panel.
+    ///
+    /// CDXC:Workarea 2026-09-26 DECISION:
+    /// User: "add a setting where closing the last tab in the side panel closes the side panel
+    /// fully (disabled by default)". With `closeSidePanelWithLastTab` on, the close with no
+    /// successor closes the panel instead of showing the picker; off keeps the 2026-09-22 rule.
     pub(crate) fn close_view_tab(
         &mut self,
         mode: TitlebarMode,
@@ -213,6 +218,12 @@ impl GhostexGpuiApp {
         match successor {
             Some(next) => {
                 self.set_active_mode(next, window, cx);
+            }
+            None if mode == self.active_mode
+                && crate::shared_settings::shared_sidebar_settings_snapshot()
+                    .close_side_panel_with_last_tab() =>
+            {
+                self.close_view_panel(window, cx)
             }
             None if mode == self.active_mode => self.open_view_picker(window, cx),
             None => {}

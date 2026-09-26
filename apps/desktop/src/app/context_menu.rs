@@ -29,10 +29,11 @@ impl ContextMenuRow {
     }
 }
 
-/// CDXC:ContextMenus 2026-09-20 WHY:
-/// The view panel's `+` menu and a view tab's right-click menu both end in a `Hidden here` submenu
-/// (ruling 2A), which is the first nested row this shared menu has had to draw. It is a row kind
-/// rather than a second menu type so sizing, dispatch and dismissal stay in one place.
+/// CDXC:ContextMenus 2026-09-26 WHY:
+/// A submenu is a row kind rather than a second menu type so sizing, dispatch and dismissal stay in
+/// one place. It holds the same entries as the menu itself, ticks and separators included, because a
+/// view tab's `Show in ▸` submenu is a list of ticks. Supersedes 2026-09-20, when submenus held plain
+/// rows only for the `+` menu's `Hidden here`.
 enum ContextMenuEntry {
     Row(ContextMenuRow),
     Separator,
@@ -40,8 +41,28 @@ enum ContextMenuEntry {
         label: SharedString,
         icon: Option<&'static str>,
         disabled: bool,
-        rows: Vec<ContextMenuRow>,
+        entries: Vec<ContextMenuEntry>,
     },
+}
+
+impl ContextMenuEntry {
+    fn cloned(&self) -> Self {
+        match self {
+            Self::Row(row) => Self::Row(row.cloned()),
+            Self::Separator => Self::Separator,
+            Self::Submenu {
+                label,
+                icon,
+                disabled,
+                entries,
+            } => Self::Submenu {
+                label: label.clone(),
+                icon: *icon,
+                disabled: *disabled,
+                entries: entries.iter().map(Self::cloned).collect(),
+            },
+        }
+    }
 }
 
 /// CDXC:ContextMenus 2026-09-11 DECISION:
@@ -119,14 +140,6 @@ impl GpuiContextMenu {
 
     /// A nested menu. An empty `rows` draws the parent row disabled rather than a submenu that opens
     /// onto nothing.
-    pub(crate) fn submenu(
-        self,
-        label: impl Into<SharedString>,
-        rows: Vec<(SharedString, Box<dyn gpui::Action>)>,
-    ) -> Self {
-        self.submenu_with_icon(label, None, rows)
-    }
-
     pub(crate) fn submenu_with_icon(
         mut self,
         label: impl Into<SharedString>,
@@ -138,18 +151,50 @@ impl GpuiContextMenu {
             label: label.into(),
             icon,
             disabled,
-            rows: rows
+            entries: rows
                 .into_iter()
-                .map(|(label, action)| ContextMenuRow {
-                    label,
-                    icon: None,
-                    checked: false,
-                    disabled: false,
-                    action,
+                .map(|(label, action)| {
+                    ContextMenuEntry::Row(ContextMenuRow {
+                        label,
+                        icon: None,
+                        checked: false,
+                        disabled: false,
+                        action,
+                    })
                 })
                 .collect(),
         });
         self
+    }
+
+    /// A nested menu built with the same row builders as this one, so its rows can carry ticks and
+    /// separators. A submenu with nothing in it is left out rather than drawn disabled.
+    pub(crate) fn submenu_menu(
+        mut self,
+        label: impl Into<SharedString>,
+        mut submenu: GpuiContextMenu,
+    ) -> Self {
+        submenu.trim_trailing_separators();
+        if submenu.entries.is_empty() {
+            return self;
+        }
+        self.entries.push(ContextMenuEntry::Submenu {
+            label: label.into(),
+            icon: None,
+            disabled: false,
+            entries: submenu.entries,
+        });
+        self
+    }
+
+    fn trim_trailing_separators(&mut self) {
+        while self
+            .entries
+            .last()
+            .is_some_and(|entry| matches!(entry, ContextMenuEntry::Separator))
+        {
+            self.entries.pop();
+        }
     }
 
     pub(crate) fn separator(mut self) -> Self {
@@ -194,13 +239,7 @@ impl GpuiContextMenu {
         window: &mut Window,
         cx: &mut App,
     ) {
-        while self
-            .entries
-            .last()
-            .is_some_and(|entry| matches!(entry, ContextMenuEntry::Separator))
-        {
-            self.entries.pop();
-        }
+        self.trim_trailing_separators();
         if self.entries.is_empty() {
             return;
         }
@@ -301,15 +340,20 @@ impl GpuiContextMenu {
         line.width.as_f32() + 34.0 + 24.0 + check_width + icon_width + extra
     }
 
-    pub(crate) fn content_width(&self, window: &Window) -> f32 {
-        let label_width = self
-            .entries
+    /// A submenu is drawn at its parent's width, so its rows count toward that width too.
+    fn entries_width(entries: &[ContextMenuEntry], window: &Window) -> f32 {
+        entries
             .iter()
             .map(|entry| match entry {
                 ContextMenuEntry::Separator => 0.0,
                 ContextMenuEntry::Row(row) => Self::row_width(row, window, 0.0),
                 // A submenu row keeps room for its own chevron.
-                ContextMenuEntry::Submenu { label, icon, .. } => Self::row_width(
+                ContextMenuEntry::Submenu {
+                    label,
+                    icon,
+                    entries,
+                    ..
+                } => Self::row_width(
                     &ContextMenuRow {
                         label: label.clone(),
                         icon: *icon,
@@ -319,9 +363,14 @@ impl GpuiContextMenu {
                     },
                     window,
                     18.0,
-                ),
+                )
+                .max(Self::entries_width(entries, window)),
             })
-            .fold(0.0_f32, f32::max);
+            .fold(0.0_f32, f32::max)
+    }
+
+    pub(crate) fn content_width(&self, window: &Window) -> f32 {
+        let label_width = Self::entries_width(&self.entries, window);
         // An openable submenu with an icon makes PopupMenu reserve a blank 12px icon plus a 4px gap
         // at the start of every other row, on top of that row's own icon.
         let reserved_icon_column = if self.entries.iter().any(|entry| {
@@ -427,7 +476,7 @@ impl GpuiContextMenu {
                     label,
                     icon,
                     disabled,
-                    rows,
+                    entries,
                 } => {
                     if *disabled {
                         menu = menu.item(self.popup_menu_item(&ContextMenuRow {
@@ -440,10 +489,7 @@ impl GpuiContextMenu {
                         continue;
                     }
                     let nested = GpuiContextMenu {
-                        entries: rows
-                            .iter()
-                            .map(|row| ContextMenuEntry::Row(row.cloned()))
-                            .collect(),
+                        entries: entries.iter().map(ContextMenuEntry::cloned).collect(),
                         source_window: self.source_window,
                         source_focus: self.source_focus.clone(),
                     };

@@ -128,6 +128,8 @@ export function ExtensionsSettingsTab({
   const targetedCustomViewId = useRef<string | undefined>(undefined);
   const targetedViewScopeKey = useRef<string | undefined>(undefined);
   const focusCustomViewEditor = useRef(false);
+  const scopeEditorRef = useRef<HTMLDivElement>(null);
+  const scrollToScopeEditor = useRef(false);
 
   /**
    * CDXC:Extensions 2026-09-16 WHY:
@@ -185,6 +187,7 @@ export function ExtensionsSettingsTab({
     const title = viewScopeEditorTitle(initialViewScopeKey);
     if (!title) return;
     targetedViewScopeKey.current = initialViewScopeKey;
+    scrollToScopeEditor.current = true;
     setScopeEditor({
       draft: ghostexViewScope(settings.viewScopes, initialViewScopeKey),
       key: initialViewScopeKey,
@@ -208,24 +211,29 @@ export function ExtensionsSettingsTab({
     editingKey: scopeEditor?.key,
     renderEditor: (key) =>
       scopeEditor?.key === key ? (
-        <ViewScopeEditor
-          editor={scopeEditor}
-          onCancel={() => setScopeEditor(undefined)}
-          onChange={(apply) => setScopeEditor((current) => (current ? apply(current) : current))}
-          onSave={() => {
-            /*
-             * CDXC:Extensions 2026-09-20 WHY:
-             * A Default of "Hidden unless chosen" with nothing chosen is saved as it stands, and hides the
-             * view everywhere. The 2026-09-18 editor refused that save because its allow-list could only
-             * ever mean "show it in these", so an empty list read as a mistake; under the override model it
-             * is the user asking for the view to be gone, and the view picker is where it comes back.
-             */
-            onUpdateSetting('viewScopes', setGhostexViewScope(settings.viewScopes, scopeEditor.key, scopeEditor.draft));
-            setScopeEditor(undefined);
-          }}
-          projects={projects}
-          spaces={spaces}
-        />
+        <div ref={scopeEditorRef}>
+          <ViewScopeEditor
+            editor={scopeEditor}
+            onCancel={() => setScopeEditor(undefined)}
+            onChange={(apply) => setScopeEditor((current) => (current ? apply(current) : current))}
+            onSave={() => {
+              /*
+               * CDXC:Extensions 2026-09-20 WHY:
+               * A Default of "Hidden unless chosen" with nothing chosen is saved as it stands, and hides the
+               * view everywhere. The 2026-09-18 editor refused that save because its allow-list could only
+               * ever mean "show it in these", so an empty list read as a mistake; under the override model it
+               * is the user asking for the view to be gone, and the view picker is where it comes back.
+               */
+              onUpdateSetting(
+                'viewScopes',
+                setGhostexViewScope(settings.viewScopes, scopeEditor.key, scopeEditor.draft)
+              );
+              setScopeEditor(undefined);
+            }}
+            projects={projects}
+            spaces={spaces}
+          />
+        </div>
       ) : null,
   };
 
@@ -343,6 +351,23 @@ export function ExtensionsSettingsTab({
     });
     return () => cancelAnimationFrame(frame);
   }, [customViewEditor?.id, detailOpen, isActive, search.tab.isSearching]);
+
+  /**
+   * CDXC:Extensions 2026-09-26 DECISION:
+   * User: Configure view on a view tab scrolls Settings to that view. Views without their own editor
+   * (Storybook, built-in and store views) open their scope editor instead, so the page scrolls to
+   * that editor the same way it scrolls to a custom view's.
+   */
+  useLayoutEffect(() => {
+    if (!isActive || !scrollToScopeEditor.current || !scopeEditorRef.current) return;
+    const frame = requestAnimationFrame(() => {
+      const editor = scopeEditorRef.current;
+      if (!editor) return;
+      scrollToScopeEditor.current = false;
+      editor.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scopeEditor?.key, detailOpen, isActive, search.tab.isSearching]);
 
   /*
    * CDXC:Extensions 2026-09-24 DECISION:

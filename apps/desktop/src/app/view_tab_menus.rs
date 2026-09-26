@@ -113,14 +113,15 @@ impl GhostexGpuiApp {
             .toggle_below(trigger_bounds, window, cx);
     }
 
-    /// CDXC:Workarea 2026-09-25 DECISION:
-    /// User (screen 05): right-clicking a view tab is where its scope lives. `Show in this Project`
-    /// and `Show in this Space` are checkable and each writes exactly one override; per ruling 1A the
-    /// space row is the project's OWN space and is absent when the project belongs to none.
-    /// `Choose where it's shown…` opens the Settings editor for exactly this view, and the rest,
-    /// Reload, Sleep, Open externally and Close, act on the tab that was clicked rather than the
-    /// active one. Supersedes 2026-09-20: the user moved the scope rows into their own section below
-    /// the tab actions and dropped the project and space names from their labels.
+    /// CDXC:Workarea 2026-09-26 DECISION:
+    /// User (screen 05): right-clicking a view tab is where its scope lives. The scope rows sit in a
+    /// `Show in ▸` submenu (`This Project`, `This Space`, then `Choose where it's shown…`), and the
+    /// rows that configure the view itself (Modify home URL, Command output, Configure view) sit in a
+    /// `Configure ▸` submenu, so the menu stays short. The project and space rows are checkable and
+    /// each writes exactly one override; per ruling 1A the space row is the project's OWN space and is
+    /// absent when the project belongs to none. `Hidden here` is on the `+` menu only. Every row acts on
+    /// the tab that was clicked rather than the active one. Supersedes 2026-09-25, when the scope rows
+    /// were a flat section of this menu.
     pub(crate) fn show_view_tab_context_menu(
         &mut self,
         mode: TitlebarMode,
@@ -129,24 +130,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let mode_index = mode.switcher_index();
-        let mut menu = GpuiContextMenu::new();
-        if let TitlebarMode::Extension(id) = mode
-            && mode
-                .website_provider()
-                .is_some_and(|provider| !provider.automatic())
-        {
-            menu = menu
-                .menu(
-                    format!("Modify home URL for {}…", self.project_name),
-                    Box::new(ProjectViewCommand {
-                        id: id.as_str().into(),
-                        operation: "home".into(),
-                    }),
-                )
-                .separator();
-        }
         let unavailable = !self.titlebar_mode_available(mode);
-        menu = menu.menu(
+        let mut menu = GpuiContextMenu::new().menu(
             if self.view_strip_tab_pinned(ViewStripTabKey::View(mode)) {
                 "Unpin tab"
             } else {
@@ -179,6 +164,26 @@ impl GhostexGpuiApp {
                 Box::new(OpenGpuiViewTab { mode_index }),
             )
         };
+        menu = menu.menu_with_disabled(
+            "Open externally",
+            self.view_pop_out_url(mode).is_none(),
+            Box::new(PopOutGpuiViewTab { mode_index }),
+        );
+
+        let mut configure = GpuiContextMenu::new();
+        if let TitlebarMode::Extension(id) = mode
+            && mode
+                .website_provider()
+                .is_some_and(|provider| !provider.automatic())
+        {
+            configure = configure.menu(
+                format!("Modify home URL for {}…", self.project_name),
+                Box::new(ProjectViewCommand {
+                    id: id.as_str().into(),
+                    operation: "home".into(),
+                }),
+            );
+        }
         /*
         CDXC:Extensions 2026-09-16 DECISION:
         User: keep Start / Restart and Stop removed, but restore Configure view and make it open the
@@ -189,7 +194,7 @@ impl GhostexGpuiApp {
             && mode.website_provider().is_none()
             && gpui_custom_view(id).is_some_and(|view| view.definition.get("source").is_some())
         {
-            menu = menu
+            configure = configure
                 .menu(
                     "Command output",
                     Box::new(ProjectViewCommand {
@@ -205,24 +210,21 @@ impl GhostexGpuiApp {
                     }),
                 );
         }
-        menu = menu.menu_with_disabled(
-            "Open externally",
-            self.view_pop_out_url(mode).is_none(),
-            Box::new(PopOutGpuiViewTab { mode_index }),
-        );
+        menu = menu.submenu_menu("Configure", configure);
+
         if let Some(scope_key) = self.titlebar_mode_view_scope_key(mode) {
             let shown =
                 self.view_scope_state_for_active_project(&scope_key) == ViewScopeState::Shown;
-            menu = menu.separator().menu_with_check(
-                "Show in this Project",
+            let mut show_in = GpuiContextMenu::new().menu_with_check(
+                "This Project",
                 shown,
                 Box::new(ToggleGpuiViewProjectScope { mode_index }),
             );
             for (space_key, _) in self.active_project_space_labels() {
                 let space_shown =
                     self.view_scope_space_state(&scope_key, &space_key) != Some(false);
-                menu = menu.menu_with_check(
-                    "Show in this Space",
+                show_in = show_in.menu_with_check(
+                    "This Space",
                     space_shown,
                     Box::new(ToggleGpuiViewSpaceScope {
                         mode_index,
@@ -230,14 +232,13 @@ impl GhostexGpuiApp {
                     }),
                 );
             }
-            menu = menu.menu(
+            show_in = show_in.separator().menu(
                 "Choose where it's shown…",
                 Box::new(OpenGpuiViewScopeSettings { mode_index }),
             );
+            menu = menu.submenu_menu("Show in", show_in);
         }
         menu.separator()
-            .submenu("Hidden here", self.hidden_here_submenu_rows())
-            .separator()
             .menu("Close tab", Box::new(CloseGpuiViewTab { mode_index }))
             .show(position, window, cx);
     }

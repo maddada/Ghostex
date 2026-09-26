@@ -1068,6 +1068,10 @@ impl SharedSidebarSettingsSnapshot {
         strict_bool_field(&self.object, "showSessionIdInTerminalPanes").unwrap_or(false)
     }
 
+    pub fn close_side_panel_with_last_tab(&self) -> bool {
+        strict_bool_field(&self.object, "closeSidePanelWithLastTab").unwrap_or(false)
+    }
+
     pub fn auto_sleep_duration(&self, target: SharedSettingsAutoSleepTarget) -> Option<Duration> {
         let minutes_key = match target {
             SharedSettingsAutoSleepTarget::CodeEditor => "autoSleepCodeEditorIdleMinutes",
