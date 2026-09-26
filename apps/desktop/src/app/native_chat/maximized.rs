@@ -18,7 +18,17 @@ impl Render for MaximizedComposer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.chat.update(cx, |chat, cx| {
             chat.ensure_input(window, cx);
-            let p = ChatAppearance::current(&chat.snapshot);
+            /*
+            CDXC:SessionChat 2026-09-26 DECISION:
+            User, of the maximized composer under window glass (an opaque theme-coloured box on a near-black backdrop): "please make it look better (should match the look of the composer in the gpui app please". This window is transparent and sits exactly over the chat pane, which paints nothing but its glass while the composer is maximized (render.rs), so the composer takes the pane's glass appearance and is the same frosted card as the inline one. The scrim is only a faint dim under glass: the 55% black it keeps off glass turned the empty glass pane into a dark slab, and there is no conversation behind it left to hold back.
+            */
+            let glass = crate::app::helpers::window_glass_active_for(chat.main_window);
+            let p = ChatAppearance::current(&chat.snapshot).on_window_glass(glass);
+            let scrim = match (glass, p.light) {
+                (false, _) => gpui::black().opacity(0.55),
+                (true, false) => gpui::black().opacity(0.16),
+                (true, true) => gpui::black().opacity(0.05),
+            };
             let composer = chat.render_composer(&p, window, cx);
             let available = window.viewport_size();
             let width = (available.width.as_f32() - 48.0 * p.scale)
@@ -33,7 +43,7 @@ impl Render for MaximizedComposer {
                 .flex()
                 .items_center()
                 .justify_center()
-                .bg(gpui::black().opacity(0.55))
+                .bg(scrim)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|chat, _, _, cx| chat.close_maximized(cx)),
