@@ -18,6 +18,7 @@ use crate::extras::minimap_rail::{
     geometry, message_preview, minimap_preview, minimap_visible, MinimapMarkerRow,
 };
 use crate::state::{ChatContext, ChatState};
+use crate::transcript::raw_html::escape_raw_html;
 
 /// The minimap rail, shipped whole and only when it changed.
 pub fn markers(state: &ChatState, _context: &ChatContext) -> Vec<MinimapMarker> {
@@ -61,9 +62,11 @@ pub fn project_minimap_turns(
                 prompt: if prompt.is_empty() {
                     "User message".to_string()
                 } else {
-                    prompt
+                    escape_raw_html(&prompt)
                 },
-                reply: message_preview(*reply, reply_lines, geometry.preview_limit).0,
+                reply: escape_raw_html(
+                    &message_preview(*reply, reply_lines, geometry.preview_limit).0,
+                ),
                 id,
             }
         })
@@ -103,9 +106,11 @@ pub fn project_minimap(
                 prompt: if prompt.is_empty() {
                     "User message".to_string()
                 } else {
-                    prompt
+                    escape_raw_html(&prompt)
                 },
-                reply: minimap_preview(reply.as_ref(), reply_lines, geometry.preview_limit).0,
+                reply: escape_raw_html(
+                    &minimap_preview(reply.as_ref(), reply_lines, geometry.preview_limit).0,
+                ),
                 id,
             }
         })

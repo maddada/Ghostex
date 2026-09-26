@@ -29,6 +29,7 @@ pub mod noise;
 pub mod presentation;
 pub mod prose;
 pub mod question_exchange;
+pub mod raw_html;
 pub mod rows;
 pub mod simple;
 pub mod subagent;

@@ -734,6 +734,8 @@ pub fn native_markdown(markdown: &str, bare_paths: bool) -> String {
     if markdown.is_empty() {
         return markdown.to_string();
     }
+    let escaped = crate::transcript::raw_html::escape_raw_html(markdown);
+    let markdown = escaped.as_str();
     let bare_wanted = bare_paths && has_path_evidence(markdown);
     let paths_wanted = bare_wanted || has_inline_code_path_evidence(markdown);
     let blocks_wanted = markdown.contains("```")

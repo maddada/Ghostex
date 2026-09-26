@@ -559,6 +559,9 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &gpui::Context<Self>,
     ) -> AnyElement {
+        // Card and notice text reaches this without the core's message pass; the rule is idempotent.
+        let content =
+            ghostex_gx_chat_core::transcript::raw_html::escape_raw_html(&content);
         if !content.contains('\u{E000}') {
             return self.text_view(id, content, references, p, cx);
         }
