@@ -372,11 +372,28 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
     }
     // A dialog is separated from scrollback by an empty band. Preserve blank
     // lines inside it, but stop at the last double-blank boundary before it.
-    let mut start = (1..footer_index)
-        .rev()
-        .find(|&i| lines[i].trim().is_empty() && lines[i - 1].trim().is_empty())
-        .map(|i| i + 1)
-        .unwrap_or(0);
+    let band_above = |before: usize| {
+        (1..before)
+            .rev()
+            .find(|&i| lines[i].trim().is_empty() && lines[i - 1].trim().is_empty())
+            .map(|i| i + 1)
+            .unwrap_or(0)
+    };
+    let mut start = band_above(footer_index);
+    // CDXC:AgentScreenDetection 2026-09-27 WHY:
+    // Codex 0.157's approval prompt ("Would you like to run the following command?", its
+    // Environment and Reason lines, the command) leaves two blank lines above its choices, so the
+    // band cut the dialog at the first choice: the selected row became the title and the approval
+    // fell back to a generic card with no command. A band that opens on a choice row is inside the
+    // dialog, so the heading is above the band before it.
+    while start > 1
+        && lines[start..footer_index]
+            .iter()
+            .find(|line| !line.trim().is_empty())
+            .is_some_and(|line| row(line).is_some())
+    {
+        start = band_above(start - 2);
+    }
     // Onboarding and text-entry views use a single empty line above their
     // heading, unlike the standard list selection view's two-line band.
     // Blank paragraphs in a textarea are content, not a boundary before its title.
