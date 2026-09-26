@@ -83,6 +83,7 @@ impl PickerDriver<'_> {
         if agent == SessionChatOptionAgent::Claude
             && crate::session_chat_composer::claude_composer_input_text(&screen)
                 .is_some_and(|text| !text.trim().is_empty())
+            && self.claude_input_holds_draft().await
         {
             return Err(agent_busy(
                 "Waiting for the text in the terminal input to be sent or cleared.",

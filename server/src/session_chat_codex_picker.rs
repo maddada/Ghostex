@@ -613,6 +613,17 @@ impl PickerDriver<'_> {
         capture_session_terminal_text(self.zmx_name).await
     }
 
+    /// CDXC:SessionChat 2026-09-26 WHY:
+    /// A plain capture cannot tell Claude's faint placeholder (`Try "fix lint errors"`) or its next-prompt suggestion from a typed draft, so every queued model or option change on an idle session was refused forever and held the chat messages queued behind it at "Waiting for agent…". Only a VT capture keeps the faint style that marks them as empty; an unreadable screen still counts as a draft so a real one is never replaced.
+    async fn claude_input_holds_draft(&self) -> bool {
+        crate::session_chat_send::capture_session_terminal_text_vt(self.zmx_name)
+            .await
+            .is_none_or(|screen| {
+                crate::session_chat_composer::session_chat_composer_input("claude", &screen)
+                    .is_some_and(|input| !input.is_empty())
+            })
+    }
+
     /// Polls the screen until `accept` answers `Some`, the step deadline
     /// passes, or the session's send generation is superseded.
     async fn wait_for<T>(
@@ -798,6 +809,7 @@ impl PickerDriver<'_> {
         // Never replace a terminal draft while applying a queued setting.
         if crate::session_chat_composer::claude_composer_input_text(&screen)
             .is_some_and(|text| !text.trim().is_empty())
+            && self.claude_input_holds_draft().await
         {
             return Err(agent_busy(
                 "Waiting for the text in Claude's terminal input to be sent or cleared.",
@@ -1013,6 +1025,7 @@ impl PickerDriver<'_> {
             // Never replace a terminal draft while applying a queued setting.
             if crate::session_chat_composer::claude_composer_input_text(&screen)
                 .is_some_and(|text| !text.trim().is_empty())
+                && self.claude_input_holds_draft().await
             {
                 return Err(agent_busy(
                     "Waiting for the text in Claude's terminal input to be sent or cleared.",
@@ -1422,9 +1435,16 @@ pub(crate) async fn select_session_chat_model(
     if agent.as_deref() == Some("opencode") {
         let id = crate::session_chat_opencode::session_id(&target.session)?;
         let args = params.clone();
-        let result = tokio::task::spawn_blocking(move || crate::session_chat_opencode::select(&id, &args))
-            .await.map_err(|_| invalid_params("OpenCode model operation failed."))??;
-        crate::session_chat_options::schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
+        let result =
+            tokio::task::spawn_blocking(move || crate::session_chat_opencode::select(&id, &args))
+                .await
+                .map_err(|_| invalid_params("OpenCode model operation failed."))??;
+        crate::session_chat_options::schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            Some("opencode"),
+        );
         return Ok(result);
     }
     if !matches!(
