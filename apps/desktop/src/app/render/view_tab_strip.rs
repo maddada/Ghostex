@@ -286,6 +286,9 @@ impl GhostexGpuiApp {
 
     /// The box every tab in the strip shares, view or browser page: one fixed width per kind, a
     /// faint outline, and the drop line before it. A pinned tab is its icon alone.
+    ///
+    /// CDXC:Titlebar 2026-09-26 DECISION:
+    /// User: "make the border color around tabs match the border of these combined buttons". The tab outline uses the split buttons' border colour (the see-through line under window glass, the solid colour when opaque) instead of the fixed #252525 / #d4d4d4 titlebar button border.
     pub(crate) fn view_strip_tab_frame(
         id: String,
         group: &'static str,
@@ -309,7 +312,7 @@ impl GhostexGpuiApp {
             .gap(px(6.0))
             .rounded(px(WORKAREA_VIEW_TAB_RADIUS))
             .border_1()
-            .border_color(titlebar_button_border_color())
+            .border_color(titlebar_split_button_border_color())
             .px(px(WORKAREA_VIEW_TAB_HORIZONTAL_PADDING))
             .text_size(px(12.5))
             .line_height(px(WORKAREA_VIEW_TAB_HEIGHT))
