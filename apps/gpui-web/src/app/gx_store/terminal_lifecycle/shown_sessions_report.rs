@@ -1,0 +1,1 @@
+../../../../../desktop/src/app/gx_store/terminal_lifecycle/shown_sessions_report.rs

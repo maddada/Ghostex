@@ -201,6 +201,7 @@ impl GhostexGpuiApp {
 
     fn web_open_session(&mut self, session: ghostex_gx_core::SessionKey, cx: &mut gpui::Context<Self>) {
         self.open_session = Some(session.clone());
+        self.web_report_shown_sessions(cx);
         self.ensure_native_chat(&session, cx);
         if self.show_terminal {
             self.ensure_terminal(&session, cx);
