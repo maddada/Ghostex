@@ -4,7 +4,7 @@
 //!
 //! CDXC:SessionChat 2026-09-21 DECISION:
 //! User: the composer's model and effort pills become one pill that opens one picker: agent tabs
-//! with a favorites tab first, a model search, rows with a Cmd+number badge and a star, and a
+//! with a favorites tab first, a model search, rows with an Option+number badge and a star, and a
 //! footer for reasoning, context window and fast mode. Every renderer (the GPUI pop-up and the
 //! phone's sheet) draws what this module decides, so tabs, row order, search ranking, favorites
 //! and the footer can never differ between them.
@@ -130,7 +130,7 @@ pub struct ModelMenuRow {
     pub key: String,
     pub favorite: bool,
     pub selected: bool,
-    /// 1 to 9 for the rows Cmd+number reaches.
+    /// 1 to 9 for the rows Option+number reaches.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shortcut: Option<usize>,
     /// Favorites mix agents, so those rows name theirs on a second line.

@@ -408,7 +408,10 @@ impl Render for ChatOptionMenuPanel {
                         .child(detail.to_owned()),
                 );
             }
-            if children || row.get("checked").is_some() {
+            // An unchecked row with a hotkey drops its empty check slot, so the hotkey sits on the
+            // right edge like the hotkeys of rows that cannot be checked.
+            let empty_check_beside_hotkey = row["checked"] == false && row["detail"].is_string();
+            if children || (row.get("checked").is_some() && !empty_check_beside_hotkey) {
                 item = item.child(div().flex_shrink_0().size(px(m.icon * scale)).when(
                     children || row["checked"] == true,
                     |item| {

@@ -253,7 +253,7 @@ impl ChatOptionMenuPanel {
                         .font_family("Menlo")
                         .text_size(px(10.0 * scale))
                         .text_color(palette.muted)
-                        .child(format!("⌘{slot}")),
+                        .child(format!("⌥{slot}")),
                 )
             })
             .child(
