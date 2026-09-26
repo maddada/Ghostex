@@ -24,6 +24,11 @@ declare module '*.webp' {
   export default webpUrl;
 }
 
+declare module '*.jpg' {
+  const jpgUrl: string;
+  export default jpgUrl;
+}
+
 declare module '*.png' {
   const pngUrl: string;
   export default pngUrl;

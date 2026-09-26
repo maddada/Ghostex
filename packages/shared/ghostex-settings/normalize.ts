@@ -29,7 +29,12 @@ import {
   DEFAULT_CHAT_FILE_OPEN_VIEW,
   DEFAULT_WEB_LINK_OPEN_TARGET,
   KEEP_AWAKE_DURATION_OPTIONS,
+  MAX_WINDOW_GLASS_LIVE_BRIGHTNESS,
+  MAX_WINDOW_GLASS_LIVE_SPEED,
+  MIN_WINDOW_GLASS_LIVE_BRIGHTNESS,
+  MIN_WINDOW_GLASS_LIVE_SPEED,
   WEB_LINK_OPEN_TARGET_SET,
+  WINDOW_GLASS_LIVE_STYLE_OPTIONS,
 } from './option-tables';
 import { SIDEBAR_SETTINGS_PRESET_SETTINGS } from './presets';
 import { clampNumber, isRecord, readBoolean, readLooseString, readNumber, readString } from './primitives';
@@ -61,6 +66,7 @@ import {
   type ChatFileOpenView,
   type CommandsPanelSide,
   type WindowGlassMode,
+  type WindowGlassLiveStyle,
   type WindowGlassSource,
   type WindowGlassImagePlacement,
   type PanelAnimationSpeed,
@@ -489,16 +495,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'hideLastActiveTimeOnSessionCards',
       DEFAULT_ghostex_SETTINGS.hideLastActiveTimeOnSessionCards
     ),
-    showSessionCommandCopyActions: readBoolean(
-      source,
-      'showSessionCommandCopyActions',
-      DEFAULT_ghostex_SETTINGS.showSessionCommandCopyActions
-    ),
-    showSessionDetailsCopyAction: readBoolean(
-      source,
-      'showSessionDetailsCopyAction',
-      DEFAULT_ghostex_SETTINGS.showSessionDetailsCopyAction
-    ),
     sidebarSessionTagListItems: normalizeSidebarSessionTagListItems(source.sidebarSessionTagListItems),
     /**
      * CDXC:SessionSleep 2026-05-28-08:06:
@@ -662,6 +658,11 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     panelAnimationSpeed: normalizePanelAnimationSpeed(
       readString(source, 'panelAnimationSpeed', DEFAULT_ghostex_SETTINGS.panelAnimationSpeed)
+    ),
+    closeSidePanelWithLastTab: readBoolean(
+      source,
+      'closeSidePanelWithLastTab',
+      DEFAULT_ghostex_SETTINGS.closeSidePanelWithLastTab
     ),
     sidebarTooltipDelayMs: clampSidebarTooltipDelayMs(
       readNumber(source, 'sidebarTooltipDelayMs', DEFAULT_ghostex_SETTINGS.sidebarTooltipDelayMs)
@@ -988,6 +989,20 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'windowGlassVideoOnlyOnPower',
       DEFAULT_ghostex_SETTINGS.windowGlassVideoOnlyOnPower
     ),
+    windowGlassLiveStyleDark: normalizeWindowGlassLiveStyle(
+      readString(source, 'windowGlassLiveStyleDark', DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleDark),
+      DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleDark
+    ),
+    windowGlassLiveStyleLight: normalizeWindowGlassLiveStyle(
+      readString(source, 'windowGlassLiveStyleLight', DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleLight),
+      DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleLight
+    ),
+    windowGlassLiveSpeed: normalizeWindowGlassLiveSpeed(
+      readNumber(source, 'windowGlassLiveSpeed', DEFAULT_ghostex_SETTINGS.windowGlassLiveSpeed)
+    ),
+    windowGlassLiveBrightness: normalizeWindowGlassLiveBrightness(
+      readNumber(source, 'windowGlassLiveBrightness', DEFAULT_ghostex_SETTINGS.windowGlassLiveBrightness)
+    ),
     windowGlassSidebarOpacityDark: clampWindowGlassSidebarOpacityPercent(
       readNumber(source, 'windowGlassSidebarOpacityDark', DEFAULT_ghostex_SETTINGS.windowGlassSidebarOpacityDark),
       DEFAULT_ghostex_SETTINGS.windowGlassSidebarOpacityDark
@@ -1257,9 +1272,39 @@ function normalizeWindowGlassMode(value: string | undefined): WindowGlassMode {
 }
 
 function normalizeWindowGlassSource(value: string | undefined): WindowGlassSource {
-  return value === 'wallpaper' || value === 'desktopAndWindows' || value === 'customImage' || value === 'video'
+  return value === 'wallpaper' ||
+    value === 'desktopAndWindows' ||
+    value === 'customImage' ||
+    value === 'video' ||
+    value === 'live'
     ? value
     : DEFAULT_ghostex_SETTINGS.windowGlassSource;
+}
+
+function normalizeWindowGlassLiveStyle(
+  value: string | undefined,
+  fallback: WindowGlassLiveStyle
+): WindowGlassLiveStyle {
+  return WINDOW_GLASS_LIVE_STYLE_OPTIONS.some((option) => option.value === value)
+    ? (value as WindowGlassLiveStyle)
+    : fallback;
+}
+
+/** Live glass brightness, 10 to 100 percent in whole steps. */
+function normalizeWindowGlassLiveBrightness(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_ghostex_SETTINGS.windowGlassLiveBrightness;
+  }
+  return Math.round(Math.min(MAX_WINDOW_GLASS_LIVE_BRIGHTNESS, Math.max(MIN_WINDOW_GLASS_LIVE_BRIGHTNESS, value)));
+}
+
+/** Live glass speed, 0.25 to 2 in quarter steps. */
+function normalizeWindowGlassLiveSpeed(value: number): number {
+  if (!Number.isFinite(value)) {
+    return DEFAULT_ghostex_SETTINGS.windowGlassLiveSpeed;
+  }
+  const clamped = Math.min(MAX_WINDOW_GLASS_LIVE_SPEED, Math.max(MIN_WINDOW_GLASS_LIVE_SPEED, value));
+  return Math.round(clamped * 4) / 4;
 }
 
 function normalizeWindowGlassImagePlacement(value: string | undefined): WindowGlassImagePlacement {

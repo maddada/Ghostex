@@ -187,6 +187,7 @@ import { createSettingsSidebarPages } from './settings-modal/sidebar-pages';
 import { useSettingsModalEffects } from './settings-modal/use-settings-modal-effects';
 import { createSettingsPersistence } from './settings-modal/settings-persistence';
 import { useAppIconSettings } from './settings-modal/use-app-icon-settings';
+import { useGlassVideoLibrary } from './settings-modal/use-glass-video-library';
 import { createSettingsActions, type GhosttySettingsAction } from './settings-modal/settings-actions';
 import { getActiveSettingsModalScrollViewport } from './settings-modal/scroll-targets';
 
@@ -294,6 +295,9 @@ export type SettingsModalProps = {
   onInstallBrowserUseSkill?: () => void;
   onInstallComputerUseSkill?: () => void;
   onInstallCuaDriver?: () => void;
+  onReinstallCuaDriver?: () => void;
+  onUninstallCuaDriver?: () => void;
+  onCheckCuaDriverUpdate?: () => void;
   onInstallAgentsOrchestrationSkill?: () => void;
   onInstallManageBeadsSkill?: () => void;
   onInstallGenerateTitleSkill?: () => void;
@@ -384,6 +388,9 @@ export function SettingsModal({
   onInstallBrowserUseSkill,
   onInstallComputerUseSkill,
   onInstallCuaDriver,
+  onReinstallCuaDriver,
+  onUninstallCuaDriver,
+  onCheckCuaDriverUpdate,
   onInstallAgentsOrchestrationSkill,
   onInstallManageBeadsSkill,
   onInstallGenerateTitleSkill,
@@ -645,8 +652,8 @@ export function SettingsModal({
   }, [initialTab, isOpen]);
 
   useEffect(() => {
-    if (isOpen && (initialAgentsSection || initialCustomViewId)) setSettingsSearchQuery('');
-  }, [isOpen, initialAgentsSection, initialCustomViewId]);
+    if (isOpen && (initialAgentsSection || initialCustomViewId || initialViewScopeKey)) setSettingsSearchQuery('');
+  }, [isOpen, initialAgentsSection, initialCustomViewId, initialViewScopeKey]);
 
   useEffect(() => {
     if (activeTab !== 'osIntegration' || showOSIntegrationSettingsTab) {
@@ -922,7 +929,7 @@ export function SettingsModal({
     closeSettingsModal,
     persistSettingsModalNavigation,
     scheduleSettingsModalNavigationPersist,
-    updateDiagnosticLoggingScenario,
+    updateDiagnosticLoggingScenarios,
     updateDraft,
     updateDraftDebounced,
     updateShowAdvancedSettings,
@@ -959,6 +966,11 @@ export function SettingsModal({
     pendingSettingsRef,
     setAppIconError,
     updateDraft,
+    vscode,
+  });
+  const glassVideoLibrary = useGlassVideoLibrary({
+    enabled: nativeFilePickerAvailable && draft.windowGlassSource === 'video',
+    isOpen,
     vscode,
   });
   const {
@@ -1343,6 +1355,15 @@ export function SettingsModal({
                                 {...getSettingModificationProps('panelAnimationSpeed')}
                                 onChange={(value) => updateDraft('panelAnimationSpeed', value)}
                                 value={draft.panelAnimationSpeed}
+                              />
+                            ) : null}
+                            {mainSettingVisible(settingsSearch.sidebar, 'closeSidePanelWithLastTab') ? (
+                              <ToggleField
+                                checked={draft.closeSidePanelWithLastTab}
+                                description='Close the side panel when you close its last tab, instead of showing the Open a view picker.'
+                                label='Close side panel with its last tab'
+                                {...getSettingModificationProps('closeSidePanelWithLastTab')}
+                                onChange={(checked) => updateDraft('closeSidePanelWithLastTab', checked)}
                               />
                             ) : null}
                             {mainSettingVisible(settingsSearch.sidebar, 'sidebarTooltipDelayMs') ? (
@@ -2736,6 +2757,7 @@ export function SettingsModal({
                       chooseAppIconFile={chooseAppIconFile}
                       chooseWindowGlassImageFile={chooseWindowGlassImageFile}
                       chooseWindowGlassVideoFile={chooseWindowGlassVideoFile}
+                      glassVideoLibrary={glassVideoLibrary}
                       windowGlassVideoError={windowGlassVideoError}
                       windowGlassVideos={windowGlassVideos}
                       draft={draft}
@@ -2787,6 +2809,9 @@ export function SettingsModal({
                       onInstallBrowserUseSkill={onInstallBrowserUseSkill}
                       onInstallComputerUseSkill={onInstallComputerUseSkill}
                       onInstallCuaDriver={onInstallCuaDriver}
+                      onReinstallCuaDriver={onReinstallCuaDriver}
+                      onUninstallCuaDriver={onUninstallCuaDriver}
+                      onCheckCuaDriverUpdate={onCheckCuaDriverUpdate}
                       onInstallAgentsOrchestrationSkill={onInstallAgentsOrchestrationSkill}
                       onInstallManageBeadsSkill={onInstallManageBeadsSkill}
                       onInstallGenerateTitleSkill={onInstallGenerateTitleSkill}
@@ -2987,7 +3012,7 @@ export function SettingsModal({
                         searchEmptyState={settingsSearchEmptyState}
                         onChange={updateDraft}
                         getModificationProps={getSettingModificationProps}
-                        onChangeDiagnosticScenario={updateDiagnosticLoggingScenario}
+                        onChangeDiagnosticScenarios={updateDiagnosticLoggingScenarios}
                         folderStats={ghostexFolderStats}
                         folderStatsLoading={ghostexFolderStatsLoading}
                         onRequestFolderStats={onRequestGhostexFolderStats}

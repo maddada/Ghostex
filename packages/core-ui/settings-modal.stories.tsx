@@ -179,6 +179,7 @@ function createRemoteStoryRpc({
 
 function SettingsModalStory({
   cuaDriverInstalled,
+  cuaDriverUpdateAvailable = false,
   cuaPermissionsGranted,
   initialSettings = modalSettings,
   initialTab = 'settings',
@@ -191,6 +192,7 @@ function SettingsModalStory({
   vscode,
 }: {
   cuaDriverInstalled?: boolean;
+  cuaDriverUpdateAvailable?: boolean;
   cuaPermissionsGranted?: boolean;
   initialSettings?: ghostexSettings;
   initialTab?:
@@ -203,7 +205,8 @@ function SettingsModalStory({
     | 'openTargets'
     | 'hotkeys'
     | 'remote'
-    | 'extensions';
+    | 'extensions'
+    | 'debugging';
   nativeWindow?: boolean;
   pluginSettingsStatus?: SidebarPluginSettingsStatusMessage;
   projects?: SidebarProjectSettingsItem[];
@@ -246,7 +249,11 @@ function SettingsModalStory({
     cuaDriverAccessibilityPermissionGranted: cuaPermissionsGranted,
     cuaDriverInstallCommand: '/bin/bash -c "$(curl -fsSL https://cua.ai/driver/install.sh)"',
     cuaDriverInstalled: cuaDriverInstalled ?? cuaPermissionsGranted !== undefined,
+    cuaDriverLatestVersion: cuaDriverUpdateAvailable ? '0.29.1' : '0.23.2',
+    cuaDriverManagedUpdatesSupported: true,
     cuaDriverScreenRecordingPermissionGranted: cuaPermissionsGranted,
+    cuaDriverUpdateAvailable,
+    cuaDriverVersion: '0.23.2',
     detail:
       'Ghostex CLI is installed automatically with the app. Use ghostex for the full command. Ghostex Browser Use and Ghostex Computer Use are not installed yet.',
     generateTitleSkillInstalled: false,
@@ -330,6 +337,20 @@ function SettingsModalStory({
             cuaDriverInstalled: true,
             cuaDriverPath: '/Users/madda/.local/bin/cua-driver',
             cuaDriverScreenRecordingPermissionGranted: true,
+            cuaDriverUpdateAvailable: false,
+            cuaDriverVersion: ghostexCliStatus.cuaDriverLatestVersion,
+          })
+        }
+        onCheckCuaDriverUpdate={() =>
+          setGhostexCliStatus({ ...ghostexCliStatus, generatedAt: new Date().toISOString() })
+        }
+        onReinstallCuaDriver={() => setGhostexCliStatus({ ...ghostexCliStatus, generatedAt: new Date().toISOString() })}
+        onUninstallCuaDriver={() =>
+          setGhostexCliStatus({
+            ...ghostexCliStatus,
+            cuaAppInstalled: false,
+            cuaDriverInstalled: false,
+            cuaDriverPath: undefined,
           })
         }
         onInstallGhostexCli={() => setGhostexCliStatus({ ...ghostexCliStatus, installed: true })}
@@ -395,6 +416,10 @@ export const Integrations: Story = {
  */
 export const IntegrationsTrycuaMissing: Story = {
   render: () => <SettingsModalStory cuaDriverInstalled={false} initialTab='integrations' />,
+};
+
+export const IntegrationsTrycuaUpdateAvailable: Story = {
+  render: () => <SettingsModalStory cuaDriverUpdateAvailable cuaPermissionsGranted initialTab='integrations' />,
 };
 
 export const Projects: Story = {
@@ -474,42 +499,198 @@ export const Theme: Story = {
   render: () => <SettingsModalStory initialTab='theme' />,
 };
 
-/** A desktop host that answers the glass video list with two downloaded aerial wallpapers. */
-const glassVideoHost: WebviewApi = {
-  postMessage: (message) => {
-    if (message.type !== 'listWindowGlassVideos') {
-      return;
-    }
-    window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent('ghostex-app-modal-host-message', {
-          detail: {
-            type: 'windowGlassVideosListed',
-            videos: [
-              { name: 'Hawaii Coast', value: 'aerial:0A1B2C3D' },
-              { name: 'New York Night', value: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE' },
-            ],
-          },
-        })
-      );
-    }, 0);
+/** A soft gradient picture standing in for a library video's poster in stories. */
+function storyVideoPoster(colors: [string, string, string]): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><radialGradient id="a" cx="25%" cy="30%" r="70%"><stop offset="0" stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[0]}" stop-opacity="0"/></radialGradient><radialGradient id="b" cx="80%" cy="70%" r="70%"><stop offset="0" stop-color="${colors[1]}"/><stop offset="1" stop-color="${colors[1]}" stop-opacity="0"/></radialGradient></defs><rect width="160" height="90" fill="${colors[2]}"/><rect width="160" height="90" fill="url(#a)"/><rect width="160" height="90" fill="url(#b)"/></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+const STORY_LIBRARY_VIDEOS = [
+  {
+    id: 'calm-drift',
+    name: 'Calm Drift',
+    state: 'bundled',
+    colors: ['#7a4fd6', '#3b6ff0', '#231244'],
+    tone: 'any',
+    added: '2026-09-01',
+    sizeBytes: 1_543_899,
+    durationSeconds: 60,
+    tags: ['calm', 'soft'],
   },
+  {
+    id: 'ink-bloom',
+    name: 'Ink Bloom',
+    state: 'downloaded',
+    colors: ['#3a5bd9', '#6c2bb0', '#05070f'],
+    tone: 'dark',
+    added: '2026-09-10',
+    sizeBytes: 7_259_184,
+    durationSeconds: 285,
+    tags: ['calm', 'colourful'],
+  },
+  {
+    id: 'nebula',
+    name: 'Nebula',
+    state: 'available',
+    colors: ['#d83bb0', '#1ad0e0', '#07040f'],
+    tone: 'dark',
+    added: new Date().toISOString().slice(0, 10),
+    sizeBytes: 8_900_000,
+    durationSeconds: 300,
+    tags: ['colourful'],
+  },
+  {
+    id: 'slow-clouds',
+    name: 'Slow Clouds',
+    state: 'available',
+    colors: ['#f2f4f8', '#b9c7e0', '#8fa6c8'],
+    tone: 'light',
+    added: '2026-08-20',
+    sizeBytes: 5_400_000,
+    durationSeconds: 300,
+    tags: ['calm'],
+  },
+  {
+    id: 'ember',
+    name: 'Ember',
+    state: 'available',
+    colors: ['#ff7a2e', '#ffc04a', '#120402'],
+    tone: 'dark',
+    added: '2026-08-20',
+    sizeBytes: 5_900_000,
+    durationSeconds: 300,
+    tags: ['warm'],
+  },
+  {
+    id: 'ocean-glass',
+    name: 'Ocean Glass',
+    state: 'available',
+    colors: ['#1aa0c8', '#6ae0d0', '#021822'],
+    tone: 'any',
+    added: '2026-08-20',
+    sizeBytes: 6_800_000,
+    durationSeconds: 300,
+    tags: ['calm'],
+  },
+] as const;
+
+/**
+ * A desktop host for the glass video stories: it lists two downloaded aerials and the video library, and walks a Get
+ * through a pretend download.
+ */
+function createGlassVideoHost({ online = true }: { online?: boolean } = {}): WebviewApi {
+  const downloaded = new Set<string>(
+    STORY_LIBRARY_VIDEOS.filter((video) => video.state === 'downloaded').map((video) => video.id)
+  );
+  const send = (detail: unknown) =>
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('ghostex-app-modal-host-message', { detail }));
+    }, 0);
+  const listing = () => ({
+    type: 'glassVideoLibraryListed',
+    online,
+    storageBytes: STORY_LIBRARY_VIDEOS.filter((video) => downloaded.has(video.id)).reduce(
+      (total, video) => total + video.sizeBytes,
+      0
+    ),
+    videos: STORY_LIBRARY_VIDEOS.map((video) => ({
+      ...video,
+      tags: [...video.tags],
+      state: video.state === 'bundled' ? 'bundled' : downloaded.has(video.id) ? 'downloaded' : 'available',
+      poster: online || video.state !== 'available' ? storyVideoPoster([...video.colors]) : undefined,
+    })),
+  });
+  return {
+    postMessage: (message) => {
+      if (message.type === 'listWindowGlassVideos') {
+        send({
+          type: 'windowGlassVideosListed',
+          videos: [
+            { name: 'Hawaii Coast', value: 'aerial:0A1B2C3D' },
+            { name: 'New York Night', value: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE' },
+          ],
+        });
+      } else if (message.type === 'listGlassVideoLibrary') {
+        send(listing());
+      } else if (message.type === 'downloadGlassVideo') {
+        const video = STORY_LIBRARY_VIDEOS.find((candidate) => candidate.id === message.id);
+        if (!video) {
+          return;
+        }
+        let received = 0;
+        const timer = window.setInterval(() => {
+          received = Math.min(video.sizeBytes, received + video.sizeBytes / 12);
+          send({ type: 'glassVideoDownloadProgress', id: video.id, received, total: video.sizeBytes });
+          if (received >= video.sizeBytes) {
+            window.clearInterval(timer);
+            downloaded.add(video.id);
+            send({ type: 'glassVideoDownloadFinished', id: video.id, ok: true });
+            send(listing());
+          }
+        }, 180);
+      } else if (message.type === 'removeGlassVideo') {
+        downloaded.delete(message.id);
+        send(listing());
+      }
+    },
+  };
+}
+
+const glassVideoSettings: ghostexSettings = {
+  ...modalSettings,
+  windowGlass: 'frosted',
+  windowGlassSource: 'video',
+  windowGlassVideoDark: 'library:ink-bloom',
+  windowGlassVideoLight: 'library:calm-drift',
 };
 
-/** Theme with Glass shows set to Video: a downloaded aerial for dark mode, a picked file for light mode. */
+/** Theme with the Video source: the library (one bundled, one downloaded, the rest to Get), aerials and files. */
 export const ThemeGlassVideo: Story = {
   render: () => (
+    <SettingsModalStory initialSettings={glassVideoSettings} initialTab='theme' vscode={createGlassVideoHost()} />
+  ),
+};
+
+/** Use transparency set to Dark only: only the dark-mode video, tints and pictures are offered. */
+export const ThemeGlassVideoDarkOnly: Story = {
+  render: () => (
     <SettingsModalStory
-      initialSettings={{
-        ...modalSettings,
-        windowGlass: 'frosted',
-        windowGlassSource: 'video',
-        windowGlassVideoDark: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE',
-        windowGlassVideoLight: '/Users/you/Movies/clouds.mp4',
-      }}
+      initialSettings={{ ...glassVideoSettings, windowGlass: 'auto' }}
       initialTab='theme'
-      vscode={glassVideoHost}
+      vscode={createGlassVideoHost()}
     />
+  ),
+};
+
+/** Offline: videos not on this computer are dimmed with "Available when online". */
+export const ThemeGlassVideoOffline: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialSettings={glassVideoSettings}
+      initialTab='theme'
+      vscode={createGlassVideoHost({ online: false })}
+    />
+  ),
+};
+
+const glassLiveSettings: ghostexSettings = {
+  ...modalSettings,
+  windowGlass: 'frosted',
+  windowGlassSource: 'live',
+  windowGlassLiveStyleDark: 'aurora',
+  windowGlassLiveStyleLight: 'drift',
+  windowGlassLiveSpeed: 1,
+};
+
+/** Theme with the Live source: the eight animated styles, one per mode, and their speed. */
+export const ThemeGlassLive: Story = {
+  render: () => <SettingsModalStory initialSettings={glassLiveSettings} initialTab='theme' />,
+};
+
+/** Live with Use transparency set to Dark only: only the dark-mode style is offered. */
+export const ThemeGlassLiveDarkOnly: Story = {
+  render: () => (
+    <SettingsModalStory initialSettings={{ ...glassLiveSettings, windowGlass: 'auto' }} initialTab='theme' />
   ),
 };
 
@@ -528,6 +709,22 @@ export const Agents: Story = {
  */
 export const Remote: Story = {
   render: () => <SettingsModalStory initialTab='remote' remoteRpc={createRemoteStoryRpc({ sshEnabled: true })} />,
+};
+
+export const Debugging: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialSettings={{
+        ...modalSettings,
+        debuggingMode: true,
+        diagnosticLogging: {
+          scenarios: { 'gpui.sessionChat.viewState': { enabled: true }, 'native.terminal.focus': { enabled: true } },
+          version: 1,
+        },
+      }}
+      initialTab='debugging'
+    />
+  ),
 };
 
 export const RemoteSshAccessOff: Story = {

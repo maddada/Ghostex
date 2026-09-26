@@ -1,0 +1,407 @@
+/*
+ * Settings -> Theme -> Transparency -> Video: the glass video gallery (settings-modal/glass-video-gallery.tsx).
+ */
+.ghostex-settings-shadcn .glass-video-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 0.25rem 0 0.5rem;
+  position: relative;
+}
+
+.ghostex-settings-shadcn .glass-video-offline {
+  background: color-mix(in srgb, #f5a524 12%, transparent);
+  border: 1px solid color-mix(in srgb, #f5a524 30%, transparent);
+  border-radius: 0.5rem;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.ghostex-settings-shadcn .glass-video-slots {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+
+.ghostex-settings-shadcn .glass-video-slot {
+  align-items: center;
+  border: 1px solid var(--settings-hairline, var(--border));
+  border-radius: 0.625rem;
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-slot .glass-video-slot-picture {
+  aspect-ratio: auto;
+  flex: none;
+  height: 2.25rem;
+  width: 4rem;
+}
+
+.ghostex-settings-shadcn .glass-video-slot-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .glass-video-slot-mode {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+}
+
+.ghostex-settings-shadcn .glass-video-slot-name {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .glass-video-slot-name.is-missing {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.ghostex-settings-shadcn .glass-video-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-section-head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-section-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.ghostex-settings-shadcn .glass-video-section-sub,
+.ghostex-settings-shadcn .glass-video-sub,
+.ghostex-settings-shadcn .glass-video-loading {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.ghostex-settings-shadcn .glass-video-grid {
+  display: grid;
+  gap: 0.625rem;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+}
+
+.ghostex-settings-shadcn .glass-video-card {
+  border: 1px solid var(--settings-hairline, var(--border));
+  border-radius: 0.625rem;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: visible;
+  position: relative;
+}
+
+.ghostex-settings-shadcn .glass-video-card.is-unavailable {
+  opacity: 0.5;
+}
+
+.ghostex-settings-shadcn .glass-video-card-media {
+  display: block;
+  position: relative;
+}
+
+.ghostex-settings-shadcn .glass-video-picture {
+  aspect-ratio: 16 / 9;
+  border-radius: 0.5rem;
+  display: block;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .glass-video-card .glass-video-picture {
+  border-radius: 0.5625rem 0.5625rem 0 0;
+}
+
+.ghostex-settings-shadcn .glass-video-picture img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-hint {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 999px;
+  bottom: 0.375rem;
+  color: #fff;
+  font-size: 0.625rem;
+  left: 0.375rem;
+  opacity: 0;
+  padding: 0.125rem 0.4375rem;
+  position: absolute;
+  transition: opacity 120ms ease;
+}
+
+.ghostex-settings-shadcn .glass-video-picture:hover .glass-video-preview-hint {
+  opacity: 1;
+}
+
+.ghostex-settings-shadcn .glass-video-badges {
+  display: flex;
+  gap: 0.25rem;
+  left: 0.375rem;
+  position: absolute;
+  top: 0.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-mode-badge,
+.ghostex-settings-shadcn .glass-video-new-badge {
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  padding: 0.0625rem 0.4375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-mode-badge.is-dark {
+  background: rgba(10, 12, 20, 0.78);
+  color: #fff;
+}
+
+.ghostex-settings-shadcn .glass-video-mode-badge.is-light {
+  background: rgba(255, 255, 255, 0.88);
+  color: #111;
+}
+
+.ghostex-settings-shadcn .glass-video-new-badge {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  position: absolute;
+  right: 0.375rem;
+  top: 0.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-meta {
+  align-items: center;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.4375rem 0.375rem 0.4375rem 0.625rem;
+}
+
+.ghostex-settings-shadcn .glass-video-meta-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .glass-video-name {
+  font-size: 0.8125rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .glass-video-meta .glass-video-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ghostex-settings-shadcn .glass-video-menu-button {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0.375rem;
+  color: var(--muted-foreground);
+  cursor: default;
+  flex: none;
+  font-size: 0.875rem;
+  height: 1.75rem;
+  width: 1.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-menu-button:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  color: var(--foreground);
+}
+
+.ghostex-settings-shadcn .glass-video-menu {
+  background: var(--popover);
+  border: 1px solid var(--settings-hairline, var(--border));
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  padding: 0.25rem;
+  position: absolute;
+  right: 0.25rem;
+  top: calc(100% - 0.25rem);
+  z-index: 20;
+}
+
+.ghostex-settings-shadcn .glass-video-menu-item {
+  align-items: center;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 0.3125rem;
+  color: var(--popover-foreground, var(--foreground));
+  cursor: default;
+  display: flex;
+  font-size: 0.8125rem;
+  justify-content: space-between;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+}
+
+.ghostex-settings-shadcn .glass-video-menu-item:hover {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.ghostex-settings-shadcn .glass-video-menu-item.is-danger {
+  color: var(--destructive);
+}
+
+.ghostex-settings-shadcn .glass-video-menu-separator {
+  background: var(--settings-hairline, var(--border));
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-menu-note {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  padding: 0.375rem 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-progress-ring {
+  flex: none;
+  height: 1.375rem;
+  transform: rotate(-90deg);
+  width: 1.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-progress-ring circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.ghostex-settings-shadcn .glass-video-progress-ring .track {
+  stroke: color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.ghostex-settings-shadcn .glass-video-progress-ring .bar {
+  stroke: var(--primary);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 180ms linear;
+}
+
+.ghostex-settings-shadcn .glass-video-error {
+  color: var(--destructive);
+  font-size: 0.75rem;
+  padding: 0 0.625rem 0.4375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-file-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-storage {
+  align-items: center;
+  border-top: 1px solid var(--settings-hairline, var(--border));
+  color: var(--muted-foreground);
+  display: flex;
+  font-size: 0.75rem;
+  justify-content: space-between;
+  padding-top: 0.625rem;
+}
+
+.ghostex-settings-shadcn .glass-video-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-manage-row {
+  align-items: center;
+  display: flex;
+  font-size: 0.8125rem;
+  gap: 0.625rem;
+}
+
+.ghostex-settings-shadcn .glass-video-manage-row .glass-video-manage-picture {
+  aspect-ratio: auto;
+  flex: none;
+  height: 1.5rem;
+  width: 2.625rem;
+}
+
+.ghostex-settings-shadcn .glass-video-manage-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-scrim {
+  align-items: center;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 2rem;
+  position: fixed;
+  z-index: 60;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-modal {
+  background: var(--popover);
+  border: 1px solid var(--settings-hairline, var(--border));
+  border-radius: 0.875rem;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  max-width: 34rem;
+  overflow: hidden;
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-picture {
+  border-radius: 0;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.875rem 1rem 1rem;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.ghostex-settings-shadcn .glass-video-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.ghostex-settings-shadcn .glass-video-tag {
+  background: color-mix(in srgb, var(--foreground) 8%, transparent);
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  padding: 0.0625rem 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-video-preview-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding-top: 0.25rem;
+}

@@ -1324,6 +1324,9 @@ done
 mkdir -p "$WEB_DIR/portless"
 stage_tree_if_changed "$WEB_BIN_SOURCE_DIR" "$WEB_DIR/bin"
 stage_tree_if_changed "$GXSERVER_SOURCE_DIR" "$WEB_DIR/gxserver"
+# CDXC:Theming 2026-09-26 WHY:
+# The glass video library ships one small looping video inside the app (media/glass-videos, written by tooling/glass-videos/publish.ts --bundled) so the Video gallery works offline on first launch; apps/desktop/src/app/helpers/glass_video_library.rs reads it from Contents/Resources/glass-videos. It is staged only when it changes, and never embedded in the binary.
+stage_tree_if_changed "$REPO_ROOT/media/glass-videos" "$APP_PATH/Contents/Resources/glass-videos"
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" == "1" ]]; then
 	rm -rf "$WEB_DIR/code-server"
 	rm -f "$WEB_DIR/local-start-code-server-root"

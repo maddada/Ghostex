@@ -225,7 +225,7 @@
 .ghostex-settings-shadcn .theme-glass-source-cards {
   display: grid;
   gap: 0.625rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .ghostex-settings-shadcn .theme-glass-source-card {
@@ -281,6 +281,13 @@
 
 .ghostex-settings-shadcn .theme-glass-source-art.is-video {
   background: linear-gradient(135deg, #1d2b52, #563a7a);
+}
+
+.ghostex-settings-shadcn .theme-glass-source-art.is-live {
+  background:
+    radial-gradient(circle at 25% 30%, rgba(95, 178, 230, 0.9), transparent 55%),
+    radial-gradient(circle at 75% 70%, rgba(170, 120, 230, 0.8), transparent 55%),
+    linear-gradient(135deg, #10203a, #2a1d44);
 }
 
 .ghostex-settings-shadcn .theme-glass-source-art.is-video::after {

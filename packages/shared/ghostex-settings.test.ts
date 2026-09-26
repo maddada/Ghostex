@@ -680,22 +680,6 @@ describe('normalizeghostexSettings', () => {
     });
   });
 
-  test('hides session command-copy context actions unless explicitly enabled', () => {
-    /**
-     * CDXC:ContextMenus 2026-06-09-23:17:
-     * Copy resume and Copy attach command are advanced context-menu utilities.
-     * Missing settings must keep both hidden by default, while an explicit
-     * Settings opt-in should persist and reveal both actions.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.showSessionCommandCopyActions).toBe(false);
-    expect(normalizeghostexSettings({})).toMatchObject({
-      showSessionCommandCopyActions: false,
-    });
-    expect(normalizeghostexSettings({ showSessionCommandCopyActions: true })).toMatchObject({
-      showSessionCommandCopyActions: true,
-    });
-  });
-
   test('normalizes the session-card hover buttons and migrates the old close toggle', () => {
     expect(DEFAULT_ghostex_SETTINGS.sessionCardHoverButtons).toEqual(DEFAULT_SESSION_CARD_HOVER_BUTTONS);
     expect(normalizeghostexSettings({}).sessionCardHoverButtons).toEqual(DEFAULT_SESSION_CARD_HOVER_BUTTONS);
@@ -721,21 +705,6 @@ describe('normalizeghostexSettings', () => {
     expect(stored).toHaveLength(DEFAULT_SESSION_CARD_HOVER_BUTTONS.length);
     expect(stored.slice(3).every((item) => !item.enabled)).toBe(true);
     expect(splitSessionCardHoverButtons(stored)).toEqual({ after: ['rename'], before: ['close'], chevron: true });
-  });
-
-  test('hides the session details copy context-menu option unless explicitly enabled', () => {
-    /**
-     * CDXC:ContextMenus 2026-06-11-23:08:
-     * Copy details writes session metadata to the clipboard. Missing settings
-     * must keep the action hidden by default while an explicit opt-in persists.
-     */
-    expect(DEFAULT_ghostex_SETTINGS.showSessionDetailsCopyAction).toBe(false);
-    expect(normalizeghostexSettings({})).toMatchObject({
-      showSessionDetailsCopyAction: false,
-    });
-    expect(normalizeghostexSettings({ showSessionDetailsCopyAction: true })).toMatchObject({
-      showSessionDetailsCopyAction: true,
-    });
   });
 
   test('keeps title-bar keep-awake settings English and bounded', () => {

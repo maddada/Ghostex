@@ -46,7 +46,7 @@ export function isTransparencyEnabled(windowGlass: WindowGlassMode): boolean {
   return windowGlass !== 'opaque';
 }
 
-/** Turning Enable Transparency on keeps an Always glass choice and otherwise picks glass in dark mode. */
+/** Turning Enable Transparency on keeps an Always choice and otherwise picks Dark only. */
 export function windowGlassForTransparency(current: WindowGlassMode, enabled: boolean): WindowGlassMode {
   if (!enabled) {
     return 'opaque';

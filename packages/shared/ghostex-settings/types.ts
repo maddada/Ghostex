@@ -37,7 +37,10 @@ export type DefaultEditorCommand =
   'code' | 'code-insiders' | 'zed' | 'zeditor' | 'cursor' | 'windsurf' | 'codium' | 'subl' | 'other';
 export type CommandsPanelSide = 'bottom' | 'right';
 export type WindowGlassMode = 'auto' | 'frosted' | 'opaque';
-export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage' | 'video';
+export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage' | 'video' | 'live';
+
+/** The animated styles Live glass draws (`live_<id>` in the GPUI macOS crate's live_backdrop.metal). */
+export type WindowGlassLiveStyle = 'aurora' | 'ink' | 'drift' | 'nebula' | 'silk' | 'bokeh' | 'waves' | 'mesh';
 export type WindowGlassImagePlacement = 'static' | 'desktop';
 export type PanelAnimationSpeed = 'off' | 'slow' | 'normal' | 'fast';
 export const MIN_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 40;
@@ -492,18 +495,6 @@ export type ghostexSettings = {
   hideLastActiveTimeOnSessionCards: boolean;
   hideAccountEmails: boolean;
   /**
-   * CDXC:ContextMenus 2026-06-09-23:17:
-   * Session context menus should hide Copy resume and Copy attach command by default because they expose raw shell-command utilities. Settings owns a single opt-in that reveals both actions for users who intentionally copy commands into external terminals.
-   */
-  showSessionCommandCopyActions: boolean;
-  /**
-   * CDXC:ContextMenus 2026-06-11-23:08:
-   * Copy details is an explicit session-card context-menu opt-in. Keep it hidden
-   * by default because it copies project/session metadata, including paths and
-   * provider ids, into the system clipboard.
-   */
-  showSessionDetailsCopyAction: boolean;
-  /**
    * CDXC:Sessions 2026-06-13-17:50:
    * Settings owns the sidebar tag-filter presentation list: users can reorder
    * tags, move separators, hide rows, or disable selectable tag filters without
@@ -580,6 +571,12 @@ export type ghostexSettings = {
    * `apps/desktop/src/app/panel_motion.rs`. macOS Reduce Motion always snaps.
    */
   panelAnimationSpeed: PanelAnimationSpeed;
+  /**
+   * CDXC:Workarea 2026-09-26 SEE-ALSO: closing the last tab in the side panel closes the panel
+   * instead of showing the "Open a view" picker; the user's decision lives on `close_view_tab` in
+   * `apps/desktop/src/app/view_panel.rs`.
+   */
+  closeSidePanelWithLastTab: boolean;
   /** Delay before sidebar hover tooltips appear. */
   sidebarTooltipDelayMs: number;
   /**
@@ -822,7 +819,17 @@ export type ghostexSettings = {
    */
   windowGlassVideoDark: string;
   windowGlassVideoLight: string;
+  /** Pauses the glass video, and the Live style's motion, while the computer runs on battery. */
   windowGlassVideoOnlyOnPower: boolean;
+  /**
+   * CDXC:Theming 2026-09-26 SEE-ALSO:
+   * The animated style Live glass draws in dark and light mode and how fast it moves (0.25 to 2); window_glass_live.rs holds the user's decision and the GPUI macOS window draws it in the theme's colours.
+   */
+  windowGlassLiveStyleDark: WindowGlassLiveStyle;
+  windowGlassLiveStyleLight: WindowGlassLiveStyle;
+  windowGlassLiveSpeed: number;
+  /** How bright the Live style is drawn, 10 to 100 percent (default 45). */
+  windowGlassLiveBrightness: number;
   /**
    * CDXC:Theming 2026-09-23 SEE-ALSO:
    * Whether the Wallpaper only or Custom image picture covers the window and moves with it (static) or stays still against the screen (desktop); window_glass.rs holds the user's decision and the GPUI macOS window places it.

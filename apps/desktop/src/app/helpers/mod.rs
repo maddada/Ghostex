@@ -10,6 +10,7 @@ pub(crate) mod browser;
 pub(crate) mod browser_favicon_cache;
 pub(crate) mod chrome_palette;
 pub(crate) mod dev_servers;
+pub(crate) mod glass_video_library;
 pub(crate) mod indicator_animation;
 pub(crate) mod manage_docs;
 pub(crate) mod manage_docs_chat_files;
@@ -24,6 +25,7 @@ pub(crate) mod terminal_links;
 pub(crate) mod titlebar;
 pub(crate) mod titlebar_split_button;
 pub(crate) mod window_glass;
+pub(crate) mod window_glass_live;
 pub(crate) mod window_glass_video;
 
 pub(crate) use agents_hub::*;

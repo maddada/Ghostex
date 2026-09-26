@@ -20,6 +20,7 @@ import {
   type WebLinkOpenTarget,
   type PanelAnimationSpeed,
   type WindowGlassMode,
+  type WindowGlassLiveStyle,
   type WindowGlassSource,
   type WindowGlassImagePlacement,
 } from './types';
@@ -163,9 +164,9 @@ export const WINDOW_GLASS_OPTIONS: ReadonlyArray<{
   label: string;
   value: WindowGlassMode;
 }> = [
-  { label: 'Glass in dark mode', value: 'auto' },
-  { label: 'Always glass', value: 'frosted' },
-  { label: 'Always opaque', value: 'opaque' },
+  { label: 'Dark only', value: 'auto' },
+  { label: 'Always', value: 'frosted' },
+  { label: 'Never', value: 'opaque' },
 ];
 
 export const WINDOW_GLASS_SOURCE_OPTIONS: ReadonlyArray<{
@@ -176,7 +177,28 @@ export const WINDOW_GLASS_SOURCE_OPTIONS: ReadonlyArray<{
   { label: 'Wallpaper only', value: 'wallpaper' },
   { label: 'Custom image', value: 'customImage' },
   { label: 'Video', value: 'video' },
+  { label: 'Live', value: 'live' },
 ];
+
+/** The Live glass styles, in the order the Theme page shows them. */
+export const WINDOW_GLASS_LIVE_STYLE_OPTIONS: ReadonlyArray<{
+  label: string;
+  value: WindowGlassLiveStyle;
+}> = [
+  { label: 'Aurora', value: 'aurora' },
+  { label: 'Ink', value: 'ink' },
+  { label: 'Drift', value: 'drift' },
+  { label: 'Nebula', value: 'nebula' },
+  { label: 'Silk', value: 'silk' },
+  { label: 'Bokeh', value: 'bokeh' },
+  { label: 'Waves', value: 'waves' },
+  { label: 'Mesh', value: 'mesh' },
+];
+
+export const MIN_WINDOW_GLASS_LIVE_SPEED = 0.25;
+export const MAX_WINDOW_GLASS_LIVE_SPEED = 2;
+export const MIN_WINDOW_GLASS_LIVE_BRIGHTNESS = 10;
+export const MAX_WINDOW_GLASS_LIVE_BRIGHTNESS = 100;
 
 export const WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS: ReadonlyArray<{
   label: string;

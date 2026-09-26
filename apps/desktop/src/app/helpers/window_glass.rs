@@ -81,14 +81,19 @@ fn window_glass_video() -> (Option<std::path::PathBuf>, bool) {
     (video, videos.only_on_power)
 }
 
-/// Whether the glass shows a picture or video rather than the live blur: Wallpaper only always
-/// does, Custom image and Video only once one is chosen for the current appearance.
+/// Whether the glass shows a picture, video or live style rather than the live blur: Wallpaper
+/// only always does, Custom image, Video and Live only once one is chosen for the current
+/// appearance.
 fn window_glass_uses_backdrop(
     image: &Option<std::path::PathBuf>,
     video: &Option<std::path::PathBuf>,
+    live: &Option<gpui::LiveBackground>,
 ) -> bool {
     if !WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed) {
         return false;
+    }
+    if window_glass_live::window_glass_live_mode() {
+        return live.is_some();
     }
     let custom = WINDOW_GLASS_IMAGES.lock().is_ok_and(|images| images.custom);
     let video_mode = WINDOW_GLASS_VIDEOS.lock().is_ok_and(|videos| videos.video);
@@ -100,6 +105,10 @@ fn window_glass_uses_backdrop(
         true
     }
 }
+
+/// What the main window's glass drew last; see `APPLIED_MAIN_WINDOW_GLASS`.
+static APPLIED_MAIN_WINDOW_GLASS_LIVE: std::sync::Mutex<Option<gpui::LiveBackground>> =
+    std::sync::Mutex::new(None);
 
 /// What the main window's glass played last; see `APPLIED_MAIN_WINDOW_GLASS`.
 static APPLIED_MAIN_WINDOW_GLASS_VIDEO: std::sync::Mutex<(Option<std::path::PathBuf>, bool)> =
@@ -262,7 +271,8 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
     // The wallpaper and custom-image backdrops exist only in the macOS window backend; Settings
     // offers them only there.
     WINDOW_GLASS_WALLPAPER.store(
-        cfg!(target_os = "macos") && matches!(source, Some("wallpaper" | "customImage" | "video")),
+        cfg!(target_os = "macos")
+            && matches!(source, Some("wallpaper" | "customImage" | "video" | "live")),
         Ordering::Relaxed,
     );
     WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.store(
@@ -300,6 +310,7 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
             .and_then(serde_json::Value::as_bool)
             != Some(false);
     }
+    window_glass_live::refresh_window_glass_live(object);
     let active = cfg!(any(target_os = "macos", target_os = "windows"))
         && wanted
         && !system_reduces_transparency();
@@ -411,10 +422,14 @@ pub(crate) fn sync_overlay_window_glass(window: &Window, main_origin: gpui::Poin
     }
     let image = window_glass_custom_image();
     let (video, only_on_power) = window_glass_video();
-    let main_uses_picture = window_glass_uses_backdrop(&image, &video);
-    let follows_screen =
-        !main_uses_picture || WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed);
-    // The panel plays the main window's own player, so both show the same frame.
+    let live = window_glass_live::window_glass_live();
+    let main_uses_picture = window_glass_uses_backdrop(&image, &video, &live);
+    // A live style is laid out over the main window, so the panel draws the same part of it.
+    let main_uses_live = main_uses_picture && live.is_some();
+    let follows_screen = !main_uses_picture
+        || (!main_uses_live && WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed));
+    // The panel plays the main window's own player and live clock, so both show the same frame.
+    window.set_background_live(if main_uses_picture { live } else { None });
     window.set_background_video(if main_uses_picture { video } else { None }, only_on_power);
     window.set_background_wallpaper_image(if main_uses_picture { image } else { None });
     window.set_background_wallpaper_follows_screen(follows_screen);
@@ -459,8 +474,9 @@ impl GhostexGpuiApp {
         );
         let image = window_glass_custom_image();
         let video = window_glass_video();
-        // Custom image or Video with nothing chosen for this appearance is the live blur.
-        let wallpaper = window_glass_uses_backdrop(&image, &video.0);
+        let live = window_glass_live::window_glass_live();
+        // Custom image, Video or Live with nothing chosen for this appearance is the live blur.
+        let wallpaper = window_glass_uses_backdrop(&image, &video.0, &live);
         let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
             (false, _) => 1,
             (true, false) => 2,
@@ -482,10 +498,19 @@ impl GhostexGpuiApp {
                 changed
             })
             .unwrap_or(true);
+        let live_changed = APPLIED_MAIN_WINDOW_GLASS_LIVE
+            .lock()
+            .map(|mut applied| {
+                let changed = *applied != live;
+                *applied = live.clone();
+                changed
+            })
+            .unwrap_or(true);
         let previous = APPLIED_MAIN_WINDOW_GLASS.swap(code, Ordering::Relaxed);
-        if previous == code && !image_changed && !video_changed {
+        if previous == code && !image_changed && !video_changed && !live_changed {
             return;
         }
+        window.set_background_live(live);
         window.set_background_video(video.0, video.1);
         window.set_background_wallpaper_image(image);
         window.set_background_wallpaper(wallpaper);

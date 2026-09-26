@@ -451,17 +451,13 @@ describe('settings modal source', () => {
       "  debugging: {\n    title: 'Debugging',",
       '  extensions: {'
     );
-    const gatedRows = sourceFrom(settingsModalDebuggingTabSource, '{settings.debuggingMode ? (');
-
     expect(debuggingSearch).toContain("key: 'diagnosticLogging'");
-    expect(debuggingSearch).toContain("key: 'showSessionCommandCopyActions'");
-    expect(debuggingSearch).toContain("key: 'showSessionDetailsCopyAction'");
     expect(settingsModalDebuggingTabSource).toContain('checked={settings.debuggingMode}');
-    expect(gatedRows).toContain("visible('controls', 'diagnosticLogging')");
-    expect(gatedRows).toContain("visible('controls', 'showSessionCommandCopyActions')");
-    expect(gatedRows).toContain("visible('controls', 'showSessionDetailsCopyAction')");
     expect(settingsModalDebuggingTabSource).toContain(
-      'Show debug-only controls, load storage statistics, and allow enabled routine diagnostic logs.'
+      "{settings.debuggingMode && visible('controls', 'diagnosticLogging') ? ("
+    );
+    expect(settingsModalDebuggingTabSource).toContain(
+      'Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.'
     );
   });
 

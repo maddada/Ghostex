@@ -80,12 +80,16 @@ pub(crate) fn aerial_reference(id: &str) -> String {
     format!("{AERIAL_PREFIX}{id}")
 }
 
-/// The file a saved glass video plays: the aerial's downloaded file, or the picked file, when it
-/// exists and is a video.
+/// The file a saved glass video plays: the aerial's downloaded file, a library video on this
+/// computer (`library:<id>`, glass_video_library.rs), or the picked file, when it exists and is a
+/// video.
 pub(crate) fn resolve_glass_video(saved: &str) -> Option<PathBuf> {
     let saved = saved.trim();
     if saved.is_empty() {
         return None;
+    }
+    if saved.starts_with(super::glass_video_library::LIBRARY_PREFIX) {
+        return super::glass_video_library::resolve_library_video(saved);
     }
     let path = match saved.strip_prefix(AERIAL_PREFIX) {
         Some(id) => {

@@ -19,6 +19,8 @@
 @import './styles/modals-light.css';
 @import './styles/settings-light.css';
 @import './styles/settings-theme.css';
+@import './styles/settings-glass-video.css';
+@import './styles/settings-glass-live.css';
 /**
  * CDXC:ContextMenus 2026-05-11-01:39
  * Sidebar and app context menus should behave like native menus: menu items

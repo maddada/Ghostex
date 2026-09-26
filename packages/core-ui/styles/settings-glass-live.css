@@ -1,0 +1,74 @@
+/*
+ * Settings -> Theme -> Transparency -> Live: the live glass style gallery (settings-modal/glass-live-gallery.tsx).
+ */
+.ghostex-settings-shadcn .glass-live-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.ghostex-settings-shadcn .glass-live-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.ghostex-settings-shadcn .glass-live-summary {
+  font-size: 0.8125rem;
+}
+
+.ghostex-settings-shadcn .glass-live-note {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.ghostex-settings-shadcn .glass-live-grid {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.ghostex-settings-shadcn .glass-live-card {
+  background: transparent;
+  border: 1px solid var(--settings-hairline, var(--border));
+  border-radius: 0.625rem;
+  color: var(--foreground);
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.ghostex-settings-shadcn .glass-live-card:hover {
+  border-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+
+.ghostex-settings-shadcn .glass-live-card.is-selected {
+  border-color: var(--ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 35%, transparent);
+}
+
+.ghostex-settings-shadcn .glass-live-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
+  border-color: var(--ring);
+}
+
+.ghostex-settings-shadcn .glass-live-poster {
+  aspect-ratio: 16 / 10;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.ghostex-settings-shadcn .glass-live-name {
+  font-size: 0.75rem;
+  padding: 0.375rem 0.5rem 0.4375rem;
+}

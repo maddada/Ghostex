@@ -287,8 +287,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   hideLastActiveTimeOnSessionCards: SIDEBAR_SETTINGS_PRESET_SETTINGS.recommended.hideLastActiveTimeOnSessionCards,
   hideAccountEmails: false,
-  showSessionCommandCopyActions: false,
-  showSessionDetailsCopyAction: false,
   /**
    * CDXC:Sessions 2026-06-13-17:50:
    * First-run sidebar tag filter settings should show the default triage tags,
@@ -398,6 +396,7 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   preferredAgentInterfaceOverrides: {},
   sidebarCollapseAnimationDurationMs: DEFAULT_SIDEBAR_COLLAPSE_ANIMATION_DURATION_MS,
   panelAnimationSpeed: 'normal',
+  closeSidePanelWithLastTab: false,
   sidebarTooltipDelayMs: DEFAULT_SIDEBAR_TOOLTIP_DELAY_MS,
   /**
    * CDXC:Sidebar 2026-06-05-04:40:
@@ -561,6 +560,10 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   windowGlassVideoDark: '',
   windowGlassVideoLight: '',
   windowGlassVideoOnlyOnPower: true,
+  windowGlassLiveStyleDark: 'aurora',
+  windowGlassLiveStyleLight: 'drift',
+  windowGlassLiveSpeed: 1,
+  windowGlassLiveBrightness: 45,
   windowGlassSidebarOpacityDark: DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT,
   windowGlassWorkAreaTintDark: DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_DARK_PERCENT,
   windowGlassSidebarOpacityLight: DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_LIGHT_PERCENT,

@@ -25,6 +25,8 @@ pub(crate) mod remote_browser;
 pub(crate) mod window;
 
 pub(crate) mod agent_hooks_required_modal_lifecycle;
+pub(crate) mod app_modal_hydrate;
+pub(crate) mod app_modal_spare;
 pub(crate) mod app_new;
 pub(crate) mod browser_history;
 pub(crate) mod browser_pane;
@@ -43,6 +45,8 @@ pub(crate) mod drag_resize;
 pub(crate) mod export_transcript_modal_lifecycle;
 pub(crate) mod floating_reveal;
 pub(crate) mod focus;
+pub(crate) mod focused_chat_hotkeys;
+pub(crate) mod glass_video_library_dispatch;
 pub(crate) mod gx_chat;
 pub(crate) mod gx_store;
 pub(crate) mod keyboard_owner;

@@ -12,6 +12,7 @@ import {
   COMMANDS_PANEL_SIDE_OPTIONS,
   WINDOW_GLASS_OPTIONS,
   WINDOW_GLASS_SOURCE_OPTIONS,
+  WINDOW_GLASS_LIVE_STYLE_OPTIONS,
   WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS,
   PANEL_ANIMATION_SPEED_OPTIONS,
   COMMANDS_PANEL_AUTO_MINIMIZE_DELAY_OPTIONS,
@@ -427,6 +428,11 @@ export function getSettingsSearchSectionDefinitions() {
           title: 'Panel animations',
         },
         {
+          key: 'closeSidePanelWithLastTab',
+          subtitle: 'Close the side panel when you close its last tab, instead of showing the Open a view picker.',
+          title: 'Close side panel with its last tab',
+        },
+        {
           key: 'sidebarTooltipDelayMs',
           subtitle: 'Set how long sidebar hover labels wait before appearing. Set to 0 to show them immediately.',
           title: 'Tooltip Delay',
@@ -589,14 +595,14 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'windowGlass',
           options: WINDOW_GLASS_OPTIONS,
-          subtitle:
-            'Let your desktop show through the window. Use transparency picks Automatic (dark mode only), Always or Never.',
+          subtitle: 'Let your desktop show through the window. Use transparency picks Dark only, Always or Never.',
           title: 'Enable transparency',
         },
         {
           key: 'windowGlassSource',
           options: WINDOW_GLASS_SOURCE_OPTIONS,
-          subtitle: 'Desktop and windows, your wallpaper, a picture you choose, or a video playing behind the glass.',
+          subtitle:
+            'Desktop and windows, your wallpaper, a picture you choose, a video, or a Live animated background in your theme colours.',
           title: 'What shows behind the glass',
         },
         {
@@ -631,8 +637,30 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'windowGlassVideoOnlyOnPower',
           subtitle:
-            'Pause the glass video while your computer runs on battery. It always pauses when Ghostex is in the background.',
+            'Pause the glass video or Live background while your computer runs on battery. It always pauses when Ghostex is in the background.',
           title: 'Play only when plugged in',
+        },
+        {
+          key: 'windowGlassLiveStyleDark',
+          options: WINDOW_GLASS_LIVE_STYLE_OPTIONS,
+          subtitle: 'The animated background the glass shows in dark mode when Live shows behind the glass.',
+          title: 'Live background for dark mode',
+        },
+        {
+          key: 'windowGlassLiveStyleLight',
+          options: WINDOW_GLASS_LIVE_STYLE_OPTIONS,
+          subtitle: 'The animated background the glass shows in light mode when Live shows behind the glass.',
+          title: 'Live background for light mode',
+        },
+        {
+          key: 'windowGlassLiveSpeed',
+          subtitle: 'How fast the Live background moves, from a quarter of its pace to twice as fast.',
+          title: 'Live background speed',
+        },
+        {
+          key: 'windowGlassLiveBrightness',
+          subtitle: 'How bright the Live background glows behind the glass. Lower keeps it a subtle glow.',
+          title: 'Live background brightness',
         },
         {
           key: 'windowGlassSidebarOpacityDark',

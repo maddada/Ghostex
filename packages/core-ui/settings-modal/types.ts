@@ -194,6 +194,10 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'windowGlassVideoDark',
     'windowGlassVideoLight',
     'windowGlassVideoOnlyOnPower',
+    'windowGlassLiveStyleDark',
+    'windowGlassLiveStyleLight',
+    'windowGlassLiveSpeed',
+    'windowGlassLiveBrightness',
     'windowGlassSidebarOpacityDark',
     'windowGlassWorkAreaTintDark',
     'windowGlassSidebarOpacityLight',
@@ -235,6 +239,7 @@ export const MAIN_SETTINGS_SECTION_SETTING_KEYS: Record<MainSettingsSectionId, r
     'hideMenuBarSessionStatusIndicators',
     'sidebarCollapseAnimationDurationMs',
     'panelAnimationSpeed',
+    'closeSidePanelWithLastTab',
     'sidebarTooltipDelayMs',
     'sidebarDefaultWidthPx',
     'commandsPanelDefaultHeightPx',
@@ -373,6 +378,10 @@ export const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS = {
     'windowGlassVideoDark',
     'windowGlassVideoLight',
     'windowGlassVideoOnlyOnPower',
+    'windowGlassLiveStyleDark',
+    'windowGlassLiveStyleLight',
+    'windowGlassLiveSpeed',
+    'windowGlassLiveBrightness',
     'windowGlassSidebarOpacityDark',
     'windowGlassWorkAreaTintDark',
     'windowGlassSidebarOpacityLight',
@@ -539,14 +548,12 @@ export const DIAGNOSTIC_LOGGING_DURATION_OPTIONS: ReadonlyArray<{
   label: string;
   value: DiagnosticLoggingDurationValue;
 }> = [
-  { label: 'Off', value: 'off' },
   { label: '15 min', value: '15m' },
   { label: '1 hour', value: '1h' },
-  { label: 'Always', value: 'always' },
+  { label: 'Never', value: 'always' },
 ];
 
 export const DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION: DiagnosticLoggingDurationValue = '1h';
-export const DIAGNOSTIC_LOGGING_GROUPS: readonly ['macOS', 'GPUI', 'gxserver'] = ['macOS', 'GPUI', 'gxserver'];
 
 /*
  * CDXC:Settings 2026-06-16-01:35:
