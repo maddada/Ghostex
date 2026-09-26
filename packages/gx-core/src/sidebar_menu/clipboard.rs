@@ -14,18 +14,20 @@ pub(crate) struct DetailsGroup<'a> {
     pub(crate) project_path: Option<&'a str>,
     pub(crate) worktree_name: Option<&'a str>,
     pub(crate) worktree_branch: Option<&'a str>,
-    pub(crate) parent_project_name: Option<&'a str>,
     pub(crate) remote_machine_name: Option<&'a str>,
     pub(crate) server_id: Option<&'a str>,
 }
 
-/// `buildSidebarSessionDetailsClipboardText`.
+/// `buildSidebarSessionDetailsClipboardText`, trimmed to what a user or another agent needs.
+///
+/// CDXC:ContextMenus 2026-09-26 DECISION:
+/// The user asked for Copy Details to carry only what another agent needs to reach this session through `$ghostex-agents`: first the agent, the title, the Global Ref, the agent session id and the zmx name (both kept because the user uses them), then where it runs (machine, project, path, worktree), and a last line pointing at `$ghostex-agents`. The title is the stored one, without the glyphs the daemon's display title carries. The internal fields (display title, sidebar and routing ids, kind, status, activity, terminal title, detail, parent project, last active) are gone even with Show debug UI controls on, which an earlier version of this decision allowed; `ghostex sessions --json --full` has them.
 pub(crate) fn session_details_text(row: &SessionRow, group: &DetailsGroup<'_>) -> String {
     let facts = &row.menu_facts;
     let title = first_non_empty(&[
-        facts.raw_display_title.as_deref(),
-        facts.primary_title.as_deref(),
         Some(row.alias.as_str()),
+        facts.primary_title.as_deref(),
+        facts.raw_display_title.as_deref(),
     ]);
     let mut lines: Vec<String> = vec!["Ghostex Session".to_string()];
     let mut line = |label: &str, value: Option<&str>| {
@@ -36,16 +38,9 @@ pub(crate) fn session_details_text(row: &SessionRow, group: &DetailsGroup<'_>) -
             }
         }
     };
+    let agent = row.agent_icon.as_deref().map(format_identifier);
+    line("Agent", agent.as_deref());
     line("Title", Some(&title));
-    line("Alias", (row.alias != title).then_some(row.alias.as_str()));
-    line("Session ID", Some(&row.sidebar_session_id));
-    line(
-        "Routing ID",
-        facts
-            .session_routing_id
-            .as_deref()
-            .filter(|routing| *routing != row.sidebar_session_id),
-    );
     /*
     CDXC:Cli 2026-09-24 DECISION:
     The user asked that the copied block carry the one id every `ghostex` verb takes, so an agent
@@ -58,30 +53,23 @@ pub(crate) fn session_details_text(row: &SessionRow, group: &DetailsGroup<'_>) -
         _ => None,
     };
     line("Global Ref", global_ref.as_deref());
-    let kind = format_identifier(row.session_kind.as_deref().unwrap_or("terminal"));
-    line("Kind", Some(&kind));
-    line("Status", Some(&row.lifecycle_state));
-    line("Activity", Some(&row.activity));
-    let agent = row.agent_icon.as_deref().map(format_identifier);
-    line("Agent", agent.as_deref());
     line("Agent Session ID", facts.agent_session_id.as_deref());
-    line(
-        "Terminal Title",
-        facts
-            .terminal_title
-            .as_deref()
-            .filter(|terminal| *terminal != title),
-    );
-    line("Detail", facts.detail.as_deref());
-    let persistence = persistence(row);
-    line("Persistence", persistence.as_deref());
+    let persistence_name = facts
+        .session_persistence_name
+        .as_deref()
+        .filter(|name| !name.is_empty());
+    let persistence_provider = facts
+        .session_persistence_provider
+        .as_deref()
+        .filter(|provider| !provider.is_empty())
+        .unwrap_or("zmx");
+    line(persistence_provider, persistence_name);
     line("Remote Machine", group.remote_machine_name);
     line("Project", Some(group.title));
     line("Project Path", group.project_path);
     line("Worktree", group.worktree_name);
     line("Worktree Branch", group.worktree_branch);
-    line("Parent Project", group.parent_project_name);
-    line("Last Active", row.last_interaction_at.as_deref());
+    lines.push("More details: use $ghostex-agents".to_string());
     lines.join("\n")
 }
 
@@ -96,24 +84,4 @@ fn first_non_empty(values: &[Option<&str>]) -> String {
         }
     }
     "Session".to_string()
-}
-
-/// `formatPersistence`.
-fn persistence(row: &SessionRow) -> Option<String> {
-    let provider = row
-        .menu_facts
-        .session_persistence_provider
-        .as_deref()
-        .filter(|value| !value.is_empty());
-    let name = row
-        .menu_facts
-        .session_persistence_name
-        .as_deref()
-        .filter(|value| !value.is_empty());
-    match (provider, name) {
-        (None, None) => None,
-        (Some(provider), Some(name)) => Some(format!("{provider} ({name})")),
-        (Some(provider), None) => Some(provider.to_string()),
-        (None, Some(name)) => Some(name.to_string()),
-    }
 }

@@ -15,7 +15,6 @@ pub(crate) struct SessionCapabilities {
     pub(crate) can_close_after_done: bool,
     pub(crate) can_copy_attach_command: bool,
     pub(crate) can_copy_resume_command: bool,
-    pub(crate) can_copy_session_details: bool,
     pub(crate) can_delayed_send: bool,
     pub(crate) can_export_transcript: bool,
     pub(crate) can_fork_session: bool,
@@ -34,11 +33,13 @@ impl SessionCapabilities {
     /// `getSidebarSessionContextMenuEligibility`. `is_remote_session` is the group's remote machine
     /// context; `workspace_focus_bridge` is the host's `postWorkspaceTerminalFocus`, which the web
     /// app does not have.
+    ///
+    /// CDXC:ContextMenus 2026-09-26 DECISION:
+    /// User: Copy Resume and Copy Attach appear whenever Show debug UI controls is on; the separate Show command copy actions switch is gone. They stay hidden otherwise because they expose raw shell commands.
     pub(crate) fn resolve(
         row: &SessionRow,
         is_remote_session: bool,
-        show_session_command_copy_actions: bool,
-        show_session_details_copy_action: bool,
+        debugging_mode: bool,
         workspace_focus_bridge: bool,
     ) -> Self {
         let facts = &row.menu_facts;
@@ -50,7 +51,7 @@ impl SessionCapabilities {
         Self {
             can_close_after_done: terminal_action
                 && (!is_remote_session || facts.can_toggle_close_after_done),
-            can_copy_attach_command: show_session_command_copy_actions
+            can_copy_attach_command: debugging_mode
                 && terminal_action
                 && facts
                     .session_persistence_provider
@@ -60,10 +61,9 @@ impl SessionCapabilities {
                     .session_persistence_name
                     .as_deref()
                     .is_some_and(|name| !name.is_empty()),
-            can_copy_resume_command: show_session_command_copy_actions
+            can_copy_resume_command: debugging_mode
                 && terminal_action
                 && supports_resume_command_copy(row),
-            can_copy_session_details: show_session_details_copy_action,
             can_delayed_send: terminal_action
                 && (!is_remote_session || facts.can_schedule_delayed_send),
             can_export_transcript: terminal_action

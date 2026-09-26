@@ -246,8 +246,7 @@ pub struct SessionMenuFacts {
     pub session_persistence_name: Option<String>,
     /// `<project>:<session>`, the id a pane is routed by.
     pub session_routing_id: Option<String>,
-    /// The daemon's own `displayTitle`, before the heading rules. Copy Details quotes this rather
-    /// than the heading the row draws.
+    /// The daemon's own `displayTitle`, before the heading rules.
     pub raw_display_title: Option<String>,
     pub primary_title: Option<String>,
     pub terminal_title: Option<String>,

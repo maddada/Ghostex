@@ -201,8 +201,6 @@ const SANDBOX_STORY_ARGS: SidebarStoryArgs = {
   isFocusModeActive: false,
   renameSessionOnDoubleClick: false,
   sessionCardHoverButtons: normalizeSessionCardHoverButtons(['close']),
-  showSessionCommandCopyActions: false,
-  showSessionDetailsCopyAction: false,
   theme: 'dark-blue',
   viewMode: 'grid',
   visibleCount: 1,

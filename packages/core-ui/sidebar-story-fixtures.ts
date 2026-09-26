@@ -42,8 +42,6 @@ export type SidebarStoryArgs = {
   isFocusModeActive: boolean;
   renameSessionOnDoubleClick: boolean;
   showCloseButtonOnSessionCards: boolean;
-  showSessionCommandCopyActions: boolean;
-  showSessionDetailsCopyAction: boolean;
   theme: SidebarTheme;
   viewMode: TerminalViewMode;
   visibleCount: VisibleSessionCount;
@@ -144,14 +142,10 @@ export function createSidebarStoryMessage(
 ): SidebarHydrateMessage {
   const baseStorySettings = isCombinedReferenceFixture(args.fixture)
     ? createCombinedStorySettings(currentSettings)
-    : !args.showCloseButtonOnSessionCards || args.showSessionCommandCopyActions || args.showSessionDetailsCopyAction
+    : !args.showCloseButtonOnSessionCards
       ? normalizeghostexSettings({
           ...DEFAULT_ghostex_SETTINGS,
-          sessionCardHoverButtons: normalizeSessionCardHoverButtons(
-            args.showCloseButtonOnSessionCards ? ['close'] : []
-          ),
-          showSessionCommandCopyActions: args.showSessionCommandCopyActions,
-          showSessionDetailsCopyAction: args.showSessionDetailsCopyAction,
+          sessionCardHoverButtons: normalizeSessionCardHoverButtons([]),
         })
       : undefined;
   const storySettings = baseStorySettings;

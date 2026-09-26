@@ -232,8 +232,6 @@ pub struct SidebarSettings {
     pub show_tag_menu_when_parking: bool,
     /// The hover strip's actions are repeated at the top of the row's context menu.
     pub show_session_card_hover_buttons_in_context_menu: bool,
-    pub show_session_command_copy_actions: bool,
-    pub show_session_details_copy_action: bool,
     pub show_beta_features: bool,
     pub hide_keep_awake_titlebar_control: bool,
     /// The project header offers New Browser Tab.
@@ -258,8 +256,6 @@ impl Default for SidebarSettings {
             session_card_hover_buttons: Value::Null,
             show_tag_menu_when_parking: true,
             show_session_card_hover_buttons_in_context_menu: true,
-            show_session_command_copy_actions: false,
-            show_session_details_copy_action: false,
             show_beta_features: false,
             hide_keep_awake_titlebar_control: false,
             browser_view_tab_hidden: false,
@@ -319,14 +315,6 @@ impl SidebarSettings {
             show_session_card_hover_buttons_in_context_menu: boolean(
                 "showSessionCardHoverButtonsInContextMenu",
                 defaults.show_session_card_hover_buttons_in_context_menu,
-            ),
-            show_session_command_copy_actions: boolean(
-                "showSessionCommandCopyActions",
-                defaults.show_session_command_copy_actions,
-            ),
-            show_session_details_copy_action: boolean(
-                "showSessionDetailsCopyAction",
-                defaults.show_session_details_copy_action,
             ),
             show_beta_features: boolean("showBetaFeatures", defaults.show_beta_features),
             hide_keep_awake_titlebar_control: boolean(

@@ -41,7 +41,6 @@ impl<'a> MenuGroup<'a> {
             project_path: self.project.map(|project| project.path.as_str()),
             worktree_name: worktree.map(|worktree| worktree.name.as_str()),
             worktree_branch: worktree.map(|worktree| worktree.branch.as_str()),
-            parent_project_name: worktree.map(|worktree| worktree.parent_project_name.as_str()),
             remote_machine_name: self.remote_machine_name,
             server_id: self.server_id.as_deref(),
         }

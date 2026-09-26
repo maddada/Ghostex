@@ -5,8 +5,7 @@ export type SidebarSessionContextMenuEligibilityInput = {
   isProjectSessionListMoreRow: boolean;
   isRemoteSession: boolean;
   session: SidebarSessionItem | undefined;
-  showSessionCommandCopyActions: boolean;
-  showSessionDetailsCopyAction: boolean;
+  debuggingMode: boolean;
 };
 
 export type SidebarSessionContextMenuEligibility = {
@@ -45,8 +44,7 @@ export function getSidebarSessionContextMenuEligibility({
   isProjectSessionListMoreRow,
   isRemoteSession,
   session,
-  showSessionCommandCopyActions,
-  showSessionDetailsCopyAction,
+  debuggingMode,
 }: SidebarSessionContextMenuEligibilityInput): SidebarSessionContextMenuEligibility {
   const isBrowserSession = isSidebarBrowserSession(session);
   const hasSession = session !== undefined;
@@ -62,15 +60,12 @@ export function getSidebarSessionContextMenuEligibility({
     canCloseAfterDone:
       canUseTerminalAgentMenuAction && hasSession && supportsCloseAfterDoneMenuAction(session, isRemoteSession),
     canCopyAttachCommand:
-      showSessionCommandCopyActions &&
+      debuggingMode &&
       canUseTerminalAgentMenuAction &&
       Boolean(session?.sessionPersistenceProvider && session.sessionPersistenceName),
     canCopyResumeCommand:
-      showSessionCommandCopyActions &&
-      canUseTerminalAgentMenuAction &&
-      hasSession &&
-      supportsResumeCommandCopy(session),
-    canCopySessionDetails: isConcreteSessionRow && showSessionDetailsCopyAction,
+      debuggingMode && canUseTerminalAgentMenuAction && hasSession && supportsResumeCommandCopy(session),
+    canCopySessionDetails: isConcreteSessionRow,
     canDelayedSend:
       canUseTerminalAgentMenuAction && hasSession && supportsDelayedSendMenuAction(session, isRemoteSession),
     canExportTranscript:
