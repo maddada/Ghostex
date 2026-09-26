@@ -457,7 +457,7 @@ describe('settings modal source', () => {
       "{settings.debuggingMode && visible('controls', 'diagnosticLogging') ? ("
     );
     expect(settingsModalDebuggingTabSource).toContain(
-      'Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.'
+      'Show diagnostic logs, and Copy Resume and Copy Attach in session menus.'
     );
   });
 

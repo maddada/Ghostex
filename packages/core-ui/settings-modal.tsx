@@ -187,7 +187,6 @@ import { createSettingsSidebarPages } from './settings-modal/sidebar-pages';
 import { useSettingsModalEffects } from './settings-modal/use-settings-modal-effects';
 import { createSettingsPersistence } from './settings-modal/settings-persistence';
 import { useAppIconSettings } from './settings-modal/use-app-icon-settings';
-import { useGlassVideoLibrary } from './settings-modal/use-glass-video-library';
 import { createSettingsActions, type GhosttySettingsAction } from './settings-modal/settings-actions';
 import { getActiveSettingsModalScrollViewport } from './settings-modal/scroll-targets';
 
@@ -217,7 +216,8 @@ export type SettingsSidebarTagsAction = 'createTag';
 function getInitialSettingsModalTab(
   initialTab: SettingsModalTab,
   visibility: SettingsModalTabVisibilityOptions,
-  storedNavigation: SettingsModalNavigationState
+  storedNavigation: SettingsModalNavigationState,
+  showAdvancedSettings: boolean
 ): SettingsModalTab {
   /**
    * CDXC:Settings 2026-05-11-09:06
@@ -230,8 +230,14 @@ function getInitialSettingsModalTab(
    * from durable macOS settings storage after an app relaunch. Explicit entry
    * points still win so menu actions and deep links land on the requested page.
    */
+  const rememberedTab = initialTab === 'settings' ? getRememberedSettingsModalTab(storedNavigation) : undefined;
+  // A remembered Debugging page stays closed while Show Advanced hides it from the rail; `ghostex settings open --tab debugging` still opens it.
   const requestedTab =
-    initialTab !== 'settings' ? initialTab : (getRememberedSettingsModalTab(storedNavigation) ?? initialTab);
+    initialTab !== 'settings'
+      ? initialTab
+      : rememberedTab === 'debugging' && !showAdvancedSettings
+        ? initialTab
+        : (rememberedTab ?? initialTab);
   return resolveSettingsModalTabForVisibility(requestedTab, visibility);
 }
 
@@ -476,7 +482,8 @@ export function SettingsModal({
           showBetaFeatures: normalizedInitialSettings.showBetaFeatures,
         }),
       },
-      normalizedInitialSettings.settingsModalNavigation
+      normalizedInitialSettings.settingsModalNavigation,
+      normalizedInitialSettings.showAdvancedSettings
     )
   );
   const dialogContentRef = useRef<HTMLDivElement>(null);
@@ -643,7 +650,8 @@ export function SettingsModal({
     const nextTab = getInitialSettingsModalTab(
       initialTab,
       { showOSIntegrationSettingsTab },
-      (pendingSettingsRef.current ?? draft).settingsModalNavigation
+      (pendingSettingsRef.current ?? draft).settingsModalNavigation,
+      (pendingSettingsRef.current ?? draft).showAdvancedSettings
     );
     rememberActiveScrollPosition();
     rememberSettingsModalTab(nextTab);
@@ -878,11 +886,21 @@ export function SettingsModal({
     setActiveMainSettingsSectionId,
     setActiveTab,
     settingsSearchQuery,
+    showAdvancedSettings,
     showOSIntegrationSettingsTab,
     visibleHotkeySectionNavigation,
     visibleHotkeySections,
     visibleMainSettingsSectionNavigation,
   });
+  const previousShowAdvancedSettingsRef = useRef(showAdvancedSettings);
+  useEffect(() => {
+    const wasShowingAdvancedSettings = previousShowAdvancedSettingsRef.current;
+    previousShowAdvancedSettingsRef.current = showAdvancedSettings;
+    // Turning Show Advanced off while Debugging is open leaves the page it just hid from the rail.
+    if (wasShowingAdvancedSettings && !showAdvancedSettings && activeTab === 'debugging' && !isSettingsSearching) {
+      setActiveTab('settings');
+    }
+  }, [showAdvancedSettings]);
 
   useSettingsModalEffects({
     activeTab,
@@ -955,7 +973,6 @@ export function SettingsModal({
     nativeFilePickerAvailable,
     selectAppIcon,
     windowGlassVideoError,
-    windowGlassVideos,
   } = useAppIconSettings({
     appIconPickerUnavailable,
     appIconState,
@@ -966,11 +983,6 @@ export function SettingsModal({
     pendingSettingsRef,
     setAppIconError,
     updateDraft,
-    vscode,
-  });
-  const glassVideoLibrary = useGlassVideoLibrary({
-    enabled: nativeFilePickerAvailable && draft.windowGlassSource === 'video',
-    isOpen,
     vscode,
   });
   const {
@@ -2757,9 +2769,7 @@ export function SettingsModal({
                       chooseAppIconFile={chooseAppIconFile}
                       chooseWindowGlassImageFile={chooseWindowGlassImageFile}
                       chooseWindowGlassVideoFile={chooseWindowGlassVideoFile}
-                      glassVideoLibrary={glassVideoLibrary}
                       windowGlassVideoError={windowGlassVideoError}
-                      windowGlassVideos={windowGlassVideos}
                       draft={draft}
                       getSettingModificationProps={getSettingModificationProps}
                       nativeFilePickerAvailable={nativeFilePickerAvailable}
@@ -3013,10 +3023,6 @@ export function SettingsModal({
                         onChange={updateDraft}
                         getModificationProps={getSettingModificationProps}
                         onChangeDiagnosticScenarios={updateDiagnosticLoggingScenarios}
-                        folderStats={ghostexFolderStats}
-                        folderStatsLoading={ghostexFolderStatsLoading}
-                        onRequestFolderStats={onRequestGhostexFolderStats}
-                        onOpenFolder={onOpenGhostexFolder}
                       />
                     ) : null}
                   </TabsContent>

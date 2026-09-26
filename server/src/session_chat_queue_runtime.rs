@@ -405,14 +405,15 @@ impl SessionChatQueueRuntime {
                 self.reset_gate(&key);
                 continue;
             }
-            if self.transcript_lifecycle_is_working(&key, &session) {
+            let startup_composer_ready = awaiting_startup
+                && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready;
+            // CDXC:SessionChat 2026-09-26 WHY:
+            // An agent that died mid-turn leaves its transcript ending in a tool result with no reply, which reads as Working forever. A freshly started CLI showing an empty input box cannot be mid-turn, so a startup send trusts the screen over that dead turn; checking the transcript here left a woken session's "continue" queued indefinitely.
+            if !startup_composer_ready && self.transcript_lifecycle_is_working(&key, &session) {
                 self.reset_gate(&key);
                 continue;
             }
-            if !(awaiting_startup
-                && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready)
-                && !self.stability_window_elapsed(&key, now)
-            {
+            if !startup_composer_ready && !self.stability_window_elapsed(&key, now) {
                 continue;
             }
             let Some(head) = snapshot.deliverable_head() else {

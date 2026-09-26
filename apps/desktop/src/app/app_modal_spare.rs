@@ -32,6 +32,12 @@ pub(crate) struct GpuiAppModalSpare {
     light_appearance: bool,
 }
 
+impl GpuiAppModalSpare {
+    pub(crate) fn host(&self) -> WindowHandle<GpuiAppModalHostWindow> {
+        self.handle
+    }
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn schedule_gpui_app_modal_spare_preload(&mut self, cx: &mut gpui::Context<Self>) {
         self.app_modal_spare_preload_generation =

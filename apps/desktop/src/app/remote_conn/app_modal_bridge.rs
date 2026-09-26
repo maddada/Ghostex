@@ -129,21 +129,6 @@ impl GhostexGpuiApp {
             "pickWindowGlassImageFile" => {
                 self.handle_gpui_pick_window_glass_image_message(&message, cx);
             }
-            "listGlassVideoLibrary" => {
-                self.handle_gpui_list_glass_video_library_message(cx);
-            }
-            "downloadGlassVideo" => {
-                self.handle_gpui_download_glass_video_message(&message, cx);
-            }
-            "cancelGlassVideoDownload" => {
-                self.handle_gpui_cancel_glass_video_download_message(&message);
-            }
-            "removeGlassVideo" => {
-                self.handle_gpui_remove_glass_video_message(&message, cx);
-            }
-            "listWindowGlassVideos" => {
-                self.handle_gpui_list_window_glass_videos_message(cx);
-            }
             "pickWindowGlassVideoFile" => {
                 self.handle_gpui_pick_window_glass_video_message(&message, cx);
             }

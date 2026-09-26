@@ -112,7 +112,7 @@ impl NativeChatView {
         };
         self.maximized_opening = true;
         let pane = self.bounds.get();
-        let parent_native_view = self.config.parent_native_view;
+        let parent_native_view = self.child_window_parent(cx);
         let chat = cx.entity();
         #[cfg(target_os = "linux")]
         let owner = main;

@@ -55,7 +55,7 @@ impl NativeChatView {
         };
         self.context_editor_window.opening = true;
         let pane = self.bounds.get();
-        let parent = self.config.parent_native_view;
+        let parent = self.child_window_parent(cx);
         let chat = cx.entity();
         let appearance = super::super::appearance::ChatAppearance::current(&self.snapshot);
         cx.defer(move |cx| {

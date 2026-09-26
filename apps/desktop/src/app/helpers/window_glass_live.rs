@@ -5,8 +5,15 @@ use std::sync::atomic::Ordering;
 
 use crate::app::helpers::*;
 
+/// The Live slot value that plays the user's own video (`windowGlassVideoDark` /
+/// `windowGlassVideoLight`) instead of one of the animations.
+pub(crate) const LIVE_STYLE_VIDEO: &str = "video";
+
 /// CDXC:Theming 2026-09-26 DECISION:
-/// User, after rendering the glass videos live was proposed instead of downloading mp4 files ("how about if we just render them in the bg behind the app? not as mp4 vids?"): "pls implement the shaders thing"; then "the animations can't jump at all they need to loop and never break", "can just be 2 mins only as long as it loops", and "the brightness of those animations is too high btw we need a way to control dim them and they need to be dimmer by default not so bright by default". Glass shows has a Live choice: one of the app's animated styles (`windowGlassLiveStyleDark` / `windowGlassLiveStyleLight`, "Dark only" shows only the dark one) drawn behind the glass at `windowGlassLiveSpeed` and `windowGlassLiveBrightness` (45% by default, every style evened out to the same brightness), in the current theme's colours and Colourfulness, so switching themes recolours it. It loops every two minutes without a seam and never jumps: speed changes the rate, pauses hold it, and a new style, colours or brightness cross-fade (`window_live.rs` in the GPUI macOS crate). It pauses under the same rules as the video (`windowGlassVideoOnlyOnPower` covers both) and shows a still frame under Reduce Motion. Video stays for the computer's aerials and the user's own files.
+/// User: "let's hide videos and merge videos with live / make videos just take from custom video user picks or the animations we did / also remove the ability to read from macos flyovers, they don't look good blurred". Live holds both: each mode's slot is one of the animations or `video`, the user's own file, which plays in the same backdrop and cross-fades with the animations (`retire_backdrop_view` in the GPUI macOS window). Speed and Brightness apply to the animations only; a video plays as the user made it. Supersedes the separate Video choice and its aerial wallpapers; a saved Video choice is carried into Live (`live_slot_style`).
+///
+/// CDXC:Theming 2026-09-26 DECISION:
+/// User, after rendering the glass videos live was proposed instead of downloading mp4 files ("how about if we just render them in the bg behind the app? not as mp4 vids?"): "pls implement the shaders thing"; then "the animations can't jump at all they need to loop and never break", "can just be 2 mins only as long as it loops", and "the brightness of those animations is too high btw we need a way to control dim them and they need to be dimmer by default not so bright by default". Glass shows has a Live choice: one of the app's animated styles (`windowGlassLiveStyleDark` / `windowGlassLiveStyleLight`, "Dark only" shows only the dark one) drawn behind the glass at `windowGlassLiveSpeed` and `windowGlassLiveBrightness` (45% by default, every style evened out to the same brightness), in the current theme's colours and Colourfulness, so switching themes recolours it. It loops every two minutes without a seam and never jumps: speed changes the rate, pauses hold it, and a new style, colours or brightness cross-fade (`window_live.rs` in the GPUI macOS crate). It pauses under the same rules as a video (`windowGlassVideoOnlyOnPower` covers both) and shows a still frame under Reduce Motion.
 static WINDOW_GLASS_LIVE: std::sync::Mutex<WindowGlassLive> =
     std::sync::Mutex::new(WindowGlassLive {
         live: false,
@@ -44,12 +51,21 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
             .unwrap_or_default()
             .to_string()
     };
-    live.live = object
+    let source = object
         .get("windowGlassSource")
-        .and_then(serde_json::Value::as_str)
-        == Some("live");
-    live.style_dark = text("windowGlassLiveStyleDark");
-    live.style_light = text("windowGlassLiveStyleLight");
+        .and_then(serde_json::Value::as_str);
+    live.live = matches!(source, Some("live" | "video"));
+    let legacy_video = source == Some("video");
+    live.style_dark = live_slot_style(
+        text("windowGlassLiveStyleDark"),
+        &text("windowGlassVideoDark"),
+        legacy_video,
+    );
+    live.style_light = live_slot_style(
+        text("windowGlassLiveStyleLight"),
+        &text("windowGlassVideoLight"),
+        legacy_video,
+    );
     live.speed = object
         .get("windowGlassLiveSpeed")
         .and_then(serde_json::Value::as_f64)
@@ -83,8 +99,34 @@ pub(crate) fn refresh_window_glass_live(object: &serde_json::Map<String, serde_j
     );
 }
 
-/// The live style the main window's glass draws in the current appearance, when Glass shows is
-/// Live and a style is chosen for that appearance.
+/// What a mode's Live slot shows. A settings file saved before Live took over the videos may still
+/// say Video: there each mode keeps its chosen file as its own video, and a mode without a playable
+/// file (an aerial or library video, now gone) shows its saved animation.
+fn live_slot_style(style: String, video: &str, legacy_video: bool) -> String {
+    if legacy_video {
+        return if super::window_glass_video::resolve_glass_video(video).is_some() {
+            LIVE_STYLE_VIDEO.to_string()
+        } else {
+            style
+        };
+    }
+    style
+}
+
+/// Whether the current appearance's Live slot plays the user's own video.
+pub(crate) fn window_glass_live_plays_video(light: bool) -> bool {
+    WINDOW_GLASS_LIVE.lock().is_ok_and(|live| {
+        live.live
+            && if light {
+                live.style_light == LIVE_STYLE_VIDEO
+            } else {
+                live.style_dark == LIVE_STYLE_VIDEO
+            }
+    })
+}
+
+/// The animation the main window's glass draws in the current appearance, when Glass shows is
+/// Live and that mode's slot holds an animation.
 pub(crate) fn window_glass_live() -> Option<gpui::LiveBackground> {
     let live = WINDOW_GLASS_LIVE.lock().ok()?;
     if !live.live {
@@ -96,7 +138,7 @@ pub(crate) fn window_glass_live() -> Option<gpui::LiveBackground> {
     } else {
         &live.style_dark
     };
-    if style.is_empty() {
+    if style.is_empty() || style == LIVE_STYLE_VIDEO {
         return None;
     }
     Some(gpui::LiveBackground {

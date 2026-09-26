@@ -207,6 +207,7 @@ impl GhostexGpuiApp {
         for surface in live.chain(parked) {
             surface.update(cx, |surface, _| surface.refresh_workarea_theme(light));
         }
+        self.refresh_app_modal_pages_window_glass(cx);
         // Browser pages: the colour GPUI paints under the CEF child view must
         // follow the theme, or hiding a page on a switch flashes the old one.
         let browser_background = rgb(if light { 0xffffff } else { 0x0d0d0d }).into();
@@ -1004,29 +1005,7 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// Settings -> Window glass -> Video: the aerial wallpapers macOS has downloaded, for the dark
-    /// and light video dropdowns.
-    pub(crate) fn handle_gpui_list_window_glass_videos_message(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let videos: Vec<serde_json::Value> =
-            crate::app::helpers::window_glass_video::downloaded_aerial_videos()
-                .into_iter()
-                .map(|video| {
-                    serde_json::json!({
-                        "name": video.name,
-                        "value": crate::app::helpers::window_glass_video::aerial_reference(&video.id),
-                    })
-                })
-                .collect();
-        self.dispatch_open_gpui_app_modal_message(
-            serde_json::json!({ "type": "windowGlassVideosListed", "videos": videos }),
-            cx,
-        );
-    }
-
-    /// Settings -> Window glass -> Video: "Choose a file…" for the dark or light video. The dialog
+    /// Settings -> Window glass -> Live: "Choose a file…" for the dark or light mode's own video. The dialog
     /// cannot filter by type, so a picked file that is not a .mov, .mp4 or .m4v comes back as an
     /// error for the row to show.
     pub(crate) fn handle_gpui_pick_window_glass_video_message(

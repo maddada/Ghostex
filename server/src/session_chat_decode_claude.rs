@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use serde_json::{Map, Value};
 
 use crate::session_chat::*;
@@ -48,11 +49,70 @@ fn claude_content_is_reasoning_only(content: Option<&Value>) -> bool {
     };
     !items.is_empty()
         && items.iter().all(|item| {
-            item.as_object()
-                .and_then(|record| record.get("type"))
-                .and_then(Value::as_str)
-                == Some("thinking")
+            item.as_object().is_some_and(|record| {
+                record.get("type").and_then(Value::as_str) == Some("thinking")
+                    && !claude_thinking_is_narration(record)
+            })
         })
+}
+
+/// CDXC:SessionChat 2026-09-26 WHY:
+/// Claude Code (2.1.281 with Opus 5.5) saves the prose it writes between tool calls as a `thinking` block whose signature the API tags `narration`, and its terminal paints that block as an ordinary reply. Decoded as reasoning, the row never retired the reply chat had already streamed off the terminal (`terminal_stream_retired` in gx-chat-core matches assistant and system rows only), so the same paragraph showed twice: a collapsed thinking row and a reply. The tag is read the way Claude Code's own classifier reads it (signature envelope field 2, then 1, then 8), and a narration block without text stays ordinary thinking, as Claude Code documents.
+fn claude_thinking_is_narration(record: &Map<String, Value>) -> bool {
+    if extract_string(record.get("thinking")).is_none() {
+        return false;
+    }
+    let Some(signature) = record.get("signature").and_then(Value::as_str) else {
+        return false;
+    };
+    let Ok(envelope) = BASE64_STANDARD.decode(signature) else {
+        return false;
+    };
+    protobuf_bytes_field(&envelope, 2)
+        .and_then(|inner| protobuf_bytes_field(inner, 1))
+        .and_then(|inner| protobuf_bytes_field(inner, 8))
+        == Some(b"narration".as_slice())
+}
+
+/// The last length-delimited value of `field` in a protobuf message; `None` when the field is
+/// absent or the message does not parse.
+fn protobuf_bytes_field(message: &[u8], field: u64) -> Option<&[u8]> {
+    let mut found = None;
+    let mut rest = message;
+    while !rest.is_empty() {
+        let key;
+        (key, rest) = protobuf_varint(rest)?;
+        match key & 7 {
+            0 => (_, rest) = protobuf_varint(rest)?,
+            1 => rest = rest.get(8..)?,
+            2 => {
+                let length;
+                (length, rest) = protobuf_varint(rest)?;
+                let length = usize::try_from(length)
+                    .ok()
+                    .filter(|length| *length <= rest.len())?;
+                let (value, tail) = rest.split_at(length);
+                if key >> 3 == field {
+                    found = Some(value);
+                }
+                rest = tail;
+            }
+            5 => rest = rest.get(4..)?,
+            _ => return None,
+        }
+    }
+    found
+}
+
+fn protobuf_varint(bytes: &[u8]) -> Option<(u64, &[u8])> {
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().enumerate().take(10) {
+        value |= u64::from(byte & 0x7f) << (7 * index);
+        if byte & 0x80 == 0 {
+            return Some((value, &bytes[index + 1..]));
+        }
+    }
+    None
 }
 
 /*

@@ -7314,7 +7314,7 @@
     {
       "key": "windowGlassSource",
       "title": "What shows behind the glass",
-      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, a video, or a Live animated background in your theme colours.",
+      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7337,10 +7337,6 @@
           "value": "customImage"
         },
         {
-          "label": "Video",
-          "value": "video"
-        },
-        {
           "label": "Live",
           "value": "live"
         }
@@ -7350,7 +7346,7 @@
     {
       "key": "windowGlassImagePlacement",
       "title": "Picture position",
-      "subtitle": "Where the wallpaper, custom picture or video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
+      "subtitle": "Where the wallpaper, custom picture or your own Live video sits behind the glass. Stays with the desktop can trail the window while you drag it.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7401,8 +7397,8 @@
     },
     {
       "key": "windowGlassVideoDark",
-      "title": "Video for dark mode",
-      "subtitle": "The video the glass plays in dark mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.",
+      "title": "Your video for dark mode",
+      "subtitle": "The video file the glass plays in dark mode when Live is set to Your video.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7415,8 +7411,8 @@
     },
     {
       "key": "windowGlassVideoLight",
-      "title": "Video for light mode",
-      "subtitle": "The video the glass plays in light mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.",
+      "title": "Your video for light mode",
+      "subtitle": "The video file the glass plays in light mode when Live is set to Your video.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7430,7 +7426,7 @@
     {
       "key": "windowGlassVideoOnlyOnPower",
       "title": "Play only when plugged in",
-      "subtitle": "Pause the glass video or Live background while your computer runs on battery. It always pauses when Ghostex is in the background.",
+      "subtitle": "Pause the Live animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7444,7 +7440,7 @@
     {
       "key": "windowGlassLiveStyleDark",
       "title": "Live background for dark mode",
-      "subtitle": "The animated background the glass shows in dark mode when Live shows behind the glass.",
+      "subtitle": "The animation, or your own video, the glass shows in dark mode when Live shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7485,6 +7481,10 @@
         {
           "label": "Mesh",
           "value": "mesh"
+        },
+        {
+          "label": "Your video",
+          "value": "video"
         }
       ],
       "agentWritable": true
@@ -7492,7 +7492,7 @@
     {
       "key": "windowGlassLiveStyleLight",
       "title": "Live background for light mode",
-      "subtitle": "The animated background the glass shows in light mode when Live shows behind the glass.",
+      "subtitle": "The animation, or your own video, the glass shows in light mode when Live shows behind the glass.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7533,6 +7533,10 @@
         {
           "label": "Mesh",
           "value": "mesh"
+        },
+        {
+          "label": "Your video",
+          "value": "video"
         }
       ],
       "agentWritable": true
@@ -7540,7 +7544,7 @@
     {
       "key": "windowGlassLiveSpeed",
       "title": "Live background speed",
-      "subtitle": "How fast the Live background moves, from a quarter of its pace to twice as fast.",
+      "subtitle": "How fast the Live animation moves, from a quarter of its pace to twice as fast.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7554,7 +7558,7 @@
     {
       "key": "windowGlassLiveBrightness",
       "title": "Live background brightness",
-      "subtitle": "How bright the Live background glows behind the glass. Lower keeps it a subtle glow.",
+      "subtitle": "How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7696,7 +7700,7 @@
     {
       "key": "debuggingMode",
       "title": "Show debug UI controls",
-      "subtitle": "Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.",
+      "subtitle": "Show diagnostic logs, and Copy Resume and Copy Attach in session menus.",
       "tab": "debugging",
       "tabTitle": "Debugging",
       "section": "controls",
@@ -7760,28 +7764,6 @@
           "value": "gxserver.requests"
         }
       ],
-      "agentWritable": false
-    },
-    {
-      "key": "storageUsage",
-      "title": "Storage usage",
-      "subtitle": "Inspect browser storage by feature, budgets, pending saves, and disposable caches.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "storage",
-      "sectionTitle": "Storage",
-      "type": "ui",
-      "agentWritable": false
-    },
-    {
-      "key": "storageStats",
-      "title": "Ghostex folder storage",
-      "subtitle": "View on-disk Ghostex folder sizes and total usage, refresh statistics, or open the data folder.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "storage",
-      "sectionTitle": "Storage",
-      "type": "ui",
       "agentWritable": false
     },
     {

@@ -70,7 +70,7 @@ impl NativeChatView {
         };
         self.table_preview.opening = true;
         let pane = self.bounds.get();
-        let parent = self.config.parent_native_view;
+        let parent = self.child_window_parent(cx);
         let chat = cx.entity();
         let scale = super::super::appearance::ChatAppearance::current(&self.snapshot).scale;
         let glass = crate::app::helpers::window_glass_active();

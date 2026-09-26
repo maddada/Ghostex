@@ -49,7 +49,7 @@ impl NativeChatView {
         };
         self.save_markdown_window.opening = true;
         let pane = self.bounds.get();
-        let parent = self.config.parent_native_view;
+        let parent = self.child_window_parent(cx);
         let chat = cx.entity();
         cx.defer(move |cx| {
             let result = main.update(cx, |_, window, cx| {

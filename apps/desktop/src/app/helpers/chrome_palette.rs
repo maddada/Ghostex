@@ -40,6 +40,14 @@ pub(crate) fn workarea_theme_script(light: bool, chrome: u32, content: u32, glas
     )
 }
 
+/// The glass flag alone, for the pages that keep their own theme (the React app-modal host and
+/// Search by Prompt); `installWindowGlassFlag` in apps/desktop/views/workarea-theme.ts reads it.
+pub(crate) fn window_glass_flag_script(glass: bool) -> String {
+    format!(
+        "window.ghostexGpui = window.ghostexGpui || {{}}; window.ghostexGpui.workareaGlass = {glass}; window.dispatchEvent(new CustomEvent('ghostex-workarea-theme-changed', {{detail: {{glass: {glass}}}}}));"
+    )
+}
+
 /// CDXC:Theming 2026-09-13 DECISION:
 /// User: the background before a pane loads must be white in light mode.
 /// CEF's initial paint and the native placeholder must agree to avoid a dark flash before page content arrives.

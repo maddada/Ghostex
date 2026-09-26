@@ -15,9 +15,18 @@ export function legacyStorageIssues(): StorageInspection['unknown'] {
   return unmigratedLegacy.slice();
 }
 
+/** Keys a deleted feature wrote before it went away; nothing reads them, so the storage report would list them as unregistered forever. */
+const RETIRED_LOCAL_KEYS = [
+  // Docs files list width, fixed since 2026-09 (2af5a6761).
+  'ghostex.manage.sidebarWidth',
+  // The React sidebar's import intro, deleted 2026-09-24.
+  'ghostex.sidebar.import-sessions-intro-seen.v1',
+];
+
 /** Copy raw values unchanged; retire a source only after a strict commit and an exact read-back. */
 export async function migrateStorage(): Promise<void> {
   unmigratedLegacy.length = 0;
+  for (const key of RETIRED_LOCAL_KEYS) if (readBrowser('local', key) !== null) writeBrowser('local', key, null);
   const candidates: Mutation[] = [];
   for (const [key, raw] of scanBrowser('local')) {
     const definition = definitionForKey(key);

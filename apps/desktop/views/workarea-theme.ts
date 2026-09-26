@@ -75,6 +75,26 @@ export function installWorkareaTheme(): void {
   });
 }
 
+/**
+ * CDXC:Theming 2026-09-26 SEE-ALSO:
+ * The app-modal host and Search by Prompt pages keep their own theming, so they take only the glass flag from the
+ * host's theme event and publish it as `data-window-glass`; packages/core-ui/styles/modals-glass.css lightens them.
+ */
+export function installWindowGlassFlag(): void {
+  const apply = (glass: boolean | undefined) => {
+    if (glass === true) document.documentElement.dataset.windowGlass = 'true';
+    else delete document.documentElement.dataset.windowGlass;
+  };
+  apply(
+    (window as Window & { ghostexGpui?: { workareaGlass?: boolean } }).ghostexGpui?.workareaGlass ??
+      new URLSearchParams(location.search).get('windowGlass') === '1'
+  );
+  window.addEventListener(THEME_EVENT, (event) => {
+    const detail = (event as CustomEvent<WorkareaTheme | WorkareaThemeColors>).detail;
+    if (typeof detail === 'object' && detail !== null) apply(detail.glass);
+  });
+}
+
 function subscribe(listener: () => void): () => void {
   window.addEventListener(THEME_EVENT, listener);
   return () => window.removeEventListener(THEME_EVENT, listener);

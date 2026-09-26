@@ -251,15 +251,7 @@ impl Render for ChatOptionMenuPanel {
         let m = self.menu.read(cx).metrics();
         let scale = appearance.scale;
         let foreground = gpui::rgb(if appearance.light { 0x292929 } else { 0xfcfcfc });
-        // A wash of the menu's own ink, like `titlebar_popup_menu_hover_color` on the sidebar menus:
-        // the surface follows the chrome colour (and glass), so a fixed grey can land on the surface
-        // itself and show no highlight at all.
-        let hover = foreground.opacity(if appearance.light { 0.06 } else { 0.08 });
-        let border = gpui::rgba(if appearance.light {
-            0x0000001f
-        } else {
-            0xffffff1f
-        });
+        let (hover, border) = menu_ink_washes(appearance.light);
         let mut body = div()
             .id("chat-option-menu-scroll")
             .flex()
@@ -449,4 +441,14 @@ impl Render for ChatOptionMenuPanel {
             .child(body)
             .into_any_element()
     }
+}
+
+/// The hover fill and hairline of the chat's menus: washes of the menu's own ink, like
+/// `titlebar_popup_menu_hover_color` on the sidebar menus. The surface follows the chrome colour
+/// (and is frosted under window glass), so an opaque grey such as `ChatAppearance::border` lands as
+/// a solid slab on it rather than a highlight.
+pub(super) fn menu_ink_washes(light: bool) -> (gpui::Hsla, gpui::Hsla) {
+    let foreground: gpui::Hsla = gpui::rgb(if light { 0x292929 } else { 0xfcfcfc }).into();
+    let border: gpui::Hsla = gpui::rgba(if light { 0x0000001f } else { 0xffffff1f }).into();
+    (foreground.opacity(if light { 0.06 } else { 0.08 }), border)
 }

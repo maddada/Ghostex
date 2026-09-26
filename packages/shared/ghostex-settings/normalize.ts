@@ -974,29 +974,19 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'windowGlassImageLight',
       DEFAULT_ghostex_SETTINGS.windowGlassImageLight
     ).trim(),
-    windowGlassVideoDark: readString(
-      source,
-      'windowGlassVideoDark',
-      DEFAULT_ghostex_SETTINGS.windowGlassVideoDark
-    ).trim(),
-    windowGlassVideoLight: readString(
-      source,
-      'windowGlassVideoLight',
-      DEFAULT_ghostex_SETTINGS.windowGlassVideoLight
-    ).trim(),
+    windowGlassVideoDark: normalizeWindowGlassVideoPath(
+      readString(source, 'windowGlassVideoDark', DEFAULT_ghostex_SETTINGS.windowGlassVideoDark)
+    ),
+    windowGlassVideoLight: normalizeWindowGlassVideoPath(
+      readString(source, 'windowGlassVideoLight', DEFAULT_ghostex_SETTINGS.windowGlassVideoLight)
+    ),
     windowGlassVideoOnlyOnPower: readBoolean(
       source,
       'windowGlassVideoOnlyOnPower',
       DEFAULT_ghostex_SETTINGS.windowGlassVideoOnlyOnPower
     ),
-    windowGlassLiveStyleDark: normalizeWindowGlassLiveStyle(
-      readString(source, 'windowGlassLiveStyleDark', DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleDark),
-      DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleDark
-    ),
-    windowGlassLiveStyleLight: normalizeWindowGlassLiveStyle(
-      readString(source, 'windowGlassLiveStyleLight', DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleLight),
-      DEFAULT_ghostex_SETTINGS.windowGlassLiveStyleLight
-    ),
+    windowGlassLiveStyleDark: normalizeWindowGlassLiveSlot(source, 'Dark'),
+    windowGlassLiveStyleLight: normalizeWindowGlassLiveSlot(source, 'Light'),
     windowGlassLiveSpeed: normalizeWindowGlassLiveSpeed(
       readNumber(source, 'windowGlassLiveSpeed', DEFAULT_ghostex_SETTINGS.windowGlassLiveSpeed)
     ),
@@ -1271,22 +1261,49 @@ function normalizeWindowGlassMode(value: string | undefined): WindowGlassMode {
   return value === 'frosted' || value === 'opaque' ? value : DEFAULT_ghostex_SETTINGS.windowGlass;
 }
 
+/**
+ * CDXC:Theming 2026-09-26 WHY:
+ * Glass shows no longer has a separate Video choice: the user's own video is a Live slot. A settings file saved with
+ * Video becomes Live, and each mode that had a playable file keeps it as its own video (`normalizeWindowGlassLiveSlot`).
+ */
 function normalizeWindowGlassSource(value: string | undefined): WindowGlassSource {
-  return value === 'wallpaper' ||
-    value === 'desktopAndWindows' ||
-    value === 'customImage' ||
-    value === 'video' ||
-    value === 'live'
+  if (value === 'video') {
+    return 'live';
+  }
+  return value === 'wallpaper' || value === 'desktopAndWindows' || value === 'customImage' || value === 'live'
     ? value
     : DEFAULT_ghostex_SETTINGS.windowGlassSource;
 }
 
-function normalizeWindowGlassLiveStyle(
-  value: string | undefined,
-  fallback: WindowGlassLiveStyle
+/**
+ * CDXC:Theming 2026-09-26 WHY:
+ * A glass video is only a file the user picked. macOS's aerial wallpapers and the Ghostex video library were
+ * removed, so a saved `aerial:<id>` or `library:<id>` is cleared: that mode's Live slot shows its animation instead
+ * (this migrates a removed value; it is not a runtime fallback).
+ */
+function normalizeWindowGlassVideoPath(value: string | undefined): string {
+  const path = (value ?? '').trim();
+  return path.startsWith('aerial:') || path.startsWith('library:') ? '' : path;
+}
+
+/** One mode's Live slot: an animation, or `video` for the user's own file (carried over from the retired Video choice). */
+function normalizeWindowGlassLiveSlot(
+  source: Record<string, unknown>,
+  appearance: 'Dark' | 'Light'
 ): WindowGlassLiveStyle {
-  return WINDOW_GLASS_LIVE_STYLE_OPTIONS.some((option) => option.value === value)
-    ? (value as WindowGlassLiveStyle)
+  const fallback = DEFAULT_ghostex_SETTINGS[`windowGlassLiveStyle${appearance}`];
+  const saved = readString(source, `windowGlassLiveStyle${appearance}`, fallback);
+  if (readString(source, 'windowGlassSource', '') === 'video') {
+    const video = normalizeWindowGlassVideoPath(readString(source, `windowGlassVideo${appearance}`, ''));
+    if (video) {
+      return 'video';
+    }
+  }
+  if (saved === 'video') {
+    return 'video';
+  }
+  return WINDOW_GLASS_LIVE_STYLE_OPTIONS.some((option) => option.value === saved)
+    ? (saved as WindowGlassLiveStyle)
     : fallback;
 }
 

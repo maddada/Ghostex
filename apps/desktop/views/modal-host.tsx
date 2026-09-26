@@ -98,6 +98,7 @@ import {
 } from "@/packages/shared/ghostex-settings";
 import type { WebviewApi } from "@/packages/core-ui/webview-api";
 import "@/packages/core-ui/styles.css";
+import { installWindowGlassFlag } from "./workarea-theme";
 
 const AddProjectModal = lazyModal(
   async () =>
@@ -584,29 +585,6 @@ type AppModalHostMessage =
       path: string;
       type: "windowGlassImageFilePicked";
     }
-  | {
-      type: "windowGlassVideosListed";
-      videos: { name: string; value: string }[];
-    }
-  | {
-      online: boolean;
-      storageBytes: number;
-      type: "glassVideoLibraryListed";
-      videos: unknown[];
-    }
-  | {
-      id: string;
-      received: number;
-      total?: number | null;
-      type: "glassVideoDownloadProgress";
-    }
-  | {
-      error?: string | null;
-      id: string;
-      ok: boolean;
-      type: "glassVideoDownloadFinished";
-    }
-  | { error: string; id: string; type: "glassVideoRemoveFailed" }
   | {
       appearance: "dark" | "light";
       error?: string;
@@ -5323,6 +5301,7 @@ function applySidebarStateMessage(message: unknown) {
 }
 
 document.body.classList.add("app-modal-host-body");
+installWindowGlassFlag();
 if (window.__ghostex_APP_MODAL_HOST_SURFACE__ === "nativeWindow") {
   document.documentElement.classList.add(
     "app-modal-host-native-window-document",

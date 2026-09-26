@@ -44,11 +44,8 @@ struct WindowGlassImages {
     light: String,
 }
 
-/// CDXC:Theming 2026-09-23 DECISION:
-/// User, asked whether the glass could show a video: "ok set those in the dropdown to pick from (if any are downloaded we can let the user pick those) / also allow the user to pick a specific mp4/mov file". Glass shows has a Video choice with one video for dark mode (`windowGlassVideoDark`) and one for light mode (`windowGlassVideoLight`): an aerial wallpaper macOS has downloaded (saved as `aerial:<id>`) or a picked .mov/.mp4/.m4v file. It plays muted and looping, blurred and placed like the picture (`windowGlassImagePlacement`).
-///
 /// CDXC:Theming 2026-09-23 WHY:
-/// A background video must cost nothing while nobody is looking, so it plays only while Ghostex is the front app and its window is on screen, and pauses while the displays sleep, in Low Power Mode, and on battery unless `windowGlassVideoOnlyOnPower` is off (on by default, to spare the battery); Reduce Motion shows its first frame instead. A mode with no video chosen, or one whose file or aerial is gone, shows the live blur.
+/// A background video must cost nothing while nobody is looking, so it plays only while Ghostex is the front app and its window is on screen, and pauses while the displays sleep, in Low Power Mode, and on battery unless `windowGlassVideoOnlyOnPower` is off (on by default, to spare the battery); Reduce Motion shows its first frame instead. A mode whose Live slot is its own video but has no playable file shows the live blur. Which mode plays a video is the Live slot's choice (`window_glass_live.rs`).
 static WINDOW_GLASS_VIDEOS: std::sync::Mutex<WindowGlassVideos> =
     std::sync::Mutex::new(WindowGlassVideos {
         video: false,
@@ -64,16 +61,18 @@ struct WindowGlassVideos {
     only_on_power: bool,
 }
 
-/// The video the main window's glass plays in the current appearance, when Glass shows is Video
-/// and a playable one is chosen for that appearance, and whether it pauses on battery.
+/// The user's own video the main window's glass plays in the current appearance, when Glass
+/// shows is Live, that mode's slot is its own video and the file is playable, and whether it
+/// pauses on battery.
 fn window_glass_video() -> (Option<std::path::PathBuf>, bool) {
     let Ok(videos) = WINDOW_GLASS_VIDEOS.lock() else {
         return (None, true);
     };
-    if !videos.video {
+    let light = CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed);
+    if !videos.video || !window_glass_live::window_glass_live_plays_video(light) {
         return (None, videos.only_on_power);
     }
-    let video = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+    let video = if light {
         videos.light.clone()
     } else {
         videos.dark.clone()
@@ -81,9 +80,8 @@ fn window_glass_video() -> (Option<std::path::PathBuf>, bool) {
     (video, videos.only_on_power)
 }
 
-/// Whether the glass shows a picture, video or live style rather than the live blur: Wallpaper
-/// only always does, Custom image, Video and Live only once one is chosen for the current
-/// appearance.
+/// Whether the glass shows a picture, animation or video rather than the live blur: Wallpaper
+/// only always does, Custom image and Live only once one is chosen for the current appearance.
 fn window_glass_uses_backdrop(
     image: &Option<std::path::PathBuf>,
     video: &Option<std::path::PathBuf>,
@@ -93,17 +91,10 @@ fn window_glass_uses_backdrop(
         return false;
     }
     if window_glass_live::window_glass_live_mode() {
-        return live.is_some();
+        return live.is_some() || video.is_some();
     }
     let custom = WINDOW_GLASS_IMAGES.lock().is_ok_and(|images| images.custom);
-    let video_mode = WINDOW_GLASS_VIDEOS.lock().is_ok_and(|videos| videos.video);
-    if custom {
-        image.is_some()
-    } else if video_mode {
-        video.is_some()
-    } else {
-        true
-    }
+    if custom { image.is_some() } else { true }
 }
 
 /// What the main window's glass drew last; see `APPLIED_MAIN_WINDOW_GLASS`.
@@ -186,7 +177,8 @@ fn store_sidebar_glass_percent(
     target: &AtomicU8,
 ) -> u8 {
     let percent = read_glass_percent(object, key)
-        .map(|value| value.clamp(40.0, 100.0).round() as u8)
+        // Full 0-100% (`MIN_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT` in packages/shared/ghostex-settings/types.ts).
+        .map(|value| value.clamp(0.0, 100.0).round() as u8)
         .unwrap_or_else(|| glass_percent(default_alpha));
     target.store(percent, Ordering::Relaxed);
     percent
@@ -302,7 +294,8 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
                 .and_then(serde_json::Value::as_str)
                 .and_then(window_glass_video::resolve_glass_video)
         };
-        videos.video = source == Some("video");
+        // A settings file saved before Live took over the videos may still say Video.
+        videos.video = matches!(source, Some("live" | "video"));
         videos.dark = video("windowGlassVideoDark");
         videos.light = video("windowGlassVideoLight");
         videos.only_on_power = object
@@ -475,7 +468,7 @@ impl GhostexGpuiApp {
         let image = window_glass_custom_image();
         let video = window_glass_video();
         let live = window_glass_live::window_glass_live();
-        // Custom image, Video or Live with nothing chosen for this appearance is the live blur.
+        // Custom image or Live with nothing chosen for this appearance is the live blur.
         let wallpaper = window_glass_uses_backdrop(&image, &video.0, &live);
         let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
             (false, _) => 1,

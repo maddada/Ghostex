@@ -499,180 +499,6 @@ export const Theme: Story = {
   render: () => <SettingsModalStory initialTab='theme' />,
 };
 
-/** A soft gradient picture standing in for a library video's poster in stories. */
-function storyVideoPoster(colors: [string, string, string]): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><radialGradient id="a" cx="25%" cy="30%" r="70%"><stop offset="0" stop-color="${colors[0]}"/><stop offset="1" stop-color="${colors[0]}" stop-opacity="0"/></radialGradient><radialGradient id="b" cx="80%" cy="70%" r="70%"><stop offset="0" stop-color="${colors[1]}"/><stop offset="1" stop-color="${colors[1]}" stop-opacity="0"/></radialGradient></defs><rect width="160" height="90" fill="${colors[2]}"/><rect width="160" height="90" fill="url(#a)"/><rect width="160" height="90" fill="url(#b)"/></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
-
-const STORY_LIBRARY_VIDEOS = [
-  {
-    id: 'calm-drift',
-    name: 'Calm Drift',
-    state: 'bundled',
-    colors: ['#7a4fd6', '#3b6ff0', '#231244'],
-    tone: 'any',
-    added: '2026-09-01',
-    sizeBytes: 1_543_899,
-    durationSeconds: 60,
-    tags: ['calm', 'soft'],
-  },
-  {
-    id: 'ink-bloom',
-    name: 'Ink Bloom',
-    state: 'downloaded',
-    colors: ['#3a5bd9', '#6c2bb0', '#05070f'],
-    tone: 'dark',
-    added: '2026-09-10',
-    sizeBytes: 7_259_184,
-    durationSeconds: 285,
-    tags: ['calm', 'colourful'],
-  },
-  {
-    id: 'nebula',
-    name: 'Nebula',
-    state: 'available',
-    colors: ['#d83bb0', '#1ad0e0', '#07040f'],
-    tone: 'dark',
-    added: new Date().toISOString().slice(0, 10),
-    sizeBytes: 8_900_000,
-    durationSeconds: 300,
-    tags: ['colourful'],
-  },
-  {
-    id: 'slow-clouds',
-    name: 'Slow Clouds',
-    state: 'available',
-    colors: ['#f2f4f8', '#b9c7e0', '#8fa6c8'],
-    tone: 'light',
-    added: '2026-08-20',
-    sizeBytes: 5_400_000,
-    durationSeconds: 300,
-    tags: ['calm'],
-  },
-  {
-    id: 'ember',
-    name: 'Ember',
-    state: 'available',
-    colors: ['#ff7a2e', '#ffc04a', '#120402'],
-    tone: 'dark',
-    added: '2026-08-20',
-    sizeBytes: 5_900_000,
-    durationSeconds: 300,
-    tags: ['warm'],
-  },
-  {
-    id: 'ocean-glass',
-    name: 'Ocean Glass',
-    state: 'available',
-    colors: ['#1aa0c8', '#6ae0d0', '#021822'],
-    tone: 'any',
-    added: '2026-08-20',
-    sizeBytes: 6_800_000,
-    durationSeconds: 300,
-    tags: ['calm'],
-  },
-] as const;
-
-/**
- * A desktop host for the glass video stories: it lists two downloaded aerials and the video library, and walks a Get
- * through a pretend download.
- */
-function createGlassVideoHost({ online = true }: { online?: boolean } = {}): WebviewApi {
-  const downloaded = new Set<string>(
-    STORY_LIBRARY_VIDEOS.filter((video) => video.state === 'downloaded').map((video) => video.id)
-  );
-  const send = (detail: unknown) =>
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('ghostex-app-modal-host-message', { detail }));
-    }, 0);
-  const listing = () => ({
-    type: 'glassVideoLibraryListed',
-    online,
-    storageBytes: STORY_LIBRARY_VIDEOS.filter((video) => downloaded.has(video.id)).reduce(
-      (total, video) => total + video.sizeBytes,
-      0
-    ),
-    videos: STORY_LIBRARY_VIDEOS.map((video) => ({
-      ...video,
-      tags: [...video.tags],
-      state: video.state === 'bundled' ? 'bundled' : downloaded.has(video.id) ? 'downloaded' : 'available',
-      poster: online || video.state !== 'available' ? storyVideoPoster([...video.colors]) : undefined,
-    })),
-  });
-  return {
-    postMessage: (message) => {
-      if (message.type === 'listWindowGlassVideos') {
-        send({
-          type: 'windowGlassVideosListed',
-          videos: [
-            { name: 'Hawaii Coast', value: 'aerial:0A1B2C3D' },
-            { name: 'New York Night', value: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE' },
-          ],
-        });
-      } else if (message.type === 'listGlassVideoLibrary') {
-        send(listing());
-      } else if (message.type === 'downloadGlassVideo') {
-        const video = STORY_LIBRARY_VIDEOS.find((candidate) => candidate.id === message.id);
-        if (!video) {
-          return;
-        }
-        let received = 0;
-        const timer = window.setInterval(() => {
-          received = Math.min(video.sizeBytes, received + video.sizeBytes / 12);
-          send({ type: 'glassVideoDownloadProgress', id: video.id, received, total: video.sizeBytes });
-          if (received >= video.sizeBytes) {
-            window.clearInterval(timer);
-            downloaded.add(video.id);
-            send({ type: 'glassVideoDownloadFinished', id: video.id, ok: true });
-            send(listing());
-          }
-        }, 180);
-      } else if (message.type === 'removeGlassVideo') {
-        downloaded.delete(message.id);
-        send(listing());
-      }
-    },
-  };
-}
-
-const glassVideoSettings: ghostexSettings = {
-  ...modalSettings,
-  windowGlass: 'frosted',
-  windowGlassSource: 'video',
-  windowGlassVideoDark: 'library:ink-bloom',
-  windowGlassVideoLight: 'library:calm-drift',
-};
-
-/** Theme with the Video source: the library (one bundled, one downloaded, the rest to Get), aerials and files. */
-export const ThemeGlassVideo: Story = {
-  render: () => (
-    <SettingsModalStory initialSettings={glassVideoSettings} initialTab='theme' vscode={createGlassVideoHost()} />
-  ),
-};
-
-/** Use transparency set to Dark only: only the dark-mode video, tints and pictures are offered. */
-export const ThemeGlassVideoDarkOnly: Story = {
-  render: () => (
-    <SettingsModalStory
-      initialSettings={{ ...glassVideoSettings, windowGlass: 'auto' }}
-      initialTab='theme'
-      vscode={createGlassVideoHost()}
-    />
-  ),
-};
-
-/** Offline: videos not on this computer are dimmed with "Available when online". */
-export const ThemeGlassVideoOffline: Story = {
-  render: () => (
-    <SettingsModalStory
-      initialSettings={glassVideoSettings}
-      initialTab='theme'
-      vscode={createGlassVideoHost({ online: false })}
-    />
-  ),
-};
-
 const glassLiveSettings: ghostexSettings = {
   ...modalSettings,
   windowGlass: 'frosted',
@@ -691,6 +517,56 @@ export const ThemeGlassLive: Story = {
 export const ThemeGlassLiveDarkOnly: Story = {
   render: () => (
     <SettingsModalStory initialSettings={{ ...glassLiveSettings, windowGlass: 'auto' }} initialTab='theme' />
+  ),
+};
+
+/**
+ * A desktop host for the Live "Your video" stories: "Choose file…" answers with a pretend path, so the slot fills in
+ * as it does in the app.
+ */
+function createGlassLiveVideoHost(): WebviewApi {
+  return {
+    postMessage: (message) => {
+      if (message.type === 'pickWindowGlassVideoFile') {
+        window.dispatchEvent(
+          new CustomEvent('ghostex-app-modal-host-message', {
+            detail: {
+              appearance: message.appearance,
+              path: `/Users/you/Movies/${message.appearance === 'light' ? 'Morning light' : 'Rain on glass'}.mp4`,
+              type: 'windowGlassVideoFilePicked',
+            },
+          })
+        );
+      }
+    },
+  } as WebviewApi;
+}
+
+const glassLiveVideoSettings: ghostexSettings = {
+  ...glassLiveSettings,
+  windowGlassLiveStyleDark: 'video',
+  windowGlassVideoDark: '/Users/you/Movies/Rain on glass.mp4',
+};
+
+/** Live with the dark mode's slot set to Your video: the file, Change and Clear under the cards. */
+export const ThemeGlassLiveVideo: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialSettings={glassLiveVideoSettings}
+      initialTab='theme'
+      vscode={createGlassLiveVideoHost()}
+    />
+  ),
+};
+
+/** Your video with Use transparency set to Dark only: one slot. */
+export const ThemeGlassLiveVideoDarkOnly: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialSettings={{ ...glassLiveVideoSettings, windowGlass: 'auto' }}
+      initialTab='theme'
+      vscode={createGlassLiveVideoHost()}
+    />
   ),
 };
 

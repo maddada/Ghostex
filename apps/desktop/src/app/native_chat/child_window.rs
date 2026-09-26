@@ -77,14 +77,36 @@ impl NativeChatView {
 
     /// CDXC:SessionChat 2026-09-25 WHY:
     /// The floating sessions panel draws the chat in a window of its own and closes it when it goes away, and the chat's owned modals are restored when the pane is next shown, which comes before the chat is drawn in the window that shows it now. Opening them then read the closed panel window's frame, and GPUI's "window not found" landed in the chat's error banner and stayed there. A modal owed to a pane whose window is gone therefore waits for the pane's next draw, which names the window it belongs to, and opens once that draw has measured the pane there.
-    pub(super) fn note_drawn_in(&mut self, window: gpui::AnyWindowHandle, cx: &mut Context<Self>) {
+    pub(super) fn note_drawn_in(&mut self, window: &gpui::Window, cx: &mut Context<Self>) {
+        self.drawn_native_view = window_native_view(window);
+        let window = window.window_handle();
         if self.main_window.replace(window) == Some(window) || self.pane_hidden {
             return;
         }
         let chat = cx.weak_entity();
         cx.defer(move |cx| {
-            let _ = chat.update(cx, |chat, cx| chat.sync_owned_modal_windows(cx));
+            let _ = chat.update(cx, |chat, cx| {
+                chat.hide_frosted_overlays(cx);
+                chat.close_suggestion_window(cx);
+                chat.sync_owned_modal_windows(cx);
+                cx.notify();
+            });
         });
+    }
+
+    /// CDXC:SessionChat 2026-09-26 WHY:
+    /// The chat's popups (the `$`, `@` and `/` list, the scroll-to-bottom pill, menus and pane modals) take their frames in the coordinates of the window the chat is drawn in, and moving one in place measured those frames against the parent it is attached to. That parent was always the main window, so while the chat was drawn in the floating sessions panel every moved popup landed the panel's offset away, over the sidebar. They attach to, and are placed in, the window that draws the chat, and the ones already open are closed when the chat moves to another window so its next paint reopens them there.
+    pub(in crate::app::native_chat) fn child_window_parent(
+        &self,
+        cx: &gpui::App,
+    ) -> *mut std::ffi::c_void {
+        // The floating panel's window is closed when the panel goes away; its view is never reused.
+        self.drawn_native_view
+            .filter(|_| {
+                self.main_window
+                    .is_some_and(|window| cx.windows().contains(&window))
+            })
+            .unwrap_or(self.config.parent_native_view)
     }
 
     pub(super) fn pane_windows_open(&self) -> bool {
@@ -129,7 +151,7 @@ impl NativeChatView {
     /// React draws these as overlays inside the pane, so they follow it for free.
     pub(super) fn follow_pane_windows(&mut self, cx: &mut Context<Self>) {
         let pane = self.bounds.get();
-        let parent = self.config.parent_native_view;
+        let parent = self.child_window_parent(cx);
         let scale = super::appearance::ChatAppearance::current(&self.snapshot).scale;
         let windows: [Option<(gpui::AnyWindowHandle, Bounds<Pixels>)>; 6] = [
             self.image_viewer.handle.map(|handle| (handle.into(), pane)),
@@ -178,6 +200,22 @@ pub(crate) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
         bounds.bottom_right(),
     );
     bounds
+}
+
+/// The window's root native view, which the chat's child windows attach to on macOS. Elsewhere
+/// they keep the parent the chat was created with.
+#[cfg(target_os = "macos")]
+pub(crate) fn window_native_view(window: &gpui::Window) -> Option<*mut std::ffi::c_void> {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    match HasWindowHandle::window_handle(window).ok()?.as_raw() {
+        RawWindowHandle::AppKit(handle) => Some(handle.ns_view.as_ptr()),
+        _ => None,
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn window_native_view(_: &gpui::Window) -> Option<*mut std::ffi::c_void> {
+    None
 }
 
 /// Move an open child window to `frame`, given in the chat window's content coordinates. False

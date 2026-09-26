@@ -8,6 +8,9 @@ use crate::*;
 fn app_modal_host_background() -> Hsla {
     if CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed) {
         rgb(0xffffff).into()
+    } else if window_glass_active() {
+        // The page's lighter window colour over glass (packages/core-ui/styles/modals-glass.css).
+        titlebar_background().blend(gpui::white().opacity(0.12))
     } else {
         titlebar_background()
     }
@@ -94,6 +97,9 @@ impl GpuiAppModalHostWindow {
                             "dark"
                         },
                     );
+                    if window_glass_active() {
+                        parsed.query_pairs_mut().append_pair("windowGlass", "1");
+                    }
                     parsed.to_string()
                 })
                 .unwrap_or(url)
@@ -262,6 +268,17 @@ impl GpuiAppModalHostWindow {
         }
     }
 
+    /// Tells the page whether window glass is showing, which lightens its dark surfaces
+    /// (packages/core-ui/styles/modals-glass.css).
+    pub(crate) fn refresh_window_glass(&self, cx: &mut App) {
+        if let Some(surface) = &self.surface {
+            surface.update(cx, |surface, _| {
+                let _ = surface
+                    .execute_app_owned_script(&window_glass_flag_script(window_glass_active()));
+            });
+        }
+    }
+
     pub(crate) fn receive_bridge_message(
         &mut self,
         message: serde_json::Value,
@@ -271,6 +288,7 @@ impl GpuiAppModalHostWindow {
         match message.get("type").and_then(serde_json::Value::as_str) {
             Some("ready") => {
                 self.is_ready = true;
+                self.refresh_window_glass(cx);
                 if self.current_modal.requires_sidebar_state() {
                     self.dispatch_sidebar_state(cx);
                 }
@@ -438,5 +456,19 @@ impl Render for GpuiAppModalHostWindow {
             .size_full()
             .bg(background)
             .children(self.surface.clone())
+    }
+}
+
+impl GhostexGpuiApp {
+    /// Pushes the glass flag into the React app-modal pages: the open one and the warm spare.
+    pub(crate) fn refresh_app_modal_pages_window_glass(&self, cx: &mut App) {
+        let hosts = self
+            .app_modal_window
+            .iter()
+            .cloned()
+            .chain(self.app_modal_spare.as_ref().map(|spare| spare.host()));
+        for handle in hosts {
+            let _ = handle.update(cx, |host, _window, cx| host.refresh_window_glass(cx));
+        }
     }
 }

@@ -15,6 +15,7 @@ import type {
 import { FindPromptsView } from '@/packages/core-ui/find/find-prompts-view';
 import type { FindPromptsTransport } from '@/packages/core-ui/find/find-prompts-transport';
 import { playCopySound } from '@/packages/core-ui/copy-sound';
+import { installWindowGlassFlag } from '../views/workarea-theme';
 
 /*
 CDXC:PromptSearch 2026-08-23:
@@ -188,9 +189,12 @@ function createGpuiFindPromptsTransport(bootstrap: { authToken: string; baseUrl:
 }
 
 function applyDocumentFindTheme(theme: 'dark' | 'light'): void {
+  // The dark page colour is a variable so the glass palette (styles/modals-glass.css) can lift it.
+  const background = theme === 'light' ? '#fdfdfd' : 'var(--ghostex-find-page-background, #111111)';
   document.documentElement.style.colorScheme = theme;
-  document.documentElement.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#111111';
-  document.body.style.backgroundColor = theme === 'light' ? '#fdfdfd' : '#111111';
+  document.documentElement.dataset.appAppearance = theme;
+  document.documentElement.style.backgroundColor = background;
+  document.body.style.backgroundColor = background;
 }
 
 function applyDocumentFindFontFamily(fontFamily: string): void {
@@ -234,6 +238,7 @@ if (findTheme === 'dark') {
   document.documentElement.classList.add('dark');
 }
 applyDocumentFindTheme(findTheme);
+installWindowGlassFlag();
 applyDocumentFindFontFamily(searchParams.get('fontFamily') ?? '');
 
 initializeClientStorage().then(() => waitForBootstrap())

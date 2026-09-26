@@ -224,6 +224,17 @@ pub(crate) struct GpuiAccountUsageMeterHost {
     /// meter centres its content either way, so a filled cell centres it in the column.
     pub(crate) fill_width: bool,
     pub(crate) scale: f32,
+    /// Set when the meters are drawn in a window other than the one their popup and menu belong
+    /// to (the sidebar's frosted usage strip): presses are handed to that window.
+    pub(crate) route: Option<GpuiAccountUsageMeterRoute>,
+}
+
+/// Where a meter drawn in a frosted host window sends its presses: the window the account's usage
+/// popup and menu belong to, and where the drawing window's content origin sits in it.
+#[derive(Clone, Copy)]
+pub(crate) struct GpuiAccountUsageMeterRoute {
+    pub(crate) window: gpui::AnyWindowHandle,
+    pub(crate) offset: gpui::Point<Pixels>,
 }
 
 impl GhostexGpuiApp {
@@ -430,6 +441,7 @@ impl GhostexGpuiApp {
         };
         let hover_background = host.hover_background;
         let open_background = host.open_background;
+        let route = host.route;
 
         let glyph = |size: f32| {
             let size = if indicator.is_some() {
@@ -502,6 +514,19 @@ impl GhostexGpuiApp {
                         window.request_animation_frame();
                         return;
                     };
+                    if let Some(route) = route {
+                        let app = cx.entity();
+                        let bounds =
+                            Bounds::new(trigger_bounds.origin + route.offset, trigger_bounds.size);
+                        cx.defer(move |cx| {
+                            let _ = route.window.update(cx, |_, window, cx| {
+                                app.update(cx, |app, cx| {
+                                    app.open_titlebar_account_usage(account_id, bounds, window, cx)
+                                })
+                            });
+                        });
+                        return;
+                    }
                     this.open_titlebar_account_usage(account_id, trigger_bounds, window, cx);
                 }),
             )
@@ -510,6 +535,18 @@ impl GhostexGpuiApp {
                 cx.listener(move |this, event: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
+                    if let Some(route) = route {
+                        let app = cx.entity();
+                        let position = event.position + route.offset;
+                        cx.defer(move |cx| {
+                            let _ = route.window.update(cx, |_, window, cx| {
+                                app.update(cx, |app, cx| {
+                                    app.show_gpui_titlebar_account_menu(position, window, cx)
+                                })
+                            });
+                        });
+                        return;
+                    }
                     this.show_gpui_titlebar_account_menu(event.position, window, cx);
                 }),
             )

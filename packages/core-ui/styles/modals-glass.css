@@ -1,0 +1,81 @@
+/*
+ * CDXC:Theming 2026-09-26 DECISION:
+ * User, of the React app modals over a transparent window: they "look so dark when the whole app looks lighter", so give them "a lighter color", "without making them transparent", and the "bg shouldn't be gradient or fake glass or anything just lighter color". While window glass is showing and the page is dark, a modal's window is the theme's chrome colour lifted 12% toward white (about #2a2a2a on the default theme, the lightness the glass window reads at), and every surface keeps the steps above it that the native modals use over glass: +3% popups and panels, +6% raised, +8.5% hover, 10% hairlines. Solid colours only; glass off, light themes and the Onboarding stage are unchanged.
+ * The page learns the glass state from the host (`data-window-glass`, set by `installWindowGlassFlag` from the same resolved state as the native modals), so Reduce Transparency turns this off too.
+ * SEE-ALSO: apps/desktop/views/workarea-theme.ts, apps/desktop/src/app/window/modal_host.rs (`refresh_window_glass`), `ModalPalette::frosted` in apps/desktop/src/app/window/native_modal_kit.rs.
+ */
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding)) {
+  --gx-glass-surface: color-mix(in srgb, #ffffff 12%, #0e0e0e);
+  --app-modal-background: var(--gx-glass-surface);
+  --ghostex-find-page-background: var(--gx-glass-surface);
+}
+
+/* Every element that redeclares the theme tokens (the page body, each modal root and each
+ * portaled popup) takes the lifted values, the same roots the light sheet overrides. */
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding))
+  :is(
+    body,
+    .ghostex-root,
+    .gx-app-modal,
+    .command-config-modal-shadcn,
+    .ghostex-settings-shadcn,
+    .agents-hub-dialog,
+    .settings-select-content,
+    [data-slot='select-content'],
+    [data-slot='popover-content'],
+    [data-slot='dropdown-menu-content']
+  ) {
+  --gx-glass-surface: color-mix(in srgb, #ffffff 12%, var(--gx-theme-chrome, #0e0e0e));
+  --app-background: var(--gx-glass-surface);
+  --app-modal-background: var(--gx-glass-surface);
+  --app-dropdown-background: color-mix(in srgb, #ffffff 3%, var(--gx-glass-surface));
+  --app-card: color-mix(in srgb, #ffffff 9%, var(--gx-glass-surface));
+  --app-card-active: color-mix(in srgb, #ffffff 12%, var(--gx-glass-surface));
+  --app-context-menu-hover-background: color-mix(in srgb, #ffffff 8.5%, var(--gx-glass-surface));
+  --app-input-background: color-mix(in srgb, #ffffff 4%, var(--gx-glass-surface));
+  --app-tooltip-background: color-mix(in srgb, #ffffff 8.5%, var(--gx-glass-surface));
+  --app-border: rgba(255, 255, 255, 0.13);
+  /* Secondary text keeps its contrast on the lighter window. */
+  --app-muted: #9ca2ab;
+  --accent: color-mix(in srgb, #ffffff 8.5%, var(--gx-glass-surface));
+  --secondary: color-mix(in srgb, #ffffff 6%, var(--gx-glass-surface));
+  --gx-modal-surface: var(--gx-glass-surface);
+  --gx-modal-hairline: rgba(255, 255, 255, 0.1);
+  --settings-surface: var(--gx-glass-surface);
+  --settings-raised: color-mix(in srgb, #ffffff 6%, var(--gx-glass-surface));
+  --settings-raised-hover: color-mix(in srgb, #ffffff 8.5%, var(--gx-glass-surface));
+  --settings-hairline: rgba(255, 255, 255, 0.1);
+  --settings-popup-background: color-mix(in srgb, #ffffff 3%, var(--gx-glass-surface));
+  --settings-popup-border: rgba(255, 255, 255, 0.1);
+  --settings-popup-selected: color-mix(in srgb, #ffffff 14%, var(--gx-glass-surface));
+  --agents-hub-panel: color-mix(in srgb, #ffffff 2%, var(--gx-glass-surface));
+  --agents-hub-raised: color-mix(in srgb, #ffffff 6%, var(--gx-glass-surface));
+  --agents-hub-raised-hover: color-mix(in srgb, #ffffff 8.5%, var(--gx-glass-surface));
+  --agents-hub-line: rgba(255, 255, 255, 0.1);
+}
+
+/* The two popups that paint a fixed dark fill instead of a token. */
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding))
+  [data-slot='select-content'].gx-app-modal-select-content {
+  background: var(--app-dropdown-background) !important;
+  background-color: var(--app-dropdown-background) !important;
+}
+
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding))
+  .add-project-modal
+  [data-slot='input-group'] {
+  background: var(--app-dropdown-background) !important;
+}
+
+/* Search by Prompt's result counter carries its own dark fill. */
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding)) .ghostex-find-count-pill {
+  --ghostex-find-pill-surface: color-mix(in srgb, #ffffff 6%, var(--gx-glass-surface));
+  --ghostex-find-pill-outline: rgba(255, 255, 255, 0.1);
+}
+
+/* Agents Hub's editor is Monaco on its built-in dark theme, which paints its own background. */
+:root[data-window-glass='true'][data-app-appearance='dark']:not(:has(.gx-onboarding))
+  .agents-hub-monaco
+  :is(.monaco-editor, .monaco-editor-background, .monaco-editor .margin) {
+  background-color: var(--agents-hub-panel) !important;
+}

@@ -228,6 +228,15 @@ impl Render for GhostexGpuiApp {
         self.sync_session_chat_pane_focus(window, cx);
         self.refresh_zmx_persistence_focused_terminal_if_changed(cx);
         let sidebar_chrome_visible = gpui_sidebar_chrome_visible(self.sidebar_collapsed);
+        // The sidebar's peeking usage strip draws in a frosted window of its own, which outlives a
+        // docked sidebar that is no longer drawn unless it is taken down here.
+        if !sidebar_chrome_visible {
+            crate::app::window::frosted_host::hide_frosted_host_over(
+                crate::app::window::frosted_host::FrostedHostKind::SidebarUsage,
+                gpui::Window::window_handle(window),
+                cx,
+            );
+        }
         // Collapsing or expanding, the sidebar and its divider slide at their full width inside a
         // clip that tweens (panel_motion.rs).
         let sidebar_frame = self.panel_motion.sidebar.frame();

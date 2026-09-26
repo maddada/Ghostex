@@ -82,6 +82,7 @@ pub(crate) fn queue_gpui_accessibility_display_options_changed(should_reduce_mot
                 // The same notification carries Reduce Transparency, which turns window glass off.
                 let settings = shared_settings::shared_sidebar_settings_snapshot();
                 if refresh_window_glass(settings.object()) {
+                    this.refresh_workarea_page_themes(&settings, cx);
                     cx.notify();
                 }
             });

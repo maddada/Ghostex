@@ -31,6 +31,9 @@ pub(crate) enum FrostedHostKind {
     QuickAccessPicker,
     /// A Quick Access row's actions menu or its Actions panel (`window/quick_access/actions_menu.rs`).
     QuickAccessActions,
+    /// The sidebar's account usage strip while it peeks over the list unpinned
+    /// (`native_sidebar/usage.rs`).
+    SidebarUsage,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -38,6 +41,9 @@ pub(crate) const SIDEBAR_MENU_HOST_LEVELS: u8 = 4;
 
 /// The corner radius of a sidebar menu panel's window (the panel's own 8px at 100% zoom).
 pub(crate) const SIDEBAR_MENU_HOST_RADIUS: f32 = 8.0;
+
+/// The corner radius of the sidebar's peeking usage strip, which its window's blur takes too.
+pub(crate) const SIDEBAR_USAGE_HOST_RADIUS: f32 = 8.0;
 
 /// The corner radius of the Docs selection toolbar, which its window's blur takes too.
 pub(crate) const DOCS_SELECTION_TOOLBAR_RADIUS: f32 = 8.0;
@@ -71,6 +77,7 @@ thread_local! {
     static DOCS_SELECTION_TOOLBAR_HOST: RefCell<HostSlot> = RefCell::default();
     static QUICK_ACCESS_PICKER_HOST: RefCell<HostSlot> = RefCell::default();
     static QUICK_ACCESS_ACTIONS_HOST: RefCell<HostSlot> = RefCell::default();
+    static SIDEBAR_USAGE_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
@@ -86,6 +93,7 @@ fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R 
         FrostedHostKind::QuickAccessActions => {
             QUICK_ACCESS_ACTIONS_HOST.with(|slot| f(&mut slot.borrow_mut()))
         }
+        FrostedHostKind::SidebarUsage => SIDEBAR_USAGE_HOST.with(|slot| f(&mut slot.borrow_mut())),
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
             let level = usize::from(level);
@@ -143,6 +151,15 @@ pub(crate) fn hide_frosted_host(kind: FrostedHostKind, cx: &mut App) {
     });
     if schedule {
         cx.defer(move |cx| apply(kind, cx));
+    }
+}
+
+/// Hides `kind`'s host only while it sits over `parent`, leaving a host over another window alone.
+pub(crate) fn hide_frosted_host_over(kind: FrostedHostKind, parent: AnyWindowHandle, cx: &mut App) {
+    if with_slot(kind, |slot| {
+        slot.wanted.is_some_and(|(over, _)| over == parent)
+    }) {
+        hide_frosted_host(kind, cx);
     }
 }
 
@@ -275,6 +292,9 @@ fn open_host(
                     window.set_background_corner_radius(gpui::px(
                         crate::app::window::quick_access::palette::QUICK_ACCESS_RADIUS_ACTIONS_MENU,
                     ))
+                }
+                FrostedHostKind::SidebarUsage => {
+                    window.set_background_corner_radius(gpui::px(SIDEBAR_USAGE_HOST_RADIUS))
                 }
             }
             attach_host_window(window, parent_view, kind);

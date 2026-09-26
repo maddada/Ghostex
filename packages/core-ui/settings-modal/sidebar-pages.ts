@@ -51,6 +51,7 @@ export function createSettingsSidebarPages({
   setActiveMainSettingsSectionId,
   setActiveTab,
   settingsSearchQuery,
+  showAdvancedSettings,
   showOSIntegrationSettingsTab,
   visibleHotkeySectionNavigation,
   visibleHotkeySections,
@@ -70,6 +71,7 @@ export function createSettingsSidebarPages({
   setActiveMainSettingsSectionId: Dispatch<SetStateAction<MainSettingsScrollTargetId>>;
   setActiveTab: (nextTab: SettingsModalTab) => void;
   settingsSearchQuery: string;
+  showAdvancedSettings: boolean;
   showOSIntegrationSettingsTab: boolean;
   visibleHotkeySectionNavigation: VisibleHotkeySectionNavigation;
   visibleHotkeySections: VisibleHotkeySections;
@@ -169,7 +171,13 @@ export function createSettingsSidebarPages({
     ...(showOSIntegrationSettingsTab
       ? [{ icon: IconDeviceDesktop, id: 'osIntegration' as const, title: 'OS Integration' }]
       : []),
-    { icon: IconBug, id: 'debugging', title: 'Debugging' },
+    /*
+     * CDXC:Settings 2026-09-26 DECISION:
+     * User: when the Show Advanced toggle is off, hide Debugging from the Settings sidebar. A search still finds it, the same way it finds advanced rows.
+     */
+    ...(showAdvancedSettings || isSettingsSearching
+      ? [{ icon: IconBug, id: 'debugging' as const, title: 'Debugging' }]
+      : []),
     { icon: IconInfoCircle, id: 'about', title: 'About' },
   ];
   const settingsSidebarPages: SettingsSidebarPage[] = allSettingsSidebarPages.filter((page) =>

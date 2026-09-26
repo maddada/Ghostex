@@ -163,13 +163,14 @@ fn apply_frosted_overlay(
     overlay: FrostedOverlay,
     cx: &mut gpui::App,
 ) {
-    let (wanted, handle, parent, main, scale) = chat.update(cx, |chat, _| {
+    let (wanted, handle, parent, main, scale) = chat.update(cx, |chat, cx| {
         let scale = ChatAppearance::current(&chat.snapshot).scale;
+        let parent = chat.child_window_parent(cx);
         let state = chat.frosted_overlays.state(overlay);
         (
             state.wanted,
             state.handle.take(),
-            chat.config.parent_native_view,
+            parent,
             chat.main_window,
             scale,
         )

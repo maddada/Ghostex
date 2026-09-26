@@ -29,8 +29,6 @@ import {
 } from '../../../shared/ghostex-settings';
 import { type SidebarAppIconStateMessage } from '../../../shared/session-grid-contract';
 import { GlassLiveGallery } from '../glass-live-gallery';
-import { GlassVideoGallery } from '../glass-video-gallery';
-import { type GlassVideoLibraryControls } from '../use-glass-video-library';
 import {
   AppIconPickerField,
   SelectField,
@@ -136,8 +134,7 @@ const GLASS_SOURCE_CARDS: readonly { art: string; description: string; label: st
   },
   { art: 'is-wallpaper', description: 'Just your desktop picture.', label: 'Wallpaper', value: 'wallpaper' },
   { art: 'is-picture', description: 'An image you choose.', label: 'Picture', value: 'customImage' },
-  { art: 'is-video', description: 'A moving background.', label: 'Video', value: 'video' },
-  { art: 'is-live', description: 'A calm animation in your colours.', label: 'Live', value: 'live' },
+  { art: 'is-live', description: 'A calm animation, or your own video.', label: 'Live', value: 'live' },
 ];
 
 type UpdateDraft = <Key extends keyof ghostexSettings>(key: Key, value: ghostexSettings[Key]) => void;
@@ -155,7 +152,6 @@ export function ThemeSettingsTab({
   chooseWindowGlassVideoFile,
   draft,
   getSettingModificationProps,
-  glassVideoLibrary,
   nativeFilePickerAvailable,
   onOpenRelatedSetting,
   rowVisible,
@@ -168,7 +164,6 @@ export function ThemeSettingsTab({
   updateDraftDebounced,
   updateDraftMany,
   windowGlassVideoError,
-  windowGlassVideos,
 }: {
   appIconError?: string;
   appIconSectionRef: RefObject<HTMLDivElement | null>;
@@ -178,8 +173,6 @@ export function ThemeSettingsTab({
   chooseWindowGlassVideoFile: (appearance: 'dark' | 'light') => void;
   draft: ghostexSettings;
   getSettingModificationProps: <Key extends keyof ghostexSettings>(key: Key) => Required<SettingModificationProps>;
-  /** The glass video library (Settings -> Theme -> Transparency -> Video). */
-  glassVideoLibrary: GlassVideoLibraryControls;
   nativeFilePickerAvailable: boolean;
   /** Opens General searched for a related setting's title. */
   onOpenRelatedSetting: (query: string) => void;
@@ -196,8 +189,6 @@ export function ThemeSettingsTab({
   updateDraftMany: (patch: Partial<ghostexSettings>) => void;
   /** Why the last picked glass video file was refused, for its appearance's row. */
   windowGlassVideoError?: { appearance: 'dark' | 'light'; message: string };
-  /** The aerial wallpapers macOS has downloaded, offered as glass videos. */
-  windowGlassVideos: readonly { name: string; value: string }[];
 }) {
   const appearanceId = useId();
   const colourId = useId();
@@ -295,8 +286,13 @@ export function ThemeSettingsTab({
     );
 
   const usesPicture = draft.windowGlassSource !== 'desktopAndWindows';
-  // A Live style is drawn over the window itself, so it has no position to pick.
-  const usesPlacement = usesPicture && draft.windowGlassSource !== 'live';
+  const liveSlots = darkOnlyGlass
+    ? [draft.windowGlassLiveStyleDark]
+    : [draft.windowGlassLiveStyleDark, draft.windowGlassLiveStyleLight];
+  const liveUsesAnimation = liveSlots.some((style) => style !== 'video');
+  const liveUsesVideo = liveSlots.includes('video');
+  // A Live animation is drawn over the window itself, so only a video has a position to pick.
+  const usesPlacement = usesPicture && (draft.windowGlassSource !== 'live' || liveUsesVideo);
 
   return (
     <SettingsNativeScrollArea className='settings-main-scroll h-full min-h-0'>
@@ -632,11 +628,7 @@ export function ThemeSettingsTab({
                 ) : null}
                 {glassOn && picturesAvailable && usesPicture && draft.windowGlassSource !== 'wallpaper' ? (
                   <ThemeSubhead step={2}>
-                    {draft.windowGlassSource === 'video'
-                      ? 'Choose the videos'
-                      : draft.windowGlassSource === 'live'
-                        ? 'Choose the style'
-                        : 'Choose the pictures'}
+                    {draft.windowGlassSource === 'live' ? 'Choose the style' : 'Choose the pictures'}
                   </ThemeSubhead>
                 ) : null}
                 {glassOn &&
@@ -706,59 +698,38 @@ export function ThemeSettingsTab({
                   : null}
                 {glassOn &&
                 picturesAvailable &&
-                draft.windowGlassSource === 'video' &&
-                (visible('windowGlassVideoDark') || visible('windowGlassVideoLight')) ? (
-                  <div className='theme-stacked-row'>
-                    {nativeFilePickerAvailable ? (
-                      <GlassVideoGallery
-                        aerials={windowGlassVideos}
-                        canChooseFile={nativeFilePickerAvailable}
-                        darkOnly={darkOnlyGlass}
-                        darkValue={draft.windowGlassVideoDark}
-                        fileError={windowGlassVideoError}
-                        library={glassVideoLibrary}
-                        lightValue={draft.windowGlassVideoLight}
-                        onAssign={(target, value) =>
-                          applyPatch({
-                            ...(target === 'light' ? {} : { windowGlassVideoDark: value }),
-                            ...(target === 'dark' ? {} : { windowGlassVideoLight: value }),
-                          })
-                        }
-                        onChooseFile={chooseWindowGlassVideoFile}
-                        onClear={(appearance) =>
-                          updateDraft(appearance === 'dark' ? 'windowGlassVideoDark' : 'windowGlassVideoLight', '')
-                        }
-                      />
-                    ) : (
-                      <p className='text-sm text-muted-foreground'>Videos are chosen in the Ghostex desktop app.</p>
-                    )}
-                  </div>
-                ) : null}
-                {glassOn &&
-                picturesAvailable &&
                 draft.windowGlassSource === 'live' &&
                 (visible('windowGlassLiveStyleDark') || visible('windowGlassLiveStyleLight')) ? (
                   <div className='theme-stacked-row'>
                     <GlassLiveGallery
+                      canChooseVideo={nativeFilePickerAvailable}
                       darkOnly={darkOnlyGlass}
                       darkStyle={draft.windowGlassLiveStyleDark}
+                      darkVideo={draft.windowGlassVideoDark}
                       lightStyle={draft.windowGlassLiveStyleLight}
+                      lightVideo={draft.windowGlassVideoLight}
+                      onChooseVideo={chooseWindowGlassVideoFile}
+                      onClearVideo={(appearance) =>
+                        updateDraft(appearance === 'dark' ? 'windowGlassVideoDark' : 'windowGlassVideoLight', '')
+                      }
                       onPick={(appearance, style) =>
                         updateDraft(
                           appearance === 'dark' ? 'windowGlassLiveStyleDark' : 'windowGlassLiveStyleLight',
                           style
                         )
                       }
+                      videoError={windowGlassVideoError}
                     />
                   </div>
                 ) : null}
                 {glassOn &&
                 picturesAvailable &&
                 draft.windowGlassSource === 'live' &&
+                liveUsesAnimation &&
                 visible('windowGlassLiveSpeed') ? (
                   <SliderNumberField
                     dependent
-                    description='How fast the Live background moves. 1 is its own calm pace.'
+                    description='How fast the Live animation moves. 1 is its own calm pace. Your own video plays as it is.'
                     label='Speed'
                     {...getSettingModificationProps('windowGlassLiveSpeed')}
                     max={MAX_WINDOW_GLASS_LIVE_SPEED}
@@ -772,10 +743,11 @@ export function ThemeSettingsTab({
                 {glassOn &&
                 picturesAvailable &&
                 draft.windowGlassSource === 'live' &&
+                liveUsesAnimation &&
                 visible('windowGlassLiveBrightness') ? (
                   <SliderNumberField
                     dependent
-                    description='How bright the Live background glows behind the glass. Lower keeps it a subtle glow.'
+                    description='How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.'
                     label='Brightness'
                     {...getSettingModificationProps('windowGlassLiveBrightness')}
                     max={MAX_WINDOW_GLASS_LIVE_BRIGHTNESS}
@@ -788,12 +760,12 @@ export function ThemeSettingsTab({
                 ) : null}
                 {glassOn &&
                 picturesAvailable &&
-                (draft.windowGlassSource === 'video' || draft.windowGlassSource === 'live') &&
+                draft.windowGlassSource === 'live' &&
                 visible('windowGlassVideoOnlyOnPower') ? (
                   <ToggleField
                     checked={draft.windowGlassVideoOnlyOnPower}
                     dependent
-                    description={`Pause the ${draft.windowGlassSource === 'live' ? 'Live background' : 'video'} while your computer runs on battery. It always pauses while Ghostex is in the background or hidden.`}
+                    description='Pause the Live animation or video while your computer runs on battery. It always pauses while Ghostex is in the background or hidden.'
                     label='Play only when plugged in'
                     {...getSettingModificationProps('windowGlassVideoOnlyOnPower')}
                     onChange={(checked) => updateDraft('windowGlassVideoOnlyOnPower', checked)}

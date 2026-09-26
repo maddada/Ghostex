@@ -8,6 +8,9 @@
     <script>
       document.documentElement.dataset.appAppearance =
         new URLSearchParams(location.search).get('appAppearance') === 'light' ? 'light' : 'dark';
+      if (new URLSearchParams(location.search).get('windowGlass') === '1') {
+        document.documentElement.dataset.windowGlass = 'true';
+      }
     </script>
     <style>
       html,
@@ -22,6 +25,11 @@
       html[data-app-appearance='light'],
       html[data-app-appearance='light'] body {
         background: #ffffff;
+      }
+      /* The lighter glass window colour (styles/modals-glass.css) from the first paint. */
+      html[data-window-glass='true'][data-app-appearance='dark'],
+      html[data-window-glass='true'][data-app-appearance='dark'] body {
+        background: #2b2b2b;
       }
     </style>
   </head>

@@ -3304,32 +3304,10 @@ export type SidebarToExtensionMessage =
       appearance: 'dark' | 'light';
       type: 'pickWindowGlassImageFile';
     }
-  /** Settings -> Window glass -> Video: the downloaded aerial wallpapers, answered as windowGlassVideosListed. */
-  | {
-      type: 'listWindowGlassVideos';
-    }
-  /** Settings -> Window glass -> Video: "Choose a file…", answered as windowGlassVideoFilePicked with a path or an error. */
+  /** Settings -> Window glass -> Live -> Your video: "Choose a file…", answered as windowGlassVideoFilePicked with a path or an error. */
   | {
       appearance: 'dark' | 'light';
       type: 'pickWindowGlassVideoFile';
-    }
-  /** Settings -> Window glass -> Video: the glass video library, answered as glassVideoLibraryListed. */
-  | {
-      type: 'listGlassVideoLibrary';
-    }
-  /** Downloads one library video, reported as glassVideoDownloadProgress then glassVideoDownloadFinished. */
-  | {
-      id: string;
-      type: 'downloadGlassVideo';
-    }
-  | {
-      id: string;
-      type: 'cancelGlassVideoDownload';
-    }
-  /** Deletes a downloaded library video, answered with a fresh glassVideoLibraryListed. */
-  | {
-      id: string;
-      type: 'removeGlassVideo';
     }
   /**
    * CDXC:Onboarding 2026-08-24:

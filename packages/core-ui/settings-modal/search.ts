@@ -261,7 +261,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           {
             key: 'debuggingMode',
             title: 'Show debug UI controls',
-            subtitle: 'Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.',
+            subtitle: 'Show diagnostic logs, and Copy Resume and Copy Attach in session menus.',
           },
           {
             key: 'diagnosticLogging',
@@ -269,22 +269,6 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             subtitle:
               'Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.',
             options: DIAGNOSTIC_LOGGING_SCENARIOS.map((scenario) => ({ label: scenario.label, value: scenario.id })),
-          },
-        ],
-      },
-      {
-        id: 'storage',
-        title: 'Storage',
-        settings: [
-          {
-            key: 'storageUsage',
-            title: 'Storage usage',
-            subtitle: 'Inspect browser storage by feature, budgets, pending saves, and disposable caches.',
-          },
-          {
-            key: 'storageStats',
-            title: 'Ghostex folder storage',
-            subtitle: 'View on-disk Ghostex folder sizes and total usage, refresh statistics, or open the data folder.',
           },
         ],
       },

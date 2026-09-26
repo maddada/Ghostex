@@ -10,7 +10,6 @@ pub(crate) mod browser;
 pub(crate) mod browser_favicon_cache;
 pub(crate) mod chrome_palette;
 pub(crate) mod dev_servers;
-pub(crate) mod glass_video_library;
 pub(crate) mod indicator_animation;
 pub(crate) mod manage_docs;
 pub(crate) mod manage_docs_chat_files;

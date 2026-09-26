@@ -48,6 +48,8 @@ pub(crate) struct NativeSidebarState {
     pub(crate) usage_pin_hovered: bool,
     /// The pointer is on the peeking usage strip itself, so leaving the pin for a card keeps it up.
     pub(crate) usage_peek_hovered: bool,
+    /// The pointer is on the peeking strip's frosted window (under window glass it draws there).
+    pub(crate) usage_frosted_hovered: bool,
     /// Every painted session card's bounds. A tooltip captures its span the moment hover starts, so the card it belongs to must already be known then.
     pub(crate) session_card_bounds: std::collections::HashMap<String, gpui::Bounds<gpui::Pixels>>,
     /// Armed Delayed Send / Close After Done labels by sidebar session id, for every session rather than only the rows the snapshot shows (session_chat_armed_actions.rs).

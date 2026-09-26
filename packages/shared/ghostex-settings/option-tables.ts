@@ -176,14 +176,13 @@ export const WINDOW_GLASS_SOURCE_OPTIONS: ReadonlyArray<{
   { label: 'Desktop and windows', value: 'desktopAndWindows' },
   { label: 'Wallpaper only', value: 'wallpaper' },
   { label: 'Custom image', value: 'customImage' },
-  { label: 'Video', value: 'video' },
   { label: 'Live', value: 'live' },
 ];
 
-/** The Live glass styles, in the order the Theme page shows them. */
+/** The Live glass animations, in the order the Theme page shows them; `video` (the user's own file) follows them. */
 export const WINDOW_GLASS_LIVE_STYLE_OPTIONS: ReadonlyArray<{
   label: string;
-  value: WindowGlassLiveStyle;
+  value: Exclude<WindowGlassLiveStyle, 'video'>;
 }> = [
   { label: 'Aurora', value: 'aurora' },
   { label: 'Ink', value: 'ink' },

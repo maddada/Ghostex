@@ -655,7 +655,9 @@ impl NativeChatView {
         let chat = cx.weak_entity();
         let source = window.window_handle();
         let source_focus = window.focused(cx);
-        let parent = self.config.parent_native_view;
+        // Attached to the window the trigger is drawn in, whose content `trigger` is measured in.
+        let parent = super::super::child_window::window_native_view(window)
+            .unwrap_or(self.config.parent_native_view);
         let outside_pane = std::mem::take(&mut self.menu_outside_pane);
         let menu = cx.new(|_| ChatOptionMenu {
             chat,

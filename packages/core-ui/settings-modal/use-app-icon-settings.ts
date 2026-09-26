@@ -116,8 +116,7 @@ export function useAppIconSettings({
     }
     vscode.postMessage({ appearance, type: 'pickWindowGlassImageFile' });
   };
-  /** Settings -> Window glass -> Video: the downloaded aerial wallpapers the host lists, and why a picked file was refused. */
-  const [windowGlassVideos, setWindowGlassVideos] = useState<readonly { name: string; value: string }[]>([]);
+  /** Settings -> Window glass -> Live -> Your video: why a picked file was refused. */
   const [windowGlassVideoError, setWindowGlassVideoError] = useState<{
     appearance: 'dark' | 'light';
     message: string;
@@ -138,14 +137,7 @@ export function useAppIconSettings({
       if (!message || typeof message !== 'object' || !('type' in message)) {
         return;
       }
-      if (message.type === 'windowGlassVideosListed' && 'videos' in message && Array.isArray(message.videos)) {
-        setWindowGlassVideos(
-          message.videos.filter(
-            (video): video is { name: string; value: string } =>
-              typeof video?.name === 'string' && typeof video?.value === 'string'
-          )
-        );
-      } else if (message.type === 'windowGlassVideoFilePicked') {
+      if (message.type === 'windowGlassVideoFilePicked') {
         const appearance = 'appearance' in message && message.appearance === 'light' ? 'light' : 'dark';
         const error = 'error' in message && typeof message.error === 'string' ? message.error : '';
         const path = 'path' in message && typeof message.path === 'string' ? message.path.trim() : '';
@@ -158,8 +150,6 @@ export function useAppIconSettings({
       }
     };
     window.addEventListener('ghostex-app-modal-host-message', handleVideoMessage);
-    // The aerials macOS keeps change as it downloads and deletes them, so the list is asked for each time Settings opens.
-    vscode.postMessage({ type: 'listWindowGlassVideos' });
     return () => {
       window.removeEventListener('ghostex-app-modal-host-message', handleVideoMessage);
     };
@@ -198,6 +188,5 @@ export function useAppIconSettings({
     nativeFilePickerAvailable,
     selectAppIcon,
     windowGlassVideoError,
-    windowGlassVideos,
   };
 }

@@ -7,6 +7,7 @@ use gpui::{
     AnyElement, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Window, deferred, div, px,
 };
+use gpui_component::ElementExt as _;
 use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::tooltip::ManagedTooltipPlacement;
 use gpui_component::{h_flex, v_flex};
@@ -16,7 +17,7 @@ use crate::GhostexGpuiApp;
 use crate::app::helpers::*;
 use crate::app::titlebar::account_usage::{
     ACCOUNT_USAGE_BADGE_GAP, ACCOUNT_USAGE_BADGE_GLYPH_WIDTH, ACCOUNT_USAGE_BADGE_TEXT_SIZE,
-    GpuiAccountUsageMeter, GpuiAccountUsageMeterHost,
+    GpuiAccountUsageMeter, GpuiAccountUsageMeterHost, GpuiAccountUsageMeterRoute,
 };
 
 /// The narrowest a meter reads at: a provider glyph plus two monospace numbers.
@@ -42,6 +43,17 @@ const SIDEBAR_USAGE_BADGE_ADVANCE: f32 = 0.65;
 const SIDEBAR_FOOTER_ROW_HEIGHT: f32 = 36.0;
 const SIDEBAR_FOOTER_ROW_TOP_PADDING: f32 = 5.0;
 
+/// A meter card's height, before the zoom scale.
+const SIDEBAR_USAGE_METER_HEIGHT: f32 = 26.0;
+
+/// The strip's space above its first row of cards and below its last.
+const SIDEBAR_USAGE_TOP_PADDING: f32 = 10.0;
+const SIDEBAR_USAGE_BOTTOM_PADDING: f32 = 4.0;
+
+/// The frosted panel's padding around the cards. The panel is inset by the rest of the strip's
+/// padding, so the cards sit exactly where the pinned strip puts them.
+const SIDEBAR_USAGE_FROSTED_PADDING: f32 = 4.0;
+
 impl GhostexGpuiApp {
     /// CDXC:Sidebar 2026-09-22 DECISION:
     /// User: hovering the account usage button at the bottom of the sidebar shows the accounts floating over the bottom of the list, without pushing the content or the scroll area, at exactly the place they take when pinned; clicking the button pins the strip there above the Commands row as before. The button keeps its bar-chart icon by default and only turns into a pin while hovered: an outline pin while unpinned (the Tabler pin, the exact outline twin of the filled pin, not the old `pin.svg` shape the user rejected), a filled pin while pinned. The near-limit dot the button carried is gone. This supersedes the 2026-09-20 rule that the chart button was a plain show/hide toggle: a click still pins and unpins, and a hover now peeks.
@@ -60,24 +72,37 @@ impl GhostexGpuiApp {
         if !self.sidebar_usage_visible {
             return None;
         }
-        self.render_native_sidebar_usage_strip(appearance, window, cx)
+        self.render_native_sidebar_usage_strip(appearance, None, window, cx)
     }
 
     /// The unpinned strip, floating over the bottom of the list while the pin or the strip
     /// itself is hovered. It is a deferred, absolutely placed child of the sidebar root, so the
     /// list and its scroll area keep their size.
+    ///
+    /// CDXC:Sidebar 2026-09-26 DECISION:
+    /// User, of the peeking strip's near-black band under window glass: "make these glass too please when not pinned, they're dark bg, dont fit transparent aesthetic". While it peeks over the list under glass (macOS), the strip is a frosted panel in a blurred window of its own (`FrostedHostKind::SidebarUsage`), with the frosted menus' fill and border, over the rows it covers; its meters take their presses there and hand them to this window, where the usage popup and the account menu belong. This window keeps the strip's frame and hover box, and occludes that frame so the rows under the panel do not light up (it goes on getting pointer moves beneath the panel as the key window). Pinned, the strip already sits on the sidebar's own glass. Glass off, and off macOS, the band stays as it was.
     pub(crate) fn render_native_sidebar_usage_peek(
         &self,
         appearance: &SidebarAppearance,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
-        if self.sidebar_usage_visible
-            || !(self.native_sidebar.usage_pin_hovered || self.native_sidebar.usage_peek_hovered)
-        {
+        use crate::app::window::frosted_host::{
+            FrostedHostKind, frosted_hosting_active, hide_frosted_host,
+        };
+        let frosted = frosted_hosting_active() && window_glass_active_in(window);
+        // The frosted window's hover counts only while the strip draws there: once it is hidden it
+        // may never see the pointer leave.
+        let showing = !self.sidebar_usage_visible
+            && (self.native_sidebar.usage_pin_hovered
+                || self.native_sidebar.usage_peek_hovered
+                || (frosted && self.native_sidebar.usage_frosted_hovered));
+        if !(showing && frosted) {
+            hide_frosted_host(FrostedHostKind::SidebarUsage, cx);
+        }
+        if !showing {
             return None;
         }
-        let strip = self.render_native_sidebar_usage_strip(appearance, window, cx)?;
         let scale = appearance.scale;
         // The painted box sits exactly where the pinned strip sits, on top of the Commands row.
         // Its hover box alone reaches down through the row's top padding to the pin's own hitbox,
@@ -85,6 +110,18 @@ impl GhostexGpuiApp {
         // would have closed the peek halfway.
         let bridge = SIDEBAR_FOOTER_ROW_TOP_PADDING * scale;
         let bottom = SIDEBAR_FOOTER_ROW_HEIGHT * scale - bridge;
+        let body = if frosted {
+            self.render_native_sidebar_usage_frosted_placeholder(appearance, cx)?
+        } else {
+            let strip = self.render_native_sidebar_usage_strip(appearance, None, window, cx)?;
+            div()
+                .w_full()
+                .bg(titlebar_background())
+                .border_t_1()
+                .border_color(appearance.hover)
+                .child(strip)
+                .into_any_element()
+        };
         Some(
             deferred(
                 div()
@@ -100,23 +137,128 @@ impl GhostexGpuiApp {
                             cx.notify();
                         }
                     }))
-                    .child(
-                        div()
-                            .w_full()
-                            .bg(titlebar_background())
-                            .border_t_1()
-                            .border_color(appearance.hover)
-                            .child(strip),
-                    ),
+                    .child(body),
             )
             .with_priority(6)
             .into_any_element(),
         )
     }
 
+    /// The peek's frame in this window while its strip draws in the frosted host: an empty box of
+    /// the strip's height that places the host window on every paint.
+    fn render_native_sidebar_usage_frosted_placeholder(
+        &self,
+        appearance: &SidebarAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        use crate::app::window::frosted_host::{FrostedHostKind, show_frosted_host};
+        let count = self.account_usage_meters().len();
+        if count == 0 {
+            return None;
+        }
+        let scale = appearance.scale;
+        let columns = self.native_sidebar_usage_columns(scale);
+        let rows = count.div_ceil(columns);
+        let height = (SIDEBAR_USAGE_TOP_PADDING + SIDEBAR_USAGE_BOTTOM_PADDING) * scale
+            + rows as f32 * SIDEBAR_USAGE_METER_HEIGHT * scale
+            + rows.saturating_sub(1) as f32 * SIDEBAR_USAGE_GAP * scale;
+        // The panel is inset from the strip's frame so its padding plus this inset is the strip's.
+        let inset_x = (SIDEBAR_USAGE_INSET - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
+        let inset_top = (SIDEBAR_USAGE_TOP_PADDING - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
+        let inset_bottom = (SIDEBAR_USAGE_BOTTOM_PADDING - SIDEBAR_USAGE_FROSTED_PADDING) * scale;
+        let app = cx.entity();
+        let appearance = appearance.clone();
+        Some(
+            div()
+                .id("native-sidebar-usage-peek-frame")
+                .w_full()
+                .h(px(height))
+                .occlude()
+                .on_prepaint(move |bounds, window, cx| {
+                    let frame = gpui::Bounds::new(
+                        bounds.origin + gpui::point(px(inset_x), px(inset_top)),
+                        gpui::size(
+                            bounds.size.width - px(2.0 * inset_x),
+                            bounds.size.height - px(inset_top + inset_bottom),
+                        ),
+                    );
+                    let route = GpuiAccountUsageMeterRoute {
+                        window: window.window_handle(),
+                        offset: frame.origin,
+                    };
+                    let content_app = app.clone();
+                    let appearance = appearance.clone();
+                    show_frosted_host(
+                        FrostedHostKind::SidebarUsage,
+                        window.window_handle(),
+                        frame,
+                        None,
+                        std::rc::Rc::new(move |window, cx| {
+                            content_app.update(cx, |app, cx| {
+                                app.render_native_sidebar_usage_frosted(
+                                    &appearance,
+                                    route,
+                                    window,
+                                    cx,
+                                )
+                            })
+                        }),
+                        Some(app.clone()),
+                        cx,
+                    );
+                })
+                .into_any_element(),
+        )
+    }
+
+    /// The peeking strip as its frosted host window draws it: the frosted menus' fill and border
+    /// around the cards, which hand their presses to the sidebar's own window.
+    fn render_native_sidebar_usage_frosted(
+        &self,
+        appearance: &SidebarAppearance,
+        route: GpuiAccountUsageMeterRoute,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> AnyElement {
+        use crate::app::window::frosted_host::SIDEBAR_USAGE_HOST_RADIUS;
+        let strip = self
+            .render_native_sidebar_usage_strip(appearance, Some(route), window, cx)
+            .unwrap_or_else(|| div().into_any_element());
+        div()
+            .id("native-sidebar-usage-frosted")
+            .size_full()
+            .overflow_hidden()
+            .rounded(px(SIDEBAR_USAGE_HOST_RADIUS))
+            .border_1()
+            .border_color(titlebar_popup_menu_border_color())
+            .bg(frosted_menu_fill(titlebar_popup_menu_background()))
+            .on_hover(cx.listener(|app, hovered: &bool, _, cx| {
+                if app.native_sidebar.usage_frosted_hovered != *hovered {
+                    app.native_sidebar.usage_frosted_hovered = *hovered;
+                    cx.notify();
+                }
+            }))
+            .child(strip)
+            .into_any_element()
+    }
+
+    /// How many meters fit in a row at the sidebar's current width.
+    fn native_sidebar_usage_columns(&self, scale: f32) -> usize {
+        let gap = SIDEBAR_USAGE_GAP * scale;
+        // Every column but the last carries a gap, so the row fits one more card than
+        // the plain division would allow.
+        let usable_width = (self.sidebar_width - 2.0 * SIDEBAR_USAGE_INSET * scale + gap).max(0.0);
+        ((usable_width / (SIDEBAR_USAGE_METER_MIN_WIDTH * scale + gap)).floor() as usize)
+            .clamp(1, SIDEBAR_USAGE_MAX_COLUMNS)
+    }
+
+    /// The strip's rows of cards. `route` is set when it draws in the frosted host window: the
+    /// cards hand their presses to the sidebar's window, and the panel around them supplies the
+    /// rest of the strip's padding.
     fn render_native_sidebar_usage_strip(
         &self,
         appearance: &SidebarAppearance,
+        route: Option<GpuiAccountUsageMeterRoute>,
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> Option<AnyElement> {
@@ -125,13 +267,7 @@ impl GhostexGpuiApp {
             return None;
         }
         let scale = appearance.scale;
-        let gap = SIDEBAR_USAGE_GAP * scale;
-        // Every column but the last carries a gap, so the row fits one more card than
-        // the plain division would allow.
-        let usable_width = (self.sidebar_width - 2.0 * SIDEBAR_USAGE_INSET * scale + gap).max(0.0);
-        let columns = ((usable_width / (SIDEBAR_USAGE_METER_MIN_WIDTH * scale + gap)).floor()
-            as usize)
-            .clamp(1, SIDEBAR_USAGE_MAX_COLUMNS);
+        let columns = self.native_sidebar_usage_columns(scale);
 
         /*
         CDXC:Sidebar 2026-09-20 WHY:
@@ -155,7 +291,7 @@ impl GhostexGpuiApp {
         let host = GpuiAccountUsageMeterHost {
             element_id_prefix: "native-sidebar-usage-meter",
             anchor_key_prefix: "native-sidebar-usage-meter-anchor",
-            height: 26.0 * scale,
+            height: SIDEBAR_USAGE_METER_HEIGHT * scale,
             padding_x: 4.0 * scale,
             corner_radius: 7.0 * scale,
             background: card.into(),
@@ -165,6 +301,7 @@ impl GhostexGpuiApp {
             // stays distinct from the one merely under the pointer.
             open_background: card_open.into(),
             scale,
+            route,
         };
 
         align_badge_columns(&mut meters, &host, columns, self.sidebar_width);
@@ -174,13 +311,24 @@ impl GhostexGpuiApp {
             .map(|row| self.render_native_sidebar_usage_row(row, columns, &host, scale, window, cx))
             .collect::<Vec<_>>();
 
+        // In the frosted panel the panel's 1px border takes the first pixel of its padding.
+        let (padding_x, padding_top, padding_bottom) = if route.is_some() {
+            let padding = (SIDEBAR_USAGE_FROSTED_PADDING * scale - 1.0).max(0.0);
+            (padding, padding, padding)
+        } else {
+            (
+                SIDEBAR_USAGE_INSET * scale,
+                SIDEBAR_USAGE_TOP_PADDING * scale,
+                SIDEBAR_USAGE_BOTTOM_PADDING * scale,
+            )
+        };
         Some(
             div()
                 .w_full()
                 .flex_shrink_0()
-                .px(px(SIDEBAR_USAGE_INSET * scale))
-                .pt(px(10.0 * scale))
-                .pb(px(4.0 * scale))
+                .px(px(padding_x))
+                .pt(px(padding_top))
+                .pb(px(padding_bottom))
                 .child(
                     v_flex()
                         .w_full()

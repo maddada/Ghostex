@@ -678,24 +678,25 @@ impl GhostexGpuiApp {
     pub(crate) fn agents_find_runtime_url(&self) -> Option<String> {
         let base_url = gpui_cef_html_entry_url("GHOSTEX_GPUI_FIND_URL", "find.html").ok()?;
         let settings = shared_settings::shared_sidebar_settings_snapshot();
-        Some(append_url_query_params(
-            base_url,
-            &[
-                (
-                    "theme",
-                    if gpui_session_chat_uses_light_theme(settings.object()) {
-                        "light"
-                    } else {
-                        "dark"
-                    }
-                    .to_string(),
-                ),
-                (
-                    "fontFamily",
-                    gpui_session_chat_font_family_from_settings(settings.object()),
-                ),
-            ],
-        ))
+        let mut params = vec![
+            (
+                "theme",
+                if gpui_session_chat_uses_light_theme(settings.object()) {
+                    "light"
+                } else {
+                    "dark"
+                }
+                .to_string(),
+            ),
+            (
+                "fontFamily",
+                gpui_session_chat_font_family_from_settings(settings.object()),
+            ),
+        ];
+        if window_glass_active() {
+            params.push(("windowGlass", "1".to_string()));
+        }
+        Some(append_url_query_params(base_url, &params))
     }
 
     pub(crate) fn receive_find_prompts_modal_host_action(
@@ -712,6 +713,7 @@ impl GhostexGpuiApp {
                 if let Some(handle) = self.app_modal_window.clone() {
                     let _ = handle.update(cx, |host, modal_window, cx| {
                         modal_window.activate_window();
+                        host.refresh_window_glass(cx);
                         if let Some(surface) = &host.surface {
                             surface.update(cx, |surface, _| surface.focus());
                         }

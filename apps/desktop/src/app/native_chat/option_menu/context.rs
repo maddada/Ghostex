@@ -68,6 +68,7 @@ impl ChatOptionMenuPanel {
         let appearance = &self.menu.read(cx).appearance;
         let scale = appearance.scale;
         let muted = appearance.muted;
+        let (hover, border) = super::render::menu_ink_washes(appearance.light);
         let text = |key: &str| context[key].as_str().unwrap_or_default().to_owned();
         let mut content = div()
             .flex_shrink_0()
@@ -122,7 +123,7 @@ impl ChatOptionMenuPanel {
             .child(
                 div()
                     .id("compact-context")
-                    .when(self.selected == Some(0), |item| item.bg(appearance.border))
+                    .when(self.selected == Some(0), |item| item.bg(hover))
                     .role(gpui::Role::Button)
                     .aria_label("Compact context")
                     .mt(px(4.0 * scale))
@@ -134,12 +135,11 @@ impl ChatOptionMenuPanel {
                     .justify_center()
                     .rounded(px(6.0 * scale))
                     .border_1()
-                    .border_color(appearance.border)
+                    .border_color(border)
                     .text_color(appearance.primary)
                     .when(disabled, |item| item.opacity(0.5))
                     .when(!disabled, |item| {
-                        item.chat_cursor_pointer()
-                            .hover(|style| style.bg(appearance.border))
+                        item.chat_cursor_pointer().hover(|style| style.bg(hover))
                     })
                     // CDXC:SessionChat 2026-09-26 DECISION: User: a button whose static text already says what the tooltip would say gets no tooltip; only the disabled button keeps one, to say why.
                     .when(disabled, |item| {
@@ -161,7 +161,7 @@ impl ChatOptionMenuPanel {
                 .mt(px(4.0 * scale))
                 .pt(px(8.0 * scale))
                 .border_t_1()
-                .border_color(appearance.border)
+                .border_color(border)
                 .child(
                     div()
                         .flex()
@@ -176,7 +176,7 @@ impl ChatOptionMenuPanel {
                         .child(
                             div()
                                 .id("edit-context-details")
-                                .when(self.selected == Some(1), |item| item.bg(appearance.border))
+                                .when(self.selected == Some(1), |item| item.bg(hover))
                                 .role(gpui::Role::Button)
                                 .aria_label("Choose which details to show")
                                 .size(px(24.0 * scale))

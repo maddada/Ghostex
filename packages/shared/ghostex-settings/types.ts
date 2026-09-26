@@ -37,13 +37,21 @@ export type DefaultEditorCommand =
   'code' | 'code-insiders' | 'zed' | 'zeditor' | 'cursor' | 'windsurf' | 'codium' | 'subl' | 'other';
 export type CommandsPanelSide = 'bottom' | 'right';
 export type WindowGlassMode = 'auto' | 'frosted' | 'opaque';
-export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage' | 'video' | 'live';
+export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage' | 'live';
 
-/** The animated styles Live glass draws (`live_<id>` in the GPUI macOS crate's live_backdrop.metal). */
-export type WindowGlassLiveStyle = 'aurora' | 'ink' | 'drift' | 'nebula' | 'silk' | 'bokeh' | 'waves' | 'mesh';
+/**
+ * What a Live glass slot shows: one of the animated styles (`live_<id>` in the GPUI macOS crate's live_backdrop.metal),
+ * or `video`, the user's own file for that mode (`windowGlassVideoDark` / `windowGlassVideoLight`).
+ */
+export type WindowGlassLiveStyle =
+  'aurora' | 'ink' | 'drift' | 'nebula' | 'silk' | 'bokeh' | 'waves' | 'mesh' | 'video';
 export type WindowGlassImagePlacement = 'static' | 'desktop';
 export type PanelAnimationSpeed = 'off' | 'slow' | 'normal' | 'fast';
-export const MIN_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 40;
+/**
+ * CDXC:Theming 2026-09-26 DECISION:
+ * User: "i feel we're limiting the ability of the user to set things to be more transparent even in advanced mode please fix this i want to be able to set fully opaque or transparent there as i wish". The sidebar and work area tint sliders both run the full 0-100%; this supersedes the 40% floor the sidebar tint kept for text contrast.
+ */
+export const MIN_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 0;
 export const MAX_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 100;
 export const MIN_WINDOW_GLASS_WORK_AREA_TINT_PERCENT = 0;
 export const MAX_WINDOW_GLASS_WORK_AREA_TINT_PERCENT = 100;
@@ -815,7 +823,7 @@ export type ghostexSettings = {
   windowGlassImageLight: string;
   /**
    * CDXC:Theming 2026-09-23 SEE-ALSO:
-   * The videos Video glass plays in dark and light mode: `aerial:<id>` for an aerial wallpaper macOS has downloaded, or the absolute path of a .mov/.mp4/.m4v file (empty: none chosen, the live blur shows). `windowGlassVideoOnlyOnPower` pauses them on battery. window_glass.rs holds the user's decision and the GPUI macOS window plays them.
+   * The user's own videos Live glass plays in dark and light mode when that mode's Live slot is `video`: the absolute path of a .mov/.mp4/.m4v file (empty: none chosen, the live blur shows). `windowGlassVideoOnlyOnPower` pauses them on battery. window_glass_live.rs holds the user's decision and the GPUI macOS window plays them.
    */
   windowGlassVideoDark: string;
   windowGlassVideoLight: string;

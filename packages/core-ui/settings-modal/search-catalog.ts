@@ -71,6 +71,9 @@ export type SettingsSearchSectionDefinition = {
  */
 export const APP_ICON_CONTROLS_VISIBLE = false;
 
+/** A Live slot: the eight animations, then the user's own video. */
+const LIVE_SLOT_OPTIONS = [...WINDOW_GLASS_LIVE_STYLE_OPTIONS, { label: 'Your video', value: 'video' }] as const;
+
 export function getSettingsSearchSectionDefinitions() {
   const settingsSearchSections = {
     // CDXC:Icons 2026-06-25-21:50: Make the App Icon section findable by Settings search.
@@ -602,14 +605,14 @@ export function getSettingsSearchSectionDefinitions() {
           key: 'windowGlassSource',
           options: WINDOW_GLASS_SOURCE_OPTIONS,
           subtitle:
-            'Desktop and windows, your wallpaper, a picture you choose, a video, or a Live animated background in your theme colours.',
+            'Desktop and windows, your wallpaper, a picture you choose, or Live: a calm animation in your theme colours or your own video.',
           title: 'What shows behind the glass',
         },
         {
           key: 'windowGlassImagePlacement',
           options: WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS,
           subtitle:
-            'Where the wallpaper, custom picture or video sits behind the glass. Stays with the desktop can trail the window while you drag it.',
+            'Where the wallpaper, custom picture or your own Live video sits behind the glass. Stays with the desktop can trail the window while you drag it.',
           title: 'Picture position',
         },
         {
@@ -624,42 +627,40 @@ export function getSettingsSearchSectionDefinitions() {
         },
         {
           key: 'windowGlassVideoDark',
-          subtitle:
-            'The video the glass plays in dark mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.',
-          title: 'Video for dark mode',
+          subtitle: 'The video file the glass plays in dark mode when Live is set to Your video.',
+          title: 'Your video for dark mode',
         },
         {
           key: 'windowGlassVideoLight',
-          subtitle:
-            'The video the glass plays in light mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.',
-          title: 'Video for light mode',
+          subtitle: 'The video file the glass plays in light mode when Live is set to Your video.',
+          title: 'Your video for light mode',
         },
         {
           key: 'windowGlassVideoOnlyOnPower',
           subtitle:
-            'Pause the glass video or Live background while your computer runs on battery. It always pauses when Ghostex is in the background.',
+            'Pause the Live animation or video while your computer runs on battery. It always pauses when Ghostex is in the background.',
           title: 'Play only when plugged in',
         },
         {
           key: 'windowGlassLiveStyleDark',
-          options: WINDOW_GLASS_LIVE_STYLE_OPTIONS,
-          subtitle: 'The animated background the glass shows in dark mode when Live shows behind the glass.',
+          options: LIVE_SLOT_OPTIONS,
+          subtitle: 'The animation, or your own video, the glass shows in dark mode when Live shows behind the glass.',
           title: 'Live background for dark mode',
         },
         {
           key: 'windowGlassLiveStyleLight',
-          options: WINDOW_GLASS_LIVE_STYLE_OPTIONS,
-          subtitle: 'The animated background the glass shows in light mode when Live shows behind the glass.',
+          options: LIVE_SLOT_OPTIONS,
+          subtitle: 'The animation, or your own video, the glass shows in light mode when Live shows behind the glass.',
           title: 'Live background for light mode',
         },
         {
           key: 'windowGlassLiveSpeed',
-          subtitle: 'How fast the Live background moves, from a quarter of its pace to twice as fast.',
+          subtitle: 'How fast the Live animation moves, from a quarter of its pace to twice as fast.',
           title: 'Live background speed',
         },
         {
           key: 'windowGlassLiveBrightness',
-          subtitle: 'How bright the Live background glows behind the glass. Lower keeps it a subtle glow.',
+          subtitle: 'How bright the Live animation glows behind the glass. Lower keeps it a subtle glow.',
           title: 'Live background brightness',
         },
         {

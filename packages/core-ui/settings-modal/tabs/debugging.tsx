@@ -1,26 +1,18 @@
-import { lazy, Suspense, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   areDiagnosticLoggingSettingsEqual,
   DEFAULT_ghostex_SETTINGS,
   type DiagnosticLoggingScenarioId,
   type ghostexSettings,
 } from '@/packages/shared/ghostex-settings';
-import type { SidebarGhostexFolderStatsMessage } from '@/packages/shared/session-grid-contract';
 import { DiagnosticLoggingSettingsField, SettingsNativeScrollArea, SettingsSection, ToggleField } from '../fields';
 import { hasVisibleSettingsSearchResult, shouldShowSetting, type SettingsTabSearch } from '../search';
 import type { DiagnosticLoggingDurationValue, SettingModificationProps } from '../types';
 
-const StorageInspector = lazy(() =>
-  import('../storage-inspector').then((module) => ({ default: module.StorageInspector }))
-);
-const FolderStorageStats = lazy(() =>
-  import('../folder-storage-stats').then((module) => ({ default: module.FolderStorageStats }))
-);
-
 /**
- * CDXC:Diagnostics 2026-09-16 DECISION:
- * User: move debugging to its own Settings page above About, put Show debug UI controls first, and do not show or load the storage inspector until it is enabled.
- * Restore the previously hidden folder storage statistics here under the same gate; this supersedes the 2026-09-12 decision to disable that section.
+ * CDXC:Diagnostics 2026-09-26 DECISION:
+ * User: debugging lives on its own Settings page above About, with Show debug UI controls first.
+ * User: hide and disable the Storage section (storage usage and folder statistics); this supersedes the 2026-09-16 decision that showed it behind Show debug UI controls.
  */
 export function DebuggingSettingsTab({
   settings,
@@ -29,10 +21,6 @@ export function DebuggingSettingsTab({
   onChange,
   getModificationProps,
   onChangeDiagnosticScenarios,
-  folderStats,
-  folderStatsLoading,
-  onRequestFolderStats,
-  onOpenFolder,
 }: {
   settings: ghostexSettings;
   search: SettingsTabSearch;
@@ -43,10 +31,6 @@ export function DebuggingSettingsTab({
     ids: readonly DiagnosticLoggingScenarioId[],
     duration: DiagnosticLoggingDurationValue
   ) => void;
-  folderStats?: SidebarGhostexFolderStatsMessage;
-  folderStatsLoading: boolean;
-  onRequestFolderStats?: () => void;
-  onOpenFolder?: () => void;
 }) {
   const visible = (section: string, key: string) => shouldShowSetting(search.sections[section], key);
   return (
@@ -55,7 +39,7 @@ export function DebuggingSettingsTab({
         <SettingsSection title='Debugging'>
           <ToggleField
             checked={settings.debuggingMode}
-            description='Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus. Warnings, errors, and crashes are always captured.'
+            description='Show diagnostic logs, and Copy Resume and Copy Attach in session menus. Warnings, errors, and crashes are always captured.'
             label='Show debug UI controls'
             {...getModificationProps('debuggingMode')}
             onChange={(checked) => onChange('debuggingMode', checked)}
@@ -75,25 +59,6 @@ export function DebuggingSettingsTab({
             />
           ) : null}
         </SettingsSection>
-        {settings.debuggingMode ? (
-          <>
-            {visible('storage', 'storageUsage') ? (
-              <Suspense fallback={<p className='text-sm text-muted-foreground'>Loading storage usage...</p>}>
-                <StorageInspector />
-              </Suspense>
-            ) : null}
-            {visible('storage', 'storageStats') ? (
-              <Suspense fallback={<p className='text-sm text-muted-foreground'>Loading folder statistics...</p>}>
-                <FolderStorageStats
-                  stats={folderStats}
-                  isLoading={folderStatsLoading}
-                  onRequest={onRequestFolderStats}
-                  onOpenFolder={onOpenFolder}
-                />
-              </Suspense>
-            ) : null}
-          </>
-        ) : null}
         {search.tab.isSearching && !hasVisibleSettingsSearchResult(search.tab) ? searchEmptyState : null}
       </div>
     </SettingsNativeScrollArea>
