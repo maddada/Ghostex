@@ -367,11 +367,6 @@ impl ChatOptionMenuPanel {
                     Some(letter) => format!("{tooltip} ({letter})"),
                     None => tooltip,
                 };
-                let tooltip = match setting["icon"].as_str() {
-                    Some("fast") => format!("{tooltip} (F)"),
-                    Some("context") => format!("{tooltip} (C)"),
-                    _ => tooltip,
-                };
                 // CDXC:SessionChat 2026-09-24 DECISION:
                 // User: the footer's values ("Default", "Medium") must not be cut short. Reasoning, Context Window and Fast keep their full width and grow into the spare room; only the Account button and labelled option buttons give way and truncate.
                 let keeps_width = matches!(
