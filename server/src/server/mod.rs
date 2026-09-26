@@ -1307,22 +1307,9 @@ async fn route_http(
             |repository, db, params, _| {
                 let created_session = repository.create_session(params, false)?;
                 let session = apply_created_session_identity(repository, &created_session, params)?;
-                if session
-                    .pointer("/runtimeSettings/externalSession")
-                    .and_then(Value::as_bool)
-                    == Some(true)
-                {
-                    repository.restore_recent_project(&value_text(&session, "projectId")?)?;
-                    schedule_presentation_project_delta(
-                        &state,
-                        db,
-                        repository,
-                        &value_text(&session, "projectId")?,
-                        "projectUpdated",
-                    )?;
-                }
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
+                restore_parked_project_for_new_session(&state, db, repository, &project_id)?;
                 schedule_presentation_session_delta(
                     &state,
                     db,
@@ -1346,6 +1333,7 @@ async fn route_http(
                     apply_created_session_identity(repository, &created_session, &create_params)?;
                 let project_id = value_text(&session, "projectId")?;
                 let session_id = value_text(&session, "sessionId")?;
+                restore_parked_project_for_new_session(&state, db, repository, &project_id)?;
                 schedule_presentation_session_delta(
                     &state,
                     db,

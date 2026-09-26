@@ -56,6 +56,24 @@ pub(crate) fn schedule_presentation_project_delta(
     Ok(())
 }
 
+/// CDXC:Projects 2026-09-27 WHY:
+/// `ghostex create-agent --project-id` started a live agent inside a project parked in Recent Projects, and no sidebar, session list or CLI verb could then show, focus or close it. A new session brings its parked project back to the sidebar first, as resuming an external conversation already did.
+pub(crate) fn restore_parked_project_for_new_session(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+) -> std::result::Result<(), DomainStateError> {
+    let parked = repository.get_project(project_id)?.is_some_and(|project| {
+        project.get("isRecentProject").and_then(Value::as_bool) == Some(true)
+    });
+    if !parked {
+        return Ok(());
+    }
+    repository.restore_recent_project(project_id)?;
+    schedule_presentation_project_delta(state, db, repository, project_id, "projectUpdated")
+}
+
 pub(crate) fn schedule_presentation_session_delta(
     state: &AppState,
     db: &rusqlite::Connection,

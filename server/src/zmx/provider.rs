@@ -395,7 +395,17 @@ pub(crate) fn kill_and_cache_session_provider(
     let session = require_session(repository, lifecycle)?;
     let zmx = require_zmx()?;
     let zmx_name = provider_zmx_session_name(&session)?;
-    let kill = kill_zmx_session(&zmx_name, &zmx.executable_path);
+    let mut kill = kill_zmx_session(&zmx_name, &zmx.executable_path);
+    // CDXC:SessionSleep 2026-09-27 WHY:
+    // A daemon that already exited makes `kill` fail (wmx: "cannot find the file specified"), and
+    // keeping the old lifecycle left a dead session "running" that no Close could retire. Only a
+    // probe that finds the session missing turns the failure into the stop it asked for.
+    if !kill.killed
+        && probe_zmx_session(&zmx_name, &zmx.executable_path).lifecycle_state == "missing"
+    {
+        kill.killed = true;
+        kill.error = None;
+    }
     let timestamp = now_iso();
     let provider_state = if kill.killed {
         missing_provider_state_patch(&session, &timestamp)?
