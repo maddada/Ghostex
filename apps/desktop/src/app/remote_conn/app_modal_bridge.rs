@@ -1,14 +1,10 @@
-use std::collections::HashSet;
-
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
 use gpui::Window;
 
-use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
-use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
@@ -18,13 +14,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let payload = match event {
-            cef::AppModalHostBridgeEvent::Message(payload) => payload,
-            cef::AppModalHostBridgeEvent::NativeHostMessage(payload) => {
-                self.receive_gpui_titlebar_native_host_message(&payload, window, cx);
-                return;
-            }
-        };
+        let cef::AppModalHostBridgeEvent::Message(payload) = event;
         let Ok(message) = serde_json::from_str::<serde_json::Value>(&payload) else {
             return;
         };
@@ -118,9 +108,6 @@ impl GhostexGpuiApp {
                     });
                 }
             }
-            "gpuiTitlebarTipsUnreadCount" => {
-                self.receive_gpui_titlebar_tips_unread_count_message(&message, cx);
-            }
             "updateSettings" => {
                 self.handle_gpui_app_modal_update_settings_message(&message, cx);
             }
@@ -141,6 +128,18 @@ impl GhostexGpuiApp {
             }
             "pickWindowGlassImageFile" => {
                 self.handle_gpui_pick_window_glass_image_message(&message, cx);
+            }
+            "listGlassVideoLibrary" => {
+                self.handle_gpui_list_glass_video_library_message(cx);
+            }
+            "downloadGlassVideo" => {
+                self.handle_gpui_download_glass_video_message(&message, cx);
+            }
+            "cancelGlassVideoDownload" => {
+                self.handle_gpui_cancel_glass_video_download_message(&message);
+            }
+            "removeGlassVideo" => {
+                self.handle_gpui_remove_glass_video_message(&message, cx);
             }
             "listWindowGlassVideos" => {
                 self.handle_gpui_list_window_glass_videos_message(cx);
@@ -250,17 +249,6 @@ impl GhostexGpuiApp {
             "pickWorktreeImages" => {
                 self.handle_gpui_pick_worktree_images_message(cx);
             }
-            "closeTitlebarDropdownPanel" => {
-                if self.titlebar_popup_menu.is_some() {
-                    self.close_gpui_titlebar_popup(None, window, cx);
-                }
-                if self.titlebar_resources_panel_open {
-                    self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-                }
-                if self.titlebar_tips_panel_open {
-                    self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-                }
-            }
             "toast" => {
                 self.receive_gpui_app_toast_bridge_message(&message, cx);
             }
@@ -326,243 +314,6 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn receive_gpui_titlebar_native_host_message(
-        &mut self,
-        payload: &str,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Ok(message) = serde_json::from_str::<serde_json::Value>(payload) else {
-            return;
-        };
-        let Some(message_type) = message.get("type").and_then(serde_json::Value::as_str) else {
-            return;
-        };
-
-        match message_type {
-            "sidebarDiagnosticLog" => {
-                let Some(scenario_id) = message
-                    .get("scenarioId")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|scenario_id| !scenario_id.trim().is_empty())
-                else {
-                    return;
-                };
-                support_logs::append_for_scenario(
-                    if scenario_id == "gpui.sessionChat.drafts" {
-                        support_logs::GpuiSupportLog::SessionChat
-                    } else {
-                        support_logs::GpuiSupportLog::SidebarRefresh
-                    },
-                    scenario_id,
-                    message
-                        .get("event")
-                        .and_then(serde_json::Value::as_str)
-                        .unwrap_or("gpui.sidebar.diagnostic"),
-                    message
-                        .get("details")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null),
-                );
-            }
-            "runProcess" => {
-                self.receive_gpui_titlebar_native_host_run_process(message, cx);
-            }
-            "titlebarDropdownPanelReady" => {
-                self.receive_gpui_titlebar_native_host_dropdown_ready_message(&message, cx);
-            }
-            "closeTitlebarDropdownPanel" => {
-                if self.titlebar_popup_menu.is_some() {
-                    self.close_gpui_titlebar_popup(None, window, cx);
-                }
-                if self.titlebar_resources_panel_open {
-                    self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-                }
-                if self.titlebar_tips_panel_open {
-                    self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-                }
-            }
-            "focusResourceSessionFromTitlebar" => {
-                self.receive_gpui_titlebar_resources_focus_session_message(&message, window, cx);
-            }
-            "sleepInactiveSessionsFromTitlebar" => {
-                self.receive_gpui_titlebar_resources_sleep_inactive_sessions_message(&message, cx);
-            }
-            "quitResourcesFromTitlebar" => {
-                self.receive_gpui_titlebar_resources_quit_message(&message, window, cx);
-            }
-            // The sidebar's own Load Sessions row reaches the same three steps without this
-            // bridge since M5 (gx_store/sidebar_open.rs), so they are one function.
-            "accountSwitchProgress" => {
-                let (Some(project_id), Some(session_id)) =
-                    (message["projectId"].as_str(), message["sessionId"].as_str())
-                else {
-                    return;
-                };
-                let key = if let Some(machine_id) = message["machineId"].as_str() {
-                    GpuiWorkspaceTerminalSessionKey::Remote(GpuiRemoteAttachSessionKey {
-                        remote_machine_id: machine_id.to_string(),
-                        project_id: project_id.to_string(),
-                        session_id: session_id.to_string(),
-                    })
-                } else {
-                    GpuiWorkspaceTerminalSessionKey::Local(GpuiLocalWorkspaceSessionKey {
-                        project_id: project_id.to_string(),
-                        session_id: session_id.to_string(),
-                    })
-                };
-                self.set_session_account_switch_progress(key, &message["progress"], None, cx);
-            }
-            "stopGxserverFromTitlebar" => {
-                self.stop_gpui_local_gxserver_from_titlebar(false, cx);
-                self.dispatch_gpui_titlebar_resources_project_state_update(cx);
-            }
-            "restartGxserverFromTitlebar" => {
-                self.stop_gpui_local_gxserver_from_titlebar(true, cx);
-                self.dispatch_gpui_titlebar_resources_project_state_update(cx);
-            }
-            "setGxserverAlwaysStartFromTitlebar" => {
-                self.receive_gpui_titlebar_resources_set_gxserver_always_start_message(
-                    &message, cx,
-                );
-            }
-            "openExternalUrl" => {
-                self.receive_gpui_titlebar_resources_open_external_url_message(&message);
-            }
-            "resizeTitlebarDropdownPanel" | "titlebarBlankMouseDown" => {}
-            _ => {}
-        }
-    }
-
-    pub(crate) fn receive_gpui_titlebar_native_host_dropdown_ready_message(
-        &mut self,
-        message: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(kind) = message
-            .get("kind")
-            .and_then(serde_json::Value::as_str)
-            .filter(|kind| matches!(*kind, "resources" | "tips"))
-        else {
-            return;
-        };
-        if kind != "resources" || !self.titlebar_resources_panel_open {
-            return;
-        }
-        let project_state_update = self.gpui_titlebar_resources_project_state_update(cx);
-        self.titlebar_resources_panel_ready = true;
-        let Some(panel) = self.titlebar_resources_panel.clone() else {
-            cx.notify();
-            return;
-        };
-        let browser = panel.update(cx, |panel, cx| {
-            panel.set_visible(true, cx);
-            panel.browser(cx)
-        });
-        gpui_titlebar_resources_dispatch_project_state_update(cx, browser, project_state_update);
-        cx.notify();
-    }
-
-    pub(crate) fn receive_gpui_titlebar_resources_focus_session_message(
-        &mut self,
-        message: &serde_json::Value,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(session_id) = message
-            .get("sessionId")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|session_id| !session_id.is_empty())
-        else {
-            return;
-        };
-        let _ = self.focus_gpui_titlebar_resource_session(session_id, cx);
-        self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-    }
-
-    pub(crate) fn receive_gpui_titlebar_resources_sleep_inactive_sessions_message(
-        &mut self,
-        _message: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:Resources 2026-07-08:
-        React sends the exact inactive session ids it derived from the Resources
-        rows, but the store's existing batch path (gx_store/terminal_lifecycle/runtime_actions.rs)
-        revalidates the current inactive set itself. Reuse that owner instead of introducing a
-        second explicit-id lifecycle route in this phase.
-        */
-        let _ = self.dispatch_gpui_workspace_sleep_inactive_sessions(cx);
-        self.dispatch_gpui_titlebar_resources_project_state_update(cx);
-    }
-
-    pub(crate) fn receive_gpui_titlebar_resources_quit_message(
-        &mut self,
-        message: &serde_json::Value,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let session_ids = gpui_titlebar_resources_string_array_field(message, "sessionIds");
-        let project_ids = gpui_titlebar_resources_string_array_field(message, "projectIds");
-        let mut changed = false;
-        let mut seen_sessions = HashSet::new();
-        for session_id in session_ids {
-            let Some(shell_session_id) = self.gpui_titlebar_resource_shell_session_id(&session_id)
-            else {
-                /*
-                CDXC:Resources 2026-07-26:
-                Resources now also lists sessions this window has not mounted,
-                so Close cannot stop at the local pane map. Sessions that carry
-                a gxserver identity close through the store's existing
-                lifecycle route, exactly like a sidebar card close.
-                */
-                if let Some(key) = gpui_combined_presentation_session_key(&session_id) {
-                    changed |=
-                        self.dispatch_gpui_workspace_session_key_runtime_action("close", &key, cx);
-                }
-                continue;
-            };
-            if !seen_sessions.insert(shell_session_id) {
-                continue;
-            }
-            let Some(pane_id) = self.agents_workspace.pane_id_for_session(shell_session_id) else {
-                continue;
-            };
-            changed |= self.close_agents_tab(pane_id, shell_session_id, cx);
-        }
-
-        if self.gpui_titlebar_resources_project_ids_include_active_project(&project_ids) {
-            changed |= self.stop_source_code_server_runtime(cx);
-            changed |= self
-                .project_editor_shell
-                .mark_mode_sleeping(TitlebarMode::Source);
-            if changed {
-                self.refresh_project_workarea_runtime_cef_surfaces_from_runtime_state(cx);
-                self.persist_shell_layout_state();
-            }
-        }
-        if changed {
-            cx.notify();
-        }
-        self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-    }
-
-    pub(crate) fn receive_gpui_titlebar_resources_set_gxserver_always_start_message(
-        &mut self,
-        _message: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:Resources 2026-07-08:
-        GPUI has no shared Settings key for disabling local gxserver startup; the
-        app bootstrap already starts/reconciles it. Keep the React action wired
-        and refresh daemon status without inventing or faking a persisted
-        always-start setting in this phase.
-        */
-        self.dispatch_gpui_titlebar_resources_project_state_update(cx);
-    }
-
     pub(crate) fn receive_gpui_titlebar_resources_open_external_url_message(
         &self,
         message: &serde_json::Value,
@@ -624,93 +375,6 @@ impl GhostexGpuiApp {
         }
         gpui_agents_session_id_from_external_id(session_id)
             .filter(|shell_session_id| self.agents_workspace.has_session(*shell_session_id))
-    }
-
-    pub(crate) fn gpui_titlebar_resources_project_ids_include_active_project(
-        &self,
-        project_ids: &[String],
-    ) -> bool {
-        let Some(active_project_id) = self.gpui_app_modal_active_project_id() else {
-            return false;
-        };
-        project_ids
-            .iter()
-            .any(|project_id| project_id.as_str() == active_project_id.as_str())
-    }
-
-    pub(crate) fn receive_gpui_titlebar_native_host_run_process(
-        &mut self,
-        message: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let request_id = message
-            .get("requestId")
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|request_id| !request_id.is_empty())
-            .filter(|request_id| {
-                request_id.chars().count() <= GPUI_TITLEBAR_NATIVE_PROCESS_REQUEST_ID_MAX_CHARS
-            })
-            .map(str::to_string);
-        let request = match gpui_titlebar_native_process_request_from_message(&message) {
-            Ok(request) => request,
-            Err(error) => {
-                if let Some(request_id) = request_id {
-                    self.dispatch_gpui_titlebar_native_process_result(
-                        GpuiTitlebarNativeProcessResult::rejected(request_id, error),
-                        cx,
-                    );
-                }
-                return;
-            }
-        };
-
-        let background = cx.background_executor().clone();
-        cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move { gpui_run_titlebar_native_process(request) })
-                .await;
-            let _ = this.update(cx, |this, cx| {
-                this.dispatch_gpui_titlebar_native_process_result(result, cx);
-            });
-        })
-        .detach();
-    }
-
-    pub(crate) fn dispatch_gpui_titlebar_native_process_result(
-        &mut self,
-        result: GpuiTitlebarNativeProcessResult,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        self.dispatch_gpui_titlebar_native_host_event(
-            serde_json::json!({
-                "exitCode": result.exit_code,
-                "requestId": result.request_id,
-                "stderr": result.stderr,
-                "stdout": result.stdout,
-                "type": "processResult",
-            }),
-            cx,
-        );
-    }
-
-    pub(crate) fn dispatch_gpui_titlebar_native_host_event(
-        &mut self,
-        event: serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if let Some(panel) = self.titlebar_resources_panel.clone() {
-            panel.update(cx, |panel, cx| {
-                panel.dispatch_native_host_event(event.clone(), cx);
-            });
-            return;
-        }
-        let Some(panel) = self.titlebar_tips_panel.clone() else {
-            return;
-        };
-        panel.update(cx, |panel, cx| {
-            panel.dispatch_native_host_event(event.clone(), cx);
-        });
     }
 }
 

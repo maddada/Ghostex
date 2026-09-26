@@ -107,38 +107,6 @@ pub(super) fn install_app_modal_host_v8_bridge(
         V8Propertyattribute::default(),
     );
 
-    /*
-    CDXC:CefRuntime 2026-07-14:
-    Helper-backed titlebar renderers must install the same `ghostexNativeHost`
-    bridge as the shell CEF path (apps/desktop/src/cef/shell.rs); the titlebar
-    uses it for Resources actions. (The sidebar page that also used it was
-    deleted on 2026-09-21.)
-    */
-    if surface == AppModalHostBridgeSurface::Titlebar {
-        let Some(mut native_host) = cef::v8_value_create_object(None, None) else {
-            return;
-        };
-        let mut handler = GhostexGpuiNativeHostBridgeV8Handler::new();
-        let function_name = CefString::from(WEBKIT_POST_MESSAGE_JS_FUNCTION);
-        let mut post_message =
-            match cef::v8_value_create_function(Some(&function_name), Some(&mut handler)) {
-                Some(function) => function,
-                None => return,
-            };
-        native_host.set_value_bykey(
-            Some(&function_name),
-            Some(&mut post_message),
-            V8Propertyattribute::default(),
-        );
-
-        let native_host_key = CefString::from(WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT);
-        message_handlers.set_value_bykey(
-            Some(&native_host_key),
-            Some(&mut native_host),
-            V8Propertyattribute::default(),
-        );
-    }
-
     let message_handlers_key = CefString::from(WEBKIT_MESSAGE_HANDLERS_JS_OBJECT);
     webkit.set_value_bykey(
         Some(&message_handlers_key),

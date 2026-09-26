@@ -178,12 +178,6 @@ impl GhostexGpuiApp {
         else {
             return false;
         };
-        if self.titlebar_tips_panel_open {
-            self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-        }
-        if self.titlebar_resources_panel_open {
-            self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-        }
         self.close_gpui_titlebar_popup(None, window, cx);
         self.close_titlebar_extension_popup(window, cx);
         self.titlebar_extension_popup_generation =

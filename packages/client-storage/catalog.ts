@@ -478,7 +478,7 @@ export const storageCatalog = Object.freeze({
   keepAwake: define(
     'keepAwake',
     'Keep Awake runtime',
-    desktop + 'views/titlebar/project-state.ts',
+    desktop + 'src/app/gx_store/sidebar_ui_storage.rs',
     'ghostex.titlebar.keepAwakeRuntime',
     objectCodec
   ),

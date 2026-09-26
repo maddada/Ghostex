@@ -136,6 +136,5 @@ impl GhostexGpuiApp {
             cx,
         );
         self.start_gpui_local_gxserver_bootstrap(false, cx);
-        self.dispatch_gpui_titlebar_resources_project_state_update(cx);
     }
 }

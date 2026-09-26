@@ -822,10 +822,6 @@ pub(crate) fn command_pane_delayed_send_badge_text_color() -> Hsla {
     rgb(0xf6c945).into()
 }
 
-pub(crate) fn gpui_combined_presentation_project_group_id(project_id: &str) -> String {
-    format!("combined-project:{}", gpui_encode_uri_component(project_id))
-}
-
 pub(crate) fn gpui_combined_presentation_session_id(project_id: &str, session_id: &str) -> String {
     format!(
         "combined-session:{}:{}",

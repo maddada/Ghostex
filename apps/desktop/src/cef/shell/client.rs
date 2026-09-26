@@ -76,12 +76,10 @@ wrap_client! {
                 project_workarea_bridge_event_kind_for_process_message(&message_name);
             let is_app_modal_host_message =
                 message_name == APP_MODAL_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
-            let is_native_host_message = message_name == NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME;
             let is_extension_bridge_message =
                 message_name == EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME;
             if project_workarea_event_kind.is_none()
                 && !is_app_modal_host_message
-                && !is_native_host_message
                 && !is_extension_bridge_message
             {
                 return 0;
@@ -154,29 +152,13 @@ wrap_client! {
                 };
                 /*
                 CDXC:AppModal 2026-06-24-10:42:
-                The GPUI app-modal host and titlebar Tips panel reuse the macOS React bridge shape, but CEF forwards each message as a single bounded JSON string from first-party bundled pages only. Keep this main-frame-only and handler-scoped so Browser tabs, workarea pages, logs, persistence, raw URLs, page titles, and generic IPC never receive app-modal payloads.
+                The GPUI app-modal host reuses the macOS React bridge shape, but CEF forwards each message as a single bounded JSON string from first-party bundled pages only. Keep this main-frame-only and handler-scoped so Browser tabs, workarea pages, logs, persistence, raw URLs, page titles, and generic IPC never receive app-modal payloads.
                 */
                 if payload.chars().count() > APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
                     return 1;
                 }
 
                 handler(AppModalHostBridgeEvent::Message(payload));
-                return 1;
-            }
-
-            if is_native_host_message {
-                let Some(handler) = self.app_modal_host_bridge_event_handler.clone() else {
-                    return 0;
-                };
-                /*
-                CDXC:Titlebar 2026-07-08:
-                The bundled titlebar-host Resources document uses macOS's `ghostexNativeHost` bridge for process sampling and titlebar actions. CEF forwards only a bounded main-frame JSON string from first-party modal/sidebar/titlebar surfaces and tags it as native-host; app-side Rust owns the fixed process allowlist and action validation.
-                */
-                if payload.chars().count() > NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
-                    return 1;
-                }
-
-                handler(AppModalHostBridgeEvent::NativeHostMessage(payload));
                 return 1;
             }
 
@@ -429,7 +411,7 @@ wrap_render_process_handler! {
             };
             /*
             CDXC:AppModal 2026-06-24-11:09:
-            Install the CEF-compatible `window.webkit.messageHandlers.ghostexAppModalHost` shim at V8 context creation for only bundled modal-host.html, titlebar-host.html, and sidebar index.html entries. Install `ghostexNativeHost` for titlebar-host and the first-party sidebar so either surface can invoke Rust's fixed, validated native actions, including gxserver lifecycle controls. The shared React modal host posts `ready` during mount, the titlebar panels post dropdown/process messages during hydration, and the shared sidebar can emit Settings/Hotkeys/Command Palette opens after hydration, so waiting for load-end would race real presentation. Only native-window entries in the shared bridge manifest receive the native-window identity fields; Browser tabs, project workareas, arbitrary pages, raw URLs, titles, logs, persistence, and generic IPC do not receive these bridges.
+            Install the CEF-compatible `window.webkit.messageHandlers.ghostexAppModalHost` shim at V8 context creation for only the bundled entries in the bridge manifest (modal-host.html and find.html). The shared React modal host posts `ready` during mount, so waiting for load-end would race real presentation. Only native-window entries in the shared bridge manifest receive the native-window identity fields; Browser tabs, project workareas, arbitrary pages, raw URLs, titles, logs, persistence, and generic IPC do not receive these bridges.
 
             CDXC:Diagnostics 2026-06-28-17:06:
             App-modal CEF setup keeps only the functional host message bridge. Do not emit lifecycle diagnostic IPC or renderer logging events from bridge installation while GPUI logging is intentionally removed.

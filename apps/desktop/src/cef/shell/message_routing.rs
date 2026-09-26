@@ -136,7 +136,6 @@ pub type ProjectWorkareaBridgeEventHandler = StdRc<dyn Fn(ProjectWorkareaBridgeE
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AppModalHostBridgeEvent {
     Message(String),
-    NativeHostMessage(String),
 }
 
 pub type AppModalHostBridgeEventHandler = StdRc<dyn Fn(AppModalHostBridgeEvent)>;
@@ -398,39 +397,6 @@ wrap_v8_handler! {
                 return 1;
             };
             let sent = send_extension_bridge_process_message(&payload);
-            set_v8_bool_return(retval, sent);
-            1
-        }
-    }
-}
-
-wrap_v8_handler! {
-    pub(crate) struct GhostexGpuiNativeHostBridgeV8Handler;
-
-    impl V8Handler {
-        fn execute(
-            &self,
-            name: Option<&CefString>,
-            _object: Option<&mut V8Value>,
-            arguments: Option<&[Option<V8Value>]>,
-            retval: Option<&mut Option<V8Value>>,
-            _exception: Option<&mut CefString>,
-        ) -> c_int {
-            let name = name.map(CefString::to_string);
-            if name.as_deref() != Some(WEBKIT_POST_MESSAGE_JS_FUNCTION) {
-                return 0;
-            }
-
-            let payload = arguments
-                .and_then(|arguments| arguments.first())
-                .and_then(Option::as_ref)
-                .and_then(app_modal_host_payload_from_v8_value);
-            let Some(payload) = payload else {
-                set_v8_bool_return(retval, false);
-                return 1;
-            };
-
-            let sent = send_native_host_bridge_process_message(&payload);
             set_v8_bool_return(retval, sent);
             1
         }
@@ -798,32 +764,6 @@ pub(crate) fn send_extension_bridge_process_message(payload: &str) -> bool {
     };
     let mut message = match cef::process_message_create(Some(&CefString::from(
         EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME,
-    ))) {
-        Some(message) => message,
-        None => return false,
-    };
-    let Some(arguments) = message.argument_list() else {
-        return false;
-    };
-    arguments.set_size(1);
-    arguments.set_string(0, Some(&CefString::from(payload)));
-    frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
-    true
-}
-
-pub(crate) fn send_native_host_bridge_process_message(payload: &str) -> bool {
-    if payload.chars().count() > NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
-        return false;
-    }
-
-    let Some(context) = cef::v8_context_get_current_context() else {
-        return false;
-    };
-    let Some(frame) = context.frame() else {
-        return false;
-    };
-    let mut message = match cef::process_message_create(Some(&CefString::from(
-        NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME,
     ))) {
         Some(message) => message,
         None => return false,

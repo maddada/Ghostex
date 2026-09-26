@@ -15,7 +15,6 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-use gpui::Action;
 use gpui::px;
 use gpui_component::Side;
 use gpui_component::menu::{PopupMenu, PopupMenuAppearance};
@@ -24,7 +23,6 @@ use gpui_component::scroll::ScrollbarShow;
 use crate::app::actions::*;
 use crate::app::consts::*;
 use crate::app::helpers::*;
-use crate::app::model::*;
 use crate::*;
 
 /// CDXC:ContextMenus 2026-09-16 DECISION:
@@ -229,187 +227,6 @@ impl GhostexGpuiApp {
                 row.disabled,
                 move |_, _| titlebar_popup_git_action_menu_row(row.clone()),
             );
-        }
-        menu
-    }
-
-    #[allow(dead_code)] // no caller: Tips is a titlebar-host CEF panel now; this is the superseded native popup menu
-    pub(crate) fn build_gpui_titlebar_tips_popup_menu(&self, menu: PopupMenu) -> PopupMenu {
-        let read_ids = gpui_titlebar_tips_read_ids_from_settings();
-        let unread_count = GPUI_NATIVE_TITLEBAR_TIPS
-            .len()
-            .saturating_sub(read_ids.len());
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_TIPS_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_TIPS_WIDTH))
-            .max_h(px(TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT))
-            .scrollable(true);
-
-        menu = menu.menu_element_with_disabled(
-            Box::new(CopyGpuiTitlebarGitBranch),
-            true,
-            move |_, _| {
-                titlebar_popup_reading_header(
-                    TITLEBAR_ICON_INFO,
-                    "Tips".to_string(),
-                    format!("{unread_count} unread"),
-                )
-            },
-        );
-        for (action_index, (label, icon_path)) in [
-            ("Docs", "titlebar/book.svg"),
-            ("Setup", "titlebar/tool.svg"),
-            ("Updates", "titlebar/history.svg"),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            menu = menu.menu_element(
-                Box::new(RunGpuiTitlebarTipsHeaderAction {
-                    action_index: action_index as u64,
-                }),
-                move |_, _| {
-                    titlebar_popup_standard_menu_row(
-                        icon_path,
-                        TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                        label.to_string(),
-                        false,
-                    )
-                },
-            );
-        }
-
-        if shared_settings::shared_sidebar_settings_snapshot().debugging_mode() {
-            menu = titlebar_popup_git_section(menu.separator(), "Notices");
-            menu = menu.menu_element(
-                Box::new(RunGpuiTitlebarTipsHeaderAction { action_index: 3 }),
-                move |_, _| titlebar_popup_tip_row(
-                    "titlebar/bug.svg",
-                    "Debug mode is on".to_string(),
-                    "Ghostex is showing debug UI controls and allowing enabled diagnostic scenarios to write routine logs.".to_string(),
-                    false,
-                ),
-            );
-        }
-
-        let unread = GPUI_NATIVE_TITLEBAR_TIPS
-            .iter()
-            .enumerate()
-            .filter(|(_, tip)| !read_ids.contains(tip.id))
-            .collect::<Vec<_>>();
-        let read = GPUI_NATIVE_TITLEBAR_TIPS
-            .iter()
-            .enumerate()
-            .filter(|(_, tip)| read_ids.contains(tip.id))
-            .collect::<Vec<_>>();
-        if !unread.is_empty() {
-            menu = titlebar_popup_git_section(menu.separator(), "Unread");
-            for (tip_index, tip) in unread {
-                let tip = *tip;
-                menu = menu.menu_element(
-                    Box::new(RunGpuiTitlebarTip {
-                        tip_index: tip_index as u64,
-                    }),
-                    move |_, _| {
-                        titlebar_popup_tip_row(
-                            tip.icon_path,
-                            tip.title.to_string(),
-                            tip.body.to_string(),
-                            true,
-                        )
-                    },
-                );
-            }
-        }
-        if !read.is_empty() {
-            menu = titlebar_popup_git_section(menu.separator(), "Read");
-            for (tip_index, tip) in read {
-                let tip = *tip;
-                menu = menu.menu_element(
-                    Box::new(RunGpuiTitlebarTip {
-                        tip_index: tip_index as u64,
-                    }),
-                    move |_, _| {
-                        titlebar_popup_tip_row(
-                            tip.icon_path,
-                            tip.title.to_string(),
-                            tip.body.to_string(),
-                            false,
-                        )
-                    },
-                );
-            }
-        }
-        menu
-    }
-
-    #[allow(dead_code)] // no caller: Resources is a titlebar-host CEF panel now; this is the superseded native popup menu
-    pub(crate) fn build_gpui_titlebar_resources_popup_menu(
-        menu: PopupMenu,
-        snapshot: GpuiNativeResourcesSnapshot,
-    ) -> PopupMenu {
-        let mut menu = menu
-            .min_w(px(TITLEBAR_POPUP_RESOURCES_WIDTH))
-            .max_w(px(TITLEBAR_POPUP_RESOURCES_WIDTH))
-            .max_h(px(TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT))
-            .scrollable(true);
-        let total_label = format!(
-            "{}  •  {}",
-            format_gpui_resource_cpu(snapshot.total_cpu),
-            format_gpui_resource_memory(snapshot.total_memory_mb),
-        );
-        menu = menu.menu_element_with_disabled(
-            Box::new(CopyGpuiTitlebarGitBranch),
-            true,
-            move |_, _| {
-                titlebar_popup_reading_header(
-                    TITLEBAR_ICON_DEVICE_DESKTOP,
-                    "Resources".to_string(),
-                    total_label.clone(),
-                )
-            },
-        );
-        menu = menu
-            .menu_element(Box::new(SleepInactiveSessionsFromTitlebar), move |_, _| {
-                titlebar_popup_standard_menu_row(
-                    COMMAND_ICON_MOON,
-                    TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                    "Sleep Inactive Sessions".to_string(),
-                    false,
-                )
-            })
-            .menu_element(Box::new(RestartGpuiGxserverFromTitlebar), move |_, _| {
-                titlebar_popup_standard_menu_row(
-                    BROWSER_ICON_RELOAD,
-                    TITLEBAR_POPUP_MENU_ROW_ICON_SIZE,
-                    "Restart gxserver".to_string(),
-                    false,
-                )
-            });
-
-        for (label, rows) in snapshot.session_sections().chain([
-            ("Code IDE", snapshot.code_rows.as_slice()),
-            ("Browser Tabs", snapshot.browser_rows.as_slice()),
-            ("Orphaned / Detached", snapshot.orphan_rows.as_slice()),
-        ]) {
-            if rows.is_empty() {
-                continue;
-            }
-            menu = titlebar_popup_git_section(menu.separator(), label.to_string());
-            for row in rows {
-                let row = row.clone();
-                let action: Box<dyn Action> = if let Some(session_id) = row.session_id.clone() {
-                    Box::new(FocusGpuiTitlebarResourceSession { session_id })
-                } else if let Some(url) = row.url.clone() {
-                    Box::new(OpenGpuiTitlebarResourceUrl { url })
-                } else {
-                    Box::new(CopyGpuiTitlebarGitBranch)
-                };
-                let disabled = row.session_id.is_none() && row.url.is_none();
-                menu = menu.menu_element_with_disabled(action, disabled, move |_, _| {
-                    titlebar_popup_resource_row(row.clone(), disabled)
-                });
-            }
         }
         menu
     }

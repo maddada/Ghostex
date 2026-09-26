@@ -107,7 +107,6 @@ pub type ProjectWorkareaBridgeEventHandler = Rc<dyn Fn(ProjectWorkareaBridgeEven
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AppModalHostBridgeEvent {
     Message(String),
-    NativeHostMessage(String),
 }
 
 pub type AppModalHostBridgeEventHandler = Rc<dyn Fn(AppModalHostBridgeEvent)>;

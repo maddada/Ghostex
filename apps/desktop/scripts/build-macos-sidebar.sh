@@ -25,7 +25,6 @@ build_cef_sidebar_bundle_if_needed() {
 		--path "$GPUI_DIR/kanban.html" \
 		--path "$GPUI_DIR/manage.html" \
 		--path "$GPUI_DIR/modal-host.html" \
-		--path "$GPUI_DIR/titlebar-host.html" \
 		--path "$GPUI_DIR/sidebar" \
 		--path "$GPUI_DIR/views" \
 		--path "$REPO_ROOT/packages/core-ui" \
@@ -42,7 +41,6 @@ build_cef_sidebar_bundle_if_needed() {
 		"$GPUI_DIR/dist/sidebar/kanban.html"
 		"$GPUI_DIR/dist/sidebar/manage.html"
 		"$GPUI_DIR/dist/sidebar/modal-host.html"
-		"$GPUI_DIR/dist/sidebar/titlebar-host.html"
 		"$GPUI_DIR/dist/sidebar/monaco/vs/loader.js"
 		"$GPUI_DIR/dist/sidebar/mermaid/runtime.js"
 	)

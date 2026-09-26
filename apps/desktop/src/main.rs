@@ -107,7 +107,6 @@ use gpui::Pixels;
 use gpui::Point;
 use gpui::PressureStage;
 use gpui::Render;
-use gpui::RenderOnce;
 use gpui::ScrollDelta;
 use gpui::ScrollHandle;
 use gpui::Size;
@@ -128,7 +127,6 @@ use gpui::rgba;
 use gpui::size;
 use gpui::svg;
 use gpui_component::Root;
-use gpui_component::Selectable;
 use gpui_component::h_flex;
 use gpui_component::menu::PopupMenu;
 use gpui_component::scroll::Scrollbar;
@@ -487,34 +485,12 @@ fn main() {
                             GPUI_LATEST_WINDOW_FRAME_STATE.with(|latest| latest.borrow().clone());
                         if previous_frame_state != current_frame_state {
                             schedule_gpui_window_frame_state_persist(cx);
-                            if let Some(state) = app.titlebar_popup_menu.as_ref() {
-                                log_gpui_titlebar_popup_repro(
-                                    "gpui.titlebarPopup.mainWindowBoundsChanged",
-                                    serde_json::json!({
-                                        "kind": state.kind.diagnostic_label(),
-                                        "mainWindowActive": window.is_window_active(),
-                                        "windowBounds": gpui_titlebar_popup_bounds_diagnostic(
-                                            Some(window.bounds())
-                                        ),
-                                    }),
-                                );
-                            }
                             app.close_gpui_titlebar_popup(None, window, cx);
                             app.recycle_gpui_new_thread_picker_preload(cx);
                         }
                     })
                     .detach();
                     cx.observe_window_activation(window, |app, window, cx| {
-                        log_gpui_titlebar_popup_repro(
-                            "gpui.titlebarPopup.mainWindowActivationChanged",
-                            serde_json::json!({
-                                "kind": app
-                                    .titlebar_popup_menu
-                                    .as_ref()
-                                    .map(|state| state.kind.diagnostic_label()),
-                                "mainWindowActive": window.is_window_active(),
-                            }),
-                        );
                         if !window.is_window_active() {
                             app.close_gpui_titlebar_popup(None, window, cx);
                             /*
@@ -733,72 +709,6 @@ fn reconcile_gpui_managed_ghostty_config() {
         snapshot.object(),
         &keys,
     );
-}
-
-#[derive(IntoElement)]
-struct GpuiTitlebarTipsTrigger {
-    selected: bool,
-    show_badge: bool,
-}
-
-impl GpuiTitlebarTipsTrigger {
-    fn new(show_badge: bool) -> Self {
-        Self {
-            selected: false,
-            show_badge,
-        }
-    }
-}
-
-impl Selectable for GpuiTitlebarTipsTrigger {
-    fn selected(mut self, selected: bool) -> Self {
-        self.selected = selected;
-        self
-    }
-
-    fn is_selected(&self) -> bool {
-        self.selected
-    }
-}
-
-impl RenderOnce for GpuiTitlebarTipsTrigger {
-    fn render(self, _window: &mut Window, _cx: &mut App) -> impl IntoElement {
-        let icon_color = if self.selected {
-            titlebar_icon_hover_color()
-        } else {
-            titlebar_icon_color()
-        };
-
-        div()
-            .id("ghostex-gpui-titlebar-button-tips")
-            .relative()
-            .flex()
-            .h(px(TITLEBAR_CONTROL_HEIGHT))
-            .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
-            .items_center()
-            .justify_center()
-            .text_color(icon_color)
-            .cursor_default()
-            .when(self.selected, |this| this.bg(titlebar_button_hover_color()))
-            .hover(|this| {
-                this.bg(titlebar_button_hover_color())
-                    .text_color(titlebar_icon_hover_color())
-            })
-            .child(titlebar_svg_icon(TITLEBAR_ICON_INFO, 16.0, icon_color))
-            .when(self.show_badge, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .right(px(2.0))
-                        .top(px(5.0))
-                        .size(px(7.5))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(titlebar_background())
-                        .bg(rgb(0x95d7f6)),
-                )
-            })
-    }
 }
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]

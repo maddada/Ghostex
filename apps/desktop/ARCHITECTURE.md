@@ -52,10 +52,8 @@ Main code:
 
 - `gpui/src/main.rs`
 - `gpui/assets/titlebar/*.svg`
-- `gpui/titlebar-host.html`
-- `native/sidebar/titlebar-host.tsx`
 
-The titlebar is GPUI-owned. It renders the project label, sidebar toggle, workarea switcher, Open In, Resources, Keep Awake, actions, and Settings controls. Git, Actions, Open In, Tips, and Resources use GPUI-rendered `gpui_component::menu::PopupMenu` surfaces in non-activating popup windows; OS utility menus continue to use `gpui_component::native_menu::NativeMenu`. The legacy React Tips and Resources implementations remain owned by the macOS app and are not loaded by these GPUI titlebar controls.
+The titlebar is GPUI-owned. It renders the project label, sidebar toggle, workarea switcher, Open In, Resources, Keep Awake, actions, and Settings controls. Git, Actions, Open In, Tips, and Resources use GPUI-rendered `gpui_component::menu::PopupMenu` surfaces in non-activating popup windows; OS utility menus continue to use `gpui_component::native_menu::NativeMenu`.
 
 ### Sidebar
 
@@ -209,7 +207,6 @@ Build pieces:
   - `kanban.html`
   - `manage.html`
   - `modal-host.html`
-  - `titlebar-host.html`
 - The app packager creates a macOS `.app` bundle with CEF frameworks, helper apps, sidebar resources, sounds, CLI resources, Web resources, and optional remote gxserver packages.
 
 ## Current caveats

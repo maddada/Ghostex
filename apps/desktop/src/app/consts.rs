@@ -292,10 +292,6 @@ pub(crate) const TITLEBAR_TOOLTIP_LINE_HEIGHT: f32 = 18.0;
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 pub(crate) const TITLEBAR_WINDOW_BUTTON_WIDTH: f32 = 46.0;
 
-pub(crate) const TITLEBAR_DROPDOWN_TIPS_PANEL_WIDTH: f32 = 556.0;
-
-pub(crate) const TITLEBAR_DROPDOWN_READING_PANEL_HEIGHT: f32 = 650.0;
-
 pub(crate) const TITLEBAR_PROJECT_LABEL_FALLBACK: &str = "Ghostex";
 
 pub(crate) const GPUI_PROJECT_IS_QUICK_ENV: &str = "GHOSTEX_GPUI_PROJECT_IS_QUICK";
@@ -580,8 +576,6 @@ pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL: &str = "titlebar/arrows-diagonal
 pub(crate) const TITLEBAR_ICON_ARROWS_DIAGONAL_MINIMIZE: &str =
     "titlebar/arrows-diagonal-minimize.svg";
 
-pub(crate) const TITLEBAR_TIPS_READ_STORAGE_KEY: &str = "ghostex.titlebar.tips.readIds";
-
 pub(crate) const TITLEBAR_TIP_IDS: &[&str] = &[
     "command-palette-all-actions",
     "customize-sidebar-layout-and-tools",
@@ -712,20 +706,6 @@ pub(crate) const GHOSTEX_TUTORIAL_VIDEO_URL: &str = "https://www.youtube.com/wat
 /// main-frame load-end before its player has installed keyboard shortcuts, so
 /// the host-side fullscreen key press waits this long after that edge.
 pub(crate) const GPUI_TUTORIAL_VIDEO_FULLSCREEN_KEY_DELAY: Duration = Duration::from_millis(1500);
-
-pub(crate) const TITLEBAR_TIPS_PANEL_CEF_PROFILE_ID: &str = "titlebar-tips-panel";
-
-pub(crate) const TITLEBAR_TIPS_PANEL_ID: &str = "ghostex-gpui-titlebar-tips-panel";
-
-pub(crate) const TITLEBAR_RESOURCES_PANEL_CEF_PROFILE_ID: &str = "titlebar-resources-panel";
-
-pub(crate) const TITLEBAR_RESOURCES_PANEL_ID: &str = "ghostex-gpui-titlebar-resources-panel";
-
-pub(crate) const TITLEBAR_DROPDOWN_RESOURCES_PANEL_WIDTH: f32 = 656.0;
-
-pub(crate) const GPUI_TITLEBAR_NATIVE_PROCESS_REQUEST_ID_MAX_CHARS: usize = 256;
-
-pub(crate) const GPUI_TITLEBAR_NATIVE_PROCESS_REJECTED_EXIT_CODE: i32 = 126;
 
 pub(crate) const APP_MODAL_HOST_WINDOW_WIDTH: f32 = 1080.0;
 
@@ -948,14 +928,6 @@ pub(crate) const GPUI_TITLEBAR_TIPS_READ_IDS_SETTINGS_KEY: &str = "gpuiTitlebarT
 
 pub(crate) const TITLEBAR_ACTION_UNCONFIGURED_PREVIEW: &str = "Set the command";
 
-pub(crate) const TITLEBAR_TIPS_TOOLTIP: &str = "Tips";
-
-pub(crate) const TITLEBAR_RESOURCES_TOOLTIP: &str = "Resources Monitor";
-
-
-
-
-
 pub(crate) const TITLEBAR_UPDATE_AVAILABLE_TOOLTIP: &str =
     "Update Ghostex! All your sessions will continue running.";
 
@@ -1003,10 +975,9 @@ pub(crate) const BROWSER_ICON_WORLD: &str = "titlebar/world.svg";
 pub(crate) const BROWSER_ICON_TOOLS: &str = "titlebar/tools.svg";
 
 /*
-GPUI Tips uses the same gpui-component PopupMenu child-window path as the
-other titlebar dropdowns. The legacy React titlebar host remains available to
-the macOS app, while these first-party URLs stay bounded before they enter a
-GPUI Browser pane.
+GPUI Tips uses the same child-window path as the other titlebar dropdowns.
+Its Docs and Updates actions open only these first-party URLs in a GPUI
+Browser pane.
 */
 pub(crate) const GHOSTEX_CHANGELOG_URL: &str = "https://github.com/maddada/ghostex/releases";
 

@@ -19,14 +19,13 @@ use sidebar_bridge_manifest::{
     APP_MODAL_HOST_SURFACE_JS_FIELD, APP_MODAL_HOST_SURFACE_VALUE, AppModalHostBridgeSurface,
     EXTENSION_BRIDGE_INSTALL_MESSAGE_NAME, EXTENSION_BRIDGE_PAYLOAD_MAX_CHARS,
     EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME, EXTENSION_BRIDGE_RUNTIME_SHIM,
-    NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS,
-    PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME, PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS,
-    PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
+    PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS, PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME,
+    PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS, PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE,
     WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT, WEBKIT_JS_OBJECT,
-    WEBKIT_MESSAGE_HANDLERS_JS_OBJECT, WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT,
-    WEBKIT_POST_MESSAGE_JS_FUNCTION, project_workarea_bridge_function_spec_for_js_function,
+    WEBKIT_MESSAGE_HANDLERS_JS_OBJECT, WEBKIT_POST_MESSAGE_JS_FUNCTION,
+    project_workarea_bridge_function_spec_for_js_function,
     project_workarea_bridge_function_spec_for_process_message,
 };
 use std::os::raw::c_int;
@@ -407,39 +406,6 @@ wrap_v8_handler! {
     }
 }
 
-wrap_v8_handler! {
-    struct GhostexGpuiNativeHostBridgeV8Handler;
-
-    impl V8Handler {
-        fn execute(
-            &self,
-            name: Option<&CefString>,
-            _object: Option<&mut V8Value>,
-            arguments: Option<&[Option<V8Value>]>,
-            retval: Option<&mut Option<V8Value>>,
-            _exception: Option<&mut CefString>,
-        ) -> std::os::raw::c_int {
-            let name = name.map(CefString::to_string);
-            if name.as_deref() != Some(WEBKIT_POST_MESSAGE_JS_FUNCTION) {
-                return 0;
-            }
-
-            let payload = arguments
-                .and_then(|arguments| arguments.first())
-                .and_then(Option::as_ref)
-                .and_then(app_modal_host_payload_from_v8_value);
-            let Some(payload) = payload else {
-                set_v8_bool_return(retval, false);
-                return 1;
-            };
-
-            let sent = send_native_host_bridge_process_message(&payload);
-            set_v8_bool_return(retval, sent);
-            1
-        }
-    }
-}
-
 fn is_gpui_first_party_cef_entry_url(url: &str, entry_file_name: &str) -> bool {
     let Some(base) = url.split(['?', '#']).next() else {
         return false;
@@ -757,32 +723,6 @@ fn send_extension_bridge_process_message(payload: &str) -> bool {
     };
     let mut message = match cef::process_message_create(Some(&CefString::from(
         EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME,
-    ))) {
-        Some(message) => message,
-        None => return false,
-    };
-    let Some(arguments) = message.argument_list() else {
-        return false;
-    };
-    arguments.set_size(1);
-    arguments.set_string(0, Some(&CefString::from(payload)));
-    frame.send_process_message(ProcessId::BROWSER, Some(&mut message));
-    true
-}
-
-fn send_native_host_bridge_process_message(payload: &str) -> bool {
-    if payload.chars().count() > APP_MODAL_HOST_BRIDGE_PAYLOAD_MAX_CHARS {
-        return false;
-    }
-
-    let Some(context) = cef::v8_context_get_current_context() else {
-        return false;
-    };
-    let Some(frame) = context.frame() else {
-        return false;
-    };
-    let mut message = match cef::process_message_create(Some(&CefString::from(
-        NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME,
     ))) {
         Some(message) => message,
         None => return false,

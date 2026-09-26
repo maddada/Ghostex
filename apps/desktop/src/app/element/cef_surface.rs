@@ -146,10 +146,6 @@ impl CefSurface {
         }
     }
 
-    pub(crate) fn browser(&self) -> Rc<CefBrowser> {
-        self.browser.clone()
-    }
-
     pub(crate) fn load_url(&mut self, url: &str) {
         self.browser.load_url(url);
     }

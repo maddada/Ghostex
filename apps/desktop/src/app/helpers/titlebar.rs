@@ -16,7 +16,7 @@ use windows_sys::Win32::Security::Cryptography::{
     BCRYPT_USE_SYSTEM_PREFERRED_RNG, BCryptGenRandom,
 };
 
-use anyhow::{Context as _, Result};
+use anyhow::Result;
 use futures::StreamExt as _;
 use gpui::http_client::HttpRequestExt as _;
 use gpui::{
@@ -118,7 +118,13 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     of the sidebar, so it takes the ordinary trigger-relative path: it grows to
     the right of the meter and flips above it when there is no room below.
     */
+    /*
+    CDXC:ContextMenus 2026-09-26 DECISION:
+    User: a context menu with many options is not scrollable. It grows to its full height and only
+    the window itself limits it, so the dropdown cap below applies to header dropdowns alone.
+    */
     let max_height = match kind {
+        GpuiTitlebarPopupKind::ContextMenu => f32::INFINITY,
         GpuiTitlebarPopupKind::AccountUsage(_) => 640.0,
         GpuiTitlebarPopupKind::Notifications => TITLEBAR_POPUP_NOTIFICATIONS_MAX_HEIGHT,
         GpuiTitlebarPopupKind::Resources
@@ -612,152 +618,6 @@ pub(crate) fn gpui_native_resource_children_by_parent(
             .push(process.clone());
     }
     children
-}
-
-pub(crate) fn titlebar_popup_reading_header(
-    icon_path: &'static str,
-    title: String,
-    summary: String,
-) -> impl IntoElement {
-    h_flex()
-        .w_full()
-        .min_h(px(38.0))
-        .items_center()
-        .justify_between()
-        .gap(px(12.0))
-        .text_color(titlebar_active_text_color())
-        .child(
-            h_flex()
-                .items_center()
-                .gap(px(10.0))
-                .text_size(px(15.0))
-                .font_weight(FontWeight::SEMIBOLD)
-                .child(titlebar_svg_icon(icon_path, 18.0, titlebar_icon_color()))
-                .child(title),
-        )
-        .child(
-            div()
-                .text_size(px(12.0))
-                .font_weight(FontWeight::NORMAL)
-                .text_color(titlebar_inactive_text_color())
-                .child(summary),
-        )
-}
-
-pub(crate) fn titlebar_popup_tip_row(
-    icon_path: &'static str,
-    title: String,
-    body: String,
-    unread: bool,
-) -> impl IntoElement {
-    h_flex()
-        .min_w_0()
-        .w_full()
-        .min_h(px(58.0))
-        .items_start()
-        .gap(px(11.0))
-        .py(px(7.0))
-        .child(
-            div()
-                .relative()
-                .flex()
-                .w(px(20.0))
-                .pt(px(2.0))
-                .items_center()
-                .justify_center()
-                .child(titlebar_svg_icon(icon_path, 16.0, titlebar_icon_color()))
-                .when(unread, |this| {
-                    this.child(
-                        div()
-                            .absolute()
-                            .right(px(-1.0))
-                            .top_0()
-                            .size(px(6.0))
-                            .rounded_full()
-                            .bg(rgb(0x95d7f6)),
-                    )
-                }),
-        )
-        .child(
-            v_flex()
-                .min_w_0()
-                .flex_1()
-                .gap(px(2.0))
-                .child(
-                    div()
-                        .text_size(px(13.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(titlebar_active_text_color())
-                        .child(title),
-                )
-                .child(
-                    div()
-                        .text_size(px(11.0))
-                        .line_height(px(15.0))
-                        .text_color(titlebar_inactive_text_color())
-                        .child(body),
-                ),
-        )
-}
-
-pub(crate) fn titlebar_popup_resource_row(
-    row: GpuiNativeResourceRow,
-    disabled: bool,
-) -> impl IntoElement {
-    let foreground = if disabled {
-        titlebar_popup_menu_disabled_text_color()
-    } else {
-        titlebar_active_text_color()
-    };
-    h_flex()
-        .min_w_0()
-        .w_full()
-        .min_h(px(48.0))
-        .items_center()
-        .gap(px(11.0))
-        .child(
-            div()
-                .flex()
-                .size(px(28.0))
-                .items_center()
-                .justify_center()
-                .bg(rgb(0xffffff).opacity(0.07))
-                .child(titlebar_svg_icon(row.icon_path, 16.0, foreground)),
-        )
-        .child(
-            v_flex()
-                .min_w_0()
-                .flex_1()
-                .gap(px(1.0))
-                .child(
-                    div()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(13.0))
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(foreground)
-                        .child(row.label),
-                )
-                .child(
-                    div()
-                        .overflow_hidden()
-                        .whitespace_nowrap()
-                        .text_ellipsis()
-                        .text_size(px(11.0))
-                        .text_color(titlebar_inactive_text_color())
-                        .child(row.detail),
-                ),
-        )
-        .child(
-            h_flex()
-                .flex_shrink_0()
-                .gap(px(12.0))
-                .text_size(px(12.0))
-                .text_color(titlebar_inactive_text_color())
-                .child(format_gpui_resource_cpu(row.cpu))
-                .child(format_gpui_resource_memory(row.memory_mb)),
-        )
 }
 
 pub(crate) fn titlebar_popup_standard_menu_row(
@@ -2002,7 +1862,7 @@ fn theme_contrast_points(object: &serde_json::Map<String, serde_json::Value>, ke
     }
 }
 
-fn theme_contrast_offset(object: &serde_json::Map<String, serde_json::Value>) -> f64 {
+pub(crate) fn theme_contrast_offset(object: &serde_json::Map<String, serde_json::Value>) -> f64 {
     theme_contrast_points(object, "themeSidebarContrast")
 }
 
@@ -2321,82 +2181,6 @@ pub(crate) fn normalize_address(value: &str) -> Option<String> {
     ))
 }
 
-pub(crate) fn titlebar_tips_panel_url() -> Result<String> {
-    let base_url = gpui_cef_html_entry_url("GHOSTEX_GPUI_TITLEBAR_HOST_URL", "titlebar-host.html")
-        .context("failed to resolve GPUI titlebar host bundle URL")?;
-    Ok(gpui_url_with_query_param(
-        &base_url,
-        "ghostexTitlebarPanel",
-        "tips",
-    ))
-}
-
-pub(crate) fn titlebar_resources_panel_url() -> Result<String> {
-    let base_url = gpui_cef_html_entry_url("GHOSTEX_GPUI_TITLEBAR_HOST_URL", "titlebar-host.html")
-        .context("failed to resolve GPUI titlebar host bundle URL")?;
-    Ok(gpui_url_with_query_param(
-        &base_url,
-        "ghostexTitlebarPanel",
-        "resources",
-    ))
-}
-
-pub(crate) fn gpui_url_with_query_param(url: &str, key: &str, value: &str) -> String {
-    let separator = if url.contains('?') { '&' } else { '?' };
-    format!("{url}{separator}{key}={value}")
-}
-
-pub(crate) fn gpui_titlebar_tips_browser_url_allowed(url: &str) -> bool {
-    matches!(url, GHOSTEX_DOCS_URL | GHOSTEX_CHANGELOG_URL)
-}
-
-pub(crate) fn gpui_titlebar_resources_browser_url_allowed(url: &str) -> bool {
-    let Ok(parsed) = gpui::http_client::Url::parse(url.trim()) else {
-        return false;
-    };
-    if !matches!(parsed.scheme(), "http" | "https")
-        || !parsed.username().is_empty()
-        || parsed.password().is_some()
-    {
-        return false;
-    }
-    let Some(host) = parsed.host_str() else {
-        return false;
-    };
-    if matches!(host, "localhost" | "127.0.0.1" | "::1") {
-        return true;
-    }
-    GPUI_PORTLESS_APP_INTEGRATION_ENABLED
-        && gpui_sidebar_portless_state_with_presentation()
-            .as_ref()
-            .is_some_and(|state| gpui_titlebar_resources_portless_host_allowed(host, state))
-}
-
-pub(crate) fn gpui_titlebar_resources_portless_host_allowed(
-    host: &str,
-    state: &serde_json::Value,
-) -> bool {
-    let presentation = state.get("presentation");
-    if presentation
-        .and_then(|presentation| presentation.get("routePreviewStatus"))
-        .and_then(serde_json::Value::as_str)
-        != Some("current")
-    {
-        return false;
-    }
-    presentation
-        .and_then(|presentation| presentation.get("routePreviews"))
-        .and_then(serde_json::Value::as_array)
-        .is_some_and(|previews| {
-            previews.iter().any(|preview| {
-                preview
-                    .get("hostname")
-                    .and_then(serde_json::Value::as_str)
-                    .is_some_and(|hostname| hostname.eq_ignore_ascii_case(host))
-            })
-        })
-}
-
 pub(crate) fn gpui_open_external_http_url(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     if trimmed.is_empty() || trimmed.len() > 4096 {
@@ -2412,86 +2196,6 @@ pub(crate) fn gpui_open_external_http_url(url: &str) -> Result<(), String> {
         return Err("External URL is invalid.".to_string());
     }
     gpui_spawn_os_open(std::ffi::OsStr::new(trimmed))
-}
-
-pub(crate) fn gpui_titlebar_resources_native_pane_state(
-    state: TerminalSessionPresentationState,
-) -> &'static str {
-    match state {
-        TerminalSessionPresentationState::Running => "mounted",
-        TerminalSessionPresentationState::Mounting => "mounting",
-        TerminalSessionPresentationState::Sleeping
-        | TerminalSessionPresentationState::StartupFailed
-        | TerminalSessionPresentationState::RestoredUnmounted
-        | TerminalSessionPresentationState::PoppedOutPlaceholder => "unmounted",
-    }
-}
-
-pub(crate) fn gpui_titlebar_resources_provider_session_state(
-    persistence_name: Option<&str>,
-) -> &'static str {
-    if persistence_name.is_some_and(|name| !name.trim().is_empty()) {
-        "exists"
-    } else {
-        "unknown"
-    }
-}
-
-pub(crate) fn gpui_titlebar_resources_project_editor_kind(
-    slot_key: ProjectWorkareaCefSurfaceSlotKey,
-) -> &'static str {
-    match slot_key {
-        ProjectWorkareaCefSurfaceSlotKey::Source => "code",
-        ProjectWorkareaCefSurfaceSlotKey::Kanban => "tasks",
-        ProjectWorkareaCefSurfaceSlotKey::Automate => "automate",
-        ProjectWorkareaCefSurfaceSlotKey::Manage => "manage",
-        ProjectWorkareaCefSurfaceSlotKey::Extension(_) => "extension",
-    }
-}
-
-/*
-CDXC:Navigation 2026-08-19:
-The titlebar Resources list needs the merged web-link destination as a string
-for its own payload, so route it through the same snapshot accessor that owns
-the legacy-key precedence instead of reading the raw field a second time.
-*/
-pub(crate) fn gpui_titlebar_web_link_open_target_from_settings(
-    settings: &serde_json::Map<String, serde_json::Value>,
-) -> &'static str {
-    if shared_settings::web_links_open_in_app_from_object(settings) {
-        "internal-browser"
-    } else {
-        "system-default-browser"
-    }
-}
-
-pub(crate) fn gpui_titlebar_resources_string_array_field(
-    message: &serde_json::Value,
-    field: &str,
-) -> Vec<String> {
-    message
-        .get(field)
-        .and_then(serde_json::Value::as_array)
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(serde_json::Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-pub(crate) fn gpui_titlebar_project_state_update_from_sidebar_state_payload(
-    payload: &serde_json::Value,
-) -> Option<serde_json::Value> {
-    match payload.get("type").and_then(serde_json::Value::as_str)? {
-        "agentHookStatus" => Some(serde_json::json!({ "agentHookStatus": payload })),
-        "ghostexCliStatus" => Some(serde_json::json!({ "ghostexCliStatus": payload })),
-        _ => None,
-    }
 }
 
 pub(crate) fn gpui_app_modal_unsupported_settings_command_noop(command_type: &str) -> bool {
@@ -2540,221 +2244,6 @@ pub(crate) fn gpui_terminal_link_is_web_url(link: &str) -> bool {
         || link
             .get(..8)
             .is_some_and(|prefix| prefix.eq_ignore_ascii_case("https://"))
-}
-
-pub(crate) fn gpui_titlebar_resource_groups_from_presentation_snapshot(
-    snapshot: &serde_json::Value,
-    active_project_id: Option<&str>,
-) -> Vec<serde_json::Value> {
-    let Some(snapshot) = snapshot.as_object() else {
-        return Vec::new();
-    };
-    let projects_by_id = json_array_field(snapshot, "projects")
-        .into_iter()
-        .flatten()
-        .filter_map(|project| {
-            let project = project.as_object()?;
-            let project_id = json_string_field(project, "projectId")?;
-            Some((project_id.to_string(), project.clone()))
-        })
-        .collect::<HashMap<_, _>>();
-    let sessions_by_key = json_array_field(snapshot, "sessions")
-        .into_iter()
-        .flatten()
-        .filter_map(|session| {
-            let session = session.as_object()?;
-            let project_id = json_string_field(session, "projectId")?;
-            let session_id = json_string_field(session, "sessionId")?;
-            Some((
-                (project_id.to_string(), session_id.to_string()),
-                session.clone(),
-            ))
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut ordered_project_ids: Vec<String> = Vec::new();
-    let mut sessions_by_project: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
-    for group in json_array_field(snapshot, "groups").into_iter().flatten() {
-        let Some(group) = group.as_object() else {
-            continue;
-        };
-        let Some(project_id) = json_string_field(group, "projectId") else {
-            continue;
-        };
-        for session_id in json_array_field(group, "sessionIds").into_iter().flatten() {
-            let Some(session_id) = session_id.as_str() else {
-                continue;
-            };
-            let Some(session) =
-                sessions_by_key.get(&(project_id.to_string(), session_id.to_string()))
-            else {
-                continue;
-            };
-            let Some(value) = gpui_titlebar_resource_session_from_presentation(project_id, session)
-            else {
-                continue;
-            };
-            let sessions = sessions_by_project
-                .entry(project_id.to_string())
-                .or_default();
-            if sessions.is_empty() {
-                ordered_project_ids.push(project_id.to_string());
-            }
-            sessions.push(value);
-        }
-    }
-
-    ordered_project_ids
-        .into_iter()
-        .filter_map(|project_id| {
-            let sessions = sessions_by_project.remove(&project_id)?;
-            let project = projects_by_id.get(&project_id);
-            let project_path = project
-                .and_then(|project| json_string_field(project, "path"))
-                .unwrap_or_default();
-            let project_name = project
-                .and_then(|project| json_string_field(project, "title"))
-                .map(str::trim)
-                .filter(|title| !title.is_empty())
-                .or_else(|| {
-                    project_path
-                        .rsplit('/')
-                        .find(|component| !component.is_empty())
-                })
-                .unwrap_or(project_id.as_str())
-                .to_string();
-            Some(serde_json::json!({
-                "groupId": gpui_combined_presentation_project_group_id(&project_id),
-                "isActive": active_project_id == Some(project_id.as_str()),
-                "projectId": project_id,
-                "projectName": project_name,
-                "projectPath": project_path,
-                "sessions": sessions,
-                "title": project_name,
-            }))
-        })
-        .collect()
-}
-
-pub(crate) fn gpui_titlebar_resource_session_from_presentation(
-    project_id: &str,
-    session: &serde_json::Map<String, serde_json::Value>,
-) -> Option<serde_json::Value> {
-    if json_bool_field(session, "visibleInSidebarByDefault") != Some(true)
-        || json_string_field(session, "surface") == Some("commands")
-    {
-        return None;
-    }
-    let session_id = json_string_field(session, "sessionId")?;
-    let session_kind = match json_string_field(session, "kind")? {
-        "agent" | "terminal" => "terminal",
-        "browser" => "browser",
-        _ => return None,
-    };
-    let lifecycle_state = json_string_field(session, "lifecycleState").unwrap_or("unknown");
-    let is_running = lifecycle_state == "running";
-    let title = json_string_field(session, "displayTitle")
-        .or_else(|| json_string_field(session, "primaryTitle"))
-        .or_else(|| json_string_field(session, "title"))
-        .map(str::trim)
-        .filter(|title| !title.is_empty())
-        .unwrap_or("Terminal");
-    let mut value = serde_json::json!({
-        "activity": gpui_daemon_agent_status(json_string_field(session, "activity")),
-        "isLive": is_running,
-        "isRunning": is_running,
-        "isSleeping": lifecycle_state == "sleeping",
-        "projectId": project_id,
-        "sessionId": gpui_combined_presentation_session_id(project_id, session_id),
-        "sessionKind": session_kind,
-        "terminalTitle": title,
-        "title": title,
-    });
-    let value_object = value.as_object_mut()?;
-    /*
-    CDXC:SavedPrompts 2026-08-24:
-    Carry gxserver's provider conversation id onto the projected row. App-modal
-    surfaces that hydrate from this Quick Access projection (Saved Prompts, for
-    one) need it to tell which rows belong to the conversation they were opened
-    for, because the visible `sessionId` above is the combined presentation id
-    and a conversation outlives the gxserver session row that hosts it.
-    */
-    gpui_insert_optional_string(
-        value_object,
-        "agentSessionId",
-        json_string_field(session, "agentSessionId"),
-    );
-    /*
-    Quick Access reuses this bounded live-session projection. Preserve the
-    gxserver-owned visible title and its comparison metadata so the shared
-    session card does not reinterpret a confirmed title as an unsynced local
-    terminal title and add the `∗` marker.
-    */
-    gpui_insert_optional_string(
-        value_object,
-        "displayTitle",
-        json_string_field(session, "displayTitle"),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "displayTitleTooltip",
-        json_string_field(session, "displayTitleTooltip"),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "primaryTitle",
-        json_string_field(session, "primaryTitle").or_else(|| json_string_field(session, "title")),
-    );
-    if let Some(is_primary_title_terminal_title) =
-        json_bool_field(session, "isPrimaryTitleTerminalTitle")
-    {
-        value_object.insert(
-            "isPrimaryTitleTerminalTitle".to_string(),
-            serde_json::Value::Bool(is_primary_title_terminal_title),
-        );
-    }
-    /*
-    gxserver presentation rows identify agents with values such as `cursor`,
-    `droid`, and `grok`, while SidebarSessionItem.agentIcon requires the
-    canonical shared icon ids (`cursor-cli`, `factory-droid`, `grok-build`,
-    and so on). This projection now feeds Quick Access session cards as well as
-    the titlebar Resources list, so normalize at the contract boundary before
-    React indexes its closed set of icon metadata.
-    */
-    gpui_insert_optional_string(
-        value_object,
-        "agentIcon",
-        gpui_sidebar_agent_icon(json_string_field(session, "agentIcon")),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "lastInteractionAt",
-        json_string_field(session, "meaningfulActivityAt")
-            .or_else(|| json_string_field(session, "lastActiveAt"))
-            .or_else(|| json_string_field(session, "updatedAt")),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "providerSessionState",
-        json_string_field(session, "providerSessionState").filter(|state| {
-            matches!(
-                *state,
-                "exists" | "missing" | "persistence-disabled" | "unknown"
-            )
-        }),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "sessionPersistenceName",
-        json_string_field(session, "zmxName"),
-    );
-    gpui_insert_optional_string(
-        value_object,
-        "sessionPersistenceProvider",
-        json_string_field(session, "sessionPersistenceProvider")
-            .filter(|provider| matches!(*provider, "tmux" | "zmx" | "zellij")),
-    );
-    Some(value)
 }
 
 pub(crate) fn gpui_daemon_session_items_from_presentation_snapshot(
@@ -3359,4 +2848,3 @@ pub(crate) fn gpui_titlebar_mode_hidden_from_settings(mode: TitlebarMode) -> boo
                 .is_some_and(|provider| provider.hidden_by_default)
         })
 }
-

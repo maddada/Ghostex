@@ -472,15 +472,6 @@ impl GhostexGpuiApp {
         ) {
             return Some(FirstResponderCefSurface::ProjectWorkarea(slot_key));
         }
-        if self.titlebar_tips_panel.as_ref().is_some_and(|panel| {
-            panel
-                .read(cx)
-                .surface
-                .read(cx)
-                .native_view_contains_responder(responder)
-        }) {
-            return Some(FirstResponderCefSurface::TitlebarTips);
-        }
         if self
             .titlebar_extension_popup
             .as_ref()

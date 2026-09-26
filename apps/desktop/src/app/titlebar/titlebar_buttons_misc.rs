@@ -42,9 +42,7 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Native equivalent of the shared React titlebar update affordance
-    /// (titlebar-host.tsx `updateAvailable`/`updateDownloading` +
-    /// `TitlebarUpdateProgressRing`): renders only while an update is
+    /// The titlebar update affordance: renders only while an update is
     /// available or downloading, shows a download icon at rest and a circular
     /// progress ring during the platform download, and disables clicks while
     /// downloading.

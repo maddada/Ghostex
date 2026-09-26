@@ -3,7 +3,7 @@
 // only edit from the original app/titlebar.rs body is wrapping each group
 // of `impl GhostexGpuiApp` methods in its own impl block; multiple impl
 // blocks for the same type across files is the established pattern used by
-// every sibling file in apps/desktop/src/app/). This file holds the generic titlebar icon-button renderer and the browser toolbar renderer.
+// every sibling file in apps/desktop/src/app/). This file holds the browser toolbar renderer.
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 // C1 wave-4 extraction: `impl GhostexGpuiApp` methods moved verbatim out of
@@ -15,11 +15,8 @@
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
 
-use gpui::AnyElement;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
-use gpui::MouseButton;
-use gpui::MouseDownEvent;
 use gpui::ParentElement as _;
 use gpui::Styled as _;
 use gpui::div;
@@ -34,136 +31,6 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn render_titlebar_icon_button(
-        &self,
-        id: &'static str,
-        icon_path: &'static str,
-        icon_size: f32,
-        show_badge: bool,
-        cx: &mut gpui::Context<Self>,
-    ) -> AnyElement {
-        div()
-            .id(format!("ghostex-gpui-titlebar-button-{id}"))
-            .relative()
-            .flex()
-            .h(px(TITLEBAR_CONTROL_HEIGHT))
-            .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
-            .items_center()
-            .justify_center()
-            .text_color(titlebar_icon_color())
-            .cursor_default()
-            .hover(|this| {
-                this.bg(titlebar_button_hover_color())
-                    .text_color(titlebar_icon_hover_color())
-            })
-            .on_mouse_down(
-                MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                    window.prevent_default();
-                    cx.stop_propagation();
-                    if id == "settings" {
-                        /*
-                        CDXC:AppModal 2026-06-24-11:09:
-                        The GPUI titlebar Settings glyph owns the app-modal menu for Settings, Hotkeys, and Command Palette. Keep the menu as owned GPUI popup window actions that all route to the shared React modal host, rather than leaving Hotkeys or Command Palette without a titlebar path or adding GPUI-local placeholder UI.
-
-                            CDXC:Sessions 2026-06-24-11:53:
-                            The same Settings glyph menu owns Previous Sessions access so the GPUI titlebar opens the production shared modal and its gxserver bridge, not a separate GPUI-local history picker.
-
-                            */
-                        this.show_titlebar_settings_menu(event.position, window, cx);
-                    } else if id == "keep-awake" {
-                        /*
-                        CDXC:KeepAwake 2026-06-24-13:16:
-                        Keep Awake titlebar clicks open the owned GPUI duration menu instead of toggling caffeinate directly. Runtime start/stop stays inside menu actions so users can choose the same shared duration semantics as macOS.
-                        */
-                        this.show_gpui_keep_awake_menu(event.position, window, cx);
-                    } else if id == "resources" {
-                        /*
-                        CDXC:Resources 2026-07-08:
-                        The visible Resources titlebar glyph opens the shared
-                        React titlebar-host Resources panel in the app-owned
-                        anchored dropdown. React owns live process polling while
-                        Rust owns only the panel entity and native action bridge.
-                        */
-                        this.set_gpui_titlebar_resources_panel_open(
-                            !this.titlebar_resources_panel_open,
-                            window,
-                            cx,
-                        );
-                    } else if id == "git" {
-                        this.show_gpui_titlebar_git_menu(None, window, cx);
-                    } else if id == "open-project" {
-                        /*
-                        CDXC:Titlebar 2026-06-24-12:50:
-                        Left-click Open In launches the active runtime target for the explicit active project path only. If GPUI does not have `in_memory_project_path` from the sidebar contract, show private-data-free feedback and do not infer a path from display names, ids, labels, filesystem probing, or git metadata.
-                        */
-                        this.open_active_project_with_active_open_target(window, cx);
-                    } else if id == "actions" {
-                        /*
-                        CDXC:Titlebar 2026-06-24-14:24:
-                        Left-click Actions runs the selected/last configured sidebar action when GPUI has one, otherwise the first configured action, and opens Settings > Actions when no configured action is available. Browser actions use the GPUI Browser CEF path, terminal actions use command-pane launch payloads, and this handler must not shell out, log private details, or create overlay UI.
-                        */
-                        this.run_active_gpui_titlebar_action(window, cx);
-                    }
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                    if id == "keep-awake" {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.show_gpui_keep_awake_menu(event.position, window, cx);
-                    } else if id == "open-project" {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.show_gpui_open_targets_menu(None, window, cx);
-                    } else if id == "resources" {
-                        /*
-                        CDXC:Resources 2026-07-08:
-                        Right-click uses the same React Resources dropdown as
-                        primary click so the full resource controls share one
-                        titlebar-host surface and one native action bridge.
-                        */
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.set_gpui_titlebar_resources_panel_open(
-                            !this.titlebar_resources_panel_open,
-                            window,
-                            cx,
-                        );
-                    } else if id == "git" {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.show_gpui_titlebar_git_menu(None, window, cx);
-                    } else if id == "actions" {
-                        window.prevent_default();
-                        cx.stop_propagation();
-                        this.show_gpui_titlebar_actions_menu(None, window, cx);
-                    }
-                }),
-            )
-            .child(titlebar_svg_icon(
-                icon_path,
-                icon_size,
-                titlebar_icon_color(),
-            ))
-            .when(show_badge, |this| {
-                this.child(
-                    div()
-                        .absolute()
-                        .right(px(2.0))
-                        .top(px(5.0))
-                        .size(px(7.5))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(titlebar_background())
-                        .bg(rgb(0x95d7f6)),
-                )
-            })
-            .into_any_element()
-    }
-
     pub(crate) fn render_browser_toolbar(
         &self,
         pane_id: BrowserPaneId,

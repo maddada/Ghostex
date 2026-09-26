@@ -17,7 +17,6 @@ pub(crate) struct ProjectWorkareaBridgeFunctionSpec {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AppModalHostBridgeSurface {
     NativeWindow,
-    Titlebar,
     FindPrompts,
 }
 
@@ -67,15 +66,10 @@ pub(crate) const EXTENSION_BRIDGE_INSTALL_MESSAGE_NAME: &str =
 pub(crate) const EXTENSION_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.extension.message";
 pub(crate) const EXTENSION_BRIDGE_PAYLOAD_MAX_CHARS: usize = 4 * 1024 * 1024;
 pub(crate) const WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexExtensionHost";
-#[allow(dead_code)]
-pub(crate) const NATIVE_HOST_BRIDGE_PROCESS_MESSAGE_NAME: &str = "ghostex.gpui.nativeHost.message";
-#[allow(dead_code)]
-pub(crate) const NATIVE_HOST_BRIDGE_PAYLOAD_MAX_CHARS: usize = 1024 * 1024;
 #[allow(dead_code)] // protocol manifest: the extra_info key is part of the CEF bridge contract even where Rust does not read it (matches the neighbouring allows)
 pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_EXTRA_INFO_KEY: &str =
     "ghostexGpuiAppModalHostSurface";
 const APP_MODAL_HOST_BRIDGE_SURFACE_NATIVE_WINDOW: &str = "nativeWindow";
-const APP_MODAL_HOST_BRIDGE_SURFACE_TITLEBAR: &str = "titlebar";
 const APP_MODAL_HOST_BRIDGE_SURFACE_FIND_PROMPTS: &str = "findPrompts";
 pub(crate) const APP_MODAL_HOST_SURFACE_JS_FIELD: &str = "__ghostex_APP_MODAL_HOST_SURFACE__";
 pub(crate) const APP_MODAL_HOST_ID_JS_FIELD: &str = "__ghostex_APP_MODAL_HOST_ID__";
@@ -84,8 +78,6 @@ pub(crate) const APP_MODAL_HOST_ID_VALUE: &str = "gpui";
 pub(crate) const WEBKIT_JS_OBJECT: &str = "webkit";
 pub(crate) const WEBKIT_MESSAGE_HANDLERS_JS_OBJECT: &str = "messageHandlers";
 pub(crate) const WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexAppModalHost";
-#[allow(dead_code)]
-pub(crate) const WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT: &str = "ghostexNativeHost";
 pub(crate) const WEBKIT_POST_MESSAGE_JS_FUNCTION: &str = "postMessage";
 
 /*
@@ -296,18 +288,12 @@ pub(crate) const PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS: [ProjectWorkareaBridgeF
     },
 ];
 
-pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurfaceSpec; 3] = [
+pub(crate) const APP_MODAL_HOST_BRIDGE_SURFACE_SPECS: [AppModalHostBridgeSurfaceSpec; 2] = [
     AppModalHostBridgeSurfaceSpec {
         surface: AppModalHostBridgeSurface::NativeWindow,
         entry_file_name: "modal-host.html",
         extra_info_value: APP_MODAL_HOST_BRIDGE_SURFACE_NATIVE_WINDOW,
         exposes_native_window_identity: true,
-    },
-    AppModalHostBridgeSurfaceSpec {
-        surface: AppModalHostBridgeSurface::Titlebar,
-        entry_file_name: "titlebar-host.html",
-        extra_info_value: APP_MODAL_HOST_BRIDGE_SURFACE_TITLEBAR,
-        exposes_native_window_identity: false,
     },
     /*
     CDXC:PromptSearch 2026-08-20:

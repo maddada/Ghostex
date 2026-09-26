@@ -265,18 +265,6 @@ pub(crate) fn gpui_native_resource_child_rows(
         .collect()
 }
 
-pub(crate) fn format_gpui_resource_cpu(cpu: f64) -> String {
-    format!("CPU {:.0}%", cpu.max(0.0))
-}
-
-pub(crate) fn format_gpui_resource_memory(memory_mb: f64) -> String {
-    if memory_mb >= 1024.0 {
-        format!("RAM {:.1} GB", memory_mb / 1024.0)
-    } else {
-        format!("RAM {:.0} MB", memory_mb.max(0.0))
-    }
-}
-
 pub(crate) fn find_app_bundle_root(path: &std::path::Path) -> Option<PathBuf> {
     for ancestor in path.ancestors() {
         if ancestor

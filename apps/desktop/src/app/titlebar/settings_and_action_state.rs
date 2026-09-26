@@ -103,8 +103,8 @@ impl GhostexGpuiApp {
             // User: "i want setup button in the tips dropdown to open this new one instead of the old one";
             // since 2026-09-15 the automatic first run opens the same Onboarding modal (modals.rs
             // `open_gpui_first_launch_setup_with_sidebar_state`), and the old FirstLaunchSetup modal stays in
-            // the tree under its own id ("might come back to it"). SEE-ALSO: delayed_send.rs for the CEF
-            // titlebar-host twin of this button.
+            // the tree under its own id ("might come back to it"). SEE-ALSO: delayed_send.rs
+            // `openWorkspaceWelcome`, Quick Access's Setup Ghostex row, which opens the same modal.
             // CDXC:Onboarding 2026-09-15 DECISION:
             // User: hide all buttons that talk about video for Ghostex. The old Video header
             // action is gone, so Setup and Updates shifted down one index.
