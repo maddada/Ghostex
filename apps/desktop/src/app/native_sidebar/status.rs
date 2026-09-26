@@ -1,8 +1,6 @@
 use gpui::prelude::FluentBuilder;
 use gpui::{AnyElement, IntoElement, ParentElement, Styled, div, px, rgb};
 
-use gpui_component::h_flex;
-
 use crate::app::helpers::chrome_palette::chrome_color;
 use crate::app::helpers::titlebar_background;
 
@@ -57,6 +55,8 @@ pub(crate) fn activity_indicator(
 
 /// CDXC:Spaces 2026-09-25 DECISION:
 /// User: the status dots under a Space, and on a remote machine tab, overlap by half instead of sitting side by side: blue most right and on top, orange in the middle, the leftmost slot (the grey shell-running dot, which never shows with orange) behind them. Each dot keeps its session-card size (8px working, 7px attention) and gets a thin ring in the sidebar colour so the covered edge stays readable. This supersedes the 2026-09-22 side-by-side dots.
+/// CDXC:Spaces 2026-09-26 WHY:
+/// The stack has an explicit width with each dot placed at a fixed offset instead of negative flex margins, which left the measured box narrower than the drawn dots and pushed two or more of them right of centre.
 pub(crate) fn status_dot_stack(
     working_count: usize,
     attention_count: usize,
@@ -66,31 +66,38 @@ pub(crate) fn status_dot_stack(
     let ring = 1.5 * scale;
     let ring_color = titlebar_background();
     let background = working_count == 0 && background_work_count > 0;
-    let dot = |size: f32, color: gpui::Hsla, first: bool| {
-        div()
-            .size(px(size * scale + 2.0 * ring))
-            .flex_shrink_0()
-            .rounded_full()
-            .border(px(ring))
-            .border_color(ring_color)
-            .bg(color)
-            .when(!first, |dot| dot.ml(px(-(4.0 * scale + 2.0 * ring))))
-    };
-    h_flex()
+    let dots: Vec<(f32, gpui::Hsla)> = [
+        (background, 8.0, background_work_color().into()),
+        (working_count > 0, 8.0, rgb(WORKING_COLOR).into()),
+        (attention_count > 0, 7.0, rgb(0x95d7f6).into()),
+    ]
+    .into_iter()
+    .filter(|(shown, _, _)| *shown)
+    .map(|(_, size, color)| (size * scale + 2.0 * ring, color))
+    .collect();
+    let step = 4.0 * scale;
+    let width = dots
+        .iter()
+        .enumerate()
+        .map(|(index, (size, _))| index as f32 * step + size)
+        .fold(0.0, f32::max);
+    let height = 8.0 * scale + 2.0 * ring;
+    div()
+        .relative()
         .flex_shrink_0()
-        .when(background, |row| {
-            row.child(dot(8.0, background_work_color().into(), true))
-        })
-        .when(working_count > 0, |row| {
-            row.child(dot(8.0, rgb(WORKING_COLOR).into(), true))
-        })
-        .when(attention_count > 0, |row| {
-            row.child(dot(
-                7.0,
-                rgb(0x95d7f6).into(),
-                !background && working_count == 0,
-            ))
-        })
+        .w(px(width))
+        .h(px(height))
+        .children(dots.into_iter().enumerate().map(|(index, (size, color))| {
+            div()
+                .absolute()
+                .left(px(index as f32 * step))
+                .top(px((height - size) / 2.0))
+                .size(px(size))
+                .rounded_full()
+                .border(px(ring))
+                .border_color(ring_color)
+                .bg(color)
+        }))
 }
 
 pub(crate) fn question_indicator(working: bool, scale: f32) -> AnyElement {
