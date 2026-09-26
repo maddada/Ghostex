@@ -100,7 +100,7 @@ impl NativeChatView {
             } else {
                 "titlebar/list-details.svg"
             };
-            rows.push(json!({"label":"Summary mode","iconPath":summary_icon,"checked":summary,"command":{"type":"toggleSummary"}}));
+            rows.push(json!({"label":"Summary mode","hotkeyAction":"toggleChatSummaryMode","iconPath":summary_icon,"checked":summary,"command":{"type":"toggleSummary"}}));
         }
         let host_row = |action: &Value| {
             json!({

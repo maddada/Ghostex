@@ -200,7 +200,18 @@ impl NativeChatView {
                 )
             })
             .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(label).build(window, cx)
+                // The configured chord, so rebinding it in Settings > Hotkeys changes the tooltip too.
+                let hotkey = match action {
+                    "summaryMode" => {
+                        crate::app::hotkeys::gpui_configured_hotkey_label("toggleChatSummaryMode")
+                    }
+                    _ => None,
+                };
+                let text = match hotkey.filter(|hotkey| !hotkey.is_empty()) {
+                    Some(hotkey) => format!("{label} ({hotkey})"),
+                    None => label.to_owned(),
+                };
+                gpui_component::tooltip::Tooltip::new(text).build(window, cx)
             })
             .on_click(
                 cx.listener(move |this, event: &gpui::ClickEvent, window, cx| {

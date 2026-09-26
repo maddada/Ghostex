@@ -134,12 +134,20 @@ pub(crate) fn gpui_migrated_hotkey_for_action<'a>(
     key
 }
 
-/// The chat answers these chords itself, in its own key context, so they also work while the chat
-/// box has focus and never reach terminals (`ghostexChatHotkeyActionId` in the shared catalog).
+/// The chat box answers this chord itself, in its own key context, so it also works while you type
+/// and never reaches terminals (`ghostexChatHotkeyActionId` in the shared catalog).
 pub(crate) fn gpui_chat_owned_hotkey_action_id(action_id: &str) -> bool {
+    matches!(action_id, "scrollChatToBottom")
+}
+
+/// The hotkeys that act on the focused session's chat (`focused_chat_hotkeys.rs`).
+pub(crate) fn gpui_focused_chat_hotkey_action_id(action_id: &str) -> bool {
     matches!(
         action_id,
-        "scrollChatToBottom" | "focusChatComposer" | "copyLastChatCodeBlock" | "copyLastChatReply"
+        "focusChatComposer"
+            | "copyLastChatCodeBlock"
+            | "copyLastChatReply"
+            | "toggleChatSummaryMode"
     )
 }
 
@@ -159,6 +167,8 @@ pub(crate) fn gpui_platform_hotkey_for_action<'a>(action_id: &str, key: &'a str)
             "renameActiveSession" => Some(("cmd+r", "cmd+shift+r")),
             "openCommandsPanel" => Some(("cmd+j", "f12")),
             "copyLastChatReply" => Some(("cmd+shift+c", "")),
+            // Ctrl+Alt+S is Delayed Actions on Windows and Linux.
+            "toggleChatSummaryMode" => Some(("cmd+ctrl+s", "cmd+alt+shift+s")),
             "popOutPane" => Some(("ctrl+shift+o", "cmd+alt+o")),
             // CDXC:Navigation 2026-08-19: same Mac-Control substitution
             // as the Jump to Project entries below, mirroring the
@@ -365,6 +375,7 @@ pub(crate) const GPUI_DEFAULT_GHOSTEX_HOTKEYS: &[(&str, &str)] = &[
     ("focusChatComposer", "shift+escape"),
     ("copyLastChatCodeBlock", "cmd+shift+;"),
     ("copyLastChatReply", "cmd+shift+c"),
+    ("toggleChatSummaryMode", "cmd+ctrl+s"),
     ("forkSession", "cmd+ctrl+shift+f"),
     ("reloadSession", ""),
     ("sleepFocusedSession", "cmd+shift+a"),
@@ -695,6 +706,11 @@ pub(crate) fn gpui_keyboard_owner_allows_hotkey(
     }
     // CDXC:AgentLauncher 2026-09-09 WHY:
     // The New Thread picker targets the active project, not the focused surface, so its chord must win from every responder (sidebar, Browser, Session Chat, workareas) the same way the model picker does; otherwise it only works while an Agents terminal has focus.
+    // The focused-chat keys only mean something while GPUI (where chats are drawn) owns the
+    // keyboard; a terminal or page keeps Shift+Esc and the copy chords (focused_chat_hotkeys.rs).
+    if gpui_focused_chat_hotkey_action_id(action_id) {
+        return false;
+    }
     // New Agent Session starts the last-used agent in the active project, the picker's first row.
     // CDXC:Hotkeys 2026-09-25 DECISION:
     // User: while the Code editor itself has keyboard focus, Cmd+N and Cmd+Shift+O belong to VS Code (New File, Go to Symbol); only then, not whenever the Code view is merely open.
@@ -920,6 +936,9 @@ impl GhostexGpuiApp {
     ) -> bool {
         if action_id == "openModelPicker" {
             return self.request_focused_session_model_picker(window, cx);
+        }
+        if gpui_focused_chat_hotkey_action_id(action_id) {
+            return self.run_focused_chat_hotkey(action_id, window, cx);
         }
         self.handle_gpui_app_modal_sidebar_command(
             serde_json::json!({

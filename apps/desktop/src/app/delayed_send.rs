@@ -1988,6 +1988,26 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "listGlassVideoLibrary" => {
+                self.handle_gpui_list_glass_video_library_message(cx);
+            }
+            "downloadGlassVideo" => {
+                self.handle_gpui_download_glass_video_message(
+                    &serde_json::Value::Object(command.clone()),
+                    cx,
+                );
+            }
+            "cancelGlassVideoDownload" => {
+                self.handle_gpui_cancel_glass_video_download_message(&serde_json::Value::Object(
+                    command.clone(),
+                ));
+            }
+            "removeGlassVideo" => {
+                self.handle_gpui_remove_glass_video_message(
+                    &serde_json::Value::Object(command.clone()),
+                    cx,
+                );
+            }
             "listWindowGlassVideos" => {
                 self.handle_gpui_list_window_glass_videos_message(cx);
             }
@@ -2173,33 +2193,15 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
-            "openBrowserPane" => {
-                let Some(url) = command
-                    .get("url")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|url| self.gpui_titlebar_browser_url_allowed(url))
-                    .map(str::to_string)
-                else {
-                    return;
-                };
-                if self.titlebar_resources_panel_open {
-                    self.set_gpui_titlebar_resources_panel_open(false, window, cx);
-                } else {
-                    self.set_gpui_titlebar_tips_panel_open(false, window, cx);
-                }
-                self.open_gpui_browser_action_url(url, window, cx);
-            }
             // CDXC:Onboarding 2026-09-15 DECISION:
             // The Tips dropdown's "Setup" button opens the Onboarding modal, the same one the automatic
             // first run opens (modals.rs); the old FirstLaunchSetup stays in the tree under its own id and
-            // nothing opens it by default. This is the CEF titlebar-host twin of the native Tips header
-            // action in titlebar/settings_and_action_state.rs; both must match.
+            // nothing opens it by default. Quick Access's Setup Ghostex row reaches this arm, so it must
+            // open the same modal as the native Tips header action in titlebar/settings_and_action_state.rs.
             "openWorkspaceWelcome" => {
-                self.set_gpui_titlebar_tips_panel_open(false, window, cx);
                 self.open_gpui_app_modal_from_titlebar(GpuiAppModalKind::Onboarding, window, cx);
             }
             "openGhostexTutorialVideo" => {
-                self.set_gpui_titlebar_tips_panel_open(false, window, cx);
                 self.open_gpui_app_modal_from_titlebar(
                     GpuiAppModalKind::WatchGhostexVideo,
                     window,
@@ -2218,6 +2220,10 @@ impl GhostexGpuiApp {
                 }
                 if action_id == "createAgentSession" {
                     self.start_new_agent_session(cx);
+                    return;
+                }
+                if gpui_focused_chat_hotkey_action_id(action_id) {
+                    self.run_focused_chat_hotkey(action_id, window, cx);
                     return;
                 }
                 /*
@@ -2658,6 +2664,15 @@ impl GhostexGpuiApp {
             }
             "installCuaDriver" => {
                 self.handle_gpui_cua_driver_install_or_update(window, cx);
+            }
+            "reinstallCuaDriver" => {
+                self.handle_gpui_cua_driver_reinstall(window, cx);
+            }
+            "uninstallCuaDriver" => {
+                self.handle_gpui_cua_driver_uninstall(window, cx);
+            }
+            "checkCuaDriverUpdate" => {
+                self.check_gpui_cua_driver_update(cx);
             }
             "uninstallBundledAgentSkills" => {
                 self.run_gpui_ghostex_cli_settings_action(

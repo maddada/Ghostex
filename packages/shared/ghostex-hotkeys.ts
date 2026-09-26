@@ -33,6 +33,7 @@ export type ghostexHotkeyActionId =
   | 'focusChatComposer'
   | 'copyLastChatCodeBlock'
   | 'copyLastChatReply'
+  | 'toggleChatSummaryMode'
   | 'scrollTerminalToTop'
   | 'stashPrompt'
   | 'stashedPrompts'
@@ -77,11 +78,8 @@ export type ghostexHotkeyActionId =
 
 export type ghostexHotkeySettings = Partial<Record<ghostexHotkeyActionId, string>>;
 
-/** Chords the chat answers itself while it has focus; they are never bound app-wide. */
-export type ghostexChatHotkeyActionId = Extract<
-  ghostexHotkeyActionId,
-  'scrollChatToBottom' | 'focusChatComposer' | 'copyLastChatCodeBlock' | 'copyLastChatReply'
->;
+/** Chords the chat box answers itself while you type in it; they are never bound app-wide. */
+export type ghostexChatHotkeyActionId = Extract<ghostexHotkeyActionId, 'scrollChatToBottom'>;
 
 export type ghostexFocusedPaneAction =
   | 'splitSessionRight'
@@ -112,6 +110,7 @@ export type ghostexTerminalToolbarAction =
 
 export type ghostexHotkeyAction =
   | { id: ghostexChatHotkeyActionId; kind: 'chatAction' }
+  | { id: ghostexHotkeyActionId; kind: 'focusedChatAction' }
   | { id: ghostexHotkeyActionId; kind: 'createAgentSession' }
   | { id: ghostexHotkeyActionId; kind: 'createSession' }
   | { id: ghostexHotkeyActionId; kind: 'cyclePaneTab'; direction: -1 | 1 }
@@ -179,27 +178,40 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Scroll Chat to Bottom',
   },
   {
-    action: { id: 'focusChatComposer', kind: 'chatAction' },
+    action: { id: 'focusChatComposer', kind: 'focusedChatAction' },
     defaultKey: 'shift+escape',
-    description: 'Move the keyboard to the chat box of the chat you are in.',
+    description: 'Move the keyboard to the chat box of the chat session you are in.',
     id: 'focusChatComposer',
     title: 'Focus Chat Box',
   },
   {
-    action: { id: 'copyLastChatCodeBlock', kind: 'chatAction' },
+    action: { id: 'copyLastChatCodeBlock', kind: 'focusedChatAction' },
     defaultKey: 'cmd+shift+;',
-    description: 'Copy the last code block an agent wrote in the chat you are in.',
+    description: 'Copy the last code block the agent wrote in the chat session you are in.',
     id: 'copyLastChatCodeBlock',
     title: 'Copy Last Code Block',
   },
   {
-    action: { id: 'copyLastChatReply', kind: 'chatAction' },
+    action: { id: 'copyLastChatReply', kind: 'focusedChatAction' },
     defaultKey: 'cmd+shift+c',
-    description: "Copy the agent's last reply in the chat you are in.",
+    description: "Copy the agent's last reply in the chat session you are in.",
     id: 'copyLastChatReply',
     title: 'Copy Last Reply',
     // Ctrl+Shift+C is terminal copy on Windows and Linux.
     windowsLinuxDefaultKey: '',
+  },
+  {
+    action: { id: 'toggleChatSummaryMode', kind: 'focusedChatAction' },
+    /**
+     * CDXC:SessionChat 2026-09-26 DECISION:
+     * User: Summary mode gets a hotkey, shown in its toolbar tooltip: Cmd+Ctrl+S on Mac. They asked for Ctrl+Alt+S on Windows and Linux, but that is Delayed Actions there, so it is Ctrl+Alt+Shift+S, the React chat's old Summary key.
+     * SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`gpui_platform_hotkey_for_action`), apps/desktop/src/app/native_chat/composer.rs (`host_button` tooltip).
+     */
+    defaultKey: 'cmd+ctrl+s',
+    description: 'Turn Summary mode on or off in the chat session you are in.',
+    id: 'toggleChatSummaryMode',
+    title: 'Toggle Summary Mode',
+    windowsLinuxDefaultKey: 'cmd+alt+shift+s',
   },
   {
     action: { id: 'createAgentSession', kind: 'createAgentSession' },

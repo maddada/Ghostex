@@ -167,6 +167,16 @@ impl GhostexGpuiApp {
     ) {
     }
 
+    /// The desktop routes Focus Chat Box, the copy keys and Toggle Summary Mode to the focused session's chat pane; the page binds none of them.
+    pub(crate) fn run_focused_chat_hotkey(
+        &mut self,
+        _action_id: &str,
+        _window: &mut Window,
+        _cx: &mut Context<Self>,
+    ) -> bool {
+        false
+    }
+
     /// The desktop's model picker hotkey; the chat's own model pill opens the picker here.
     pub(crate) fn request_focused_session_model_picker(
         &mut self,
