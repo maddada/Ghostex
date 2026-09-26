@@ -100,6 +100,9 @@ impl NativeChatView {
                 } else {
                     None
                 };
+                // CDXC:SessionChat 2026-09-26 DECISION:
+                // User: a notice card's choice must never wrap onto 2 lines; truncate it with "..." and show the whole label on hover.
+                // SEE-ALSO: apps/mobile/app/src/chat/native/cards/NoticeCard.tsx, where pressing and holding the choice stands in for hover.
                 let row = self.choice_row(
                     format!("notice-choice:{}", choice["index"]),
                     text(choice, if collapsed { "collapsedLabel" } else { "label" }),
@@ -107,6 +110,7 @@ impl NativeChatView {
                     false,
                     shortcut,
                     collapsed,
+                    true,
                     snapshot["questionCard"]["busy"] == true,
                     json!({"type":"answer","answer":choice["answer"]}),
                     p,

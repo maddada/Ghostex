@@ -253,6 +253,7 @@ impl NativeChatView {
                         selected.contains(&option_index),
                         None,
                         true,
+                        false,
                         // Settled answers are a record, never a control.
                         true,
                         Value::Null,

@@ -27,6 +27,7 @@ impl NativeChatView {
             selected,
             shortcut.map(|key| key.to_string()),
             false,
+            false,
             disabled,
             action,
             p,
@@ -34,6 +35,8 @@ impl NativeChatView {
         )
     }
 
+    /// `single_line` keeps the label on one line, cut with an ellipsis, and shows the whole label
+    /// in a hover tooltip.
     pub(super) fn choice_row(
         &self,
         id: String,
@@ -42,12 +45,14 @@ impl NativeChatView {
         selected: bool,
         shortcut: Option<String>,
         dense: bool,
+        single_line: bool,
         disabled: bool,
         action: Value,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
+        let tooltip = single_line.then(|| label.clone());
         div()
             .id(id)
             .when(!disabled, |row| row.tab_index(0))
@@ -92,6 +97,7 @@ impl NativeChatView {
                         div()
                             .text_size(px(14.0 * s))
                             .line_height(px(19.25 * s))
+                            .when(single_line, |label| label.truncate())
                             .child(label.clone()),
                     )
                     .when(!description.is_empty() && description != label, |column| {
@@ -132,6 +138,11 @@ impl NativeChatView {
                         .text_color(p.muted)
                         .child(shortcut.unwrap_or_default()),
                 )
+            })
+            .when_some(tooltip, |row, tooltip| {
+                row.tooltip(move |window, cx| {
+                    gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+                })
             })
             .when(!disabled, |row| {
                 row.on_click(cx.listener(move |this, _, _, cx| {
