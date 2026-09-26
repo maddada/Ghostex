@@ -261,10 +261,18 @@ answers, and generic submitted session messages all obey the same rule.
 */
 pub fn disambiguate_agent_tui_submit_text(text: &str) -> String {
     let mut staged = text.to_string();
-    if staged.ends_with('\\') {
+    if staged.ends_with('\\') || ends_with_mention_token(&staged) {
         staged.push(' ');
     }
     staged
+}
+
+/// CDXC:SessionChat 2026-09-26 WHY:
+/// A message whose last word is a `$skill` or `@file` mention leaves the cursor inside that token, so the composer's mention popup is open when Ghostex's Return arrives and the popup takes it: Codex 0.156 kept "… More details: use $ghostex-agents" (the Copy Details trailer) in its input box, unsent, until the user pressed Enter in the terminal. The trailing space closes the popup, as it does for a person typing; verified live, the same text with the space submits.
+fn ends_with_mention_token(text: &str) -> bool {
+    text.rsplit(char::is_whitespace)
+        .next()
+        .is_some_and(|token| token.len() > 1 && token.starts_with(['$', '@']))
 }
 
 pub fn wrap_terminal_bracketed_paste_text(text: &str) -> String {
@@ -1002,6 +1010,10 @@ pub enum SessionChatSendStep {
     AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget),
     /// See CDXC:SessionChat in session_chat_claude_question_prep.rs.
     PrepareClaudeQuestion(crate::session_chat_claude_question_prep::ClaudeQuestionPrep),
+    /// Read Codex's input box after the Return; see session_chat_send_submit.rs.
+    VerifyCodexSubmitted {
+        text: String,
+    },
     /// Close a positively identified Claude Code panel whose Escape is safe (Settings, or
     /// an offer listed in session_chat_claude_popups.rs), then require its real composer
     /// to appear before any later input-line write can run.
@@ -1218,6 +1230,13 @@ pub fn build_session_chat_message_steps(
             .unwrap_or(SessionChatSendStep::SleepMs(SESSION_CHAT_SUBMIT_DELAY_MS)),
     );
     steps.push(SessionChatSendStep::Write(SESSION_CHAT_SUBMIT.to_string()));
+    if !text.trim().is_empty()
+        && crate::agents::identity::normalize_agent_id(agent).as_deref() == Some("codex")
+    {
+        steps.push(SessionChatSendStep::VerifyCodexSubmitted {
+            text: text.to_string(),
+        });
+    }
     steps
 }
 
@@ -1237,7 +1256,7 @@ const SESSION_CHAT_VERIFY_NEEDLE_CHARS: usize = 40;
 /// The comparison is deliberately lossy in the safe direction: a false match
 /// only degrades this step to the old blind-Enter behaviour, while a false
 /// miss would abort a message the agent did receive.
-fn normalize_session_chat_screen_text(text: &str) -> String {
+pub(crate) fn normalize_session_chat_screen_text(text: &str) -> String {
     text.chars()
         .filter(|character| {
             !character.is_whitespace()
@@ -1250,7 +1269,7 @@ fn normalize_session_chat_screen_text(text: &str) -> String {
 /// Normalized fragments of the message to look for on screen. Both ends are
 /// sampled because a long composer shows only part of what it holds — the head
 /// while it is still being filled, the tail once it scrolled.
-fn session_chat_paste_needles(text: &str) -> Vec<String> {
+pub(crate) fn session_chat_paste_needles(text: &str) -> Vec<String> {
     let mut needles: Vec<String> = Vec::new();
     let lines: Vec<&str> = text
         .split(['\r', '\n'])
@@ -1427,7 +1446,7 @@ pub struct SessionChatSendError {
 }
 
 impl SessionChatSendError {
-    fn new(failure: SessionChatSendFailure, message: String) -> Self {
+    pub(crate) fn new(failure: SessionChatSendFailure, message: String) -> Self {
         Self { failure, message }
     }
 
@@ -2152,6 +2171,21 @@ async fn run_session_chat_send_worker(
                             SessionChatSendFailure::Write,
                             error,
                         ));
+                        break;
+                    }
+                }
+                SessionChatSendStep::VerifyCodexSubmitted { text } => {
+                    if let Err(error) = crate::session_chat_send_submit::confirm_codex_submitted(
+                        &project_id,
+                        &session_id,
+                        &zmx_name,
+                        &source,
+                        &text,
+                        &|| job_generation != generation.load(Ordering::SeqCst),
+                    )
+                    .await
+                    {
+                        outcome = Err(error);
                         break;
                     }
                 }
@@ -3627,14 +3661,32 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
             Err(error) => return domain_error_response(endpoint_path, request_id, error),
         };
         let answer_params = params.clone();
-        let result = tokio::task::spawn_blocking(move || crate::session_chat_opencode::answer(&id, &answer_params)).await;
+        let result = tokio::task::spawn_blocking(move || {
+            crate::session_chat_opencode::answer(&id, &answer_params)
+        })
+        .await;
         match result {
-            Ok(Ok(())) => {},
+            Ok(Ok(())) => {}
             Ok(Err(error)) => return domain_error_response(endpoint_path, request_id, error),
-            Err(_) => return domain_error_response(endpoint_path, request_id, crate::session_chat_opencode::error("OpenCode answer task failed.")),
+            Err(_) => {
+                return domain_error_response(
+                    endpoint_path,
+                    request_id,
+                    crate::session_chat_opencode::error("OpenCode answer task failed."),
+                )
+            }
         }
-        schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
-        return routed_json(Some(endpoint_path), StatusCode::OK, rpc_success(request_id, json!({"answered":true})));
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            Some("opencode"),
+        );
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(request_id, json!({"answered":true})),
+        );
     }
     if matches!(kind, "asyncQuestion" | "dismissAsyncQuestion") {
         let Some(question_id) = params
@@ -4461,16 +4513,34 @@ pub(crate) async fn handle_interrupt_session_chat_http(
     crate::session_chat_send::cancel_session_chat_sends(&target.project_id, &target.session_id);
     if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode") {
         let id = crate::session_chat_opencode::session_id(&target.session);
-        let prompt_id = params.get("toolUseId").and_then(Value::as_str).map(str::to_owned);
+        let prompt_id = params
+            .get("toolUseId")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
         let result = tokio::task::spawn_blocking(move || {
             let id = id?;
             crate::session_chat_opencode::interrupt(&id, prompt_id.as_deref())?;
             crate::session_chat_opencode::invalidate(&id);
             Ok::<_, DomainStateError>(())
-        }).await.unwrap_or_else(|_|Err(crate::session_chat_opencode::error("OpenCode interrupt task failed.")));
-        schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
+        })
+        .await
+        .unwrap_or_else(|_| {
+            Err(crate::session_chat_opencode::error(
+                "OpenCode interrupt task failed.",
+            ))
+        });
+        schedule_session_chat_option_redetect(
+            state,
+            &target.project_id,
+            &target.session_id,
+            Some("opencode"),
+        );
         return match result {
-            Ok(()) => routed_json(Some(endpoint_path), StatusCode::OK, rpc_success(request_id, json!({"interrupted":true}))),
+            Ok(()) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(request_id, json!({"interrupted":true})),
+            ),
             Err(error) => domain_error_response(endpoint_path, request_id, error),
         };
     }

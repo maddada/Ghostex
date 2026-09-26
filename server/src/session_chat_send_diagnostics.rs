@@ -102,18 +102,40 @@ pub(crate) fn record_send_recovery(
     reason: &str,
     screen_tail: &[String],
 ) {
-    persist(
-        state,
-        &json!({
-            "ts": chrono::Utc::now().to_rfc3339(),
-            "event": event,
-            "serverId": state.metadata.server_id,
-            "projectId": project_id,
-            "sessionId": session_id,
-            "reason": reason,
-            "terminal": { "tail": screen_tail.join("\n") },
-        }),
-    );
+    let mut entry = recovery_entry(event, project_id, session_id, reason, screen_tail);
+    entry["serverId"] = json!(state.metadata.server_id);
+    persist(state, &entry);
+}
+
+/// The same line from inside the send worker, which has no `AppState`.
+pub(crate) fn record_send_recovery_from_worker(
+    event: &str,
+    project_id: &str,
+    session_id: &str,
+    reason: &str,
+    screen_tail: &[String],
+) {
+    let entry = recovery_entry(event, project_id, session_id, reason, screen_tail);
+    if let Err(error) = append(&crate::paths::get_gxserver_paths(None).logs_dir, &entry) {
+        eprintln!("session chat send diagnostic could not be written: {error}");
+    }
+}
+
+fn recovery_entry(
+    event: &str,
+    project_id: &str,
+    session_id: &str,
+    reason: &str,
+    screen_tail: &[String],
+) -> Value {
+    json!({
+        "ts": chrono::Utc::now().to_rfc3339(),
+        "event": event,
+        "projectId": project_id,
+        "sessionId": session_id,
+        "reason": reason,
+        "terminal": { "tail": screen_tail.join("\n") },
+    })
 }
 
 fn persist(state: &AppState, entry: &Value) {

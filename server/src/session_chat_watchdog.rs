@@ -425,19 +425,20 @@ async fn run_session_chat_send_watchdog(
     let started = Instant::now();
     // Polls observed since the affirmative evidence became complete.
     let mut mismatch_polls = 0u32;
-    // CDXC:AgentScreenDetection 2026-09-13 WHY:
-    // A queued notice used to end verification at ten seconds, leaving it visible after the answer arrived. Keep checking the transcript until delivery, notice retirement/expiry, or a newer send; terminal capture still happens only at escalation.
-    let mut queued_notice_published = false;
+    // CDXC:AgentScreenDetection 2026-09-26 WHY:
+    // A published notice that a late delivery disproves (the queued-input card and the delivery warning) keeps the transcript under watch until delivery, notice retirement/expiry, or a newer send; terminal capture still happens only at escalation. This extends the 2026-09-13 rule for the queued card: a delivery warning whose message arrived later (the user pressed Enter in the terminal) stayed up for ten minutes, and the prompt queue failed the next queued message on it without trying to send it.
+    let mut published_kind: Option<String> = None;
     loop {
         tokio::time::sleep(WATCHDOG_POLL_INTERVAL).await;
         if superseded() {
             return;
         }
-        if queued_notice_published
-            && session_chat_watchdog_notice(&probe.project_id, &probe.session_id)
-                .is_none_or(|notice| notice.kind != SESSION_CHAT_NOTICE_QUEUED_INPUT)
-        {
-            return;
+        if let Some(kind) = published_kind.as_deref() {
+            if session_chat_watchdog_notice(&probe.project_id, &probe.session_id)
+                .is_none_or(|notice| notice.kind != kind)
+            {
+                return;
+            }
         }
         let poll_probe = probe.clone();
         let poll_needle = needle.clone();
@@ -467,7 +468,7 @@ async fn run_session_chat_send_watchdog(
             }
             return;
         }
-        if queued_notice_published {
+        if published_kind.is_some() {
             continue;
         }
         // Affirmative non-delivery: the composer was submitted past our message
@@ -509,10 +510,13 @@ async fn run_session_chat_send_watchdog(
         }
         escalate_undelivered_send(&probe, cursor.path.is_some(), &publish, &read_state, reason)
             .await;
-        queued_notice_published =
-            session_chat_watchdog_notice(&probe.project_id, &probe.session_id)
-                .is_some_and(|notice| notice.kind == SESSION_CHAT_NOTICE_QUEUED_INPUT);
-        if !queued_notice_published {
+        published_kind = session_chat_watchdog_notice(&probe.project_id, &probe.session_id)
+            .map(|notice| notice.kind)
+            .filter(|kind| {
+                kind == SESSION_CHAT_NOTICE_QUEUED_INPUT
+                    || kind == SESSION_CHAT_NOTICE_DELIVERY_FAILED
+            });
+        if published_kind.is_none() {
             return;
         }
     }
@@ -913,6 +917,19 @@ fn publish_watchdog_notice(
     if notice.same_notice(previous.as_ref()) {
         return;
     }
+    // See CDXC:SessionChat 2026-09-25 in session_chat_send_diagnostics.rs: a delivery card the
+    // user sees is a break in sending, so it is logged with the screen it was built from.
+    crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+        "sessionChatDeliveryNotice",
+        &probe.project_id,
+        &probe.session_id,
+        &notice.title,
+        &notice
+            .screen_tail
+            .as_deref()
+            .map(|tail| tail.lines().map(str::to_string).collect::<Vec<_>>())
+            .unwrap_or_default(),
+    );
     set_session_chat_watchdog_notice(&probe.project_id, &probe.session_id, notice);
     publish();
 }

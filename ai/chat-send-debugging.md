@@ -12,6 +12,8 @@ Read this when the user reports that pressing Enter in the chat did nothing, the
   - `sessionChatSendClosingClaudePanel`: Escape closed Claude's Settings, an offer from `server/src/session_chat_claude_popups.rs`, or its focused background-agents list.
   - `sessionChatSendWokeSession` / `sessionChatSendWakeFailed`: the send found no zmx daemon and woke the session.
   - `sessionChatSendHeldForStartingAgent`: the agent was still printing "Restoring session...", so the message went to the queue as a startup send.
+  - `sessionChatSendPressedEnterAgain` (Codex): the message was still in Codex's input box after Return, so the send pressed Return once more. Each one is a cause to fix at its source (`server/src/session_chat_send_submit.rs`); `sessionChatSendNotSubmitted` means Codex kept it even then and the send failed.
+- `sessionChatDeliveryNotice`: the delivery watchdog showed a card such as "Your message might not have reached the agent", with the screen it saw. Compare its time with the agent's own transcript (Codex: `~/.codex/sessions/**/rollout-*<agent session id>.jsonl`, `user_message` rows) to see when, or whether, the message was recorded.
 
 Find the user's report by session and time (the `ts` fields are UTC):
 
@@ -32,7 +34,7 @@ To see every kind of failure there has been, group the `sessionChatSendFailure` 
 
 ## 2. The desktop chat's own log (debug scenario)
 
-`~/.local/state/ghostex/logs/gpui-session-chat-debug.jsonl`, written only while Show debug UI controls and the session-chat Diagnostic disk logging scenario are on. `sessionChat.nativeRpcResult` lines carry `method`, `sessionKey` (`projectId:sessionId`), `errorCode` and `errorMessage` for every chat RPC, so a refusal the user saw can be matched to the gxserver line above.
+`~/.local/state/ghostex/logs/gpui-session-chat-debug.jsonl`, written only while Show debug UI controls and the Chat area under Diagnostic logs are on. `sessionChat.nativeRpcResult` lines carry `method`, `sessionKey` (`projectId:sessionId`), `errorCode` and `errorMessage` for every chat RPC, so a refusal the user saw can be matched to the gxserver line above.
 
 ## 3. The live screen
 
