@@ -73,6 +73,30 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
     portless_state_override: Option<serde_json::Value>,
     active_project_id: Option<&str>,
 ) -> serde_json::Value {
+    gpui_app_modal_sidebar_state_message_from_gxserver_hydrate(
+        settings_snapshot,
+        &gpui_fetch_app_modal_gxserver_hydrate(portless_state_override, active_project_id),
+    )
+}
+
+/// The parts of the app-modal hydrate that come from gxserver. Settings themselves are local and are always read fresh when the message is assembled, so a held copy of this struct only ever lags on projects, agents, actions, Recent Projects, pinned prompts, session tags and Portless.
+#[derive(Clone, PartialEq)]
+pub(crate) struct GpuiAppModalGxserverHydrate {
+    pub(crate) active_project_id: Option<String>,
+    agents: serde_json::Value,
+    commands: serde_json::Value,
+    global_commands: serde_json::Value,
+    project_settings_projects: Vec<serde_json::Value>,
+    recent_projects: Vec<serde_json::Value>,
+    pinned_prompts: Vec<serde_json::Value>,
+    custom_session_tags: Option<serde_json::Value>,
+    portless_state: Option<serde_json::Value>,
+}
+
+pub(crate) fn gpui_fetch_app_modal_gxserver_hydrate(
+    portless_state_override: Option<serde_json::Value>,
+    active_project_id: Option<&str>,
+) -> GpuiAppModalGxserverHydrate {
     /*
     CDXC:Settings 2026-06-24-11:14:
     The GPUI Settings modal host hydrates from the shared settings service snapshot, not a second ad hoc file read. The payload remains intentionally minimal for current GPUI parity, but it carries the saved settings object and service revision for both open-time hydration and post-save `sidebarState` refreshes.
@@ -103,17 +127,6 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
     CDXC:AgentLauncher 2026-06-24-20:34:
     Agent/action HUD rows are read through gxserver's `/api/readSidebarHud` production projection. The app-modal host still reads project settings and Recent Projects from their existing gxserver contracts, but it no longer hand-normalizes custom agent/action metadata from `/api/listProjects`.
     */
-    let settings_object = settings_snapshot.object().clone();
-    let runtime_settings =
-        sidebar_runtime_settings_snapshot_from_shared_settings(settings_snapshot);
-    let completion_sound = settings_object
-        .get("completionSound")
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("arcade")
-        .to_string();
-    let completion_sound_label = gpui_completion_sound_label(&completion_sound);
-    let theme = gpui_app_modal_sidebar_theme_from_settings(&settings_object);
-    let settings = serde_json::Value::Object(settings_object);
     let portless_state = GPUI_PORTLESS_APP_INTEGRATION_ENABLED
         .then(|| portless_state_override.or_else(gpui_sidebar_portless_state))
         .flatten();
@@ -142,6 +155,45 @@ pub(crate) fn gpui_app_modal_sidebar_state_message_from_settings_snapshot_and_po
         .map(gpui_pinned_prompt_value)
         .collect::<Vec<_>>();
     let custom_session_tags = gpui_read_gxserver_custom_session_tags(Duration::from_secs(2));
+    GpuiAppModalGxserverHydrate {
+        active_project_id: active_project_id.map(str::to_string),
+        agents,
+        commands,
+        global_commands,
+        project_settings_projects,
+        recent_projects,
+        pinned_prompts,
+        custom_session_tags,
+        portless_state,
+    }
+}
+
+pub(crate) fn gpui_app_modal_sidebar_state_message_from_gxserver_hydrate(
+    settings_snapshot: &shared_settings::SharedSidebarSettingsSnapshot,
+    hydrate: &GpuiAppModalGxserverHydrate,
+) -> serde_json::Value {
+    let settings_object = settings_snapshot.object().clone();
+    let runtime_settings =
+        sidebar_runtime_settings_snapshot_from_shared_settings(settings_snapshot);
+    let completion_sound = settings_object
+        .get("completionSound")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("arcade")
+        .to_string();
+    let completion_sound_label = gpui_completion_sound_label(&completion_sound);
+    let theme = gpui_app_modal_sidebar_theme_from_settings(&settings_object);
+    let settings = serde_json::Value::Object(settings_object);
+    let GpuiAppModalGxserverHydrate {
+        agents,
+        commands,
+        global_commands,
+        project_settings_projects,
+        recent_projects,
+        pinned_prompts,
+        custom_session_tags,
+        portless_state,
+        ..
+    } = hydrate.clone();
 
     let mut message = serde_json::json!({
         "groups": [],

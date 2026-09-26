@@ -60,10 +60,13 @@ function MountedSignal({ onMounted }: { onMounted: () => void }) {
   return null;
 }
 
+/** An on-demand modal; `preload` fetches its code ahead of the first open, which the warm spare window does for Settings. */
+export type LazyModalComponent<Props> = ComponentType<Props> & { preload: () => void };
+
 function createLazyModal<Props extends object>(
   load: () => Promise<ComponentType<Props>>,
   isWanted: (props: Props) => boolean
-): ComponentType<Props> {
+): LazyModalComponent<Props> {
   /*
    * CDXC:AppModal 2026-09-21 WHY:
    * Not React.lazy with Suspense: React holds content that resolves behind a Suspense fallback for about 300 ms so fallbacks do not flicker, which made every on-demand modal open 300 ms late although its files load in about 15 ms.
@@ -82,7 +85,7 @@ function createLazyModal<Props extends object>(
     );
     return loading;
   };
-  return function LazyModal(props: Props) {
+  function LazyModal(props: Props) {
     const idRef = useRef(Symbol('lazy-modal'));
     const [wasWanted, setWasWanted] = useState(() => isWanted(props));
     const [isMounted, setIsMounted] = useState(false);
@@ -123,19 +126,20 @@ function createLazyModal<Props extends object>(
         <MountedSignal onMounted={markMounted} />
       </>
     );
-  };
+  }
+  return Object.assign(LazyModal, { preload: () => void ensureLoading() });
 }
 
 /** For modals that are always rendered and driven by `isOpen`. */
 export function lazyModal<Props extends { isOpen: boolean }>(
   load: () => Promise<ComponentType<Props>>
-): ComponentType<Props> {
+): LazyModalComponent<Props> {
   return createLazyModal(load, (props) => props.isOpen);
 }
 
 /** For modals the host renders only while they are open. */
 export function lazyRenderedModal<Props extends object>(
   load: () => Promise<ComponentType<Props>>
-): ComponentType<Props> {
+): LazyModalComponent<Props> {
   return createLazyModal(load, () => true);
 }

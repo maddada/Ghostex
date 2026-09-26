@@ -832,6 +832,10 @@ pub struct GhostexGpuiApp {
     pub(crate) app_modal_window_id: Rc<Cell<Option<gpui::WindowId>>>,
     pub(crate) app_modal_open_attempt_id: u64,
     pub(crate) app_modal_ready_retry_used: bool,
+    pub(crate) app_modal_spare: Option<crate::app::app_modal_spare::GpuiAppModalSpare>,
+    pub(crate) app_modal_spare_preload_generation: u64,
+    pub(crate) app_modal_gxserver_hydrate: Option<GpuiAppModalGxserverHydrate>,
+    pub(crate) app_modal_gxserver_hydrate_refreshing: bool,
     pub(crate) app_modal_command_return_focus_target: Option<CommandPaneAppModalReturnFocusTarget>,
     pub(crate) plugins_modal_window: Option<WindowHandle<plugins_modal::GpuiPluginsModalWindow>>,
     pub(crate) plugin_settings_action_progress:
@@ -928,10 +932,6 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_delayed_send_generation: u64,
     pub(crate) agents_delayed_send_countdown_ticker_active: bool,
     pub(crate) agents_delayed_send_persistence_ticker_active: bool,
-    /*
-    CDXC:Onboarding 2026-06-24-23:17:
-    The titlebar Tips dropdown owns a runtime-only React titlebar-host CEF panel inside an app-owned anchored GPUI overlay positioned directly below the workarea header's measured bottom edge. Store only the panel entity, open boolean, and transient focus handoff state so closing the overlay can hide the native CEF child view; do not duplicate tips data, persist dropdown state, create AppKit child windows, or rely on invisible overlays.
-    */
     pub(crate) titlebar_dropdown_focus_handle: FocusHandle,
     pub(crate) titlebar_dropdown_previous_focus_handle: Option<FocusHandle>,
     pub(crate) titlebar_popup_menu: Option<GpuiTitlebarPopupState>,
@@ -944,23 +944,6 @@ pub struct GhostexGpuiApp {
     pub(crate) titlebar_more_button_bounds: Rc<std::cell::Cell<Option<Bounds<Pixels>>>>,
     pub(crate) titlebar_extension_popup_generation: u64,
     pub(crate) titlebar_extension_popup: Option<GpuiTitlebarExtensionPopupState>,
-    pub(crate) titlebar_tips_panel_open: bool,
-    pub(crate) titlebar_tips_panel: Option<Entity<GpuiTitlebarTipsPanel>>,
-    pub(crate) titlebar_resources_panel_open: bool,
-    pub(crate) titlebar_resources_panel_ready: bool,
-    pub(crate) titlebar_resources_panel_open_generation: u64,
-    pub(crate) titlebar_resources_panel: Option<Entity<GpuiTitlebarResourcesPanel>>,
-    /*
-    CDXC:Resources 2026-07-26:
-    Resources attributes a localhost listener to a project by matching the
-    listener's cwd against the project paths in the resource groups GPUI sends.
-    Sending only the active project's mounted panes hid every dev server started
-    from another project or from a session this window has not mounted, so the
-    panel also receives project groups projected from the gxserver presentation
-    snapshot. Cache only that projection; the snapshot itself is refetched on
-    each Resources open.
-    */
-    pub(crate) titlebar_resources_presentation_groups: Vec<serde_json::Value>,
     pub(crate) titlebar_tips_cli_status: Option<serde_json::Value>,
     pub(crate) titlebar_tips_agent_hook_status: Option<serde_json::Value>,
     /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.

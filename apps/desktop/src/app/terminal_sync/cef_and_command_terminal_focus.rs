@@ -260,6 +260,7 @@ impl GhostexGpuiApp {
         // window before CEF is available.
         self.start_gpui_first_run_onboarding(cx);
         self.open_gpui_app_modal_deferred_for_cef(cx);
+        self.schedule_gpui_app_modal_spare_preload(cx);
         cx.notify();
     }
 

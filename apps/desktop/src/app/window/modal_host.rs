@@ -182,6 +182,16 @@ impl GpuiAppModalHostWindow {
         })
     }
 
+    /// Turns a freshly created host into the warm spare (`app_modal_spare.rs`): it waits for no open request, and once React is up its page fetches Settings' code in the background.
+    pub(crate) fn prepare_as_spare(&mut self) {
+        self.pending_messages =
+            vec![serde_json::json!({ "modals": ["settings"], "type": "preloadModals" })];
+    }
+
+    pub(crate) fn has_presented(&self) -> bool {
+        self.presented_modal.is_some()
+    }
+
     /// CDXC:Onboarding 2026-08-18: entering fullscreen needs a
     /// trusted key press from the host (see `CefBrowser::send_fullscreen_toggle_key`),
     /// and it must happen once, only while the tutorial video is the presented
