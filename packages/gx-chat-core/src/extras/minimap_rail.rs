@@ -27,7 +27,14 @@ pub struct MinimapGeometry {
     pub column_width: i64,
     pub padding_block: i64,
     pub dash_widths: Vec<i64>,
+    /// The most UTF-16 units one preview (the prompt or the reply) keeps.
     pub preview_limit: usize,
+    /// How many lines the hover card shows, the prompt and its reply together.
+    pub preview_lines: usize,
+    /// The hover card's widest, before the scale.
+    pub preview_max_width: i64,
+    pub preview_font_size: i64,
+    pub preview_line_height: i64,
 }
 
 /// `SESSION_CHAT_MINIMAP`.
@@ -46,7 +53,7 @@ pub struct MinimapMarkerRow {
     pub reply: String,
 }
 
-/// `sessionChatMinimapPreviewText`: the prompt's own words, on one line.
+/// The prompt's own words as Markdown, one paragraph per text block.
 pub fn minimap_preview_text(message: Option<&Value>) -> String {
     let blocks = message
         .and_then(|message| message.get("blocks"))
@@ -64,13 +71,13 @@ pub fn minimap_preview_text(message: Option<&Value>) -> String {
                         .to_string()
                 })
                 .collect::<Vec<_>>()
-                .join(" ")
+                .join("\n\n")
         })
         .unwrap_or_default();
-    collapse_whitespace(&joined)
+    crate::extras::agent_tasks::js_trim(&joined).to_string()
 }
 
-/// `sessionChatMinimapPreviewText` over a typed message: the prompt's own words, on one line.
+/// [`minimap_preview_text`] over a typed message.
 pub fn message_preview_text(message: Option<&ghostex_gx_protocol::chat::ChatMessage>) -> String {
     use ghostex_gx_protocol::chat::ChatBlock;
     let joined = message
@@ -83,33 +90,66 @@ pub fn message_preview_text(message: Option<&ghostex_gx_protocol::chat::ChatMess
                     _ => None,
                 })
                 .collect::<Vec<_>>()
-                .join(" ")
+                .join("\n\n")
         })
         .unwrap_or_default();
-    collapse_whitespace(&joined)
+    crate::extras::agent_tasks::js_trim(&joined).to_string()
 }
 
-/// `sessionChatMinimapPreview` over a typed message.
+/// A message's hover preview: its first `lines` lines of Markdown, and how many lines it kept.
 pub fn message_preview(
     message: Option<&ghostex_gx_protocol::chat::ChatMessage>,
+    lines: usize,
     preview_limit: usize,
-) -> String {
-    cut_preview(&message_preview_text(message), preview_limit)
+) -> (String, usize) {
+    cut_preview(&message_preview_text(message), lines, preview_limit)
 }
 
-/// `sessionChatMinimapPreview`: the same one-line preview, cut to what a hover card can show.
-pub fn minimap_preview(message: Option<&Value>, preview_limit: usize) -> String {
-    cut_preview(&minimap_preview_text(message), preview_limit)
+/// [`message_preview`] over a raw message.
+pub fn minimap_preview(
+    message: Option<&Value>,
+    lines: usize,
+    preview_limit: usize,
+) -> (String, usize) {
+    cut_preview(&minimap_preview_text(message), lines, preview_limit)
 }
 
-/// The one cut both previews make: UTF-16 code units, which is what a JavaScript string index is.
-fn cut_preview(text: &str, preview_limit: usize) -> String {
-    let units: Vec<u16> = text.encode_utf16().collect();
-    if units.len() <= preview_limit {
-        return text.to_string();
+/// The one cut both previews make: the first `max_lines` lines, then at most `preview_limit`
+/// UTF-16 code units, with an ellipsis when anything was left out.
+///
+/// CDXC:SessionChat 2026-09-26 WHY:
+/// The hover card renders this as Markdown and shows `previewLines` rows (the user's decision is on
+/// `minimap_preview_card` in apps/desktop/src/app/native_chat/minimap.rs). A run of blank lines
+/// folds into one, so a paragraph break costs the card exactly one line, the row its paragraph gap
+/// takes.
+fn cut_preview(text: &str, max_lines: usize, preview_limit: usize) -> (String, usize) {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut truncated = false;
+    for line in text.lines() {
+        let line = trim_end_js(line);
+        if line.is_empty() && kept.last().is_none_or(|last| last.is_empty()) {
+            continue;
+        }
+        if kept.len() == max_lines {
+            truncated = true;
+            break;
+        }
+        kept.push(line);
     }
-    let head = String::from_utf16_lossy(&units[..preview_limit]);
-    format!("{}\u{2026}", trim_end_js(&head))
+    while kept.last().is_some_and(|last| last.is_empty()) {
+        kept.pop();
+    }
+    let mut preview = kept.join("\n");
+    let units: Vec<u16> = preview.encode_utf16().collect();
+    if units.len() > preview_limit {
+        preview = trim_end_js(&String::from_utf16_lossy(&units[..preview_limit])).to_string();
+        truncated = true;
+    }
+    let count = preview.lines().count();
+    if truncated && !preview.is_empty() {
+        preview.push('\u{2026}');
+    }
+    (preview, count)
 }
 
 /// `sessionChatMinimapVisible`: a single prompt has nothing to navigate between, so the rail stays
@@ -136,24 +176,6 @@ pub fn minimap_index_at(progress: f64, turn_count: usize) -> i64 {
 /// `sessionChatMinimapRailHeight`: one `spacing` step between neighbouring dashes.
 pub fn minimap_rail_height(turn_count: usize, spacing: i64) -> i64 {
     (turn_count as i64 - 1).max(0) * spacing
-}
-
-/// `.replace(/\s+/g, ' ').trim()`.
-fn collapse_whitespace(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let mut in_run = false;
-    for character in value.chars() {
-        if is_js_space(character) {
-            if !in_run {
-                out.push(' ');
-                in_run = true;
-            }
-        } else {
-            out.push(character);
-            in_run = false;
-        }
-    }
-    crate::extras::agent_tasks::js_trim(&out).to_string()
 }
 
 /// `String.prototype.trimEnd`.

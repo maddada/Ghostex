@@ -49,7 +49,9 @@ pub fn project_minimap_turns(
         .iter()
         .map(|(user, reply)| {
             let id = user.id.clone();
-            let prompt = message_preview(Some(user), geometry.preview_limit);
+            let (prompt, prompt_lines) =
+                message_preview(Some(user), geometry.preview_lines, geometry.preview_limit);
+            let reply_lines = reply_line_budget(geometry.preview_lines, prompt_lines);
             MinimapMarkerRow {
                 item: item_index
                     .iter()
@@ -61,7 +63,7 @@ pub fn project_minimap_turns(
                 } else {
                     prompt
                 },
-                reply: message_preview(*reply, geometry.preview_limit),
+                reply: message_preview(*reply, reply_lines, geometry.preview_limit).0,
                 id,
             }
         })
@@ -89,7 +91,9 @@ pub fn project_minimap(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string();
-            let prompt = minimap_preview(Some(user), geometry.preview_limit);
+            let (prompt, prompt_lines) =
+                minimap_preview(Some(user), geometry.preview_lines, geometry.preview_limit);
+            let reply_lines = reply_line_budget(geometry.preview_lines, prompt_lines);
             MinimapMarkerRow {
                 item: item_index
                     .iter()
@@ -101,9 +105,15 @@ pub fn project_minimap(
                 } else {
                     prompt
                 },
-                reply: minimap_preview(reply.as_ref(), geometry.preview_limit),
+                reply: minimap_preview(reply.as_ref(), reply_lines, geometry.preview_limit).0,
                 id,
             }
         })
         .collect()
+}
+
+/// The lines the reply may take on the hover card: whatever the prompt left, after the blank line
+/// that separates the two. An empty prompt still shows its one "User message" line.
+fn reply_line_budget(card_lines: usize, prompt_lines: usize) -> usize {
+    card_lines.saturating_sub(prompt_lines.max(1) + 1)
 }
