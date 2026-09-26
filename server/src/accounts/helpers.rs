@@ -3,7 +3,7 @@ use serde_json::Value;
 use std::{
     io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Stdio,
     time::{Duration, Instant},
 };
 
@@ -194,7 +194,7 @@ mod windows {
 pub(crate) fn json_command(home: &Path, name: &str, args: &[&str]) -> Result<Value, String> {
     let binary =
         executable(home, name).ok_or_else(|| format!("Install {name} on this computer first."))?;
-    let mut command = Command::new(binary);
+    let mut command = crate::platform::process::background_command(binary);
     command.args(args).env("HOME", home);
     // The Windows helpers resolve their registry from USERPROFILE, so both variables must name the same home.
     #[cfg(windows)]

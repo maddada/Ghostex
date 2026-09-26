@@ -6,7 +6,7 @@ use scraper::{Html, Selector};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     io::Read,
-    process::{Command, Stdio},
+    process::Stdio,
     sync::Arc,
     time::{Duration, Instant, SystemTime},
 };
@@ -122,7 +122,7 @@ struct PageResponse {
 }
 
 fn fetch_browser_page(url: &str, proxy_port: Option<u16>) -> Result<PageResponse, &'static str> {
-    let mut command = Command::new("curl");
+    let mut command = gpui_background_command("curl");
     command.args([
         "--disable",
         "--silent",

@@ -586,6 +586,9 @@ pub fn read_session_chat_tail_page(
     limit: usize,
     before_offset: Option<u64>,
 ) -> std::io::Result<SessionChatTailPage> {
+    if agent == SessionChatTranscriptAgent::OpenCode && before_offset.is_none() {
+        crate::session_chat_opencode::refresh_for_path(file_path);
+    }
     let decode = session_chat_line_decoder(agent);
     let decode_lifecycle = session_chat_lifecycle_decoder(agent);
     match read_session_chat_transcript_tail_file_for_agent(

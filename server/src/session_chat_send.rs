@@ -79,7 +79,7 @@ strictly better than submitting an empty turn and dropping their text.
 pub const SESSION_CHAT_VERIFY_SETTLE_MS: u64 = SESSION_CHAT_SUBMIT_DELAY_MS;
 pub const SESSION_CHAT_VERIFY_POLL_MS: u64 = 150;
 pub const SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS: u64 = 2_000;
-pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = 8_000;
+pub const SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS: u64 = if cfg!(windows) { 30_000 } else { 8_000 };
 
 /*
 CDXC:SessionChat 2026-08-26:
@@ -978,8 +978,15 @@ pub enum SessionChatSendStep {
 /// plus time proportional to the byte count, capped so a wedged TUI cannot
 /// hold the per-session queue.
 pub fn session_chat_verify_timeout_ms(text_bytes: usize) -> u64 {
-    let scaled = SESSION_CHAT_VERIFY_SETTLE_MS
-        .saturating_add(text_bytes as u64 / SESSION_CHAT_VERIFY_BYTES_PER_MS);
+    // ConPTY delivers console input records incrementally: a measured 3.3KB
+    // Codex paste stayed blank for 3.8s before its chip appeared. Keep polling
+    // for positive evidence, with a Windows ingestion budget of 2ms per byte.
+    let ingestion_ms = if cfg!(windows) {
+        (text_bytes as u64).saturating_mul(2)
+    } else {
+        text_bytes as u64 / SESSION_CHAT_VERIFY_BYTES_PER_MS
+    };
+    let scaled = SESSION_CHAT_VERIFY_SETTLE_MS.saturating_add(ingestion_ms);
     scaled
         .max(SESSION_CHAT_VERIFY_MIN_TIMEOUT_MS)
         .min(SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS)
@@ -2895,8 +2902,14 @@ mod tests {
         );
         // The window scales with the payload and is capped.
         assert_eq!(session_chat_verify_timeout_ms(0), 2_000);
-        assert_eq!(session_chat_verify_timeout_ms(4_600), 2_800);
-        assert_eq!(session_chat_verify_timeout_ms(1_000_000), 8_000);
+        assert_eq!(
+            session_chat_verify_timeout_ms(4_600),
+            if cfg!(windows) { 9_700 } else { 2_800 }
+        );
+        assert_eq!(
+            session_chat_verify_timeout_ms(1_000_000),
+            SESSION_CHAT_VERIFY_MAX_TIMEOUT_MS
+        );
     }
 
     #[test]
@@ -3427,6 +3440,21 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
         .get("kind")
         .and_then(Value::as_str)
         .unwrap_or_default();
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode") {
+        let id = match crate::session_chat_opencode::session_id(&target.session) {
+            Ok(id) => id,
+            Err(error) => return domain_error_response(endpoint_path, request_id, error),
+        };
+        let answer_params = params.clone();
+        let result = tokio::task::spawn_blocking(move || crate::session_chat_opencode::answer(&id, &answer_params)).await;
+        match result {
+            Ok(Ok(())) => {},
+            Ok(Err(error)) => return domain_error_response(endpoint_path, request_id, error),
+            Err(_) => return domain_error_response(endpoint_path, request_id, crate::session_chat_opencode::error("OpenCode answer task failed.")),
+        }
+        schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
+        return routed_json(Some(endpoint_path), StatusCode::OK, rpc_success(request_id, json!({"answered":true})));
+    }
     if matches!(kind, "asyncQuestion" | "dismissAsyncQuestion") {
         let Some(question_id) = params
             .get("questionId")
@@ -4233,7 +4261,7 @@ pub(crate) fn read_and_release_stashed_prompt(
     )
 }
 
-pub(crate) fn handle_interrupt_session_chat_http(
+pub(crate) async fn handle_interrupt_session_chat_http(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
@@ -4250,6 +4278,21 @@ pub(crate) fn handle_interrupt_session_chat_http(
     // Cancel first so queued sends (and an in-flight sequence's remaining
     // steps) drop, then deliver ESC through the queue's new generation.
     crate::session_chat_send::cancel_session_chat_sends(&target.project_id, &target.session_id);
+    if session_chat_agent_for_session(&target.session).as_deref() == Some("opencode") {
+        let id = crate::session_chat_opencode::session_id(&target.session);
+        let prompt_id = params.get("toolUseId").and_then(Value::as_str).map(str::to_owned);
+        let result = tokio::task::spawn_blocking(move || {
+            let id = id?;
+            crate::session_chat_opencode::interrupt(&id, prompt_id.as_deref())?;
+            crate::session_chat_opencode::invalidate(&id);
+            Ok::<_, DomainStateError>(())
+        }).await.unwrap_or_else(|_|Err(crate::session_chat_opencode::error("OpenCode interrupt task failed.")));
+        schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
+        return match result {
+            Ok(()) => routed_json(Some(endpoint_path), StatusCode::OK, rpc_success(request_id, json!({"interrupted":true}))),
+            Err(error) => domain_error_response(endpoint_path, request_id, error),
+        };
+    }
     let mut steps = Vec::new();
     match session_chat_agent_for_session(&target.session).as_deref() {
         Some("codex") => steps.push(SessionChatSendStep::GuardCodexInterrupt),

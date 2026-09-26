@@ -101,6 +101,20 @@ pub fn run() -> Result<(), JsValue> {
 
     app.with_assets(assets::GhostexAssets).run(|cx: &mut App| {
         gpui_component::init(cx);
+        // Match desktop's terminal keymap: Root's focus traversal otherwise
+        // consumes Tab/Shift+Tab before the shared terminal encoder sees them.
+        cx.bind_keys([
+            KeyBinding::new(
+                "tab",
+                gpui::NoAction {},
+                Some(terminal_element::TERMINAL_KEY_CONTEXT),
+            ),
+            KeyBinding::new(
+                "shift-tab",
+                gpui::NoAction {},
+                Some(terminal_element::TERMINAL_KEY_CONTEXT),
+            ),
+        ]);
 
         let emoji_font = Cow::Borrowed(include_bytes!("../fonts/NotoEmoji-Regular.ttf").as_slice());
         let mono_font =

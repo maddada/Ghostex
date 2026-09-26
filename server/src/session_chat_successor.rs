@@ -337,9 +337,18 @@ pub(crate) fn is_uuid_transcript_stem(stem: &str) -> bool {
 
 const UUID_TEXT_LENGTH: usize = 36;
 
-/// A Codex rollout stem is `rollout-<ts>-<uuid>`, so — unlike Claude, whose
-/// stem IS the session id — only the trailing 36 characters name the session.
+/// CDXC:SessionIdentity 2026-09-25 WHY:
+/// Codex preserves the thread UUID when rewinding into an immutable replacement named `rollout-<ts>-<thread>_<rollout>`. Process identity follows the thread; history_base and cycle detection follow the rollout UUID.
 pub(crate) fn codex_rollout_session_id(stem: &str) -> Option<String> {
+    if let Some((prefix, rollout)) = stem.rsplit_once('_') {
+        if is_uuid_transcript_stem(rollout) {
+            return codex_rollout_id(prefix);
+        }
+    }
+    codex_rollout_id(stem)
+}
+
+pub(crate) fn codex_rollout_id(stem: &str) -> Option<String> {
     let suffix = stem.get(stem.len().checked_sub(UUID_TEXT_LENGTH)?..)?;
     if !is_uuid_transcript_stem(suffix) {
         return None;
@@ -583,6 +592,7 @@ const CODEX_SESSION_META_HEAD_BYTES: u64 = 128 * 1024;
 
 pub(crate) struct CodexSessionMeta {
     pub(crate) session_id: String,
+    pub(crate) rollout_id: String,
     pub(crate) cwd: Option<String>,
     pub(crate) timestamp: Option<String>,
     pub(crate) forked_from_id: Option<String>,
@@ -608,8 +618,15 @@ pub(crate) fn read_codex_session_meta(path: &Path) -> Option<CodexSessionMeta> {
     let payload = as_record(record.get("payload"))?;
     let session_id =
         extract_string(payload.get("session_id")).or_else(|| extract_string(payload.get("id")))?;
+    let rollout_id = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .filter(|stem| codex_rollout_session_id(stem).as_deref() == Some(&session_id))
+        .and_then(codex_rollout_id)
+        .unwrap_or_else(|| session_id.clone());
     Some(CodexSessionMeta {
         session_id,
+        rollout_id,
         cwd: extract_string(payload.get("cwd")),
         timestamp: extract_string(payload.get("timestamp")),
         forked_from_id: extract_string(payload.get("forked_from_id")),

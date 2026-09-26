@@ -176,12 +176,34 @@ fn start(
         quote(&editor),
         startup.unwrap_or_default().trim_end_matches(['\r', '\n'])
     );
+    let startup = startup_from_environment(&startup, &mut environment);
     let launch = json!({"name": name, "cwd": cwd,
         "shell": crate::platform::shell::command_shell().executable,
         "startup": startup});
     let encoded =
         STANDARD.encode(serde_json::to_vec(&launch).expect("serialize native session launch"));
     invocation(program, vec!["start-encoded".into(), encoded], environment)
+}
+
+/// CDXC:PlatformSupport 2026-09-25 WHY:
+/// Resume lookup can contain the full first prompt. Putting it in wmx's launch argument and then PowerShell's UTF-16 EncodedCommand exceeded Windows' command-line limit and prevented session attach. Transport the UTF-8 payload in bounded environment values, consumed before the agent starts, so neither command line grows with the prompt.
+fn startup_from_environment(startup: &str, environment: &mut HashMap<String, String>) -> String {
+    let encoded = STANDARD.encode(startup.as_bytes());
+    let mut count = 0;
+    for (index, chunk) in encoded.as_bytes().chunks(8192).enumerate() {
+        environment.insert(
+            format!("GHOSTEX_NATIVE_STARTUP_{index}"),
+            String::from_utf8(chunk.to_vec()).expect("base64 is ASCII"),
+        );
+        count += 1;
+    }
+    format!(
+        ". (& {{ $payload = -join @(for ($i = 0; $i -lt {count}; $i++) {{ \
+         $key = 'GHOSTEX_NATIVE_STARTUP_' + $i; \
+         [Environment]::GetEnvironmentVariable($key, 'Process'); \
+         Remove-Item -LiteralPath ('Env:' + $key) -ErrorAction Stop \
+         }}); [ScriptBlock]::Create([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($payload))) }})"
+    )
 }
 
 pub(crate) fn process_snapshot_command(program: &str) -> String {

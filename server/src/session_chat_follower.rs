@@ -148,6 +148,9 @@ pub(crate) fn follower_drain_once(
     want_snapshot: bool,
 ) -> FollowerDrainOutcome {
     let lineage = session_chat_lineage_extractor(agent);
+    if agent == SessionChatTranscriptAgent::OpenCode {
+        crate::session_chat_opencode::refresh_for_path(file_path);
+    }
     // Hermes's transcript is a mirror of its SQLite rows; freshen it before the
     // generic file logic reads it so each tick sees the latest turn state. An
     // in-place rewind rewrite swaps the inode, which the identity check below
@@ -759,6 +762,7 @@ async fn detect_and_adopt_successor_transcript(
         | SessionChatTranscriptAgent::Cursor
         | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
+        | SessionChatTranscriptAgent::OpenCode
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode => return None,
     };

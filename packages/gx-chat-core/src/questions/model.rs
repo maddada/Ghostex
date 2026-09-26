@@ -49,7 +49,7 @@ pub struct QuestionOption {
 
 /// What the agent is blocked on: a question set, or a tool approval.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum InteractivePrompt {
     Question {
         #[serde(default)]

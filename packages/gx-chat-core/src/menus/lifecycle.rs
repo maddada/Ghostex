@@ -30,6 +30,17 @@ use crate::wire::ChatRpcMethod;
 pub fn observe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let now_ms = context.now_millis();
     let mut effects = Vec::new();
+    if state.session.agent.as_deref() == Some("opencode") {
+        if let Some(catalog) = state.session.selected_options.as_ref().and_then(|v| v.get("modelCatalog"))
+            .and_then(crate::menus::catalog::parse_agent_model_catalog) {
+            if let Some(agent) = catalog.agents.get("opencode") {
+                if state.menus.model_catalog.agents.get("opencode") != Some(agent) {
+                    state.menus.model_catalog.agents.insert("opencode".into(), agent.clone());
+                    state.menus.model_catalog_generation = state.menus.model_catalog_generation.wrapping_add(1);
+                }
+            }
+        }
+    }
     rebuild_option_store(state, now_ms);
     apply_detection(state);
     state.menus.options.expire(now_ms);

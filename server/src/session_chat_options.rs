@@ -208,6 +208,8 @@ pub struct SessionChatDetectedSelection {
     /// What Cursor handed its statusline command plus the checkout's git state
     /// (`session_chat_cursor_status.rs`), camelCase and absent-when-absent.
     pub cursor_status: Option<Value>,
+    /// Session-local provider inventory supplied by agents with a model API.
+    pub model_catalog: Option<Value>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -287,6 +289,7 @@ impl SessionChatDetectedOptions {
         if let Some(status) = self.selection.cursor_status.as_ref() {
             map.insert("cursorStatus".to_string(), status.clone());
         }
+        if let Some(catalog) = &self.selection.model_catalog { map.insert("modelCatalog".into(), catalog.clone()); }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)
     }
@@ -995,6 +998,7 @@ pub(crate) fn match_cursor_statusline(line: &str) -> Option<SessionChatDetectedS
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
         ..SessionChatDetectedSelection::default()
     })
 }
@@ -1084,6 +1088,7 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     })
 }
 
@@ -1181,6 +1186,7 @@ fn match_antigravity_statusline(line: &str) -> Option<SessionChatDetectedSelecti
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     })
 }
 
@@ -1254,6 +1260,7 @@ fn match_pi_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     })
 }
 
@@ -1303,6 +1310,7 @@ fn match_omp_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     })
 }
 
@@ -1354,6 +1362,7 @@ fn match_hermes_statusline(line: &str) -> Option<SessionChatDetectedSelection> {
         claude_status: None,
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     })
 }
 
@@ -1699,6 +1708,7 @@ fn detect_session_chat_transcript_selection(
                     claude_status: None,
                     codex_status: None,
                     cursor_status: None,
+        model_catalog: None,
                 }
             }
             _ => continue,
@@ -1802,6 +1812,7 @@ fn read_session_chat_statusline_selection(
         claude_status: claude_statusline_status_value(payload),
         codex_status: None,
         cursor_status: None,
+        model_catalog: None,
     };
     // CDXC:AgentProviders 2026-09-09 WHY:
     // Claude's reported usage is useful before model or effort detection succeeds; do not discard the statusline stats with an unrecognized choice.
@@ -2145,6 +2156,10 @@ pub fn detect_session_chat_terminal_state(
     session_id: &str,
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
+    if agent_id == Some("opencode") {
+        return repository.get_session(project_id, session_id).ok().flatten()
+            .as_ref().map(crate::session_chat_opencode::detect).unwrap_or_default();
+    }
     /*
     CDXC:SessionChat 2026-08-26:
     Two independent reasons to spend a capture on this session now. The
@@ -2793,6 +2808,7 @@ mod tests {
             claude_status: None,
             codex_status: None,
             cursor_status: None,
+        model_catalog: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
         let merged = merge_session_chat_option_selections(Some(transcript), None, Some(terminal))
@@ -2847,6 +2863,7 @@ mod tests {
                 claude_status: None,
                 codex_status: None,
                 cursor_status: None,
+        model_catalog: None,
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),
         };

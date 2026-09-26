@@ -39,6 +39,7 @@ pub(crate) fn read_options(
                 message: "Invalid chat option selection.".into(),
             })?;
     let valid_mode = options.mode.as_deref().is_none_or(|mode| match provider {
+        "opencode" => !mode.trim().is_empty() && mode.len() <= 160,
         "codex" => matches!(mode, "plan" | "default"),
         "claude" => matches!(mode, "bypass" | "auto" | "manual" | "accept-edits" | "plan"),
         _ => false,
@@ -80,6 +81,9 @@ pub(crate) fn read_scope(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or(SCOPE_DEFAULT);
+    if provider == "opencode" && matches!(scope, SCOPE_DEFAULT | SCOPE_SESSION) {
+        return Ok(scope.to_string());
+    }
     if scope == SCOPE_DEFAULT {
         return Ok(SCOPE_DEFAULT.to_string());
     }
@@ -154,7 +158,7 @@ pub(crate) fn validate_selection(
     };
     if !matches!(
         provider,
-        "codex" | "claude" | "cursor" | "grok" | "antigravity"
+        "codex" | "claude" | "cursor" | "grok" | "antigravity" | "opencode"
     ) || !token(model)
         || (!effort.is_empty() && !token(effort))
     {
@@ -208,7 +212,7 @@ pub(crate) fn enqueue(
     let scope = read_scope(&provider, params)?;
     if !model.is_empty() || incoming_options.is_empty() {
         validate_selection(&provider, model, effort)?;
-    } else if !matches!(provider.as_str(), "codex" | "claude") || !effort.is_empty() {
+    } else if !matches!(provider.as_str(), "codex" | "claude" | "opencode") || !effort.is_empty() {
         return Err(DomainStateError {
             code: "invalidParams",
             message: "An effort change requires its model.".into(),

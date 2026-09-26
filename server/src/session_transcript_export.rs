@@ -343,6 +343,7 @@ fn agent_display_name(agent: SessionChatTranscriptAgent) -> &'static str {
         SessionChatTranscriptAgent::Cursor => "Cursor CLI",
         SessionChatTranscriptAgent::Grok => "Grok",
         SessionChatTranscriptAgent::Hermes => "Hermes Agent",
+        SessionChatTranscriptAgent::OpenCode => "OpenCode",
         SessionChatTranscriptAgent::Pi => "Pi",
         SessionChatTranscriptAgent::Zcode => "ZCode",
     }
@@ -736,6 +737,7 @@ fn parse_transcript(
             SessionChatTranscriptAgent::Hermes => parse_hermes_record(&mut builder, &record),
             SessionChatTranscriptAgent::Pi => parse_pi_record(&mut builder, &record),
             SessionChatTranscriptAgent::Zcode => parse_zcode_record(&mut builder, line),
+            SessionChatTranscriptAgent::OpenCode => parse_opencode_record(&mut builder, line),
         }
     }
     builder.finish()
@@ -2018,10 +2020,20 @@ fn strip_grok_user_query(text: &str) -> String {
 // ---------------------------------------------------------------------------
 
 fn parse_zcode_record(builder: &mut TranscriptBuilder, line: &str) {
-    use crate::session_chat::{SessionChatBlock, SessionChatRole};
     let Some(message) = crate::session_chat::decode_zcode_transcript_line(line, "zcode") else {
         return;
     };
+    parse_normalized_record(builder, message);
+}
+
+fn parse_opencode_record(builder: &mut TranscriptBuilder, line: &str) {
+    if let Some(message) = crate::session_chat_opencode::decode_line(line, "opencode") {
+        parse_normalized_record(builder, message);
+    }
+}
+
+fn parse_normalized_record(builder: &mut TranscriptBuilder, message: crate::session_chat::SessionChatMessage) {
+    use crate::session_chat::{SessionChatBlock, SessionChatRole};
     for block in message.blocks {
         match block {
             SessionChatBlock::Text { text } => {
@@ -2041,7 +2053,7 @@ fn parse_zcode_record(builder: &mut TranscriptBuilder, line: &str) {
                 );
             }
             SessionChatBlock::ToolResult { output, is_error } => {
-                builder.push_output(Some(message.id.clone()), output, is_error.unwrap_or(false))
+                builder.push_output(Some(message.id.trim_end_matches(":result").to_string()), output, is_error.unwrap_or(false))
             }
             SessionChatBlock::ImageRef { path, url, alt } => builder.push_dialog(
                 TranscriptExportSection::UserMessage,

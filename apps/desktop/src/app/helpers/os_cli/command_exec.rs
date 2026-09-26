@@ -6,17 +6,28 @@ use std::{
 
 use anyhow::Result;
 
-pub(crate) fn gpui_run_command_with_timeout(
-    command: &Path,
-    args: &[&str],
-    timeout: Duration,
-) -> Result<bool, String> {
-    let mut process = std::process::Command::new(command);
+/// CDXC:PlatformSupport 2026-09-24 WHY:
+/// Piped output alone does not suppress Windows console windows. Background probes and RPC helpers must opt out when creating the process, before a console can flash on screen.
+pub(crate) fn gpui_background_command(
+    program: impl AsRef<std::ffi::OsStr>,
+) -> std::process::Command {
+    let mut process = std::process::Command::new(program);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         process.creation_flags(0x0800_0000);
     }
+    #[cfg(not(windows))]
+    let _ = &mut process;
+    process
+}
+
+pub(crate) fn gpui_run_command_with_timeout(
+    command: &Path,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<bool, String> {
+    let mut process = gpui_background_command(command);
     let mut child = process
         .args(args)
         .stdin(std::process::Stdio::null())
@@ -70,12 +81,7 @@ pub(crate) fn gpui_run_command_with_captured_output_timeout(
     timeout: Duration,
     max_capture_bytes: usize,
 ) -> Result<GpuiCapturedCommandOutput, String> {
-    let mut process = std::process::Command::new(command);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        process.creation_flags(0x0800_0000);
-    }
+    let mut process = gpui_background_command(command);
     let mut child = process
         .args(args)
         .stdin(std::process::Stdio::null())

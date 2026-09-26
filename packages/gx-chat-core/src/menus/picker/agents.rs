@@ -20,6 +20,7 @@ pub struct PickerAgent {
 /// `getDefaultSidebarAgentById(provider)`, narrowed to the fields chat reads.
 pub fn picker_agent(provider: ModelPickerProvider) -> PickerAgent {
     match provider {
+        ModelPickerProvider::OpenCode => PickerAgent { name:"OpenCode", icon:"opencode" },
         ModelPickerProvider::Codex => PickerAgent {
             name: "Codex",
             icon: "codex",

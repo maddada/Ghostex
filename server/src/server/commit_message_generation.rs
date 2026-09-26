@@ -526,6 +526,8 @@ pub(crate) async fn run_commit_message_generation_agent(
     let shell_command = build_commit_message_generation_shell_command(agent, &delimiter, prompt)?;
     let shell = command_shell();
     let mut child = Command::new(&shell.executable);
+    #[cfg(windows)]
+    child.creation_flags(0x0800_0000);
     child
         .args(shell.interactive_script_args(&shell_command))
         .current_dir(cwd)

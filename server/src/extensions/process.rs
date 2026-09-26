@@ -592,7 +592,7 @@ pub(crate) fn configure_process_group(command: &mut Command) {
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0000_0200);
+        command.creation_flags(0x0000_0200 | 0x0800_0000);
     }
 }
 
@@ -609,7 +609,7 @@ pub(crate) fn terminate_process_group(child: &mut Child) {
 
     #[cfg(windows)]
     {
-        let _ = Command::new("taskkill")
+        let _ = crate::platform::process::background_command("taskkill")
             .args(["/PID", &child.id().to_string(), "/T", "/F"])
             .stdin(Stdio::null())
             .stdout(Stdio::null())

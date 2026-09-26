@@ -9,7 +9,7 @@ use std::{
     io::{Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Stdio},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -350,7 +350,7 @@ fn serve_connection(
     if stream.set_nonblocking(false).is_err() {
         return;
     }
-    let child = Command::new(&spec.binary_path)
+    let child = gpui_background_command(&spec.binary_path)
         .arg(&spec.address_blob)
         .arg(spec.remote_port.to_string())
         .stdin(Stdio::piped())

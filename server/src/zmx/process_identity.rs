@@ -295,8 +295,9 @@ pub(crate) fn read_codex_process_session_identity(
 pub(crate) fn codex_process_session_identity_from_paths(
     paths: impl IntoIterator<Item = PathBuf>,
 ) -> Option<(String, String)> {
-    let mut identities = HashMap::<String, PathBuf>::new();
+    let mut identities = HashMap::<String, (String, PathBuf)>::new();
     let mut predecessors = HashSet::new();
+    let mut inherited_rollouts = HashSet::new();
     for target in paths {
         let Some(agent_session_id) = codex_session_id_from_transcript_path(&target) else {
             continue;
@@ -311,18 +312,27 @@ pub(crate) fn codex_process_session_identity_from_paths(
         if let Some(parent) = meta.forked_from_id {
             predecessors.insert(parent);
         }
-        identities.entry(agent_session_id).or_insert(target);
+        if let Some(base) = meta.history_base {
+            inherited_rollouts.insert(base.thread_id);
+        }
+        identities
+            .entry(meta.rollout_id)
+            .or_insert((agent_session_id, target));
     }
     // Codex may retain the previous rollout handle after rewinding. Among its
     // open root rollouts, only an unambiguous descendant can be the active branch.
-    identities.retain(|id, _| !predecessors.contains(id));
+    identities.retain(|rollout, (id, _)| {
+        !predecessors.contains(id) && !inherited_rollouts.contains(rollout)
+    });
     if identities.len() != 1 {
         return None;
     }
     identities
         .into_iter()
         .next()
-        .map(|(agent_session_id, path)| (agent_session_id, path.to_string_lossy().into_owned()))
+        .map(|(_, (agent_session_id, path))| {
+            (agent_session_id, path.to_string_lossy().into_owned())
+        })
 }
 
 #[cfg(target_os = "linux")]
@@ -379,7 +389,8 @@ pub(crate) fn codex_session_id_from_transcript_path(path: &Path) -> Option<Strin
     if !stem.starts_with("rollout-") || stem.len() < 36 {
         return None;
     }
-    normalize_codex_session_id(&stem[stem.len() - 36..])
+    crate::session_chat_successor::codex_rollout_session_id(stem)
+        .and_then(|id| normalize_codex_session_id(&id))
 }
 
 /// CDXC:SessionIdentity 2026-09-14 WHY:

@@ -578,9 +578,18 @@ Ctrl on Windows and Linux).
 Type `/` in the chat box to browse the agent's built-in commands. In Cursor
 chats, `/compact` summarizes the conversation to reduce context, just like
 `/summarize`.
-In Claude Code and Codex chats, start a message with `!` to run a shell command
+In Claude Code, Codex, and OpenCode v2 chats, start a message with `!` to run a shell command
 in that agent's session, for example `! pwd`. The command and its output appear
 in the chat.
+OpenCode v2 supports streamed replies, reasoning, tool results, image attachments,
+questions, permissions, queued prompts, and conversation rewind in Chat. Install
+its hooks in Settings > Agents, then open a new OpenCode session to connect it.
+The model picker shows the models available from your OpenCode providers and
+their reasoning levels; the mode control selects Build or Plan. Left-click a
+model to save the default, or right-click to apply it only to this session.
+Use `/compact` to summarize the conversation. Forms with conditional fields or
+external sign-in steps offer an Open terminal action. Commands:
+`ghostex send-session-chat-message`, `ghostex answer-session-chat-prompt`.
 ZCode supports chat messages, thinking, tool results, attachments, and imported
 conversation history. Install its hooks in Settings > Agents to connect new
 conversations and keep activity in sync. ZCode runs in the same terminal, so

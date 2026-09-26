@@ -80,18 +80,14 @@ pub struct ComposerReference {
     pub start: usize,
 }
 
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// Markdown only escapes ASCII punctuation. Unescaping every backslash turns a Windows image path into `C:Users...`, which is rejected as a URI scheme instead of becoming a reference pill.
 fn unescape_markdown(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
-    let mut chars = value.chars();
+    let mut chars = value.chars().peekable();
     while let Some(character) = chars.next() {
-        if character == '\\' {
-            if let Some(next) = chars.next() {
-                out.push(next);
-            }
-            // A trailing backslash has nothing to unescape, and `/\\(.)/g` leaves it in place.
-            else {
-                out.push('\\');
-            }
+        if character == '\\' && chars.peek().is_some_and(char::is_ascii_punctuation) {
+            out.push(chars.next().unwrap());
         } else {
             out.push(character);
         }
@@ -308,6 +304,25 @@ struct Destination {
 
 /// The `(...)` half of a Markdown link, angle-bracketed or nested-paren form.
 fn linked_destination(text: &Utf16Text, destination_start: usize) -> Option<Destination> {
+    let path_start = destination_start + usize::from(text.at(destination_start) == Some('<'));
+    // Native paste writes literal Windows paths. A single drive separator (or a two-slash UNC
+    // leader) must also survive before punctuation, such as `C:\_images\photo.png`.
+    // Doubled Markdown separators still use the ordinary escape decoder.
+    let literal_windows = (text.at(path_start).is_some_and(|c| c.is_ascii_alphabetic())
+        && text.at(path_start + 1) == Some(':')
+        && text.at(path_start + 2) == Some('\\')
+        && text.at(path_start + 3) != Some('\\'))
+        || (text.at(path_start) == Some('\\')
+            && text.at(path_start + 1) == Some('\\')
+            && text.at(path_start + 2) != Some('\\'));
+    let decode = |start, end| {
+        let source = text.slice(start, end);
+        if literal_windows {
+            source
+        } else {
+            unescape_markdown(&source)
+        }
+    };
     if text.at(destination_start) == Some('<') {
         let mut index = destination_start + 1;
         while index < text.len() {
@@ -315,14 +330,17 @@ fn linked_destination(text: &Utf16Text, destination_start: usize) -> Option<Dest
             if character == '\n' || character == '\r' {
                 return None;
             }
-            if character == '\\' {
+            if !literal_windows
+                && character == '\\'
+                && text.at(index + 1).is_some_and(|c| c.is_ascii_punctuation())
+            {
                 index += 2;
                 continue;
             }
             if character == '>' && text.at(index + 1) == Some(')') {
                 return Some(Destination {
                     end: index + 2,
-                    path: unescape_markdown(&text.slice(destination_start + 1, index)),
+                    path: decode(destination_start + 1, index),
                 });
             }
             index += 1;
@@ -337,7 +355,10 @@ fn linked_destination(text: &Utf16Text, destination_start: usize) -> Option<Dest
         if character == '\n' || character == '\r' {
             return None;
         }
-        if character == '\\' {
+        if !literal_windows
+            && character == '\\'
+            && text.at(index + 1).is_some_and(|c| c.is_ascii_punctuation())
+        {
             index += 2;
             continue;
         }
@@ -354,12 +375,25 @@ fn linked_destination(text: &Utf16Text, destination_start: usize) -> Option<Dest
         if depth == 0 {
             return Some(Destination {
                 end: index + 1,
-                path: unescape_markdown(&text.slice(destination_start, index)),
+                path: decode(destination_start, index),
             });
         }
         index += 1;
     }
     None
+}
+
+/// Read a link destination after its opening `(`, returning the path and consumed byte length.
+/// The transcript uses the composer's decoder so escaped and angle-bracketed image paths agree.
+pub(crate) fn markdown_destination(source: &str) -> Option<(String, usize)> {
+    let source = source.split(['\r', '\n']).next()?;
+    let destination = linked_destination(&Utf16Text::new(source), 0)?;
+    let consumed = source
+        .chars()
+        .take(destination.end)
+        .map(char::len_utf8)
+        .sum();
+    Some((destination.path, consumed))
 }
 
 /// `/\[((?:\\.|[^\]\\\r\n])+)]\(/g` from `start`, as one leftmost match.

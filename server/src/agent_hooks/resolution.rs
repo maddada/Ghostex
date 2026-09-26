@@ -180,6 +180,9 @@ pub(crate) fn provider_hook_paths(agent_id: &str, hook_paths: &HookPaths) -> Vec
                 ".config/opencode",
                 None,
             );
+            if super::opencode_v2::installed(hook_paths) {
+                return vec![config_dir.join("plugins/ghostex-v2/tui.js"), config_dir.join("cli.json")];
+            }
             vec![
                 config_dir.join("plugins").join("ghostex-session.js"),
                 config_dir.join("opencode.json"),

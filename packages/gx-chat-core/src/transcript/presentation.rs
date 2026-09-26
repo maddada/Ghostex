@@ -79,7 +79,7 @@ pub fn message_can_rewind(message: &ChatMessage, copy_text: &str, suppressed: &V
 
 /// Agents whose own rewind flow Ghostex drives; anything else never offers the action.
 pub fn agent_supports_rewind(agent: Option<&str>) -> bool {
-    matches!(agent, Some("claude") | Some("codex"))
+    matches!(agent, Some("claude") | Some("codex") | Some("opencode"))
 }
 
 /// The message's own wire keys, which the projection spreads before it adds its own.

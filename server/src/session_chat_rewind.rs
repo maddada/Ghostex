@@ -1209,6 +1209,13 @@ async fn rewind_session_chat(
     }
     let target = resolve_session_chat_send_target(state, params, "rewindSessionChat")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
+    if agent.as_deref() == Some("opencode") {
+        let id = crate::session_chat_opencode::session_id(&target.session)?;
+        let result = tokio::task::spawn_blocking(move || crate::session_chat_opencode::rewind(&id, &message_id))
+            .await.map_err(|_| agent_busy("OpenCode rewind failed."))??;
+        crate::session_chat_follower::request_session_chat_resnapshot(state, &target.project_id, &target.session_id);
+        return Ok(result);
+    }
     if agent.as_deref() == Some("codex") {
         return codex::rewind(state, target, &message_id).await;
     }

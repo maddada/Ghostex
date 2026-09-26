@@ -64,7 +64,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 from_history: false,
             }]
         }
-        ActionKind::EditDraft => edit_draft(state, action),
+        ActionKind::EditDraft => edit_draft(state, action, context),
         ActionKind::SaveDraft => save_draft(state, action),
         ActionKind::RecallHistory => recall_history(state, action),
         ActionKind::OpenComposerReference => open_reference(action),
@@ -426,7 +426,7 @@ fn suggestion_command(state: &mut ChatState, action: &UserAction) -> Vec<Effect>
     }
 }
 
-fn edit_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+fn edit_draft(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     let text = text_param(action);
     track_draft_attachments(state, text);
     let from_history = action.param("history") == Some(&Value::Bool(true));
@@ -435,6 +435,15 @@ fn edit_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
         state.composer.history.reset_index();
     }
     state.composer.text = text.to_string();
+    let record = crate::composer::storage::StoredDraftRecord {
+        text: text.to_string(),
+        updated_at: Some(context.now_millis() as f64),
+        version: action.param("draftVersion").and_then(|value| serde_json::from_value(value.clone()).ok()),
+        submitted: false,
+        parked: false,
+    };
+    state.composer.version = record.version.clone();
+    state.composer.stored_draft = Some(record.clone());
     // `if (!clearedError && !historyChanged) return;`: every keystroke writes the draft, and the
     // write answering is not on its own a reason to ship a snapshot.
     if !state.core.cleared_error && !history_changed {
@@ -442,7 +451,7 @@ fn edit_draft(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     }
     vec![Effect::WriteStorage {
         key: draft_key(state),
-        value: Some(text.to_string()),
+        value: Some(crate::composer::storage::encode_stored_draft(&record)),
         durable: false,
     }]
 }

@@ -11,7 +11,7 @@ Status on 2026-09-22: the sidebar, the chat view and the terminal are the deskto
 | Terminal | Output, colours, Nerd Font glyphs, cursor, keyboard input through Ghostty's key encoder, resize, and an action bar with the desktop's Chat View button | `terminal_element.rs`, `ghostty_vt.rs`, `terminal_wheel.rs`, `terminal_scrollbar_reveal.rs`, the state half of `terminal_model.rs`, and libghostty-vt itself as a static wasm32 archive |
 | Shell | Work area header with breadcrumb and sidebar toggle; chat and terminal switch through their own buttons, as on the desktop. Start, Open, Commit, the more menu and the panel toggles are drawn disabled. Code, Browser, Kanban, Automate and Docs tabs are not drawn | The desktop's constants, palette and icons; the header itself is written here |
 
-Not run against live sessions, on purpose: sending a chat message, Sleep and Wake. They are wired (the send path is the desktop's own; Sleep and Wake go through the core's planner) but would have started or stopped real agents.
+Live Windows verification (2026-09-25) covers sending messages, asynchronous question choices and multiline Unicode answers, Codex text dialogs and rewind history, and terminal Tab/Shift+Tab/Ctrl+Enter in disposable sessions. Sleep and Wake have not been exercised in that browser audit.
 
 ## Run it
 
@@ -27,7 +27,9 @@ bun run start:web        # builds the wasm (release, ~2 min cold) and the page i
 bun run web:dev          # rebuilds the wasm and starts Vite on http://localhost:4174, which proxies the bootstrap to :4173
 ```
 
-`./build-wasm.sh` without `--release` gives a debug build that works but is 100 MB and slow.
+`bun apps/gpui-web/build-wasm.mjs` without `--release` gives a debug build that works but is 100 MB and slow. The Bash entry point delegates to the same builder.
+
+On Windows, run `bun run web:build` from PowerShell with Zig 0.16, Rust 1.95.0's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.125 installed. The builder restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through sccache. Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
 
 - `http://localhost:4174/?session=<projectId>:<sessionId>&surface=terminal` opens a session directly (ids as in its zmx name, `S90-<projectId>-<sessionId>`).
 - `?chatDebug` logs every chat runtime output to the console.

@@ -1,6 +1,8 @@
-//! The chat runtime in the browser: the same TypeScript controller bundle the desktop runs in QuickJS (`packages/shared/session-chat-controller/native-host.ts`), evaluated in a hidden same-origin iframe per chat, behind the same API the desktop's worker thread has.
+//! Browser hosts for gx-chat-core and the optional QuickJS parity comparison bundle.
 //!
 //! CDXC:WebGpui 2026-09-22 WHY: the bundle replaces `globalThis.setTimeout` and friends with virtual timers it services from `tick`, which is right inside QuickJS and would break the page (GPUI's web dispatcher is built on the real `setTimeout`). An iframe gives every chat its own global object, and calls into it stay synchronous, which the composer's per-paint `query` needs.
+#[path = "rust_runtime.rs"]
+mod rust_runtime;
 use serde_json::Value;
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
@@ -122,6 +124,7 @@ extern "C" {
 
 pub(crate) struct ChatRuntimeWorker {
     id: u32,
+    rust: Option<rust_runtime::Runtime>,
     /// Held so the JavaScript side can keep calling it for as long as the runtime lives.
     _wake: Closure<dyn FnMut()>,
 }
@@ -132,16 +135,41 @@ impl ChatRuntimeWorker {
         _recording: Option<std::path::PathBuf>,
         wake: impl Fn() + Send + Sync + 'static,
     ) -> Self {
+        let wake = std::rc::Rc::new(wake);
+        let rust = if rust_runtime::rust_chat_enabled() {
+            let wake = wake.clone();
+            Some(rust_runtime::Runtime::new(config.clone(), move || wake()))
+        } else {
+            None
+        };
         let wake = Closure::<dyn FnMut()>::new(move || wake());
-        let id = chat_runtime_start(&config.to_string(), &wake);
-        Self { id, _wake: wake }
+        let id = if rust.is_none() {
+            chat_runtime_start(&config.to_string(), &wake)
+        } else {
+            0
+        };
+        Self {
+            id,
+            rust,
+            _wake: wake,
+        }
     }
 
     pub(crate) fn call(&self, method: &'static str, arguments: Vec<Value>) {
+        if let Some(rust) = &self.rust {
+            rust.call(method, arguments);
+            return;
+        }
         chat_runtime_call(self.id, method, &Value::Array(arguments).to_string());
     }
 
     pub(crate) fn call_raw(&self, method: &'static str, raw: String) {
+        if let Some(rust) = &self.rust {
+            if let Ok(value) = serde_json::from_str(&raw) {
+                rust.call(method, vec![value]);
+            }
+            return;
+        }
         chat_runtime_call(self.id, method, &format!("[{raw}]"));
     }
 
@@ -161,11 +189,21 @@ impl ChatRuntimeWorker {
         arguments: Vec<Value>,
         _timeout: Duration,
     ) -> Option<Value> {
+        if let Some(rust) = &self.rust {
+            return rust.query(method, &arguments);
+        }
         let text = chat_runtime_query(self.id, method, &Value::Array(arguments).to_string())?;
         serde_json::from_str(&text).ok()
     }
 
     pub(crate) fn take_outputs(&self) -> Vec<ChatRuntimeOutput> {
+        if let Some(rust) = &self.rust {
+            return rust
+                .take()
+                .into_iter()
+                .map(ChatRuntimeOutput::Drained)
+                .collect();
+        }
         chat_runtime_take(self.id)
             .into_iter()
             .map(|text| match serde_json::from_str::<Value>(&text) {

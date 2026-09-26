@@ -1881,6 +1881,8 @@ pub(crate) async fn generate_first_prompt_session_title(
         build_title_generation_command(&agent, &command, &delimiter, &generation_prompt)?;
     let shell = command_shell();
     let mut child = Command::new(&shell.executable);
+    #[cfg(windows)]
+    child.creation_flags(0x0800_0000);
     child.args(shell.interactive_script_args(&shell_command));
     child.current_dir(cwd.unwrap_or_else(|| state.paths.home_dir.to_str().unwrap_or(".")));
     child.envs(internal_prompt_generation_environment(

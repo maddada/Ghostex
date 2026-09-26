@@ -31,6 +31,12 @@ fn text(value: Option<&Value>) -> Option<String> {
 }
 
 pub(crate) fn read(path: &Path, family: SessionChatTranscriptAgent) -> io::Result<SubagentModel> {
+    if family == SessionChatTranscriptAgent::OpenCode {
+        let id=path.file_stem().and_then(|s|s.to_str()).unwrap_or_default();
+        let snapshot=crate::session_chat_opencode::snapshot(id).map_err(|e|io::Error::other(e.message))?;
+        let model=snapshot.info.get("model").or_else(||snapshot.messages.iter().rev().find(|m|m["type"]=="assistant").and_then(|m|m.get("model")));
+        return Ok(SubagentModel {model:text(model.and_then(|m|m.get("id"))),effort:text(model.and_then(|m|m.get("variant")))});
+    }
     type Cache = HashMap<PathBuf, (TranscriptFileVersion, SubagentModel)>;
     static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
     let cache = CACHE.get_or_init(Mutex::default);

@@ -18,12 +18,13 @@ use crate::menus::picker::agents::picker_agent;
 use crate::menus::picker::model_picker::ModelPickerProvider;
 
 /// The tab order, and the only providers a model menu can show.
-pub const MODEL_MENU_PROVIDERS: [ModelPickerProvider; 5] = [
+pub const MODEL_MENU_PROVIDERS: [ModelPickerProvider; 6] = [
     ModelPickerProvider::Claude,
     ModelPickerProvider::Codex,
     ModelPickerProvider::Cursor,
     ModelPickerProvider::Grok,
     ModelPickerProvider::Antigravity,
+    ModelPickerProvider::OpenCode,
 ];
 pub const MODEL_MENU_FAVORITES_TAB: &str = "favorites";
 /// `AUTO_MODEL_VALUE`: the row the agent picks for you, pinned first on its own tab.

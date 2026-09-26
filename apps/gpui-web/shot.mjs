@@ -27,6 +27,21 @@ import { homedir } from 'node:os';
 
 // Playwright's Chrome for Testing when it is installed (the system Chrome stopped exposing DevTools in headless mode after its 153 update), else the system Chrome.
 function chromeBinary() {
+  if (process.platform === 'win32') {
+    const cache = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData/Local'), 'ms-playwright');
+    const builds = existsSync(cache) ? readdirSync(cache).filter(name => /^chromium-\d+$/.test(name)).sort().reverse() : [];
+    for (const build of builds) {
+      for (const directory of ['chrome-win64', 'chrome-win']) {
+        const candidate = join(cache, build, directory, 'chrome.exe');
+        if (existsSync(candidate)) return candidate;
+      }
+    }
+    for (const root of [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean)) {
+      const candidate = join(root, 'Google/Chrome/Application/chrome.exe');
+      if (existsSync(candidate)) return candidate;
+    }
+    throw new Error('Install Chrome or Playwright Chromium to run GPUI web screenshots.');
+  }
   const cache = join(homedir(), 'Library/Caches/ms-playwright');
   const builds = existsSync(cache) ? readdirSync(cache).filter((name) => /^chromium-\d+$/.test(name)).sort() : [];
   for (const build of builds.reverse()) {
@@ -43,15 +58,16 @@ const chrome = spawn(
   [
     '--headless=new',
     '--enable-unsafe-webgpu',
-    '--use-angle=metal',
+    ...(process.platform === 'darwin' ? ['--use-angle=metal'] : []),
     '--remote-debugging-port=0',
     `--user-data-dir=${profileDir}`,
     `--window-size=${width},${height}`,
     'about:blank',
   ],
-  { stdio: ['ignore', 'ignore', process.env.SHOT_CHROME_LOG ? 'inherit' : 'ignore'] },
+  { stdio: ['ignore', 'ignore', process.env.SHOT_CHROME_LOG ? 'inherit' : 'ignore'], windowsHide: true },
 );
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+let socket;
 
 try {
   let target;
@@ -63,7 +79,7 @@ try {
       target = targets.find((entry) => entry.type === 'page');
     } catch {}
   }
-  const socket = new WebSocket(target.webSocketDebuggerUrl);
+  socket = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((resolve) => (socket.onopen = resolve));
   let nextId = 1;
   const pending = new Map();
@@ -144,6 +160,8 @@ try {
   const { data } = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(out, Buffer.from(data, 'base64'));
   console.log(`saved ${out}`);
+  await send('Browser.close');
 } finally {
+  socket?.close();
   chrome.kill();
 }

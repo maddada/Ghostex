@@ -12,8 +12,8 @@ use crate::session_chat::{
 };
 use crate::session_chat_paths::read_transcript_head_complete_lines;
 use crate::session_chat_successor::{
-    codex_rollout_session_id, collect_all_codex_day_directories, read_codex_session_meta,
-    SUCCESSOR_CHAIN_LIMIT,
+    codex_rollout_id, codex_rollout_session_id, collect_all_codex_day_directories,
+    read_codex_session_meta, SUCCESSOR_CHAIN_LIMIT,
 };
 use crate::session_chat_tail::{
     read_session_chat_tail_page, SessionChatTailFileResult, SessionChatTailPage,
@@ -52,9 +52,9 @@ Because a stitched cursor is not a monotonically decreasing raw offset, the read
 path MUST report `hasMoreExact: true` (it already does, unconditionally) so the
 client's `sessionChatPageHasMore` trusts `hasMore` instead of comparing cursors.
 
-Codex-only: the gate is "transcript agent is Codex AND the path is a
-`rollout-<ts>-<uuid>` file whose opening `session_meta` carries
-`forked_from_id`". Every other agent takes the untouched single-file path.
+Codex-only: forked_from_id describes genealogy, while history_base can also
+carry retained history for a replacement rollout in the same thread.
+Every other agent takes the untouched single-file path.
 */
 
 /// First cursor value that names an ancestor hop instead of a raw byte offset.
@@ -219,7 +219,7 @@ fn codex_rollout_index(rollout_path: &Path) -> Option<HashMap<String, PathBuf>> 
                 .file_stem()
                 .and_then(|stem| stem.to_str())
                 .filter(|stem| stem.starts_with("rollout-"))
-                .and_then(codex_rollout_session_id)
+                .and_then(codex_rollout_id)
             else {
                 continue;
             };
@@ -237,18 +237,23 @@ fn resolve_codex_fork_lineage(rollout_path: &Path) -> Option<SessionChatForkLine
         ancestors: Vec::new(),
         history: Vec::new(),
     };
-    let Some(mut next_session_id) = meta.forked_from_id else {
+    if meta.forked_from_id.is_none() && meta.history_base.is_none() {
         return Some(lineage);
-    };
+    }
     let Some(index) = codex_rollout_index(rollout_path) else {
-        lineage.ancestors.push(SessionChatForkAncestor {
-            session_id: next_session_id,
-            path: None,
-            forked_from_id: None,
-        });
+        if let Some(session_id) = meta.forked_from_id {
+            lineage.ancestors.push(SessionChatForkAncestor {
+                session_id,
+                path: None,
+                forked_from_id: None,
+            });
+        }
         return Some(lineage);
     };
     lineage.history = resolve_codex_fork_history(rollout_path, &index);
+    let Some(mut next_session_id) = meta.forked_from_id else {
+        return Some(lineage);
+    };
     let mut visited: HashSet<String> = HashSet::new();
     visited.insert(lineage.session_id.clone());
     for _ in 1..=SUCCESSOR_CHAIN_LIMIT {
@@ -281,10 +286,11 @@ fn resolve_codex_fork_lineage(rollout_path: &Path) -> Option<SessionChatForkLine
     Some(lineage)
 }
 
-/// CDXC:SessionFork 2026-09-05 WHY:
+/// CDXC:SessionFork 2026-09-25 WHY:
 /// A parent can keep running after a fork, so reading its live tail leaks later parent replies into the child and makes both chats end with the same content.
 /// Codex's history_base names the actual inherited file and exclusive byte boundary; a rewind can skip an intermediate fork entirely, while forked_from_id still records the family relationship.
 /// Keep genealogy for branch navigation and resolve bounded history separately for pagination.
+/// Same-thread rewinds retain a history_base without forked_from_id; track immutable rollout UUIDs so their own earlier files are not mistaken for a thread cycle.
 fn resolve_codex_fork_history(
     rollout_path: &Path,
     index: &HashMap<String, PathBuf>,
@@ -297,17 +303,17 @@ fn resolve_codex_fork_history(
         let Some(meta) = read_codex_session_meta(&current_path) else {
             break;
         };
-        visited.insert(meta.session_id);
-        let Some(parent_id) = meta.forked_from_id else {
-            break;
-        };
+        visited.insert(meta.rollout_id);
         let (source_id, ordinal, byte_offset) = match meta.history_base {
             Some(base) => (
                 base.thread_id,
                 Some(base.end_ordinal_exclusive),
                 Some(base.end_byte_offset),
             ),
-            None => (parent_id, meta.forked_from_ordinal_exclusive, None),
+            None => match meta.forked_from_id {
+                Some(parent_id) => (parent_id, meta.forked_from_ordinal_exclusive, None),
+                None => break,
+            },
         };
         if visited.contains(&source_id) {
             break;
@@ -320,7 +326,7 @@ fn resolve_codex_fork_history(
         let source_meta = candidate
             .as_deref()
             .and_then(read_codex_session_meta)
-            .filter(|meta| meta.session_id == source_id);
+            .filter(|meta| meta.rollout_id == source_id);
         let source_path = candidate.filter(|_| source_meta.is_some());
         let end_offset = source_path.as_deref().and_then(|path| {
             if byte_offset.is_some() && cutoff_ordinal == ordinal {
@@ -333,7 +339,9 @@ fn resolve_codex_fork_history(
         let next_path = path.clone();
         history.push(SessionChatForkHistory {
             ancestor: SessionChatForkAncestor {
-                session_id: source_id,
+                session_id: source_meta
+                    .as_ref()
+                    .map_or(source_id, |meta| meta.session_id.clone()),
                 path,
                 forked_from_id: source_meta.and_then(|meta| meta.forked_from_id),
             },
@@ -405,13 +413,14 @@ pub fn codex_fork_lineage(
 }
 
 /// Cheap "does scroll-back continue past the top of this file" probe for the
-/// follower's frames. Cached with the lineage, so the follower pays for it once
+/// follower's frames, including same-thread replacements. Cached with the lineage, so the follower pays for it once
 /// per adopted transcript path and never per frame.
 pub fn codex_transcript_has_fork_ancestor(
     agent: SessionChatTranscriptAgent,
     file_path: &Path,
 ) -> bool {
-    codex_fork_lineage(agent, file_path).is_some_and(|lineage| lineage.forked_from_id.is_some())
+    codex_fork_lineage(agent, file_path)
+        .is_some_and(|lineage| !lineage.history.is_empty() || lineage.forked_from_id.is_some())
 }
 
 /// CDXC:SessionFork 2026-09-11 WHY:
@@ -554,8 +563,8 @@ pub fn read_session_chat_tail_page_stitched(
     if limit == 0 {
         return unstitched(agent, file_path, limit, before_offset);
     }
-    let Some(lineage) =
-        codex_fork_lineage(agent, file_path).filter(|lineage| lineage.forked_from_id.is_some())
+    let Some(lineage) = codex_fork_lineage(agent, file_path)
+        .filter(|lineage| !lineage.history.is_empty() || lineage.forked_from_id.is_some())
     else {
         return unstitched(agent, file_path, limit, before_offset);
     };
@@ -656,7 +665,7 @@ pub fn read_session_chat_tail_page_stitched(
                     boundary_timestamp,
                 ),
             );
-        } else {
+        } else if !ancestor_path_exists {
             // Root of the lineage: nothing older exists at all.
             chunk.extend(messages);
             messages = chunk;

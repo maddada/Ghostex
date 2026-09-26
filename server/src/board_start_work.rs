@@ -1,6 +1,6 @@
 use std::io::Read;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -429,7 +429,7 @@ fn run_bd_show(
 ) -> Result<Option<Value>, DomainStateError> {
     const BD_SHOW_TIMEOUT: Duration = Duration::from_secs(10);
 
-    let mut command = Command::new(bd_executable_path);
+    let mut command = crate::platform::process::background_command(bd_executable_path);
     command
         .args(["show", bead_id, "--json"])
         .current_dir(cwd)

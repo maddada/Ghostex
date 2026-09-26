@@ -35,6 +35,8 @@ pub enum ModelPickerProvider {
     Cursor,
     Grok,
     Antigravity,
+    #[serde(rename = "opencode")]
+    OpenCode,
 }
 
 impl ModelPickerProvider {
@@ -46,6 +48,7 @@ impl ModelPickerProvider {
             Self::Cursor => "cursor",
             Self::Grok => "grok",
             Self::Antigravity => "antigravity",
+            Self::OpenCode => "opencode",
         }
     }
 
@@ -57,6 +60,7 @@ impl ModelPickerProvider {
             "cursor" => Some(Self::Cursor),
             "grok" => Some(Self::Grok),
             "antigravity" => Some(Self::Antigravity),
+            "opencode" => Some(Self::OpenCode),
             _ => None,
         }
     }
@@ -115,7 +119,7 @@ impl ModelSelectionScope {
 /// Claude Code's `/model` list answers `s` with "for this session only"; Codex's picker writes
 /// `model` and `model_reasoning_effort` into `~/.codex/config.toml` on every confirm.
 pub fn model_picker_supports_session_scope(provider: ModelPickerProvider) -> bool {
-    provider == ModelPickerProvider::Claude
+    matches!(provider, ModelPickerProvider::Claude | ModelPickerProvider::OpenCode)
 }
 
 /// CDXC:SessionChat 2026-09-21 DECISION:

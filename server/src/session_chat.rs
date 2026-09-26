@@ -264,6 +264,7 @@ pub enum SessionChatTranscriptAgent {
     Cursor,
     Grok,
     Hermes,
+    OpenCode,
     Pi,
     Zcode,
 }
@@ -281,6 +282,7 @@ pub fn resolve_session_chat_transcript_agent(
         "cursor" | "cursor-agent" | "cursor cli" => Some(SessionChatTranscriptAgent::Cursor),
         "grok" | "grok-build" => Some(SessionChatTranscriptAgent::Grok),
         "hermes" | "hermes agent" | "hermes-agent" => Some(SessionChatTranscriptAgent::Hermes),
+        "opencode" => Some(SessionChatTranscriptAgent::OpenCode),
         "pi" | "omp" => Some(SessionChatTranscriptAgent::Pi),
         "zcode" | "zcode-cli" => Some(SessionChatTranscriptAgent::Zcode),
         _ => None,
@@ -295,6 +297,7 @@ pub fn session_chat_transcript_agent_id(agent: Option<&str>) -> Option<&'static 
         SessionChatTranscriptAgent::Cursor => Some("cursor"),
         SessionChatTranscriptAgent::Grok => Some("grok"),
         SessionChatTranscriptAgent::Hermes => Some("hermes"),
+        SessionChatTranscriptAgent::OpenCode => Some("opencode"),
         SessionChatTranscriptAgent::Pi => Some("pi"),
         SessionChatTranscriptAgent::Zcode => Some("zcode"),
     }
@@ -311,6 +314,7 @@ pub fn session_chat_line_decoder(agent: SessionChatTranscriptAgent) -> SessionCh
         SessionChatTranscriptAgent::Cursor => decode_cursor_transcript_line,
         SessionChatTranscriptAgent::Grok => decode_grok_transcript_line,
         SessionChatTranscriptAgent::Hermes => decode_hermes_transcript_line,
+        SessionChatTranscriptAgent::OpenCode => crate::session_chat_opencode::decode_line,
         SessionChatTranscriptAgent::Pi => decode_pi_transcript_line,
         SessionChatTranscriptAgent::Zcode => decode_zcode_transcript_line,
     }
@@ -326,6 +330,7 @@ pub fn session_chat_lifecycle_decoder(
         SessionChatTranscriptAgent::Cursor => Some(decode_cursor_turn_lifecycle),
         SessionChatTranscriptAgent::Grok => Some(decode_grok_turn_lifecycle),
         SessionChatTranscriptAgent::Hermes => Some(decode_hermes_turn_lifecycle),
+        SessionChatTranscriptAgent::OpenCode => Some(crate::session_chat_opencode::decode_lifecycle),
         SessionChatTranscriptAgent::Pi => None,
         SessionChatTranscriptAgent::Zcode => Some(decode_zcode_turn_lifecycle),
     }
@@ -406,6 +411,7 @@ pub fn session_chat_lineage_extractor(
         | SessionChatTranscriptAgent::Cursor
         | SessionChatTranscriptAgent::Grok
         | SessionChatTranscriptAgent::Hermes
+        | SessionChatTranscriptAgent::OpenCode
         | SessionChatTranscriptAgent::Pi
         | SessionChatTranscriptAgent::Zcode => None,
     }

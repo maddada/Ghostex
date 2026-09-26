@@ -936,7 +936,7 @@ export function normalizeghostexHotkeySettings(
   for (const definition of GHOSTEX_HOTKEY_DEFINITIONS) {
     const platformDefaultKey =
       platform === 'mac' ? definition.defaultKey : (definition.windowsLinuxDefaultKey ?? definition.defaultKey);
-    const value = source[definition.id] ?? readLegacyProjectJumpHotkey(source, definition.id);
+    const value = source[definition.id] ?? readLegacyHotkey(source, definition.id);
     if (typeof value === 'string') {
       /**
        * CDXC:Hotkeys 2026-05-11-09:06
@@ -987,7 +987,14 @@ function applyNewSessionHotkeyLayout(
   normalized.createSession = terminalFirst ? NEW_SESSION_PRIMARY_KEY : NEW_SESSION_SECONDARY_KEY;
 }
 
-function readLegacyProjectJumpHotkey(source: Record<string, unknown>, actionId: ghostexHotkeyActionId): unknown {
+/**
+ * CDXC:Hotkeys 2026-09-24 WHY:
+ * The side-panel action replaced toggleCompanionPane. Preserve its saved custom or blank chord under toggleViewPanel, matching the native binding migration in apps/desktop/src/app/hotkeys.rs.
+ */
+function readLegacyHotkey(source: Record<string, unknown>, actionId: ghostexHotkeyActionId): unknown {
+  if (actionId === 'toggleViewPanel') {
+    return source.toggleCompanionPane;
+  }
   const match = /^jumpToProject([1-5])$/u.exec(actionId);
   if (!match) {
     return undefined;

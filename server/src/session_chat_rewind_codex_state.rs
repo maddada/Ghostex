@@ -2,6 +2,32 @@ use super::*;
 
 const PENDING_KEY: &str = "sessionChatPendingCodexRewind";
 
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// Same-thread Codex rewinds remove the selected prompt from the original rollout, so retries cannot reconstruct the expected prefix from that file. Persist its fingerprint before Enter without copying the conversation into runtime settings.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RetainedPrompts {
+    pub count: usize,
+    fingerprint: String,
+}
+
+impl RetainedPrompts {
+    pub fn new(prompts: &[(String, String)]) -> Self {
+        use sha2::{Digest, Sha256};
+        let mut digest = Sha256::new();
+        for (id, text) in prompts {
+            for value in [id, text] {
+                digest.update((value.len() as u64).to_le_bytes());
+                digest.update(value.as_bytes());
+            }
+        }
+        Self {
+            count: prompts.len(),
+            fingerprint: format!("{:x}", digest.finalize()),
+        }
+    }
+}
+
 /// CDXC:SessionChat 2026-09-11 DECISION:
 /// User approved retrying synchronization after Codex rewinds. Persist the submitted target before Enter so retrying the request, including after a daemon restart, cannot drive the picker a second time.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -12,6 +38,8 @@ pub(super) struct PendingCodexRewind {
     pub target_message_id: String,
     pub started_at: i64,
     pub zmx_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retained_prompts: Option<RetainedPrompts>,
 }
 
 pub(super) fn pending_rewind(
@@ -69,6 +97,7 @@ pub(super) fn write_pending_rewind(
                 target_message_id: codex.message_id.clone(),
                 started_at,
                 zmx_name: driver.zmx_name.to_string(),
+                retained_prompts: codex.retained_prompts.clone(),
             }),
         );
     } else {

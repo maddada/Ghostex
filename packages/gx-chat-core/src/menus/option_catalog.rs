@@ -312,6 +312,7 @@ enum CatalogOptions {
         agent: Box<CatalogAgent>,
         catalog: Box<AgentModelCatalog>,
     },
+    OpenCode { agent: Box<CatalogAgent>, catalog: Box<AgentModelCatalog> },
     /// Read-only mirrors: the same list whatever the model is.
     Fixed(Vec<OptionDescriptor>),
 }
@@ -369,6 +370,15 @@ impl SessionOptionCatalog {
                     }
                     _ => Vec::new(),
                 }
+            }
+            CatalogOptions::OpenCode {agent, catalog} => {
+                let mut options = Vec::new();
+                let efforts = agent.efforts_for_model(model_value);
+                if !efforts.is_empty() { options.push(reasoning_effort_picker(catalog, &efforts)); }
+                let mut mode = OptionDescriptor::new("mode", MODES_SECTION_LABEL, OptionCategory::Mode, OptionDispatch::ModelPicker);
+                mode.choices = Some(vec![OptionChoice {value:"build".into(), label:"Build".into(), ..Default::default()}, OptionChoice {value:"plan".into(), label:"Plan".into(), ..Default::default()}]);
+                options.push(mode);
+                options
             }
             CatalogOptions::Fixed(descriptors) => descriptors.clone(),
         }
@@ -613,6 +623,14 @@ fn build_codex_catalog(catalog: &AgentModelCatalog, agent: &CatalogAgent) -> Ses
 // Cursor Agent
 // ---------------------------------------------------------------------------
 
+fn build_opencode_catalog(catalog: &AgentModelCatalog, agent: &CatalogAgent) -> SessionOptionCatalog {
+    let mut result = build_cursor_catalog(catalog, agent);
+    result.model_icon = "opencode".into();
+    result.model.dispatch = OptionDispatch::ModelPicker;
+    result.options = CatalogOptions::OpenCode {agent: Box::new(agent.clone()), catalog: Box::new(catalog.clone())};
+    result
+}
+
 fn build_cursor_catalog(catalog: &AgentModelCatalog, agent: &CatalogAgent) -> SessionOptionCatalog {
     let choices = model_choices(agent);
     // The picker filter needs the row's literal text ("Claude Opus 5").
@@ -827,6 +845,7 @@ pub fn session_option_catalog(
         fn(&AgentModelCatalog, &CatalogAgent) -> SessionOptionCatalog,
     ) = match agent_id {
         "claude" | "openclaude" => ("claude", build_claude_catalog),
+        "opencode" => ("opencode", build_opencode_catalog),
         "codex" => ("codex", build_codex_catalog),
         "cursor" | "cursor-cli" => ("cursor", build_cursor_catalog),
         "grok" | "grok-build" => ("grok", build_grok_catalog),

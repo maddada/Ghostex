@@ -35,6 +35,7 @@ tower = "0.5"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+jsonc-parser = { version = "0.33.2", features = ["cst", "serde"] }
 
 [target.'cfg(windows)'.dependencies]
 ghostex-editor-client = { path = "../packages/editor-client" }

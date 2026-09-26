@@ -25,6 +25,7 @@ use markdown::mdast::Node;
 use markdown::ParseOptions;
 use serde_json::Value;
 
+use crate::composer::reference_pills::markdown_destination;
 use crate::transcript::file_paths::{
     bare_file_paths, fence_title, file_path_icon_name, resolve_fence_title_file_path,
     resolve_inline_code_file_path,
@@ -134,8 +135,8 @@ fn code_spans(line: &str) -> Vec<(usize, usize)> {
     spans
 }
 
-/// `(!?)\[([^\]\r\n]*)\]\(([^)\r\n]+)\)` at `start`, returning (bang, label, href, length).
-fn inline_image_at(line: &str, start: usize) -> Option<(bool, &str, &str, usize)> {
+/// An inline image or link at `start`, returning (bang, label, decoded href, byte length).
+fn inline_image_at(line: &str, start: usize) -> Option<(bool, &str, String, usize)> {
     let rest = &line[start..];
     let bang = rest.starts_with('!');
     let after_bang = usize::from(bang);
@@ -152,19 +153,15 @@ fn inline_image_at(line: &str, start: usize) -> Option<(bool, &str, &str, usize)
         return None;
     }
     let href_start = label_end + 2;
-    let href_end = rest[href_start..]
-        .char_indices()
-        .find(|(_, character)| matches!(character, ')' | '\r' | '\n'))
-        .filter(|(_, character)| *character == ')')
-        .map(|(index, _)| href_start + index)?;
-    if href_end == href_start {
+    let (href, consumed) = markdown_destination(&rest[href_start..])?;
+    if href.is_empty() {
         return None;
     }
     Some((
         bang,
         &rest[label_start..label_end],
-        &rest[href_start..href_end],
-        href_end + 1,
+        href,
+        href_start + consumed,
     ))
 }
 
@@ -221,7 +218,7 @@ fn mark_inline_images(line: &str) -> String {
             scan += 1;
             continue;
         }
-        if !picture && !names_a_picture(href) {
+        if !picture && !names_a_picture(&href) {
             scan += 1;
             continue;
         }
@@ -229,7 +226,7 @@ fn mark_inline_images(line: &str) -> String {
         result.push_str(&line[cursor..scan]);
         let fallback = if text.is_empty() { "Image" } else { text };
         let alt = if picture { text } else { fallback };
-        result.push_str(&image_mark(href, fallback, alt));
+        result.push_str(&image_mark(&href, fallback, alt));
         cursor = end;
         scan = end;
     }
@@ -710,7 +707,7 @@ fn has_inline_code_path_evidence(markdown: &str) -> bool {
     false
 }
 
-/// `!\[|\]\([^)\r\n]*\.(?:avif|…)` case-insensitively.
+/// Whether a Markdown image or a link to a picture needs the inline-image pass.
 fn has_image_evidence(markdown: &str) -> bool {
     if markdown.contains("![") {
         return true;
@@ -719,18 +716,7 @@ fn has_image_evidence(markdown: &str) -> bool {
     while let Some(at) = markdown[cursor..].find("](") {
         let start = cursor + at + 2;
         cursor = start;
-        let rest = &markdown[start..];
-        let bounded: String = rest
-            .chars()
-            .take_while(|character| !matches!(character, ')' | '\r' | '\n'))
-            .collect();
-        let lower = ascii_lower(&bounded);
-        if [
-            ".avif", ".bmp", ".gif", ".heic", ".heif", ".ico", ".jpg", ".jpeg", ".png", ".svg",
-            ".tif", ".tiff", ".webp",
-        ]
-        .iter()
-        .any(|extension| lower.contains(extension))
+        if markdown_destination(&markdown[start..]).is_some_and(|(href, _)| names_a_picture(&href))
         {
             return true;
         }

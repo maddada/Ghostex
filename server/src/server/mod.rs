@@ -2458,6 +2458,7 @@ async fn route_http(
         }
         "/api/interruptSessionChat" => {
             handle_interrupt_session_chat_http(&state, endpoint.path, request_id, &body_json)
+                .await
         }
         /*
         CDXC:SessionChat 2026-09-02:

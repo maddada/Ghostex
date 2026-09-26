@@ -20,6 +20,9 @@ pub fn resolve_session_chat_transcript_path(
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(expand_home);
+    if agent == SessionChatTranscriptAgent::OpenCode {
+        return crate::session_chat_opencode::resolve_transcript(agent_session_id?);
+    }
     if agent == SessionChatTranscriptAgent::Zcode {
         return crate::session_chat_zcode::resolve_zcode_chat_transcript_path(
             agent_session_id?,
@@ -89,6 +92,7 @@ pub fn resolve_session_chat_transcript_path(
         }
         SessionChatTranscriptAgent::Pi => find_pi_family_chat_transcript(session_id),
         SessionChatTranscriptAgent::Zcode => None,
+        SessionChatTranscriptAgent::OpenCode => None,
     }
 }
 

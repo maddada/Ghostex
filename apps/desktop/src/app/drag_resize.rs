@@ -1339,12 +1339,17 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// CDXC:CommandPane 2026-09-25 WHY:
+    /// Closing or restarting a tab removes its server session while an asynchronous attach can still be running. Its later 404 belongs to the closed tab, so only a tab that still exists may be closed and report an attach error.
     pub(crate) fn close_command_terminal_after_gxserver_attach_failure(
         &mut self,
         slot_id: CommandTerminalBodyMountSlotId,
         message: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        if !self.command_pane.has_session(slot_id.session_id) {
+            return false;
+        }
         let current_slot_id =
             command_pane_group_for_session(&self.command_pane, slot_id.session_id)
                 .map(|group_id| CommandTerminalBodyMountSlotId {

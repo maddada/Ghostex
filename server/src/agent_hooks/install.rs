@@ -153,7 +153,10 @@ fn uninstall_opencode_hook(hook_paths: &HookPaths) -> Result<Vec<String>, Domain
     let Some(config_path) = paths.get(1) else {
         return Ok(Vec::new());
     };
-    uninstall_opencode_hook_paths(plugin_path, config_path)
+    let directory = config_path.parent().unwrap();
+    let mut removed = super::opencode_v2::uninstall(directory)?;
+    removed.extend(uninstall_opencode_hook_paths(&directory.join("plugins/ghostex-session.js"), &directory.join("opencode.json"))?);
+    Ok(removed)
 }
 
 pub(crate) fn uninstall_opencode_hook_paths(
@@ -351,6 +354,9 @@ pub(crate) fn inspect_agent_hook_installation(
     let command = command_for_agent(definition, &hook_paths.notify_hook_path);
     match hook_format(definition.agent_id) {
         HookFormat::Opencode => {
+            if let Some(config) = config_paths.get(1).filter(|p| p.file_name().is_some_and(|n| n == "cli.json")) {
+                return super::opencode_v2::inspect(hook_paths, config.parent().unwrap());
+            }
             let plugin_text = config_paths
                 .first()
                 .map(|path| read_file_text(path))
@@ -1593,6 +1599,9 @@ fn install_opencode_hook(hook_paths: &HookPaths) -> Result<Vec<String>, DomainSt
     let Some(config_path) = paths.get(1) else {
         return Ok(Vec::new());
     };
+    if super::opencode_v2::installed(hook_paths) {
+        return super::opencode_v2::install(hook_paths, config_path.parent().unwrap());
+    }
     if let Some(parent) = plugin_path.parent() {
         fs::create_dir_all(parent).map_err(io_error)?;
     }

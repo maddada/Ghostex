@@ -58,6 +58,22 @@ $InstalledExecutable = Join-Path $InstallDir "Ghostex.exe"
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 <#
+CDXC:Build 2026-09-24 WHY:
+Remote Code clients can keep the bundled Node runtime and native editor modules mapped after the desktop closes. Close only processes using this installation's editor executable before mirroring its payload; terminal daemons have a separate lifecycle.
+#>
+$InstalledEditorExecutable = Join-Path $InstallDir "code-server/lib/node.exe"
+$EditorProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.Path -and [string]::Equals($_.Path, $InstalledEditorExecutable, [StringComparison]::OrdinalIgnoreCase)
+})
+foreach ($EditorProcess in $EditorProcesses) {
+    Stop-Process -InputObject $EditorProcess -Force -ErrorAction SilentlyContinue
+}
+foreach ($EditorProcess in $EditorProcesses) {
+    if (-not $EditorProcess.WaitForExit(10000)) {
+        throw "The bundled Code editor process $($EditorProcess.Id) did not exit before installation."
+    }
+}
+<#
 CDXC:Build 2026-09-23 WHY:
 The server removes its HTTP endpoint before its workers finish shutting down, and its mapped image can outlive process-path discovery. Retire a changed image outside the mirror, as with the persistent session provider, so installation does not depend on worker exit or race a reconnecting client. Keep an identical server executable out of the mirror.
 #>

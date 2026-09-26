@@ -45,6 +45,8 @@ fn rewind_projection(request: &RewindRequest) -> Value {
         "preview": prompt_preview(&request.prompt),
         "description": if request.agent == "codex" {
             "Codex continues in a new conversation from this point and puts this message back in the composer for editing."
+        } else if request.agent == "opencode" {
+            "Rewind the conversation to this point and put this message back in the composer for editing. Files stay as they are."
         } else {
             "We only rewind using \"Restore conversation\" in the Chat View currently. Switch to Terminal View and use /rewind to resume using another option."
         },

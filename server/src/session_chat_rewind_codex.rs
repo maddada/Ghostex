@@ -1,7 +1,7 @@
 //! CDXC:SessionChat 2026-09-07 DECISION:
 //! User: Codex rewind requires Ghostex to report the session idle, clears the input, presses Escape twice quickly, moves Left once per later prompt (the latest starts selected), and presses Enter.
-//! CDXC:SessionChat 2026-09-07 WHY:
-//! Codex 0.153.4 forks before the selected prompt. Adopt the verified new rollout through the existing identity writer so chat, pagination and resume all follow the same branch.
+//! CDXC:SessionChat 2026-09-25 WHY:
+//! Codex 0.153.4 forks before the selected prompt; 0.156.1 can trim the same thread. Verify the retained prompts before adopting either result through the existing identity writer so chat, pagination and resume agree.
 //! The highlight is SGR reverse video, absent from plain captures. CSI-u Escape avoids the terminal parser holding a bare Escape while waiting for another byte.
 
 use super::*;
@@ -14,7 +14,7 @@ use crate::storage::open_gxserver_database;
 
 #[path = "session_chat_rewind_codex_state.rs"]
 mod state;
-use state::{pending_rewind, write_pending_rewind};
+use state::{pending_rewind, write_pending_rewind, RetainedPrompts};
 
 const ESCAPE: &str = "\u{1b}[27u";
 const LEFT: &str = "\u{1b}[1;1D";
@@ -29,6 +29,7 @@ pub(super) struct CodexRewindPlan {
     pub(super) synchronizing_since: Option<i64>,
     /// Newest first, including inherited prompts, with stable transcript IDs.
     prompts: Vec<(String, String)>,
+    retained_prompts: Option<RetainedPrompts>,
 }
 
 fn prompts(path: &Path) -> Result<Vec<(String, String)>, DomainStateError> {
@@ -119,14 +120,21 @@ pub(super) async fn rewind(
         ));
     }
     let prompts = prompts(&transcript_path)?;
-    let presses = prompts
-        .iter()
-        .position(|(id, _)| id == message_id)
-        .ok_or_else(|| {
-            message_not_found("That message is not an active user prompt of this conversation.")
-        })?;
-    let first_line = prompt_first_line(&prompts[presses].1);
-    if first_line.is_empty() {
+    let target_index = prompts.iter().position(|(id, _)| id == message_id);
+    if pending.is_none() && target_index.is_none() {
+        return Err(message_not_found(
+            "That message is not an active user prompt of this conversation.",
+        ));
+    }
+    let retained_prompts = pending
+        .as_ref()
+        .and_then(|pending| pending.retained_prompts.clone())
+        .or_else(|| target_index.map(|index| RetainedPrompts::new(&prompts[index + 1..])));
+    let presses = target_index.unwrap_or(0);
+    let first_line = target_index
+        .map(|index| prompt_first_line(&prompts[index].1))
+        .unwrap_or_default();
+    if pending.is_none() && first_line.is_empty() {
         return Err(message_not_found(
             "This prompt has no text to verify in Codex's rewind picker.",
         ));
@@ -145,6 +153,7 @@ pub(super) async fn rewind(
             message_id: message_id.to_string(),
             synchronizing_since: pending.as_ref().map(|pending| pending.started_at),
             prompts,
+            retained_prompts,
         }),
     });
     let sent = execute_session_chat_send(
@@ -211,8 +220,8 @@ fn picker_open(screen: &str) -> bool {
     crate::session_chat_codex_pager::detect_codex_transcript_pager(screen).is_some()
 }
 
-/// Extract only characters painted with SGR reverse-video. A prompt marker in
-/// ordinary history cannot be confused with the selected prompt.
+/// Extract only characters painted with SGR reverse-video. Codex can leave
+/// the prompt glyph dim while reversing the body, including question replies.
 fn selected_prompt(screen: &str) -> Option<PromptSelection> {
     if !picker_open(screen) {
         return None;
@@ -220,12 +229,14 @@ fn selected_prompt(screen: &str) -> Option<PromptSelection> {
     let mut reversed = false;
     let mut selected = Vec::new();
     let mut first_row = None;
+    let mut first_marker = None;
     let lines: Vec<&str> = screen.lines().collect();
     let end = content_end(&lines)?;
     let mut last_highlighted = None;
     for (row, line) in lines[..end].iter().enumerate() {
         let mut chars = line.chars().peekable();
         let mut text = String::new();
+        let mut row_marker = None;
         while let Some(ch) = chars.next() {
             if ch == '\u{1b}' && chars.peek() == Some(&'[') {
                 chars.next();
@@ -245,22 +256,33 @@ fn selected_prompt(screen: &str) -> Option<PromptSelection> {
                     }
                     params.push(ch);
                 }
-            } else if reversed {
-                text.push(ch);
-                last_highlighted = Some(row);
+            } else {
+                if row_marker.is_none() && !ch.is_whitespace() {
+                    row_marker = Some((ch, reversed));
+                }
+                if reversed {
+                    text.push(ch);
+                    last_highlighted = Some(row);
+                }
             }
         }
         let text = text.trim();
         if !text.is_empty() {
+            if first_row.is_none() {
+                first_marker = row_marker;
+            }
             first_row.get_or_insert(row);
             selected.push(collapse_spaces(text));
         }
     }
-    let prompt = selected
-        .first()?
-        .strip_prefix('›')
-        .or_else(|| selected.first()?.strip_prefix('»'))?
-        .trim();
+    let (marker @ ('›' | '»'), marker_reversed) = first_marker? else {
+        return None;
+    };
+    let prompt = if marker_reversed {
+        selected.first()?.strip_prefix(marker)?.trim()
+    } else {
+        selected.first()?.trim()
+    };
     selected[0] = prompt.to_string();
     Some(PromptSelection {
         row: first_row?,
@@ -304,8 +326,7 @@ impl PromptSelection {
 
 fn content_end(lines: &[&str]) -> Option<usize> {
     let footer = lines.iter().rposition(|line| {
-        let line = crate::session_chat_options::strip_ansi_sgr(line);
-        line.trim_start().starts_with("q close ") || line.trim_start().starts_with("q to quit ")
+        crate::session_chat_codex_pager::transcript_pager_footer(line).is_some()
     })?;
     Some(
         lines[..footer]
@@ -440,15 +461,19 @@ pub(super) async fn drive(
         .await
         .is_some_and(|screen| !picker_open(&screen));
     let result = drive_inner(driver, plan, codex).await;
-    if started_at_composer
-        && result.is_err()
-        && driver
+    if started_at_composer && result.is_err() {
+        if let Some(footer) = driver
             .capture()
             .await
-            .is_some_and(|screen| picker_open(&screen))
-    {
-        // Escape moves backward in this picker; q is its actual cancel key.
-        let _ = driver.write("q").await;
+            .and_then(|screen| crate::session_chat_codex_pager::transcript_pager_footer(&screen))
+        {
+            let cancel = if footer.ends_with("esc back") {
+                ESCAPE
+            } else {
+                "q"
+            };
+            let _ = driver.write(cancel).await;
+        }
     }
     result
 }
@@ -615,7 +640,7 @@ async fn adopt_branch(
         return Ok(());
     }
     return Err(agent_busy(
-        "Codex rewound, but Ghostex could not adopt its new conversation identity.",
+        "Codex rewound, but Ghostex could not synchronize its conversation identity.",
     ));
 }
 
@@ -637,15 +662,110 @@ fn empty_conversation_id(screen: &str, old_id: &str) -> Option<String> {
     })
 }
 
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// Codex restores the draft even when it rejects a mid-turn steer before reverting anything. Require both that explicit rejection and the target's position inside its persisted turn before releasing the pending request; a restored composer alone proves no rewind.
+fn rejected_steer(path: &Path, message_id: &str, screen: &str) -> bool {
+    use std::io::BufRead;
+    if !collapse_spaces(&crate::session_chat_options::strip_ansi_sgr(screen)).contains(
+        "Failed to edit the selected prompt: the selected prompt is a steer and cannot be edited independently",
+    ) {
+        return false;
+    }
+    let Ok(file) = std::fs::File::open(path) else {
+        return false;
+    };
+    let mut turns = std::collections::HashSet::new();
+    for line in std::io::BufReader::new(file).lines() {
+        let Ok(line) = line else { return false };
+        let Ok(record) = serde_json::from_str::<Value>(&line) else {
+            continue;
+        };
+        let payload = &record["payload"];
+        if record["type"] != "event_msg"
+            || payload["type"] != "item_completed"
+            || payload["item"]["type"] != "UserMessage"
+        {
+            continue;
+        }
+        let Some(turn_id) = payload["turn_id"].as_str() else {
+            continue;
+        };
+        let first_in_turn = turns.insert(turn_id.to_string());
+        if payload["item"]["id"].as_str() == Some(message_id) {
+            return !first_in_turn;
+        }
+    }
+    false
+}
+
 async fn wait_for_branch(
     driver: &RewindDriver<'_>,
-    plan: &RewindPlan,
+    _plan: &RewindPlan,
     codex: &CodexRewindPlan,
     started: i64,
 ) -> Result<RewoundConversation, DomainStateError> {
+    crate::zmx::invalidate_zmx_process_identity_cache();
     let deadline = std::time::Instant::now() + Duration::from_secs(15);
     loop {
-        if plan.presses + 1 == codex.prompts.len() {
+        let name = driver.zmx_name.to_string();
+        let home = codex.paths.home_dir.clone();
+        let live = tokio::task::spawn_blocking(move || {
+            crate::zmx::read_zmx_session_process_identities(&[name.clone()], &home)
+                .ok()?
+                .remove(&name)
+        })
+        .await
+        .map_err(|error| session_not_running(error.to_string()))?;
+        if let Some(path) = live
+            .as_ref()
+            .filter(|live| live.agent_session_id.as_deref() == Some(&codex.agent_session_id))
+            .and_then(|live| live.agent_session_path.as_deref())
+            .map(PathBuf::from)
+            .filter(|path| path != &codex.transcript_path)
+        {
+            if read_codex_session_meta(&path)
+                .is_some_and(|meta| meta.session_id == codex.agent_session_id)
+                && codex.retained_prompts.as_ref() == Some(&RetainedPrompts::new(&prompts(&path)?))
+            {
+                return Ok(RewoundConversation {
+                    agent_session_id: codex.agent_session_id.clone(),
+                    path: Some(path),
+                });
+            }
+        }
+        let current_prompts = prompts(&codex.transcript_path)?;
+        let same_thread_rewound = codex
+            .retained_prompts
+            .as_ref()
+            .is_some_and(|expected| RetainedPrompts::new(&current_prompts) == *expected);
+        if same_thread_rewound
+            && read_codex_session_meta(&codex.transcript_path)
+                .is_some_and(|meta| meta.session_id == codex.agent_session_id)
+        {
+            return Ok(RewoundConversation {
+                agent_session_id: codex.agent_session_id.clone(),
+                path: Some(codex.transcript_path.clone()),
+            });
+        }
+        if current_prompts
+            .iter()
+            .any(|(id, _)| id == &codex.message_id)
+        {
+            if let Some(screen) = driver.capture().await {
+                if rejected_steer(&codex.transcript_path, &codex.message_id, &screen) {
+                    write_pending_rewind(driver, codex, None)?;
+                    return Err(DomainStateError {
+                        code: "rewindRejected",
+                        message: "Codex cannot rewind a message sent during an existing turn independently. Choose the first prompt of that turn instead. Nothing was rewound; the restored draft has not been submitted.".into(),
+                    });
+                }
+            }
+        }
+        if codex
+            .retained_prompts
+            .as_ref()
+            .is_some_and(|expected| expected.count == 0)
+        {
             if let Some(screen) = driver.capture().await {
                 if let Some(agent_session_id) =
                     empty_conversation_id(&screen, &codex.agent_session_id)
@@ -680,7 +800,8 @@ async fn wait_for_branch(
         .await
         .map_err(|error| session_not_running(error.to_string()))?;
         if let Some(crate::session_chat::SessionChatSuccessorOutcome::Found(next)) = candidate {
-            if prompts(&next.path)? != codex.prompts[plan.presses + 1..] {
+            if codex.retained_prompts.as_ref() != Some(&RetainedPrompts::new(&prompts(&next.path)?))
+            {
                 return Err(dialog_mismatch(
                     "branch",
                     "Codex's new conversation does not end before the selected prompt.",
@@ -692,7 +813,7 @@ async fn wait_for_branch(
             });
         }
         if std::time::Instant::now() >= deadline {
-            return Err(DomainStateError { code: "timeout", message: format!("Codex did not confirm the new conversation for prompt {}. Inspect the terminal before retrying.", codex.message_id) });
+            return Err(DomainStateError { code: "timeout", message: format!("Codex did not confirm the retained conversation for prompt {}. Inspect the terminal before retrying.", codex.message_id) });
         }
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
@@ -846,6 +967,7 @@ mod tests {
                 agent_session_id: meta.session_id,
                 message_id: rows[presses].0.clone(),
                 synchronizing_since: None,
+                retained_prompts: Some(RetainedPrompts::new(&rows[presses + 1..])),
                 prompts: rows,
             };
             let plan = RewindPlan {
@@ -884,6 +1006,7 @@ mod tests {
                     target_message_id: codex.message_id.clone(),
                     started_at: started,
                     zmx_name: name.clone(),
+                    retained_prompts: codex.retained_prompts.clone(),
                 }),
             );
             repository.update_session(json!({"projectId": project_id, "sessionId": session_id, "runtimeSettings": runtime}).as_object().unwrap()).unwrap();
@@ -910,7 +1033,6 @@ mod tests {
             );
             assert!(pending_rewind(&stored).unwrap().is_none());
             adopt_branch(&driver, &plan, &codex, started).await.unwrap();
-            assert_ne!(next.agent_session_id, codex.agent_session_id);
             if let Some(next_path) = next.path {
                 assert_eq!(prompts(&next_path).unwrap(), codex.prompts[presses + 1..]);
                 path = next_path;

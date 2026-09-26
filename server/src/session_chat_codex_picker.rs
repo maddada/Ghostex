@@ -1419,6 +1419,14 @@ pub(crate) async fn select_session_chat_model(
     }
     let target = resolve_session_chat_send_target(state, params, "selectSessionChatModel")?;
     let agent = crate::session_chat_follower::session_chat_agent_for_session(&target.session);
+    if agent.as_deref() == Some("opencode") {
+        let id = crate::session_chat_opencode::session_id(&target.session)?;
+        let args = params.clone();
+        let result = tokio::task::spawn_blocking(move || crate::session_chat_opencode::select(&id, &args))
+            .await.map_err(|_| invalid_params("OpenCode model operation failed."))??;
+        crate::session_chat_options::schedule_session_chat_option_redetect(state, &target.project_id, &target.session_id, Some("opencode"));
+        return Ok(result);
+    }
     if !matches!(
         agent.as_deref(),
         Some("codex" | "claude" | "cursor" | "grok" | "antigravity")

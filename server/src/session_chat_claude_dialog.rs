@@ -311,9 +311,9 @@ pub(crate) fn claude_dialog_steps(
             steps.push(SessionChatSendStep::Write(clear));
             steps.push(SessionChatSendStep::SleepMs(100));
             if !text.is_empty() {
-                steps.push(SessionChatSendStep::Write(format!(
-                    "\x1b[200~{text}\x1b[201~"
-                )));
+                steps.push(SessionChatSendStep::Write(
+                    crate::session_chat_send::wrap_terminal_bracketed_paste_text(text),
+                ));
                 steps.push(SessionChatSendStep::SleepMs(150));
             }
             if action == "submit" {

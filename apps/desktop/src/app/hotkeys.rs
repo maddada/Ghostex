@@ -15,6 +15,21 @@ pub(crate) struct RunConfiguredGhostexHotkey {
     pub(crate) action_id: String,
 }
 
+const LEGACY_VIEW_PANEL_HOTKEY_ACTION_ID: &str = "toggleCompanionPane";
+
+/// CDXC:Hotkeys 2026-09-24 WHY:
+/// The view panel replaced the companion pane, but saved hotkeys still contain its old action id. Registering that retired id after the new defaults shadows Ctrl+Alt+B with an action that no longer exists. Read its custom or blank chord through the current id and omit the retired binding, matching shared hotkey normalization.
+fn gpui_persisted_hotkey_value<'a>(
+    hotkeys: &'a serde_json::Map<String, serde_json::Value>,
+    action_id: &str,
+) -> Option<&'a serde_json::Value> {
+    hotkeys.get(action_id).or_else(|| {
+        (action_id == "toggleViewPanel")
+            .then(|| hotkeys.get(LEGACY_VIEW_PANEL_HOTKEY_ACTION_ID))
+            .flatten()
+    })
+}
+
 /*
 CDXC:Hotkeys 2026-08-22:
 Cmd-K clears the focused terminal, matching the `clear_screen` binding
@@ -553,7 +568,9 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
         if *action_id == "scrollChatToBottom" {
             continue;
         }
-        let key = match persisted_hotkeys.and_then(|hotkeys| hotkeys.get(*action_id)) {
+        let key = match persisted_hotkeys
+            .and_then(|hotkeys| gpui_persisted_hotkey_value(hotkeys, action_id))
+        {
             Some(serde_json::Value::String(key)) => key.as_str(),
             _ => default_key,
         };
@@ -570,7 +587,10 @@ pub(crate) fn gpui_configured_hotkey_action_id_for_native_text(
             .collect::<HashSet<_>>();
         for (action_id, key) in persisted_hotkeys {
             // CDXC:SessionChat 2026-09-11 WHY: Chat owns this configurable chord in its capture handler, including editor focus; binding it natively would swallow the page key or affect terminals.
-            if action_id == "scrollChatToBottom" || known_action_ids.contains(action_id.as_str()) {
+            if action_id == "scrollChatToBottom"
+                || action_id == LEGACY_VIEW_PANEL_HOTKEY_ACTION_ID
+                || known_action_ids.contains(action_id.as_str())
+            {
                 continue;
             }
             if key
@@ -631,7 +651,7 @@ pub(crate) fn gpui_configured_hotkey_key(action_id: &str) -> Option<String> {
         .object()
         .get("hotkeys")
         .and_then(serde_json::Value::as_object)
-        .and_then(|hotkeys| hotkeys.get(action_id))
+        .and_then(|hotkeys| gpui_persisted_hotkey_value(hotkeys, action_id))
         .and_then(serde_json::Value::as_str)
         .unwrap_or(default_key);
     let key = gpui_migrated_hotkey_for_action(action_id, key, default_key);
@@ -824,7 +844,7 @@ pub(crate) fn gpui_configured_hotkey_key_bindings_from_settings() -> Vec<KeyBind
         ));
     };
     for (action_id, default_key) in GPUI_DEFAULT_GHOSTEX_HOTKEYS {
-        let key = match persisted_hotkeys.get(*action_id) {
+        let key = match gpui_persisted_hotkey_value(&persisted_hotkeys, action_id) {
             Some(serde_json::Value::String(persisted_key)) => persisted_key.as_str(),
             _ => default_key,
         };
@@ -840,7 +860,10 @@ pub(crate) fn gpui_configured_hotkey_key_bindings_from_settings() -> Vec<KeyBind
         .map(|(action_id, _)| *action_id)
         .collect();
     for (action_id, key) in &persisted_hotkeys {
-        if action_id.trim().is_empty() || default_action_ids.contains(action_id.as_str()) {
+        if action_id.trim().is_empty()
+            || action_id == LEGACY_VIEW_PANEL_HOTKEY_ACTION_ID
+            || default_action_ids.contains(action_id.as_str())
+        {
             continue;
         }
         let Some(key) = key.as_str() else {
@@ -870,7 +893,9 @@ pub(crate) fn gpui_configured_hotkey_unbinds_from_settings(
             if *action_id == "scrollChatToBottom" {
                 return None;
             }
-            let key = match persisted_hotkeys.and_then(|hotkeys| hotkeys.get(*action_id)) {
+            let key = match persisted_hotkeys
+                .and_then(|hotkeys| gpui_persisted_hotkey_value(hotkeys, action_id))
+            {
                 Some(serde_json::Value::String(key)) => key.as_str(),
                 _ => default_key,
             };

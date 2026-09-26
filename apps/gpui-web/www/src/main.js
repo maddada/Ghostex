@@ -1,3 +1,4 @@
+import './rust-chat-storage';
 import { installSessionChatRuntimeBroker } from '@/apps/desktop/sidebar/session-chat-runtime/broker';
 
 // The desktop's chat broker, run in the page as it is (src/app/chat_host.rs).

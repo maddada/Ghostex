@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -295,7 +295,7 @@ pub(crate) fn run_portless_listener_snapshot_command(
     script: &str,
 ) -> Result<PortlessSnapshotCommandOutput> {
     let shell = command_shell();
-    let mut child = Command::new(&shell.executable)
+    let mut child = crate::platform::process::background_command(&shell.executable)
         .args(shell.script_args(script))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

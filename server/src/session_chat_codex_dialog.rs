@@ -314,7 +314,16 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
         .unwrap_or(0);
     // Onboarding and text-entry views use a single empty line above their
     // heading, unlike the standard list selection view's two-line band.
-    if let Some(named) = (start..footer_index).rev().find(|&i| {
+    // Blank paragraphs in a textarea are content, not a boundary before its title.
+    let named_start = if clean(&lines[footer_index]).contains("submit") {
+        (0..footer_index)
+            .rev()
+            .find(|&i| crate::session_chat_codex_blocking::is_codex_modal_footer(clean(&lines[i])))
+            .map_or(0, |i| i + 1)
+    } else {
+        start
+    };
+    if let Some(named) = (named_start..footer_index).rev().find(|&i| {
         clean(&lines[i]).starts_with("Tell us more (")
             || matches!(
                 clean(&lines[i]),
@@ -464,11 +473,32 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
         }
         Some(index)
     });
+    // CDXC:AgentScreenDetection 2026-09-25 WHY:
+    // Native Windows Codex renders text dialogs with a composer chevron instead of the block gutter. Restrict that marker to text-dialog headings so a selected list row cannot become an editable field.
+    let chevron_input = matches!(
+        title.as_str(),
+        "Name thread"
+            | "Rename thread"
+            | "Edit goal"
+            | "Save conversation"
+            | "Add marketplace"
+            | "Custom review instructions"
+            | "Export filename"
+            | "Save transcript"
+    ) || title.starts_with("Tell us more (");
+    let chevron_input = chevron_input
+        .then(|| {
+            content
+                .iter()
+                .position(|line| line.trim_start().starts_with('›'))
+        })
+        .flatten();
     let input = if title == "Remap Shortcut" {
         Some("key".to_string())
     } else if search_index.is_some() {
         Some("search".to_string())
-    } else if content.iter().any(|line| line.trim().starts_with('▌'))
+    } else if chevron_input.is_some()
+        || content.iter().any(|line| line.trim().starts_with('▌'))
         || lower.contains("type a name")
     {
         Some("text".to_string())
@@ -486,6 +516,24 @@ pub fn detect_codex_dialog(text: &str) -> Option<TerminalDialog> {
         } else {
             left_column(content[index]).trim().to_string()
         }
+    } else if let Some(index) = chevron_input {
+        content[index..]
+            .iter()
+            .enumerate()
+            .map(|(line_index, line)| {
+                if line_index == 0 {
+                    line.trim_start()
+                        .strip_prefix('›')
+                        .unwrap_or(line)
+                        .trim_start()
+                } else {
+                    line.trim()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim_end()
+            .to_string()
     } else if input.as_deref() == Some("text") {
         let input_start = content
             .iter()
@@ -601,14 +649,10 @@ impl TerminalDialog {
                 return Err(invalid());
             }
             return Ok(if self.input.as_deref() == Some("search") {
-                "\x7f".repeat(self.input_value.chars().count()) + text
+                "\x7f".repeat(self.input_value.chars().count())
+                    + &crate::session_chat_send::sanitize_bracketed_paste_text(text)
             } else {
-                let clear = crate::session_chat_send::build_agent_tui_clear_input_for_text(
-                    &self.input_value,
-                )
-                .replace('\u{15}', "\x1b[117;5u")
-                .replace('\u{b}', "\x1b[107;5u");
-                format!("{clear}\x1b[200~{text}\x1b[201~\r")
+                crate::session_chat_send::wrap_terminal_bracketed_paste_text(text)
             });
         }
         if action == "key" && self.input.as_deref() == Some("key") {
@@ -689,6 +733,7 @@ impl TerminalDialog {
             "pageDown" => "\x1b[6~",
             "home" => "\x1b[H",
             "end" => "\x1b[F",
+            "cancel" if self.footer.starts_with("Browsing transcript · ") => "\x1b[27u",
             "cancel"
                 if self.id == crate::session_chat_codex_pager::CODEX_TRANSCRIPT_PAGER_ID
                     || self.footer.contains("q to quit") =>
@@ -718,25 +763,42 @@ pub(crate) async fn answer_codex_dialog(
         return Err(stale());
     }
     let payload = dialog.payload(params)?;
+    let submitting_text = params.get("dialogAction").and_then(Value::as_str) == Some("submit")
+        && dialog.input.as_deref() == Some("text");
+    let mut steps = vec![
+        SessionChatSendStep::BeginLocalCommandOutput {
+            agent: Some("codex".to_string()),
+            command: dialog.title.clone(),
+            durable_id: None,
+        },
+        SessionChatSendStep::VerifyTerminalDialog {
+            agent: "codex".to_string(),
+            id: dialog.id.clone(),
+        },
+    ];
+    if submitting_text {
+        // CDXC:SessionChat 2026-09-25 WHY:
+        // Codex's paste detector swallowed Enter into the rename value when clear, paste and submit shared one write. Text dialogs need the same separate bursts as the main composer.
+        let clear =
+            crate::session_chat_send::build_agent_tui_clear_input_for_text(&dialog.input_value)
+                .replace('\u{15}', "\x1b[117;5u")
+                .replace('\u{b}', "\x1b[107;5u");
+        steps.push(SessionChatSendStep::Write(clear));
+        steps.push(SessionChatSendStep::SleepMs(100));
+    }
+    steps.push(SessionChatSendStep::Write(payload));
+    steps.push(SessionChatSendStep::SleepMs(150));
+    if submitting_text {
+        steps.push(SessionChatSendStep::Write("\r".to_string()));
+        steps.push(SessionChatSendStep::SleepMs(150));
+    }
+    steps.push(SessionChatSendStep::FinishLocalCommandOutput);
     execute_session_chat_send(
         &target.project_id,
         &target.session_id,
         &target.zmx_name,
         "session-chat-dialog",
-        vec![
-            SessionChatSendStep::BeginLocalCommandOutput {
-                agent: Some("codex".to_string()),
-                command: dialog.title,
-                durable_id: None,
-            },
-            SessionChatSendStep::VerifyTerminalDialog {
-                agent: "codex".to_string(),
-                id: dialog.id.clone(),
-            },
-            SessionChatSendStep::Write(payload),
-            SessionChatSendStep::SleepMs(150),
-            SessionChatSendStep::FinishLocalCommandOutput,
-        ],
+        steps,
     )
     .await
     .map_err(|error| DomainStateError {
@@ -752,7 +814,9 @@ pub(crate) async fn answer_codex_dialog(
         && capture_session_terminal_text(&target.zmx_name)
             .await
             .and_then(|screen| detect_codex_dialog(&screen))
-            .is_some_and(|current| current.id == dialog.id)
+            .is_some_and(|current| {
+                current.id == dialog.id || (submitting_text && current.title == dialog.title)
+            })
     {
         return Err(DomainStateError {
             code: "invalidState",

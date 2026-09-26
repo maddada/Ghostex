@@ -50,13 +50,7 @@ pub(crate) fn gpui_remote_tar_executable() -> String {
 }
 
 pub(crate) fn gpui_remote_background_command(executable: &str) -> Command {
-    let mut command = Command::new(executable);
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt as _;
-        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-    command
+    gpui_background_command(executable)
 }
 
 pub(crate) fn gpui_remote_ssh_terminal_environment(

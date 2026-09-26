@@ -332,7 +332,7 @@ impl SessionChatTerminalNotice {
         self
     }
 
-    fn with_input_blocking(mut self, blocks_input: bool) -> Self {
+    pub(crate) fn with_input_blocking(mut self, blocks_input: bool) -> Self {
         self.blocks_input = blocks_input;
         self
     }

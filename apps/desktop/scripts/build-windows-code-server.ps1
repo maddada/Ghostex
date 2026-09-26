@@ -177,7 +177,13 @@ if (!$ComponentOnly -and !$SkipCompile -and $TreeClean -and (Get-Command gh -Err
     # Component tags live in the components repository (GHOSTEX_COMPONENTS_REPO, resolved by components-repo.mjs).
     $ComponentsRepo = (& node (Join-Path $RepoRoot "tooling/release-gpui/components-repo.mjs")).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $ComponentsRepo) { throw "Could not resolve the components repository." }
-    $Published = @(& gh release view $Tag --repo $ComponentsRepo --json assets --jq '.assets[].name' 2>$null | ForEach-Object { "$_" })
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Windows PowerShell turns native stderr into an error before the exit-code check.
+        $ErrorActionPreference = "Continue"
+        $Published = @(& gh release view $Tag --repo $ComponentsRepo --json assets --jq '.assets[].name' 2>$null | ForEach-Object { "$_" })
+    }
+    finally { $ErrorActionPreference = $PreviousErrorActionPreference }
     if ($LASTEXITCODE -eq 0 -and ($Published -contains $ArchiveName) -and ($Published -contains "$ArchiveName.sha256")) {
         $DownloadDir = Join-Path $RepoRoot "build/on-demand-components/$ComponentPlatform-editor-download"
         if (Test-Path $DownloadDir) { Remove-Item -Recurse -Force $DownloadDir }

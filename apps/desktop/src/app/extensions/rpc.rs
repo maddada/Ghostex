@@ -1,12 +1,14 @@
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
 use futures::StreamExt as _;
 
-use crate::app::helpers::{gpui_bundled_ghostex_cli_resource_dir, gpui_gxserver_rpc_result};
+use crate::app::helpers::{
+    gpui_background_command, gpui_bundled_ghostex_cli_resource_dir, gpui_gxserver_rpc_result,
+};
 use crate::*;
 
 use super::{
@@ -430,7 +432,7 @@ fn run_ghostex_cli(
     args: &[String],
     cwd: Option<&Path>,
 ) -> Result<serde_json::Value, String> {
-    let mut command = Command::new(ghostex_cli_executable()?);
+    let mut command = gpui_background_command(ghostex_cli_executable()?);
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
@@ -553,13 +555,13 @@ fn run_streaming_command(
 ) {
     #[cfg(target_os = "windows")]
     let mut process = {
-        let mut command_process = Command::new("powershell.exe");
+        let mut command_process = gpui_background_command("powershell.exe");
         command_process.args(["-NoProfile", "-Command", command]);
         command_process
     };
     #[cfg(not(target_os = "windows"))]
     let mut process = {
-        let mut command_process = Command::new("/bin/zsh");
+        let mut command_process = gpui_background_command("/bin/zsh");
         command_process.args(["-lc", command]);
         command_process
     };

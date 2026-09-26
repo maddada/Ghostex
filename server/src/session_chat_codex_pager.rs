@@ -27,12 +27,19 @@ pub(crate) fn codex_escape_would_open_transcript_pager(screen: &str) -> bool {
     })
 }
 
-fn transcript_pager_footer(screen: &str) -> Option<String> {
+pub(crate) fn transcript_pager_footer(screen: &str) -> Option<String> {
     let footer = screen.lines().rev().find(|line| !line.trim().is_empty())?;
     let footer = normalize_spaces(&strip_ansi_sgr(footer))
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
+    if footer.starts_with("Browsing transcript · ")
+        && footer.contains(" prompts · ")
+        && footer.contains(" rewind · ")
+        && footer.ends_with("esc back")
+    {
+        return Some(footer);
+    }
     // The older pager says "q to quit"; current Codex's keymap renderer says "q close".
     let editing = footer
         .strip_prefix("q to quit ")
@@ -133,7 +140,11 @@ pub(crate) async fn close_unwatched_pager(
         session_id,
         zmx_name,
         "codex-transcript-pager-close",
-        "q",
+        if screen.contains("Browsing transcript · ") {
+            "\x1b[27u"
+        } else {
+            "q"
+        },
     )
     .await
 }

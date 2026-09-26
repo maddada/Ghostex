@@ -230,7 +230,7 @@ timeout or wait failure. On Unix the child owns a process group so helpers it
 starts cannot keep the stdout pipe open after the deadline.
 */
 fn run_grok_skill_inspect(grok_command: &Path, working_directory: &Path) -> Option<Value> {
-    let mut command = Command::new(grok_command);
+    let mut command = crate::platform::process::background_command(grok_command);
     command
         .args(["inspect", "--json"])
         .current_dir(working_directory)

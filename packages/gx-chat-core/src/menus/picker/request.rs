@@ -40,6 +40,7 @@ pub fn model_picker_provider(icon: Option<&str>) -> Option<ModelPickerProvider> 
         "cursor-cli" | "cursor" => Some(ModelPickerProvider::Cursor),
         "grok-build" | "grok" => Some(ModelPickerProvider::Grok),
         "antigravity-cli" | "antigravity" => Some(ModelPickerProvider::Antigravity),
+        "opencode" => Some(ModelPickerProvider::OpenCode),
         _ => None,
     }
 }
