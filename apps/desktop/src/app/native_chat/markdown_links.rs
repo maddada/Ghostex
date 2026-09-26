@@ -13,15 +13,21 @@ pub(super) struct ReferenceVisual {
     pub(super) icon_em: f32,
     dark_white_mix: f32,
     colors: HashMap<String, String>,
+    transcript: TranscriptPalette,
     composer_url: String,
     web: WebVisual,
+}
+
+/// The reference colours of the transcript, one set per theme, used as written.
+#[derive(Deserialize)]
+struct TranscriptPalette {
+    dark: HashMap<String, String>,
+    light: HashMap<String, String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct WebVisual {
-    light_color: String,
-    dark_color: String,
     gap_em: f32,
 }
 
@@ -45,6 +51,10 @@ fn blended(hex: &str, appearance: &ChatAppearance) -> Option<Hsla> {
         (((color >> shift) & 255u32) as f32 * (1.0 - mix) + 255.0 * mix).round() as u32
     };
     Some(rgb(channel(16) << 16 | channel(8) << 8 | channel(0)).into())
+}
+
+fn hex_color(hex: &str) -> Option<Hsla> {
+    Some(rgb(u32::from_str_radix(hex.trim_start_matches('#'), 16).ok()?).into())
 }
 
 /// The color a reference pill uses inside an editable composer.
@@ -83,26 +93,25 @@ pub(super) fn secondary_click(
     }
 }
 
+/// CDXC:SessionChat 2026-09-26 DECISION:
+/// User: references in the transcript keep their shape (icon and coloured label, no chip) but take brighter, more saturated colours, because the muted ones read like normal text. The composer keeps its dimmer pills (`composer_color`).
+/// SEE-ALSO: `transcript` in `packages/gx-chat-core/visual/reference-visual.json`, and `link` in `apps/mobile/app/src/chat/native/transcript/theme.ts`, which the phone chat must keep equal.
 pub(super) fn presentations(
     references: &Value,
     appearance: &ChatAppearance,
 ) -> HashMap<(String, String), InlineLink> {
+    let palette = if appearance.light {
+        &VISUAL.transcript.light
+    } else {
+        &VISUAL.transcript.dark
+    };
     references
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|reference| {
             let kind = reference["kind"].as_str()?;
-            let color = if kind == "url" {
-                if appearance.light {
-                    &VISUAL.web.light_color
-                } else {
-                    &VISUAL.web.dark_color
-                }
-            } else {
-                VISUAL.colors.get(kind)?
-            };
-            let color = blended(color, appearance)?;
+            let color = hex_color(palette.get(kind)?)?;
             Some((
                 (
                     reference["href"].as_str()?.to_owned(),
@@ -119,6 +128,9 @@ pub(super) fn presentations(
                         VISUAL.gap
                     } * appearance.scale),
                     color,
+                    // A path keeps its file name when the pill is wider than the line
+                    // (`reference_path_label` in gx-chat-core).
+                    truncate_start: matches!(kind, "file" | "folder" | "image"),
                 },
             ))
         })
