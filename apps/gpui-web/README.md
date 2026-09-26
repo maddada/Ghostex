@@ -38,7 +38,7 @@ bun run web:dev          # rebuilds the wasm and starts Vite on http://localhost
 On Windows, run `bun run web:build` from PowerShell with Zig 0.16, Rust 1.95.0's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.125 installed. The builder restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through sccache. Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
 
 - `http://localhost:4174/?session=<projectId>:<sessionId>&surface=terminal` opens a session directly (ids as in its zmx name, `S90-<projectId>-<sessionId>`).
-- `node shot.mjs out.png --wait 5000 --click 150,240 --type "text" --key Enter --key Control+a --pasteimage <base64 png> --eval "js" --rightclick 150,300 --move x,y --wheel x,y,deltaY --pause ms --timeout ms --url ...` drives the page in headless Chrome over the DevTools protocol, prints the page console and saves a screenshot. It waits in real time; Chrome's `--virtual-time-budget` never delivers the gxserver WebSocket frames. A run that stalls stops its own Chrome after `--timeout` (90 s). When Chrome for Testing never commits a navigation (seen on a machine short of memory), point `SHOT_CHROME` at Playwright's `chrome-headless-shell`.
+- `node shot.mjs out.png --wait 5000 --click 150,240 --type "text" --key Enter --key Control+a --pasteimage <base64 png> --eval "js" --rightclick 150,300 --move x,y --wheel x,y,deltaY --pause ms --timeout ms --url ...` drives the page in headless Chrome over the DevTools protocol, prints the page console and saves a screenshot. It waits in real time; Chrome's `--virtual-time-budget` never delivers the gxserver WebSocket frames. A run that stalls stops its own Chrome after `--timeout` (90 s). `--insert text` inserts text with no key events, the way browser automation and dictation do. When Chrome for Testing never commits a navigation (seen on a machine short of memory), point `SHOT_CHROME` at Playwright's `chrome-headless-shell`.
 
 ## How it is put together
 
@@ -65,9 +65,19 @@ The desktop's sidebar, chat and terminal carry roles, labels and state, and the 
 - **Chat** (`group "Session chat"`): `document "Conversation"`, one `article` per message labelled `<role> message: <text>` (first 2000 chars), `button`s for tool rows (`Tool <name>: <preview>`, expanded, description `failed`), disclosures, message actions, the composer (`group "Message composer"` with its `textbox`) and every toolbar button, `menuitem`s in menus, `checkbox` cards in the model picker.
 - **Terminal** (`log "<title>"`): one `text` node per screen row, in order.
 
-On the desktop, gpui builds the tree only while an assistive client is connected, so nothing is paid until `cua-driver` (or VoiceOver) attaches; `cua-driver` then acts on element tokens instead of pixels. On the web, `#gpui-a11y` holds one element per node with the ARIA role, `aria-label`, `aria-description`, `aria-expanded`, `aria-selected`, `aria-checked`, `data-gpui-actions` and the node's page bounds, brought up to date at most ten times a second; `?a11y=off` turns it off. `window.gpuiA11y.snapshot()` returns the tree as plain objects, `window.gpuiA11y.act(id, 'Click')` dispatches an AccessKit action to a node (gpui clicks the node's centre), and Playwright's `getByRole` finds the mirrored elements: a pointer click on one lands on the canvas underneath, because the mirror lets pointer events through. `node shot.mjs out.png --print "window.gpuiA11y.snapshot()"` dumps it from the command line.
+On the desktop, gpui builds the tree only while an assistive client is connected, so nothing is paid until `cua-driver` (or VoiceOver) attaches; `cua-driver` then acts on element tokens instead of pixels. On the web, every gpui window has its own mirror (`#gpui-a11y` for the page's main window, `#gpui-a11y-<n>` for each overlay: menus, the model picker, dialogs), each element carrying the ARIA role, `aria-label`, `aria-description`, `aria-expanded`, `aria-selected`, `aria-checked`, `data-gpui-actions` and the node's page bounds, brought up to date at most ten times a second; `?a11y=off` turns it off. `window.gpuiA11y.snapshot()` returns every window's tree as plain objects, `window.gpuiA11y.act(id, 'Click')` dispatches an AccessKit action to a node (gpui clicks the node's centre; an overlay's ids are `<n>:<id>`), and Playwright's `getByRole` finds the mirrored elements: a pointer click on one lands on the canvas underneath, because the mirror lets pointer events through. `node shot.mjs out.png --print "window.gpuiA11y.snapshot()"` dumps it from the command line.
 
-Known gaps: rows inside the chat's virtual list report bounds relative to the list rather than the page, so reach them through `act()` or `getByRole` rather than by coordinate; scrolled-out sidebar rows are in the tree with their off-screen bounds; text runs inside a message are not separate nodes (one label per message, by decision).
+A browser driver works on the mirror the way it works on a page, which is how `$ghostex-browser-use` (cua-driver's typed browser tools) tests the chat without touching the user's window:
+
+- **Clicks.** A DOM click that reaches a mirrored element (`browser_click` with `input_route: "dom_event"`, `el.click()`) runs the node's AccessKit Click, so it works for menu rows that act on mouse-down and for rows of the chat's list.
+- **Typing.** A mirrored text field is focusable and editable: `browser_type` (inserted text or keystrokes) is replayed on its window's own input element once gpui has clicked the field into focus, and the window stays active while the mirror holds focus. `browser_type`'s `replace` cannot clear what gpui holds (it selects the mirror's own, empty, text); stash or send first.
+- **Wheel.** A wheel event dispatched on a mirrored element is replayed on its canvas. The driver's own scroll tool refuses these refs (they do not look scrollable), so scroll with `shot.mjs --wheel` or a script's `WheelEvent`.
+- **Screenshots.** `get_browser_state` with `include_screenshot: true` captures the tab over CDP without bringing the browser forward.
+- Text inserted without a key event (dictation, an IME that commits directly, `Input.insertText`) reaches gpui through its input's `beforeinput`; `shot.mjs --insert text` sends it that way.
+
+A reused cached view (the chat's transcript host is one) replays the accessibility subtree it built when it last rendered, so the chat's rows stay in the tree between renders; a view cached before accessibility turned on renders once more.
+
+Known gaps: scrolled-out sidebar rows are in the tree with their off-screen bounds; text runs inside a message are not separate nodes (one label per message, by decision).
 
 ## Changes outside this folder
 
@@ -98,7 +108,7 @@ All are no-ops for native builds; `cargo check --bins` of the desktop crate pass
 
 ## Known gaps
 
-- The model picker opens about 190 px left of its pill, and child windows show a dark pixel at their rounded corners.
+- Child windows show a dark pixel at their rounded corners.
 - The console logs `RefCell already borrowed` when a child window opens: an event of the new canvas arrives while the app is mid-update and is dropped. Harmless so far.
 - The chat's native file pickers, attachments from disk and Save as Markdown have no browser implementation yet (they compile and fail softly). Pasting an image works; pasting a copied FILE does not.
 - The header breadcrumb is empty for a session whose row the sidebar is not drawing (a compact list, a deep link).
