@@ -7,9 +7,10 @@ Default bindings are listed for macOS (`cmd`) with the Windows/Linux default whe
 | Action | Default | Windows/Linux | What it does | Id |
 | --- | --- | --- | --- | --- |
 | Scroll Chat to Bottom | `ctrl+shift+down` | `cmd+shift+down` | Scroll chat to the bottom, including while typing in the composer. | `scrollChatToBottom` |
-| Focus Chat Box | `shift+escape` |  | Move the keyboard to the chat box of the chat you are in. | `focusChatComposer` |
-| Copy Last Code Block | `cmd+shift+;` |  | Copy the last code block an agent wrote in the chat you are in. | `copyLastChatCodeBlock` |
-| Copy Last Reply | `cmd+shift+c` |  | Copy the agent's last reply in the chat you are in. | `copyLastChatReply` |
+| Focus Chat Box | `shift+escape` |  | Move the keyboard to the chat box of the chat session you are in. | `focusChatComposer` |
+| Copy Last Code Block | `cmd+shift+;` |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
+| Copy Last Reply | `cmd+shift+c` |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |
+| Toggle Summary Mode | `cmd+ctrl+s` | `cmd+alt+shift+s` | Turn Summary mode on or off in the chat session you are in. | `toggleChatSummaryMode` |
 | New Agent Session | `cmd+shift+o` |  | Start your last-used agent in the active project, in your default interface. | `createAgentSession` |
 | New Terminal | `cmd+shift+t` |  | Create a terminal session. | `createSession` |
 | Open Quick Access: Commands | `cmd+shift+p` |  | Open Ghostex Quick Access on Commands. | `openCommandPalette` |

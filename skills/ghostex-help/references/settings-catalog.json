@@ -294,6 +294,20 @@
       "agentWritable": true
     },
     {
+      "key": "closeSidePanelWithLastTab",
+      "title": "Close side panel with its last tab",
+      "subtitle": "Close the side panel when you close its last tab, instead of showing the Open a view picker.",
+      "tab": "settings",
+      "tabTitle": "General",
+      "group": "sidebar",
+      "groupTitle": "Sidebar",
+      "section": "sidebar",
+      "sectionTitle": "Sidebar",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "sidebarTooltipDelayMs",
       "title": "Tooltip Delay",
       "subtitle": "Set how long sidebar hover labels wait before appearing. Set to 0 to show them immediately.",
@@ -2792,6 +2806,7 @@
         "focusChatComposer": "shift+escape",
         "copyLastChatCodeBlock": "cmd+shift+;",
         "copyLastChatReply": "cmd+shift+c",
+        "toggleChatSummaryMode": "cmd+ctrl+s",
         "createAgentSession": "cmd+shift+o",
         "createSession": "cmd+shift+t",
         "openCommandPalette": "cmd+shift+p",
@@ -7271,7 +7286,7 @@
     {
       "key": "windowGlass",
       "title": "Enable transparency",
-      "subtitle": "Let your desktop show through the window. Use transparency picks Automatic (dark mode only), Always or Never.",
+      "subtitle": "Let your desktop show through the window. Use transparency picks Dark only, Always or Never.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7282,15 +7297,15 @@
       "default": "auto",
       "options": [
         {
-          "label": "Glass in dark mode",
+          "label": "Dark only",
           "value": "auto"
         },
         {
-          "label": "Always glass",
+          "label": "Always",
           "value": "frosted"
         },
         {
-          "label": "Always opaque",
+          "label": "Never",
           "value": "opaque"
         }
       ],
@@ -7299,7 +7314,7 @@
     {
       "key": "windowGlassSource",
       "title": "What shows behind the glass",
-      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, or a video playing behind the glass.",
+      "subtitle": "Desktop and windows, your wallpaper, a picture you choose, a video, or a Live animated background in your theme colours.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7324,6 +7339,10 @@
         {
           "label": "Video",
           "value": "video"
+        },
+        {
+          "label": "Live",
+          "value": "live"
         }
       ],
       "agentWritable": true
@@ -7411,7 +7430,7 @@
     {
       "key": "windowGlassVideoOnlyOnPower",
       "title": "Play only when plugged in",
-      "subtitle": "Pause the glass video while your computer runs on battery. It always pauses when Ghostex is in the background.",
+      "subtitle": "Pause the glass video or Live background while your computer runs on battery. It always pauses when Ghostex is in the background.",
       "tab": "theme",
       "tabTitle": "Theme",
       "group": "appearance",
@@ -7420,6 +7439,130 @@
       "sectionTitle": "Theme",
       "type": "boolean",
       "default": true,
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveStyleDark",
+      "title": "Live background for dark mode",
+      "subtitle": "The animated background the glass shows in dark mode when Live shows behind the glass.",
+      "tab": "theme",
+      "tabTitle": "Theme",
+      "group": "appearance",
+      "groupTitle": "Theme",
+      "section": "theming",
+      "sectionTitle": "Theme",
+      "type": "enum",
+      "default": "aurora",
+      "options": [
+        {
+          "label": "Aurora",
+          "value": "aurora"
+        },
+        {
+          "label": "Ink",
+          "value": "ink"
+        },
+        {
+          "label": "Drift",
+          "value": "drift"
+        },
+        {
+          "label": "Nebula",
+          "value": "nebula"
+        },
+        {
+          "label": "Silk",
+          "value": "silk"
+        },
+        {
+          "label": "Bokeh",
+          "value": "bokeh"
+        },
+        {
+          "label": "Waves",
+          "value": "waves"
+        },
+        {
+          "label": "Mesh",
+          "value": "mesh"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveStyleLight",
+      "title": "Live background for light mode",
+      "subtitle": "The animated background the glass shows in light mode when Live shows behind the glass.",
+      "tab": "theme",
+      "tabTitle": "Theme",
+      "group": "appearance",
+      "groupTitle": "Theme",
+      "section": "theming",
+      "sectionTitle": "Theme",
+      "type": "enum",
+      "default": "drift",
+      "options": [
+        {
+          "label": "Aurora",
+          "value": "aurora"
+        },
+        {
+          "label": "Ink",
+          "value": "ink"
+        },
+        {
+          "label": "Drift",
+          "value": "drift"
+        },
+        {
+          "label": "Nebula",
+          "value": "nebula"
+        },
+        {
+          "label": "Silk",
+          "value": "silk"
+        },
+        {
+          "label": "Bokeh",
+          "value": "bokeh"
+        },
+        {
+          "label": "Waves",
+          "value": "waves"
+        },
+        {
+          "label": "Mesh",
+          "value": "mesh"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveSpeed",
+      "title": "Live background speed",
+      "subtitle": "How fast the Live background moves, from a quarter of its pace to twice as fast.",
+      "tab": "theme",
+      "tabTitle": "Theme",
+      "group": "appearance",
+      "groupTitle": "Theme",
+      "section": "theming",
+      "sectionTitle": "Theme",
+      "type": "number",
+      "default": 1,
+      "agentWritable": true
+    },
+    {
+      "key": "windowGlassLiveBrightness",
+      "title": "Live background brightness",
+      "subtitle": "How bright the Live background glows behind the glass. Lower keeps it a subtle glow.",
+      "tab": "theme",
+      "tabTitle": "Theme",
+      "group": "appearance",
+      "groupTitle": "Theme",
+      "section": "theming",
+      "sectionTitle": "Theme",
+      "type": "number",
+      "default": 45,
       "agentWritable": true
     },
     {
@@ -7553,7 +7696,7 @@
     {
       "key": "debuggingMode",
       "title": "Show debug UI controls",
-      "subtitle": "Show debug-only controls, storage statistics, and enabled routine diagnostic logs.",
+      "subtitle": "Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.",
       "tab": "debugging",
       "tabTitle": "Debugging",
       "section": "controls",
@@ -7564,8 +7707,8 @@
     },
     {
       "key": "diagnosticLogging",
-      "title": "Diagnostic disk logging scenarios",
-      "subtitle": "Choose routine repro log areas while Show debug UI controls is on. Important warnings, errors, and crashes remain captured when it is off.",
+      "title": "Diagnostic logs",
+      "subtitle": "Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.",
       "tab": "debugging",
       "tabTitle": "Debugging",
       "section": "controls",
@@ -7577,327 +7720,47 @@
       },
       "options": [
         {
-          "label": "Desktop performance profiling",
-          "value": "gpui.performance"
-        },
-        {
-          "label": "gpui-performance.jsonl",
-          "value": "gpui-performance.jsonl"
-        },
-        {
-          "label": "Chat draft persistence and recovery",
-          "value": "gpui.sessionChat.drafts"
-        },
-        {
-          "label": "gpui-session-chat-debug.jsonl",
-          "value": "gpui-session-chat-debug.jsonl"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "Terminal focus and input routing",
+          "label": "Terminals, panes, and keyboard focus",
           "value": "native.terminal.focus"
         },
         {
-          "label": "native-terminal-focus-debug.log",
-          "value": "native-terminal-focus-debug.log"
-        },
-        {
-          "label": "gpui-terminal-focus-debug.log",
-          "value": "gpui-terminal-focus-debug.log"
-        },
-        {
-          "label": "Terminal resize and reflow",
-          "value": "native.terminal.resize"
-        },
-        {
-          "label": "native-terminal-focus-debug.log",
-          "value": "native-terminal-focus-debug.log"
-        },
-        {
-          "label": "Sidebar refresh and hydration",
+          "label": "Sidebar, browser, and editor panes",
           "value": "native.sidebar.refresh"
         },
         {
-          "label": "sidebar-refresh-debug.log",
-          "value": "sidebar-refresh-debug.log"
+          "label": "Chat",
+          "value": "gpui.sessionChat.viewState"
         },
         {
-          "label": "gpui-sidebar-refresh-debug.log",
-          "value": "gpui-sidebar-refresh-debug.log"
+          "label": "Modals and Settings",
+          "value": "gpui.app.modal"
         },
         {
-          "label": "Sidebar collapse state",
-          "value": "native.sidebar.collapse"
-        },
-        {
-          "label": "sidebar-collapse-state-debug.log",
-          "value": "sidebar-collapse-state-debug.log"
-        },
-        {
-          "label": "Pane tabs, resize rails, and sidebar divider",
-          "value": "native.pane.tabs"
-        },
-        {
-          "label": "native-pane-tabs-debug.log",
-          "value": "native-pane-tabs-debug.log"
-        },
-        {
-          "label": "Pane reorder repros",
-          "value": "native.pane.reorder"
-        },
-        {
-          "label": "native-pane-reorder-repro.log",
-          "value": "native-pane-reorder-repro.log"
-        },
-        {
-          "label": "Layout, layering, and hit testing",
-          "value": "native.layout.layering"
-        },
-        {
-          "label": "native-layout-layering-debug.log",
-          "value": "native-layout-layering-debug.log"
-        },
-        {
-          "label": "View switching and header routing",
-          "value": "native.mode.switcher"
-        },
-        {
-          "label": "native-mode-switcher-debug.log",
-          "value": "native-mode-switcher-debug.log"
-        },
-        {
-          "label": "Sidebar and header responsiveness",
-          "value": "native.chrome.responsiveness"
-        },
-        {
-          "label": "native-chrome-responsiveness-debug.log",
-          "value": "native-chrome-responsiveness-debug.log"
-        },
-        {
-          "label": "sidebar-refresh-debug.log",
-          "value": "sidebar-refresh-debug.log"
-        },
-        {
-          "label": "Session titles and auto-rename",
-          "value": "native.session.title"
-        },
-        {
-          "label": "session-title-sync-debug.log",
-          "value": "session-title-sync-debug.log"
-        },
-        {
-          "label": "Agent detection and activity",
-          "value": "native.agent.detection"
-        },
-        {
-          "label": "agent-detection-debug.log",
-          "value": "agent-detection-debug.log"
-        },
-        {
-          "label": "Workspace restore and startup",
-          "value": "native.workspace.restore"
-        },
-        {
-          "label": "workspace-restore-debug.log",
-          "value": "workspace-restore-debug.log"
-        },
-        {
-          "label": "Workspace dock indicator",
-          "value": "native.workspace.dock"
-        },
-        {
-          "label": "workspace-dock-indicator-debug.log",
-          "value": "workspace-dock-indicator-debug.log"
-        },
-        {
-          "label": "Native host lifecycle",
-          "value": "native.host.lifecycle"
-        },
-        {
-          "label": "native-host-lifecycle.log",
-          "value": "native-host-lifecycle.log"
-        },
-        {
-          "label": "gpui-host-lifecycle.log",
-          "value": "gpui-host-lifecycle.log"
-        },
-        {
-          "label": "Menu bar session status dropdown",
-          "value": "native.menuBar.status"
-        },
-        {
-          "label": "native-menu-bar-status-debug.log",
-          "value": "native-menu-bar-status-debug.log"
-        },
-        {
-          "label": "Project board actions",
+          "label": "Project board",
           "value": "native.project.board"
         },
         {
-          "label": "project-board-debug.log",
-          "value": "project-board-debug.log"
+          "label": "Remote machines",
+          "value": "native.remote.gxserver.install"
         },
         {
-          "label": "gpui-project-board-debug.log",
-          "value": "gpui-project-board-debug.log"
-        },
-        {
-          "label": "Ghostty config startup",
-          "value": "native.ghostty.config"
-        },
-        {
-          "label": "native-ghostty-config.log",
-          "value": "native-ghostty-config.log"
-        },
-        {
-          "label": "Terminal link opening",
-          "value": "native.terminal.links"
-        },
-        {
-          "label": "terminal-link-open-debug.log",
-          "value": "terminal-link-open-debug.log"
+          "label": "Agent activity",
+          "value": "gxserver.agentActivity"
         },
         {
           "label": "Prompt editor",
           "value": "native.prompt.editor"
         },
         {
-          "label": "native-prompt-editor-debug.log",
-          "value": "native-prompt-editor-debug.log"
+          "label": "App and server lifecycle",
+          "value": "native.host.lifecycle"
         },
         {
-          "label": "Remote gxserver install",
-          "value": "native.remote.gxserver.install"
-        },
-        {
-          "label": "remote-gxserver-install-debug.log",
-          "value": "remote-gxserver-install-debug.log"
-        },
-        {
-          "label": "gpui-remote-gxserver-install-debug.log",
-          "value": "gpui-remote-gxserver-install-debug.log"
-        },
-        {
-          "label": "App modals and Settings windows",
-          "value": "native.app.modal"
-        },
-        {
-          "label": "app-modal-debug.log",
-          "value": "app-modal-debug.log"
-        },
-        {
-          "label": "app-modal-errors.log",
-          "value": "app-modal-errors.log"
-        },
-        {
-          "label": "GPUI sidebar focus and bouncing",
-          "value": "gpui.sidebar.focus"
-        },
-        {
-          "label": "gpui-sidebar-focus-debug.jsonl",
-          "value": "gpui-sidebar-focus-debug.jsonl"
-        },
-        {
-          "label": "GPUI sidebar renderer lifecycle",
-          "value": "gpui.sidebar.renderer"
-        },
-        {
-          "label": "gpui-sidebar-renderer-debug.jsonl",
-          "value": "gpui-sidebar-renderer-debug.jsonl"
-        },
-        {
-          "label": "GPUI app modals and Settings",
-          "value": "gpui.app.modal"
-        },
-        {
-          "label": "gpui-app-modal-debug.jsonl",
-          "value": "gpui-app-modal-debug.jsonl"
-        },
-        {
-          "label": "GPUI session chat view state",
-          "value": "gpui.sessionChat.viewState"
-        },
-        {
-          "label": "gpui-session-chat-debug.jsonl",
-          "value": "gpui-session-chat-debug.jsonl"
-        },
-        {
-          "label": "Daemon lifecycle",
-          "value": "gxserver.lifecycle"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "API requests",
+          "label": "Server requests",
           "value": "gxserver.requests"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "Typed operations",
-          "value": "gxserver.typedOperations"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "Repository cloning",
-          "value": "gxserver.repositoryClone"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "Portless",
-          "value": "gxserver.portless"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
-        },
-        {
-          "label": "Agent activity transitions",
-          "value": "gxserver.agentActivity"
-        },
-        {
-          "label": "gxserver.jsonl",
-          "value": "gxserver.jsonl"
         }
       ],
       "agentWritable": false
-    },
-    {
-      "key": "showSessionCommandCopyActions",
-      "title": "Show command copy actions",
-      "subtitle": "Show Copy resume and Copy attach command in session context menus.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "controls",
-      "sectionTitle": "Debug controls",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
-    },
-    {
-      "key": "showSessionDetailsCopyAction",
-      "title": "Show Copy Details option",
-      "subtitle": "Show Copy Details in session context menus.",
-      "tab": "debugging",
-      "tabTitle": "Debugging",
-      "section": "controls",
-      "sectionTitle": "Debug controls",
-      "type": "boolean",
-      "default": false,
-      "agentWritable": true
     },
     {
       "key": "storageUsage",
@@ -10011,20 +9874,27 @@
     {
       "id": "focusChatComposer",
       "title": "Focus Chat Box",
-      "description": "Move the keyboard to the chat box of the chat you are in.",
+      "description": "Move the keyboard to the chat box of the chat session you are in.",
       "defaultKey": "shift+escape"
     },
     {
       "id": "copyLastChatCodeBlock",
       "title": "Copy Last Code Block",
-      "description": "Copy the last code block an agent wrote in the chat you are in.",
+      "description": "Copy the last code block the agent wrote in the chat session you are in.",
       "defaultKey": "cmd+shift+;"
     },
     {
       "id": "copyLastChatReply",
       "title": "Copy Last Reply",
-      "description": "Copy the agent's last reply in the chat you are in.",
+      "description": "Copy the agent's last reply in the chat session you are in.",
       "defaultKey": "cmd+shift+c"
+    },
+    {
+      "id": "toggleChatSummaryMode",
+      "title": "Toggle Summary Mode",
+      "description": "Turn Summary mode on or off in the chat session you are in.",
+      "defaultKey": "cmd+ctrl+s",
+      "windowsLinuxDefaultKey": "cmd+alt+shift+s"
     },
     {
       "id": "createAgentSession",

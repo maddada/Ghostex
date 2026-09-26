@@ -73,20 +73,23 @@ and extensions. Press a view's letter to open it (C for Code, B for Browser, K f
 Kanban, U for Automate, D for Docs, T for Terminal) while the picker is in front. Views you hid
 for this project are not in the list; **Manage views and where they appear…** at
 the bottom opens their settings, and **Hidden here** on the `+` menu brings one
-back.
+back. Closing the panel's last tab brings the picker back; to close the whole
+panel instead, turn on **Close side panel with its last tab** in Settings >
+Sidebar (`closeSidePanelWithLastTab`, off by default).
 
 Right-click a view tab to choose where that view appears and what happens to it.
 **Reload** refreshes the clicked view, **Sleep** unloads it while keeping its tab (Code also stops its editor
 server; choose **Wake** or click the tab to bring it back, and Resources can stop
 Code too without closing Ghostex), and **Open externally** opens its page in its
-own window. Lower down, **Show in this Project** and **Show in this Space** are
-ticks: unticking one hides the view there and leaves it everywhere else (the
-space row is absent when the project is not in a space), and **Choose where
-it's shown…** opens that view's full scope editor in Settings > Extensions.
-**Close tab** removes it from the strip, and **Hidden here** is on
-this menu as well. Custom project views also offer **Command output** and
-**Configure view**, which opens that view's editor in Settings > Extensions and
-focuses its name field.
+own window. **Configure ▸** holds what a view can change about itself: **Modify
+home URL** for a website view, and **Command output** and **Configure view** for
+your own project views (Configure view opens that view's editor in Settings >
+Extensions and focuses its name field). **Show in ▸** holds **This Project** and
+**This Space**, which are ticks: unticking one hides the view there and leaves
+it everywhere else (the space row is absent when the project is not in a
+space). **Choose where it's shown…** at the bottom of that submenu opens the
+view's full scope editor in Settings > Extensions. **Close tab** removes the
+view from the strip.
 
 - **Agents**: the terminal grid. Panes run agent CLIs or plain shells, split
   horizontally or vertically. There is no tab bar above a pane: the sidebar is
@@ -133,7 +136,8 @@ focuses its name field.
   strip to reorder. Right-click a tab for Select Tab, Pin Tab, Sleep (that tab),
   Sleep Browser (every browser tab), and Close Tab. Closing the last browser tab closes the
   Browser the way closing any view does: the panel moves to the next open view,
-  and shows the Open a view picker when Browser was the last one. **Browser Tab** at the top of the strip's **+** menu opens
+  and shows the Open a view picker (or closes the panel, with Close side panel
+  with its last tab on) when Browser was the last one. **Browser Tab** at the top of the strip's **+** menu opens
   another tab. A tab with no address yet is blank: type or paste an address, or
   pick a running server from the ⋯ menu's Dev servers panel.
   Web links from terminals, chat, and detected dev servers
@@ -580,10 +584,11 @@ the terminal's attachment action offers the same choices.
 Hover a message to show its actions and the time it was sent in a row below
 it: Copy message, Reply by Annotating, and Save to md under an agent's final
 reply; Rewind to here, Save prompt, and Copy message under your own messages.
-Hover the time to see the full date. While a chat has focus, Shift+Esc moves
-the keyboard to its chat box, Cmd+Shift+; copies the last code block an agent
-wrote, and Cmd+Shift+C copies the agent's last reply (Mac only; on Windows and
-Linux Ctrl+Shift+C stays terminal copy).
+Hover the time to see the full date. When the session you are in shows its
+chat, Shift+Esc moves the keyboard to its chat box from anywhere in the window,
+Cmd+Shift+; copies the last code block the agent wrote, and Cmd+Shift+C copies
+the agent's last reply (Mac only; on Windows and Linux Ctrl+Shift+C stays
+terminal copy).
 The chat box edits like VS Code: Up on the first line jumps to the start and
 Down on the last line to the end, Option+Up/Down moves the current line,
 Option+Shift+Up/Down duplicates it, Cmd+Shift+K deletes it, Cmd+L selects it,
@@ -803,9 +808,15 @@ collapse under "Edited 1 file" or "Edited X files", counting each path once; exp
 the row to see the usual file and diff cards. The menu and Settings use the same
 toggle (`sessionChatSimpleMode`, off by default).
 
+Summary mode folds each turn down to your prompt and an "Agent reply" row; the
+newest reply stays open, and older ones open with a click. The row holds every
+reply the agent gave to that prompt, including the ones it wrote after a
+background task finished.
 Summary mode has its own button between More actions and Session note when the
 chat toolbar has room. In a narrow chat, find it under More actions instead.
-The button highlights when Summary mode is on; its tooltip shows the shortcut.
+The button highlights when Summary mode is on; its tooltip shows the Toggle Summary
+Mode shortcut (Cmd+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows and Linux), which
+switches it from anywhere in that chat and can be changed in Settings > Hotkeys.
 As space gets tighter, toolbar buttons move into More actions one at a time:
 Summary mode, Session note, Stash prompt, Attach, Maximize, then Terminal View.
 If the context ring still does not fit beside the model, it moves into Model
@@ -841,7 +852,7 @@ Right change the highlighted model's reasoning level, which the reasoning button
 shows; the letter on each bottom button's icon uses it (R Reasoning, C Context,
 F Fast mode, A Account); Tab and Shift+Tab move through the Favorites and agent tabs. Enter uses the highlighted model and level in
 this session and closes the picker, Shift+Enter saves them as the agent's default,
-and Cmd+1 to Cmd+9
+and Option+1 to Option+9
 jump the highlight to one of the first nine rows without applying it. Escape closes it
 without changing anything. The key reminder along the bottom lists these.
 
@@ -1102,18 +1113,27 @@ Use `ghostex agents --help` to create, message, and close other agent sessions.
 configured agent IDs; `agents create <agent-id> --task "<task>"` starts one in
 the caller's project (`--project-id` selects another). `agents list` finds
 sessions, and `agents send <session-ref> "<text>"` attaches the sender's identity
-and reply reference automatically. Use `--body-file` for multiline messages,
-`--interrupt` for an urgent correction, or `--queue` to leave the message
-waiting until the current turn finishes. A queued message waits as long as that
-turn does, so send normally unless the point is to have the next task ready for
-an agent whose final message you have already read. If Ghostex cannot deliver
+and reply reference automatically. A normal send reaches a busy agent at its
+next input boundary and wakes a sleeping one, so it is right for almost every
+message. Use `--body-file` for multiline messages, `--interrupt` for an urgent
+correction, or `--queue` to leave the message waiting until the current turn
+finishes. A queued message waits as long as that turn does, so send normally
+unless the point is to have the next task ready for an agent whose final
+message you have already read. If Ghostex cannot deliver
 a queued message, the row stays in the recipient's queue marked Not delivered
 with Retry and Delete, and the sending agent gets a note saying so. `agents close
 <session-ref>` ends that session, including any unfinished work. `ghostex read-session-chat` and `ghostex read-text` read replies.
 An agent can also read or search any other thread, including a sleeping one:
 `ghostex read-session-chat <session> --all --format text` prints the whole
 conversation, and `--grep "<words>" --context 1` finds where a topic came up.
-`<session>` can be any id from the sidebar's Copy Details, or the title.
+`<session>` can be any id from the sidebar's Copy Details (right-click a session,
+Advanced > Copy Details; its Global Ref is the most precise), or the title.
+Copy Details lists the session's agent, title, Global Ref, agent session id,
+zmx name and project, and ends with a pointer to `$ghostex-agents`: paste it
+into another agent's chat and mention that skill, and the agent can message or
+read that session. `ghostex sessions --json` prints the same short facts for
+every session, plus its project id and status; add `--full` for everything
+Ghostex knows about each one.
 On older versions without `agents`, use the existing commands below.
 
 Cross-agent orchestration also works through the `$ghostex-cli` skill. For
@@ -1389,6 +1409,12 @@ docs directory), `hideProjectHeaderDiffStats`,
   online they are downloaded from the Ghostex GitHub repository, so skill fixes
   arrive between releases, and installed skills are refreshed automatically
   each time Ghostex starts. Offline installs use the copy inside the app.
+  Its Desktop control section installs Trycua. Once Trycua is installed, its
+  row shows an update button when a newer release is out (on a Mac), or a
+  check mark when it is up to date (click it to check again), a reinstall
+  button that runs the official installer again, and an uninstall button
+  that removes Trycua but keeps its Accessibility and Screen Recording
+  permissions. Hover them to see the installed and latest versions.
 - The header's ⋯ menu holds Ask Ghostex, Tips & Tricks, Resources, Dev
   servers, Extensions and Customize. Each of the first five opens a panel
   under the ⋯ button that closes when you click away. Ask Ghostex, Tips &
@@ -1445,25 +1471,31 @@ the default starts on the custom colour. The accent color (status highlights,
 accent text, advanced-setting markers) has no setting of its own: it follows the
 dark theme's tint hue, and a neutral tint keeps the sky-blue accent.
 Window glass lets the blurred desktop show through the sidebar, the work area,
-terminals, and chat on macOS and Windows. The Transparency group's Enable
-transparency switch turns it on (glass in dark mode, the default) or off, and
+terminals, and chat on macOS and Windows, and menus and most dialogs (Rename
+Session, Quick Access and the like) turn frosted to match. The Transparency group's Enable
+transparency switch turns it on (Dark only, the default) or off, and
 Strength (0 to 100) sets how see-through it is. More transparency options goes
 in the order you decide: 1 what shows behind the glass, 2 the pictures or videos,
-3 their position, then Fine-tune the tints and Use transparency (Automatic, which
-is dark mode only, Always, or Never).
+3 their position, then Fine-tune the tints and Use transparency (Dark only,
+Always, or Never). With Dark only, light mode stays opaque, so the light-mode
+picture, video and tints are hidden until Always is picked.
 Docs, Kanban, the browser, and the code editor stay opaque. Turning on Reduce
 transparency in the macOS accessibility settings, or turning off Transparency effects
 in Windows Settings > Personalization > Colors, always makes the window opaque. On
 Windows, turning glass on takes effect the next time Ghostex starts, the corners of
 menus and pop-ups follow Windows' own rounding, and notifications keep solid cards.
-What shows behind the glass (macOS only) is four cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Video plays a muted, looping, blurred video behind the glass, one for dark mode and one for light mode (Video for dark mode and Video for light mode): pick an aerial wallpaper your computer has already downloaded (download more by choosing them in System Settings > Wallpaper), or Choose a file… for a .mov or .mp4 video. The video pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassVideoOnlyOnPower`).
+What shows behind the glass (macOS only) is five cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Video plays a muted, looping, blurred video behind the glass, one for dark mode and one for light mode, shown at the top of a gallery: Ghostex videos are 5-minute loops made for the glass (hover a card to preview it, press Get to download it, about 5 to 9 MB each, then Use it in dark mode, light mode or both; a new video carries a New badge for a week, and its dark or light tag is only a suggestion); one video comes with Ghostex and works offline; On this computer lists the aerial wallpapers your computer has already downloaded (download more by choosing them in System Settings > Wallpaper); Your files chooses a .mov or .mp4 video. Manage downloads shows the space downloaded videos take and removes them; while offline only videos already on this computer can be picked. The video pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. Live draws a calm animated background behind the glass in your theme's colours, so switching themes or Colourfulness recolours it at once: pick one of eight styles (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh) for dark mode and one for light mode (only dark mode with Use transparency set to Dark only), set how fast it moves with Speed (a quarter of its pace to twice as fast) and how bright it glows with Brightness (45% by default, a subtle glow; every style is about as bright as the others at the same setting). It loops every two minutes without a seam, and changing the style, theme or brightness fades rather than jumping. Nothing is downloaded, and it pauses under the same rules as the video, including Play only when plugged in; Reduce Motion shows a still frame. For Wallpaper, Picture and Video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassVideoOnlyOnPower`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassLiveSpeed`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
 Keep Awake (Power)
 prevents sleep while agents work.
 Advanced holds Enable Experimental Features. The separate Debugging page sits
-above About and starts with Show debug UI controls. Enable that switch to see
-diagnostic logging scenarios, session context-menu debugging controls, Storage
-usage, and Ghostex folder storage. Storage usage lists browser space by feature
+above About and starts with Show debug UI controls. Enable that switch to add
+Copy Resume and Copy Attach to session menus and to see Diagnostic logs, Storage
+usage, and Ghostex folder storage. Diagnostic logs has one switch per area
+(terminals, sidebar, chat, modals, board, remote machines, agent activity,
+prompt editor, app lifecycle, server requests) and one Turn logs off after
+choice (15 min, 1 hour, or Never) shared by all of them; warnings, errors, and
+crashes are always captured. Storage usage lists browser space by feature
 and can clear disposable caches; unsaved drafts and pending work are protected.
 Ghostex folder storage shows on-disk folder sizes with Refresh and Open Folder.
 Both storage panels load only while debug controls are enabled on that page.
