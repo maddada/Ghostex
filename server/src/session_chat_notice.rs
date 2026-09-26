@@ -1680,6 +1680,7 @@ fn notice_from_picker(
     picker: crate::session_chat_resume_prompt::SessionChatTerminalPicker,
 ) -> SessionChatTerminalNotice {
     use crate::session_chat_resume_prompt::SessionChatTerminalPickerKind;
+    let picker = picker.with_catalog_model_names();
     let guidance =
         "Claude Code accepts no input until this is answered. Pick an option to answer it here.";
     let detail = match picker.detail.as_deref() {

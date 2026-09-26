@@ -103,6 +103,20 @@ pub fn catalog_model(agent: &str, value: &str) -> Option<Value> {
         .find(|row| row.get("value").and_then(Value::as_str) == Some(value))
 }
 
+/// The catalog's own name for a model the terminal printed with a " (1M context)" suffix, when
+/// that suffix tells no two catalog rows apart: "Opus 5.5 (1M context)" is the one `opus[1m]` row
+/// labelled "Opus 5.5". A model offered in both context sizes keeps its suffix (`None`).
+pub fn long_context_label(agent: &str, name: &str) -> Option<String> {
+    let base = name.trim().strip_suffix(" (1M context)")?;
+    let values: Vec<String> = agent_models(&current(), agent)
+        .into_iter()
+        .filter(|row| row.get("label").and_then(Value::as_str) == Some(base))
+        .filter_map(|row| row.get("value").and_then(Value::as_str).map(str::to_string))
+        .collect();
+    (!values.is_empty() && values.iter().all(|value| value.ends_with("[1m]")))
+        .then(|| base.to_string())
+}
+
 /// The dispatch value of the row whose `label`, `pickerLabel` or one of its
 /// `terminalLabels` is exactly `name`, the way the agent's footer prints it.
 pub fn model_value_for_label(agent: &str, name: &str) -> Option<String> {

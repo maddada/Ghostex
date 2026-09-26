@@ -258,6 +258,30 @@ pub struct SessionChatTerminalPicker {
 
 impl SessionChatTerminalPicker {
     /*
+    CDXC:SessionChat 2026-09-26 DECISION:
+    User: "no need to say (1M context) for Opus 5.5, just keep it Opus 5.5" on the chat's model switch card.
+    The card names the model the way the model catalog labels it, and a model the catalog offers in both context sizes keeps Claude's suffix.
+    Only the card's copy changes: rows are answered by index against a fresh capture, and the /model job matches the raw rows.
+    */
+    pub fn with_catalog_model_names(mut self) -> Self {
+        if self.kind != SessionChatTerminalPickerKind::SwitchModel {
+            return self;
+        }
+        let Some((printed, short)) = self.rows.iter().find_map(|row| {
+            let printed = row.label.strip_prefix(SWITCH_CONFIRM_YES_PREFIX)?;
+            let short = crate::agent_model_catalog::long_context_label("claude", printed)?;
+            Some((printed.to_string(), short))
+        }) else {
+            return self;
+        };
+        for row in &mut self.rows {
+            row.label = row.label.replace(&printed, &short);
+        }
+        self.detail = self.detail.map(|detail| detail.replace(&printed, &short));
+        self
+    }
+
+    /*
     The keystrokes that pick row `target`. For the number-driven pickers that
     is the row's printed number, as one digit. For the permission prompt it is
     the arrow walk from the highlighted row to `target` followed by Enter (see
