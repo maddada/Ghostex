@@ -15,6 +15,8 @@ use std::time::Duration;
 #[path = "session_chat_provider_model_picker.rs"]
 mod provider_model_picker;
 pub(crate) use provider_model_picker::run_provider_model_picker_job;
+#[path = "session_chat_claude_effort_slider.rs"]
+mod claude_effort_slider;
 #[path = "session_chat_selection_options.rs"]
 mod selection_options;
 
@@ -229,6 +231,7 @@ fn advanced_effort_picker_rows(screen: &str) -> Option<Vec<PickerRow>> {
 
 fn any_picker_open(screen: &str) -> bool {
     claude_model_picker_open(screen)
+        || claude_effort_slider::claude_effort_slider_open(screen)
         || screen_lines(screen).iter().any(|line| {
             line == CODEX_MODEL_PICKER_TITLE
                 || line.starts_with(CODEX_EFFORT_PICKER_TITLE_PREFIX)
@@ -815,19 +818,16 @@ impl PickerDriver<'_> {
                 "Waiting for the text in Claude's terminal input to be sent or cleared.",
             ));
         }
-        let selection = detect_session_chat_selection(SessionChatOptionAgent::Claude, &screen);
-        let applied = |field: Option<&crate::session_chat_options::SessionChatDetectedChoice>,
-                       value: &str| {
-            value.is_empty() || field.is_some_and(|choice| choice.value == value)
+        let (model, effort) = claude_effort_slider::claude_live_selection(plan, &screen);
+        let applied = |current: Option<&String>, value: &str| {
+            value.is_empty() || current.is_some_and(|current| current == value)
         };
-        if applied(
-            selection.as_ref().and_then(|state| state.model.as_ref()),
-            &plan.model,
-        ) && applied(
-            selection.as_ref().and_then(|state| state.effort.as_ref()),
-            &plan.effort,
-        ) {
+        let model_applied = applied(model.as_ref(), &plan.model);
+        if model_applied && applied(effort.as_ref(), &plan.effort) {
             return Ok(());
+        }
+        if model_applied {
+            return self.drive_claude_effort_session_only(&plan.effort).await;
         }
 
         self.write(&crate::session_chat_send::build_session_chat_paste_bytes(
@@ -974,7 +974,13 @@ impl PickerDriver<'_> {
                 self.cancel_dialog().await;
                 if let Some(screen) = self.capture().await {
                     if crate::session_chat_composer::claude_composer_input_text(&screen)
-                        .is_some_and(|text| text.trim() == CLAUDE_MODEL_COMMAND)
+                        .is_some_and(|text| {
+                            [
+                                CLAUDE_MODEL_COMMAND,
+                                claude_effort_slider::CLAUDE_EFFORT_COMMAND,
+                            ]
+                            .contains(&text.trim())
+                        })
                     {
                         let _ = self
                             .write(crate::session_chat_send::AGENT_TUI_CLEAR_INPUT_LINE)
@@ -1010,15 +1016,9 @@ impl PickerDriver<'_> {
             }
             // CDXC:SessionChat 2026-09-15 WHY:
             // The effort picker sends the model too. Reapplying an unchanged model added a complete command/confirmation round trip before every effort change, and retries repeated already-applied work.
-            let selection = detect_session_chat_selection(SessionChatOptionAgent::Claude, &screen);
-            let current = selection.as_ref().and_then(|selection| {
-                if field == "model" {
-                    selection.model.as_ref()
-                } else {
-                    selection.effort.as_ref()
-                }
-            });
-            if current.is_some_and(|choice| choice.value == value) {
+            let (model, effort) = claude_effort_slider::claude_live_selection(plan, &screen);
+            let current = if field == "model" { model } else { effort };
+            if current.as_deref() == Some(value) {
                 continue;
             }
             let command = format!("/{field} {value}");
