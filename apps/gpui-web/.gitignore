@@ -2,5 +2,4 @@ target/
 www/src/wasm/
 www/dist/
 www/node_modules/
-www/public/chat-runtime.js
 www/public/service-runtime.js

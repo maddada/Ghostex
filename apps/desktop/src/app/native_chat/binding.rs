@@ -3,7 +3,7 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /// CDXC:SessionChat 2026-09-21 DECISION:
-    /// User: "remove the ability to switch between GPUI chat view and the React chat view in the settings, and take out the React chat view completely from the GPUI app". Desktop chat is GPUI only, superseding the 2026-09-17 GPUI/React toggle; React chat remains for web and mobile.
+    /// User: "remove the ability to switch between GPUI chat view and the React chat view in the settings, and take out the React chat view completely from the GPUI app". Desktop chat is GPUI only, superseding the 2026-09-17 GPUI/React toggle.
     pub(crate) fn ensure_native_chat(
         &mut self,
         session_id: TerminalSessionId,
@@ -53,11 +53,10 @@ impl GhostexGpuiApp {
             sidebar_session_id,
             shell_session_id: session_id,
             app: Some(cx.weak_entity()),
-            preview: None,
             parent_native_view: self.parent_ns_view,
             client_id: format!("native-desktop-{}", std::process::id()),
             remote,
-            initial_snapshot: self.cached_session_chat_runtime_snapshot(Some(&key)),
+            initial_snapshot: None,
             initial_presentation: self.initial_session_chat_presentation(Some(&key)),
         };
         if let Some(view) = existing {
@@ -89,16 +88,9 @@ impl GhostexGpuiApp {
         let subscription =
             cx.subscribe(
                 &view,
-                move |this, view, event: &NativeChatEvent, cx| match event {
+                move |this, _view, event: &NativeChatEvent, cx| match event {
                     NativeChatEvent::Broker(message) => {
-                        let mut message = message.clone();
-                        message["clientId"] = view.read(cx).config.client_id.clone().into();
-                        message["requestId"] = message["id"]
-                            .as_u64()
-                            .map(|id| id.to_string())
-                            .unwrap_or_default()
-                            .into();
-                        this.relay_session_chat_runtime_request(generation, &message, cx);
+                        this.relay_session_chat_runtime_request(generation, message);
                     }
                     NativeChatEvent::ComposerFocused => {
                         this.reclaim_gpui_root_for_chrome_input_focus();

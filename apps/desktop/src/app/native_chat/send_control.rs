@@ -35,9 +35,9 @@ impl NativeChatView {
     /// Pressing a blocked Send: the reason is a native toast, never a read-only composer.
     ///
     /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-    /// The request comes from `packages/shared/session-chat-presentation/send-blocked.ts`, so this
-    /// raises exactly the toast React raises over the app-modal bridge
-    /// (`session-chat-send-blocked-toast.tsx`, the user's 2026-09-03 decision).
+    /// The request comes from the core (`send_blocked_toast_request` in
+    /// packages/gx-chat-core/src/composer/policy.rs), the toast React raised over the app-modal
+    /// bridge (`session-chat-send-blocked-toast.tsx`, the user's 2026-09-03 decision).
     pub(super) fn report_send_blocked(&mut self, reason: &str, cx: &mut Context<Self>) {
         let request = self.runtime.as_ref().and_then(|runtime| {
             runtime.query(
@@ -83,7 +83,7 @@ impl NativeChatView {
                 || self.snapshot["pendingAttachments"].as_u64().unwrap_or(0) > 0
         };
         let blocked = !stop && self.snapshot["sendBlockedReason"].is_string();
-        // Matches React's Send label: the gesture hints appear only while the draft can queue.
+        // As React's Send label did: the gesture hints appear only while the draft can queue.
         let label: gpui::SharedString = if stop {
             "Stop the agent".into()
         } else if has_draft && self.snapshot["queue"]["capabilities"]["canQueue"] == true {

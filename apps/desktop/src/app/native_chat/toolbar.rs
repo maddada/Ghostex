@@ -6,6 +6,9 @@ use gpui::{
 };
 use serde_json::{Value, json};
 
+/// CDXC:SessionChat 2026-09-11 DECISION:
+/// User: show Summary mode between More actions and Session note when there is room; keep it in More actions in the compact toolbar.
+/// This order is also the order controls fold into More actions.
 pub(super) const COMPOSER_CONTROLS: [(&str, &str, &str, &str); 6] = [
     (
         "summary",
@@ -47,8 +50,8 @@ impl NativeChatView {
             .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
     }
 
-    /// React renders each of these controls only when the host handed it the handler
-    /// (`onSessionNote`, `onStash`, `onAttach`, the Terminal View switch); the shared host projects
+    /// React rendered each of these controls only when the host handed it the handler
+    /// (`onSessionNote`, `onStash`, `onAttach`, the Terminal View switch); the core projects
     /// the same answer under `composerActions` so a control that cannot do anything is not drawn.
     pub(super) fn composer_control_available(&self, id: &str) -> bool {
         let actions = &self.snapshot["composerActions"];
@@ -94,7 +97,7 @@ impl NativeChatView {
             }
             let icon = match id {
                 "maximize" if self.maximized_window.is_some() => "titlebar/minimize.svg",
-                // React swaps the Summary glyph with the mode, the way the More actions row does.
+                // The Summary glyph swaps with the mode, the way the More actions row does.
                 "summary" if self.snapshot["summaryMode"] == true => "titlebar/list-check.svg",
                 _ => icon,
             };
@@ -144,8 +147,8 @@ impl NativeChatView {
                             return;
                         }
                         chat.composer_measurements = Some(measurements.clone());
-                        // Geometry is available before the session is. Use the same fit rules as
-                        // React immediately, including while the controller is still booting.
+                        // Geometry is available before the session is. Apply the fit rules
+                        // immediately, including while the controller is still booting.
                         if let Ok(measured) = serde_json::from_value(measurements.clone()) {
                             let fit = ghostex_gx_chat_core::composer::layout::fit_composer_controls(
                                 &measured,

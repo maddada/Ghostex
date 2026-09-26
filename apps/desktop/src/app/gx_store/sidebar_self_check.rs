@@ -105,7 +105,7 @@ impl GhostexGpuiApp {
         );
         let ui = self.gx_store.sidebar_ui.counters;
         self.gx_store.diagnostics.sidebar_ui_summary(&ui);
-        // The runtime facts channel rides the same path, and for the same reason: its counters are
+        // The runtime facts holder rides the same path, and for the same reason: its counters are
         // what says it is alive (gx_store/diagnostics_runtime_facts.rs).
         let runtime_facts = self.gx_store.runtime_facts.counters;
         let runtime_route = self.gx_store.runtime_route;

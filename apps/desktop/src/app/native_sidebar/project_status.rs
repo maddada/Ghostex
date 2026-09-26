@@ -14,6 +14,7 @@ pub(crate) fn project_status(
     let count = |key: &str| group.summary[key].as_u64().unwrap_or_default();
     let working = count("workingCount");
     let attention = count("attentionCount");
+    let background_work = count("backgroundWorkCount");
     let awake = count("awakeCount");
     if group.collapsed && (working > 0 || attention > 0 || awake > 0) {
         let count_badge = |count: u64, color, dot: bool| {
@@ -38,6 +39,13 @@ pub(crate) fn project_status(
                 })
                 .when(attention > 0, |row| {
                     row.child(count_badge(attention, rgb(0x95d7f6), true))
+                })
+                .when(working == 0 && background_work > 0, |row| {
+                    row.child(count_badge(
+                        background_work,
+                        super::status::background_work_color(),
+                        true,
+                    ))
                 })
                 .when(working == 0 && attention == 0 && awake > 0, |row| {
                     row.child(count_badge(awake, rgb(0xaaaaaa), false))

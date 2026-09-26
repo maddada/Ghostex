@@ -63,7 +63,7 @@ pub(super) fn sidebar_free_width_tooltip(
 }
 
 /**
-CDXC:Sidebar 2026-09-23 DECISION: User: the session tooltip, a flat near-black box on the tinted glass sidebar, should "look more fitting". It takes the sidebar menus' shape (8px corners, the menus' soft ink outline and tinted menu colour), and under window glass that colour is slightly see-through so the frosted sidebar's tint carries into it; it stays nearly opaque because an in-window tooltip cannot blur the rows beneath it. The first line (the title) reads as the heading; the state and id lines beneath it are smaller, muted and cut short on one line each.
+CDXC:Sidebar 2026-09-23 DECISION: User: the session tooltip, a flat near-black box on the tinted glass sidebar, should "look more fitting". It takes the sidebar menus' shape (8px corners, the menus' soft ink outline and tinted menu colour), and under window glass it is frosted: on macOS it draws in the frosted tooltip host with the frosted menus' fill and corners (2026-09-25, app/window/frosted_host.rs); where it stays in the window it is only slightly see-through, because an in-window tooltip cannot blur the rows beneath it. The first line (the title) reads as the heading; the state and id lines beneath it are smaller, muted and cut short on one line each.
 */
 fn sidebar_tooltip_sized(
     text: String,
@@ -76,10 +76,21 @@ fn sidebar_tooltip_sized(
     let card_width = (span.right - span.left).max(0.0);
     let content_width = px((card_width - 16.0 * scale - 2.0).max(0.0));
     let menu = titlebar_popup_menu_background();
-    let background = if window_glass_active_in(window) {
+    // Under glass the tooltip draws in the frosted tooltip host, so it takes the frosted menus' fill
+    // and the host's bubble corners (see app/window/frosted_host.rs).
+    let frosted = window_glass_active_in(window)
+        && crate::app::window::frosted_host::frosted_hosting_active();
+    let background = if frosted {
+        crate::app::helpers::frosted_menu_fill(menu)
+    } else if window_glass_active_in(window) {
         menu.opacity(0.9)
     } else {
         menu
+    };
+    let radius = if frosted {
+        px(gpui_component::tooltip::FROSTED_TOOLTIP_RADIUS)
+    } else {
+        px(8.0 * scale)
     };
     let secondary = titlebar_popup_menu_foreground().opacity(0.6);
     Tooltip::element(move |_, _| {
@@ -116,7 +127,7 @@ fn sidebar_tooltip_sized(
     .mb_0()
     .py(px(7.0 * scale))
     .px(px(9.0 * scale))
-    .rounded(px(8.0 * scale))
+    .rounded(radius)
     .bg(background)
     .border_color(titlebar_popup_menu_border_color())
     .build(window, cx)

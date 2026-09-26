@@ -2,7 +2,7 @@
 //! other families read.
 //!
 //! `computeSessionChatSkills` and `computeSessionChatFiles`
-//! (`packages/shared/session-chat-controller/skills.ts` and `files.ts`) are `useEffect`
+//! (`packages/shared/session-chat-controller/skills.ts` and `files.ts`) were `useEffect`
 //! bookkeeping: the skills list is read once per agent and re-read when the agent changes, the
 //! file list once per chat. The core has no render pass, so the same decision runs here, once per
 //! event.
@@ -159,7 +159,7 @@ fn settle_returned_claim(
 /// 'restoreReturned', returned: chat.returnedPrompt }) }, [chat.returnedPrompt?.id])`.
 ///
 /// The brain dispatches the action to itself, so no renderer ever sends it; without this the core
-/// never claimed a returned prompt, and the live brain's `claimReturned` round trip answered
+/// never claimed a returned prompt, and the TypeScript brain's `claimReturned` round trip answered
 /// nothing the core had asked for.
 pub fn restore_returned_effect(
     state: &mut ChatState,
@@ -261,6 +261,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
         _ => {}
     }
     effects.extend(request_catalogs(state));
+    effects.extend(crate::composer::draft_sync::settle(state));
     // The two latches `NativeComposerChrome.projection` sets on the way to its answer. They live
     // here because `document()` holds `&ChatState` and could only set them on a clone.
     let note_open = state.composer.note.open;
@@ -305,7 +306,7 @@ fn adopt_boot_read(state: &mut ChatState, read: &ComposerBootRead) {
     state.transcript_view.verbose_override = read.verbose_override.as_bool();
 }
 
-/// `requestSkills()`, which is `load()` in `packages/shared/session-chat-controller/skills.ts:36`.
+/// `requestSkills()`, which was `load()` in `packages/shared/session-chat-controller/skills.ts:36`.
 ///
 /// CDXC:AgentSkills 2026-09-22 WHY:
 /// The guard is `loading || loaded`, and `loaded` is set only after a read SUCCEEDS

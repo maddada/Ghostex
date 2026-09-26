@@ -47,6 +47,5 @@ if (!existsSync(path.join(prefix, 'lib/libghostty-vt.a'))) {
     '-Demit-xcframework=false', '-Doptimize=ReleaseSmall', '-Dtarget=wasm32-freestanding', '--prefix', prefix], ghostty);
 }
 run('cargo', ['build', '--target', 'wasm32-unknown-unknown', ...(release ? ['--release'] : [])]);
-run('bun', ['tooling/build-chat-runtime.mjs', 'apps/gpui-web/www/public/chat-runtime.js'], repo);
 run('wasm-bindgen', [`target/wasm32-unknown-unknown/${release ? 'release' : 'debug'}/ghostex_gpui_web.wasm`,
   '--out-dir', 'www/src/wasm', '--target', 'web', '--no-typescript']);

@@ -144,7 +144,8 @@ impl GhostexGpuiApp {
             }),
         };
         let drop_position = self.native_sidebar_drop_position("targetSpaceId", &id);
-        let has_status = space.working_count > 0 || space.attention_count > 0;
+        let has_status =
+            space.working_count > 0 || space.attention_count > 0 || space.background_work_count > 0;
         let icon = gpui::svg()
             .path(path)
             .size(px(16.0 * scale))
@@ -162,10 +163,9 @@ impl GhostexGpuiApp {
             .hover(|row| row.bg(appearance.hover))
             .child(icon)
             .children(drop_position.map(|position| super::space_drag::insertion_line(position, scale)))
-            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots (8px working, 7px attention). This supersedes the numbered-badge styling requested earlier today.
-            .when(has_status, |row| row.child(h_flex().absolute().top(px(20.5 * scale)).left_0().w_full().justify_center().gap(px(2.0 * scale)).h(px(11.0 * scale))
-                .when(space.working_count > 0, |row| row.child(div().size(px(8.0 * scale)).flex_shrink_0().rounded_full().bg(rgb(super::status::WORKING_COLOR))))
-                .when(space.attention_count > 0, |row| row.child(div().size(px(7.0 * scale)).flex_shrink_0().rounded_full().bg(rgb(0x95d7f6))))))
+            // CDXC:Spaces 2026-09-22 DECISION: User: remove the numbers for now and match the dots exactly to the session card status dots. The 2026-09-25 overlap layout lives on `status_dot_stack`.
+            .when(has_status, |row| row.child(h_flex().absolute().top(px(20.5 * scale)).left_0().w_full().justify_center().h(px(11.0 * scale))
+                .child(super::status::status_dot_stack(space.working_count, space.attention_count, space.background_work_count, scale))))
             .when(self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.managed_discrete_tooltip_with_placement(tooltip_span.placement(), appearance.tooltip_delay, move |window, cx| super::tooltips::sidebar_free_width_tooltip(name.to_string(), tooltip_span, scale, window, cx)))
             .when(id != "other", |row| row.sidebar_drag_source(dragged, cx))
             .sidebar_drop_target("space", drag_id, None, cx)

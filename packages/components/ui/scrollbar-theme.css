@@ -13,7 +13,6 @@
  */
 :is([data-sidebar-theme='plain-light'], [data-sidebar-theme^='light-']),
 [data-chat-theme='light'],
-body[data-session-chat-theme='light'] .ghostex-session-chat-popup:not([data-chat-theme]),
 .monaco-editor.vs,
 [data-app-scrollbar-theme='light'] {
   --gx-scrollbar-thumb: var(--gx-scrollbar-thumb-light);
@@ -21,7 +20,6 @@ body[data-session-chat-theme='light'] .ghostex-session-chat-popup:not([data-chat
 
 :is([data-sidebar-theme='plain-dark'], [data-sidebar-theme^='dark-']),
 [data-chat-theme='dark'],
-body[data-session-chat-theme='dark'] .ghostex-session-chat-popup:not([data-chat-theme]),
 .monaco-editor:is(.vs-dark, .hc-black),
 [data-app-scrollbar-theme='dark'] {
   --gx-scrollbar-thumb: var(--gx-scrollbar-thumb-dark);

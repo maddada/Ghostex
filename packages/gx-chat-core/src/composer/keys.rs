@@ -1,14 +1,15 @@
 //! What a keystroke on the chat background means for the composer.
 //!
 //! Port of `packages/shared/session-chat-presentation/native-composer-keys.ts` together with the
-//! two shared rule files it asks, `packages/core-ui/chat/session-chat-caret-navigation.ts` and
+//! two shared rule files it asked, `packages/core-ui/chat/session-chat-caret-navigation.ts` and
 //! `session-chat-edit-shortcuts.ts`.
 //!
 //! CDXC:SessionChat 2026-09-18 WHY:
-//! `detectghostexHotkeyPlatform` reads `navigator`, which the chat runtime does not have, so the
-//! shared editing rules always answer as macOS there. On Windows and Linux the primary modifier is
-//! Control, which under the macOS answer is also the terminal-chord modifier: ask twice, once as
-//! Control (Ctrl+U/K/Y/A/E) and once as the primary chord, instead of forking the rules themselves.
+//! `detectghostexHotkeyPlatform` read `navigator`, which the QuickJS chat runtime did not have, so
+//! the shared editing rules always answered as macOS there. On Windows and Linux the primary
+//! modifier is Control, which under the macOS answer is also the terminal-chord modifier: ask
+//! twice, once as Control (Ctrl+U/K/Y/A/E) and once as the primary chord, instead of forking the
+//! rules themselves.
 
 use serde::{Deserialize, Serialize};
 

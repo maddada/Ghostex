@@ -117,6 +117,18 @@ pub(crate) struct RemoteClients {
 }
 
 impl RemoteClients {
+    /// Asks that machine's client for a full snapshot, on its live socket or with its next connect.
+    /// A machine with no client (not connected) has nothing to ask.
+    pub(crate) fn request_full_snapshot(&self, machine_id: &str) {
+        if let Some(client) = self
+            .clients
+            .get(machine_id)
+            .and_then(|remote| remote.client.as_ref())
+        {
+            client.request_resubscribe();
+        }
+    }
+
     /// The machine tabs. Empty until the first reconcile, which is the moment before the app has
     /// read its settings.
     pub(crate) fn tabs(&self) -> &[MachineTabInput] {
@@ -185,6 +197,8 @@ impl GxStoreHost {
                     self.counters.client_diagnostics += 1;
                     self.diagnostics.client_diagnostic(&diagnostic);
                 }
+                // Never produced: a remote machine's client does not register (see its config).
+                ClientOutput::RendererCommand(_) => {}
             }
         }
         self.remote.counters.events += events.len() as u64;
@@ -212,8 +226,6 @@ impl GxStoreHost {
             self.diagnostics.remote_machine_loaded(&self.core, &machine);
         }
         self.run_effects(output.effects);
-        // A remote frame can be exactly what a pending remote tab-list difference was waiting for.
-        self.settle_shadow_diff();
         (thread_ended, true)
     }
 
@@ -643,6 +655,8 @@ impl GhostexGpuiApp {
                 client_id: format!("ghostex-gpui-store:{machine_id}"),
                 held_revision,
                 forward_chat_frames: false,
+                // The renderer-command target is this computer's own store socket only.
+                renderer_commands: false,
             },
             move || {
                 let _ = wake.unbounded_send(());
@@ -700,6 +714,11 @@ impl GhostexGpuiApp {
         // A wake whose drain came back empty (the thread woke the host and the host had already
         // drained it) has nothing for the list to read.
         if applied {
+            // A remote project's workspace follows its machine's frames the way this computer's
+            // follows the local ones (focus_publish.rs).
+            if self.gx_store_after_pump(true, cx) {
+                cx.notify();
+            }
             self.gx_store_update_sidebar_list(cx);
             // The rows this machine's tab draws are also the copy the NEXT run seeds from while it
             // is offline, so every frame that moves them owes the stored key an update

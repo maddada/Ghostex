@@ -5,16 +5,16 @@ use gpui::{
 use std::{cell::RefCell, collections::HashSet, time::Duration};
 use web_time::Instant;
 
-/// CDXC:SessionChat 2026-09-23 WHY:
-/// gpui redraws a view for every animation frame, and since 2026-09-18 the repeating indicators (chat working strip, machine tabs, the sidebar's empty state) advanced on one shared timer at about seven frames per second because each frame re-laid out every visible markdown view. That made the compaction bar and the spinners visibly step.
-/// The chat's transcript is now a cached view that an indicator frame leaves alone (native_chat/transcript_host.rs), so a view that registers through `render_indicators_at_display_rate` gets one frame per display refresh, notified alone rather than through a window refresh that would also rebuild every other pane. Views that did not register, which includes the transcript itself when a row carries a spinner, keep a shared timer, now at thirty frames per second since a frame no longer reshapes unchanged text (inline_flow.rs keeps its flows).
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// Every repeating indicator (chat working strip, spinners, machine tabs, the sidebar's empty state) advances on one shared thirty-frames-per-second timer. Supersedes the 2026-09-23 display-rate path for the chat: notifying one view still marks its ancestors dirty and the uncached window root renders on every draw, so each chat indicator frame rebuilt the whole window at 120 Hz on ProMotion displays and kept the main thread saturated for as long as an agent worked.
+/// A view that registers through `render_indicator_frames_animation_only` keeps its cached content (the chat's transcript, native_chat/transcript_host.rs) on those frames; the others render whole. Seven frames per second (before 2026-09-23) made the compaction bar and spinners visibly step, so do not lower the rate below thirty.
 /// SEE-ALSO: apps/desktop/src/app/native_chat/transcript_host.rs, apps/desktop/src/app/native_chat/render.rs, apps/desktop/src/app/native_sidebar/machines.rs.
 pub(crate) const INDICATOR_FRAME_INTERVAL: Duration = Duration::from_millis(33);
 
 thread_local! {
-    /// Views whose indicators advance every display frame instead of on the shared timer.
-    static DISPLAY_RATE_VIEWS: RefCell<HashSet<EntityId>> = RefCell::new(HashSet::new());
-    /// Views that already have a display-rate frame scheduled.
+    /// Views whose indicator frames leave their cached content alone.
+    static ANIMATION_ONLY_VIEWS: RefCell<HashSet<EntityId>> = RefCell::new(HashSet::new());
+    /// Views that already have an animation-only frame scheduled.
     static FRAME_TICKS_PENDING: RefCell<HashSet<EntityId>> = RefCell::new(HashSet::new());
     /// Views whose coming render was asked for by an indicator frame and by nothing else.
     static ANIMATION_ONLY_RENDERS: RefCell<HashSet<EntityId>> = RefCell::new(HashSet::new());
@@ -22,10 +22,10 @@ thread_local! {
     static TIMER_FRAMES_PENDING: RefCell<Vec<(WindowId, HashSet<EntityId>)>> = RefCell::new(Vec::new());
 }
 
-/// Lets the view being rendered advance its indicators every display frame; call it from that
-/// view's render. Only a view whose frame stays cheap when nothing but an indicator changed should.
-pub(crate) fn render_indicators_at_display_rate(view: EntityId) {
-    DISPLAY_RATE_VIEWS.with_borrow_mut(|views| {
+/// Lets the view being rendered keep what it draws cached on its indicator frames; call it from
+/// that view's render. Only a view whose frame stays cheap when nothing but an indicator changed should.
+pub(crate) fn render_indicator_frames_animation_only(view: EntityId) {
+    ANIMATION_ONLY_VIEWS.with_borrow_mut(|views| {
         views.insert(view);
     });
 }
@@ -39,32 +39,47 @@ pub(crate) fn take_animation_only_render(view: EntityId) -> bool {
 /// Schedules the next indicator frame for the view being rendered.
 pub(crate) fn request_indicator_frame(window: &mut Window, cx: &mut App) {
     let view = window.current_view();
-    if DISPLAY_RATE_VIEWS.with_borrow(|views| views.contains(&view)) {
-        request_display_frame(view, window);
+    if ANIMATION_ONLY_VIEWS.with_borrow(|views| views.contains(&view)) {
+        request_animation_only_frame(view, window, cx);
     } else {
         request_timer_frame(view, window, cx);
     }
 }
 
-fn request_display_frame(view: EntityId, window: &mut Window) {
+fn request_animation_only_frame(view: EntityId, window: &mut Window, cx: &mut App) {
     if !FRAME_TICKS_PENDING.with_borrow_mut(|pending| pending.insert(view)) {
         return;
     }
-    // Runs before the next draw, in its own update, so nothing can notify `view` between the
-    // check below and the render it asks for.
-    window.on_next_frame(move |window, cx| {
-        FRAME_TICKS_PENDING.with_borrow_mut(|pending| {
-            pending.remove(&view);
+    let handle = window.window_handle();
+    cx.spawn(async move |cx| {
+        cx.background_executor()
+            .timer(INDICATOR_FRAME_INTERVAL)
+            .await;
+        let scheduled = handle.update(cx, |_, window, _| {
+            // Runs before the next draw, in its own update, so nothing can notify `view` between
+            // the check below and the render it asks for.
+            window.on_next_frame(move |window, cx| {
+                FRAME_TICKS_PENDING.with_borrow_mut(|pending| {
+                    pending.remove(&view);
+                });
+                // A flag the view does not consume (it left the tree before this draw) is
+                // harmless: the cached transcript's element state goes with it, and the next draw
+                // renders it whole.
+                if !window.view_is_pending_render(view) {
+                    ANIMATION_ONLY_RENDERS.with_borrow_mut(|views| {
+                        views.insert(view);
+                    });
+                }
+                cx.notify(view);
+            });
         });
-        // A flag the view does not consume (it left the tree before this draw) is harmless: the
-        // cached transcript's element state goes with it, and the next draw renders it whole.
-        if !window.view_is_pending_render(view) {
-            ANIMATION_ONLY_RENDERS.with_borrow_mut(|views| {
-                views.insert(view);
+        if scheduled.is_err() {
+            FRAME_TICKS_PENDING.with_borrow_mut(|pending| {
+                pending.remove(&view);
             });
         }
-        cx.notify(view);
-    });
+    })
+    .detach();
 }
 
 fn request_timer_frame(view: EntityId, window: &mut Window, cx: &mut App) {

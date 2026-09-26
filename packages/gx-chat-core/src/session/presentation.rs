@@ -2,9 +2,9 @@
 //!
 //! Ported from `packages/core-ui/chat/session-chat-presentation-cache.ts` and its two writers in
 //! `packages/shared/session-chat-controller/controller.ts` (`:227` for the status line's options,
-//! `:378` for the agent identity). `native-host.ts:676` builds the store with the cache the host
-//! passed in and pushes every change back over the bridge, which the desktop host already
-//! dispatches.
+//! `:378` for the agent identity). `native-host.ts:676` built the store with the cache the host
+//! passed in and pushed every change back over the bridge; the core pushes it as
+//! [`crate::Effect::UpdatePresentation`], which the desktop host dispatches.
 //!
 //! CDXC:SessionChat 2026-09-14 DECISION:
 //! User: returning to a chat should immediately restore its account, context usage and status line,
@@ -102,7 +102,7 @@ pub fn identity_matches(
 
 /// `transport.presentation.update(...)`, run once per event over the final state.
 ///
-/// The TypeScript writes from two call sites, one per patch; the core writes from one, over the
+/// The TypeScript wrote from two call sites, one per patch; the core writes from one, over the
 /// values those patches leave behind. Two writes in one turn end at the same snapshot, and the
 /// store itself only reports a change when the serialized form moved, so the effect a host performs
 /// is identical.

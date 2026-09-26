@@ -1,4 +1,4 @@
-//! The periodic line of the runtime facts channel and of the command route that replaced the
+//! The periodic line of the runtime facts holder (once the old runtime's facts channel) and of the command route that replaced the
 //! sidebar page, in a sibling because `diagnostics.rs` is over the size ceiling and waiting for a
 //! quiet window.
 //!
@@ -44,17 +44,13 @@ impl GxStoreDiagnostics {
             "gxStore.runtimeFacts.summary",
             json!({
                 "hudPosts": counters.hud_posts,
-                "rowPosts": counters.row_posts,
-                "revealPosts": counters.reveal_posts,
                 // Held through the loading skeleton and answered once it lifted. The two move
                 // together; a held one with no replay is a reveal that was dropped.
                 "revealsHeld": counters.reveals_held,
                 "revealsReplayed": counters.reveals_replayed,
-                "unparsable": counters.unparsable,
                 // The other half of "no page in the route": what the sidebar dispatch's
                 // fall-through did with a command the store did not perform itself.
                 "runtimeRoute": {
-                    "routed": route.routed,
                     "uiOnly": route.ui_only,
                     // Above zero means a command has no owner on either side any more.
                     "unroutable": route.unroutable,
@@ -77,7 +73,7 @@ impl GxStoreDiagnostics {
         );
     }
 
-    /// A command that reached the end of the dispatch in a shape the runtime has no arm for. The
+    /// A command that reached the end of the dispatch with no owner on either side. The
     /// TYPE only, which is a fixed word from the renderer's own closed set, never the payload.
     pub(super) fn sidebar_command_unroutable(&mut self, kind: Option<&str>) {
         if self.unroutable_command_warnings >= 8 {

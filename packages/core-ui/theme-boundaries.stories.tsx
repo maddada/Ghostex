@@ -5,8 +5,6 @@ import { Button } from '@/packages/components/ui/button';
 import { Input } from '@/packages/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/packages/components/ui/popover';
 import { SegmentedControl, SegmentedControlItem } from '@/packages/components/ui/segmented-control';
-import { SessionChatActivityRow } from './chat/session-chat-activity-row';
-import { SessionChatStatusCard, SessionChatStatusCardLead } from './chat/session-chat-status-card';
 
 function ThemeBoundaries() {
   const [choice, setChoice] = useState('first');
@@ -16,29 +14,6 @@ function ThemeBoundaries() {
         <h1 className='text-xl font-semibold'>Shared theme behavior</h1>
         <p className='mt-2'>This page scrolls normally. Its text can be selected and copied.</p>
       </header>
-      <section className='grid gap-4 sm:grid-cols-2' aria-label='Chat palettes'>
-        {(['light', 'dark'] as const).map((theme) => (
-          <div
-            key={theme}
-            className={`ghostex-session-chat-scope rounded-xl bg-background p-4 text-foreground ${theme === 'dark' ? 'dark' : ''}`}
-            data-chat-theme={theme}
-          >
-            <h2 className='mb-4 font-medium'>{theme === 'light' ? 'Light chat' : 'Dark chat'}</h2>
-            <SessionChatActivityRow
-              activity={{ kind: 'compacting', label: 'Compacting conversation', detectedAt: '2026-09-13T00:00:00Z' }}
-            />
-            <SessionChatStatusCard
-              className='mt-4'
-              data-kind='preview'
-              footer={<Button variant='outline'>Open terminal</Button>}
-              lead={<SessionChatStatusCardLead icon={IconInfoCircle} />}
-              title='Message queued'
-            >
-              <p>Your message will be sent after compaction.</p>
-            </SessionChatStatusCard>
-          </div>
-        ))}
-      </section>
       <section
         className='ghostex-settings-shadcn dark grid gap-4 rounded-xl bg-background p-5'
         aria-label='Settings controls'

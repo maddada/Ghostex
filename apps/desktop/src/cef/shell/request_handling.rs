@@ -137,6 +137,72 @@ pub(crate) fn manage_docs_resource_relative_path(url: &str) -> Option<String> {
     Some(relative_path.to_string())
 }
 
+/// The file a Docs resource path names, when it lies inside a mounted Docs root that allows it.
+/// Runs off the main thread: resolving the roots reads the project's Docs directory from the daemon.
+fn resolve_manage_docs_local_resource(
+    resolve_dynamic_root: &ManageDocsDynamicRootResolver,
+    resolve_root: &ManageDocsLocalRootResolver,
+    resolved_root: &Arc<Mutex<Option<Vec<ManageDocsResourceRoot>>>>,
+    relative_path: &str,
+) -> Option<PathBuf> {
+    /*
+    CDXC:Docs 2026-08-09:
+    The requested path names its own root through the reserved mount
+    segment, exactly as the Docs bridge routes it, so an image beside a
+    note in the mounted Docs directory resolves there and a path can
+    never be resolved against the root it did not name.
+    */
+    let mut mounts = {
+        let mut resolved = resolved_root.lock().ok()?;
+        if resolved.is_none() {
+            *resolved = resolve_root();
+        }
+        resolved.clone()?
+    };
+    if let Some(dynamic_root) = resolve_dynamic_root(relative_path) {
+        mounts.retain(|mount| mount.mount_segment != dynamic_root.mount_segment);
+        mounts.push(dynamic_root);
+    }
+    // A named mount claims its own segment first; the project root owns
+    // every path no mount claimed.
+    let (mount, relative_path) = mounts
+        .iter()
+        .filter(|mount| !mount.mount_segment.is_empty())
+        .find_map(|mount| {
+            relative_path
+                .strip_prefix(&format!("{}/", mount.mount_segment))
+                .map(|inner| (mount, inner))
+        })
+        .or_else(|| {
+            mounts
+                .iter()
+                .find(|mount| mount.mount_segment.is_empty())
+                .map(|mount| (mount, relative_path))
+        })?;
+    let root = std::fs::canonicalize(&mount.path).ok()?;
+    let candidate = std::fs::canonicalize(
+        relative_path
+            .split('/')
+            .fold(root.clone(), |path, component| path.join(component)),
+    )
+    .ok()?;
+    if !candidate.is_file() || !candidate.starts_with(&root) {
+        return None;
+    }
+    let allowed = mount.allowed_relative_roots.iter().any(|relative_root| {
+        let allowed_root = root.join(relative_root);
+        std::fs::canonicalize(allowed_root)
+            .ok()
+            .is_some_and(|allowed_root| {
+                allowed_root.starts_with(&root) && candidate.starts_with(allowed_root)
+            })
+    });
+    if !allowed {
+        return None;
+    }
+    Some(candidate)
+}
+
 /// Opens a Docs resource. Runs on a CEF worker sequence, never the IO thread.
 pub(crate) fn open_manage_docs_resource(
     source: &ManageDocsResourceSource,
@@ -148,61 +214,12 @@ pub(crate) fn open_manage_docs_resource(
             resolve_root,
             resolved_root,
         } => {
-            /*
-            CDXC:Docs 2026-08-09:
-            The requested path names its own root through the reserved mount
-            segment, exactly as the Docs bridge routes it, so an image beside a
-            note in the mounted Docs directory resolves there and a path can
-            never be resolved against the root it did not name.
-            */
-            let mut mounts = {
-                let mut resolved = resolved_root.lock().ok()?;
-                if resolved.is_none() {
-                    *resolved = resolve_root();
-                }
-                resolved.clone()?
-            };
-            if let Some(dynamic_root) = resolve_dynamic_root(relative_path) {
-                mounts.retain(|mount| mount.mount_segment != dynamic_root.mount_segment);
-                mounts.push(dynamic_root);
-            }
-            // A named mount claims its own segment first; the project root owns
-            // every path no mount claimed.
-            let (mount, relative_path) = mounts
-                .iter()
-                .filter(|mount| !mount.mount_segment.is_empty())
-                .find_map(|mount| {
-                    relative_path
-                        .strip_prefix(&format!("{}/", mount.mount_segment))
-                        .map(|inner| (mount, inner))
-                })
-                .or_else(|| {
-                    mounts
-                        .iter()
-                        .find(|mount| mount.mount_segment.is_empty())
-                        .map(|mount| (mount, relative_path))
-                })?;
-            let root = std::fs::canonicalize(&mount.path).ok()?;
-            let candidate = std::fs::canonicalize(
-                relative_path
-                    .split('/')
-                    .fold(root.clone(), |path, component| path.join(component)),
-            )
-            .ok()?;
-            if !candidate.is_file() || !candidate.starts_with(&root) {
-                return None;
-            }
-            let allowed = mount.allowed_relative_roots.iter().any(|relative_root| {
-                let allowed_root = root.join(relative_root);
-                std::fs::canonicalize(allowed_root)
-                    .ok()
-                    .is_some_and(|allowed_root| {
-                        allowed_root.starts_with(&root) && candidate.starts_with(allowed_root)
-                    })
-            });
-            if !allowed {
-                return None;
-            }
+            let candidate = resolve_manage_docs_local_resource(
+                resolve_dynamic_root,
+                resolve_root,
+                resolved_root,
+                relative_path,
+            )?;
             let file_name = candidate.to_string_lossy();
             let stream = stream_reader_create_for_file(Some(&CefString::from(file_name.as_ref())))?;
             Some(ManageDocsResourceBody::Stream(stream))
@@ -211,6 +228,28 @@ pub(crate) fn open_manage_docs_resource(
             let data = loader(relative_path)?;
             Some(ManageDocsResourceBody::Buffer { data, offset: 0 })
         }
+    }
+}
+
+/// A Docs resource's bytes, for the native Docs view (images). Same roots and rules as the page's
+/// resource origin; runs on a background thread.
+pub(crate) fn read_manage_docs_resource(
+    scope: &ManageDocsResourceScope,
+    relative_path: &str,
+) -> Option<Vec<u8>> {
+    match &scope.source {
+        ManageDocsResourceSource::Local {
+            resolve_dynamic_root,
+            resolve_root,
+            resolved_root,
+        } => std::fs::read(resolve_manage_docs_local_resource(
+            resolve_dynamic_root,
+            resolve_root,
+            resolved_root,
+            relative_path,
+        )?)
+        .ok(),
+        ManageDocsResourceSource::Remote { loader } => loader(relative_path),
     }
 }
 
@@ -440,126 +479,6 @@ pub(crate) fn first_party_loopback_request_matches(
     // HTTP origin normalization deliberately rejects hostless file URLs.
     (entry_identity.starts_with("file:///") && matches!(requesting_origin, "file://" | "file:///"))
         || sidebar_page_entry_identity(requesting_origin) == entry_identity
-}
-
-wrap_request_handler! {
-    pub(crate) struct GhostexGpuiSidebarRendererRequestHandler {
-        entry_identity: String,
-        sidebar_bridge_event_handler: SidebarBridgeEventHandler,
-    }
-
-    impl RequestHandler {
-        fn on_before_browse(
-            &self,
-            _browser: Option<&mut cef::Browser>,
-            frame: Option<&mut Frame>,
-            request: Option<&mut Request>,
-            _user_gesture: c_int,
-            _is_redirect: c_int,
-        ) -> c_int {
-            let is_main_frame = frame.map(|frame| frame.is_main() != 0).unwrap_or(true);
-            if !is_main_frame {
-                return 0;
-            }
-            let Some(request_url) = request.map(|request| CefString::from(&request.url()).to_string())
-            else {
-                return 0;
-            };
-            if sidebar_page_entry_identity(&request_url) == self.entry_identity {
-                return 0;
-            }
-            if request_url.starts_with("http://") || request_url.starts_with("https://") {
-                (self.sidebar_bridge_event_handler)(SidebarBridgeEvent::RefusedPageNavigation(
-                    request_url,
-                ));
-            }
-            1
-        }
-
-        fn on_render_view_ready(&self, browser: Option<&mut cef::Browser>) {
-            append_sidebar_renderer_lifecycle(
-                "gpui.sidebar.rendererReady",
-                browser,
-                serde_json::json!({}),
-            );
-        }
-
-        fn on_render_process_unresponsive(
-            &self,
-            browser: Option<&mut cef::Browser>,
-            _callback: Option<&mut UnresponsiveProcessCallback>,
-        ) -> c_int {
-            append_sidebar_renderer_lifecycle(
-                "gpui.sidebar.rendererUnresponsive",
-                browser,
-                serde_json::json!({}),
-            );
-            0
-        }
-
-        fn on_render_process_responsive(&self, browser: Option<&mut cef::Browser>) {
-            append_sidebar_renderer_lifecycle(
-                "gpui.sidebar.rendererResponsive",
-                browser,
-                serde_json::json!({}),
-            );
-        }
-
-        fn on_render_process_terminated(
-            &self,
-            browser: Option<&mut cef::Browser>,
-            status: TerminationStatus,
-            error_code: c_int,
-            error_string: Option<&CefString>,
-        ) {
-            append_sidebar_renderer_lifecycle(
-                "gpui.sidebar.rendererTerminated",
-                browser,
-                serde_json::json!({
-                    "cefCode": error_code,
-                    "cefText": error_string.map(CefString::to_string),
-                    "terminationKind": cef_termination_kind(status),
-                    "terminationRaw": status.get_raw(),
-                }),
-            );
-        }
-    }
-}
-
-pub(crate) fn cef_termination_kind(status: TerminationStatus) -> &'static str {
-    match status {
-        TerminationStatus::ABNORMAL_TERMINATION => "abnormalTermination",
-        TerminationStatus::PROCESS_WAS_KILLED => "processWasKilled",
-        TerminationStatus::PROCESS_CRASHED => "processCrashed",
-        TerminationStatus::PROCESS_OOM => "processOutOfMemory",
-        TerminationStatus::LAUNCH_FAILED => "launchFailed",
-        TerminationStatus::INTEGRITY_FAILURE => "integrityFailure",
-        _ => "unknown",
-    }
-}
-
-pub(crate) fn append_sidebar_renderer_lifecycle(
-    event: &str,
-    browser: Option<&mut cef::Browser>,
-    mut details: serde_json::Value,
-) {
-    if let Some(details) = details.as_object_mut() {
-        details.insert(
-            "browserId".to_string(),
-            browser
-                .map(|browser| serde_json::Value::from(browser.identifier()))
-                .unwrap_or(serde_json::Value::Null),
-        );
-        details.insert(
-            "cefContextInitialized".to_string(),
-            serde_json::Value::Bool(CEF_CONTEXT_INITIALIZED.load(Ordering::Acquire)),
-        );
-        details.insert(
-            "runtimeShutdownStarted".to_string(),
-            serde_json::Value::Bool(CEF_SHUTDOWN_IN_PROGRESS.load(Ordering::Acquire)),
-        );
-    }
-    support_logs::append(GpuiSupportLog::SidebarRenderer, event, details);
 }
 
 wrap_request_handler! {

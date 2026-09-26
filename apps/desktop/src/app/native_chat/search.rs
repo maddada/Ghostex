@@ -2,13 +2,13 @@
 //!
 //! The bar is a real sibling region at the top of the chat pane, above the
 //! transcript list: no overlay, no hit-test routing. Matching, the selected
-//! occurrence and next/previous live in shared TS (native-search.ts over
-//! session-chat-presentation/transcript-search.ts), so GPUI only draws the bar,
+//! occurrence and next/previous live in the core (`extras/search.rs` over
+//! `extras/transcript_search.rs` in gx-chat-core), so GPUI only draws the bar,
 //! scrolls the list to the selected row and tints the rows that matched.
 //!
 //! GPUI's markdown TextView cannot highlight a range inside its own layout, so
 //! the highlight is row-level: every matching row takes a faint tint and the
-//! selected one a stronger one. React highlights the exact characters.
+//! selected one a stronger one. React highlighted the exact characters.
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -32,7 +32,7 @@ impl gpui::Global for ChatSearchRegistered {}
 /// The chat field is a gpui-component input, and that crate binds Cmd+F inside its own `Input`
 /// context to its in-field Search panel. A binding on `NativeChat` alone loses to it by depth and
 /// Cmd+F does nothing while the composer has focus, so transcript search claims both the pane and
-/// the focused field, the way React's window-level handler covers the whole chat surface.
+/// the focused field, the way React's window-level handler covered the whole chat surface.
 pub(super) fn register(cx: &mut App) {
     if cx.has_global::<ChatSearchRegistered>() {
         return;

@@ -169,6 +169,7 @@ impl GhostexGpuiApp {
             let content = content.clone();
             move |popup_window, cx| {
                 popup_window.set_background_corner_radius(px(8.0));
+                apply_frosted_menu_blur(popup_window);
                 prepare_gpui_titlebar_popup_window_chrome(popup_window);
                 GpuiTitlebarPopupWindow::new(main_app, kind, content, popup_window, cx)
             }

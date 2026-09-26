@@ -18,7 +18,6 @@
 //! `moves` climbs and `movePosts` does not means every drop is being refused.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_drag/,
-//! tooling/gx-core/sidebar-page-frozen/reorder.ts,
 //! apps/desktop/src/app/gx_store/workspace_groups.rs.
 
 use std::time::Duration;
@@ -29,9 +28,9 @@ use ghostex_gx_core::{
 };
 use serde_json::{Value, json};
 
+use super::rpc::gxserver_rpc_result_task;
 use super::sidebar_drop_queue::DropQueueNeed;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::board_gxserver::gxserver_health_and_daemon::gpui_gxserver_rpc_result;
 
 /// `/api/updateSessionOrder` is a plain write; it gets the same timeout the other sidebar calls do.
 const ORDER_RPC_TIMEOUT: Duration = Duration::from_secs(10);
@@ -173,6 +172,10 @@ impl GhostexGpuiApp {
                 } => self.gx_store_call_session_order(project, session_ids, cx),
                 OrderWrite::ActivateSubgroup { project, group_id } => {
                     self.gx_store.sidebar_drag.activations += 1;
+                    // A remote project's group is also the active group (the old runtime's `activeGroupId`), which its
+                    // remote tab list is read from (gx-core order_write.rs, CDXC:Sessions 2026-09-25).
+                    let remote_group = (!project.machine.is_local())
+                        .then(|| ghostex_gx_core::encode_workspace_subgroup_id(&project, &group_id));
                     let output = self.gx_store.core.handle(
                         Event::Intent(Intent::FocusSubgroup { project, group_id }),
                         super::host::now_ms(),
@@ -181,6 +184,25 @@ impl GhostexGpuiApp {
                         self.gx_store.sidebar_list.note_changes(&output.changes);
                         self.gx_store_update_sidebar_list(cx);
                     }
+                    if let Some(group_id) = remote_group {
+                        self.dispatch_native_sidebar_command(
+                            json!({ "type": "focusGroup", "groupId": group_id }),
+                            cx,
+                        );
+                    }
+                }
+                OrderWrite::RemoteProjectOrder { machine_id, state } => {
+                    // `requestRemoteGxserver`'s default timeout; the machine's own stream brings
+                    // the order back into the store, as it brought it to the runtime's copy.
+                    self.start_gpui_remote_sidebar_rpc(
+                        &machine_id,
+                        "/api/updateWorkspaceSessionGroups",
+                        Some(json!({ "state": state })),
+                        std::time::Duration::from_secs(20),
+                        crate::app::remote_conn::sidebar_rpc::GpuiRemoteSidebarRpcMode::Awaited,
+                        cx,
+                    )
+                    .detach();
                 }
                 OrderWrite::Toast { level, title } => {
                     self.gx_store.sidebar_drag.toasts += 1;
@@ -257,11 +279,13 @@ impl GhostexGpuiApp {
         let params = json!({ "projectId": project.project_id, "sessionIds": session_ids });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move {
-                    gpui_gxserver_rpc_result("/api/updateSessionOrder", &params, ORDER_RPC_TIMEOUT)
-                })
-                .await;
+            let result = gxserver_rpc_result_task(
+                &background,
+                "/api/updateSessionOrder",
+                params,
+                ORDER_RPC_TIMEOUT,
+            )
+            .await;
             let _ = this.update(cx, |this, _| {
                 if result.is_err() {
                     this.gx_store.sidebar_drag.session_order_failures += 1;

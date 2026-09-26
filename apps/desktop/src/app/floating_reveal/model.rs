@@ -28,6 +28,10 @@ pub(crate) const FLOATING_REVEAL_RAIL_WIDTH: f32 = 2.0;
 /// display.
 pub(crate) const FLOATING_REVEAL_AGENTS_COLUMN_WIDTH: f32 = 520.0;
 
+/// The corner radius of the floating panels: the sessions panel here and the Docs view's floating
+/// files list (`native/macos/GpuiDocsDrawer.m` cuts the corners, see its CDXC:Sidebar decision).
+pub(crate) const FLOATING_PANEL_CORNER_RADIUS: f32 = 12.0;
+
 /// How long a reveal asked for by name (Reveal Active Session) waits for the pointer.
 pub(crate) const FLOATING_REVEAL_REQUEST_GRACE_SECS: u64 = 5;
 

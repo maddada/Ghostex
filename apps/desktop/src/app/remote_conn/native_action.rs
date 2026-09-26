@@ -286,9 +286,7 @@ impl GhostexGpuiApp {
                                 cx,
                             );
                             this.refresh_gpui_remote_gxserver_presentation_in_background(
-                                remote_machine_id,
-                                false,
-                                cx,
+                                &remote_machine_id,
                             );
                         }
                         Err(message) => this.dispatch_gpui_workspace_action_toast(

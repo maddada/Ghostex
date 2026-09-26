@@ -23,7 +23,6 @@ impl GhostexGpuiApp {
             ),
             shell_session_id,
             app: Some(cx.weak_entity()),
-            preview: None,
             parent_native_view: std::ptr::null_mut(),
             client_id: format!("gpui-web-{}", crate::app::helpers::gpui_random_uuid_string().unwrap_or_default()),
             remote: None,
@@ -32,18 +31,9 @@ impl GhostexGpuiApp {
         };
         let view = cx.new(|cx| NativeChatView::new(config, cx));
         let key = session.clone();
-        let subscription = cx.subscribe(&view, move |this, view, event: &NativeChatEvent, cx| {
+        let subscription = cx.subscribe(&view, move |this, _view, event: &NativeChatEvent, cx| {
             match event {
-                NativeChatEvent::Broker(message) => {
-                    let mut message = message.clone();
-                    message["clientId"] = view.read(cx).config.client_id.clone().into();
-                    message["requestId"] = message["id"]
-                        .as_u64()
-                        .map(|id| id.to_string())
-                        .unwrap_or_default()
-                        .into();
-                    this.web_relay_chat_broker(&key, message, cx);
-                }
+                NativeChatEvent::Broker(message) => this.web_relay_chat_broker(&key, message),
                 NativeChatEvent::Host(message) => this.web_chat_host_action(&key, message, cx),
                 NativeChatEvent::ComposerFocused | NativeChatEvent::DraftState(_) => {}
             }

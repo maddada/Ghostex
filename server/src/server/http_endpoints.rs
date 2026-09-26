@@ -193,6 +193,7 @@ pub(crate) fn hold_sessions_awake(
         crate::telemetry::client_connected("mobile", crate::telemetry::ClientPlatform::default());
     }
     let ttl_ms = session_keep_awake::normalize_ttl_ms(params.get("ttlMs").and_then(Value::as_i64));
+    crate::session_auto_sleep::note_shown_sessions_report(&holder_id);
     let release = params.get("release").and_then(Value::as_bool) == Some(true);
     let requested = params
         .get("sessions")

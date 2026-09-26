@@ -5,7 +5,6 @@
 #import <stdbool.h>
 #import <stdint.h>
 
-void GhostexGpuiCEFClearActiveNativeView(void);
 void GhostexGpuiCEFRefreshSidebarPointerInside(void);
 
 // CDXC:Sidebar 2026-09-09 DECISION:
@@ -339,16 +338,6 @@ void GhostexGpuiSidebarRevealFocusEditable(void *sidebarPtr) {
   NSView *sidebar = (__bridge NSView *)sidebarPtr;
   GhostexGpuiSidebarReveal *state = objc_getAssociatedObject(sidebar, GhostexGpuiSidebarRevealKey);
   if (state.attached) [state.panel makeKeyWindow];
-}
-
-bool GhostexGpuiSidebarRevealReturnFocus(void *sidebarPtr) {
-  NSView *sidebar = (__bridge NSView *)sidebarPtr;
-  GhostexGpuiSidebarReveal *state = objc_getAssociatedObject(sidebar, GhostexGpuiSidebarRevealKey);
-  if (!state.attached || !state.root.window) return false;
-  GhostexGpuiCEFClearActiveNativeView();
-  [state.root.window makeKeyWindow];
-  [state.root.window makeFirstResponder:state.root];
-  return true;
 }
 
 void GhostexGpuiSidebarRevealDispose(void *sidebarPtr) {

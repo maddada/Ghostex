@@ -1,12 +1,13 @@
 //! A JSON object that keeps the order its keys were written in.
 //!
 //! CDXC:SessionChat 2026-09-22 WHY:
-//! The replay gate fingerprints a pure query's answer by hashing its serialized text, so the key
-//! order of every object inside it is part of the contract. `serde_json::Map` is a `BTreeMap`
-//! unless the crate turns on `preserve_order`, which would sort `{action, path, type, view, line}`
-//! into `{action, column, endLine, line, path, type, view}` and fail the gate on a value that is
-//! in fact identical. Rather than add `indexmap` to the whole crate, the free-form objects family d
-//! emits are built here, in the order the TypeScript writes them.
+//! The replay gate that checked the port fingerprinted a pure query's answer by hashing its
+//! serialized text, so the key order of every object inside it was part of the contract.
+//! `serde_json::Map` is a `BTreeMap` unless the crate turns on `preserve_order`, and without it
+//! `{action, path, type, view, line}` came out as `{action, column, endLine, line, path, type,
+//! view}` and failed the gate on a value that was in fact identical. Rather than add `indexmap` to
+//! the whole crate, the free-form objects family d emits are built here, in the order the
+//! TypeScript wrote them.
 
 use serde::de::{MapAccess, Visitor};
 use serde::ser::SerializeMap;

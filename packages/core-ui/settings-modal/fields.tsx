@@ -428,6 +428,7 @@ export function SettingsSection({
   children,
   description,
   descriptionClassName,
+  plain,
   sectionRef,
   title,
 }: {
@@ -435,6 +436,8 @@ export function SettingsSection({
   children: ReactNode;
   description?: ReactNode;
   descriptionClassName?: string;
+  /** Lay the children straight on the page instead of inside the list card (the Extensions card grid). */
+  plain?: boolean;
   sectionRef?: RefObject<HTMLDivElement | null>;
   title: string;
 }) {
@@ -449,7 +452,7 @@ export function SettingsSection({
         </div>
         {actions ? <div className='settings-list-section-actions'>{actions}</div> : null}
       </div>
-      <div className='settings-list-card'>{children}</div>
+      <div className={plain ? 'settings-list-plain' : 'settings-list-card'}>{children}</div>
     </div>
   );
 }

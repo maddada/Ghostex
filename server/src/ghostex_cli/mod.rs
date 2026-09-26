@@ -28,6 +28,7 @@ mod session_chat_transcript;
 mod session_parking;
 pub mod sessions;
 pub mod settings;
+mod settings_hotkeys;
 pub mod skills;
 pub mod tailcat;
 pub mod tailcat_tunnel;

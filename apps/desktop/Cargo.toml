@@ -51,12 +51,19 @@ cef = { path = "../../.dependencies/cef-rs/cef", default-features = false }
 flate2 = "1"
 futures = "0.3"
 ghostex-paths = { path = "../../packages/paths" }
-ghostex-chat-runtime = { path = "../../packages/chat-runtime" }
+ghostex-client-storage = { path = "../../packages/client-storage-native" }
 ghostex-gx-chat-core = { path = "../../packages/gx-chat-core" }
+ghostex-gx-chat-client = { path = "../../packages/gx-chat-client" }
 ghostex-gx-client = { path = "../../packages/gx-client" }
 ghostex-gx-core = { path = "../../packages/gx-core" }
 ghostex-agent-sync = { path = "../../packages/agent-sync" }
 ghostex-docs = { path = "../../packages/project-docs" }
+# CDXC:Docs 2026-09-24 DECISION: User: build native Docs on zorite-editor, the MIT crate from packetThrower/zorite ("you can look at the gpl code but dont copy it verbatim"). The live-preview editor, math (RaTeX) and Mermaid (mermaid-rs-renderer, rasterized by resvg) are the prototype the user reviewed ("ok this looks AWESOME ... let's keep going this way").
+zorite-editor = { path = "../../.dependencies/zorite/zorite-editor" }
+ratex-gpui = { path = "../../.dependencies/zorite/ratex-gpui" }
+mermaid-rs-renderer = { version = "0.3.1", default-features = false }
+resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+similar = "2"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 # CDXC:SessionChat 2026-09-18 WHY: every tree-sitter grammar in gpui-component sits behind an off-by-default feature, and `TextView` silently renders an unhighlighted fence when the language cannot be resolved. Without this the native transcript shows plain grey code while the React one colours the same fence through Shiki, so the feature list is part of chat parity, not an optional extra.
@@ -84,7 +91,7 @@ tar = "0.4"
 tokio = { version = "1", features = ["rt", "net", "time", "sync", "io-util", "macros"] }
 tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
 ureq = { version = "3.3.0", default-features = false, features = ["platform-verifier", "rustls"] }
-# CDXC:SessionChat 2026-09-22 WHY: the Rust chat host mints the draft ids and the chat client id the brain must not generate itself (the core reads no random source), in the same v4 shape `crypto.randomUUID()` produces inside QuickJS. Already in the graph through packages/chat-runtime.
+# CDXC:SessionChat 2026-09-22 WHY: the Rust chat host mints the draft ids and the chat client id the brain must not generate itself (the core reads no random source), in the same v4 shape `crypto.randomUUID()` produces. Already in the graph through the desktop crate's other dependencies.
 uuid = { version = "1", features = ["v4"] }
 # CDXC:WebGpui 2026-09-22 WHY: `std::time::Instant::now()` panics on wasm32, and apps/gpui-web compiles the drawing files of this crate for the browser. `web_time::Instant` IS `std::time::Instant` on every native target (a re-export, already in the graph through gpui), so files shared with the web build name it instead.
 web-time = "1"

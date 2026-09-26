@@ -4,18 +4,13 @@ use super::style::{
     BAR_HEIGHT, BUTTON_GAP, CARD_WIDTH, ERROR_HEIGHT, HINTS_HEIGHT, LIST_HEIGHT, TRAIT_ROW_HEIGHT,
     button_lines,
 };
-use gpui::{
-    AppContext as _, Bounds, Context, Entity, Pixels, ScrollStrategy, Subscription,
-    UniformListScrollHandle, Window,
-};
-use gpui_component::input::{InputEvent, InputState};
+use gpui::{Bounds, Context, Entity, Pixels, ScrollStrategy, UniformListScrollHandle, Window};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// CDXC:SessionChat 2026-09-21 SEE-ALSO:
-/// What the picker shows (tabs, row order, search ranking, favorites, the footer rows and the pill's label) is decided in packages/shared/session-chat-presentation/model-menu.ts and projected by packages/shared/session-chat-controller/model-menu.ts as the snapshot's `modelMenu`; native-host.ts answers `modelMenuView`, `modelMenuPick`, `modelMenuTrait` and `modelMenuFavorite`. The React twin is packages/core-ui/chat/session-chat-model-menu.tsx. This side owns only the cursor, the open side list and the search field.
+/// What the picker shows (tabs, row order, search ranking, favorites, the footer rows and the pill's label) is decided in the core (packages/gx-chat-core/src/menus/picker/model_menu.rs) and projected as the snapshot's `modelMenu`; the core answers `modelMenuView`, `modelMenuPick`, `modelMenuTrait` and `modelMenuFavorite`. This side owns only the cursor and the open side list.
 pub(in crate::app::native_chat::option_menu) struct ModelMenuState {
-    pub(super) input: Entity<InputState>,
     /// The snapshot's `modelMenu` this panel last drew.
     pub(super) view: Value,
     /// Model rows first, then the footer buttons, as one cursor the arrows walk straight through.
@@ -26,7 +21,6 @@ pub(in crate::app::native_chat::option_menu) struct ModelMenuState {
     pub(super) last_row: Option<String>,
     /// When Left or Right last hit an end, which plays the Reasoning button's shake.
     pub(super) shake_at: Option<std::time::Instant>,
-    _input: Subscription,
 }
 
 fn live_view(menu: &Entity<ChatOptionMenu>, cx: &gpui::App) -> Value {
@@ -66,7 +60,7 @@ pub(in crate::app::native_chat::option_menu) fn menu_height(marker: &Value) -> f
     } else {
         0.0
     };
-    2.0 + BAR_HEIGHT * 2.0 + error + LIST_HEIGHT + tray + HINTS_HEIGHT - 14.0
+    2.0 + BAR_HEIGHT + error + LIST_HEIGHT + tray + HINTS_HEIGHT - 14.0
 }
 
 impl ModelMenuState {
@@ -76,50 +70,17 @@ impl ModelMenuState {
         window: &mut Window,
         cx: &mut Context<ChatOptionMenuPanel>,
     ) -> Option<Self> {
-        let marker = rows.first()?.get("modelMenu")?.as_object()?;
+        rows.first()?.get("modelMenu")?.as_object()?;
         let view = live_view(menu, cx);
-        let placeholder = view["placeholder"]
-            .as_str()
-            .unwrap_or("Search models…")
-            .to_owned();
-        // A card re-placed for a new height keeps the search the person had typed.
-        let query = marker
-            .get("reopen")
-            .and_then(|_| view["query"].as_str())
-            .unwrap_or_default()
-            .to_owned();
-        let input = cx.new(|cx| {
-            let mut input = InputState::new(window, cx).placeholder(placeholder);
-            if !query.is_empty() {
-                input.set_value(query, window, cx);
-            }
-            input
-        });
-        let subscription = cx.subscribe_in(
-            &input,
-            window,
-            |panel, input, event: &InputEvent, window, cx| {
-                if matches!(event, InputEvent::Focus) {
-                    crate::app::native_chat::focus::reclaim_keyboard_focus(window);
-                }
-                if matches!(event, InputEvent::Change) {
-                    let query = input.read(cx).value().to_string();
-                    panel.model_menu_send(json!({"type":"modelMenuView","query":query}), cx);
-                }
-            },
-        );
-        // Typed text reaches a field only through the window's native keyboard owner, which a GPUI focus handle alone does not claim (native_chat/focus.rs); every other chat field reclaims it the same way.
+        // Key presses reach the card only through the window's native keyboard owner, which a GPUI focus handle alone does not claim (native_chat/focus.rs).
         crate::app::native_chat::focus::reclaim_keyboard_focus(window);
-        input.update(cx, |input, cx| input.focus(window, cx));
         Some(Self {
-            input,
             active: selected_row(&view),
             view,
             flyout: None,
             scroll: UniformListScrollHandle::new(),
             last_row: None,
             shake_at: None,
-            _input: subscription,
         })
     }
 
@@ -164,7 +125,6 @@ impl ModelMenuState {
     }
 }
 
-/// CDXC:SessionChat 2026-09-24 SEE-ALSO: `modelMenuReasoningFor` in packages/shared/session-chat-presentation/model-menu.ts, which React applies to the same button; keep the two in step.
 /// The Reasoning button for the highlighted model: its levels, with the one Left and Right moved to
 /// marked. `browse` names the row, and `browseCurrent` says whether it is the model in use, whose
 /// level a choice applies at once as it always did.
@@ -217,7 +177,6 @@ fn reasoning_for(setting: &Value, row: Option<&Value>, effort: Option<&str>) -> 
     setting
 }
 
-/// CDXC:SessionChat 2026-09-24 SEE-ALSO: `modelMenuStepEffort` in packages/shared/session-chat-presentation/model-menu.ts.
 /// The level Left or Right moves `row` to from `current`, or `None` at an end or on a model without levels.
 pub(super) fn step_effort(row: &Value, current: &str, forward: bool) -> Option<String> {
     let efforts = row["efforts"]
@@ -262,14 +221,10 @@ impl ChatOptionMenuPanel {
             });
             return;
         }
-        let moved = next["tab"] != state.view["tab"] || next["query"] != state.view["query"];
+        let moved = next["tab"] != state.view["tab"];
         state.view = next;
         if moved {
-            state.active = if state.view["query"].as_str().is_some_and(|q| !q.is_empty()) {
-                0
-            } else {
-                selected_row(&state.view)
-            };
+            state.active = selected_row(&state.view);
             state
                 .scroll
                 .scroll_to_item(state.active, ScrollStrategy::Top);

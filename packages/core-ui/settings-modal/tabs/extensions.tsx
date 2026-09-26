@@ -2,19 +2,15 @@ import { CustomViewEditor, type CustomViewEditorState } from '../project-views/e
 import { ViewScopeEditor, type ViewScopeEditorState } from '../project-views/scope-editor';
 import { ProjectViewTemplates } from '../project-views/templates';
 import {
-  projectViewDescription,
   DEFAULT_PROJECT_VIEW_SOURCE,
   type ProjectViewTemplate,
 } from '@/packages/shared/ghostex-settings/project-views';
 /*
  * CDXC:Extensions 2026-08-30:
- * Settings has one Extensions page. The "Official Extensions" section is the
- * features Ghostex ships itself, backed by the inverted `*Hidden` settings keys
- * in `GHOSTEX_OFFICIAL_EXTENSIONS`; below it the same page embeds the real
- * extension store and installed list, followed by user-defined URL views. All
- * three read as one family of cards, which is why the official and custom rows
- * reuse the `.extensions-*` panel skin instead of the stacked settings-field
- * layout the other Settings pages use.
+ * Settings has one Extensions page. The "Built-in" section is the features Ghostex ships itself, backed by the
+ * inverted `*Hidden` settings keys in `GHOSTEX_OFFICIAL_EXTENSIONS`; below it the same page embeds the real
+ * extension store and installed list, followed by user-defined URL views. All three read as one family of
+ * cards (a three-column grid since 2026-09-24), under one filter bar.
  *
  * Opening an extension's details replaces the whole page (not just the store
  * section), and the list scroll position is restored on the way back.
@@ -23,44 +19,13 @@ import {
  * Extensions app modal.
  */
 import { DragDropProvider, type DragDropEventHandlers } from '@dnd-kit/react';
-import { isSortableOperation, useSortable } from '@dnd-kit/react/sortable';
+import { isSortableOperation } from '@dnd-kit/react/sortable';
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
 import { cn } from '@/packages/components/utils';
 import { Button } from '@/packages/components/ui/button';
-import { Switch } from '@/packages/components/ui/switch';
-import {
-  IconBolt,
-  IconBug,
-  IconPalette,
-  IconCloud,
-  IconDatabase,
-  IconChartBar,
-  IconArrowsSort,
-  IconCodeDots,
-  IconDeviceDesktop,
-  IconExternalLink,
-  IconFileText,
-  IconFolderOpen,
-  IconGitCommit,
-  IconGripVertical,
-  IconBell,
-  IconHelpCircle,
-  IconInfoCircle,
-  IconPencil,
-  IconPlayerPlay,
-  IconPlus,
-  IconPuzzle,
-  IconRefresh,
-  IconTrash,
-  IconWorld,
-  type Icon as TablerIcon,
-  IconTerminal2,
-} from '@tabler/icons-react';
+import { IconArrowsSort, IconExternalLink, IconRefresh } from '@tabler/icons-react';
 import {
   GHOSTEX_OFFICIAL_EXTENSIONS,
-  isOfficialExtensionEnabled,
-  type GhostexOfficialExtension,
-  type GhostexOfficialExtensionId,
   type GhostexOfficialExtensionSettingsKey,
 } from '../../../shared/ghostex-official-extensions';
 import {
@@ -83,86 +48,46 @@ import {
   viewScopeDescription,
 } from '../../../shared/ghostex-settings/view-scopes';
 import { type WebviewApi } from '../../webview-api';
-import { ExtensionsBrowserDetail, ExtensionsBrowserList, useExtensionsBrowserState } from '../../extensions-modal';
+import {
+  DEFAULT_EXTENSION_FILTER,
+  ExtensionCardGrid,
+  ExtensionCardGridWide,
+  ExtensionEmptyStateFilter,
+  ExtensionsBrowserDetail,
+  ExtensionsBrowserList,
+  ExtensionsFilterBar,
+  extensionFilterMatches,
+  filterStoreExtensions,
+  isExtensionFilterActive,
+  storeCategories,
+  useExtensionsBrowserState,
+  type ExtensionFilter,
+} from '../../extensions-modal';
 import { createExtensionsModalTransport } from '../../extensions-modal/transport';
 import { TitlebarAccountUsageSection } from '../../accounts/titlebar-settings-section';
 import { TitlebarViewOrderDialog } from './titlebar-view-order-dialog';
 import { titlebarViewOrderItems } from '@/packages/shared/ghostex-settings/titlebar-view-order';
-import { createSettingsCustomViewDragData, getSettingsCustomViewDragData, moveId } from '../drag-data';
-import {
-  setSettingsSortableRowElement,
-  SettingButton,
-  SettingsInput,
-  SettingsListItem,
-  SettingsNativeScrollArea,
-  SettingsSection,
-} from '../fields';
+import { getSettingsCustomViewDragData, moveId } from '../drag-data';
+import { SettingButton, SettingsListItem, SettingsNativeScrollArea, SettingsSection } from '../fields';
 import {
   SettingsTabSearch,
   hasVisibleSettingsSearchResult,
   shouldShowSetting,
   shouldShowSettingsSection,
 } from '../search';
+import {
+  BUILT_IN_CATEGORY_LABELS,
+  BuiltInExtensionGroups,
+  builtInCounts,
+  type ViewScopeControls,
+} from './extensions/built-in-cards';
+import { AddCustomViewCard, CustomViewCard, customViewFilterSubject } from './extensions/custom-view-cards';
 
 export type OfficialExtensionSettingKey = GhostexOfficialExtensionSettingsKey;
 type ExtensionPageSettingKey =
   OfficialExtensionSettingKey | 'customViews' | 'titlebarViewOrder' | 'customViewTemplates' | 'viewScopes';
 
 const GHOSTEX_EXTENSIONS_REPO_URL = 'https://github.com/maddada/ghostex-extensions';
-
-const OFFICIAL_EXTENSION_ICONS: Record<GhostexOfficialExtensionId, TablerIcon> = {
-  linear: IconWorld,
-  jira: IconWorld,
-  github: IconGitCommit,
-  sentry: IconBug,
-  figma: IconPalette,
-  vercel: IconCloud,
-  supabase: IconDatabase,
-  'github-actions': IconPlayerPlay,
-  posthog: IconChartBar,
-  'custom-website': IconWorld,
-  automate: IconBolt,
-  browser: IconWorld,
-  code: IconCodeDots,
-  devServers: IconWorld,
-  docs: IconFileText,
-  extensionsButton: IconPuzzle,
-  gitActions: IconGitCommit,
-  help: IconHelpCircle,
-  kanban: IconPlayerPlay,
-  notifications: IconBell,
-  openIn: IconFolderOpen,
-  quickActions: IconPlayerPlay,
-  resources: IconDeviceDesktop,
-  terminal: IconTerminal2,
-  storybook: IconCodeDots,
-  tips: IconInfoCircle,
-};
-
-/** Official entries whose runtime component the app can install or reinstall. */
-const OFFICIAL_EXTENSION_RUNTIME_IDS: Partial<Record<GhostexOfficialExtensionId, SidebarPluginSettingsItem['id']>> = {
-  code: 'code',
-};
-
-const OFFICIAL_VIEW_EXTENSIONS = GHOSTEX_OFFICIAL_EXTENSIONS.filter((entry) => entry.placement === 'view');
-const OFFICIAL_TITLEBAR_EXTENSIONS = GHOSTEX_OFFICIAL_EXTENSIONS.filter(
-  (entry) => entry.placement === 'titlebar-button'
-);
-
-/**
- * CDXC:Extensions 2026-09-20 DECISION:
- * User (ruling 3A): every view and extension row gets the same Edit button as a custom view, and behind it
- * a Default of shown or hidden plus per-project and per-space overrides. Supersedes the 2026-09-18 wording
- * that called this an "Available in" allow-list. One controls object carries the three things a row needs,
- * so the official rows and the store rows stay one behaviour instead of two.
- */
-type ViewScopeControls = {
-  /** The row's scope summary, or undefined while the view is available everywhere. */
-  describe: (key: string) => string | undefined;
-  edit: (key: string, title: string) => void;
-  /** The inline editor for this row, or null when another row (or none) is being edited. */
-  renderEditor: (key: string) => ReactNode;
-};
 
 export function ExtensionsSettingsTab({
   initialCustomViewId,
@@ -223,7 +148,6 @@ export function ExtensionsSettingsTab({
     setCustomViewEditor({ draft: { ...view }, id: view.id });
   }, [initialCustomViewId, isActive, settings.customViews]);
   const statusById = new Map(status?.plugins.map((plugin) => [plugin.id, plugin]));
-  const cef = statusById.get('cef');
   /*
    * CDXC:Extensions 2026-08-30:
    * Only the desktop shell exposes a gxserver bootstrap, so the store section
@@ -246,9 +170,7 @@ export function ExtensionsSettingsTab({
    * SEE-ALSO: apps/desktop/src/app/view_tab_menus.rs, apps/desktop/views/modal-host.tsx.
    */
   const viewScopeEditorTitle = (key: string): string | undefined => {
-    const official = [...OFFICIAL_VIEW_EXTENSIONS, ...OFFICIAL_TITLEBAR_EXTENSIONS].find(
-      (extension) => officialViewScopeKey(extension.id) === key
-    );
+    const official = GHOSTEX_OFFICIAL_EXTENSIONS.find((extension) => officialViewScopeKey(extension.id) === key);
     if (official) return official.title;
     const customView = settings.customViews.find((view) => extensionViewScopeKey(view.id) === key);
     if (customView) return customView.name;
@@ -283,6 +205,7 @@ export function ExtensionsSettingsTab({
       return isDefaultGhostexViewScope(scope) ? undefined : viewScopeDescription(scope, { projects, spaces });
     },
     edit: (key, title) => setScopeEditor({ draft: ghostexViewScope(settings.viewScopes, key), key, title }),
+    editingKey: scopeEditor?.key,
     renderEditor: (key) =>
       scopeEditor?.key === key ? (
         <ViewScopeEditor
@@ -421,6 +344,47 @@ export function ExtensionsSettingsTab({
     return () => cancelAnimationFrame(frame);
   }, [customViewEditor?.id, detailOpen, isActive, search.tab.isSearching]);
 
+  /*
+   * CDXC:Extensions 2026-09-24 DECISION:
+   * User: one filter bar (search, source, type, category, "N shown") covers every extension on the page. The
+   * Settings-wide search still narrows the page first; this filter narrows what is left.
+   */
+  const [filter, setFilter] = useState<ExtensionFilter>(DEFAULT_EXTENSION_FILTER);
+  const filterActive = isExtensionFilterActive(filter);
+  const showBuiltIn = shouldShowSettingsSection(search.sections.official);
+  const showStore = Boolean(transport) && shouldShowSettingsSection(search.sections.store);
+  const showCustomViews = shouldShowSettingsSection(search.sections.customViews);
+  const builtIn = showBuiltIn ? builtInCounts(filter, showOfficial) : { shown: 0, total: 0 };
+  const storeShown = showStore ? filterStoreExtensions(filter, browser.catalog, browser.installed) : undefined;
+  const storeAll = showStore
+    ? filterStoreExtensions(DEFAULT_EXTENSION_FILTER, browser.catalog, browser.installed)
+    : undefined;
+  const visibleCustomViews = showCustomViews
+    ? orderedCustomViews.filter((view) => extensionFilterMatches(filter, customViewFilterSubject(view)))
+    : [];
+  const shownCount =
+    builtIn.shown +
+    (storeShown ? storeShown.installed.length + storeShown.store.length : 0) +
+    visibleCustomViews.length;
+  const totalCount =
+    builtIn.total +
+    (storeAll ? storeAll.installed.length + storeAll.store.length : 0) +
+    (showCustomViews ? orderedCustomViews.length : 0);
+  const filterCategories = useMemo(
+    () =>
+      [
+        ...BUILT_IN_CATEGORY_LABELS,
+        ...storeCategories(browser.catalog, browser.installed).sort((a, b) => a.localeCompare(b)),
+      ].filter((category, index, all) => all.indexOf(category) === index),
+    [browser.catalog, browser.installed]
+  );
+  // While a filter is active a section with no match disappears; without one every section stays so its empty state and actions show.
+  const builtInVisible = showBuiltIn && (!filterActive || builtIn.shown > 0);
+  const storeVisible =
+    showStore && (!filterActive || (storeShown ? storeShown.installed.length + storeShown.store.length : 0) > 0);
+  const customViewsVisible = showCustomViews && (!filterActive || visibleCustomViews.length > 0);
+  const anyExtensionSection = showBuiltIn || showStore || showCustomViews;
+
   return (
     <SettingsNativeScrollArea className='h-full min-h-0' onScrollCapture={handleScrollCapture}>
       <div className='settings-page-width flex flex-col gap-6 px-5 pb-5' ref={contentRef}>
@@ -448,7 +412,28 @@ export function ExtensionsSettingsTab({
               installed={browser.installed}
               onChange={(order) => onUpdateSetting('titlebarViewOrder', order)}
             />
-            {shouldShowSettingsSection(search.sections.official) ? (
+
+            {anyExtensionSection ? (
+              <ExtensionsFilterBar
+                categories={filterCategories}
+                filter={filter}
+                loading={browser.loading}
+                onChange={setFilter}
+                onRefresh={transport ? () => void browser.load() : undefined}
+                shownCount={shownCount}
+                sources={[
+                  ...(showBuiltIn ? (['built-in'] as const) : []),
+                  ...(showStore ? (['installed', 'store'] as const) : []),
+                  ...(showCustomViews ? (['custom'] as const) : []),
+                ]}
+                totalCount={totalCount}
+              />
+            ) : null}
+            {anyExtensionSection && filterActive && shownCount === 0 ? (
+              <ExtensionEmptyStateFilter onClear={() => setFilter(DEFAULT_EXTENSION_FILTER)} />
+            ) : null}
+
+            {builtInVisible ? (
               <SettingsSection
                 actions={
                   <SettingButton
@@ -470,48 +455,22 @@ export function ExtensionsSettingsTab({
                 }
                 description='Extensions Ghostex ships and maintains.'
                 descriptionClassName='pb-2'
-                title='Official Extensions'
+                plain
+                title='Built-in'
               >
-                <OfficialExtensionList
-                  extensions={OFFICIAL_VIEW_EXTENSIONS}
-                  label='Views'
+                <BuiltInExtensionGroups
+                  filter={filter}
                   onReinstallPlugin={onReinstallPlugin}
-                  onUpdateSetting={onUpdateSetting}
+                  onToggle={(key, hidden) => onUpdateSetting(key, hidden)}
                   scopeControls={scopeControls}
                   settings={settings}
                   showOfficial={showOfficial}
                   statusById={statusById}
                 />
-                <OfficialExtensionList
-                  extensions={OFFICIAL_TITLEBAR_EXTENSIONS}
-                  label='Buttons and menus'
-                  onReinstallPlugin={onReinstallPlugin}
-                  onUpdateSetting={onUpdateSetting}
-                  scopeControls={scopeControls}
-                  settings={settings}
-                  showOfficial={showOfficial}
-                  statusById={statusById}
-                />
-                {showOfficial('cef') ? (
-                  <OfficialExtensionGroup label='Shared runtime'>
-                    <OfficialExtensionRow
-                      description='Chromium Embedded Framework powers Ghostex web surfaces and stays on because the app requires it.'
-                      icon={IconDeviceDesktop}
-                      onReinstall={onReinstallPlugin ? () => onReinstallPlugin('cef') : undefined}
-                      reinstallAvailable={Boolean(onReinstallPlugin && cef?.canReinstall)}
-                      runtime={cef}
-                      title='Chromium runtime (CEF)'
-                    />
-                  </OfficialExtensionGroup>
-                ) : null}
               </SettingsSection>
             ) : null}
 
-            {shouldShowSettingsSection(search.sections.accountUsage) ? (
-              <TitlebarAccountUsageSection active={isActive} hideEmails={settings.hideAccountEmails} />
-            ) : null}
-
-            {transport && shouldShowSettingsSection(search.sections.store) ? (
+            {storeVisible ? (
               <SettingsSection
                 description={
                   <>
@@ -534,9 +493,14 @@ export function ExtensionsSettingsTab({
                   </>
                 }
                 descriptionClassName='pb-2'
+                plain
                 title='Extensions Store'
               >
                 <ExtensionsBrowserList
+                  editingScopeId={
+                    scopeEditor?.key.startsWith('extension:') ? scopeEditor.key.slice('extension:'.length) : undefined
+                  }
+                  filter={filter}
                   onEditScope={(extension) =>
                     scopeControls.edit(extensionViewScopeKey(extension.id), extension.manifest.title)
                   }
@@ -547,60 +511,40 @@ export function ExtensionsSettingsTab({
               </SettingsSection>
             ) : null}
 
-            {shouldShowSettingsSection(search.sections.customViews) ? (
+            {customViewsVisible ? (
               <SettingsSection
-                actions={
-                  <SettingButton
-                    disabled={Boolean(customViewEditor)}
-                    disabledReason='Finish editing the current custom view first.'
-                    onClick={() => setChoosingTemplate(true)}
-                    type='button'
-                    variant='ghost'
-                  >
-                    <IconPlus aria-hidden='true' data-icon='inline-start' />
-                    Add view
-                  </SettingButton>
-                }
                 description='Websites, project dev servers, and HTML reports. Add from a template or configure your own.'
                 descriptionClassName='pb-2'
+                plain
                 title='Your views'
               >
                 {choosingTemplate ? (
-                  <ProjectViewTemplates
-                    templates={settings.customViewTemplates}
-                    onCancel={() => setChoosingTemplate(false)}
-                    onRemove={(id) =>
-                      onUpdateSetting(
-                        'customViewTemplates',
-                        settings.customViewTemplates.filter((t) => t.id !== id)
-                      )
-                    }
-                    onSelect={(template) => {
-                      setChoosingTemplate(false);
-                      setCustomViewEditor({
-                        draft: { ...template, id: '', enabled: true, projectBindings: {}, templateId: template.id },
-                      });
-                    }}
-                  />
+                  <div className='pb-3'>
+                    <ProjectViewTemplates
+                      templates={settings.customViewTemplates}
+                      onCancel={() => setChoosingTemplate(false)}
+                      onRemove={(id) =>
+                        onUpdateSetting(
+                          'customViewTemplates',
+                          settings.customViewTemplates.filter((t) => t.id !== id)
+                        )
+                      }
+                      onSelect={(template) => {
+                        setChoosingTemplate(false);
+                        setCustomViewEditor({
+                          draft: { ...template, id: '', enabled: true, projectBindings: {}, templateId: template.id },
+                        });
+                      }}
+                    />
+                  </div>
                 ) : null}
                 <DragDropProvider onDragEnd={handleCustomViewDragEnd}>
-                  <div className='settings-list-rows'>
-                    {orderedCustomViews.map((view, index) =>
-                      customViewEditor?.id === view.id ? (
-                        <CustomViewEditor
-                          editorRef={customViewEditorRef}
-                          spaces={spaces}
-                          editor={customViewEditor}
-                          key={view.id}
-                          onCancel={() => setCustomViewEditor(undefined)}
-                          onChange={setCustomViewEditor}
-                          onSave={saveCustomView}
-                          onSaveTemplate={saveViewTemplate}
-                        />
-                      ) : (
-                        <CustomViewRow
+                  <ExtensionCardGrid>
+                    {visibleCustomViews.map((view, index) => (
+                      <Fragment key={view.id}>
+                        <CustomViewCard
+                          editing={customViewEditor?.id === view.id}
                           index={index}
-                          key={view.id}
                           onEdit={() => setCustomViewEditor({ draft: { ...view }, id: view.id })}
                           onEnabledChange={(enabled) =>
                             updateCustomViews(
@@ -612,269 +556,54 @@ export function ExtensionsSettingsTab({
                           onRemove={() =>
                             updateCustomViews(settings.customViews.filter((candidate) => candidate.id !== view.id))
                           }
+                          sortable={!filterActive}
                           view={view}
                         />
-                      )
-                    )}
+                        {customViewEditor?.id === view.id ? (
+                          <ExtensionCardGridWide>
+                            <div className='settings-list-card'>
+                              <CustomViewEditor
+                                editorRef={customViewEditorRef}
+                                spaces={spaces}
+                                editor={customViewEditor}
+                                onCancel={() => setCustomViewEditor(undefined)}
+                                onChange={setCustomViewEditor}
+                                onSave={saveCustomView}
+                                onSaveTemplate={saveViewTemplate}
+                              />
+                            </div>
+                          </ExtensionCardGridWide>
+                        ) : null}
+                      </Fragment>
+                    ))}
                     {customViewEditor && !customViewEditor.id ? (
-                      <CustomViewEditor
-                        spaces={spaces}
-                        editor={customViewEditor}
-                        onCancel={() => setCustomViewEditor(undefined)}
-                        onChange={setCustomViewEditor}
-                        onSave={saveCustomView}
-                        onSaveTemplate={saveViewTemplate}
-                      />
-                    ) : settings.customViews.length === 0 ? (
-                      <div className='py-5 text-center text-[13px] font-normal text-muted-foreground'>
-                        No custom views yet.
-                      </div>
-                    ) : null}
-                  </div>
+                      <ExtensionCardGridWide>
+                        <div className='settings-list-card'>
+                          <CustomViewEditor
+                            editorRef={customViewEditorRef}
+                            spaces={spaces}
+                            editor={customViewEditor}
+                            onCancel={() => setCustomViewEditor(undefined)}
+                            onChange={setCustomViewEditor}
+                            onSave={saveCustomView}
+                            onSaveTemplate={saveViewTemplate}
+                          />
+                        </div>
+                      </ExtensionCardGridWide>
+                    ) : filterActive || choosingTemplate ? null : (
+                      <AddCustomViewCard onClick={() => setChoosingTemplate(true)} />
+                    )}
+                  </ExtensionCardGrid>
                 </DragDropProvider>
               </SettingsSection>
+            ) : null}
+
+            {shouldShowSettingsSection(search.sections.accountUsage) ? (
+              <TitlebarAccountUsageSection active={isActive} hideEmails={settings.hideAccountEmails} />
             ) : null}
           </>
         )}
       </div>
     </SettingsNativeScrollArea>
-  );
-}
-
-function CustomViewRow({
-  index,
-  onEdit,
-  onEnabledChange,
-  onRemove,
-  view,
-}: {
-  index: number;
-  onEdit: () => void;
-  onEnabledChange: (enabled: boolean) => void;
-  onRemove: () => void;
-  view: GhostexCustomView;
-}) {
-  const sortable = useSortable({
-    accept: 'settings-custom-view',
-    data: createSettingsCustomViewDragData(view.id),
-    group: 'settings-custom-views',
-    id: view.id,
-    index,
-    type: 'settings-custom-view',
-  });
-  const { handleRef, isDragging } = sortable;
-
-  const setRowRef = (element: HTMLDivElement | null) => {
-    setSettingsSortableRowElement(sortable, element);
-  };
-
-  return (
-    <div
-      className='extensions-row group/row flex min-h-14 items-center gap-3 py-2 transition-colors'
-      data-dragging={String(Boolean(isDragging))}
-      ref={setRowRef}
-    >
-      <Button aria-label={`Reorder ${view.name}`} ref={handleRef} size='icon-sm' type='button' variant='ghost'>
-        <IconGripVertical aria-hidden='true' />
-      </Button>
-      <span
-        aria-hidden='true'
-        className={cn('size-1.5 shrink-0 rounded-full', view.enabled ? 'bg-emerald-400/80' : 'bg-white/20')}
-      />
-      <span
-        aria-hidden='true'
-        className='extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-[#b9b9b9]'
-      >
-        <IconWorld className='size-4' />
-      </span>
-      <div className='min-w-0 flex-1'>
-        <span className='block truncate text-sm font-normal text-foreground'>{view.name}</span>
-        <p className='mt-0.5 truncate text-[13px] font-normal leading-relaxed text-foreground/75'>
-          {projectViewDescription(view)}
-        </p>
-      </div>
-      <div className='flex shrink-0 items-center gap-1'>
-        <Button aria-label={`Edit ${view.name}`} onClick={onEdit} size='icon-sm' type='button' variant='ghost'>
-          <IconPencil aria-hidden='true' className='size-4' />
-        </Button>
-        <Button aria-label={`Remove ${view.name}`} onClick={onRemove} size='icon-sm' type='button' variant='ghost'>
-          <IconTrash aria-hidden='true' className='size-4' />
-        </Button>
-        <div className='ml-1 flex shrink-0 items-center gap-2'>
-          <Switch
-            aria-label={`${view.enabled ? 'Disable' : 'Enable'} ${view.name}`}
-            checked={view.enabled}
-            onCheckedChange={onEnabledChange}
-            size='sm'
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OfficialExtensionList({
-  extensions,
-  label,
-  onReinstallPlugin,
-  onUpdateSetting,
-  scopeControls,
-  settings,
-  showOfficial,
-  statusById,
-}: {
-  extensions: readonly GhostexOfficialExtension[];
-  label: string;
-  onReinstallPlugin?: (pluginId: SidebarPluginSettingsItem['id']) => void;
-  onUpdateSetting: <K extends ExtensionPageSettingKey>(key: K, value: ghostexSettings[K]) => void;
-  scopeControls: ViewScopeControls;
-  settings: ghostexSettings;
-  showOfficial: (key: string) => boolean;
-  statusById: ReadonlyMap<SidebarPluginSettingsItem['id'], SidebarPluginSettingsItem>;
-}) {
-  const visible = extensions.filter((extension) => showOfficial(extension.id));
-  if (!visible.length) {
-    return null;
-  }
-  return (
-    <OfficialExtensionGroup label={label}>
-      {visible.map((extension) => {
-        const runtimeId = OFFICIAL_EXTENSION_RUNTIME_IDS[extension.id];
-        const runtime = runtimeId ? statusById.get(runtimeId) : undefined;
-        const scopeKey = officialViewScopeKey(extension.id);
-        // An app-wide entry has no project to be narrowed to, so it shows the switch alone.
-        const scoped = extension.appWide !== true;
-        return (
-          <Fragment key={extension.id}>
-            <OfficialExtensionRow
-              description={extension.description}
-              enabled={isOfficialExtensionEnabled(settings, extension)}
-              icon={OFFICIAL_EXTENSION_ICONS[extension.id]}
-              onEditScope={scoped ? () => scopeControls.edit(scopeKey, extension.title) : undefined}
-              onEnabledChange={(enabled) => onUpdateSetting(extension.settingsKey, !enabled)}
-              onReinstall={runtimeId && onReinstallPlugin ? () => onReinstallPlugin(runtimeId) : undefined}
-              reinstallAvailable={Boolean(onReinstallPlugin && runtime?.canReinstall)}
-              runtime={runtime}
-              scopeSummary={scoped ? scopeControls.describe(scopeKey) : undefined}
-              title={extension.title}
-            />
-            {scoped ? scopeControls.renderEditor(scopeKey) : null}
-          </Fragment>
-        );
-      })}
-    </OfficialExtensionGroup>
-  );
-}
-
-function OfficialExtensionGroup({ children, label }: { children: ReactNode; label: string }) {
-  return (
-    <>
-      <div className='settings-list-group-label'>{label}</div>
-      <div className='settings-list-rows'>{children}</div>
-    </>
-  );
-}
-
-function OfficialExtensionRow({
-  description,
-  enabled,
-  icon: Icon,
-  onEditScope,
-  onEnabledChange,
-  onReinstall,
-  reinstallAvailable,
-  runtime,
-  scopeSummary,
-  title,
-}: {
-  description: string;
-  enabled?: boolean;
-  icon: TablerIcon;
-  onEditScope?: () => void;
-  onEnabledChange?: (enabled: boolean) => void;
-  onReinstall?: () => void;
-  reinstallAvailable?: boolean;
-  runtime?: SidebarPluginSettingsItem;
-  scopeSummary?: string;
-  title: string;
-}) {
-  const busy = runtime !== undefined && !['installed', 'notInstalled', 'failed'].includes(runtime.status);
-  const actionLabel = runtime?.status === 'notInstalled' ? 'Install' : 'Reinstall';
-  const metadata = [
-    runtime?.statusLabel,
-    runtime?.version ? `v${runtime.version}` : undefined,
-    runtime?.errorMessage,
-  ].filter(Boolean);
-
-  return (
-    <div className='extensions-row group/row flex min-h-14 items-center gap-3 py-2 transition-colors'>
-      <span
-        aria-hidden='true'
-        className={cn('size-1.5 shrink-0 rounded-full', enabled === false ? 'bg-white/20' : 'bg-emerald-400/80')}
-      />
-      <span
-        aria-hidden='true'
-        className='extensions-icon flex size-9 shrink-0 items-center justify-center p-1.5 text-[#b9b9b9]'
-      >
-        <Icon className='size-4' />
-      </span>
-      <div className='min-w-0 flex-1'>
-        <span className='block truncate text-sm font-normal text-foreground'>{title}</span>
-        <p className='mt-0.5 text-[13px] font-normal leading-relaxed text-foreground/75'>{description}</p>
-        {scopeSummary ? (
-          <p className='mt-0.5 truncate text-[13px] font-normal text-muted-foreground'>{scopeSummary}</p>
-        ) : null}
-      </div>
-      {onReinstall ? (
-        <div className='flex shrink-0 flex-col items-end gap-1'>
-          <SettingButton
-            className='shrink-0 font-normal'
-            disabled={busy || !reinstallAvailable}
-            disabledReason={
-              busy ? `${title} is being installed.` : 'This build does not provide a reinstallable remote component.'
-            }
-            onClick={onReinstall}
-            size='sm'
-            type='button'
-            variant='outline'
-          >
-            <IconRefresh aria-hidden='true' className={cn(busy && 'animate-spin')} data-icon='inline-start' />
-            {actionLabel}
-          </SettingButton>
-          {metadata.length ? (
-            <p className='max-w-56 truncate text-right text-[13px] font-normal text-muted-foreground'>
-              {metadata.join(' · ')}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-      {onEditScope ? (
-        <Button
-          aria-label={`Choose where ${title} is shown`}
-          className='shrink-0'
-          onClick={onEditScope}
-          size='icon-sm'
-          type='button'
-          variant='ghost'
-        >
-          <IconPencil aria-hidden='true' className='size-4' />
-        </Button>
-      ) : null}
-      {onEnabledChange && enabled !== undefined ? (
-        <div className='ml-1 flex shrink-0 items-center gap-2'>
-          <Switch
-            aria-label={`${enabled ? 'Disable' : 'Enable'} ${title}`}
-            checked={enabled}
-            onCheckedChange={onEnabledChange}
-            size='sm'
-          />
-        </div>
-      ) : (
-        /* CDXC:Settings 2026-09-09 DECISION: User: no On or Off text beside toggles anywhere in Settings. A view that cannot be turned off shows a locked-on switch instead of an "Always on" caption. */
-        <div className='ml-1 flex shrink-0 items-center gap-2'>
-          <Switch aria-label={`${title} is always on`} checked disabled size='sm' />
-        </div>
-      )}
-    </div>
   );
 }

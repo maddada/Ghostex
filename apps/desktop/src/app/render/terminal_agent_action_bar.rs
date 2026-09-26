@@ -47,11 +47,13 @@ use crate::app::model::*;
 use crate::*;
 
 /*
-Geometry is derived from the real chat composer so the shared controls land on
-the same pixels when a session flips between Chat and Terminal:
+Geometry is derived from the chat composer (apps/desktop/src/app/native_chat/composer.rs)
+so the shared controls land on the same pixels when a session flips between Chat
+and Terminal. It was measured from the React chat, whose shape the native composer
+kept:
 
-  packages/core-ui/chat/session-chat-view.tsx  wrapper `max-w-3xl px-4 pb-3`
-  packages/core-ui/chat/session-chat-composer.tsx  box `rounded-3xl border px-4`
+  wrapper `max-w-3xl px-4 pb-3`
+  box `rounded-3xl border px-4`
 
 so the composer's action row is inset 16 + 1 + 16 = 33px from the pane's side
 edges and its centre line sits 12 + 1 + 10 + 16 = 39px above the pane's bottom
@@ -82,10 +84,11 @@ const TERMINAL_AGENT_BAR_ACCENT_BUTTON_RADIUS: f32 = 6.0;
 const TERMINAL_AGENT_BAR_BUTTON_GAP: f32 = 6.0;
 const TERMINAL_AGENT_BAR_ICON_SIZE: f32 = 16.0;
 /*
-`.ghostex-chat-stash-control .n svg { width: 1.25rem }` in
-packages/core-ui/styles/chat.css: the stack-push glyph only inks 16x15 of its
-24px box, so at the shared 16px size it reads smaller than the paperclip beside
-it. The chat footer renders that one glyph a size up; the bar does the same.
+The React chat's `.ghostex-chat-stash-control .n svg { width: 1.25rem }` (in
+packages/core-ui/styles/chat.css until 2026-09-25): the stack-push glyph only
+inks 16x15 of its 24px box, so at the shared 16px size it reads smaller than the
+paperclip beside it. The chat footer rendered that one glyph a size up; the bar
+does the same.
 */
 const TERMINAL_AGENT_BAR_STASH_ICON_SIZE: f32 = 20.0;
 const TERMINAL_AGENT_BAR_MENU_ICON_SIZE: f32 = 14.0;
@@ -96,11 +99,11 @@ const TERMINAL_AGENT_BAR_MENU_WIDTH: f32 = 200.0;
 const TERMINAL_AGENT_BAR_MENU_GAP: f32 = 6.0;
 
 /*
-Every glyph below is the Tabler outline icon the chat footer imports from
+Every glyph below is the Tabler outline icon the chat footer used from
 `@tabler/icons-react`, shipped here as an asset file under
 `apps/desktop/assets/titlebar/` (the crate's established icon pattern; see
-`apps/desktop/src/assets.rs`). The mapping is one-for-one with
-`packages/core-ui/chat/session-chat-composer-actions.tsx`:
+`apps/desktop/src/assets.rs`). The mapping is one-for-one with the React chat's
+composer actions, which the native chat footer kept:
 
   IconDots        → dots.svg          IconNote        → note.svg
   IconStackPush   → stack-push.svg    IconPaperclip   → paperclip.svg
@@ -181,7 +184,7 @@ pub(crate) enum TerminalAgentBarAction {
     FullReload,
     /// CDXC:AgentProviders 2026-09-03: opens the same-family account flyout
     /// instead of emitting a terminal event; the pick is dispatched to the
-    /// sidebar runtime with the agent id. Hidden when the session has no
+    /// Rust store with the agent id (gx_store/terminal_lifecycle/runtime_actions.rs). Hidden when the session has no
     /// compatible account.
     SwitchAccount,
     ExportTranscript,
@@ -294,8 +297,8 @@ impl TerminalAgentBarAction {
 
 /*
 The ⋯ menu, top to bottom. It is the chat composer's menu row for row, in the
-same order, with the same icons and the same shortcut column — see
-`packages/core-ui/chat/session-chat-composer-actions.tsx`, whose expanded menu
+same order, with the same icons and the same shortcut column; see
+`apps/desktop/src/app/native_chat/actions.rs`, whose expanded menu
 renders a "Chat" group of Verbose mode and Delayed actions, then the host's
 Close After Done action, then the host's "Agent" group, then the host's
 remaining actions in host-list order under no heading at all. The headings themselves come from
@@ -363,10 +366,23 @@ impl GhostexGpuiApp {
         if self.agents_chat_mode_sessions.contains(&session_id) {
             return None;
         }
+        // CDXC:Terminal 2026-09-25 WHY:
+        // The bar's data (agent name, icon, session id) and a respawned viewer can lag a frame behind a session switch. Rendering no bar for that frame grew the terminal body by the bar's height, which resized the session grid and ran the whole claim, dump and redraw pipeline twice per switch.
+        // A running session whose bar has rendered once in this project reserves the bar's height with an invisible spacer while its data lags. Sleeping and other non-running bodies never reserve it, and a project switch forgets the set because session ids are project-local.
+        let reserve_bar = self.terminal_agent_bar_sessions.contains(&session_id)
+            && self
+                .agents_workspace
+                .session(session_id)
+                .is_some_and(|session| {
+                    session.presentation_state == TerminalSessionPresentationState::Running
+                });
         if !self.agents_gpui_engine_terminals.contains_key(&session_id) {
-            return None;
+            return reserve_bar.then(|| Self::reserved_terminal_agent_bar(surface, session_id));
         }
-        let presentation_session = self.agents_sidebar_session_for_terminal(session_id)?;
+        let Some(presentation_session) = self.agents_sidebar_session_for_terminal(session_id)
+        else {
+            return reserve_bar.then(|| Self::reserved_terminal_agent_bar(surface, session_id));
+        };
         let agent_name = terminal_agent_bar_agent_name(presentation_session);
         let agent_session_id = presentation_session
             .agent_session_id
@@ -377,7 +393,16 @@ impl GhostexGpuiApp {
             && presentation_session.agent_icon.is_none()
             && agent_session_id.is_none()
         {
-            return None;
+            return reserve_bar.then(|| Self::reserved_terminal_agent_bar(surface, session_id));
+        }
+        if !self.terminal_agent_bar_sessions.contains(&session_id) {
+            // Rendering only reads the app; the set is updated right after this frame.
+            let app = cx.entity().downgrade();
+            cx.defer(move |cx| {
+                let _ = app.update(cx, |app, _| {
+                    app.terminal_agent_bar_sessions.insert(session_id);
+                });
+            });
         }
         let has_session_note = presentation_session.has_session_note;
         let stashed_prompt_count = presentation_session.stashed_prompt_count;
@@ -684,6 +709,31 @@ impl GhostexGpuiApp {
         menu.into_any_element()
     }
 
+    /// Invisible spacer with the bar's exact layout height: while the bar's
+    /// data lags behind the selection, the terminal body keeps its row count
+    /// instead of growing for one frame and reflowing the session grid.
+    fn reserved_terminal_agent_bar(
+        surface: TerminalAgentBarSurface,
+        session_id: TerminalSessionId,
+    ) -> AnyElement {
+        let suffix = surface.element_id_suffix(session_id);
+        h_flex()
+            .id(format!("ghostex-gpui-terminal-agent-bar-reserved-{suffix}"))
+            .flex_shrink_0()
+            .w_full()
+            .justify_center()
+            .px(px(TERMINAL_AGENT_BAR_OUTER_PADDING))
+            .pb(px(TERMINAL_AGENT_BAR_BOTTOM_INSET))
+            .child(
+                h_flex()
+                    .w_full()
+                    .max_w(px(TERMINAL_AGENT_BAR_MAX_CONTENT_WIDTH
+                        - 2.0 * TERMINAL_AGENT_BAR_OUTER_PADDING))
+                    .h(px(TERMINAL_AGENT_BAR_HEIGHT)),
+            )
+            .into_any_element()
+    }
+
     pub(crate) fn toggle_terminal_agent_action_bar_menu(
         &mut self,
         session_id: TerminalSessionId,
@@ -708,7 +758,8 @@ impl GhostexGpuiApp {
     }
 
     /// The Switch Account flyout: one row per compatible account. Picking one
-    /// closes the menu and hands the agent id to the sidebar runtime, which
+    /// closes the menu and hands the agent id to the Rust store
+    /// (gx_store/terminal_lifecycle/runtime_actions.rs), which
     /// asks gxserver to rewrite the row and then runs its Full reload.
     fn render_terminal_agent_bar_account_submenu(
         &self,
@@ -1290,7 +1341,7 @@ fn terminal_agent_bar_stashed_prompt_count_badge(count: u64) -> AnyElement {
 /// the chat-surface actions (Verbose mode, Delayed actions, Close After Done)
 /// and "Agent" over the host's session actions, and leaves its trailing
 /// host-action block unnamed;
-/// see `packages/core-ui/chat/session-chat-composer-actions.tsx`. This menu
+/// see `apps/desktop/src/app/native_chat/actions.rs`. This menu
 /// mirrors that, so Export transcript stays under a bare separator here too.
 fn terminal_agent_bar_menu_group_heading(action: TerminalAgentBarAction) -> Option<&'static str> {
     match action {

@@ -9,15 +9,16 @@
 //!
 //! What this client deliberately never does:
 //!
-//! - It never sends `rendererCommands: true`. A socket that does becomes a dispatch target for
-//!   daemon renderer commands and must answer every one of them.
+//! - It sends `rendererCommands: true` only when [`GxClientConfig::renderer_commands`] asks for it
+//!   (the desktop's local store, and nothing else). Such a socket becomes the daemon's dispatch
+//!   target for CLI renderer commands and must answer every one of them.
 //! - It never subscribes to a session chat. A chat subscribe from a second client starts a new
 //!   epoch and rebroadcasts a snapshot to every client, which would disturb a runtime that is
 //!   live beside this one.
 //! - It never talks TLS. It is for the loopback daemon only: `http://` and `ws://`.
 //!
-//! The only message it ever sends is `subscribePresentation` with a client id and, when the store
-//! already holds rows, `lastRevision`.
+//! It sends `subscribePresentation` with a client id and, when the store already holds rows,
+//! `lastRevision`; a renderer-command target also sends `rendererCommandResult`.
 
 mod client;
 mod config;

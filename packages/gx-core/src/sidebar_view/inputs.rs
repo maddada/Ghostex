@@ -447,8 +447,6 @@ pub struct SidebarHostInputs {
     pub remote_recent_project_ids: BTreeMap<String, BTreeSet<String>>,
     /// By project id.
     pub project_diff_stats: BTreeMap<String, ProjectDiffStats>,
-    /// By sidebar session id (`combined-session:<project>:<session>`).
-    pub close_after_done: BTreeMap<String, CloseAfterDoneInput>,
     /// By sidebar session id.
     pub local_delayed_sends: BTreeMap<String, DelayedSendInput>,
     /// How many Recent Projects the host knows of, this machine's and every remote machine's.

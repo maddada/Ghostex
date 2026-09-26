@@ -2,9 +2,8 @@
 //! session rather than only the rows the sidebar list shows.
 //!
 //! CDXC:SessionChat 2026-09-21 SEE-ALSO:
-//! packages/shared/session-chat-presentation/armed-actions.ts is the TypeScript twin this is a port
-//! of; packages/core-ui/chat/session-chat-working-strip.tsx and
-//! apps/desktop/src/app/native_chat/working_strip.rs draw the labels.
+//! apps/desktop/src/app/native_chat/working_strip.rs draws the labels. Ported from
+//! packages/shared/session-chat-presentation/armed-actions.ts (deleted 2026-09-25).
 //!
 //! CDXC:SessionChat 2026-09-21 WHY:
 //! Drawn from every machine's presentation rather than from the sidebar view, because the view is
@@ -55,7 +54,8 @@ pub fn armed_actions_by_session(
                 session_id: session.session_id.clone(),
             };
             let sidebar_session_id = key.to_sidebar_session_id();
-            let close = host.close_after_done.get(&sidebar_session_id);
+            let close = CloseAfterDoneInput::from_session(session);
+            let close = close.as_ref();
             let local = host.local_delayed_sends.get(&sidebar_session_id);
             // Nothing to say about this row at all: the common case, and the one that keeps a tick
             // over a workspace with hundreds of sessions to one map lookup each.

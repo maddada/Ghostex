@@ -24,6 +24,8 @@ use crate::socket::{self, Endpoint, EventSocket};
 pub(crate) enum Command {
     /// Subscribe again without `lastRevision`, which forces a full snapshot.
     Resubscribe,
+    /// A message the host wants written to the daemon: a renderer command's answer.
+    Send(String),
     Shutdown,
 }
 
@@ -62,6 +64,8 @@ struct Resubscribes {
     /// When the client last forced a resubscribe on its own, and when the next one is due.
     last_forced_at: Option<Instant>,
     forced_due_at: Option<Instant>,
+    /// Host messages that arrived while no socket was open, written after the next subscribe.
+    unsent: Vec<String>,
 }
 
 impl Worker {
@@ -162,6 +166,7 @@ impl Worker {
             match self.commands.recv_timeout(remaining) {
                 // The reconnect subscribes anyway; remember that it must be a full snapshot.
                 Ok(Command::Resubscribe) => resubscribes.full_snapshot_wanted = true,
+                Ok(Command::Send(text)) => resubscribes.unsent.push(text),
                 Ok(Command::Shutdown) | Err(RecvTimeoutError::Disconnected) => return true,
                 Err(RecvTimeoutError::Timeout) => return false,
             }
@@ -205,6 +210,11 @@ impl Worker {
         if let Err(leave) = self.subscribe(socket, resubscribes) {
             return leave;
         }
+        for text in std::mem::take(&mut resubscribes.unsent) {
+            if let Err(leave) = self.send_text(socket, text) {
+                return leave;
+            }
+        }
         let mut ack_deadline = Some(Instant::now() + SUBSCRIBE_ACK_TIMEOUT);
         loop {
             loop {
@@ -215,6 +225,11 @@ impl Worker {
                             return leave;
                         }
                         ack_deadline = Some(Instant::now() + SUBSCRIBE_ACK_TIMEOUT);
+                    }
+                    Ok(Command::Send(text)) => {
+                        if let Err(leave) = self.send_text(socket, text) {
+                            return leave;
+                        }
                     }
                     Ok(Command::Shutdown) | Err(TryRecvError::Disconnected) => return Leave::Stop,
                     Err(TryRecvError::Empty) => break,
@@ -275,8 +290,17 @@ impl Worker {
         }
     }
 
-    /// Sends `subscribePresentation`: the only message this client ever sends. It never sets
-    /// `rendererCommands`, so the daemon never makes this socket a renderer-command target.
+    /// Writes one host message (a renderer command's answer) on the live socket.
+    fn send_text(&self, socket: &mut EventSocket, text: String) -> Result<(), Leave> {
+        socket
+            .send(Message::Text(text.into()))
+            .map_err(|error| Leave::Lost(format!("could not send a renderer answer: {error}")))?;
+        bump(&self.stats.renderer_answers);
+        Ok(())
+    }
+
+    /// Sends `subscribePresentation`. `rendererCommands` is set only when the host's config asks
+    /// for it, which makes this socket the daemon's renderer-command target.
     fn subscribe(
         &self,
         socket: &mut EventSocket,
@@ -286,7 +310,7 @@ impl Worker {
         let message = ClientMessage::SubscribePresentation {
             client_id: Some(self.config.client_id.clone()),
             last_revision: (!resubscribes.full_snapshot_wanted && held > 0).then_some(held),
-            renderer_commands: None,
+            renderer_commands: self.config.renderer_commands.then_some(true),
         };
         let text = serde_json::to_string(&message)
             .map_err(|error| Leave::Lost(format!("could not encode the subscribe: {error}")))?;
@@ -334,6 +358,13 @@ impl Worker {
                 return Ok(());
             }
         };
+        if self.config.renderer_commands {
+            if let ServerEvent::RendererCommand(command) = frame {
+                bump(&self.stats.renderer_commands);
+                self.emit(ClientOutput::RendererCommand(command.command));
+                return Ok(());
+            }
+        }
         if let ServerEvent::EventStreamReady(header) = &frame {
             if header.protocol_version != GXSERVER_PROTOCOL_VERSION {
                 let received = header.protocol_version;

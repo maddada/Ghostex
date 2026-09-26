@@ -1,11 +1,12 @@
 /**
- * The Quick Access wire contract: one fully resolved display snapshot from the sidebar runtime to the native GPUI
- * window, and the interactions that come back. The runtime keeps owning data, filtering, sorting, grouping and every
+ * The Quick Access wire contract: one fully resolved display snapshot from the Quick Access controller to the native
+ * GPUI window, and the interactions that come back. The controller (packages/gx-core/src/quick_access/, which replaced
+ * the QuickJS runtime's TypeScript controller on 2026-09-25) owns data, filtering, sorting, grouping and every
  * command; the window only paints and reports.
  *
  * CDXC:AppModal 2026-09-20 SEE-ALSO:
- * Both halves of this contract must change together: apps/desktop/sidebar/native-quick-access/ (the controller that
- * builds these snapshots) and apps/desktop/src/app/window/quick_access/model.rs (the Rust structs that read them).
+ * Both halves of this contract must change together: packages/gx-core/src/quick_access/wire.rs (the Rust structs that
+ * build these snapshots) and apps/desktop/src/app/window/quick_access/model.rs (the Rust structs that read them).
  * The retained React twins are packages/core-ui/command-palette.tsx, recent-projects-modal.tsx,
  * previous-sessions-modal.tsx and stashed-prompts-modal.tsx, which still render Quick Access on web and mobile.
  */

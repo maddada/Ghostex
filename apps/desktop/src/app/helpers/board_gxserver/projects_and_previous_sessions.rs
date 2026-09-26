@@ -10,7 +10,7 @@ use std::time::Duration;
 use crate::app::helpers::*;
 use crate::*;
 
-#[allow(dead_code)] // no caller: gxserver project settings are consumed through the sidebar runtime bridge instead
+#[allow(dead_code)] // no caller: gxserver project settings are consumed through the Rust store instead
 pub(crate) fn gpui_project_settings_projects_from_gxserver() -> Vec<serde_json::Value> {
     /*
     CDXC:Projects 2026-06-24-11:59:

@@ -165,7 +165,7 @@ fn value_started_at(input: &RowInput) -> Option<String> {
         .unwrap_or_default();
     let timestamp = date_parse(&stamp)?;
     // The host's own locale rendering when it supplied one for this stamp; the crate's `en-US`
-    // fallback otherwise, which is what V8 printed for QuickJS and what the replay reproduces.
+    // fallback otherwise, which is what V8 printed for QuickJS and what the replay reproduced.
     if let Some(text) = input.context.formatted_time(
         crate::FormattedTimeStyle::ContextStartedAt,
         timestamp.round() as i64,

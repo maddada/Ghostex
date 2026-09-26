@@ -82,7 +82,7 @@ fn pill(
         .justify_center()
         .gap(px(4.0 * scale))
         .rounded_full()
-        // React's ghost Button carries `aria-expanded:bg-muted`, so an open menu keeps its pill lit.
+        // React's ghost Button carried `aria-expanded:bg-muted`, so an open menu keeps its pill lit.
         .when(open, |item| item.bg(appearance.border))
         .hover(|style| style.bg(appearance.border))
         .tooltip(move |window, cx| {

@@ -435,8 +435,9 @@ pub(crate) fn gpui_command_action_status_from_file(
 /*
 CDXC:Browser 2026-08-18:
 The reveal payload names the tab in Rust's own vocabulary (project id + tab id).
-Turning that into the sidebar's session id belongs to the sidebar runtime, which
-is the code that builds those rows in the first place.
+Turning that into the sidebar's session id belongs to the store (gx-core
+`sidebar_view`; the sidebar runtime until 2026-09-25), which is the code that
+builds those rows in the first place.
 */
 pub(crate) fn gpui_remote_attach_session_reference_from_project_id(
     project_id: &str,

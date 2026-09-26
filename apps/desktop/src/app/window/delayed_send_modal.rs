@@ -392,8 +392,8 @@ impl GpuiDelayedSendModalWindow {
     /// Posts one `requestDelayedSendAgents` round trip; the reply lands in `receive_agents`.
     fn request_agents(&mut self, cx: &mut Context<Self>) {
         self.request_counter = self.request_counter.wrapping_add(1);
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
+        let nanos = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
             .map(|elapsed| elapsed.as_nanos())
             .unwrap_or_default();
         let request_id = format!("gpui-delayed-send-{nanos:x}-{}", self.request_counter);

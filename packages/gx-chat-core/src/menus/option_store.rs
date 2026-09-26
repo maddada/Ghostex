@@ -1,7 +1,7 @@
 //! The optimistic option store: a pill shows the user's choice at once and reconciles with what
 //! the agent turns out to be running.
 //!
-//! Port of `packages/shared/session-chat-controller/option-state.ts`. The TypeScript owns a
+//! Port of `packages/shared/session-chat-controller/option-state.ts`. The TypeScript owned a
 //! `setTimeout` for the grace window; here the deadline is a number the core reports through
 //! [`OptionStore::next_wake_ms`] and the host turns into `Effect::SetTimer`, so nothing in this
 //! file reads a clock or holds a closure.
@@ -49,7 +49,7 @@ pub struct OptionStore {
     next_change_id: u64,
     /// Set when a grace window expired without confirmation, which the host reads once.
     unconfirmed: bool,
-    /// Every state published since the host last wrote, oldest first. The TypeScript calls
+    /// Every state published since the host last wrote, oldest first. The TypeScript called
     /// `persistence.write` on EVERY publish, so a turn that publishes twice (a detection and a
     /// receipt completing on the same frame) makes two `optionWrite` round trips, not one.
     published: Vec<OptionState>,
@@ -136,7 +136,7 @@ impl OptionStore {
     /// The TypeScript's guard is `if (state === next) return`, an IDENTITY test: every caller but
     /// one builds a fresh object, so an unchanged value still notifies its listeners and still
     /// persists. Comparing contents here instead lost the `optionWrite` round trips the replay
-    /// pairs its storage answers against, so the guard is the caller's (`begin_dispatch` is the
+    /// paired its storage answers against, so the guard is the caller's (`begin_dispatch` is the
     /// one that can hand back `state` itself, when it was asked for no values at all).
     fn publish(&mut self, next: OptionState) {
         self.published.push(next.clone());
@@ -337,7 +337,7 @@ impl OptionStore {
         self.publish(next);
     }
 
-    /// The grace-window sweep the TypeScript runs on a timer: a change that was delivered more
+    /// The grace-window sweep the TypeScript ran on a timer: a change that was delivered more
     /// than [`SESSION_CHAT_DISPATCH_GRACE_MS`] ago and never confirmed gives its pill back.
     ///
     /// An unchanged footer is still fresh evidence after a rejected CLI toggle, so a detection

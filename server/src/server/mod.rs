@@ -182,12 +182,15 @@ pub mod agent_http;
 pub mod agent_prompt_search_http;
 pub mod background_tasks;
 mod browser_tcp;
+mod close_after_done_runtime;
+mod open_conversation_http;
 pub mod commit_message_generation;
 pub mod http_endpoints;
 pub mod http_infra;
 pub mod presentation_delta;
 mod project_docs_http;
 pub mod project_paths;
+mod session_auto_sleep_sweep;
 pub mod session_state_sync;
 pub mod telemetry_http;
 pub mod telemetry_tasks;
@@ -336,8 +339,8 @@ const GXSERVER_FIRST_PROMPT_TITLE_GENERATION_TIMEOUT_MS: u64 = 30_000;
 const GXSERVER_COMMIT_MESSAGE_GENERATION_TIMEOUT_MS: u64 = 120_000;
 const GXSERVER_SESSION_STATE_SIDECAR_MAX_BYTES: u64 = 1024 * 1024;
 
+// Six actions were retired on 2026-09-25 (why: packages/gx-core/src/renderer_commands/verbs.rs).
 const RENDERER_COMMAND_ACTIONS: &[&str] = &[
-    "assertSidebarCard",
     "clickButton",
     "focusGroup",
     "focusSession",
@@ -355,15 +358,10 @@ const RENDERER_COMMAND_ACTIONS: &[&str] = &[
     */
     "renameCommand",
     "runCommand",
-    "saveAgent",
-    "sendMessage",
-    "setViewMode",
-    "setVisibleCount",
     "switchProject",
     "toggleCloseAfterDone",
     "toggleSidebarCollapsed",
     "updateSettingsPatch",
-    "waitFor",
 ];
 const PORTLESS_BACKGROUND_SYNC_INTERVAL: Duration = Duration::from_secs(10);
 const AGENT_METADATA_TITLE_SYNC_INTERVAL: Duration = Duration::from_secs(1);
@@ -583,6 +581,8 @@ pub async fn run_gxserver_foreground(
     */
     let _ = crate::session_chat_queue::recover_session_chat_queue_after_restart(&paths);
     crate::accounts::recovery::start(state.clone());
+    session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
+    close_after_done_runtime::start_close_after_done_runtime(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
     The queue scheduler is built HERE rather than beside the other runtimes
@@ -2273,6 +2273,15 @@ async fn route_http(
         in memory with a TTL — see `session_keep_awake` — and is honored by
         `/api/sleepSession` only for automatic sweeps.
         */
+        "/api/toggleCloseAfterDone" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                close_after_done_runtime::toggle_close_after_done(&state, db, repository, params)
+            },
+        ),
         "/api/holdSessionsAwake" => handle_domain_http(
             &state,
             endpoint.path,
@@ -2287,6 +2296,15 @@ async fn route_http(
             &body_json,
             |_, db, params, server_id| search_presentation_sessions(db, server_id, params),
         ),
+        "/api/openConversation" => {
+            open_conversation_http::handle_open_conversation_http(
+                &state,
+                endpoint.path,
+                request_id,
+                body_json,
+            )
+            .await
+        }
         "/api/listPreviousSessions" => {
             let worker_state = state.clone();
             let worker_endpoint = endpoint.path.clone();
@@ -2562,6 +2580,8 @@ async fn route_http(
             handle_read_session_transcript_sizes_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
+        "/api/readProjectGitState" => crate::project_git_state::handle_read_project_git_state_http(&state, endpoint.path, request_id, &body_json).await,
+        "/api/runGitShipWorkflow" => crate::git_ship_workflow::handle_run_git_ship_workflow_http(&state, endpoint.path, request_id, &body_json).await,
         "/api/createPullRequest" => {
             handle_create_pull_request_http(&state, endpoint.path, request_id, &body_json).await
         }

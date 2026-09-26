@@ -157,27 +157,6 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    pub(crate) fn sidebar_bridge_event_handler(
-        &self,
-        cx: &mut gpui::Context<Self>,
-    ) -> cef::SidebarBridgeEventHandler {
-        let app = cx.entity().downgrade();
-        let async_cx = cx.to_async();
-        let foreground = cx.foreground_executor().clone();
-
-        Rc::new(move |event: cef::SidebarBridgeEvent| {
-            let app = app.clone();
-            let mut async_cx = async_cx.clone();
-            foreground
-                .spawn(async move {
-                    let _ = app.update_in(&mut async_cx, |this, window, cx| {
-                        this.receive_sidebar_bridge_event(event, window, cx);
-                    });
-                })
-                .detach();
-        })
-    }
-
     /*
     CDXC:Onboarding 2026-08-18:
     The tutorial video should play fullscreen inside its own modal window. The
@@ -1136,7 +1115,7 @@ impl GhostexGpuiApp {
             .map(str::to_ascii_lowercase);
         // CDXC:SessionChat 2026-09-24 DECISION:
         // User: clicking a video in chat opens it normally with the OS default app on macOS, Windows, and Linux, never in the code editor. Audio and PDFs follow the same rule.
-        // SEE-ALSO: `sessionChatMediaKind` in `packages/shared/session-chat-presentation/reference-pills.ts` keeps the same extension list for the labels and menu rows.
+        // SEE-ALSO: `media_kind` in `packages/gx-chat-core/src/composer/reference_pills.rs` keeps the same extension list for the labels and menu rows.
         if requested_view.is_none()
             && matches!(
                 extension.as_deref(),
@@ -1278,6 +1257,7 @@ impl GhostexGpuiApp {
             };
             self.report_session_chat_file_opening("Docs view", &file_path, cx);
             self.pending_docs_file_open = Some(relative_path);
+            self.native_docs.pending_origin = Some(session_id);
             self.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
             self.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
             self.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
@@ -1486,6 +1466,11 @@ impl GhostexGpuiApp {
         let Some(relative_path) = self.pending_docs_file_open.clone() else {
             return false;
         };
+        if crate::app::native_docs::render::native_docs_enabled() {
+            self.pending_docs_file_open = None;
+            self.native_docs_open_external(relative_path, cx);
+            return true;
+        }
         let Some(surface) = self
             .project_workarea_runtime_cef_surfaces
             .get(&ProjectWorkareaCefSurfaceSlotKey::Manage)

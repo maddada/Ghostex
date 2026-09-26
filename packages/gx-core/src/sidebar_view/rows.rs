@@ -37,7 +37,7 @@ pub(crate) fn browser_row_id(project_id: &str, tab_id: &str) -> String {
 }
 
 /// `presentationLifecycleStateForSidebar`.
-fn sidebar_lifecycle_state(state: &LifecycleState) -> &'static str {
+pub(crate) fn sidebar_lifecycle_state(state: &LifecycleState) -> &'static str {
     match state {
         LifecycleState::Running => "running",
         LifecycleState::Sleeping => "sleeping",
@@ -48,7 +48,7 @@ fn sidebar_lifecycle_state(state: &LifecycleState) -> &'static str {
 }
 
 /// `providerSessionStateForGxserverPresentation`.
-fn provider_session_state(session: &PresentationSession) -> String {
+pub(crate) fn provider_session_state(session: &PresentationSession) -> String {
     let published = session.provider_session_state.as_str();
     if !published.is_empty() {
         return published.to_string();
@@ -62,7 +62,7 @@ fn provider_session_state(session: &PresentationSession) -> String {
 }
 
 /// `sessionKind`: an agent row is a terminal row to the sidebar.
-fn session_kind(kind: &SessionKind) -> String {
+pub(crate) fn session_kind(kind: &SessionKind) -> String {
     match kind {
         SessionKind::Agent | SessionKind::Terminal => "terminal".to_string(),
         SessionKind::Other(value) => value.clone(),

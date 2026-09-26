@@ -345,11 +345,16 @@ impl SessionChatQueueRuntime {
                 self.reset_gate(&key);
                 continue;
             }
-            let starting_draft = crate::agents::session_is_draft(&session);
+            // CDXC:SessionChat 2026-09-25 WHY:
+            // A send held for a session that was asleep or still starting (session_chat_send_wake.rs) waits exactly like a new chat's first message: nobody may be viewing the session, so the scheduler refreshes the screen itself and delivers the moment the input box appears. Waiting for the cached reading made a woken session take 40 seconds.
+            let awaiting_startup = crate::agents::session_is_draft(&session)
+                || snapshot
+                    .deliverable_head()
+                    .is_some_and(|head| head.startup_send);
             let composer_agent =
                 crate::session_chat_composer::session_chat_composer_agent_id(&session);
             let composer = (self.composer_reader)(&project_id, &session_id);
-            if starting_draft
+            if awaiting_startup
                 && crate::session_chat_composer::has_session_chat_composer_signature(
                     composer_agent.as_deref(),
                 )
@@ -404,7 +409,7 @@ impl SessionChatQueueRuntime {
                 self.reset_gate(&key);
                 continue;
             }
-            if !(starting_draft
+            if !(awaiting_startup
                 && composer.state == crate::session_chat_composer::SessionChatComposerState::Ready)
                 && !self.stability_window_elapsed(&key, now)
             {
@@ -436,7 +441,9 @@ impl SessionChatQueueRuntime {
                     self.reset_gate(&key);
                     continue;
                 }
-                if notice.blocks_queued_delivery() {
+                if notice.blocks_queued_delivery()
+                    && !escape_closes_claude_panel(&composer, &notice)
+                {
                     blocked.push((
                         project_id,
                         session_id,
@@ -679,6 +686,17 @@ fn runtime_text(session: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// An Escape-safe Claude panel (its Settings screen, or an offer Claude opened by itself) that the
+/// notice classifier also reads as an input-blocking dialog. The send closes it with Escape instead
+/// of handing it to the user as a question or failing a queued row on it.
+fn escape_closes_claude_panel(
+    composer: &crate::session_chat_composer::SessionChatComposerReadiness,
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+) -> bool {
+    composer.should_dismiss_with_escape()
+        && notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SessionChatMessageSource {
     Composer,
@@ -833,16 +851,23 @@ pub(crate) async fn send_session_chat_message_with_draft(
             true,
         )
         .await;
-    if let Some(blocking) = detection
-        .notice
-        .as_ref()
-        .filter(|notice| notice.is_answerable())
-    {
+    let dismiss_claude_panel = detection.composer.should_dismiss_with_escape();
+    if let Some(blocking) = detection.notice.as_ref().filter(|notice| {
+        notice.is_answerable() && !escape_closes_claude_panel(&detection.composer, notice)
+    }) {
         session_chat_terminal_notice_publisher(state, &target.project_id, &target.session_id)();
         return Err(DomainStateError {
             code: "invalidState",
             message: format!("{}. Answer it in chat before sending.", blocking.title),
         });
+    }
+    if source == SessionChatMessageSource::Composer {
+        if let Some(starting) =
+            crate::session_chat_send_wake::starting_session_refusal(state, &target, &detection)
+                .await
+        {
+            return Err(starting);
+        }
     }
     // Recheck automatic delivery against the fresh capture: the scheduler's
     // cached notice may predate a quota, authentication, or agent error.
@@ -899,11 +924,10 @@ pub(crate) async fn send_session_chat_message_with_draft(
         }
     }
     if source == SessionChatMessageSource::AutomaticQueue {
-        if let Some(notice) = detection
-            .notice
-            .as_ref()
-            .filter(|notice| notice.blocks_queued_delivery())
-        {
+        if let Some(notice) = detection.notice.as_ref().filter(|notice| {
+            notice.blocks_queued_delivery()
+                && !escape_closes_claude_panel(&detection.composer, notice)
+        }) {
             return Err(DomainStateError {
                 code: "invalidState",
                 message: format!("{}. The queued message was not sent.", notice.title),
@@ -925,7 +949,6 @@ pub(crate) async fn send_session_chat_message_with_draft(
     carries a code and a message and nothing else, at 169 construction sites);
     clients read it from /api/readSessionTerminalTail instead.
     */
-    let dismiss_claude_settings = detection.composer.should_dismiss_with_escape();
     let redraw_claude_composer = detection.prompt.is_none()
         && !detection
             .notice
@@ -938,7 +961,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
     if detection
         .composer
         .blocks_message_for(terminal_agent.as_deref())
-        && !dismiss_claude_settings
+        && !dismiss_claude_panel
         && !redraw_claude_composer
     {
         return Err(DomainStateError {
@@ -949,6 +972,16 @@ pub(crate) async fn send_session_chat_message_with_draft(
                 .clone()
                 .unwrap_or_else(|| "The agent's input box is not accepting input yet.".to_string()),
         });
+    }
+    if dismiss_claude_panel {
+        crate::session_chat_send_diagnostics::record_send_recovery(
+            state,
+            "sessionChatSendClosingClaudePanel",
+            &target.project_id,
+            &target.session_id,
+            detection.composer.reason.as_deref().unwrap_or_default(),
+            &detection.composer.screen_tail,
+        );
     }
     let send_probe = crate::session_chat_watchdog::SessionChatSendProbe::sample(
         &target.project_id,
@@ -972,7 +1005,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         terminal_agent.as_deref(),
         text,
         image_paths,
-        dismiss_claude_settings,
+        dismiss_claude_panel,
     );
     /*
     CDXC:SessionChat 2026-09-10 DECISION:

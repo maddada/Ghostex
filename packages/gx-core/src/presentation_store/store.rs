@@ -104,6 +104,11 @@ impl MachinePresentation {
         self.domain_projects.get(project_id)
     }
 
+    /// Every domain project row the store holds, by project id.
+    pub fn domain_projects(&self) -> impl Iterator<Item = (&String, &Value)> {
+        self.domain_projects.iter()
+    }
+
     pub fn is_session_hidden(&self, project_id: &str, session_id: &str) -> bool {
         self.overlays.is_session_hidden(project_id, session_id)
     }

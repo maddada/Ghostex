@@ -16,7 +16,7 @@ pub(crate) struct AutomateScope {
     pub(crate) project_id: String,
     pub(crate) project_path: String,
     pub(crate) project_name: String,
-    /// The project editor id the sidebar runtime's board requests carry.
+    /// The project editor id the board requests carry.
     pub(crate) editor_id: String,
     /// All Automations without Show Beta Features: the "coming very soon" notice instead of data.
     pub(crate) coming_soon: bool,

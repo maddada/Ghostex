@@ -2,8 +2,6 @@
 // occasional rather than part of the active project. Each row opens the same native
 // child window its own titlebar button used to open, re-anchored to this button.
 
-use std::time::Duration;
-
 use gpui::AnyElement;
 use gpui::InteractiveElement as _;
 use gpui::IntoElement;
@@ -18,8 +16,6 @@ use gpui::px;
 use gpui_component::ElementExt as _;
 use gpui_component::Side;
 use gpui_component::menu::PopupMenu;
-use gpui_component::tooltip::ManagedTooltipExt as _;
-use gpui_component::tooltip::ManagedTooltipPlacement;
 
 use super::popup_menu_builders::titlebar_popup_menu_with_scroll_behavior;
 use crate::app::consts::*;
@@ -297,13 +293,6 @@ impl GhostexGpuiApp {
                     this.toggle_gpui_titlebar_more_menu(window, cx);
                 }),
             )
-            .when(!open, |this| {
-                this.managed_discrete_tooltip_with_placement(
-                    ManagedTooltipPlacement::Left,
-                    Duration::from_millis(300),
-                    |window, cx| titlebar_tooltip(TITLEBAR_MORE_TOOLTIP, window, cx),
-                )
-            })
             .on_prepaint(move |bounds, window, _cx| {
                 let previous = button_bounds.get();
                 let first_capture = previous.is_none();

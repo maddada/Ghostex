@@ -1,7 +1,7 @@
 //! Family b's part of the document: the transcript modes, the per-turn deferred work, the rewind
 //! sheet and the saved-prompt marks.
 //!
-//! The producers are `publish` in `packages/shared/session-chat-controller/native-host.ts` (the
+//! The producers were `publish` in `packages/shared/session-chat-controller/native-host.ts` (the
 //! eight keys below) and `NativeChatMessageActions.projection` in `native-message-actions.ts` (the
 //! rewind sheet).
 
@@ -35,9 +35,10 @@ fn prompt_preview(prompt: &str) -> String {
 /*
 CDXC:SessionChat 2026-09-18 SEE-ALSO:
 The transcript's per-message actions for GPUI chat: Rewind (the confirmation in front of
-`/api/rewindSessionChat`, React's session-chat-rewind-dialog.tsx) and Save prompt (React's
-session-chat-save-prompt-button.tsx). The wording, the refusal handling, and the "put the prompt back
-in the composer" rule have to match those two files; only the rendering differs.
+`/api/rewindSessionChat`, ported from React's session-chat-rewind-dialog.tsx) and Save prompt
+(ported from React's session-chat-save-prompt-button.tsx). The wording, the refusal handling, and
+the "put the prompt back in the composer" rule came from those two files; only the rendering
+differs.
 */
 fn rewind_projection(request: &RewindRequest) -> Value {
     json!({
@@ -80,11 +81,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     The user rail's own actions. `rewindAvailable` is React's `rewindToMessage` gate (a host that can
     reach `/api/rewindSessionChat` and an agent whose rewind Ghostex drives); `rewindEnabled` is its
     live `canRewind` gate, the same condition that lets the composer send, because the daemon types
-    the rewind into that same pane. A preview backend answers no rewind route at all, which is why
-    the Chat Lab offers the action in neither chat.
+    the rewind into that same pane.
     */
-    into.rewind_available = state.core.preview_settings.is_none()
-        && agent_supports_rewind(state.session.agent.as_deref());
+    into.rewind_available = agent_supports_rewind(state.session.agent.as_deref());
     // `rewindEnabled: sendBlockedReason(state) === null`. That is family d's rule, and
     // `document::assemble` runs family b first, so it is read off the state family d's settle
     // cached it on rather than out of a half-built document.

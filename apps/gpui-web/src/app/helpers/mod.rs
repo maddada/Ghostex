@@ -29,10 +29,17 @@ pub(crate) mod project {
     use crate::*;
     include!(concat!(env!("OUT_DIR"), "/project.rs"));
 }
+/// The id checks the desktop's modal and sidebar bridges run on a session or project id, lifted from the desktop files that hold them.
+#[allow(dead_code, unused_imports)]
+pub(crate) mod ids {
+    use crate::*;
+    include!(concat!(env!("OUT_DIR"), "/ids.rs"));
+}
 pub(crate) mod web;
 
 pub(crate) use agents_hub::*;
 pub(crate) use browser::*;
+pub(crate) use ids::*;
 pub(crate) use project::*;
 pub(crate) use web::*;
 pub(crate) use chrome_palette::*;

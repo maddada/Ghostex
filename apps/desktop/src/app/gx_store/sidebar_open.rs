@@ -2,8 +2,8 @@
 //!
 //! CDXC:Sidebar 2026-09-21 WHY:
 //! Every one of these arrives as a TOP-LEVEL renderer command (`sidebarAction`, `machineAction`,
-//! `editSpace`, `projectAction`), never wrapped as `{ type: 'command', message }`: the controller
-//! answers them itself rather than posting them to the runtime. Reading the wrong envelope is
+//! `editSpace`, `projectAction`), never wrapped as `{ type: 'command', message }`: the deleted
+//! page's controller answered them itself rather than posting them to the runtime. Reading the wrong envelope is
 //! silent and is exactly what made the whole dialog port dead in piece 3d while its gate passed,
 //! so the check is spelled out here and the gate drives the same top-level shape.
 //!
@@ -17,12 +17,10 @@
 //! menu, a machine's Configure, the Space editor or a project's Add Worktree and `opens` is zero
 //! means the command never reached here.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/open.rs,
-//! tooling/gx-core/sidebar-page-frozen/navigation.ts,
-//! tooling/gx-core/sidebar-page-frozen/project-actions.ts,
-//! tooling/gx-core/sidebar-page-frozen/space-navigation.ts.
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/open.rs, the deleted sidebar page's
+//! `navigation.ts`, `project-actions.ts` and `space-navigation.ts`.
 
-use std::time::Instant;
+use web_time::Instant;
 
 use ghostex_gx_core::{SORT_ACTIONS, owns_open_command, plan_open_action};
 use serde_json::Value;
@@ -128,10 +126,7 @@ impl GhostexGpuiApp {
         true
     }
 
-    /// What the `startGxserverFromTitlebar` bridge message does, so the Load Sessions row of the
-    /// empty state and the titlebar's own control cannot drift apart. The bridge arm calls this.
-    ///
-    /// SEE-ALSO: apps/desktop/src/app/remote_conn/app_modal_bridge.rs.
+    /// Starts the local gxserver for the Load Sessions row of the empty state.
     pub(crate) fn start_local_gxserver_from_sidebar(&mut self, cx: &mut gpui::Context<Self>) {
         self.show_gpui_gxserver_bootstrap_toast(
             "info",

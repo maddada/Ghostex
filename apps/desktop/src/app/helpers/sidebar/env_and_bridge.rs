@@ -58,27 +58,6 @@ pub(crate) fn gpui_percent_decoded_id_part(value: &str) -> Option<String> {
     .then_some(decoded)
 }
 
-/// The store's direct route into the sidebar runtime for a command it does not perform itself.
-///
-/// CDXC:Sidebar 2026-09-21 WHY:
-/// The old route was `onNativeSidebarCommand`, the sidebar PAGE's entry, which routed the command
-/// and forwarded most of it to the runtime. That page is being deleted, so the store sends the
-/// runtime's own message straight to the runtime. A command that arrives before the runtime
-/// installed its entry is parked on the bridge and drained by the install, the way the attention
-/// acknowledgement and the terminal runtime action already are, so an edit is delivered late
-/// rather than lost.
-pub(crate) fn gpui_sidebar_runtime_command_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onSidebarCommand==='function'){{bridge.onSidebarCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingSidebarCommands)?bridge.pendingSidebarCommands:[];pending.push(payload);bridge.pendingSidebarCommands=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_sidebar_host_message_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui;if(bridge&&typeof bridge.onSidebarHostMessage==='function'){{bridge.onSidebarHostMessage({message});}}}})(); undefined;"
-    )
-}
-
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_sidebar_native_pointer_inside_script(inside: bool) -> String {
     format!(
@@ -105,40 +84,6 @@ a persistent flag would also block the next hover from opening a tooltip.
 */
 #[cfg(target_os = "macos")]
 pub(crate) const GPUI_SIDEBAR_DISMISS_TOOLTIPS_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.dismissSidebarTooltips==='function'){bridge.dismissSidebarTooltips();}})(); undefined;";
-
-/*
-CDXC:Spaces 2026-08-29:
-A finger scroll gesture began inside the sidebar's native frame. The page's
-Space-swipe handler resets its gesture lock on this — DOM wheel events carry no
-momentum phase, so only AppKit can mark where one physical swipe ends and the
-next begins.
-*/
-#[cfg(target_os = "macos")]
-pub(crate) const GPUI_SIDEBAR_SCROLL_GESTURE_BEGAN_SCRIPT: &str = "(function(){const bridge=window.ghostexGpui;if(bridge&&typeof bridge.onNativeScrollGestureBegan==='function'){bridge.onNativeScrollGestureBegan();}})(); undefined;";
-
-pub(crate) fn gpui_sidebar_command_pane_sessions_script(sessions: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.commandPaneSessions={sessions};if(typeof bridge.onCommandPaneSessionsChanged==='function'){{bridge.onCommandPaneSessionsChanged(bridge.commandPaneSessions);}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_sidebar_agents_delayed_sends_script(sessions: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.workspaceSessionDelayedSends={sessions};if(typeof bridge.onWorkspaceSessionDelayedSendsChanged==='function'){{bridge.onWorkspaceSessionDelayedSendsChanged(bridge.workspaceSessionDelayedSends);}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_sidebar_displayed_sessions_script(session_ids_json: &str) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.displayedWorkspaceSessionIds={session_ids_json};if(typeof bridge.onDisplayedWorkspaceSessionIdsChanged==='function'){{bridge.onDisplayedWorkspaceSessionIdsChanged(bridge.displayedWorkspaceSessionIds);}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_sidebar_browser_tabs_script(tabs_json: &str) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};bridge.browserTabs={tabs_json};if(typeof bridge.onBrowserTabsChanged==='function'){{bridge.onBrowserTabsChanged(bridge.browserTabs);}}}})(); undefined;"
-    )
-}
 
 pub(crate) fn gpui_action_completion_sound_from_settings() -> &'static str {
     let settings = shared_settings::shared_sidebar_settings_snapshot();

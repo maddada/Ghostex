@@ -139,11 +139,17 @@ impl GhostexGpuiApp {
                             .track_scroll(&scroll_handle)
                             .children(tab_elements),
                     )
-                    .child(self.render_view_tab_add_button(
-                        entries.len(),
-                        drop_index == Some(entries.len()),
-                        cx,
-                    )),
+                    .map(|row| {
+                        if entries.is_empty() {
+                            row.child(self.render_view_tab_strip_close_panel_button(cx))
+                        } else {
+                            row.child(self.render_view_tab_add_button(
+                                entries.len(),
+                                drop_index == Some(entries.len()),
+                                cx,
+                            ))
+                        }
+                    }),
             )
             .child(div().flex_1().min_w(px(8.0)).h_full())
             .when(active_mode.is_storybook(), |strip| {
@@ -520,6 +526,34 @@ impl GhostexGpuiApp {
             })
     }
 
+    /// CDXC:Workarea 2026-09-25 DECISION:
+    /// User: with every tab closed the strip shows an X where the `+` was, so the panel closes
+    /// right where the last tab's close button was instead of at the panel toggle in the top right
+    /// corner. The picker filling the panel already opens a view, so the `+` is not needed there.
+    fn render_view_tab_strip_close_panel_button(
+        &self,
+        cx: &mut gpui::Context<Self>,
+    ) -> impl IntoElement {
+        let tooltip = titlebar_tooltip_label("Close side panel", "toggleViewPanel");
+        Self::render_view_tab_strip_icon_button(
+            "ghostex-gpui-view-tab-close-panel",
+            TITLEBAR_ICON_X,
+            true,
+            false,
+        )
+        .on_mouse_down(
+            MouseButton::Left,
+            cx.listener(|this, _event: &MouseDownEvent, window, cx| {
+                window.prevent_default();
+                cx.stop_propagation();
+                this.close_view_panel(window, cx);
+            }),
+        )
+        .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, move |window, cx| {
+            titlebar_tooltip(tooltip.clone(), window, cx)
+        })
+    }
+
     fn render_view_tab_strip_pop_out_button(
         &self,
         active_mode: TitlebarMode,
@@ -580,9 +614,9 @@ impl GhostexGpuiApp {
                 .items_center()
                 .justify_center()
                 .cursor_default()
-                .when(active, |this| this.bg(titlebar_active_segment_color()))
+                .when(active, |this| this.bg(titlebar_split_button_open_color()))
                 .when(enabled, |this| {
-                    this.hover(|this| this.bg(titlebar_button_hover_color()))
+                    this.hover(|this| this.bg(titlebar_split_button_hover_color()))
                 })
                 .child(titlebar_svg_icon(
                     icon,

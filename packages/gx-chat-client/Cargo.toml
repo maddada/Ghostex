@@ -1,0 +1,24 @@
+# CDXC:SessionChat 2026-09-25 WHY:
+# The chat's live connection to gxserver, in Rust, for the desktop app and the GPUI web build alike: one `/api/events?stream=sessionChat` socket per machine that carries every followed conversation, `subscribeSessionChat` / `unsubscribeSessionChat`, the reconnect ladder, and the frames routed back to their session. It replaces `apps/desktop/sidebar/session-chat-runtime/socket.ts`. The routing and message rules are platform neutral; the socket itself is a tungstenite thread on native targets and a browser `WebSocket` on wasm32, behind one API. It is its own crate rather than part of `packages/gx-client`, which is native only and owns the presentation stream: gxserver gives chat brokers a dedicated chat-only stream (`server/src/server/ws.rs`, `chat_event_matches`) so no transcript enters the presentation socket's queue.
+[package]
+name = "ghostex-gx-chat-client"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "ghostex_gx_chat_client"
+path = "src/lib.rs"
+
+[dependencies]
+ghostex-gx-protocol = { path = "../gx-protocol" }
+serde_json = "1"
+
+# Pinned to the version packages/gx-client uses, so the desktop build resolves one copy.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+tungstenite = "0.28"
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["CloseEvent", "MessageEvent", "WebSocket", "Window"] }

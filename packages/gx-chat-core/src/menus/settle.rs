@@ -2,7 +2,7 @@
 //!
 //! Family e has no event of its own: the option store rebuilds from the catalog and the agent, the
 //! accounts poll runs on the clock, the switch card advances every frame, and the model picker's
-//! deadlines and the fork read all arrive on events nothing routes. That is `useMemo` and
+//! deadlines and the fork read all arrive on events nothing routes. That was `useMemo` and
 //! `useEffect` work in `native-host.ts`, so it runs once per event here.
 //!
 //! e1's `observe` and e2's own settle are called from one place, in that order, so the model menu

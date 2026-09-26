@@ -2,9 +2,8 @@
 //! `packages/shared/session-chat-presentation/agent-tasks.ts`.
 //!
 //! CDXC:SessionChat 2026-09-18 SEE-ALSO:
-//! packages/core-ui/chat/session-chat-agent-tasks-panel.tsx and
-//! apps/desktop/src/app/native_chat/agent_tasks.rs render this projection; row order, the done fold
-//! and the header line must not be recomputed in either renderer.
+//! apps/desktop/src/app/native_chat/agent_tasks.rs renders this projection; row order, the done
+//! fold and the header line must not be recomputed in a renderer.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

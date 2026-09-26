@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/session_note_modal.rs

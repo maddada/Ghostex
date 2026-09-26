@@ -76,14 +76,14 @@ the bottom opens their settings, and **Hidden here** on the `+` menu brings one
 back.
 
 Right-click a view tab to choose where that view appears and what happens to it.
-**Show in <project>** and **Show in space <space>** are ticks: unticking one
-hides the view there and leaves it everywhere else, and the space row names the
-project's own space (it is absent when the project is not in one). **Choose
-where it's shown…** opens that view's full scope editor in Settings >
-Extensions. Below that, **Reload** refreshes the clicked view, **Sleep** unloads it while keeping its tab (Code also stops its editor
+**Reload** refreshes the clicked view, **Sleep** unloads it while keeping its tab (Code also stops its editor
 server; choose **Wake** or click the tab to bring it back, and Resources can stop
-Code too without closing Ghostex), **Pop out to window** opens its page in its
-own window, and **Close tab** removes it from the strip. **Hidden here** is on
+Code too without closing Ghostex), and **Open externally** opens its page in its
+own window. Lower down, **Show in this Project** and **Show in this Space** are
+ticks: unticking one hides the view there and leaves it everywhere else (the
+space row is absent when the project is not in a space), and **Choose where
+it's shown…** opens that view's full scope editor in Settings > Extensions.
+**Close tab** removes it from the strip, and **Hidden here** is on
 this menu as well. Custom project views also offer **Command output** and
 **Configure view**, which opens that view's editor in Settings > Extensions and
 focuses its name field.
@@ -100,21 +100,27 @@ focuses its name field.
   sessions keep running) and Merge All Panes, or drag it to move that session
   onto another pane's edge (a new split) or its middle (it takes that pane's
   place), and the pane it left closes. Each pane can show the raw terminal or
-  Session Chat. Cmd+T starts a new chat with the agent you used last and
-  Cmd+Shift+T opens a new terminal; when Default view for compatible agents
-  (`preferredAgentInterface`) is Terminal the two keys swap. In a browser tab
-  Cmd+T opens another browser tab, and in the Commands pane or Terminal view it
-  opens another terminal tab there. Cmd+D splits.
+  Session Chat. Cmd+Shift+O starts a new session with the agent you used last,
+  in your default view (Chat or Terminal), like ChatGPT's New Chat. Cmd+N opens
+  the New Thread picker instead: type to filter the configured agents (last used
+  first), Browser, or Terminal, press Enter to start it in the active project,
+  and press Tab on Claude or Codex to pick an account. Cmd+Shift+T opens a new
+  terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
+  focused session, and Cmd+D splits. Cmd+R renames the focused session,
+  Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)
+  closes it. On Windows and Linux use Ctrl for Cmd, except that fork is
+  Ctrl+Alt+Shift+F and rename is Ctrl+Shift+R, because Ctrl+R belongs to the
+  terminal. While the Code editor itself has keyboard focus, Cmd+N and
+  Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
   A new chat that you leave without typing anything closes on its own, so empty
-  sessions do not pile up in the sidebar, and pressing Cmd+T again while one is
-  open takes you back to it. Once you type or send something it stays like any
-  other session.
+  sessions do not pile up in the sidebar, and pressing Cmd+Shift+O again while
+  one is open takes you back to it. Once you type or send something it stays
+  like any other session.
   Cmd+Option+Arrow moves focus between the session panes and the Commands pane;
   it skips the view panel.
-  Cmd+Option+T opens the New Thread picker: type to filter the configured
-  agents (last used first), Browser, or Terminal, press Enter to start it in
-  the active project, and press Tab on Claude or Codex to pick an account.
-  Hotkeys: `createAgentSession`, `createSession`, `openNewThreadPalette`.
+  Hotkeys: `createAgentSession`, `openNewThreadPalette`, `createSession`,
+  `openBrowserPane`, `forkSession`, `renameActiveSession`, `sleepFocusedSession`,
+  `closeFocusedSession`.
 - **Code**: the built-in VS Code based editor (code-server). Opens files from
   chat links, `ghostex edit <file>`, and Open In. Optional Use VS Code settings
   reuses the local VS Code configuration.
@@ -216,12 +222,12 @@ focuses its name field.
   Escape closes the document search.
 - **Terminal**: a command terminal in the view panel that works like the
   Commands pane, only on the right beside your sessions instead of below them.
-  It has its own tab bar with a **+** for new terminals, Cmd+T for another tab
-  and Cmd+D for a split while it has focus, drag to regroup or split, right-click
+  It has its own tab bar with a **+** for new terminals, Cmd+Shift+T for another
+  tab and Cmd+D for a split while it has focus, drag to regroup or split, right-click
   a tab for Sleep and Close scopes, and Actions can run in it. A project has one
   Terminal view; opening it creates its first Command Terminal, closing its last
   tab closes the view, and its terminals keep running and come back when you
-  reopen it. It does not replace the Commands pane: F12 and the header's command
+  reopen it. It does not replace the Commands pane: Cmd+J (Mac), F12 and the header's command
   terminal toggle still open that pane, and both can be open at once.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
@@ -238,9 +244,10 @@ project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
 Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
-Close Project parks the project in Recent Projects; when it held the active
-session, Ghostex stays in the current Space and switches to an awake session
-of the next project in the list.
+Close Project parks the project in Recent Projects (a remote machine's project
+goes to that machine's Recent Projects, which Quick Access lists); when it held
+the active session, Ghostex stays in the current Space and switches to an awake
+session of the next project in the list.
 Session rows show the agent icon, title, status, tags, and last-active time.
 Ctrl+Tab and Ctrl+Shift+Tab (also Cmd+Shift+] and Cmd+Shift+[ on Mac) move to
 the next or previous session shown in the sidebar, the same keys Chrome uses
@@ -448,7 +455,7 @@ Related settings: everything under General > Sidebar, `agentManagerZoomPercent`
 ## Commands pane
 
 The Commands pane holds command terminals below the workspace, or on its right
-when Command Pane Side is set to Right. Open it with F12. The **Terminal** view
+when Command Pane Side is set to Right. Open it with Cmd+J on Mac or F12 anywhere. The **Terminal** view
 (see Views) is the same kind of terminal opened as a tab of the view panel
 instead; it has its own tabs and does not affect the Commands pane. Auto-minimize Commands
 pane is on by default: after you move focus elsewhere and leave the pointer
@@ -503,7 +510,10 @@ lists every session that shares the earlier history, including the thread you
 forked away from, and switches to the one you pick; a stopped branch is resumed
 when you open it.
 
-- Sleeping frees RAM; Auto Sleep does it after idle minutes; Resources in the
+- Sleeping frees RAM; Auto Sleep does it after idle minutes. Auto Sleep runs
+  on the computer that hosts the sessions, so it keeps working while the app
+  window is closed, and it never sleeps a session a Ghostex window or the phone
+  app is showing. Resources in the
   header's ⋯ menu sleeps many at once and shows CPU and RAM per session. Clean RAM
   copies a diagnosis prompt; paste it into an agent session to reduce RAM use.
   Sleeping sidebar sessions keep their normal title color and show a dimmer
@@ -519,7 +529,8 @@ when you open it.
 - Drag pinned sessions to reorder them within their project. Rows stay in place
   while an icon-and-title ghost follows the pointer; the insertion line marks
   where the session moves when you drop it.
-- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions.
+- Recent Sessions (Cmd+P) opens Quick Access to jump between sessions, and
+  Cmd+Option+Shift+O opens it on recent projects.
   Its four tabs are Commands, Projects, Sessions, and Saved Prompts; they sit
   at the bottom left of the window and Cmd+1 through Cmd+4 switch between
   them. Filters (Saved/Recovered/Sent, All/Closed/External, project, tags) are
@@ -569,7 +580,10 @@ the terminal's attachment action offers the same choices.
 Hover a message to show its actions and the time it was sent in a row below
 it: Copy message, Reply by Annotating, and Save to md under an agent's final
 reply; Rewind to here, Save prompt, and Copy message under your own messages.
-Hover the time to see the full date.
+Hover the time to see the full date. While a chat has focus, Shift+Esc moves
+the keyboard to its chat box, Cmd+Shift+; copies the last code block an agent
+wrote, and Cmd+Shift+C copies the agent's last reply (Mac only; on Windows and
+Linux Ctrl+Shift+C stays terminal copy).
 The chat box edits like VS Code: Up on the first line jumps to the start and
 Down on the last line to the end, Option+Up/Down moves the current line,
 Option+Shift+Up/Down duplicates it, Cmd+Shift+K deletes it, Cmd+L selects it,
@@ -590,6 +604,12 @@ model to save the default, or right-click to apply it only to this session.
 Use `/compact` to summarize the conversation. Forms with conditional fields or
 external sign-in steps offer an Open terminal action. Commands:
 `ghostex send-session-chat-message`, `ghostex answer-session-chat-prompt`.
+Sending a message to a sleeping session wakes it. While the agent is still
+starting, the message shows in the chat right away and is typed in as soon as
+the agent's input box appears. If Claude Code has its settings, a plugin
+recommendation, or its background-agents list over the input box, sending closes
+it first (a recommendation is declined for now). A question or approval the
+agent is waiting on still has to be answered in its card.
 ZCode supports chat messages, thinking, tool results, attachments, and imported
 conversation history. Install its hooks in Settings > Agents to connect new
 conversations and keep activity in sync. ZCode runs in the same terminal, so
@@ -632,8 +652,9 @@ space allows, with separators only between items on the same row.
 Codex can ask questions while it keeps working. These appear above the composer,
 so you can keep writing your next message. Choose a suggested answer or write
 your own, then press Enter or Send answer; Shift+Enter adds a new line, and
-selecting an option alone sends nothing. An orange spinner with a pink dot in
-the sidebar means the agent is working and has an unanswered question. The dot
+selecting an option alone sends nothing. An orange dot followed by a pink dot on
+the session, in the sidebar and in the phone's session list, means the agent is
+working and has an unanswered question. The dot
 stays visible until you answer or skip, even while that chat is focused; if the
 agent finishes first, the pink attention dot remains.
 Use the arrows to move between questions, collapse the panel to answer later,
@@ -798,7 +819,8 @@ terminal status line.
 The chat input row has one model pill. It shows the agent's logo, the model, and
 after it the reasoning level and the context window, for example
 "Fable 5.1 High · 200K". Click it to open the model picker: a row of agent tabs
-with a starred Favorites tab first, a search box, the models of the chosen tab,
+with a starred Favorites tab first, the models of the chosen tab (starred ones
+first, in their usual order),
 and along the bottom a button each for the reasoning level (brain), the context
 window (chart bars) and Fast mode (bolt). Clicking the context window or Fast
 mode button switches it; the reasoning button opens a short list to the side. A
@@ -813,14 +835,13 @@ off to that agent instead of changing this session's model. With more than one s
 button beside Fast mode shows the account in use and opens the list to switch.
 
 The Model & Effort Picker shortcut (Option+P by default on macOS) opens the same
-picker from the keyboard, and pressing it again closes it. Type to filter the
-list; Up and Down move through the models and then the bottom buttons, stopping
+picker from the keyboard, and pressing it again closes it. Up and Down move through the models and then the bottom buttons, stopping
 at the top and bottom; Left and
 Right change the highlighted model's reasoning level, which the reasoning button
-shows; Option plus the letter on a bottom button uses it (Option+R Reasoning,
-Option+C Context, Option+F Fast mode, Option+A Account); Tab and Shift+Tab move through the Favorites and agent tabs. Enter uses the highlighted model and level in
+shows; the letter on each bottom button's icon uses it (R Reasoning, C Context,
+F Fast mode, A Account); Tab and Shift+Tab move through the Favorites and agent tabs. Enter uses the highlighted model and level in
 this session and closes the picker, Shift+Enter saves them as the agent's default,
-F switches Fast mode and C the context window while the search box is empty, and Cmd+1 to Cmd+9
+and Cmd+1 to Cmd+9
 jump the highlight to one of the first nine rows without applying it. Escape closes it
 without changing anything. The key reminder along the bottom lists these.
 
@@ -830,6 +851,16 @@ only and leaves the saved default alone, so new sessions still start where they
 did before; waking the session later brings it back on the model you chose.
 Session-only picks work for Claude only: other agents' own model pickers always
 save the choice as the default.
+
+On the phone, tapping the model pill opens the same picker as a sheet, without
+keyboard shortcuts. Tap a model to highlight it; its reasoning levels appear under
+it, and tapping one sets the level. Then tap Use in this session, or Save as
+default to also make it the agent's default for new sessions (agents other than
+Claude show a single Apply button, since their pickers always save the default).
+Tap the info icon on the highlighted model to read what it is for. The bottom
+buttons work as on the computer; long-press one (Claude only) to apply the change
+to this session alone. In a session that has started, the phone's picker shows
+only that agent's models.
 
 Picking a model from another agent's tab does not change the running session,
 which cannot switch agents. It opens Handoff / Export on Handoff to an agent with
@@ -863,8 +894,11 @@ Sending a chat message, including a delayed chat send, replaces any text still
 in the terminal input. Ghostex checks that the agent's input is ready and empty
 before inserting the message; spaces and newlines alone count as empty. If it
 cannot confirm this, delivery stops and the chat draft or queued message is kept.
-If another saved draft is available, hover over or click its preview icon to
-read the full text above the icon before choosing Use or Dismiss.
+A chat draft you type on one device (your computer or the Ghostex phone app)
+shows up in the same chat on your other devices as "Another saved draft is
+available". Choose Use to load it into your input, or Dismiss to keep what you
+have; hover over or click its preview icon to read the full text above the icon
+first.
 
 Settings > Accounts saves Claude and Codex logins and marks each one Automatic
 or Manual. Quick launch, the main launcher row, and any session started without
@@ -1155,7 +1189,7 @@ sessions, so any client can control agents on any machine.
   Remote). Easy Connect installs the Tailcat helper, turns on SSH access with
   one admin prompt, and shows a pairing QR code; scan it with the Ghostex
   mobile app (Android ships today). A Tailscale path is offered for tailnets.
-  With Auto reconnect enabled in the phone's SSH connection settings, the phone
+  With Auto reconnect enabled in the phone's Settings > Connection, the phone
   checks the connection when you return to the app or its network changes and
   reconnects interrupted agent terminals. Tap a red cloud or choose Reconnect
   from the computer's menu to start a fresh connection. Easy Connect does not
@@ -1175,19 +1209,31 @@ sessions, so any client can control agents on any machine.
   Localhost links in chat, terminals, and browser
   actions open in Web Preview through the connected computer, including their
   path and query, instead of the phone's external browser.
+  To read a project's docs on the phone, long-press the project and choose
+  Docs, or choose Docs from a session's ⋯ menu. It lists the project's Markdown
+  and HTML files from the same folders the desktop Docs view shows, with search
+  and the most recently changed files on top. Files open in a reader on the
+  phone, and Reload picks up an agent's latest edit. HTML pages include the
+  Agentation annotation tool (the pen button hides it); its copy button puts
+  your notes on the phone's clipboard, ready to paste into a session.
 - **From another computer**: Settings > Remote > Remote machines > Add a
   machine with SSH details or an Easy Connect code, then Install / Connect
   gxserver on it. The machine appears as a sidebar section with its own
   projects and sessions; its terminals stream into the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
+  Files and folders you drop onto a remote terminal or add with its attach
+  (paperclip) button are uploaded to that computer first, so the terminal gets
+  references the agent there can open.
   Open Code from the view panel's + menu to edit the remote project; if prompted,
   install the editor component first. Folder links in remote chats also browse
   the remote folder in Code.
   Remote localhost links open in the built-in Browser through that computer,
   even when ordinary web links are set to open in your external browser.
-- **Web app**: the desktop's sidebar, chat and terminal running in a browser
-  and talking to gxserver; it is built from a Ghostex source checkout with
-  `bun run start:web` and is not part of the installed app.
+- **Web app**: the desktop's sidebar (with its session, group and project
+  actions, the Git menu and Quick Access), chat and terminal running in a
+  browser and talking to gxserver; remote machines, Settings and the commit
+  review stay in the desktop app. It is built from a Ghostex source checkout
+  with `bun run start:web` and is not part of the installed app.
 - **CLI**: `ghostex attach <selector>` attaches to a session from any terminal,
   including over SSH.
 
@@ -1275,23 +1321,31 @@ docs directory), `hideProjectHeaderDiffStats`,
 
 ## Extensions, Open In, and integrations
 
-- Settings > Extensions manages the built-in views, the official extensions
-  (Code, Browser, Storybook, Kanban, Automate, Docs, Chromium runtime), the Extension
-  store for audited third-party extensions, and Your views (custom URLs,
-  Linear, GitHub Issues, dev server commands, HTML reports).
-  Extension commands use the active local project's folder unless the extension
-  supplies a folder; relative folders are resolved inside the active project.
-  Every row on this page has an Edit (pencil) button that chooses where that
-  view, header button, or extension appears. Pick a Default of Shown
-  everywhere or Hidden unless chosen, then turn individual projects and spaces
-  on or off to override it, so a view can be hidden in one project without
-  listing every other one. A project's own setting wins over its space, and a
-  space's setting wins over the Default. Worktrees follow their parent project,
-  and a project inside a group follows the group. A row narrowed this way shows
-  its scope under its description, and the view or button is simply absent
-  wherever it is hidden, so its hotkeys and command palette entries go away with
-  it. Custom views under Your views keep their own Available in picker inside
-  their own editor.
+- Settings > Extensions shows every extension as a card, three to a row: the
+  built-in ones, grouped by category (Project websites, Code and files,
+  Planning and automation, Header buttons, Menus and panels, Shared runtime),
+  then the Extensions Store (installed extensions first, then the audited
+  third-party ones you can install), then Your views (custom URLs, Linear,
+  GitHub Issues, dev server commands, HTML reports). One filter bar above them
+  searches all of them at once and filters by source, type, and category; the
+  count beside it says how many are shown. Each card's switch turns it on or
+  off, and its actions (Edit, Details, Remove, Reinstall) appear when you hover
+  it. Extension commands use the active local project's folder unless the
+  extension supplies a folder; relative folders are resolved inside the active
+  project.
+  The Edit (pencil) button on a card chooses where that view, header button, or
+  extension appears. Pick **Everywhere** or **Only in selected places**, then
+  choose projects and spaces from the dropdown next to **Except in** (or
+  **Show in**), so a view can be hidden in one project without listing every
+  other one. Once a space is picked, **But keep in** (or **But not in**) lists
+  projects that should ignore their space's choice, because a project's own
+  setting wins over its space, and a space wins over the default. A sentence
+  under the choices spells out the result. Worktrees follow their parent
+  project, and a project inside a group follows the group. A card narrowed this
+  way shows its scope under its description, and the view or button is simply
+  absent wherever it is hidden, so its hotkeys and command palette entries go
+  away with it. Custom views under Your views keep their own Available in
+  picker inside their own editor.
   Its Account usage in the sidebar section lets you star saved Claude and Codex
   accounts to show their usage at the bottom of the desktop sidebar, or unstar
   them to hide it. These are the same per-account stars available in
@@ -1355,51 +1409,54 @@ docs directory), `hideProjectHeaderDiffStats`,
   and Computer Use; which views to show (Browser and Docs are on by default
   on a first run) and the browser skill; phone pairing and notifications;
   and the first project folder with the default agent and session view,
-  next to the look: Appearance, the dark and light theme, Background contrast,
-  Enable Transparency and Transparency strength (the same choices as Settings >
-  Theme). Turning transparency on there also switches Appearance to Dark. "I already know Ghostex" on the first panel skips the rest. Reopen it any
+  next to the look: Appearance, the theme colour squares (Dark and Light tabs),
+  Colourfulness and one Transparency row (the simple choices from Settings >
+  Theme), with a "More theme options in Settings > Theme" link that opens the
+  Theme page. Turning transparency on there also switches Appearance to Dark. "I already know Ghostex" on the first panel skips the rest. Reopen it any
   time from Tips > Setup or Quick Access > Commands > Setup.
 
 ## Appearance and app
 
-Theme, background contrast and tint, window glass, and active pane outline
-live on their own Settings page, Theme, right below General
-(`ghostex settings open --tab theme`). The page starts simple: Appearance
-(System, Light, or Dark; System is the default and follows the operating
-system appearance), a row of cards for the dark theme and one for the light theme, each
-card a small picture of the window in that theme's colors, Background contrast (five
-steps from Lowest to Highest, Normal in the middle; higher makes dark backgrounds
-darker and light backgrounds whiter, for both appearances; it sets the Sidebar
-contrast and Work area contrast sliders under Advanced together, which can also be
-set apart, and it moves the Custom contrast sliders too), an Enable Transparency switch, and Transparency strength (a 0 to 100 slider; higher shows more of the desktop, and it sets the four glass tint sliders under Advanced so the work area stays a little more see-through than the sidebar). Everything else is under Advanced, a button below those that opens the
-Colours, Chat and terminal, and Glass groups plus links to related
-settings on General; a search for one of those rows opens it. Dark theme offers
-Dark Gray (the default), Black, Blue, Green, Red, Purple, or Custom; Light theme
-offers Light Gray (the default, #f4f4f5), White, Blue, Green, Pink, Orange, or
-Custom. Choosing Custom opens Advanced, where Colours shows that appearance's
-Background contrast slider (85 to 100 for dark, 60 to 100 for light; 100 is
-black for dark, white for light) and Background tint color picker; the other
-appearance's rows stay hidden. A preset never overwrites the custom values, so switching back to
-Custom restores them. The chosen theme colors the sidebar and window chrome, the
-sidebar's dropdown menus, and the chat view background (chat keeps following its
-own Chat theme setting, so a light chat in a dark app uses the light theme's
-color). Chat and terminal default to Follow app, with optional Light, Dark, or
-System overrides under Advanced > Chat and terminal. Existing saved themes are preserved, and a
-saved dark contrast or tint that differs from the default starts on Custom. The
-accent color (status highlights, accent text, advanced-setting markers) has no
-setting of its own: it follows the dark theme's tint hue, and a neutral tint
-keeps the sky-blue accent.
+Theme colours, colourfulness, window glass, and active pane outline live on their
+own Settings page, Theme, right below General (`ghostex settings open --tab theme`).
+It has three groups, each with its own More options button for the finer
+controls, plus links to related settings on General; a search for a row inside
+More options opens it.
+Colours: Appearance (System, Light, or Dark; System is the default and follows the
+operating system appearance); Theme colour, a row of sixteen small gradient
+squares with Dark mode and Light mode tabs (Graphite, the default, Black in dark
+mode or White in light mode, Slate, Midnight, a deep navy, Blue, Indigo, Teal,
+Green, Forest, Olive, Amber, Orange, Red, Rose, Pink and Purple; picking a colour
+gives the other mode the same colour until you pick one there yourself); and
+Colourfulness, five steps from Subtle to Vivid (Soft is the default) that set how
+much of the colour shows in the sidebar and work area at once, with a small
+sidebar and work area preview. More colour options can set the sidebar and work
+area colourfulness separately, turn on a custom colour for dark or light mode
+(its tint and depth, 85 to 100 for dark and 60 to 100 for light), and show the
+active pane outline and its colour. A preset never overwrites the custom values,
+so turning the custom colour back on restores them. The chosen theme colors the
+sidebar and window chrome, the sidebar's dropdown menus, and the chat view
+background (chat keeps following its own Chat theme setting, so a light chat in a
+dark app uses the light theme's color). Chat and terminal: Chat theme and
+Terminal theme default to Follow app, with optional Light, Dark, or System
+overrides; More chat and terminal options holds the terminal palettes. Existing
+saved themes are preserved, and a saved dark contrast or tint that differs from
+the default starts on the custom colour. The accent color (status highlights,
+accent text, advanced-setting markers) has no setting of its own: it follows the
+dark theme's tint hue, and a neutral tint keeps the sky-blue accent.
 Window glass lets the blurred desktop show through the sidebar, the work area,
-terminals, and chat on macOS and Windows. The Enable Transparency switch turns it on as Glass in
-dark mode (the default), which uses glass in dark mode and stays opaque in light
-mode, or off as Always opaque; Advanced > Glass also offers Always glass, which
-forces glass in both.
+terminals, and chat on macOS and Windows. The Transparency group's Enable
+transparency switch turns it on (glass in dark mode, the default) or off, and
+Strength (0 to 100) sets how see-through it is. More transparency options goes
+in the order you decide: 1 what shows behind the glass, 2 the pictures or videos,
+3 their position, then Fine-tune the tints and Use transparency (Automatic, which
+is dark mode only, Always, or Never).
 Docs, Kanban, the browser, and the code editor stay opaque. Turning on Reduce
 transparency in the macOS accessibility settings, or turning off Transparency effects
 in Windows Settings > Personalization > Colors, always makes the window opaque. On
 Windows, turning glass on takes effect the next time Ghostex starts, the corners of
 menus and pop-ups follow Windows' own rounding, and notifications keep solid cards.
-Glass shows (macOS only) picks what the glass blurs: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Custom image shows a picture you choose instead, one for dark mode and one for light mode (Glass image for dark mode and Glass image for light mode, each with a Choose image button); a mode with no picture shows everything behind the window. For Wallpaper only and Custom image, Glass picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`).
+What shows behind the glass (macOS only) is four cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia or the aerials show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Video plays a muted, looping, blurred video behind the glass, one for dark mode and one for light mode (Video for dark mode and Video for light mode): pick an aerial wallpaper your computer has already downloaded (download more by choosing them in System Settings > Wallpaper), or Choose a file… for a .mov or .mp4 video. The video pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.
 Keep Awake (Power)
 prevents sleep while agents work.

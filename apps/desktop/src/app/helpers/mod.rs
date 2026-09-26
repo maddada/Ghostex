@@ -24,6 +24,7 @@ pub(crate) mod terminal_links;
 pub(crate) mod titlebar;
 pub(crate) mod titlebar_split_button;
 pub(crate) mod window_glass;
+pub(crate) mod window_glass_video;
 
 pub(crate) use agents_hub::*;
 pub(crate) use board_gxserver::*;

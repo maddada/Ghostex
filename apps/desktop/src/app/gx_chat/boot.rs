@@ -1,8 +1,8 @@
 //! `Effect::ReadComposerBoot`: the one read the chat waits for before it publishes anything.
 //!
-//! The QuickJS brain's `start` awaits `composer('read')` and only then builds its controller, and
-//! `ChatCore::republish` reproduces that: nothing ships until [`ComposerBootRead`] lands. This is
-//! the Rust port of `nativeComposerRequest(sessionKey, {operation: 'read'})` in
+//! The deleted QuickJS brain's `start` awaited `composer('read')` and only then built its
+//! controller, and `ChatCore::republish` reproduces that: nothing ships until [`ComposerBootRead`] lands. This is
+//! the Rust port of `nativeComposerRequest(sessionKey, {operation: 'read'})` in the deleted
 //! `apps/desktop/sidebar/session-chat-runtime/native-composer.ts`, key for key and in the same
 //! write order.
 
@@ -17,9 +17,9 @@ use super::storage;
 /// What the boot read's records did, which is how the caller tells a refusal from an empty profile.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
-/// `native-host.ts`'s `start` has a `.catch` that empties the transcript and publishes
-/// `{status: 'error'}`, and it fires when `composer('read')` REJECTS, not when a record is absent:
-/// every accessor inside that operation catches for itself. The one thing that makes all of them
+/// `native-host.ts`'s `start` had a `.catch` that emptied the transcript and published
+/// `{status: 'error'}`, and it fired when `composer('read')` REJECTED, not when a record was absent:
+/// every accessor inside that operation caught for itself. The one thing that makes all of them
 /// fail at once is client storage being unavailable (`initializeClientStorage()` throwing), so the
 /// host's equivalent test is "every read this pass attempted refused". A profile that has simply
 /// never opened chat refuses nothing and boots normally, which is the case that must not be
@@ -50,7 +50,7 @@ impl BootReads {
 /// Reads everything the chat needs at boot for one session.
 ///
 /// Every read that fails is treated as "nothing stored", which is what the TypeScript's `catch`
-/// around each accessor does; the caller counts the refusals and tests [`BootReads::all_refused`].
+/// around each accessor did; the caller counts the refusals and tests [`BootReads::all_refused`].
 pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> ComposerBootRead {
     let client_id = client_id(now_ms, errors);
     let stored = load("drafts", session_key, now_ms, errors).map(|raw| decode_stored_draft(&raw));
@@ -89,15 +89,15 @@ pub(super) fn read(session_key: &str, now_ms: i64, errors: &mut BootReads) -> Co
 /// its own storage.
 ///
 /// CDXC:SessionChat 2026-09-23 WHY:
-/// The boot read is the ONLY channel these reach the chat through, in both brains. The
-/// `chatSettings` push that `broker.ts` would send never fires on desktop, because
-/// `relay_session_chat_runtime_request` forwards only `limit` and `beforeOffset` and so drops the
-/// `catalog` flag that turns it on. The host used to answer a constant `false` here, so a chat under
+/// The boot read is the ONLY channel these reach the chat through. The `chatSettings` push that the
+/// deleted `broker.ts` would have sent never fired on desktop, because
+/// `relay_session_chat_runtime_request` forwards only `limit` and `beforeOffset` and so dropped the
+/// `catalog` flag that turned it on. The host used to answer a constant `false` here, so a chat under
 /// the Rust brain showed full account emails in its status line, account panel and context rows
 /// while Settings said to hide them. `hideAccountEmails` is the same Settings key the TypeScript
-/// reads (`hud.settings`, fed from this settings file). `title` stays `null`: the TypeScript looks
-/// it up in the service's `sessionsById` by `projectId:sessionId`, and on desktop that map is never
-/// fed (the `hydrate` message carries no groups), so it is `null` under QuickJS too.
+/// read (`hud.settings`, fed from this settings file). `title` stays `null`: the TypeScript looked
+/// it up in the service's `sessionsById` by `projectId:sessionId`, and on desktop that map was never
+/// fed (the `hydrate` message carried no groups), so it was `null` under QuickJS too.
 pub(super) fn chat_settings() -> ChatSettings {
     ChatSettings {
         hide_account_emails: crate::shared_settings::shared_sidebar_settings_snapshot()
@@ -117,10 +117,10 @@ pub(super) fn chat_settings() -> ChatSettings {
 /// against itself. The Step 4 host read the record and answered with an empty string when it was
 /// absent, which is a fresh install, a new profile, or any user who had never opened chat: every
 /// draft echo then came back unattributed and the outbox rows carried no `clientId` at all. The
-/// shape is `packages/shared/session-chat-controller/client-id.ts`'s, `gx-` then two base-36 runs,
+/// shape is `packages/core-ui/chat/session-chat-client-id.ts`'s, `gx-` then two base-36 runs,
 /// because an id is compared and stored but never parsed. A refused write is counted and the
 /// in-memory id is used anyway, which is what the TypeScript's `catch` does for private mode.
-fn client_id(now_ms: i64, errors: &mut BootReads) -> String {
+pub(super) fn client_id(now_ms: i64, errors: &mut BootReads) -> String {
     let key = StorageKey {
         store: "chatClient".to_string(),
         suffix: String::new(),
@@ -131,7 +131,7 @@ fn client_id(now_ms: i64, errors: &mut BootReads) -> String {
     let created = format!(
         "gx-{}{}",
         base36(u64::from_be_bytes(
-            uuid::Uuid::new_v4().into_bytes()[..8]
+            super::platform::random_bytes()[..8]
                 .try_into()
                 .unwrap_or_default()
         )),
@@ -216,9 +216,9 @@ fn entry_with_version(stored: Option<&StoredDraftRecord>) -> Value {
 /// `nextSessionChatDraftVersion()`: a fresh identity at revision 1.
 ///
 /// The core generates no ids on purpose (it reads no random source and must cross UniFFI), so the
-/// host mints them, in the same v4 shape `crypto.randomUUID()` produces inside QuickJS.
+/// host mints them, in the same v4 shape `crypto.randomUUID()` produces.
 pub(super) fn next_draft_version() -> Value {
-    json!({"draftId": uuid::Uuid::new_v4().to_string(), "revision": 1})
+    json!({"draftId": super::platform::uuid_v4(), "revision": 1})
 }
 
 /// `{ "<sessionKey>[#<scope>]": <value> }` for every stored record of this session.

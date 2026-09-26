@@ -39,7 +39,7 @@ pub const ASYNC_PROMPT_KEY: &str = "async";
 /// The host owns the `ghostex.sessionChat.questionDraft.` prefix and nothing else, so the session
 /// key is part of the suffix the core builds: `questionDraftStorageKey` spells it
 /// `JSON.stringify([sessionKey, promptKey])`. Leaving the session out made every chat on a machine
-/// share one card record, which the replay could not see because its storage is an in-memory map
+/// share one card record, which the replay could not see because its storage was an in-memory map
 /// keyed by the same wrong string on both sides.
 pub fn drafts_key(session_key: &str, prompt_key: &str) -> StorageKey {
     StorageKey {

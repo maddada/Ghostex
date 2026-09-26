@@ -1,0 +1,1 @@
+../../../../desktop/src/app/gx_store/quick_access_data.rs

@@ -46,7 +46,6 @@ impl GhostexGpuiApp {
                 "runtimeState": format!("{:?}", self.source_code_server_runtime.state),
                 "generation": self.source_code_server_runtime.generation,
                 "hasChild": self.source_code_server_runtime.child.is_some(),
-                "hasSidebar": self.sidebar.is_some(),
                 "hasSurface": surface.is_some(),
                 "pageReady": surface.is_some_and(|surface| surface.page_ready()),
             }),

@@ -45,6 +45,17 @@ impl GhostexGpuiApp {
             .when(summarize && section.attention_count > 0, |row| {
                 row.child(div().size(px(8.0 * scale)).rounded_full().bg(rgb(0x95d7f6)))
             })
+            .when(
+                summarize && section.working_count == 0 && section.background_work_count > 0,
+                |row| {
+                    row.child(
+                        div()
+                            .size(px(8.0 * scale))
+                            .rounded_full()
+                            .bg(super::status::background_work_color()),
+                    )
+                },
+            )
             .when(summarize && section.question_count > 0, |row| {
                 row.child(div().size(px(8.0 * scale)).rounded_full().bg(rgb(0xf472b6)))
             })

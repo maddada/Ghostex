@@ -14,10 +14,7 @@
 //! in place, one that agrees retires it, and one that says anything else replaces it at once
 //! (`StoredPatch::verdict`).
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/lifecycle.rs,
-//! apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts (`setSessionSleeping`),
-//! tooling/gx-core/lifecycle-parity-typescript.ts (the gate that drives both sides through all
-//! three answers and all three echoes).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/lifecycle.rs.
 
 use std::time::Duration;
 
@@ -31,8 +28,8 @@ use ghostex_gx_core::{
 use serde_json::Value;
 
 use super::host::now_ms;
+use super::rpc::gxserver_rpc_result_task;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::gpui_gxserver_rpc_result;
 use crate::app::model::{
     GpuiPreferredAgentInterface, GpuiSidebarWorkspaceTerminalFocusMessage,
     GpuiWorkspaceTerminalFocusPlacement,
@@ -148,9 +145,9 @@ impl GhostexGpuiApp {
             LifecycleCall::Sleep => self.gx_store.sidebar_lifecycle.sleeps += 1,
             LifecycleCall::Wake => self.gx_store.sidebar_lifecycle.wakes += 1,
         }
-        // The Quick Automations row: both sides return before the call, so this is answered and
-        // nothing happens. It resolves as accepted because the TypeScript's `await` of it resolves:
-        // a reload of that row goes on to its wake, which returns early the same way.
+        // The Quick Automations row: the TypeScript returned before the call, so this is answered
+        // and nothing happens. It resolves as accepted because the TypeScript's `await` of it
+        // resolved: a reload of that row goes on to its wake, which returns early the same way.
         if request.rpc_path.is_empty() {
             self.gx_store.diagnostics.sidebar_lifecycle_ran(
                 &request,
@@ -164,12 +161,9 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         Some(cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             this.update(cx, |this, cx| {
                 this.gx_store_apply_lifecycle_answer(&request, result, round_trip_ms, cx)
@@ -181,7 +175,8 @@ impl GhostexGpuiApp {
 
     /// Fork for a session's own chat or terminal controls, run as the same store fork its sidebar
     /// row's Fork runs. `false` when the store does not own that fork (a chat project's session, a
-    /// row it does not hold yet), which the caller hands to the runtime as before.
+    /// row it does not hold yet); the caller used to hand those to the runtime, which was deleted on
+    /// 2026-09-25.
     pub(crate) fn gx_store_run_workspace_session_fork(
         &mut self,
         project_id: &str,
@@ -262,12 +257,9 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             let _ = this.update(cx, |this, cx| {
                 this.gx_store_apply_fork_answer(&request, result, round_trip_ms, cx);
@@ -357,16 +349,13 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(
-                    async move { gpui_gxserver_rpc_result(path, &params, LIFECYCLE_RPC_TIMEOUT) },
-                )
-                .await;
+            let started = web_time::Instant::now();
+            let result =
+                gxserver_rpc_result_task(&background, path, params, LIFECYCLE_RPC_TIMEOUT).await;
             let elapsed = started.elapsed();
             // A call that spent the whole timeout and came back with an error never answered; the
             // distinction changes no follow-up and is kept because it is the one case the two
-            // clients cannot both reach (the TypeScript's `fetch` has no timeout at all).
+            // clients could not both reach (the TypeScript's `fetch` had no timeout at all).
             let answer = match (
                 CloseAnswer::read(result.as_ref().map_err(String::as_str)),
                 elapsed >= LIFECYCLE_RPC_TIMEOUT,
@@ -530,7 +519,7 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:SessionFork 2026-09-24 DECISION:
     /// User: forking a session from its sidebar row's Fork or from the chat's More actions > Fork switches to the forked session.
-    /// Its attach completes as `GpuiLocalWorkspaceAttachOrigin::Fork`, which lands the fork unless the user selected something else meanwhile. It must not use the ordinary sidebar-focus check that the runtime's focus copy still names the session: nobody tells the runtime about the fork before the attach returns, and the store cannot take the fork as a local selection either while its row has not arrived, so the runtime's next routine publish (still naming the source) was admitted and the ready attach was dropped with the source left on screen. Setting that copy by hand before the attach was tried and lost the same race. A fork from another project's row takes that project's workspace first, as a row click does.
+    /// Its attach completes as `GpuiLocalWorkspaceAttachOrigin::Fork`, which lands the fork unless the user selected something else meanwhile. It must not use the ordinary sidebar-focus check that the published focus names the session: the store cannot take the fork as a local selection while its row has not arrived, so a routine publish in between (still naming the source) dropped the ready attach with the source left on screen. Setting that copy by hand before the attach was tried and lost the same race. A fork from another project's row takes that project's workspace first, as a row click does.
     fn gx_store_place_local_workspace_session(
         &mut self,
         session: &SessionKey,
@@ -538,6 +527,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         self.swap_agents_workspace_to_project_id(Some(session.project_id.clone()), cx);
+        // The store's focus takes the fork (held until its row arrives), so no publish before the
+        // attach returns pulls the workspace back to the source's project (focus_publish.rs).
+        self.gx_store_select_opened_session(session, cx);
         self.gx_store_select_local_workspace_session(
             session,
             placement_target,

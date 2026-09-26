@@ -32,6 +32,16 @@ const AGENTS: &[(&str, &str, &str)] = &[
     ("zcode", "zcode", "ZCode"),
 ];
 
+/// `getDefaultSidebarAgentById(agentId)?.agentId`: the built-in agent with this id, trimmed and
+/// lowercased first.
+pub(crate) fn default_agent_id(agent_id: &str) -> Option<&'static str> {
+    let agent_id = agent_id.trim().to_lowercase();
+    AGENTS
+        .iter()
+        .find(|(id, _, _)| *id == agent_id)
+        .map(|(id, _, _)| *id)
+}
+
 /// The icon of the browser rows; not an agent, but part of the same icon vocabulary.
 pub(crate) const BROWSER_AGENT_ICON: &str = "browser";
 

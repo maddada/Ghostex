@@ -30,7 +30,7 @@ impl NativeChatView {
     /// The transcript region's content: the row list, or the welcome that stands in for an empty one.
     fn render_transcript_body(
         &mut self,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let p = ChatAppearance::current(&self.snapshot).on_window_glass(
@@ -61,6 +61,7 @@ impl NativeChatView {
                 .flex()
                 .flex_col()
                 .child(content),
+            window,
         )
     }
 

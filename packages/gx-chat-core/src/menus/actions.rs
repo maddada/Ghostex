@@ -217,7 +217,7 @@ pub fn switch_settled(
 /// `case 'selectOption'`: one row of a pill's menu.
 ///
 /// The decision tree is `option-dispatch.ts`'s `plan_dispatch`; the plan's steps are then walked
-/// one answer at a time by `crate::menus::dispatch_run`, because the TypeScript awaits them in
+/// one answer at a time by `crate::menus::dispatch_run`, because the TypeScript awaited them in
 /// order (a `command-confirm-picker` types the command and only then presses Enter).
 fn select_option(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     let Some(descriptor_id) = action.params.get("descriptorId").and_then(Value::as_str) else {

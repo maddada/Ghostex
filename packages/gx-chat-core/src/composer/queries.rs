@@ -1,12 +1,12 @@
-//! The five pure helpers the renderer asks for one gesture.
+//! The pure helpers the renderer asks for one gesture.
 //!
-//! They hold no state and change none, but a ported implementation has to answer them identically:
-//! the replay recording carries the fingerprint of each answer's serialized JSON, so the key order
-//! inside them is part of the contract (`docs/2026-09-21/rust-chat/REPLAY.md`).
+//! They hold no state and change none. The phone reaches them through [`crate::query`]. Each
+//! answer keeps the key order the TypeScript wrote, which the replay recording that checked the
+//! port fingerprinted (`docs/2026-09-21/rust-chat/REPLAY.md`).
 //!
-//! `nativeChat` wires them at the end of
-//! `packages/shared/session-chat-controller/native-host.ts`; this file is the same five functions
-//! with the same argument shapes.
+//! `nativeChat` wired them at the end of
+//! `packages/shared/session-chat-controller/native-host.ts`; this file is the same functions with
+//! the same argument shapes.
 
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +16,7 @@ use crate::composer::policy::send_blocked_toast_request;
 use crate::composer::reference_menu::{reference_menu_rows, ReferenceMenuRow};
 use crate::composer::reference_pills::reference_pill_text;
 use crate::composer::reference_pills::{composer_references as scan_references, ReferenceKind};
+use crate::composer::references::{remove_reference, ComposerEdit};
 use crate::composer::transcript_menu::transcript_menu_rows;
 
 /// One reference as `composerReferences` answers it: the scan plus the pill's measured text.
@@ -78,4 +79,20 @@ pub fn transcript_menu(
 /// The toast a blocked Send raises.
 pub fn send_blocked_toast(reason: &str) -> OrderedMap {
     send_blocked_toast_request(reason)
+}
+
+/// A question answer after the paths a paste uploaded were inserted as references.
+pub fn insert_answer_attachments(
+    current: &str,
+    paths: &[&str],
+    original: &str,
+    start: usize,
+    end: usize,
+) -> ComposerEdit {
+    crate::composer::references::insert_answer_attachments(current, paths, original, start, end)
+}
+
+/// A draft after removing the reference at `[start, end)` and the spacing it brought.
+pub fn remove_chat_reference(current: &str, start: usize, end: usize) -> ComposerEdit {
+    remove_reference(current, start, end)
 }

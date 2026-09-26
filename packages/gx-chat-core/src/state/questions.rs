@@ -84,8 +84,7 @@ pub struct AnswerRequest {
     pub content_key: Option<String>,
 }
 
-/// CDXC:SessionChat 2026-09-17 SEE-ALSO: React and the Rust core share async question selection,
-/// explicit submission, retirement and draft persistence through this state.
+/// Async question selection, explicit submission, retirement and draft persistence.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AsyncQuestionsState {
     /// The saved answer per question key.

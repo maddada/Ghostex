@@ -10,7 +10,7 @@ use crate::presentation::{PresentationGroup, PresentationProject, PresentationSe
 ///
 /// The Rust server emits five types today: `projectAdded`, `projectUpdated`, `projectRemoved`,
 /// `sessionPresentationChanged`, and `sessionRemoved`. Eleven more names exist only in the
-/// TypeScript union (older and remote daemons, and the TypeScript runtime's own local patches);
+/// TypeScript union (older and remote daemons, and the local patches the QuickJS runtime applied until 2026-09-25);
 /// they are accepted as aliases because daemons of other versions are merged into one client.
 /// Serialization always writes the canonical name.
 ///

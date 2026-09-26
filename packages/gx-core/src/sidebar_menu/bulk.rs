@@ -1,7 +1,9 @@
 //! The menu a multi-selection of rows carries.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/bulk-menu.ts and the bulk half of
-//! packages/core-ui/session-card-capabilities.ts, which records the decision that a bulk menu
+//! Ported from the TypeScript sidebar page's bulk menu (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/bulk-menu.ts`).
+//!
+//! SEE-ALSO: the bulk half of packages/core-ui/session-card-capabilities.ts, which records the decision that a bulk menu
 //! shows only the actions that can run over the selected rows without guessing.
 
 use serde_json::Value;

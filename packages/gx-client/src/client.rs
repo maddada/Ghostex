@@ -6,6 +6,8 @@ use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::sync::Arc;
 use std::thread;
 
+use ghostex_gx_protocol::ClientMessage;
+
 use crate::config::GxClientConfig;
 use crate::output::{ClientOutput, ClientStats, ClientStatsSnapshot};
 use crate::socket::Endpoint;
@@ -104,6 +106,33 @@ impl GxClient {
     /// `wake` closure when it ends, which a host can observe without polling.
     pub fn thread_ended(&self) -> bool {
         self.thread_ended.get()
+    }
+
+    /// Answers a [`ClientOutput::RendererCommand`]: `Ok` carries the result object, `Err` the
+    /// error text the CLI prints. Written on the live socket, or on the next one when the socket
+    /// dropped in between; the daemon matches the answer by `command_id`, not by socket.
+    pub fn answer_renderer_command(
+        &self,
+        command_id: &str,
+        result: Result<serde_json::Value, String>,
+    ) {
+        let message = match result {
+            Ok(result) => ClientMessage::RendererCommandResult {
+                command_id: command_id.to_string(),
+                ok: true,
+                result: Some(result),
+                error: None,
+            },
+            Err(error) => ClientMessage::RendererCommandResult {
+                command_id: command_id.to_string(),
+                ok: false,
+                result: None,
+                error: Some(error),
+            },
+        };
+        if let Ok(text) = serde_json::to_string(&message) {
+            let _ = self.commands.send(Command::Send(text));
+        }
     }
 
     /// Asks for a full snapshot: `subscribePresentation` without `lastRevision`, on the live

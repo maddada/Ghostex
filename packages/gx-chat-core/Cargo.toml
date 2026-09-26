@@ -1,6 +1,6 @@
 # CDXC:SessionChat 2026-09-21 DECISION:
 # User: the desktop chat's brain stops running in QuickJS; the rules move to Rust and the same code runs in the mobile app and the web build.
-# This crate is that brain's platform-neutral core. It owns the "what to draw" document the renderers already consume byte for byte, so no drawing code changes. Inputs are events (gxserver chat frames, user actions, clock ticks); outputs are the document plus effects the host performs. It must stay free of gpui, threads, sockets, the file system, and clock reads (the host passes `now_ms`), and must build for wasm32-unknown-unknown, because mobile (UniFFI) and the web build embed it next.
+# This crate is that brain's platform-neutral core. It owns the "what to draw" document every renderer draws. Inputs are events (gxserver chat frames, user actions, clock ticks); outputs are the document plus effects the host performs. It must stay free of gpui, threads, sockets, the file system, and clock reads (the host passes `now_ms`), and must build for wasm32-unknown-unknown, because mobile (UniFFI) and the web build embed it.
 [package]
 name = "ghostex-gx-chat-core"
 version = "0.1.0"
@@ -14,11 +14,11 @@ path = "src/lib.rs"
 [dependencies]
 ghostex-gx-protocol = { path = "../gx-protocol" }
 # CDXC:SessionChat 2026-09-22 WHY:
-# markdown-rs is the same author's Rust port of micromark, which is the parser
-# `packages/shared/session-chat-presentation/native-markdown.ts` and `markdown-links.ts` run through
-# `mdast-util-from-markdown`. Both sides parse plain CommonMark with no extensions and produce the
-# same mdast, which is what lets the ported link and file-reference passes walk the same tree with
-# the same node offsets. It is pure Rust and builds for wasm32-unknown-unknown.
+# markdown-rs is the same author's Rust port of micromark, the parser the TypeScript chat's
+# Markdown passes ran through `mdast-util-from-markdown`. The port chose it because both parse plain
+# CommonMark with no extensions into the same mdast, so the ported link and file-reference passes
+# walk the same tree with the same node offsets. It is pure Rust and builds for
+# wasm32-unknown-unknown.
 markdown = "1"
 serde = { version = "1", features = ["derive"] }
 # `preserve_order` keeps a parsed object's key order. A tool call's arguments are serialized back

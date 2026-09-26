@@ -115,10 +115,11 @@ impl GhostexGpuiApp {
     ) {
         // CDXC:Sidebar 2026-09-21 WHY:
         // The list is not ready yet (the launch window: the sidebar's own state has not been read
-        // back, or the runtime has not posted the HUD), so the renderer is drawing the loading
+        // back; until 2026-09-25 also while the runtime had not posted the HUD), so the renderer is drawing the loading
         // skeleton and every id in this command names a row of a list nobody has seen. Dropped
         // here, once and counted, rather than let through: the planners below would each decline
-        // it and the fall-through would then hand a command nobody can perform to the runtime.
+        // it and the fall-through would then hand a command nobody can perform to the end of the
+        // dispatch (gx_store/sidebar_runtime_route.rs).
         if !self.gx_store_sidebar_list_ready() {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
@@ -134,6 +135,8 @@ impl GhostexGpuiApp {
         if self.gx_store_run_sidebar_accounts(&command, cx) {
             return;
         }
+        // Git, worktree and Handoff / Export menu items (gx_store/git/actions.rs).
+        if self.gx_store_run_sidebar_git(&command, cx) { return; }
         // A row on a REMOTE machine: its sleep, wake, close, fork, flags, snooze and Full Reload
         // are calls down that machine's tunnel, sent through the same function the old runtime's
         // bridge message reaches, and nothing local moves (gx_store/sidebar_remote.rs).
@@ -146,12 +149,24 @@ impl GhostexGpuiApp {
         if self.gx_store_run_sidebar_action(&command, cx) {
             return;
         }
+        if self.gx_store_run_sidebar_more_menu(&command, cx) {
+            return;
+        }
         // Sleep and wake call the daemon from here, so the command must not also reach the old
         // runtime: it would make the same call a second time (gx_store/sidebar_lifecycle.rs).
         if self.gx_store_run_sidebar_lifecycle(&command, cx) {
             return;
         }
         if self.gx_store_run_sidebar_close(&command, cx) {
+            return;
+        }
+        if self.gx_store_run_close_after_done(&command, cx) {
+            return;
+        }
+        if self.gx_store_run_session_edit_command(&command, cx) {
+            return;
+        }
+        if self.gx_store_run_group_sleep(&command, cx) {
             return;
         }
         if self.gx_store_run_sidebar_fork(&command, cx) {
@@ -248,20 +263,22 @@ impl GhostexGpuiApp {
         // A click on a row of a REMOTE machine, and its Split Right: the store acknowledges the
         // attention, performs the same `openRemoteSessionTerminal` the old runtime posted, and the
         // open's own tab selection moves the remote focus marks, so the command goes no further
-        // (gx_store/sidebar_remote_focus.rs). A click the store does not answer (the old list is
-        // drawn, or the machine has not streamed) is sent on and the old runtime performs it whole.
+        // (gx_store/sidebar_remote_focus.rs), for a machine this run has not streamed too.
         if let Some(plan) = self.gx_store_plan_remote_row_focus(&command) {
             self.gx_store_focus_remote_row(&command, &plan, cx);
             return;
         }
         // A click on a row of THIS computer: the page's half of it (the multi-selection cleared, an
-        // open app modal closed) is performed here and the runtime's own `focusSession` goes
-        // straight to the runtime, so the five senders that post this command share ONE route with
+        // open app modal closed) and the focus the runtime's `focusSession` used to make are both
+        // performed by the store, so the five senders that post this command share ONE route with
         // no page in it (gx_store/sidebar_focus_route.rs).
         if self.gx_store_focus_local_row(&command, cx) {
             return;
         }
-        if self.sidebar.is_none() {
+        if self.gx_store_run_sidebar_create(&command, cx) {
+            return;
+        }
+        if self.gx_store_claim_focus_command(&command, cx) {
             return;
         }
         self.stage_agent_launch_placeholder(&command, cx);
@@ -269,22 +286,19 @@ impl GhostexGpuiApp {
         // that follows only runs when the selection really changed (gx_store/space_switch.rs).
         let space_switch = self.gx_store_space_switch_before(&command);
         // A command that moves the sidebar's own state (collapse, Space, filters, hidden items,
-        // selection) moves the Rust state here, and that IS its whole answer: the runtime has no
+        // selection) moves the Rust state here, and that IS its whole answer: nothing else has an
         // arm for any of them (gx_store/sidebar_ui_commands.rs).
         let ui_only = self.gx_store_note_sidebar_command(&command, cx);
         // Close Project is focus-moving work the page used to do on the message's way past: the
         // store names the session the close focuses, from the list it draws
         // (gx_store/sidebar_close_project.rs).
         let command = self.gx_store_add_close_project_successor(command);
-        // A sidebar command can change focus in the runtime, so it must not be handled while the runtime still holds an older focus stamp than the store (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        // What is left is the runtime's, and it goes straight there: the sidebar page that used to
-        // route it is being deleted (gx_store/sidebar_runtime_route.rs).
-        self.gx_store_route_sidebar_command_to_runtime(&command, ui_only, cx);
+        // What is left has no owner, or was the sidebar's own state (gx_store/sidebar_runtime_route.rs).
+        self.gx_store_note_unanswered_sidebar_command(&command, ui_only);
         // The Space the switch landed on reopens the session it was last left on, from the list the
         // intent above has just rebuilt. It posts the same `focusSession` the page posted, after
-        // the page has been told, so the order of the two messages is the one the runtime already
-        // sees (gx_store/space_switch.rs).
+        // the page has been told, so the order of the two messages is the one the runtime used
+        // to see (gx_store/space_switch.rs).
         if let Some(before) = space_switch {
             self.gx_store_restore_space_switch_focus(before, cx);
         }

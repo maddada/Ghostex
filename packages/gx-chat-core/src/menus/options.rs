@@ -1,7 +1,7 @@
 //! Everything the composer's option pills publish, in one pass over the state.
 //!
 //! Port of `packages/shared/session-chat-controller/native-options.ts` and
-//! `packages/shared/session-chat-controller/session-options.ts`. The TypeScript is a React hook
+//! `packages/shared/session-chat-controller/session-options.ts`. The TypeScript was a React hook
 //! chain (`useMemo` over the catalog, `useLayoutEffect` for the detection, a store with
 //! listeners); here it is one function of the state, because the state already holds what the
 //! hooks memoized.

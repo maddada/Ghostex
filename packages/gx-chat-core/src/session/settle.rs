@@ -1,4 +1,4 @@
-//! The `useEffect`s the TypeScript runs between a state change and the composition that reads it.
+//! The `useEffect`s the TypeScript ran between a state change and the composition that read it.
 //!
 //! The core has no render pass, so they run once per event, after the event's own handler and
 //! before `crate::document::assemble`. All of them are from

@@ -19,8 +19,8 @@ impl NativeChatView {
             && self.snapshot["composerCollapseEligible"] == true
     }
 
-    /// The pane is too short for the full box (`sessionChatComposerHeightConstrained` in
-    /// packages/shared/session-chat-presentation/composer-scroll.ts holds the decision).
+    /// The pane is too short for the full box (ported from React's
+    /// `sessionChatComposerHeightConstrained`; the threshold is in composer-animation.json).
     fn composer_height_constrained(&self) -> bool {
         let scale = super::appearance::ChatAppearance::current(&self.snapshot).scale;
         let height = f32::from(self.bounds.get().size.height) / scale.max(0.01);
@@ -67,7 +67,7 @@ impl NativeChatView {
             .flex_1()
             .min_h_0()
             .w_full()
-            // React's transcript menu trigger wraps the whole message list, minimap, scrollbar and
+            // React's transcript menu trigger wrapped the whole message list, minimap, scrollbar and
             // scroll button included; pills and links stop the press first (transcript_menu.rs).
             .on_mouse_down(
                 gpui::MouseButton::Right,
@@ -82,8 +82,9 @@ impl NativeChatView {
                 !crate::app::helpers::window_glass_active_for(self.main_window),
                 |this: gpui::Div| {
                     this.child(
-                        // React masks the viewport's last rows into the composer band
-                        // (`--scroll-fade-mask` on `[data-slot='message-scroller-viewport']` in chat.css).
+                        // React masked the viewport's last rows into the composer band
+                        // (`--scroll-fade-mask` on `[data-slot='message-scroller-viewport']` in chat.css,
+                        // deleted on 2026-09-25).
                         // GPUI cannot mask a scrolling list, so the same shape is painted: a plain div with
                         // no id and no interactivity, which registers no hitbox and takes no input.
                         div()

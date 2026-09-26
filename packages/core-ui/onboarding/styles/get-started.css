@@ -521,42 +521,37 @@
 .gx-onboarding .plook .opts {
   margin-bottom: 16px;
 }
-.gx-onboarding .plook .theme-card-grid {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 8px;
+/* The colour squares fill the card's width in one row of sixteen (shape and sheen come from settings-theme.css). */
+.gx-onboarding .plook .plook-colour-grid {
+  gap: 6px;
   margin-bottom: 14px;
 }
-.gx-onboarding .plook .theme-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 5px 5px 7px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.015);
-  color: #aeb6c4;
-  text-align: center;
-  transition:
-    border-color 0.2s,
-    background 0.2s;
+.gx-onboarding .plook .theme-colour-swatch.is-selected .theme-colour-square {
+  outline: 2px solid #5a7deb;
+  outline-offset: 2px;
 }
-.gx-onboarding .plook .theme-card:hover:not(.is-selected) {
-  border-color: rgba(255, 255, 255, 0.18);
+.gx-onboarding .plook .plook-colour-readout {
+  color: #7c8598;
+  font-family: Inter, sans-serif;
+  letter-spacing: 0;
+  margin-left: 6px;
+  text-transform: none;
 }
-.gx-onboarding .plook .theme-card.is-selected {
-  border-color: rgba(90, 125, 235, 0.42);
-  background: rgba(28, 38, 68, 0.4);
-  color: #eef1f7;
-}
-.gx-onboarding .plook .theme-card-name {
+.gx-onboarding .plook .plook-more-link {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: #8fb0ff;
+  cursor: pointer;
+  font: inherit;
   font-size: 12.5px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 10px;
+  padding: 0;
 }
-/* The contrast and transparency sliders: one compact row each, label | slider | value. */
+.gx-onboarding .plook .plook-more-link:hover {
+  color: #b3c8ff;
+}
+/* The Colourfulness and transparency sliders: one compact row each, label | slider | value. */
 .gx-onboarding .plook .pstep {
   display: flex;
   align-items: center;

@@ -51,8 +51,8 @@ fn read_work_page(state: &mut ChatState, walk: DeferredWalk) -> Vec<Effect> {
     vec![Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::ReadSessionChat,
-        // `readHistory({beforeOffset, limit: 200, detail: true})`, which `native-host.ts` spreads
-        // into the call and spells `historyMode: 'detail'`.
+        // `readHistory({beforeOffset, limit: 200, detail: true})`, which `native-host.ts` spread
+        // into the call and spelled `historyMode: 'detail'`.
         params: Box::new(json!({
             "beforeOffset": cursor,
             "limit": DEFERRED_WORK_PAGE_LIMIT,
@@ -66,7 +66,7 @@ fn read_work_page(state: &mut ChatState, walk: DeferredWalk) -> Vec<Effect> {
 ///
 /// The failure belongs to the row that asked for it, not to the composer's error bar, so it never
 /// reaches the outer handler. A section the cache already holds resolves on this turn, with no
-/// round trip at all, which is what the TypeScript's already-settled promise does.
+/// round trip at all, which is what the TypeScript's already-settled promise did.
 fn load_work(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let turn_id = text(action, "id");
     state
@@ -245,10 +245,9 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::LoadImage => {
             /*
             The picture behind an "[Image #N](path)" reference lives on the session's machine, so the
-            native chat cannot open it directly either: the bytes come back over the same transport
-            React reads them through, and the Chat Lab's preview backend answers the same call. A
-            file that has gone reports back as unreadable rather than raising the composer's error
-            bar.
+            native chat cannot open it directly: the bytes come back over the chat's transport, and
+            a preview backend answers the same call. A file that has gone reports back as unreadable
+            rather than raising the composer's error bar.
             */
             let request_id = state.core.allocate_request_id();
             let path = text(action, "path");

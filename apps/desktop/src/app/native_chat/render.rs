@@ -53,11 +53,12 @@ impl NativeChatView {
 impl Render for NativeChatView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         super::scroll_bottom::register(cx);
+        super::chat_hotkeys::register(cx);
         super::search::register(cx);
         super::zoom::register(cx);
         self.last_render = Some(web_time::Instant::now());
         self.schedule_row_detail_sync(window, cx);
-        self.main_window = Some(window.window_handle());
+        self.note_drawn_in(window.window_handle(), cx);
         if self.maximized_window.is_none() {
             self.ensure_input(window, cx);
         }
@@ -102,7 +103,7 @@ impl Render for NativeChatView {
         } else {
             self.composer_frame(cx).transcript_inset
         };
-        crate::app::helpers::indicator_animation::render_indicators_at_display_rate(cx.entity_id());
+        crate::app::helpers::indicator_animation::render_indicator_frames_animation_only(cx.entity_id());
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
         /*
@@ -193,6 +194,7 @@ impl Render for NativeChatView {
                 },
             ))
             .capture_action(cx.listener(Self::scroll_bottom_action))
+            .capture_action(cx.listener(Self::run_chat_hotkey))
             .capture_action(cx.listener(Self::open_search_action))
             .capture_action(cx.listener(Self::chat_zoom_in_action))
             .capture_action(cx.listener(Self::chat_zoom_out_action))

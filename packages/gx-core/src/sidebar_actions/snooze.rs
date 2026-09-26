@@ -19,16 +19,17 @@
 //!   ordinary sleep through the path that already owns sleeping.
 //! - `unsnoozeSession` is the other call, `/api/unsnoozeSession`, and nothing follows it.
 //!
-//! **Neither call patches anything.** `runSessionLifecycleCommand` says so in its own comment and
+//! **Neither call patches anything.** The deleted `runSessionLifecycleCommand` said so in its own comment and
 //! it is a rule rather than an omission: gxserver owns `snoozedUntil`, emits the delta itself, and
 //! enforces guards (a wake time in the past is refused) that the client must not pre-empt. So
 //! there is no overlay here and no echo guard to write; the one optimistic value in the whole
 //! feature is the sleep, and that belongs to `lifecycle.rs`.
 //!
 //! SEE-ALSO: packages/shared/session-snooze.ts (`resolveSessionSnoozeWakeTime`,
-//! `isSidebarSessionSnoozed`), tooling/gx-core/sidebar-page-frozen/session-actions.ts,
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`snoozeSession`,
-//! `runSessionLifecycleCommand`), apps/desktop/src/app/gx_store/sidebar_snooze.rs.
+//! `isSidebarSessionSnoozed`), apps/desktop/src/app/gx_store/sidebar_snooze.rs. Ported from the
+//! sidebar page's session actions (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/session-actions.ts`) and `snoozeSession` /
+//! `runSessionLifecycleCommand` in the deleted `gxserver-runtime/sessions-and-focus.ts`.
 
 use serde_json::{json, Map, Value};
 

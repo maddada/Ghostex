@@ -1,0 +1,24 @@
+[package]
+name = "gpui-bidi"
+version = "0.1.1"
+edition = "2024"
+description = "Right-to-left and mixed-direction text for GPUI: correct caret, selection, and click positions over reordered glyphs, plus row layout and painting."
+license = "MIT"
+repository = "https://github.com/packetThrower/zorite"
+homepage = "https://packetthrower.github.io/zorite/reference/crates/gpui-bidi/"
+keywords = ["bidi", "rtl", "gpui", "text", "unicode"]
+categories = ["text-processing", "gui"]
+
+# The core (`VisualMap`) is deliberately gpui-free: it works on plain
+# `(logical byte index, x)` glyph pairs, so every rule is unit-testable
+# without a window or a GPU. gpui is needed only for the thin adapter that
+# reads those pairs out of a `ShapedLine`.
+[dependencies]
+gpui.workspace = true
+# The UAX #9 algorithm itself, for the one thing the shaper's output does not
+# reveal: a glyph's embedding LEVEL. Direction cannot be inferred from
+# (index, x) pairs at the EDGE of an embedded run — the glyph beside it belongs
+# to the other run and carries a misleading index — so the levels come from the
+# text. Already in the tree (via lopdf/usvg), so this adds nothing to the build.
+unicode-bidi = { version = "0.3", default-features = false, features = ["hardcoded-data"] }
+

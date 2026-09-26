@@ -535,6 +535,7 @@ fn main() {
     println!("cargo:rerun-if-changed=native/macos/GpuiNavigationGestures.h");
     println!("cargo:rerun-if-changed=native/macos/GpuiNavigationGestures.m");
     println!("cargo:rerun-if-changed=native/macos/GpuiSidebarReveal.m");
+    println!("cargo:rerun-if-changed=native/macos/GpuiDocsDrawer.m");
     let gpui_terminal_appkit_adapter =
         manifest_dir.join("native/macos/GpuiTerminalAppKitAdapter.m");
     let gpui_terminal_mouse_cursor = manifest_dir.join("native/macos/GpuiTerminalMouseCursor.m");
@@ -605,6 +606,7 @@ fn main() {
         .file(manifest_dir.join("native/macos/GpuiKeyboardShortcuts.m"))
         .file(manifest_dir.join("native/macos/GpuiNavigationGestures.m"))
         .file(manifest_dir.join("native/macos/GpuiSidebarReveal.m"))
+        .file(manifest_dir.join("native/macos/GpuiDocsDrawer.m"))
         .compile("ghostex_gpui_cef_appkit_hooks");
 
     /*

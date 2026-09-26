@@ -2,7 +2,7 @@
 //! and the two shapes that legitimately prefix a recorded turn.
 //!
 //! Ported from `packages/core-ui/chat/session-chat-pending.ts` and
-//! `session-chat-command-envelope.ts`. The TypeScript uses regular expressions; this crate carries
+//! `session-chat-command-envelope.ts`. The TypeScript used regular expressions; this crate carries
 //! no regex dependency on purpose, so each pattern is spelled out below with the JavaScript it
 //! reproduces quoted beside it. Behaviour, not shape, is what must match.
 

@@ -343,6 +343,10 @@ pub fn usage() -> String {
             "Open Settings on a tab, with the setting's row searched",
         ),
         format_help_command(
+            "settings hotkeys [list|get|set|reset] ...",
+            "List hotkeys, or change, unassign or reset one (or --all) through the running desktop app",
+        ),
+        format_help_command(
             "guide [overview|features|settings|hotkeys]",
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
@@ -351,16 +355,10 @@ pub fn usage() -> String {
     .join("\n");
 
     let automation_commands = {
-        let mut lines = vec![
-            format_help_command(
-                "automations --help",
-                "Show the complete scheduled automation workflow",
-            ),
-            format_help_command(
-                "save-agent --agent-id id --name name --command command",
-                "Unsupported renderer-era agent-button writer; not a project quick action",
-            ),
-        ];
+        let mut lines = vec![format_help_command(
+            "automations --help",
+            "Show the complete scheduled automation workflow",
+        )];
         lines.extend(automation_help_commands());
         lines.push(format_help_command(
             "bd <args...>",
@@ -374,7 +372,6 @@ pub fn usage() -> String {
         format_help_command("send-enter <selector>", "Send Enter to a session by id or quoted title"),
         format_help_command("send-key <selector> <key>", "Send ctrl-c, escape, tab, or arrow keys"),
         format_help_command("send-message <selector> <text>", "Type text and Enter into an existing session"),
-        format_help_command("send-message <agentId> <text>", "Unsupported in gxserver cutover until renderer-created visible sessions land"),
         format_help_command("read-text <selector> [--lines n] [--visible] [--json]", "Read terminal text by id or quoted title"),
         format_help_command("search-agent-prompts [--query text] [--agents a,b] [--project path] [--group-by-day] [--limit n] [--offset n] --json", "Search every prompt this machine has sent to an agent (the GUI behind gx f)"),
         format_help_command("read-agent-prompt-text --key <key> --json", "Read one prompt's full text by the key a search row reported"),
@@ -446,14 +443,6 @@ pub fn usage() -> String {
         format_help_command(
             "close-after-done <id>",
             "Toggle Close After Done for a session",
-        ),
-        format_help_command(
-            "set-visible-count <1|2|3|4|6|9>",
-            "Set visible session count",
-        ),
-        format_help_command(
-            "set-view-mode <grid|horizontal|vertical>",
-            "Set session layout mode",
         ),
         format_help_command(
             "browser --help",
@@ -539,14 +528,6 @@ pub fn usage() -> String {
         format_help_command(
             "bundle [output-dir] [--lines n]",
             "Save state, logs, and a screenshot",
-        ),
-        format_help_command(
-            "assert-card <id> [--agent-icon codex] [--visible true]",
-            "Assert card projection",
-        ),
-        format_help_command(
-            "wait-for <id> [--agent-icon codex] [--timeout-ms n]",
-            "Wait for card projection",
         ),
     ]
     .join("\n");
@@ -830,7 +811,7 @@ Behavior:
   save-command writes to the live gxserver project store and refreshes normal project state.
   Reusing a command id replaces that action definition in the same ordered position; a new id is appended.
   Do not edit workspace-state.json or the Ghostex state database directly.
-  Terminal and Browser quick actions are project customCommands, not agent buttons; do not use save-agent.
+  Terminal and Browser quick actions are project customCommands, not agent buttons.
   Use run-action to execute them; run-command and click-button are renderer-only legacy paths.
 
 Inspect:
@@ -1109,6 +1090,11 @@ Usage:
   gx settings set <key> <value> [--json]
   gx settings reset <key> [--json]
   gx settings open [<key>] [--tab <id>] [--json]
+  gx settings hotkeys [list] [<search>] [--changed] [--json]
+  gx settings hotkeys get <id> [--json]
+  gx settings hotkeys set <id> <keys> [--replace] [--json]
+  gx settings hotkeys reset <id> [--json]
+  gx settings hotkeys reset --all [--json]
   gx settings --help
 
 Keys:
@@ -1127,6 +1113,17 @@ Writing:
   value. The desktop app must be running. Keys marked read-only for agents
   (structured values, account and remote-pairing state, secrets, Settings UI
   actions) cannot be set; use settings open <key> so the user can change them.
+
+Hotkeys:
+  Ids are the camelCase action ids from `ghostex guide hotkeys` (a title such
+  as \"Fork Session\" works too). Keys are written like cmd+shift+o: modifiers
+  cmd, ctrl, alt (option) and shift, then one key (a letter, digit, symbol,
+  f1-f24, up, down, left, right, tab, enter, escape, space, backspace, delete,
+  home, end, pageup, pagedown). Separate a two-step sequence with a space. On
+  Windows and Linux cmd means Ctrl. `none` unassigns a hotkey. set refuses keys
+  another hotkey already uses unless --replace moves them (the other hotkey is
+  left unassigned). Changes save through the running desktop app like the
+  Hotkeys page and bind at once.
 
 Tabs (for --tab):
   settings integrations extensions osIntegration remote projects agents

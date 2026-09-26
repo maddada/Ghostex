@@ -1,6 +1,6 @@
 //! The transcript list the renderer walks: one entry per drawn card group.
 //!
-//! The producer is `projectChatTranscript` plus `NativeChatPresentation.update`
+//! The producer was `projectChatTranscript` plus `NativeChatPresentation.update`
 //! (`packages/shared/session-chat-controller/native-presentation.ts`). The consumer dispatches on
 //! `kind` alone (`apps/desktop/src/app/native_chat/transcript.rs`), so the discriminant spelling
 //! is part of the contract.

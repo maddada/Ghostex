@@ -51,7 +51,25 @@ impl NativeChatView {
         let has_rows = dialog["rows"]
             .as_array()
             .is_some_and(|rows| !rows.is_empty());
-        if !has_rows && !text(dialog, "body").is_empty() {
+        let copy = &dialog["presentation"]["copy"];
+        if copy.is_object() {
+            // Written copy reads as the card's prose, and its buttons already say what the
+            // panel's keyboard hint footer would.
+            for (index, paragraph) in copy["paragraphs"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                body.push(self.markdown(
+                    format!("terminal-dialog-copy:{dialog_id}:{index}"),
+                    paragraph.as_str().unwrap_or_default().to_string(),
+                    &Value::Null,
+                    p,
+                    cx,
+                ));
+            }
+        } else if !has_rows && !text(dialog, "body").is_empty() {
             body.push(
                 div()
                     .id("terminal-dialog-body")
@@ -161,7 +179,7 @@ impl NativeChatView {
                     window.prevent_default(); cx.stop_propagation();
                 })).into_any_element());
         }
-        if !text(dialog, "footer").is_empty() {
+        if !copy.is_object() && !text(dialog, "footer").is_empty() {
             body.push(
                 div()
                     .text_size(px(14.0 * p.scale))

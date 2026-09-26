@@ -378,11 +378,3 @@ pub(crate) fn gpui_sidebar_pet_overlay_state_from_json(
         status_items,
     })
 }
-
-pub(crate) fn gpui_command_palette_run_sidebar_command_script(
-    message: &serde_json::Value,
-) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onCommandPaletteRunSidebarCommand==='function'){{bridge.onCommandPaletteRunSidebarCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingCommandPaletteRunSidebarCommands)?bridge.pendingCommandPaletteRunSidebarCommands:[];pending.push(payload);bridge.pendingCommandPaletteRunSidebarCommands=pending;}}}})(); undefined;"
-    )
-}

@@ -555,6 +555,16 @@ pub struct PresentationSession {
     /// TS `DelayedSendAgentReference`; kept loose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_when_specific_agent_finishes: Option<Value>,
+    /// Close After Done is armed; gxserver owns the timer. Present only when true.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "is_false"
+    )]
+    pub close_after_done: bool,
+    /// When the armed session closes, while it shows Done.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close_after_done_deadline_at: Option<String>,
 }
 
 fn is_false(value: &bool) -> bool {

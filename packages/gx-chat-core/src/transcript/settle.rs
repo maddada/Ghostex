@@ -3,9 +3,9 @@
 //!
 //! [`crate::transcript::document`] and [`crate::transcript::rows`] are pure, so everything that is
 //! carried rather than derived runs here, once per event, before `crate::document::assemble`:
-//! `NativeChatPresentation.update` stores the item list and the placeholder queue
-//! (`packages/shared/session-chat-controller/native-presentation.ts`), `scheduleBackfill` walks
-//! that queue on a zero-delay timer, and `NativeChatMessageActions` and `loadWork` finish on the
+//! `NativeChatPresentation.update` stored the item list and the placeholder queue
+//! (`packages/shared/session-chat-controller/native-presentation.ts`), `scheduleBackfill` walked
+//! that queue on a zero-delay timer, and `NativeChatMessageActions` and `loadWork` finished on the
 //! request they issued.
 
 use crate::effect::Effect;
@@ -56,7 +56,7 @@ pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
     // first, and re-arms itself while any are left.
     if matches!(event, Event::Tick) && state.core.timer_fired(BACKFILL_TIMER) {
         crate::transcript::rows::advance(state, context);
-        // The TypeScript's `onBackfill` publishes without a state change of its own.
+        // The TypeScript's `onBackfill` published without a state change of its own.
         state.core.request_publish();
     }
     if state.transcript_view.has_pending_backfill() {

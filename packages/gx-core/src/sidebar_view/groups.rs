@@ -1,8 +1,9 @@
 //! One drawn group: its rows in display order, its sections, its counts, and its header tooltip.
 //!
-//! SEE-ALSO: the deleted sidebar page's `project-sections.ts`,
-//! apps/desktop/sidebar/gxserver-runtime/sidebar-groups.ts (`createSidebarGroups`, the focus and
-//! browser-row overrides) and packages/core-ui/group-session-summary.ts.
+//! Ported from the deleted sidebar page's `project-sections.ts` and `createSidebarGroups` (the focus
+//! and browser-row overrides) in the deleted `gxserver-runtime/sidebar-groups.ts`.
+//!
+//! SEE-ALSO: packages/core-ui/group-session-summary.ts.
 
 use std::sync::Arc;
 
@@ -28,9 +29,8 @@ pub(crate) enum GroupKind {
     /// it builds the list (the deleted sidebar page's `model.ts`, `group.isChatCollection` in the group loop),
     /// so the desktop sidebar has never shown it and neither does this list. What the More menu's
     /// All Automations really does is `openAutomationsPage`, which changes the active project and
-    /// opens the Automate workarea; the row is a side effect nobody sees here. Do not add one to
-    /// make the two lists agree: they already agree, and a row only this side drew would be a
-    /// difference the shadow reports for ever.
+    /// opens the Automate workarea; the row is a side effect nobody sees here. Do not add one: the
+    /// sidebar has never drawn it, so a row here would be a new difference, not a fix.
     Chats,
     Project,
     /// A user-made session group inside a project.
@@ -252,6 +252,9 @@ pub(crate) fn group_summary(sessions: &[SessionView]) -> GroupSummary {
         }
         if row.activity == "attention" || row.pending_question_count > 0 {
             summary.attention_count += 1;
+        }
+        if row.shows_background_work() {
+            summary.background_work_count += 1;
         }
         let is_terminal_or_browser = row.is_browser
             || row.session_kind.as_deref() == Some("terminal")

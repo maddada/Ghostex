@@ -241,6 +241,7 @@ impl NativeChatView {
                         let chat = chat.clone();
                         move |window, cx| {
                             window.set_background_corner_radius(corner_radius);
+                            crate::app::helpers::apply_frosted_menu_blur(window);
                             attach_suggestion_window(window, parent);
                             let panel = cx.new(|cx| {
                                 let subscription = cx.observe(&chat, |_, _, cx| cx.notify());

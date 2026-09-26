@@ -184,6 +184,9 @@ impl Render for GhostexGpuiApp {
         self.main_window_bounds = window.bounds();
         self.main_window_handle = Some(gpui::Window::window_handle(window));
         self.sync_main_window_glass(window, cx);
+        crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
+        self.native_docs_drop_unseen_drawer(cx);
+        self.native_docs_drop_unseen_format_bar(cx);
         self.main_window_display_id = window.display(cx).map(|display| display.id());
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
@@ -210,10 +213,9 @@ impl Render for GhostexGpuiApp {
             current_sidebar_max_width(window, self.active_mode),
         );
         self.sample_panel_motion(window, cx);
-        self.refresh_gpui_sidebar_browser_tabs_if_changed(cx);
-        // The displayed set crosses the bridge to the sidebar runtime; while the selection is still moving it would do so once per tab step. The settle repaints, so the set is reported for the tab the user landed on.
+        // The shown sessions are reported to gxserver's Auto Sleep; while the selection is still moving that would happen once per tab step. The settle repaints, so the set is reported for the tab the user landed on.
         if !self.gx_store_selection_is_settling() {
-            self.refresh_gpui_sidebar_displayed_sessions_if_changed(cx);
+            self.gx_store_report_shown_sessions(cx);
         }
         self.prepare_focus_bounds_for_render(window.scale_factor(), cx);
         #[cfg(target_os = "macos")]
@@ -237,6 +239,11 @@ impl Render for GhostexGpuiApp {
             }))
             .on_action(cx.listener(|this, action: &crate::app::native_sidebar::actions::NativeSidebarAction, window, cx| {
                 this.handle_native_sidebar_action(action, window, cx);
+            }))
+            // CDXC:Hotkeys 2026-09-25 DECISION:
+            // User: hotkeys go to the Code editor only while it is focused, not whenever it is open. A CEF page keeps AppKit's first responder until something takes it, so clicking the sidebar, a header or the tab strip left Code (or a browser page) receiving every chord. Clicks inside a CEF page never reach GPUI, so a GPUI mouse-down is always a click outside it and hands the keyboard back to the window.
+            .capture_any_mouse_down(cx.listener(|app, _: &MouseDownEvent, _window, _cx| {
+                app.reclaim_gpui_root_for_chrome_input_focus();
             }))
             .relative()
             .size_full()

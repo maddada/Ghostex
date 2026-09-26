@@ -51,13 +51,40 @@ impl NativeChatView {
     }
 
     fn sync_pane_modal_windows(&mut self, cx: &mut Context<Self>) {
+        self.sync_owned_modal_windows(cx);
+        self.sync_suggestion_window(cx);
+    }
+
+    fn sync_owned_modal_windows(&mut self, cx: &mut Context<Self>) {
         self.sync_image_viewer_window(cx);
         self.sync_table_preview_window(cx);
         self.sync_rewind_window(cx);
         self.sync_save_markdown_window(cx);
         self.sync_context_editor_window(cx);
         self.sync_maximized_window(cx);
-        self.sync_suggestion_window(cx);
+    }
+
+    /// The window the pane was last drawn in, forgotten once that window has closed.
+    pub(super) fn open_main_window(&mut self, cx: &gpui::App) -> Option<gpui::AnyWindowHandle> {
+        if self
+            .main_window
+            .is_some_and(|window| !cx.windows().contains(&window))
+        {
+            self.main_window = None;
+        }
+        self.main_window
+    }
+
+    /// CDXC:SessionChat 2026-09-25 WHY:
+    /// The floating sessions panel draws the chat in a window of its own and closes it when it goes away, and the chat's owned modals are restored when the pane is next shown, which comes before the chat is drawn in the window that shows it now. Opening them then read the closed panel window's frame, and GPUI's "window not found" landed in the chat's error banner and stayed there. A modal owed to a pane whose window is gone therefore waits for the pane's next draw, which names the window it belongs to, and opens once that draw has measured the pane there.
+    pub(super) fn note_drawn_in(&mut self, window: gpui::AnyWindowHandle, cx: &mut Context<Self>) {
+        if self.main_window.replace(window) == Some(window) || self.pane_hidden {
+            return;
+        }
+        let chat = cx.weak_entity();
+        cx.defer(move |cx| {
+            let _ = chat.update(cx, |chat, cx| chat.sync_owned_modal_windows(cx));
+        });
     }
 
     pub(super) fn pane_windows_open(&self) -> bool {
@@ -139,7 +166,7 @@ impl NativeChatView {
 /// The chat window's content area in screen coordinates, which is what element bounds and child
 /// window frames are measured from. Chat Lab's regular macOS titlebar sits outside it; the app's
 /// own windows draw under their titlebar, so there the two are the same.
-pub(super) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
+pub(crate) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
     let bounds = window.bounds();
     #[cfg(target_os = "macos")]
     let bounds = Bounds::from_corners(
@@ -159,7 +186,7 @@ pub(super) fn content_bounds(window: &gpui::Window) -> Bounds<Pixels> {
 /// CDXC:SessionChat 2026-09-19 WHY:
 /// AppKit reports the new size to GPUI synchronously from `setFrame:`, and GPUI drops that report while the app is borrowed, which left a child window moved from inside an update painting at its old size inside its new frame. The frame is therefore set from a task that runs outside any app update, the way GPUI's own `Window::resize` does.
 #[cfg(target_os = "macos")]
-pub(super) fn move_child_window(
+pub(crate) fn move_child_window(
     handle: gpui::AnyWindowHandle,
     parent: *mut std::ffi::c_void,
     frame: Bounds<Pixels>,
@@ -210,7 +237,7 @@ pub(super) fn move_child_window(
 /// CDXC:PlatformSupport 2026-09-24 WHY:
 /// Floating X11 windows are still independent frames; owner-relative placement keeps previews and editors aligned when their chat pane moves. The backend uses the explicit creation-time owner rather than keyboard focus.
 #[cfg(target_os = "linux")]
-pub(super) fn move_child_window(
+pub(crate) fn move_child_window(
     handle: gpui::AnyWindowHandle,
     _: *mut std::ffi::c_void,
     frame: Bounds<Pixels>,
@@ -222,7 +249,7 @@ pub(super) fn move_child_window(
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub(super) fn move_child_window(
+pub(crate) fn move_child_window(
     _: gpui::AnyWindowHandle,
     _: *mut std::ffi::c_void,
     _: Bounds<Pixels>,

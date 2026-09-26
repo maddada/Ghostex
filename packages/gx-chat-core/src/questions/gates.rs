@@ -1,6 +1,6 @@
 //! The predicates the question and notice surfaces share.
 //!
-//! These are the small helper functions `native-host.ts` keeps beside `publish` (`noticeVisible`,
+//! These are the small helper functions `native-host.ts` kept beside `publish` (`noticeVisible`,
 //! `asyncQuestionsCanSend`, the `questionCardVisible` expression), collected here because both
 //! the document and the action handlers ask the same questions.
 

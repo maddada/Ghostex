@@ -64,8 +64,8 @@ pub enum Event {
     /// `composer('read')` in `apps/desktop/sidebar/session-chat-runtime/native-composer.ts`
     /// returns the client id, the stored draft, the stored option states and model outboxes, the
     /// dismissed notice, the bundled model catalog, the chat settings, the context preferences and
-    /// the two transcript modes in a single object, and `start` in `native-host.ts` waits for it
-    /// before it publishes anything.
+    /// the two transcript modes in a single object, and `start` in `native-host.ts` waited for it
+    /// before it published anything, as the core does.
     ComposerBootRead(Box<ComposerBootRead>),
     /// The chat settings the host pushes changed.
     SettingsChanged(Box<ChatSettings>),
@@ -87,8 +87,7 @@ pub enum Event {
 #[serde(rename_all = "camelCase")]
 pub struct StartConfig {
     /// All three default, because the host does not always know them at boot: the desktop host
-    /// learns the client id from its own storage read, and the Chat Lab has a preview backend
-    /// instead of a session. A recording of that boot must still deserialize.
+    /// learns the client id from its own storage read.
     #[serde(default)]
     pub client_id: String,
     #[serde(default)]
@@ -101,15 +100,12 @@ pub struct StartConfig {
     /// The presentation cache the sidebar and the chat share.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_presentation: Option<Value>,
-    /// The Chat Lab's scenario, when this chat is a preview rather than a session.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub preview: Option<Value>,
     /// `JSON.stringify([machineId, projectId, sessionId])`, the key of this session's retained
     /// transcript record.
     ///
     /// The host builds it with [`crate::session::persistence::storage_key`], because only it knows
     /// the machine id, and the core writes it back inside the record. Empty when the host retains
-    /// nothing, which is what the Chat Lab and an old recording look like.
+    /// nothing.
     #[serde(default)]
     pub retained_key: String,
     /// The host's composer is a touch field with no Enter-to-send (the phone): the composer's

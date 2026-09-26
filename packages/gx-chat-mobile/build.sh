@@ -7,7 +7,8 @@
 # Outputs (all gitignored, reproducible from this crate):
 #   ios/Vendor/GxChatMobile.xcframework        aarch64-apple-ios + aarch64-apple-ios-sim static libs
 #   ios/Generated/gx_chat_mobile.swift         UniFFI Swift bindings
-#   android/src/main/jniLibs/<abi>/libgx_chat_mobile.so   (GX_CHAT_ANDROID_ABIS, default arm64-v8a x86_64)
+#   android/src/main/jniLibs/<abi>/libgx_chat_mobile.so   (GX_CHAT_ANDROID_ABIS, default arm64-v8a x86_64;
+#                                                          releases build all four APK ABIs)
 #   android/src/main/java/dev/ghostex/gxchatcore/uniffi/gx_chat_mobile.kt   UniFFI Kotlin bindings
 #
 # Needs: rustup (the crate pins 1.95.0 and its targets in rust-toolchain.toml), Xcode for iOS,
@@ -24,7 +25,7 @@ while [ "$#" -gt 0 ]; do
     --target) TARGET="$2"; shift 2 ;;
     --target=*) TARGET="${1#--target=}"; shift ;;
     --debug) PROFILE=debug; shift ;;
-    -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
+    -h | --help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -89,7 +90,16 @@ if [ "$TARGET" = android ] || [ "$TARGET" = all ]; then
   export ANDROID_NDK_HOME
   ABIS="${GX_CHAT_ANDROID_ABIS:-arm64-v8a x86_64}"
   NDK_TARGETS=""
-  for abi in $ABIS; do NDK_TARGETS="$NDK_TARGETS -t $abi"; done
+  for abi in $ABIS; do
+    NDK_TARGETS="$NDK_TARGETS -t $abi"
+    case "$abi" in
+      arm64-v8a) rustup target add aarch64-linux-android >/dev/null ;;
+      armeabi-v7a) rustup target add armv7-linux-androideabi >/dev/null ;;
+      x86) rustup target add i686-linux-android >/dev/null ;;
+      x86_64) rustup target add x86_64-linux-android >/dev/null ;;
+      *) echo "unknown Android ABI: $abi" >&2; exit 2 ;;
+    esac
+  done
   echo "== android ($ABIS, NDK $ANDROID_NDK_HOME)"
   JNI_LIBS="$MODULE_DIR/android/src/main/jniLibs"
   rm -rf "$JNI_LIBS"

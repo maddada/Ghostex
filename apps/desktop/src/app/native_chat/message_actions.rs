@@ -69,7 +69,7 @@ impl NativeChatView {
     }
 
     /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
-    /// React's `CopyFooter` and `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css carry the user decision this mirrors: a final reply's actions sit in a row below it, Copy, Reply by Annotating, Save to md, then the time it arrived, starting at the prose column.
+    /// React's `CopyFooter` and `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (both deleted 2026-09-25) carried the user decision this mirrors: a final reply's actions sit in a row below it, Copy, Reply by Annotating, Save to md, then the time it arrived, starting at the prose column.
     pub(super) fn reply_actions(
         &self,
         message: &Value,
@@ -171,8 +171,8 @@ impl NativeChatView {
     /// The prompt's own action row (React: `CopyFooter` on a user row). Rewind is offered only when the
     /// host can reach `/api/rewindSessionChat`, the session runs an agent whose rewind Ghostex
     /// drives, and the composer could send right now, because the daemon types the rewind into that
-    /// same pane. Which prompt is a rewind target at all is decided in
-    /// packages/shared/session-chat-presentation/message-rewind.ts.
+    /// same pane. Which prompt is a rewind target at all is decided in the core
+    /// (`canRewind`, packages/gx-chat-core/src/transcript/presentation.rs).
     pub(super) fn user_actions(
         &self,
         message: &Value,
@@ -189,18 +189,18 @@ impl NativeChatView {
             .as_str()
             .unwrap_or("");
         // A rewind types into the session's own pane, so a child transcript never offers one
-        // (React's subagent viewer mounts its list without `rewindToMessage` for the same reason).
+        // (React's subagent viewer mounted its list without `rewindToMessage` for the same reason).
         let rewindable = !self.in_subagent
             && message["canRewind"] == true
             && self.snapshot["rewindAvailable"] == true
             && self.snapshot["rewindEnabled"] == true;
-        // React passes `onSavePrompt` only when the host has a stash bridge, the same capability
+        // React passed `onSavePrompt` only when the host had a stash bridge, the same capability
         // behind the composer's Stash control, so a host without one offers Copy alone.
         let savable = self.snapshot["composerActions"]["stash"] == true;
         /*
         CDXC:SessionChat 2026-09-19 SEE-ALSO:
-        `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css carries the user decision
-        this mirrors: the prompt's actions sit right-aligned below the bubble, led by the time it
+        `.ghostex-chat-message-actions` in packages/core-ui/styles/chat.css (deleted 2026-09-25)
+        carried the user decision this mirrors: the prompt's actions sit right-aligned below the bubble, led by the time it
         was sent, in the order Rewind, Save prompt, Copy, so Copy lands at the bubble's edge as in
         t3code.
         */
@@ -323,7 +323,7 @@ fn message_actions_row(p: &ChatAppearance, focused: bool) -> gpui::Div {
         .group_hover("native-chat-message", |style| style.opacity(1.0))
 }
 
-/// The label from packages/shared/session-chat-presentation/message-time.ts, with its long form
+/// The label from packages/gx-chat-core/src/transcript/message_time.rs, with its long form
 /// as the tooltip.
 fn message_time(id: &str, message: &Value, p: &ChatAppearance) -> Option<AnyElement> {
     let label = text(&message["time"], "label");

@@ -1,5 +1,5 @@
 //! The Quick Access wire snapshot, the Rust half of packages/shared/native-quick-access.ts.
-//! Every field is already resolved for display: the runtime owns filtering, sorting, grouping and
+//! Every field is already resolved for display: the controller owns filtering, sorting, grouping and
 //! formatting, and this window only paints what arrives here.
 use serde::Deserialize;
 

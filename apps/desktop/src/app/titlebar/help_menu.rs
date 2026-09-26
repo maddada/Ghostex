@@ -21,7 +21,7 @@ use crate::*;
 /// User: Ask Ghostex goes back to opening as an overlay "just like before" the 2026-09-20 revamp made it a view tab; that tab page is gone and must not come back.
 /// The overlay is a dropdown of seven useful sample questions (for example making Claude control Codex, or matching the terminal width to the chat width); picking one starts a Ghostex Help chat.
 /// The first row is "Ask anything about Ghostex", and the sample rows show a short summary label while the full question is what gets staged.
-/// Picking a row never sends: the chat opens with the question as an editable draft and the user presses Enter (see createGhostexHelpChat in the sidebar runtime).
+/// Picking a row never sends: the chat opens with the question as an editable draft and the user presses Enter (see `gx_store_create_ghostex_help_chat` in gx_store/create/os_integration.rs, formerly createGhostexHelpChat in the sidebar runtime).
 pub(crate) struct GpuiTitlebarHelpQuestion {
     /// Titlebar icon asset for the row; each question gets its own so the
     /// menu does not repeat one glyph seven times.
@@ -235,8 +235,8 @@ impl GhostexGpuiApp {
 
     /// A picked Help row: make sure the bundled `ghostex-help` skill is
     /// installed (a local folder copy, run off the UI thread), then ask the
-    /// sidebar runtime to start a Quick agent chat whose first message invokes
-    /// the skill with the question. The runtime owns quick-workspace creation,
+    /// Rust store (gx_store/create/os_integration.rs) to start a Quick agent chat whose first message invokes
+    /// the skill with the question. The store owns quick-workspace creation,
     /// the default prompt agent, and focusing the new session.
     pub(crate) fn run_gpui_titlebar_help_question(
         &mut self,

@@ -53,8 +53,6 @@ pub struct CoreState {
     pub hide_account_emails: bool,
     /// The session's display title, or `None` when it has none.
     pub title: Option<String>,
-    /// The Chat Lab's display settings, present only under a preview backend.
-    pub preview_settings: Option<serde_json::Value>,
     /// Every deadline the core is waiting on. Any family may arm one by key; the host only ever
     /// sees the earliest, as the frame's `nextWakeMs`.
     pub timers: crate::session::timers::TimerTable,
@@ -63,9 +61,9 @@ pub struct CoreState {
     pub fired_timers: Vec<String>,
     /// The clock each fired timer's callback read, assigned in fire order at the drain.
     ///
-    /// `tick()` in `native-host.ts` reads `Date.now()` once to decide what is due and then runs
-    /// the callbacks in the order they were armed; a callback that begins with its own
-    /// `Date.now()` (the stall watchdog, `setNow` inside an interval) therefore sees a LATER read
+    /// `tick()` in `native-host.ts` read `Date.now()` once to decide what was due and then ran
+    /// the callbacks in the order they were armed; a callback that began with its own
+    /// `Date.now()` (the stall watchdog, `setNow` inside an interval) therefore saw a LATER read
     /// than the tick's. [`CoreState::timer_now`] answers that read, and the same clock when the
     /// host recorded none.
     pub timer_clocks: Vec<(String, f64)>,
@@ -74,16 +72,16 @@ pub struct CoreState {
     /// Reset to one by `ChatCore::handle`: index zero is `now_ms`, the read every rule measures
     /// against by default.
     pub clock_cursor: usize,
-    /// Set for this dispatch when a family's TypeScript calls `publish(controller.current())`
+    /// Set for this dispatch when a family's TypeScript called `publish(controller.current())`
     /// unconditionally rather than through a state change.
     ///
     /// The core's own rule is "publish when the state changed", which is what the TypeScript's
-    /// reactive path does. Its imperative path does not: `action` ends with a publish whatever
-    /// happened, and several rpc continuations do the same. A family that ports one of those calls
+    /// reactive path did. Its imperative path did not: `action` ended with a publish whatever
+    /// happened, and several rpc continuations did the same. A family that ports one of those calls
     /// [`CoreState::request_publish`] so the revision moves on exactly the same turns.
     pub publish_requested: bool,
     /// Set with [`CoreState::request_render`]: the publish this dispatch asks for follows a
-    /// `useState` setter, so the live brain re-ran its controller before publishing. A plain
+    /// `useState` setter, so the TypeScript brain re-ran its controller before publishing. A plain
     /// `publish(controller.current())` (the fleet clock, a backfill batch, an action's close)
     /// ships the LAST render's values, which is what the account panel's clock reads.
     pub render_requested: bool,
@@ -93,9 +91,9 @@ pub struct CoreState {
     pub quiet_action: bool,
     /// The answers an action that is still in flight publishes on.
     ///
-    /// `action` in `native-host.ts` is `async`: its closing `publish(controller.current())` runs
-    /// after the last `await` in the arm that handled the command, so the snapshot ships on the
-    /// record that ANSWERS the call rather than on the record that made it. The core's handlers
+    /// `action` in `native-host.ts` was `async`: its closing `publish(controller.current())` ran
+    /// after the last `await` in the arm that handled the command, so the snapshot shipped on the
+    /// record that ANSWERED the call rather than on the record that made it. The core's handlers
     /// return instead of awaiting, so the same turn is named here: the dispatcher records what the
     /// action asked for, and family a's settle publishes when that answer lands.
     ///
@@ -122,10 +120,10 @@ pub struct CoreState {
     pub settled_chains: Vec<u64>,
     /// The controller exists, which is only true once the composer boot read has answered.
     ///
-    /// Every publish in `native-host.ts` is written `if (controller) publish(controller.current())`
-    /// or runs inside the controller itself, and `startController` is called from the boot read's
-    /// `.then(...)`. Nothing the core does before that can ship a document, which is why `start`
-    /// leaves the host's first drain empty.
+    /// Every publish in `native-host.ts` was written
+    /// `if (controller) publish(controller.current())` or ran inside the controller itself, and
+    /// `startController` was called from the boot read's `.then(...)`. Nothing the core does before
+    /// that can ship a document, which is why `start` leaves the host's first drain empty.
     pub controller_started: bool,
     /// The effects this arm raised are fire and forget: the arm did not await them.
     ///
@@ -141,8 +139,8 @@ pub struct CoreState {
     pub chain_continued: bool,
     /// The refusal the composer was showing when this action started, before it was cleared.
     ///
-    /// `native-host.ts` reads `const clearedError = operationError !== undefined` just above the
-    /// clear, and two arms publish only when it was true. Recorded here so the handler that needs
+    /// `native-host.ts` read `const clearedError = operationError !== undefined` just above the
+    /// clear, and two arms published only when it was true. Recorded here so the handler that needs
     /// it does not have to be handed a second argument.
     pub cleared_error: bool,
     /// This action's arm returned before the closing `publish(controller.current())`.
@@ -154,8 +152,8 @@ pub struct CoreState {
     pub skip_closing_publish: bool,
     /// A gxserver call an in-flight action was awaiting refused during this dispatch.
     ///
-    /// `action` wraps its whole switch in one `try`/`catch` (`native-host.ts:1630`), so a refused
-    /// `await` throws out of the arm and lands on `operationError` whatever the arm was doing.
+    /// `action` wrapped its whole switch in one `try`/`catch` (`native-host.ts:1630`), so a refused
+    /// `await` threw out of the arm and landed on `operationError` whatever the arm was doing.
     /// The core's arms have already returned by the time the answer comes back, so the decision is
     /// made once at the end of the dispatch instead, over the same list of answers the closing
     /// publish waits on.
@@ -164,8 +162,8 @@ pub struct CoreState {
     pub refusal_claimed: bool,
     /// The boot read was refused, and the document it leaves behind has not shipped yet.
     ///
-    /// `start`'s `.catch` in `native-host.ts:659` replaces the whole snapshot with
-    /// `{status: 'error', error}` and bumps the revision, WITHOUT a controller: it is the one
+    /// `start`'s `.catch` in `native-host.ts:659` replaced the whole snapshot with
+    /// `{status: 'error', error}` and bumped the revision, WITHOUT a controller: it is the one
     /// document the core publishes that is not assembled from the families.
     pub boot_error: Option<String>,
     /// The id the next request carries, for every family.
@@ -316,7 +314,7 @@ impl CoreState {
             .unwrap_or(context.now_ms)
     }
 
-    /// The next clock read of this turn, where the TypeScript calls `Date.now()` a further time.
+    /// The next clock read of this turn, where the TypeScript called `Date.now()` a further time.
     ///
     /// Only the sites whose value is LATCHED past the turn need this (a `useState` initializer,
     /// a `setNow` inside a callback); a read that is compared and forgotten keeps `now_ms`.
@@ -327,7 +325,7 @@ impl CoreState {
     }
 
     /// Ships a snapshot this turn even when nothing the document can see changed, for the places
-    /// the TypeScript publishes unconditionally.
+    /// the TypeScript published unconditionally.
     pub fn request_publish(&mut self) {
         self.publish_requested = true;
     }

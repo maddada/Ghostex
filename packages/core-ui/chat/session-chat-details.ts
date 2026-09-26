@@ -22,10 +22,9 @@
  *
  * Size: rehype-raw re-parses the document with parse5, which measured at
  * +198 KB minified (+54 KB gzipped) on top of react-markdown + remark-gfm —
- * more than doubling the markdown pipeline. This page ships as one inlined
- * `file://` script in gpui and as a single self-contained ~966 KB `index.html`
- * in the mobile webview, so that is roughly a fifth added to the phone's whole
- * chat page to render one element.
+ * more than doubling the markdown pipeline. The pages that render Markdown ship
+ * as one inlined `file://` script in the desktop app, so that weight would land
+ * on every one of them to render one element.
  *
  * Safety: a transcript is untrusted input. It carries text an agent read off a
  * web page, out of a repository, or back from a tool, and the gpui chat page is

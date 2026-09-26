@@ -1,8 +1,7 @@
 //! The agent's task plan, pinned above the composer and outside it: the list
 //! the CLI shows under its own transcript. Rows, order, the header line and the
-//! completed-task fold all come from `sessionChatAgentTaskPanel`
-//! (packages/shared/session-chat-presentation/agent-tasks.ts), the same
-//! projection `session-chat-agent-tasks-panel.tsx` renders.
+//! completed-task fold all come from the core's task panel
+//! (packages/gx-chat-core/src/extras/agent_tasks.rs).
 
 use super::disclosure_motion::measured;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};

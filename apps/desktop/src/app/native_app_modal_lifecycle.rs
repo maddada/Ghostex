@@ -267,7 +267,8 @@ impl GhostexGpuiApp {
         self.resume_deferred_gpui_portless_setup_prompt(cx);
     }
 
-    /// The sidebar runtime's `close` bridge message for a modal that is native
+    /// The app's `close` bridge message (`close_app_modal_from_bridge`, sent by the
+    /// store; the sidebar runtime sent it until 2026-09-25) for a modal that is native
     /// now (a relocated project folder, a finished flow): remove the window and
     /// give the command pane its focus back like the React host's close did.
     pub(crate) fn close_native_app_modal_from_bridge(
@@ -295,7 +296,7 @@ impl GhostexGpuiApp {
         if modal.kind == GpuiAppModalKind::ExportTranscriptResult {
             self.pending_export_transcript_reveal_path = None;
         }
-        // Quick Access keeps a live controller in the sidebar runtime; tell it to
+        // Quick Access keeps a live controller (quick_access/host.rs); tell it to
         // stop publishing when its window is replaced or dismissed.
         if crate::app::window::quick_access::QuickAccessTabId::from_modal_kind(modal.kind).is_some()
         {

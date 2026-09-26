@@ -227,35 +227,15 @@ impl GhostexGpuiApp {
         GpuiWorkspaceRenameCommandDelivery::Delivered
     }
 
-    pub(crate) fn receive_sidebar_workspace_terminal_enter_payload(
+    /// The completion sound and the sidebar card's completion flash, which are one event. Called by
+    /// the store's attention host (gx_store/attention/).
+    pub(crate) fn play_session_completion(
         &mut self,
-        payload: &str,
+        sound: &str,
+        session_id: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Ok(message) = gpui_sidebar_workspace_terminal_enter_from_json(payload) else {
-            return;
-        };
-        let _ = self.send_enter_key_to_local_agents_workspace_session(&message, cx);
-    }
-
-    pub(crate) fn receive_sidebar_session_completion_sound_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        Session-attention completion sound (macOS parity): the sidebar runtime
-        owns the attention transition edge, the attention-event dedupe, and the
-        completionBellEnabled gate. Rust only validates the fixed message shape
-        and plays a bundled sound asset; the sound id goes through the existing
-        whitelist normalization so no renderer-provided path or file name can
-        reach the player.
-        */
-        let Ok((sound, session_id)) = gpui_sidebar_session_completion_sound_from_json(payload)
-        else {
-            return;
-        };
-        let _ = gpui_play_completion_sound(&sound);
+        let _ = gpui_play_completion_sound(sound);
         /*
         CDXC:Sessions 2026-09-21 WHY:
         The card's completion flash rides the same message as the sound, because they are the same
@@ -273,31 +253,6 @@ impl GhostexGpuiApp {
             .completion_flashes
             .insert(session_id, std::time::Instant::now());
         cx.notify();
-    }
-
-    pub(crate) fn send_enter_key_to_local_agents_workspace_session(
-        &mut self,
-        message: &GpuiSidebarWorkspaceTerminalEnterMessage,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        #[cfg(target_os = "macos")]
-        {
-            let key = GpuiLocalWorkspaceSessionKey::from(message);
-            let Some(target) = self.local_workspace_rename_command_target(&key) else {
-                return false;
-            };
-            // macOS sendTerminalEnter preserves focus: press Return on the mapped
-            // surface without selecting its tab or moving focus. A session whose
-            // tab is not the active mounted tab has no surface to receive the key
-            // and is skipped rather than yanking the visible tab.
-            self.send_return_key_to_mounted_agents_terminal_surface(target.slot_id, cx)
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (message, cx);
-            false
-        }
     }
 
     pub(crate) fn set_sidebar_gxserver_presentation_focus_state(
@@ -577,12 +532,14 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn current_project_view_state(&self) -> GpuiProjectViewState {
+        let active_mode = self.available_titlebar_mode_or_agents(self.active_mode);
         GpuiProjectViewState {
-            active_mode: self.available_titlebar_mode_or_agents(self.active_mode),
+            active_mode,
             open_views: self.open_views.clone(),
             view_strip_layout: self.view_strip_layout.clone(),
             last_view_mode: self.last_open_view_mode,
             workarea_split_ratio: self.project_editor_shell.workarea_split_ratio,
+            active_view_awake: self.project_editor_shell.is_mode_awake(active_mode),
         }
     }
 
@@ -672,6 +629,13 @@ impl GhostexGpuiApp {
             self.view_panel_picker_open && target_mode == TitlebarMode::Agents;
         self.view_panel_maximized = self.view_panel_maximized
             && (target_mode != TitlebarMode::Agents || self.view_panel_picker_open);
+        // Woken before focus and visibility below read the lifecycle (`active_view_awake`).
+        if state.active_view_awake
+            && target_mode == state.active_mode
+            && !self.project_editor_shell.is_mode_awake(target_mode)
+        {
+            self.mark_project_editor_mode_awake(target_mode, cx);
+        }
         self.apply_view_pane_state(cx);
         self.seed_terminal_view_for_open(cx);
         self.focus_shell_target(
@@ -1149,29 +1113,18 @@ impl GhostexGpuiApp {
         false
     }
 
-    pub(crate) fn receive_sidebar_workspace_terminal_lifecycle_result_payload(
+    /// The daemon's answer to a pending Sleep or Wake of a tab: apply it when it succeeded, drop
+    /// the request either way. Close is never pending, so its answer finds nothing here.
+    pub(crate) fn finish_local_workspace_lifecycle_request(
         &mut self,
-        payload: &str,
+        request_id: u64,
+        ok: bool,
         cx: &mut gpui::Context<Self>,
     ) {
-        /*
-        CDXC:Workarea 2026-06-26-07:25:
-        The sidebar may acknowledge only a pending native Sleep/Wake request by request id and success boolean. Apply the matching local shell transition after a successful result, drop failed or stale results without mutation, and never trust project/session/title/path/command data from the result payload. Local-first Close notifications are not registered as pending, so their cleanup acknowledgements are intentionally ignored here.
-
-        CDXC:CommandPane 2026-06-26-23:59:
-        Mapped close requests no longer wait here: Rust consumes valid close confirmation and commits the shell close before notifying SidebarApp for best-effort gxserver transition.
-        */
-        let Ok(message) = gpui_sidebar_workspace_terminal_lifecycle_result_from_json(payload)
-        else {
+        let Some(request) = self.local_workspace_lifecycle_requests.remove(&request_id) else {
             return;
         };
-        let Some(request) = self
-            .local_workspace_lifecycle_requests
-            .remove(&message.request_id)
-        else {
-            return;
-        };
-        if !message.ok {
+        if !ok {
             return;
         }
         self.apply_local_workspace_terminal_lifecycle_result(request, cx);
@@ -1184,7 +1137,7 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:Workarea 2026-06-27-00:33:
-        Local-first Close invokes this reducer directly, while acknowledged Sleep/Wake invokes it from the result bridge. If a close request carries native confirmation state, clear that exact slot as part of the same committed local mutation.
+        Local-first Close invokes this reducer directly, while acknowledged Sleep/Wake invokes it from the daemon's answer. If a close request carries native confirmation state, clear that exact slot as part of the same committed local mutation.
         */
         // Close-confirm bookkeeping belongs to the macOS-only native Ghostty
         // tab state; the GPUI engine path confirms closes in the terminal
@@ -1332,7 +1285,7 @@ impl GhostexGpuiApp {
         }
         /*
         CDXC:FocusRouting 2026-06-26-23:24:
-        Mapped sleeping Agents sessions must wake through SidebarApp/gxserver before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
+        Mapped sleeping Agents sessions must wake through the store/gxserver (formerly SidebarApp) before local placeholder materialization. The request carries only pane/session ids plus the fixed Wake action, reuses the existing mapped native tab, and deliberately has no replacement fallback because wake keeps the selected tab.
         */
         self.request_local_workspace_terminal_lifecycle(
             pane_id,

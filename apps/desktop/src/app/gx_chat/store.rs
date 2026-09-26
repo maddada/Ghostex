@@ -7,7 +7,7 @@
 //! last render. A retained core in this map costs neither, so switching chats is a lookup: the
 //! folded transcript, the pagination window and the read clocks are already there.
 //!
-//! The limits are `apps/desktop/sidebar/session-chat-runtime/store.ts`, which the user approved:
+//! The limits are the deleted QuickJS retained store's (`store.ts`), which the user approved:
 //! chat data and live subscriptions are retained independently of mounted views.
 
 use std::collections::BTreeMap;
@@ -30,9 +30,7 @@ const SIZE_RECHECK: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// One retained chat.
 pub(super) struct Retained {
-    /// Who this chat is. Kept beside the core because a prune drops the map entry, and a later read
-    /// of the storage session key must not have to rebuild it from the retention key.
-    #[allow(dead_code)]
+    /// Who this chat is, which the chat socket follows it by.
     pub(super) identity: ChatIdentity,
     pub(super) core: ChatCore,
     /// The storage session key, built once because every record's suffix starts from it.
@@ -72,7 +70,7 @@ impl Retained {
             return false;
         }
         self.measured_at = Some(Instant::now());
-        // UTF-16 accounting, the same conservative measure the TypeScript takes of its snapshot.
+        // UTF-16 accounting, the same conservative measure the TypeScript took of its snapshot.
         serde_json::to_string(self.core.document())
             .map(|text| text.encode_utf16().count() * 2 > MAX_RETAINED_BYTES)
             .unwrap_or(false)
@@ -101,6 +99,11 @@ impl ChatStore {
 
     pub(super) fn get(&self, key: &str) -> Option<&Retained> {
         self.retained.get(key)
+    }
+
+    /// Every retained chat's key, for a push that reaches them all.
+    pub(super) fn keys(&self) -> Vec<String> {
+        self.retained.keys().cloned().collect()
     }
 
     pub(super) fn len(&self) -> usize {

@@ -538,44 +538,6 @@ body.app-modal-host-body {
 }
 
 /*
- * CDXC:SessionChat 2026-09-13 WHY:
- * Chat defaults to rounded controls, including its portaled menus, but component classes must be able to choose their own radius.
- * The base layer replaces the 2026-08-02 unlayered override so rounded-sm, rounded-full and rounded-none work on newly added controls.
- * Collapse rails, floating terminal controls and file-change cards retain their own geometry.
- */
-@layer base {
-  .ghostex-session-chat-scope :is(input, textarea),
-  .ghostex-session-chat-popup,
-  .ghostex-session-chat-scope
-    :is(button, [role='button'], [data-slot='button']):not([data-slot='session-chat-host-action']):not(
-      .ghostex-chat-expansion-rail
-    ):not(.ghostex-chat-file-change-card button):not(.ghostex-chat-terminal-search-button),
-  .ghostex-session-chat-popup
-    :is(
-      button,
-      [role='button'],
-      [data-slot='dropdown-menu-item'],
-      [data-slot='dropdown-menu-checkbox-item'],
-      [data-slot='dropdown-menu-radio-item'],
-      [data-slot='dropdown-menu-sub-trigger'],
-      [data-slot='dropdown-menu-sub-content']
-    ):not(.ghostex-chat-file-change-card button) {
-    border-radius: calc(var(--radius, 0.625rem) - 2px);
-  }
-}
-
-.ghostex-session-chat-scope :is(input, textarea),
-.ghostex-session-chat-popup {
-  border-radius: revert-layer;
-}
-
-/* Preserve controls intentionally designed as circles/pills. Send is 6px, not
-   a circle — see `.ghostex-chat-send-button` in packages/core-ui/styles/chat.css. */
-.ghostex-session-chat-scope :is(.ghostex-chat-footer-control, .ghostex-chat-scroll-bottom-button, button.rounded-full) {
-  border-radius: 9999px;
-}
-
-/*
  * CDXC:AppModal 2026-08-24:
  * The modal shell is the Codex modal surface (#161616) rather than the app
  * window background, so raised cards inside it have something to sit on.
@@ -4336,62 +4298,6 @@ body.app-modal-host-body {
   justify-content: flex-end;
   max-width: 60%;
   min-width: 0;
-}
-
-/*
- * CDXC:Settings 2026-09-18 DECISION:
- * User: the view scope choices are toggle cards, three to a row, instead of a checkbox list.
- *
- * Written as real CSS rather than Tailwind utilities because the app-modal Settings page loads the
- * pre-generated `shadcn.generated.css`, so a utility that appears nowhere else in the tree (an arbitrary
- * opacity, a 2.5 step) is simply absent at runtime and the cards fall back to unstyled blocks.
- * SEE-ALSO: packages/core-ui/settings-modal/project-views/scope-editor.tsx.
- */
-.ghostex-settings-shadcn .settings-scope-toggle-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  width: 100%;
-}
-
-.ghostex-settings-shadcn .settings-scope-toggle-card {
-  align-items: center;
-  background: var(--settings-raised);
-  border: 1px solid var(--settings-hairline);
-  border-radius: var(--settings-radius-control);
-  display: flex;
-  gap: 0.5rem;
-  justify-content: space-between;
-  min-width: 0;
-  padding: 0.5rem 0.625rem;
-  text-align: start;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease;
-  width: 100%;
-}
-
-.ghostex-settings-shadcn .settings-scope-toggle-card:hover {
-  background: var(--settings-raised-hover);
-}
-
-.ghostex-settings-shadcn .settings-scope-toggle-card[aria-pressed='true'] {
-  background: var(--settings-raised-hover);
-  border-color: color-mix(in srgb, var(--ring) 70%, transparent);
-}
-
-.ghostex-settings-shadcn .settings-scope-toggle-card:focus-visible {
-  border-color: var(--ring);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
-  outline: none;
-}
-
-.ghostex-settings-shadcn .settings-scope-toggle-card-label {
-  font-size: var(--settings-text-body);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /*

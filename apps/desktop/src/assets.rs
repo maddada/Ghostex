@@ -14,6 +14,7 @@ pub(crate) mod chat_working;
 #[folder = "assets"]
 #[include = "titlebar/**/*.svg"]
 #[include = "modals/**/*.svg"]
+#[include = "docs/**/*.svg"]
 struct GhostexEmbeddedAssets;
 
 #[derive(RustEmbed)]
@@ -43,7 +44,8 @@ impl AssetSource for GhostexAssets {
                 .map(|svg| Some(Cow::Owned(svg.into_bytes())))
                 .ok_or_else(|| anyhow!("unknown working strip asset {key:?}"));
         }
-        if path.starts_with("titlebar/") || path.starts_with("modals/") {
+        if path.starts_with("titlebar/") || path.starts_with("modals/") || path.starts_with("docs/")
+        {
             return GhostexEmbeddedAssets::get(path)
                 .map(|asset| Some(asset.data))
                 .ok_or_else(|| anyhow!("could not find embedded Ghostex asset at path {path:?}"));

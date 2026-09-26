@@ -45,7 +45,6 @@ use gpui_component::v_flex;
 use crate::app::actions::*;
 use crate::app::consts::*;
 use crate::app::helpers::*;
-use crate::app::render::workarea_header::workarea_header_bottom_y;
 use crate::app::window::*;
 use crate::*;
 
@@ -60,12 +59,11 @@ impl GhostexGpuiApp {
             .size
             .width
             .min((window.viewport_size().width.as_f32() - horizontal_margin * 2.0).max(1.0));
-        let height = state.size.height.min(
-            (window.viewport_size().height.as_f32()
-                - workarea_header_bottom_y()
-                - horizontal_margin)
-                .max(1.0),
-        );
+        let top = state.trigger_bounds.bottom().as_f32() + HEADER_MENU_TRIGGER_GAP;
+        let height = state
+            .size
+            .height
+            .min((window.viewport_size().height.as_f32() - top - horizontal_margin).max(1.0));
         let min_right_edge = width + horizontal_margin;
         let max_right_edge =
             (window.viewport_size().width.as_f32() - horizontal_margin).max(min_right_edge);
@@ -76,7 +74,7 @@ impl GhostexGpuiApp {
             .as_f32()
             .clamp(min_right_edge, max_right_edge);
         Some(Bounds::new(
-            point(px(right_edge - width), px(workarea_header_bottom_y())),
+            point(px(right_edge - width), px(top)),
             size(px(width), px(height)),
         ))
     }
@@ -265,7 +263,10 @@ impl GhostexGpuiApp {
                         - horizontal_margin)
                         .max(min_right_edge);
                     let right_edge = trigger_right_x.clamp(min_right_edge, max_right_edge);
-                    let next_position = point(px(right_edge), px(workarea_header_bottom_y()));
+                    let next_position = point(
+                        px(right_edge),
+                        bounds.bottom() + px(HEADER_MENU_TRIGGER_GAP),
+                    );
                     let request_frame = state.update(cx, |state, _| {
                         let first_capture = !state.trigger_bounds_captured;
                         let moved = state.position != next_position;
@@ -345,7 +346,10 @@ impl GhostexGpuiApp {
                         - horizontal_margin)
                         .max(min_right_edge);
                     let right_edge = trigger_right_x.clamp(min_right_edge, max_right_edge);
-                    let next_position = point(px(right_edge), px(workarea_header_bottom_y()));
+                    let next_position = point(
+                        px(right_edge),
+                        bounds.bottom() + px(HEADER_MENU_TRIGGER_GAP),
+                    );
                     let request_frame = state.update(cx, |state, _| {
                         let first_capture = !state.trigger_bounds_captured;
                         let moved = state.position != next_position;

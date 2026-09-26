@@ -13,7 +13,7 @@ pub(super) fn card_hover_fill(p: &ChatAppearance) -> Hsla {
 
 /// CDXC:SessionChat 2026-09-23 DECISION:
 /// User: "when i hover over this kind of card, you're making the only middle part change color, I want all of it to change color", and the same for "all very similar components in the chat view". A status card's pressable header reaches out to the card's own edges, so its hover lights the whole card while the card is folded to that header, and the card's full width above its body when it is open, never a band inside the padding.
-/// SEE-ALSO: `.ghostex-chat-status-card-header` in packages/core-ui/chat/session-chat-status-card.css, whose 2026-09-16 decision already gives React's collapsible cards this hover and whose spacing this copies.
+/// The spacing is copied from `.ghostex-chat-status-card-header` in React's session-chat-status-card.css, whose 2026-09-16 decision already gave React's collapsible cards this hover.
 ///
 /// `has_body` is whether the card shows a body under the header, and `has_actions` whether a footer follows the panel; a header with neither below it is the whole card and rounds every corner.
 pub(super) fn status_card_press_header(
@@ -150,6 +150,13 @@ impl NativeChatView {
     }
 
     /// The card's shell around its header, its body column (already spaced) and its footer.
+    ///
+    /// CDXC:SessionChat 2026-09-16 DECISION:
+    /// User: every card above the composer, and the status cards in the transcript, shares one shell so a change is made once.
+    /// Two tones: a panel for the header and body, and a band under a hairline for the actions; an input border, 0.75rem radius, 1rem/0.75rem padding, 0.875rem text.
+    /// Each card leads with its own icon, the title matches the transcript text at regular weight, a dismiss is a circled X, and actions sit right-aligned in the footer band.
+    /// A card whose border carries a colour is one tone. The working strip stays a bare line and never becomes a card.
+    /// Light-mode tones: see the Theming 2026-09-22 decision in appearance.rs. The question counter moved into the header on 2026-09-21 (question.rs).
     fn status_card_panel(
         &self,
         header: AnyElement,

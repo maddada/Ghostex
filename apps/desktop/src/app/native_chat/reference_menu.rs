@@ -6,10 +6,9 @@ impl NativeChatView {
     /// The right-click menu on any reference, in the composer or in the transcript.
     ///
     /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-    /// The rows are `sessionChatReferenceMenuRows`
-    /// (`packages/shared/session-chat-presentation/reference-menu.ts`), the shared form of React's
-    /// `session-chat-reference-menu-items.tsx`, which React offers on a composer pill and on a
-    /// transcript link alike (`use-session-chat-reference-interactions.ts`).
+    /// The rows come from the core (`packages/gx-chat-core/src/composer/reference_menu.rs`), ported
+    /// from React's `session-chat-reference-menu-items.tsx`, which React offered on a composer pill
+    /// and on a transcript link alike.
     pub(super) fn show_reference_menu(
         &mut self,
         href: String,

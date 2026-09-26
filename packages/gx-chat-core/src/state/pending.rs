@@ -24,8 +24,8 @@ pub struct PendingState {
     pub terminal_tool: Option<ChatMessage>,
     /// When the hold expires, or `None` when no hold is armed.
     pub terminal_tool_hold_until_ms: Option<f64>,
-    /// The counter behind a pending send's id. Monotonic, never reused, so a replay reproduces the
-    /// ids exactly and the core needs no random source.
+    /// The counter behind a pending send's id. Monotonic, never reused, so the ids are
+    /// deterministic and the core needs no random source.
     pub send_counter: u64,
 }
 

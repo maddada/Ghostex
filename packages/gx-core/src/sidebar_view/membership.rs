@@ -2,8 +2,8 @@
 //! the machine's Chats collection.
 //!
 //! SEE-ALSO: packages/shared/gxserver-presentation-sidebar-projection.ts
-//! (`createGxserverPresentationSessionsByProjectFromGroups`) and
-//! apps/desktop/sidebar/gxserver-runtime/sidebar-groups.ts (`spliceWorkspaceSubgroups`).
+//! (`createGxserverPresentationSessionsByProjectFromGroups`). `spliceWorkspaceSubgroups` was ported
+//! from the deleted `gxserver-runtime/sidebar-groups.ts` (see git history).
 
 use std::collections::BTreeSet;
 

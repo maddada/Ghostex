@@ -154,7 +154,7 @@ pub(crate) async fn create_project_worktree_for_project(
         &format!("{parent_name}-{}", target.name),
         "projectAdded",
     )?;
-    prepare_registered_worktree_project(state, &project, &context.source_project_id).await?;
+    prepare_registered_worktree_project(state, &project, Some(&context.source_project_id)).await?;
     Ok(json!({ "project": project }))
 }
 
@@ -175,7 +175,18 @@ pub(crate) async fn open_project_worktree_for_project(
         })?;
     let project =
         register_project_worktree_path(state, &selected.path, &selected.name, "projectAdded")?;
-    prepare_registered_worktree_project(state, &project, &context.source_project_id).await?;
+    /*
+    CDXC:Worktrees 2026-09-25 WHY:
+    Opening a checkout that already exists prepares its Beads hooks but does not re-run the
+    project's worktree setup command when the caller says `runSetupCommand: false`, which is what
+    the app's Add Worktree dialog has always done on this computer. A caller that says nothing keeps
+    the setup run older clients got.
+    */
+    let setup_project_id = match params.get("runSetupCommand").and_then(Value::as_bool) {
+        Some(false) => None,
+        _ => Some(context.source_project_id.as_str()),
+    };
+    prepare_registered_worktree_project(state, &project, setup_project_id).await?;
     Ok(json!({ "project": project }))
 }
 

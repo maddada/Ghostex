@@ -192,11 +192,6 @@ pub(crate) fn gpui_add_project_dialog_bounded_text(
         .map(str::to_string)
 }
 
-pub(crate) fn gpui_workspace_project_key_allowed(value: &str) -> bool {
-    gpui_remote_sidebar_project_id_allowed(value)
-        || gpui_remote_project_reference_from_project_id(value).is_some()
-}
-
 /*
 CDXC:Browser 2026-07-12:
 Browser tab models are keyed by project id strings. Local projects use the
@@ -204,16 +199,9 @@ plain workspace id, and remote projects use their machine-scoped
 `remote:<machine>:project:<id>` identity so their tabs park, persist, and
 restore per remote project exactly like local ones.
 */
-pub(crate) fn gpui_workspace_folder_picked_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceFolderPicked==='function'){{bridge.onWorkspaceFolderPicked(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceFolderPicks)?bridge.pendingWorkspaceFolderPicks:[];pending.push(payload);bridge.pendingWorkspaceFolderPicks=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_os_integration_command_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onOsIntegrationCommand==='function'){{bridge.onOsIntegrationCommand(payload);}}else{{const pending=Array.isArray(bridge.pendingOsIntegrationCommands)?bridge.pendingOsIntegrationCommands:[];pending.push(payload);bridge.pendingOsIntegrationCommands=pending;}}}})(); undefined;"
-    )
+pub(crate) fn gpui_workspace_project_key_allowed(value: &str) -> bool {
+    gpui_remote_sidebar_project_id_allowed(value)
+        || gpui_remote_project_reference_from_project_id(value).is_some()
 }
 
 #[cfg(target_os = "macos")]
@@ -304,64 +292,4 @@ pub(crate) fn gpui_os_integration_script_run_command(path: &Path) -> String {
 #[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
-}
-
-pub(crate) fn gpui_workspace_terminal_bell_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalBell==='function'){{bridge.onWorkspaceTerminalBell(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalBells)?bridge.pendingWorkspaceTerminalBells:[];pending.push(payload);bridge.pendingWorkspaceTerminalBells=pending;}}}})(); undefined;"
-    )
-}
-
-#[cfg(target_os = "windows")]
-pub(crate) fn gpui_workspace_terminal_title_changed_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalTitleChanged==='function'){{bridge.onWorkspaceTerminalTitleChanged(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalTitleChanges)?bridge.pendingWorkspaceTerminalTitleChanges:[];pending.push(payload);bridge.pendingWorkspaceTerminalTitleChanges=pending;}}}})(); undefined;"
-    )
-}
-
-// Bridge script for `ghostex.gpui.sidebar.workspaceTerminalEscapePressed`.
-pub(crate) fn gpui_workspace_terminal_escape_pressed_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalEscapePressed==='function'){{bridge.onWorkspaceTerminalEscapePressed(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalEscapePresses)?bridge.pendingWorkspaceTerminalEscapePresses:[];pending.push(payload);bridge.pendingWorkspaceTerminalEscapePresses=pending;}}}})(); undefined;"
-    )
-}
-
-// Bridge script for `ghostex.gpui.sidebar.workspaceFirstPromptTitleGenerationCancel`.
-pub(crate) fn gpui_workspace_first_prompt_title_generation_cancel_script(
-    message: &serde_json::Value,
-) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceFirstPromptTitleGenerationCancel==='function'){{bridge.onWorkspaceFirstPromptTitleGenerationCancel(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceFirstPromptTitleGenerationCancels)?bridge.pendingWorkspaceFirstPromptTitleGenerationCancels:[];pending.push(payload);bridge.pendingWorkspaceFirstPromptTitleGenerationCancels=pending;}}}})(); undefined;"
-    )
-}
-
-// Bridge script for `ghostex.gpui.sidebar.workspaceSessionAttentionAcknowledge`.
-pub(crate) fn gpui_workspace_session_attention_acknowledge_script(
-    message: &serde_json::Value,
-) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceSessionAttentionAcknowledge==='function'){{bridge.onWorkspaceSessionAttentionAcknowledge(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceSessionAttentionAcknowledgements)?bridge.pendingWorkspaceSessionAttentionAcknowledgements:[];pending.push(payload);bridge.pendingWorkspaceSessionAttentionAcknowledgements=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_workspace_terminal_runtime_action_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalRuntimeAction==='function'){{bridge.onWorkspaceTerminalRuntimeAction(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalRuntimeActions)?bridge.pendingWorkspaceTerminalRuntimeActions:[];pending.push(payload);bridge.pendingWorkspaceTerminalRuntimeActions=pending;}}}})(); undefined;"
-    )
-}
-
-/*
-CDXC:Sidebar 2026-08-02:
-`data-native-pointer-inside` is a pure CSS state flag whose only writer is the
-native pointer observer, so it is set directly on `document.body` rather than
-through a page bridge: the attribute exists from the first paint, no page code
-has to be mounted for the write to land, and an absent attribute is already the
-correct "pointer position unknown, hover normally" state.
-*/
-pub(crate) fn gpui_workspace_terminal_lifecycle_request_script(
-    message: &serde_json::Value,
-) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTerminalLifecycleRequest==='function'&&typeof bridge.postWorkspaceTerminalLifecycleResult==='function'){{bridge.onWorkspaceTerminalLifecycleRequest(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTerminalLifecycleRequests)?bridge.pendingWorkspaceTerminalLifecycleRequests:[];pending.push(payload);bridge.pendingWorkspaceTerminalLifecycleRequests=pending;}}}})(); undefined;"
-    )
 }

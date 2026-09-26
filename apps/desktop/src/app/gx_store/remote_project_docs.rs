@@ -1,15 +1,19 @@
 //! A REMOTE machine's project collections and Spaces documents: read from that machine's side
 //! state, edited by the same planners this computer's use, and sent back down its own tunnel.
 //!
-//! CDXC:RemoteMachines 2026-09-21 DECISION:
-//! User, plan question 3 option A: a Project Group or Space edit made on a remote machine's tab
-//! behaves exactly as it does today, by reaching the runtime functions that already perform it
-//! (`updateRemoteSidebarProjectCollections`, `updateRemoteSidebarSpaces`). What changes is only who
-//! computes the document: the STORE does, as it already does for this computer, and the message
-//! goes straight to the runtime on `window.ghostexGpui.onSidebarCommand` instead of through the
-//! sidebar page. Forwarding the gesture verbatim was not an option: `handleSidebarMessage` has no
-//! arm for `moveGroup`, `moveToSpace`, `moveToCollection`, `moveCollection`, `moveSpace`,
-//! `projectMembership` or `spaceMembership`, because the page answered that whole family itself.
+//! CDXC:RemoteMachines 2026-09-25 DECISION:
+//! A Project Group or Space edit made on a remote machine's tab keeps its exact behaviour (the same
+//! `/api/updateSidebarProjectCollections` or `/api/updateSidebarSpaces` call with the same `state`,
+//! the same 20-second limit, the same shaping, no toast, and the machine's presentation refreshed
+//! afterwards), but it is sent from Rust through `gx_rpc(remote, ...)` instead of reaching the old
+//! runtime's `updateRemoteSidebarProjectCollections` and `updateRemoteSidebarSpaces`. This
+//! supersedes the 2026-09-21 decision (plan question 3 option A) that routed the edit through those
+//! runtime functions: the user decided on 2026-09-21 to delete QuickJS from the desktop ("after
+//! chat, port the app runtime ... and delete QuickJS from desktop") and on 2026-09-25 "i want this
+//! whole project done"; the port's orchestrator took this recommended option while the user was
+//! asked, and the user may still revert it. The STORE computes the document, as it does for this
+//! computer's; `handleSidebarMessage` never had arms for the gestures themselves (`moveGroup`,
+//! `moveToSpace` and the rest), because the page answered that family itself.
 //!
 //! **A remote document is HELD, never owned.** There is no stored key, no debounce, no
 //! pending-push guard and no echo funnel: `updateSidebarProjectCollections` with a
@@ -18,16 +22,20 @@
 //! a read before it edits, and blocker 9's drop queue must never hold a remote drop for this
 //! computer's keys.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/membership.ts (`saveNativeCollections`),
-//! tooling/gx-core/sidebar-page-frozen/metadata.ts (`updateSpaces`, `adoptCollections`),
-//! apps/desktop/src/app/gx_store/project_docs.rs.
+//! SEE-ALSO: apps/desktop/src/app/gx_store/project_docs.rs.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use ghostex_gx_core::{CollectionsDocument, MachineId, SpacesDocument};
 use serde_json::{Value, json};
 
+use super::gx_rpc_with_timeout;
 use crate::GhostexGpuiApp;
+use crate::app::helpers::gpui_remote_sidebar_request_params;
+
+/// `requestRemoteGxserver`'s default limit, which both edits used.
+const REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// The per-machine state a remote edit needs, and what this run did with them. Memory only.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -49,8 +57,8 @@ pub(crate) struct RemoteProjectDocCounters {
     /// `ProjectMovePlan::without_group_order`: the order the sidebar page posted for a remote drag
     /// named two machines and was refused by the runtime, so a remote reorder has never saved one.
     pub(crate) orders_dropped: u64,
-    /// Edits made with no runtime to send them to, which is a launch window and not a state the
-    /// user can reach by hand. Its own counter because a silent drop here is an edit that vanished.
+    /// Edits not sent because the machine has no live tunnel or the document failed the bridge's
+    /// shaping. Its own counter because a silent drop here is an edit that vanished.
     pub(crate) unsent: u64,
 }
 
@@ -118,7 +126,7 @@ impl GhostexGpuiApp {
             .insert(machine_id.to_string(), document.next_collection_number);
         self.gx_store.remote_project_docs.counters.collection_writes += 1;
         self.gx_store_send_remote_project_doc(
-            "updateSidebarProjectCollections",
+            "/api/updateSidebarProjectCollections",
             machine_id,
             document.to_wire_json(),
             cx,
@@ -137,31 +145,38 @@ impl GhostexGpuiApp {
     ) {
         self.gx_store.remote_project_docs.counters.space_writes += 1;
         self.gx_store_send_remote_project_doc(
-            "updateSidebarSpaces",
+            "/api/updateSidebarSpaces",
             machine_id,
             document.to_wire_json(),
             cx,
         );
     }
 
+    /// `requestRemoteGxserver(remoteMachineId, path, { state })` with the old runtime's default
+    /// limit. The answer is not read (the runtime only forwarded it to a message source nobody
+    /// listened to), a failure shows nothing, as the runtime's unhandled rejection did, and the
+    /// machine's presentation is refreshed once the call is back either way, as the bridge did.
     fn gx_store_send_remote_project_doc(
         &mut self,
-        message_type: &str,
+        path: &'static str,
         machine_id: &str,
         state: Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let sent = self.gx_store_send_sidebar_runtime_command(
-            json!({
-                "type": message_type,
-                "state": state,
-                "remoteMachineId": machine_id,
-            }),
-            cx,
-        );
-        if !sent {
+        let params = gpui_remote_sidebar_request_params(path, json!({ "state": state }));
+        let target = self.gpui_remote_gxserver_request_target(machine_id);
+        let (Some(params), Some(target)) = (params, target) else {
             self.gx_store.remote_project_docs.counters.unsent += 1;
-        }
+            return;
+        };
+        let machine_id = machine_id.to_string();
+        cx.spawn(async move |this, cx| {
+            let _ = gx_rpc_with_timeout(Some(target), path, params, REMOTE_TIMEOUT).await;
+            let _ = this.update(cx, |this, _| {
+                this.refresh_gpui_remote_gxserver_presentation_in_background(&machine_id);
+            });
+        })
+        .detach();
     }
 
     /// The counters, for the periodic summary in `sidebar_remote.rs`.

@@ -45,7 +45,7 @@ impl NativeChatView {
     }
 
     /// The working row: spark and word at the left (when working), armed actions pushed right by the
-    /// lead's auto margin; items that do not fit wrap onto a left-aligned second line (armed-actions.ts).
+    /// lead's auto margin; items that do not fit wrap onto a left-aligned second line.
     fn working_row(
         &self,
         label: Option<&str>,
@@ -208,6 +208,7 @@ impl NativeChatView {
             .min_w_0()
             .text_color(p.foreground)
             .child(activity["label"].as_str().unwrap_or_default().to_owned());
+        // CDXC:SessionChat 2026-09-11 DECISION: User: put the compaction hint in an info-circle tooltip immediately right of the title, replacing the visible hint line.
         if let Some(hint) = activity["hint"].as_str() {
             let hint = hint.to_owned();
             title = title.child(

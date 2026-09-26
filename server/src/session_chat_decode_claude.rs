@@ -211,10 +211,26 @@ finally submitted). Whitespace folding is the narrowest normalization that
 makes them agree.
 */
 fn queued_prompt_key(text: &str) -> String {
-    strip_claude_pasted_content_envelopes(text)
+    let text = strip_claude_pasted_content_envelopes(text);
+    cross_session_queue_key(&text)
+        .unwrap_or(text)
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// Claude writes a peer message's `hop-chain` attribute on its enqueue row only; the removal row and the delivered row drop it. Keyed by its opening tag, the queued copy never matched its release and stayed on screen next to the delivered message, so a `<cross-session-message>` envelope is keyed by its body.
+fn cross_session_queue_key(text: &str) -> Option<String> {
+    let rest = text.trim().strip_prefix(CLAUDE_CROSS_SESSION_OPEN)?;
+    if !rest.starts_with([' ', '>']) {
+        return None;
+    }
+    let body = rest
+        .split_once('>')?
+        .1
+        .strip_suffix(CLAUDE_CROSS_SESSION_CLOSE)?;
+    Some(format!("{CLAUDE_CROSS_SESSION_OPEN}>{body}"))
 }
 
 /// CDXC:SessionChat 2026-09-08 DECISION:
@@ -231,7 +247,14 @@ fn claude_delivered_queue_keys(record: &Map<String, Value>) -> Vec<String> {
         return Vec::new();
     }
     let content = as_record(record.get("message")).and_then(|message| message.get("content"));
-    claude_content_blocks(content)
+    let blocks = claude_content_blocks(content);
+    // A peer message was queued as its bare envelope; the delivered row wraps it in Claude's preamble.
+    if record.get("isMeta") == Some(&Value::Bool(true)) {
+        if let Some(envelope) = claude_cross_session_envelope(&blocks) {
+            return vec![queued_prompt_key(&envelope)];
+        }
+    }
+    blocks
         .into_iter()
         .filter_map(|block| match block {
             SessionChatBlock::Text { text } => {
@@ -340,6 +363,31 @@ fn decode_claude_queued_prompt(
     })
 }
 
+const CLAUDE_CROSS_SESSION_OPEN: &str = "<cross-session-message";
+const CLAUDE_CROSS_SESSION_CLOSE: &str = "</cross-session-message>";
+
+/// CDXC:SessionChat 2026-09-25 WHY:
+/// A message another Claude session sent renders as chat's message-from-another-agent card. When it reaches an idle session Claude writes a meta user row: a one-line preamble ("Another Claude session sent a message:"), the `<cross-session-message>` envelope, then trust instructions meant for the model. The meta filter dropped the whole row, so chat never showed the message. Only the envelope is kept, the same text a mid-turn delivery's `queued_command` carries, so both deliveries render alike. Anything longer than one line before the envelope (a compaction summary quoting one) is not a delivery.
+/// SEE-ALSO: packages/gx-chat-core/src/transcript/agent_message.rs parses the envelope into the card.
+fn claude_cross_session_envelope(blocks: &[SessionChatBlock]) -> Option<String> {
+    let text = blocks
+        .iter()
+        .filter_map(|block| match block {
+            SessionChatBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("");
+    let start = text.find(CLAUDE_CROSS_SESSION_OPEN)?;
+    if text[..start].trim().contains('\n')
+        || !text[start + CLAUDE_CROSS_SESSION_OPEN.len()..].starts_with([' ', '>'])
+    {
+        return None;
+    }
+    let end = text.rfind(CLAUDE_CROSS_SESSION_CLOSE)? + CLAUDE_CROSS_SESSION_CLOSE.len();
+    (end > start).then(|| text[start..end].to_string())
+}
+
 pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<SessionChatMessage> {
     let record = parse_json_object(line)?;
     let role = record.get("type").and_then(Value::as_str)?;
@@ -418,7 +466,13 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
         && (record.get("isMeta") == Some(&Value::Bool(true))
             || record.get("isSynthetic") == Some(&Value::Bool(true))
             || record.get("isCompactSummary") == Some(&Value::Bool(true)));
-    let blocks: Vec<SessionChatBlock> = if is_injected_user_turn {
+    let cross_session_envelope = (role == "user"
+        && record.get("isMeta") == Some(&Value::Bool(true)))
+    .then(|| claude_cross_session_envelope(&decoded_blocks))
+    .flatten();
+    let blocks: Vec<SessionChatBlock> = if let Some(envelope) = cross_session_envelope {
+        vec![text_block(envelope)]
+    } else if is_injected_user_turn {
         decoded_blocks
             .into_iter()
             .filter(is_tool_result_block)

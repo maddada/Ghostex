@@ -12,8 +12,7 @@
 //! title and note, which are the user's own words, and the record says only which dialog opened
 //! and whether a seed was present.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/modals.rs,
-//! tooling/gx-core/sidebar-page-frozen/session-actions.ts (`runNativeSessionAction`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/modals.rs.
 
 use ghostex_gx_core::{owns_modal_message, plan_modal_action};
 use serde_json::Value;
@@ -37,9 +36,9 @@ impl GhostexGpuiApp {
     ///
     /// CDXC:ContextMenus 2026-09-20 WHY:
     /// A sidebar command arrives in one of TWO envelopes and confusing them is silent. A gxserver
-    /// message is wrapped as `{ type: 'command', message }` and the controller posts the inner
-    /// message to the runtime (controller.ts:131); `sessionAction` is a RENDERER command and
-    /// arrives at the TOP level, because the controller answers it itself (controller.ts:160,
+    /// message is wrapped as `{ type: 'command', message }` and the deleted page's controller posted
+    /// the inner message to the runtime (controller.ts:131); `sessionAction` is a RENDERER command and
+    /// arrives at the TOP level, because the controller answered it itself (controller.ts:160,
     /// `runNativeSessionAction`). This path unwrapped it, found nothing, and returned false for
     /// every Rename and Note the user clicked, so the whole dialog port was dead in the app while
     /// its gate passed: the gate drives gx-core, which was given the right shape all along.

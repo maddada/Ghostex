@@ -245,7 +245,6 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
    */
   analyticsEnabled: true,
   debuggingMode: false,
-  chatBrain: 'rust',
   diagnosticLogging: {
     scenarios: DEFAULT_DIAGNOSTIC_LOGGING_SCENARIOS,
     version: 1,
@@ -559,6 +558,9 @@ export const DEFAULT_ghostex_SETTINGS: ghostexSettings = {
   windowGlassImagePlacement: 'static',
   windowGlassImageDark: '',
   windowGlassImageLight: '',
+  windowGlassVideoDark: '',
+  windowGlassVideoLight: '',
+  windowGlassVideoOnlyOnPower: true,
   windowGlassSidebarOpacityDark: DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT,
   windowGlassWorkAreaTintDark: DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_DARK_PERCENT,
   windowGlassSidebarOpacityLight: DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_LIGHT_PERCENT,

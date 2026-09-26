@@ -75,6 +75,9 @@ pub(crate) fn window_glass_active_for(_window: Option<gpui::AnyWindowHandle>) ->
 
 pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.78;
 
+/// A menu's frosted blur samples the desktop behind its native window; a canvas menu has none.
+pub(crate) fn apply_frosted_menu_blur(_window: &gpui::Window) {}
+
 /// Never reached with glass off; the sidebar's glass tint has no meaning without glass.
 pub(crate) fn sidebar_glass_tint() -> gpui::Hsla {
     gpui::transparent_black()
@@ -85,4 +88,41 @@ pub(crate) fn sync_overlay_window_glass(_window: &gpui::Window, _main_origin: gp
 /// The sidebar's opaque fill, which is what the desktop draws with glass off.
 pub(crate) fn sidebar_chrome_fill(_glass: bool, angle: f32) -> gpui::Background {
     crate::app::helpers::sidebar_chrome_gradient_fill(angle)
+}
+
+/// A page has no window glass, so a menu keeps its solid fill.
+pub(crate) fn popup_window_surface(color: gpui::Hsla) -> gpui::Hsla {
+    color
+}
+
+/// A page has no window glass, so a menu keeps its solid fill.
+pub(crate) fn frosted_menu_fill(color: gpui::Hsla) -> gpui::Hsla {
+    color
+}
+
+/// The desktop's blocking typed-operation call, which only its quit path still makes synchronously (a client document's last push). A page cannot block on `fetch` and has no quit path, so the answer is a refusal.
+pub(crate) fn gpui_gxserver_rpc_result(
+    _endpoint: &str,
+    _params: &Value,
+    _timeout: std::time::Duration,
+) -> Result<Value, String> {
+    Err("A blocking gxserver call is not available in the browser.".to_string())
+}
+
+/// An Open In target (an editor, Finder). A page cannot launch an app, so the list it offers is empty.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GpuiOpenTarget {
+    pub(crate) id: String,
+    pub(crate) label: String,
+}
+
+pub(crate) fn gpui_visible_open_targets_from_current_settings() -> Vec<GpuiOpenTarget> {
+    Vec::new()
+}
+
+pub(crate) fn gpui_launch_open_target(
+    _target: &GpuiOpenTarget,
+    _project_path: &std::path::Path,
+) -> Result<(), String> {
+    Err("Open In needs the Ghostex app.".to_string())
 }

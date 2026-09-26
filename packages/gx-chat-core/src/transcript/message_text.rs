@@ -545,7 +545,7 @@ pub fn user_turn_copy_markdown(markdown: &str, images: &[&ChatBlock]) -> String 
         .join("\n\n")
 }
 
-/// Content requirements shared by the React action buttons and the native transcript projection.
+/// Content requirements for the transcript's message action buttons.
 ///
 /// Ported from `packages/shared/session-chat-presentation/message-actions.ts`.
 pub fn message_action_content(markdown: &str) -> serde_json::Value {

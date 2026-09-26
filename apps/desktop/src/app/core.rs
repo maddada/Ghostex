@@ -132,15 +132,14 @@ pub struct GhostexGpuiApp {
     same tab id now.
     */
     pub(crate) browser_tabs_runtime_key: u64,
-    pub(crate) sidebar_browser_tabs_snapshot: String,
     /*
     CDXC:SessionSleep 2026-08-20:
     Last published set of local gxserver sessions this shell is actually showing
-    (terminal body or chat surface). The sidebar runtime's Auto Sleep sweep
-    otherwise decides visibility from its own click history, which cannot see a
-    parked terminal behind a chat surface and is wiped on a daemon reconnect.
+    (terminal body or chat surface). Until 2026-09-25 the sidebar runtime's Auto Sleep sweep
+    decided visibility from its own click history, which could not see a
+    parked terminal behind a chat surface and was wiped on a daemon reconnect;
+    the shown-sessions report (gx_store/terminal_lifecycle/shown_sessions.rs) carries it now.
     */
-    pub(crate) sidebar_displayed_sessions_snapshot: String,
     /*
     CDXC:TranscriptExport 2026-08-20:
     The path of the markdown file the open Export Transcript result dialog is
@@ -153,13 +152,14 @@ pub struct GhostexGpuiApp {
     pub(crate) latest_sidebar_project_snapshot: Option<GpuiProjectSnapshot>,
     /*
     CDXC:Navigation 2026-08-19:
-    Back/Forward availability plus their tooltips, pushed by the sidebar runtime
-    whenever gxserver's trail changes. The render path may only read this cached
+    Back/Forward availability plus their tooltips, written by the navigation
+    history controller (navigation_history/controller.rs) whenever gxserver's trail changes. The render path may only read this cached
     value — see `navigation_history` for why the titlebar owns no trail state.
     */
     pub(crate) navigation_history_state: navigation_history::GpuiNavigationHistoryState,
-    /// The notification feed rows and unread count, pushed by the sidebar
-    /// runtime whenever gxserver's feed changes. Render-path read only; see
+    pub(crate) navigation_history: navigation_history::NavigationHistoryHost,
+    /// The notification feed rows and unread count, written by the Rust store
+    /// (gx_store/notifications/) whenever gxserver's feed changes. Render-path read only; see
     /// `notification_feed` for the ownership split.
     pub(crate) notification_feed_state: notification_feed::GpuiNotificationFeedState,
     /// Last painted bounds of the titlebar bell, so the `openNotifications`
@@ -384,7 +384,7 @@ pub struct GhostexGpuiApp {
         HashMap<ProjectWorkareaCefSurfaceSlotKey, ProjectWorkareaRuntimeCefSurface>,
     /*
     CDXC:CefRuntime 2026-06-23-08:23:
-    GPUI stores the last sidebar runtime settings snapshot it installed or sent so polling and Settings-save refreshes can no-op unchanged strict debug/beta plus saved-settings payloads and refresh only the sidebar CEF bridge when they change. Docs titlebar visibility and active-mode fallback use project-context availability instead of this settings snapshot.
+    GPUI stores the last sidebar runtime settings snapshot it installed or sent so polling and Settings-save refreshes can no-op unchanged strict debug/beta plus saved-settings payloads and refresh their readers only when they change (since the CEF sidebar and its runtime were deleted, those readers are Rust: the store's HUD, remote reconnect, the workarea and code-server; see `refresh_sidebar_runtime_settings_if_changed`). Docs titlebar visibility and active-mode fallback use project-context availability instead of this settings snapshot.
     */
     pub(crate) sidebar_runtime_settings_snapshot: cef::SidebarRuntimeSettingsSnapshot,
     pub(crate) system_color_scheme_is_light: bool,
@@ -405,7 +405,7 @@ pub struct GhostexGpuiApp {
     Local sidebar session clicks need a runtime-only bridge from gxserver project/session identity to the GPUI Agents shell tab that owns the real attach process. Keep the latest focus key, map, pending attach set, and native tab lifecycle request ids process-local, prune them against the shell workspace, and store no titles, paths, commands, tokens, daemon bodies, terminal text, or persistent layout metadata here.
 
     CDXC:Workarea 2026-06-26-07:25:
-    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then notify the sidebar runtime for best-effort gxserver cleanup. Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
+    Mapped GPUI workspace tab Close is local-first: mutate the Rust shell immediately, then hand the close to the Rust store (gx_store/terminal_lifecycle/lifecycle_requests.rs) for best-effort gxserver cleanup (the sidebar runtime did this until 2026-09-25). Sleep/Wake still apply only from typed lifecycle results because their visible state depends on the backend transition. This mirrors macOS lifecycle ownership without logging or persisting project names, session titles, commands, paths, terminal content, or raw renderer payloads.
 
     CDXC:SessionTitles 2026-06-27-02:27:
     Mapped workspace rename uses this same runtime-only gxserver project/session to shell-tab map, then requires a currently mounted Running Agents Ghostty surface before sending `/rename <title>` and a real Return key. Do not store rename titles, raw renderer JSON, command text, paths, output, or fallback target choices here.
@@ -430,6 +430,12 @@ pub struct GhostexGpuiApp {
     last-used view after an app restart. The CEF surfaces stay runtime-only.
     */
     pub(crate) agents_chat_mode_sessions: HashSet<TerminalSessionId>,
+    /// Sessions of the current project that have rendered the terminal agent
+    /// action bar. While a running session's bar data lags a switch, its bar
+    /// height stays reserved so the terminal body keeps its row count
+    /// (`render_terminal_agent_action_bar`). Runtime-only; cleared on project
+    /// switch, because session ids are project-local.
+    pub(crate) terminal_agent_bar_sessions: HashSet<TerminalSessionId>,
     /// The one terminal agent action bar whose "More actions" menu is open, by
     /// shell session id. Runtime-only, and single-valued because opening a
     /// second bar's menu closes the first, exactly like the chat composer's
@@ -462,9 +468,7 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_chat_prewarm_scheduled: bool,
     /// Sessions whose chat is in a visible pane, as of the last chat surface reconcile.
     pub(crate) native_chat_visible_sessions: HashSet<TerminalSessionId>,
-    /// Each runtime's own broker subscribe request, replayed when a paused view is shown again.
-    pub(crate) session_chat_subscribe_requests: HashMap<u64, serde_json::Value>,
-    /// Runtime generations whose broker subscription is paused because their view is hidden.
+    /// Runtime generations whose document is paused because their view is hidden.
     pub(crate) session_chat_paused_generations: HashSet<u64>,
     pub(crate) native_chat_pool_pass_scheduled: bool,
     /// Tabs opened by project-header agent launches that are still waiting for their created session.
@@ -475,10 +479,8 @@ pub struct GhostexGpuiApp {
     pub(crate) agents_chat_reconcile_scheduled: bool,
     pub(crate) native_chat_views:
         HashMap<TerminalSessionId, Entity<super::native_chat::state::NativeChatView>>,
+    /// The gxserver endpoint each machine's chat socket was last given.
     pub(crate) session_chat_broker_endpoints: HashMap<String, (String, String)>,
-    pub(crate) session_chat_broker_epoch: Option<String>,
-    pub(crate) session_chat_shared_snapshots:
-        Vec<(GpuiWorkspaceTerminalSessionKey, serde_json::Value)>,
     pub(crate) session_chat_presentations:
         Vec<(GpuiWorkspaceTerminalSessionKey, serde_json::Value)>,
     pub(crate) account_switch_progress:
@@ -539,10 +541,8 @@ pub struct GhostexGpuiApp {
     App Shot insertion needs a bounded runtime-only map from local gxserver presentation session ids to GPUI Agents shell tabs because those id spaces may differ. Populate it only from explicit sidebar focus-state handoffs and currently mounted Agents surfaces; store no prompts, app/window metadata, project paths, titles, command text, terminal output, or persistent state.
     */
     pub(crate) local_app_shot_session_mappings: HashMap<String, TerminalSessionId>,
-    /*
-    CDXC:CommandPane 2026-06-25-10:50:
-    Sidebar command-session indicator refresh is change-detected against a sanitized JSON summary of command-pane sessions. Cache only that safe summary string for CEF bridge dedupe; do not store command text, paths, status-file paths, env, output, or persisted shell-state JSON here.
-    */
+    /// The last command-tab summary `refresh_sidebar_command_pane_sessions_if_changed` saw, so it
+    /// reports only real changes.
     pub(crate) sidebar_command_pane_sessions_snapshot: String,
     /*
     Agents Delayed Send sidebar chrome crosses CEF as a sanitized list of
@@ -551,7 +551,6 @@ pub struct GhostexGpuiApp {
     include terminal text, commands, paths, titles, agent prompts, or output.
     */
     pub(crate) sidebar_agents_delayed_sends_snapshot: String,
-    pub(crate) sidebar_timer_presentations_replayed_after_ready: bool,
     /// The sidebar page's last-used launcher agent id, published over the native host bridge for the native New Thread picker.
     pub(crate) sidebar_primary_agent_launcher_id: Option<String>,
     /// The open native GPUI app modal, if any; see app/native_app_modal_lifecycle.rs.
@@ -967,13 +966,15 @@ pub struct GhostexGpuiApp {
     /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
     pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
-    pub(crate) sidebar: Option<Entity<crate::app::native_service::NativeService>>,
     pub(crate) native_sidebar: crate::app::native_sidebar::state::NativeSidebarState,
     /// The native Kanban board's state; see app/native_kanban/.
+    /// The native Docs view's state; see app/native_docs/.
+    pub(crate) native_docs: crate::app::native_docs::state::NativeDocsState,
     pub(crate) native_kanban: crate::app::native_kanban::state::NativeKanbanState,
     pub(crate) floating_reveal: crate::app::floating_reveal::model::FloatingRevealState,
     pub(crate) panel_motion: crate::app::panel_motion::PanelMotions,
     pub(crate) gx_store: crate::app::gx_store::GxStoreHost,
+    pub(crate) quick_access: crate::app::quick_access::host::QuickAccessHost,
     pub(crate) browser_surfaces: HashMap<BrowserTabId, Entity<CefSurface>>,
     pub(crate) browser_address_inputs: HashMap<BrowserPaneId, Entity<InputState>>,
     pub(crate) browser_address_input_subscriptions: HashMap<BrowserPaneId, gpui::Subscription>,

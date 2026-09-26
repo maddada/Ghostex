@@ -19,7 +19,7 @@ Space membership itself is owned by the daemon's collections and spaces document
 cannot read; the sidebar HUD carries the active project's resolved spaces instead.
 SEE-ALSO: packages/shared/ghostex-settings/view-scopes.ts owns the same rule, the same precedence and
 the same allow-list migration for React and the settings schema, and
-apps/desktop/sidebar/gxserver-runtime/helpers/view-scopes.ts resolves the HUD field.
+packages/gx-core/src/hud/scopes.rs resolves the HUD field.
 */
 
 pub(crate) fn official_view_scope_key(official_extension_id: &str) -> String {
@@ -229,8 +229,8 @@ impl ViewScope {
 
 impl GhostexGpuiApp {
     /// The spaces the ACTIVE project resolves into, as `sectionKey:spaceId` override keys, with group
-    /// and worktree-parent inheritance already applied by the sidebar runtime that owns the daemon
-    /// documents. A project only the built-in Other space holds resolves into no space at all.
+    /// and worktree-parent inheritance already applied by the store's HUD (gx-core
+    /// `hud/scopes.rs`, `active_project_space_refs`). A project only the built-in Other space holds resolves into no space at all.
     pub(crate) fn active_project_space_keys(&self) -> Vec<String> {
         self.native_sidebar
             .snapshot

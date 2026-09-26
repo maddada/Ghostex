@@ -83,6 +83,19 @@ export const MANAGE_STYLES = `
     display: block;
   }
 
+  /* The native Docs view's browser area (embed.tsx): one HTML file or drawing fills the page. */
+  .manage-embed {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .manage-embed > * {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
   body {
     color: var(--manage-text);
     font-family: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;

@@ -1,9 +1,9 @@
 //! Local focus: a tab selection, a next or previous tab step, and a sidebar row click change the
 //! store at once. This file holds what the rest of the app calls: the selection entry, the row
-//! highlight, and the admission of the old runtime's focus payloads. `burst.rs` owns the timers
-//! that tell the old runtime and release deferred work.
+//! highlight and the empty tab list guard. `burst.rs` owns the timers that finish a selection and
+//! release deferred work; `focus_publish.rs` hands the store's focus to the workspace.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use ghostex_gx_core::{
     Event, IgnoredReason, Intent, ProjectKey, SessionKey, default_group_for_project,
@@ -11,13 +11,10 @@ use ghostex_gx_core::{
 
 use super::host::{GxStoreHost, now_ms};
 use crate::GhostexGpuiApp;
-use crate::app::helpers::GpuiGxserverPresentationFocusEcho;
 use crate::app::model::{
-    GpuiGxserverPresentationFocusState, GpuiLocalWorkspaceSessionKey, GpuiPreferredAgentInterface,
-    GpuiSidebarWorkspaceTerminalFocusMessage, GpuiWorkspaceTerminalFocusPlacement,
-    ShellFocusTarget, TitlebarMode,
+    GpuiGxserverPresentationFocusState, GpuiLocalWorkspaceSessionKey, ShellFocusTarget,
+    TitlebarMode,
 };
-use crate::support_logs;
 
 /// Sidebar row ids of local sessions start with this (`SessionKey::to_sidebar_session_id`).
 const LOCAL_SESSION_ROW_PREFIX: &str = "combined-session:";
@@ -25,71 +22,24 @@ const LOCAL_SESSION_ROW_PREFIX: &str = "combined-session:";
 /// other row the sidebar draws does.
 const REMOTE_SESSION_ROW_PREFIX: &str = "remote:";
 
-/// A local selection the old runtime has not been told about yet.
+/// A local selection whose follow-up (the workspace publish, the attention acknowledge, the
+/// remembered session) waits for the burst to end.
 #[derive(Clone, Debug)]
-pub(super) struct PendingTell {
+pub(super) struct PendingFinish {
     pub(super) key: GpuiLocalWorkspaceSessionKey,
     pub(super) local_was_sleeping: bool,
     pub(super) local_runtime_missing: bool,
 }
 
-/// The last selection the old runtime was told.
-#[derive(Clone, Debug)]
-pub(super) struct ToldSelection {
-    pub(super) key: GpuiLocalWorkspaceSessionKey,
-    pub(super) stamp: u64,
-}
-
-/// A plain focus request the old runtime is about to send for a selection Rust already made: its
-/// own routing of a sidebar row click Rust handled in process, or its reconcile reply to a tell
-/// that carried `localWasSleeping` or `localRuntimeMissing`.
-#[derive(Clone, Debug)]
-pub(super) struct ExpectedFocusEcho {
-    key: GpuiLocalWorkspaceSessionKey,
-    /// The store stamp of the selection the echo belongs to.
-    stamp: u64,
-    kind: FocusEchoKind,
-    registered_at: Instant,
-}
-
-/// Where in the old runtime's output an echo sits relative to the focus payload that carries its
-/// selection's stamp, which decides when it can no longer arrive.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum FocusEchoKind {
-    /// The runtime routes a sidebar click before it is told the click's selection, so its focus
-    /// request precedes every payload that echoes that stamp.
-    Click,
-    /// The runtime answers a flagged tell after it posted the focus state for that same tell, so
-    /// the reply follows the first payload with the tell's stamp and precedes any newer one.
-    TellReply,
-    /// A row the session walk handed to the runtime's route (a session of another project). The
-    /// request follows the payload that switches the project, like a tell reply, and it carries
-    /// `keepView`, which the other two kinds never do.
-    HandedOff,
-}
-
-/// An echo that has not arrived this long after it was registered is no longer waited for, so a
-/// later request for the same session (a notification, the command palette) is never mistaken for
-/// it. The decision to drop an echo is still made by stamp order; this only bounds how long the
-/// marker lives when the runtime never sends the echo and never posts a newer stamp.
-const FOCUS_ECHO_EXPIRY: Duration = Duration::from_secs(2);
-
-/// Echoes remembered at once. A click or a flagged tell adds one and the echo removes it, so more
-/// than a few only pile up when the old runtime is far behind.
-const MAX_EXPECTED_FOCUS_ECHOES: usize = 8;
-
 /// Whose marks the sidebar's session rows draw.
 ///
-/// CDXC:FocusRouting 2026-09-21 WHY:
-/// `foreign_focus` used to be one flag for two states that must draw differently. Both mean the store's own focus cache is not what is in front of the panes, but only one of them has a projection that IS: when the OLD RUNTIME accepted a row the store cannot place, its snapshot is the only source of that highlight and a remote row keeps the snapshot's mark; when the STORE's own selection was refused (the clicked remote row is not in its rows yet), the snapshot is a click behind as well, so its mark names the row the user just left and drawing it highlighted the previous remote row for one publish while the pane already showed the new one. Nothing draws focused until the runtime's answering publish arrives, which then makes it `Foreign` or `Store`.
+/// CDXC:FocusRouting 2026-09-25 WHY:
+/// The store owns every focus now, so its own focus is the drawn one except for one case: its newest selection named a row it could not place (the clicked remote row is not in its rows yet, or a session created a moment ago has not arrived). Nothing of the store's draws focused then, until the row arrives and the held selection is placed (focus_publish.rs). The third state this enum had, a focus the old runtime accepted and the store could not place, went with the runtime's focus (supersedes the 2026-09-21 note).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) enum DrawnFocus {
     /// The store's focus is the drawn one: rows compare against its cache.
     #[default]
     Store,
-    /// The old runtime's newest accepted focus names a row the store cannot place (the quick
-    /// automations row, a session it does not hold yet, a machine it holds no rows for).
-    Foreign,
     /// The store's own newest selection named a row it could not place.
     Unplaced,
 }
@@ -99,12 +49,6 @@ impl DrawnFocus {
     pub(super) fn store_rows_unfocused(self) -> bool {
         !matches!(self, Self::Store)
     }
-
-    /// The old runtime's own projection owns the highlight: a remote row and the quick automations
-    /// row keep the mark the snapshot carries.
-    fn snapshot_owns_highlight(self) -> bool {
-        matches!(self, Self::Foreign)
-    }
 }
 
 /// What happened since the app started. Memory only; the `native.terminal.focus` lines quote it.
@@ -112,29 +56,23 @@ impl DrawnFocus {
 pub(super) struct LocalFocusCounters {
     pub(super) local_selections: u64,
     pub(super) unplaced_selections: u64,
-    pub(super) tells: u64,
+    /// Selections whose follow-up ran at the end of their burst.
+    pub(super) finishes: u64,
     pub(super) attention_acknowledges: u64,
-    pub(super) stale_payloads: u64,
-    pub(super) stale_project_contexts: u64,
-    pub(super) stale_focus_requests_dropped: u64,
     pub(super) settles: u64,
     pub(super) disputed_empty_tab_lists: u64,
 }
 
 /// CDXC:FocusRouting 2026-09-19 DECISION:
 /// User: holding "next tab" must fly through tabs, and sidebar clicks and tab selections must be instant; the old runtime is told about focus, never asked, and never allowed to override a newer local choice.
-/// A selection is a store intent plus one repaint. This supersedes the three optimistic focus markers of 2026-09-19 (the in-process click echo drop with its three second window, the sidebar's `optimistic_focus` with its 1.5 second timeout, and the GPUI highlight waiting for the TypeScript pending focus marker): the store's stamp orders a local selection against anything the old runtime says later, so nothing is matched by time.
-/// SEE-ALSO: burst.rs (tell and settle timers), shadow_diff.rs (the mirror that feeds `Intent::ExternalFocus`), packages/gx-core/src/focus.rs (`FocusState::local_stamp`), apps/desktop/sidebar/gxserver-runtime/terminal-lifecycle-queue.ts and sidebar-groups.ts (`focusStamp` echo).
+/// A selection is a store intent plus one repaint. Since 2026-09-25 there is no old runtime to tell: the store owns the focus alone, and the work a selection sets off (the workspace publish, the attention acknowledge, the remembered session) runs once when the burst ends (burst.rs), so a held key costs one intent and one repaint per step. This supersedes the stamp tell, its retells and the echo markers that kept a runtime behind the store from pulling focus back.
+/// SEE-ALSO: burst.rs (finish and settle timers), focus_publish.rs (the workspace publish), packages/gx-core/src/focus.rs.
 #[derive(Default)]
 pub(crate) struct LocalFocus {
     /// The persisted focus was seeded into the core (once, before the first frame).
     pub(super) restored: bool,
-    /// Newest stamp the old runtime echoed in a focus payload.
-    pub(super) confirmed_stamp: u64,
-    /// Whose marks session rows draw: the store's own focus, or nobody's while it is not the one
-    /// in front of the panes. A remote session the store holds is `Store` like a local one: the
-    /// store owns its focus (`gx_store_select_remote_session`, and the mirror in shadow_diff.rs).
-    /// Every selection the store places sets it back to `Store`.
+    /// Whose marks session rows draw: the store's own focus, or nobody's while its newest
+    /// selection could not be placed. Every selection the store places sets it back to `Store`.
     pub(super) drawn_focus: DrawnFocus,
     /// Row id of the store's focused session, and of its visible sessions, so a row compares two
     /// strings per frame instead of decoding its id.
@@ -142,30 +80,22 @@ pub(crate) struct LocalFocus {
     visible_row_ids: Vec<String>,
     /// `drawn_focus` as of the last cache refresh, so a flip alone also counts as a change.
     cached_drawn_focus: DrawnFocus,
-    /// The newest sidebar snapshot marks a browser row of the active group focused. The old
-    /// runtime then draws no session row focused (`browserOwnsFocus` in sidebar-groups.ts), and
-    /// neither do local rows here.
+    /// The newest sidebar snapshot marks a browser row of the active group focused; local rows
+    /// then draw no focus.
     snapshot_browser_focus: bool,
-    pub(super) pending_tell: Option<PendingTell>,
+    pub(super) pending_finish: Option<PendingFinish>,
     pub(super) pending_attention: Vec<GpuiLocalWorkspaceSessionKey>,
-    /// Newest remembered session per project from local selections that no tell covered yet.
+    /// Newest remembered session per project, written when the selection finishes.
     pub(super) pending_remembered: Vec<SessionKey>,
-    pub(super) last_tell: Option<ToldSelection>,
-    expected_echoes: Vec<ExpectedFocusEcho>,
+    /// The store's focus stamp at the last finish: a selection that repeats it has nothing to do.
+    pub(super) finished_stamp: u64,
     pub(super) last_selection_at: Option<Instant>,
     /// Set while heavy per-selection work is held back; `burst.rs` clears it.
     pub(super) settle_due: Option<Instant>,
-    pub(super) tell_due: Option<Instant>,
-    /// When the last tell is sent again unless a payload has echoed its stamp by then.
-    pub(super) retell_due: Option<Instant>,
-    pub(super) retell_attempts: u8,
-    /// The row a held previous or next session key landed on has no live terminal: the runtime is
-    /// asked to wake or attach it once the selection settles, and only if it is still focused.
-    pub(super) walk_runtime_ask: Option<String>,
-    /// The row the walk handed to the runtime (another project, a remote session, a browser tab)
-    /// and the store's focused row at that moment. While a key is held, repeats that resolve to
-    /// the same row from the same focused row are not handed over again.
-    walk_handoff: Option<(String, Option<String>)>,
+    pub(super) finish_due: Option<Instant>,
+    /// The row a held previous or next session key landed on has no live terminal: it is focused
+    /// once the selection settles, and only if it is still the focused row.
+    pub(super) walk_landing_focus: Option<String>,
     /// The row to reveal (animated, or flashed when already in view) once the selection settles.
     pub(super) walk_landing_reveal: Option<String>,
     /// The selection being booked comes from a key that is being held (a key repeat), so it is
@@ -181,49 +111,13 @@ pub(crate) struct LocalFocus {
     pub(super) browser_surface_wanted: bool,
     /// What the focus state file holds, so it is written only when one of its fields moved.
     persisted_focus: Option<(Option<String>, Option<String>, Vec<String>)>,
-    /// A focus payload that lost to a newer local selection asked for this other project. The
-    /// focus request that rides with it must lose too (CDXC:Navigation 2026-07-29).
-    pub(super) stale_project_switch: Option<String>,
-    /// The old runtime sent an empty tab list the store does not confirm; judged again when the
-    /// store's tab lists change.
+    /// An empty tab list the store does not confirm; judged again when the store's tab lists
+    /// change.
     pub(super) disputed_empty_tab_list: Option<String>,
     pub(super) counters: LocalFocusCounters,
 }
 
 impl LocalFocus {
-    /// The old runtime will send a plain focus request for `key`, an echo of the selection with
-    /// this stamp.
-    pub(super) fn expect_focus_echo(
-        &mut self,
-        key: GpuiLocalWorkspaceSessionKey,
-        stamp: u64,
-        kind: FocusEchoKind,
-    ) {
-        self.expected_echoes.retain(|echo| echo.key != key);
-        if self.expected_echoes.len() >= MAX_EXPECTED_FOCUS_ECHOES {
-            self.expected_echoes.remove(0);
-        }
-        self.expected_echoes.push(ExpectedFocusEcho {
-            key,
-            stamp,
-            kind,
-            registered_at: Instant::now(),
-        });
-    }
-
-    /// The old runtime echoed `stamp` in an admitted focus payload. It handles messages in order
-    /// and posts in order, so every echo that had to precede this payload has arrived or never
-    /// will (see `FocusEchoKind` for which payload that is). Expired echoes go with them.
-    fn forget_echoes_answered_by(&mut self, stamp: u64) {
-        self.expected_echoes.retain(|echo| {
-            let may_still_arrive = match echo.kind {
-                FocusEchoKind::Click => stamp < echo.stamp,
-                FocusEchoKind::TellReply | FocusEchoKind::HandedOff => stamp <= echo.stamp,
-            };
-            may_still_arrive && echo.registered_at.elapsed() < FOCUS_ECHO_EXPIRY
-        });
-    }
-
     /// Keeps the newest remembered session per project.
     pub(super) fn remember(&mut self, session: SessionKey) {
         let project = session.project_key();
@@ -235,6 +129,9 @@ impl LocalFocus {
 
 pub(super) struct LocalSelectionOutcome {
     pub(super) moved: bool,
+    /// The store does not hold the session yet (created a moment ago): the caller holds it for
+    /// the workspace until its row arrives (focus_publish.rs).
+    pub(super) unplaced: bool,
 }
 
 impl GxStoreHost {
@@ -253,35 +150,29 @@ impl GxStoreHost {
             now_ms(),
         );
         self.local_focus.counters.local_selections += 1;
-        if output.changes.ignored == Some(IgnoredReason::UnknownTarget) {
-            // A session the daemon created a moment ago is not in the store yet. The stamp did
-            // not move, so the old runtime's next focus payload is not stale and places it.
+        // A session the daemon created a moment ago is not in the store yet, and the stamp did
+        // not move: the selection is held until its row arrives.
+        let unplaced = output.changes.ignored == Some(IgnoredReason::UnknownTarget);
+        if unplaced {
             self.local_focus.counters.unplaced_selections += 1;
+            self.local_focus.drawn_focus = DrawnFocus::Unplaced;
+        } else {
+            self.local_focus.drawn_focus = DrawnFocus::Store;
+            self.focus_publish.unplaced = None;
         }
-        self.local_focus.drawn_focus = DrawnFocus::Store;
         self.run_effects(output.effects);
         self.refresh_row_focus_cache();
-        LocalSelectionOutcome { moved }
+        LocalSelectionOutcome { moved, unplaced }
     }
 
-    /// Whether the store already holds exactly this selection and the old runtime was told it
-    /// with the current stamp.
-    fn selection_is_already_told(
-        &self,
-        key: &GpuiLocalWorkspaceSessionKey,
-        session: &SessionKey,
-        visible: &[SessionKey],
-    ) -> bool {
+    /// Whether the store already holds exactly this selection and its follow-up has run.
+    fn selection_is_current(&self, session: &SessionKey, visible: &[SessionKey]) -> bool {
         let focus = self.core.focus();
-        self.local_focus.pending_tell.is_none()
+        self.local_focus.pending_finish.is_none()
             && !self.local_focus.drawn_focus.store_rows_unfocused()
             && focus.focused_session.as_ref() == Some(session)
             && focus.visible_sessions == visible
-            && self
-                .local_focus
-                .last_tell
-                .as_ref()
-                .is_some_and(|told| told.key == *key && told.stamp == focus.local_stamp)
+            && self.local_focus.finished_stamp == focus.local_stamp
     }
 
     /// Rebuilds the row ids the sidebar compares against. Returns `true` when they changed. A
@@ -310,7 +201,7 @@ impl GxStoreHost {
     /// The file names a local session by its raw id, so the project comes from the file's active
     /// project; a remote session is named by its machine-scoped id, which carries its project.
     /// A session that does not belong to the active project the file names is not seeded: the
-    /// file is then not one focus, and the old runtime's first publish decides.
+    /// file is then not one focus, and the store's reconcile after the first snapshot decides.
     pub(super) fn restore_focus_once(&mut self, persisted: &GpuiGxserverPresentationFocusState) {
         if std::mem::replace(&mut self.local_focus.restored, true) {
             return;
@@ -352,13 +243,13 @@ impl GxStoreHost {
         self.diagnostics.focus_restored(&self.core);
     }
 
-    /// Whether an empty tab list from the old runtime may clear a project's workspace: only when
-    /// the store is loaded and lists no tab for that project either. This picks the group to judge
-    /// by; the rule itself is `empty_tab_list_confirmed` in gx-core, which for a user-made group
-    /// also asks the project's own list (packages/gx-core/examples/empty_tab_list_guard.rs).
+    /// Whether an empty tab list may clear a project's workspace: only when the store is loaded
+    /// and lists no tab for that project either. This picks the group to judge by; the rule itself
+    /// is `empty_tab_list_confirmed` in gx-core, which for a user-made group also asks the
+    /// project's own list (packages/gx-core/examples/empty_tab_list_guard.rs).
     ///
     /// CDXC:Workarea 2026-09-19 WHY:
-    /// An empty list makes `reconcile_with_sidebar_tab_sessions` drop every restored tab, split and mapping (the "different session after restart" bug of 2026-09-04). The old runtime guards its side by not posting before its first snapshot; the store is a second reader of the same daemon, so an empty list is only believed when both agree. `NotLoaded` and `Missing` are never read as "no tabs".
+    /// An empty list makes `reconcile_with_sidebar_tab_sessions` drop every restored tab, split and mapping (the "different session after restart" bug of 2026-09-04). The publish sends no list before its machine's first snapshot (`NotLoaded` and `Missing` are never read as "no tabs"), and an empty list is still judged here against the project's own group, because the last member of a user-made group being closed leaves an empty group of a project that has other tabs. Kept when the store became the list's only source (2026-09-25): the guard is what the whole workspace's tabs depend on, so it stays one gate on the one path in.
     pub(super) fn confirms_empty_tab_list(&self, project_id: &str) -> bool {
         let Some(project) = ProjectKey::parse_workspace_project_id(project_id) else {
             return false;
@@ -370,10 +261,8 @@ impl GxStoreHost {
             // not running.
             return true;
         }
-        // The store owns the focus of every machine it holds rows for, so its active group is the
-        // one to judge by whenever it belongs to the project the old runtime named. A group of
-        // another project (the runtime is ahead of or behind the store) falls back to the
-        // project's own default group, as it always did.
+        // The store's active group is the one to judge by whenever it belongs to the project the
+        // list names; any other group falls back to the project's own default group.
         let group = self
             .core
             .focus()
@@ -393,8 +282,8 @@ impl GxStoreHost {
 
 impl GhostexGpuiApp {
     /// A local session was selected in the workspace (tab click, next or previous tab, sidebar
-    /// row click, attach completion). The store changes now; the old runtime hears about it once
-    /// the burst is over. Callers repaint themselves, as they did before.
+    /// row click, attach completion). The store changes now; the workspace publish and the rest of
+    /// the follow-up run once the burst is over. Callers repaint themselves, as they did before.
     pub(crate) fn gx_store_select_local_session(
         &mut self,
         key: &GpuiLocalWorkspaceSessionKey,
@@ -406,9 +295,9 @@ impl GhostexGpuiApp {
         let visible = self.gx_store_visible_local_session_keys(key);
         let focus_state = &mut self.sidebar_gxserver_presentation_focus_state;
         if focus_state.active_project_id.as_deref() == Some(key.project_id.as_str()) {
-            // Thirty-odd readers still resolve "the focused session" from this copy of the old
-            // runtime's focus state (the companion pane, attach completions, extensions). It
-            // follows the store here, and a payload older than this selection cannot move it back.
+            // Thirty-odd readers resolve "the focused session" from the workspace's focus state
+            // (the companion pane, attach completions, extensions). It follows the store here, in
+            // the selection's frame; the publish at the end of the burst brings the rest.
             let visible_ids = visible
                 .iter()
                 .map(|session| session.session_id.clone())
@@ -416,28 +305,31 @@ impl GhostexGpuiApp {
             focus_state.focused_session_id = Some(key.session_id.clone());
             focus_state.visible_session_ids = visible_ids;
         }
-        if self
-            .gx_store
-            .selection_is_already_told(key, &session, &visible)
+        if self.gx_store.selection_is_current(&session, &visible)
             && !local_was_sleeping
             && !local_runtime_missing
         {
-            // An attach completion or the runtime's own focus request repeating a selection the
-            // store holds and the old runtime has heard: nothing to change, nothing to tell.
+            // An attach completion or a focus request repeating a selection the store holds and
+            // has finished: nothing to change.
             return;
         }
-        let outcome = self.gx_store.apply_local_selection(session, visible);
+        let outcome = self
+            .gx_store
+            .apply_local_selection(session.clone(), visible.clone());
+        if outcome.unplaced {
+            self.gx_store_hold_unplaced_selection(session, visible);
+        }
         let local_focus = &mut self.gx_store.local_focus;
         // Flags of an earlier selection of the same session still hold: the tab has not been
         // attached or woken in between, or the later caller would not be selecting it again.
-        let (was_sleeping, runtime_missing) = match &local_focus.pending_tell {
+        let (was_sleeping, runtime_missing) = match &local_focus.pending_finish {
             Some(pending) if pending.key == *key => (
                 pending.local_was_sleeping || local_was_sleeping,
                 pending.local_runtime_missing || local_runtime_missing,
             ),
             _ => (local_was_sleeping, local_runtime_missing),
         };
-        local_focus.pending_tell = Some(PendingTell {
+        local_focus.pending_finish = Some(PendingFinish {
             key: key.clone(),
             local_was_sleeping: was_sleeping,
             local_runtime_missing: runtime_missing,
@@ -492,70 +384,10 @@ impl GhostexGpuiApp {
         local_focus.focused_row_id.clone()
     }
 
-    /// No focus request will follow for this session after all.
-    pub(super) fn gx_store_forget_expected_echo(&mut self, key: &GpuiLocalWorkspaceSessionKey) {
-        self.gx_store
-            .local_focus
-            .expected_echoes
-            .retain(|echo| echo.key != *key);
-    }
-
-    /// The runtime is about to be asked for this session right after the tell of its selection, so
-    /// its focus request follows the payload that echoes the selection's stamp.
-    pub(super) fn gx_store_expect_request_after_tell(
-        &mut self,
-        key: &GpuiLocalWorkspaceSessionKey,
-    ) {
-        let stamp = self.gx_store.core.focus().local_stamp;
-        self.gx_store
-            .local_focus
-            .expect_focus_echo(key.clone(), stamp, FocusEchoKind::TellReply);
-    }
-
-    /// Whether a held walk step resolves to the row already handed to the runtime while the
-    /// store's focused row is still the one it was handed over from.
-    pub(super) fn gx_store_walk_waits_for_runtime(
-        &self,
-        target_row_id: &str,
-        current_row_id: Option<&str>,
-    ) -> bool {
-        self.gx_store.local_focus.walk_handoff.as_ref().is_some_and(
-            |(row_id, focused_at_handoff)| {
-                row_id == target_row_id && focused_at_handoff.as_deref() == current_row_id
-            },
-        )
-    }
-
-    pub(super) fn gx_store_clear_walk_handoff(&mut self) {
-        self.gx_store.local_focus.walk_handoff = None;
-    }
-
-    /// The walk hands a row to the runtime's route. For a local session the runtime answers with
-    /// a focus request after the focus payload that switches the project, so that request is an
-    /// expected echo: it is applied while the hand-off is still the newest thing the user did and
-    /// dropped once a newer local selection exists. Remote and browser rows come back on their
-    /// own channels and have no such request.
-    pub(super) fn gx_store_hand_walk_row_to_runtime(
-        &mut self,
-        target_row_id: &str,
-        current_row_id: Option<&str>,
-    ) {
-        self.gx_store.local_focus.walk_handoff = Some((
-            target_row_id.to_string(),
-            current_row_id.map(str::to_string),
-        ));
-        if let Some(key) =
-            crate::app::helpers::gpui_combined_presentation_session_key(target_row_id)
-        {
-            let stamp = self.gx_store.core.focus().local_stamp;
-            self.gx_store
-                .local_focus
-                .expect_focus_echo(key, stamp, FocusEchoKind::HandedOff);
-        }
-    }
-
-    pub(super) fn gx_store_ask_runtime_for_landing_row(&mut self, row_id: &str) {
-        self.gx_store.local_focus.walk_runtime_ask = Some(row_id.to_string());
+    /// The row a held key landed on has a staged tab and no terminal: it is focused (woken or
+    /// attached) once the key is released, and only if it is still the focused row.
+    pub(super) fn gx_store_focus_landing_row_at_settle(&mut self, row_id: &str) {
+        self.gx_store.local_focus.walk_landing_focus = Some(row_id.to_string());
     }
 
     /// A walk step revealed a row; when the selection is still moving, the landing row is
@@ -566,13 +398,13 @@ impl GhostexGpuiApp {
             .then(|| row_id.to_string());
     }
 
-    /// The selection settled: what the walk left for the row it landed on. Returns the row the
-    /// runtime must be asked for, when it is still the focused one.
+    /// The selection settled: what the walk left for the row it landed on. Returns the row to
+    /// focus, when it is still the focused one.
     pub(super) fn gx_store_take_walk_landing(&mut self) -> (Option<String>, Option<String>) {
         let local_focus = &mut self.gx_store.local_focus;
         let reveal = local_focus.walk_landing_reveal.take();
         let ask = local_focus
-            .walk_runtime_ask
+            .walk_landing_focus
             .take()
             .filter(|row_id| local_focus.focused_row_id.as_deref() == Some(row_id.as_str()));
         (reveal, ask)
@@ -580,47 +412,43 @@ impl GhostexGpuiApp {
 
     /// A remote session was selected in the workspace: the store's own open of a remote row, a
     /// click on a remote tab, or a remote attach that lands. The core's focus takes it here, in
-    /// the frame of the selection, so the row highlights at once; the old runtime is told through
-    /// the tab selection the caller sends next, carrying the stamp this returns, so the focus
-    /// state it publishes in answer is not judged stale. `None` for a pair that does not name one
-    /// remote session of one remote project, which the runtime refuses too.
+    /// the frame of the selection, so the row highlights at once, and the workspace is published
+    /// from it. `false` for a pair that does not name one remote session of one remote project.
     ///
-    /// CDXC:FocusRouting 2026-09-21 WHY:
-    /// Remote focus part 2 step 2: the store's core focus owns the remote row, so its highlight is drawn from Rust's own focus in the click's frame rather than carried from the runtime's publish one hop later (`remote_row_focus`, deleted). The runtime still moves its own marks from the same tab selection, which is what its tab lists and `keepView` read; the store mirrors any remote focus the runtime makes on its own (shadow_diff.rs).
+    /// CDXC:FocusRouting 2026-09-25 WHY:
+    /// Remote focus part 2 step 2 (2026-09-21) made the store's core focus own the remote row's highlight; the runtime still moved its own marks from the tab selection and the store mirrored them. The runtime's focus is gone, so this is the whole selection: a row the machine does not list yet is held for the workspace until it arrives (focus_publish.rs), and nothing of the store's draws focused until then.
     pub(crate) fn gx_store_select_remote_session(
         &mut self,
         scoped_project_id: &str,
         scoped_session_id: &str,
         cx: &mut gpui::Context<Self>,
-    ) -> Option<u64> {
-        let session = SessionKey::parse_remote_scoped_session_id(scoped_session_id)?;
+    ) -> bool {
+        let Some(session) = SessionKey::parse_remote_scoped_session_id(scoped_session_id) else {
+            return false;
+        };
         if ProjectKey::parse_workspace_project_id(scoped_project_id) != Some(session.project_key())
         {
-            return None;
+            return false;
         }
         let output = self.gx_store.core.handle(
             Event::Intent(Intent::FocusSession {
                 session: session.clone(),
-                // The runtime's remote focus shows the session alone
-                // (`setRemotePresentationSessionFocus`), which is the core's rule for a remote
-                // session without a reported set.
+                // A remote focus shows the session alone (`setRemotePresentationSessionFocus`),
+                // which is the core's rule for a remote session without a reported set.
                 visible: None,
             }),
             now_ms(),
         );
+        let refused = output.changes.ignored == Some(IgnoredReason::UnknownTarget);
+        if refused {
+            self.gx_store_hold_unplaced_selection(session.clone(), vec![session.clone()]);
+        } else {
+            self.gx_store.focus_publish.unplaced = None;
+        }
         // Placed means the store HOLDS the row, not merely that the intent was not refused: the
         // core applies a focus on a machine whose first snapshot has not arrived without checking
         // it (startup restore), and such a row is one the store cannot draw either.
-        let placed = output.changes.ignored != Some(IgnoredReason::UnknownTarget)
-            && self
-                .gx_store
-                .core
-                .presentation()
-                .session(&session)
-                .is_some();
-        // A row the machine does not list yet (created a moment ago), or a machine the store holds
-        // no rows for at all: nothing of the store's is drawn focused until the runtime's publish
-        // arrives, which then owns the highlight or places the row.
+        let placed = !refused && self.gx_store.core.presentation().session(&session).is_some();
         self.gx_store.local_focus.drawn_focus = match placed {
             true => DrawnFocus::Store,
             false => DrawnFocus::Unplaced,
@@ -633,7 +461,9 @@ impl GhostexGpuiApp {
             cx.notify();
         }
         self.gx_store_sidebar_focus_moved(cx);
-        Some(self.gx_store.core.focus().local_stamp)
+        self.gx_store_persist_remembered_sessions(cx);
+        self.gx_store_publish_workspace_focus(cx);
+        true
     }
 
     /// The store keys of the sessions that own a rendered pane, the selected one included: the
@@ -698,9 +528,7 @@ impl GhostexGpuiApp {
     /// A session row of any machine reads the store, unless a browser tab owns focus or the
     /// store's focus is not the drawn one (`DrawnFocus`). A browser row keeps the
     /// snapshot's flags while the shell's focus is on the browser (browser tabs are host state,
-    /// not sessions). Any other row (the quick automations row) reads the snapshot only while the
-    /// old runtime's accepted focus is such a row, so a selection never shows two focused rows
-    /// while the old runtime catches up.
+    /// not sessions). Any other row draws no focus of its own.
     pub(crate) fn gx_store_sidebar_row_focus(
         &self,
         row_id: &str,
@@ -738,22 +566,12 @@ impl GhostexGpuiApp {
             return (false, visible);
         }
         if !session_row {
-            return (
-                snapshot_focused && local_focus.drawn_focus.snapshot_owns_highlight(),
-                snapshot_visible,
-            );
+            return (false, snapshot_visible);
         }
         if local_focus.drawn_focus.store_rows_unfocused() {
-            // The store's focus is not the drawn one, so no row of the store's is focused and
-            // every row's visible fill is the snapshot's. What the old runtime accepted and the
-            // store cannot place (the quick automations row, a session not streamed yet, a
-            // machine it holds no rows for) is still drawn from its own projection, which is the
-            // only side that holds it; a row the store's OWN selection could not place is not,
-            // because the same projection is a click behind and its mark names the row the user
-            // just left.
-            let focused =
-                snapshot_focused && remote_row && local_focus.drawn_focus.snapshot_owns_highlight();
-            return (focused, snapshot_visible);
+            // The store's newest selection is a row it could not place: no row draws focused, and
+            // every row's visible fill is the snapshot's, until the held selection is placed.
+            return (false, snapshot_visible);
         }
         let focused = local_focus.focused_row_id.as_deref() == Some(row_id);
         let visible = local_focus
@@ -763,165 +581,9 @@ impl GhostexGpuiApp {
         (focused, visible)
     }
 
-    /// The old runtime published its focus state with the stamp it had last been told. The store
-    /// mirrors it through `Intent::ExternalFocus`, which applies the same ordering rule. A payload
-    /// older than the newest local selection still carries the tab list of the current project,
-    /// but its selection, its active project and its visible set are replaced by what the app
-    /// already holds, so nothing downstream can follow it. The flag says the state is such a
-    /// rewrite: the caller applies it without choosing a workspace project.
-    pub(crate) fn gx_store_admit_old_runtime_focus_state(
-        &mut self,
-        mut next_state: GpuiGxserverPresentationFocusState,
-        echo: &GpuiGxserverPresentationFocusEcho,
-        cx: &mut gpui::Context<Self>,
-    ) -> (GpuiGxserverPresentationFocusState, bool) {
-        let observed_stamp = echo.focus_stamp.unwrap_or(0);
-        let local_stamp = self.gx_store.core.focus().local_stamp;
-        self.gx_store_observe_old_runtime_focus_state(&next_state, echo, cx);
-        if self.gx_store.refresh_row_focus_cache() {
-            // The highlight follows the store even when the payload changes nothing else.
-            cx.notify();
-        }
-        self.gx_store_sidebar_focus_moved(cx);
-        if observed_stamp >= local_stamp {
-            let local_focus = &mut self.gx_store.local_focus;
-            local_focus.confirmed_stamp = observed_stamp;
-            local_focus.stale_project_switch = None;
-            local_focus.forget_echoes_answered_by(observed_stamp);
-            if local_focus
-                .last_tell
-                .as_ref()
-                .is_some_and(|told| observed_stamp >= told.stamp)
-            {
-                // The old runtime has the stamp it was last told: nothing to send again.
-                local_focus.retell_due = None;
-            }
-            return (next_state, false);
-        }
-        let local_focus = &mut self.gx_store.local_focus;
-        local_focus.counters.stale_payloads += 1;
-        let current = &self.sidebar_gxserver_presentation_focus_state;
-        if next_state.active_project_id != current.active_project_id {
-            local_focus.stale_project_switch = next_state.active_project_id.clone();
-            next_state.active_project_tab_sessions = current.active_project_tab_sessions.clone();
-        }
-        support_logs::append(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "gpui.terminalFocus.staleFocusPayload",
-            serde_json::json!({
-                "localStamp": local_stamp,
-                "observedStamp": observed_stamp,
-                "namedOtherProject": next_state.active_project_id != current.active_project_id,
-            }),
-        );
-        next_state.active_project_id = current.active_project_id.clone();
-        next_state.focused_session_id = current.focused_session_id.clone();
-        next_state.visible_session_ids = current.visible_session_ids.clone();
-        (next_state, true)
-    }
-
-    /// The store's count of local focus intents, for the channels that carry its echo.
-    pub(crate) fn gx_store_local_focus_stamp(&self) -> u64 {
-        self.gx_store.core.focus().local_stamp
-    }
-
     /// The session the store has focused, on any machine.
     pub(crate) fn gx_store_focused_session(&self) -> Option<SessionKey> {
         self.gx_store.core.focus().focused_session.clone()
-    }
-
-    /// An active project context for another project was refused because the old runtime produced
-    /// it before it heard of the newest local selection.
-    pub(crate) fn gx_store_note_stale_project_context(&mut self, observed_stamp: u64) {
-        self.gx_store.local_focus.counters.stale_project_contexts += 1;
-        support_logs::append(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "gpui.terminalFocus.staleProjectContextRefused",
-            serde_json::json!({
-                "localStamp": self.gx_store.core.focus().local_stamp,
-                "observedStamp": observed_stamp,
-            }),
-        );
-    }
-
-    /// A sidebar row click was applied in process; the old runtime routes the same click and will
-    /// send its own focus request for the session.
-    pub(crate) fn gx_store_expect_click_echo(&mut self, key: &GpuiLocalWorkspaceSessionKey) {
-        let stamp = self.gx_store.core.focus().local_stamp;
-        self.gx_store
-            .local_focus
-            .expect_focus_echo(key.clone(), stamp, FocusEchoKind::Click);
-    }
-
-    /// Whether a focus request from the old runtime lost to a newer local selection.
-    ///
-    /// Two cases, both ordered by the store's stamp and never by time. The request that rides with
-    /// a project switch whose focus payload was already dropped as stale loses with it
-    /// (CDXC:Navigation 2026-07-29: the request belongs to its snapshot). And a plain request that
-    /// only echoes a selection Rust made itself (see `ExpectedFocusEcho`) loses when the user has
-    /// selected another session since; while that selection is still the newest it passes, because
-    /// it is what attaches a staged or restored tab. Every other request (a created, forked or
-    /// restored session, a notification, a wake that finished) is applied, and becomes the newest
-    /// local selection when it selects its tab.
-    pub(crate) fn gx_store_focus_request_lost_to_local_selection(
-        &mut self,
-        message: &GpuiSidebarWorkspaceTerminalFocusMessage,
-    ) -> bool {
-        let project_id = message.project_id.as_str();
-        let session_id = message.session_id.as_str();
-        let local_focus = &mut self.gx_store.local_focus;
-        let mut lost = false;
-        if !message.startup_restore
-            && !message.force_remount
-            && local_focus.stale_project_switch.as_deref() == Some(project_id)
-        {
-            local_focus.stale_project_switch = None;
-            lost = self.agents_workspace_project_id.as_deref() != Some(project_id);
-        }
-        let plain = message.placement == GpuiWorkspaceTerminalFocusPlacement::Tab
-            && message.placement_target_session_id.is_none()
-            && !message.force_remount
-            && !message.startup_restore
-            && message.preferred_interface == GpuiPreferredAgentInterface::Terminal;
-        local_focus
-            .expected_echoes
-            .retain(|echo| echo.registered_at.elapsed() < FOCUS_ECHO_EXPIRY);
-        let echo = local_focus
-            .expected_echoes
-            .iter()
-            .position(|echo| {
-                // Only a hand-off to another project comes back with `keepView`.
-                plain
-                    && (echo.kind == FocusEchoKind::HandedOff || !message.keep_view)
-                    && echo.key.project_id == project_id
-                    && echo.key.session_id == session_id
-            })
-            .map(|index| local_focus.expected_echoes.remove(index));
-        if let Some(echo) = echo {
-            let focus = self.gx_store.core.focus();
-            let still_focused = focus.focused_session.as_ref().is_some_and(|focused| {
-                focused.machine.is_local()
-                    && focused.project_id == project_id
-                    && focused.session_id == session_id
-            });
-            lost |= focus.local_stamp > echo.stamp && !still_focused;
-        }
-        if lost {
-            self.gx_store
-                .local_focus
-                .counters
-                .stale_focus_requests_dropped += 1;
-            support_logs::append(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "gpui.terminalFocus.staleFocusRequestDropped",
-                serde_json::json!({
-                    "projectId": project_id,
-                    "sessionId": session_id,
-                    "localStamp": self.gx_store.core.focus().local_stamp,
-                }),
-            );
-        }
-        lost
     }
 
     /// Whether the tab list of a focus payload may be reconciled into the workspace now. A list
@@ -963,8 +625,38 @@ impl GhostexGpuiApp {
         tab_lists_changed: bool,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        // A selection held for a row that had not arrived is placed once the row is there.
+        self.gx_store_place_unplaced_selection(cx);
+        // A focus the core applied on a machine it held no rows for (startup restore, a remote
+        // machine still connecting) is drawn once the machine lists the row.
+        if self.gx_store.local_focus.drawn_focus == DrawnFocus::Unplaced
+            && self.gx_store.focus_publish.unplaced.is_none()
+            && self
+                .gx_store
+                .core
+                .focus()
+                .focused_session
+                .as_ref()
+                .is_some_and(|session| self.gx_store.core.presentation().session(session).is_some())
+        {
+            self.gx_store.local_focus.drawn_focus = DrawnFocus::Store;
+        }
         // A frame can move focus too: the focused session was closed, or its project went away.
         let mut repaint = self.gx_store.refresh_row_focus_cache();
+        // The workspace follows every frame, as it followed every publish of the runtime; a
+        // selection that is still moving publishes once it settles instead (burst.rs).
+        if self.gx_store_selection_is_settling() {
+            self.gx_store_book_selection_finish(cx);
+        } else {
+            self.gx_store_publish_workspace_focus(cx);
+            self.gx_store_restore_startup_focus(cx);
+        }
+        let store = &mut self.gx_store;
+        store.diagnostics.focus_summary(
+            store.focus_publish.counters,
+            store.focus_perform,
+            &store.core,
+        );
         if tab_lists_changed
             && let Some(project_id) = self.gx_store.local_focus.disputed_empty_tab_list.clone()
         {

@@ -1,8 +1,9 @@
 /*
 CDXC:KeepAwake 2026-08-19:
-Auto Sleep ("Sleep inactive agents") is decided by whichever Ghostex client owns
-the sidebar on that machine — today the gpui desktop app's sidebar runtime. That
-client can only see ITS OWN visible/focused panes, so a session a phone is
+Auto Sleep ("Sleep inactive agents") was decided by whichever Ghostex client owned
+the sidebar on that machine, then the gpui desktop app's sidebar runtime (the sweep
+runs in gxserver since 2026-09-25; see server/src/session_auto_sleep.rs). That
+client could only see ITS OWN visible/focused panes, so a session a phone is
 actively attached to looked exactly like an abandoned idle terminal and was
 slept out from under the phone mid-conversation.
 

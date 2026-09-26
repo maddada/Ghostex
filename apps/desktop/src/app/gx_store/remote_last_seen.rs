@@ -23,8 +23,10 @@
 //! `/api/readPresentationSnapshot` deliver, which is why gx-core needs no codec of its own for it
 //! and why a build from before this port still reads what this one wrote.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/helpers/remote-last-seen.ts (the writer that
-//! still runs until M4d part 2 deletes it), packages/gx-core/src/presentation_store/snapshot_out.rs
+//! This is the only writer since 2026-09-25 (the old runtime, which also read the key for its own
+//! rows, was deleted the same day), and a machine removed from Settings loses its copy in `remote_last_seen_prune.rs`.
+//!
+//! SEE-ALSO: packages/gx-core/src/presentation_store/snapshot_out.rs
 //! (the store written back out as one snapshot), packages/gx-core/src/presentation_store/apply.rs
 //! (`seed_last_seen`, and the revision rules that make these rows "held, not live").
 
@@ -49,7 +51,7 @@ const CACHE_MAX_AGE_MS: i64 = 30 * 24 * 60 * 60 * 1_000;
 /// The catalog row (`remotePresentations`, `packages/client-storage/catalog.ts`): the `cache` base
 /// on the indexeddb backend, with its own entry, store and entry-count bounds and that base's age
 /// limit.
-const STORE: RecordStore = RecordStore {
+pub(super) const STORE: RecordStore = RecordStore {
     id: "remotePresentations",
     version: 1,
     max_entry_bytes: 8 * 1024 * 1024,
@@ -59,13 +61,12 @@ const STORE: RecordStore = RecordStore {
 };
 
 /// The catalog row's `key` prefix, with the per-machine infix `RemoteLastSeenStore` appends.
-/// `GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY` in
+/// `GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_STORAGE_KEY` in the deleted
 /// `apps/desktop/sidebar/gxserver-runtime/constants.ts`, then `:machine:`.
-const MACHINE_KEY_PREFIX: &str = "ghostex-gpui-remote-last-seen-presentations:machine:";
+pub(super) const MACHINE_KEY_PREFIX: &str = "ghostex-gpui-remote-last-seen-presentations:machine:";
 
-/// `GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_PERSIST_DELAY_MS`, the delay the old sidebar's own writer
-/// batches behind. The same number on both sides so the two writers of this key settle on the same
-/// payload rather than taking turns at different rhythms.
+/// `GPUI_REMOTE_LAST_SEEN_PRESENTATIONS_PERSIST_DELAY_MS`, the delay the old runtime's writer
+/// batched behind before this became the only writer.
 const WRITE_DELAY: Duration = Duration::from_millis(2_000);
 /// A write that lost the lock race is owed again, a bounded number of times, and the quit path
 /// flushes whatever is still owed.
@@ -157,19 +158,15 @@ impl GhostexGpuiApp {
     /// A remote machine's rows moved, so its stored copy owes an update.
     ///
     /// CDXC:RemoteMachines 2026-09-21 WHY:
-    /// **A Rust write is invisible to a client-storage service that is already running.** The
-    /// service keeps its own in-memory `rows` map and only re-reads the database on a resync
-    /// (`window.focus` and `pageshow`, `packages/client-storage/service.ts`), so a `getItem` on
-    /// this key in the same session can answer with the value the service last saw. That is
-    /// harmless HERE and only here: the one reader of this key is `RemoteLastSeenStore.read()`, at
-    /// the sidebar page's construction, which runs right after the service loaded the database.
-    /// The case that is NOT harmless was checked rather than assumed: the service's scheduled flush
-    /// re-reads the row inside its own transaction and skips a mutation whose `raw` already
-    /// matches, but it does NOT compare timestamps, so a mutation the page queued before a Rust
-    /// write and drained after it does replace the Rust row. What is lost is bounded to a slightly
-    /// older snapshot of the SAME machine from the SAME stream, which is exactly what the "both
-    /// sides write until the TypeScript writer is deleted" decision already accepts, so the answer
-    /// is that this app is the later writer on the quit path rather than a guard on top of a guard.
+    /// **A Rust write was invisible to a client-storage service that was already running.** The
+    /// service kept its own in-memory `rows` map and only re-read the database on a resync
+    /// (`window.focus` and `pageshow`, `packages/client-storage/service.ts`). That was harmless
+    /// because the one TypeScript reader of this key was `RemoteLastSeenStore.read()`, at the
+    /// deleted sidebar page's construction, and the one lossy case (a mutation the page queued
+    /// before a Rust write and drained after it) was bounded to a slightly older snapshot of the
+    /// SAME machine from the SAME stream, which the "both sides write until the TypeScript writer is
+    /// deleted" decision accepted. So this app is the later writer on the quit path rather than a
+    /// guard on top of a guard, and with that page gone it is the key's only writer.
     pub(crate) fn gx_store_note_last_seen_change(
         &mut self,
         machine_id: &str,

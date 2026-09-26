@@ -19,10 +19,12 @@
 //! is a missing key once the message is JSON, and `requestAgentSessionLaunch` reads it the same
 //! either way.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/project-actions.ts (`runNativeProjectAction`),
-//! apps/desktop/sidebar/gxserver-runtime/core.ts (`installGpuiBridgeCallbacks`,
-//! `onSidebarHostMessage`), apps/desktop/src/app/sidebar_agent_launch_placeholder.rs,
-//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs, tooling/gx-core/state-action-parity.ts.
+//! Ported from the sidebar page's `runNativeProjectAction` (frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/project-actions.ts`) and `installGpuiBridgeCallbacks` /
+//! `onSidebarHostMessage` in the deleted `gxserver-runtime/core.ts` (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/sidebar_agent_launch_placeholder.rs,
+//! apps/desktop/src/app/gx_store/sidebar_state_actions.rs.
 
 use serde_json::{json, Map, Value};
 

@@ -1,11 +1,11 @@
-//! The chat's fork branch switcher, GPUI's half of
+//! The chat's fork branch switcher, GPUI's port of the deleted React
 //! `packages/core-ui/chat/session-chat-fork-branch-switcher.tsx`.
 //!
 //! CDXC:SessionFork 2026-09-18 SEE-ALSO:
-//! The button renders what `NativeForkBranches` projects
-//! (`packages/shared/session-chat-controller/native-fork-branches.ts`) from the shared copy and row
-//! rules in `packages/shared/session-chat-presentation/fork-branches.ts`; the same projection feeds
-//! the React switcher, so neither renderer decides what a row says. The pick travels back as the
+//! The button renders what the chat core projects
+//! (`packages/gx-chat-core/src/menus/picker/fork_branches.rs`, the port of the deleted
+//! `native-fork-branches.ts` and `fork-branches.ts`) from its copy and row rules, so the renderer
+//! does not decide what a row says. The pick travels back as the
 //! `selectForkBranch` host action, handled in
 //! `apps/desktop/src/app/session_chat_fork_branches.rs`.
 
@@ -28,6 +28,10 @@ pub(super) const BADGE_RADIUS: f32 = 6.0;
 /// CDXC:SessionFork 2026-09-23 DECISION:
 /// User: "please make the tooltip for this one appear to the left not to the right (below it) / and show have max width for it's tool tip 220px". The switcher's tooltip opens under the button with its right edge on the button's right edge, so it grows leftward into the pane, and wraps at 220px. React's switcher places it the same way.
 pub(super) const TOOLTIP_PLACEMENT: ManagedTooltipPlacement = ManagedTooltipPlacement::BelowLeft;
+
+/// CDXC:SessionFork 2026-09-25 DECISION:
+/// User: "make this button very low opacity when not hovered (20%)". The switcher rests at 20% opacity and comes back to full while the pointer is over it or its menu is open. Under window glass its frosted window fades as a whole, so the blur behind the badge fades with it.
+pub(super) const RESTING_OPACITY: f32 = 0.2;
 
 /// The switcher's tooltip bubble: the family summary, wrapped at 220px.
 pub(super) fn fork_branches_tooltip(
@@ -105,6 +109,7 @@ impl NativeChatView {
         let bounds = Rc::new(Cell::new(gpui::Bounds::default()));
         let measured = bounds.clone();
         let label = tooltip.clone();
+        let menu_open = self.chat_menu_is_open(FORK_BRANCHES_TRIGGER);
         Some(
             div()
                 .id("chat-fork-branches")
@@ -126,10 +131,9 @@ impl NativeChatView {
                 .bg(p.background)
                 .text_size(px(11.0 * s))
                 .text_color(p.muted)
-                .when(self.chat_menu_is_open(FORK_BRANCHES_TRIGGER), |this| {
-                    this.bg(p.border)
-                })
-                .hover(|style| style.bg(p.border))
+                .when(menu_open, |this| this.bg(p.border))
+                .when(!menu_open, |this| this.opacity(RESTING_OPACITY))
+                .hover(|style| style.bg(p.border).opacity(1.0))
                 .managed_tooltip_with_placement(TOOLTIP_PLACEMENT, move |window, cx| {
                     fork_branches_tooltip(tooltip.clone(), window, cx)
                 })

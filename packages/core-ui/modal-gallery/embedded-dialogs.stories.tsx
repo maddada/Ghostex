@@ -5,7 +5,6 @@ import { MANAGE_STYLES } from '@/apps/desktop/views/manage/styles';
 import { PROJECT_BOARD_STYLES } from '@/apps/desktop/views/project-board/styles';
 import { RemoteMigrateGateNotice } from '@/apps/desktop/views/project-board/remote-migrate-gate';
 import { SessionChatImageViewerProvider, useSessionChatImageViewer } from '../chat/session-chat-image-viewer';
-import { SessionChatSaveMarkdownDialog } from '../chat/session-chat-save-markdown-dialog';
 import { ModalStorySurface, modalStoryParameters } from './modal-story-surface';
 
 const noop = () => undefined;
@@ -29,22 +28,6 @@ function ManageRenameStory() {
 }
 
 export const DocsRename: Story = { render: () => <ManageRenameStory /> };
-
-export const SaveChatMessageToMarkdown: Story = {
-  render: () => (
-    <ModalStorySurface>
-      <SessionChatSaveMarkdownDialog
-        listExistingPaths={async () => ['docs/2026-08-26/Modal review 1.md']}
-        markdown='## Modal review\n\nUnify headers, spacing, fields, and footer actions.'
-        onOpenChange={noop}
-        open
-        save={async ({ path }) => ({ path })}
-        sessionTitle='Modal review'
-        theme='dark'
-      />
-    </ModalStorySurface>
-  ),
-};
 
 export const BeadsMigrationConfirmation: Story = {
   render: () => (

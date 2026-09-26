@@ -10,11 +10,12 @@
 //! **The set stops at the first reload that fails.** That loop has no `try`, so a reload whose call
 //! rejects (its sleep, or its wake) rejects the whole payload and every row after it is left
 //! alone. A reload the daemon DECLINED is not a failure and the set goes on. `step_after` is that
-//! rule, in one place for the host and the gate.
+//! rule, in one place for the host (and, until the TypeScript was deleted, for the parity gate).
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! (`fullReloadProjectZmxSessions`, `fullReloadWorkspaceGroup`),
-//! apps/desktop/src/app/gx_store/sidebar_reload.rs, tooling/gx-core/reload-set-parity.ts.
+//! Ported from `fullReloadProjectZmxSessions` and `fullReloadWorkspaceGroup` in the deleted
+//! `gxserver-runtime/sessions-and-focus.ts` (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_reload.rs.
 
 use serde_json::{json, Value};
 

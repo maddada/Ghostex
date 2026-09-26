@@ -37,9 +37,9 @@ fn text<'a>(v: &'a Value, key: &str) -> &'a str {
 impl GhostexGpuiApp {
     /// CDXC:Spaces 2026-09-18 WHY:
     /// Settings builds its own hydrate, which omitted the sidebar's spaces and showed an empty picker despite existing spaces.
-    /// Reuse the shared runtime's complete local/remote options, including their computer-scoped identities.
+    /// Reuse the store HUD's complete local/remote options, including their computer-scoped identities.
     /// The project list rides along for the same reason: the scope editor lists the sidebar's own
-    /// rows, which only the sidebar runtime can enumerate.
+    /// rows, which only the native sidebar's snapshot enumerates.
     pub(crate) fn with_project_view_scope_options(&self, mut message: Value) -> Value {
         let Some(hud) = self
             .native_sidebar

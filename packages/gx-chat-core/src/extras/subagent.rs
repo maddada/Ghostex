@@ -2,12 +2,7 @@
 //! `packages/shared/session-chat-controller/native-subagent.ts`: the navigation stack, the page
 //! reads with their gap fill and poll, and the projection the native viewer paints.
 //!
-//! CDXC:SessionChat 2026-09-18 SEE-ALSO:
-//! React runs the same viewer through `packages/core-ui/chat/use-session-chat-subagent.ts` and
-//! `session-chat-subagent-viewer.tsx`. How a page is read, gap-filled, merged, labelled or settled
-//! belongs to both surfaces, never to one renderer.
-//!
-//! The TypeScript writes the gap fill as an `await` loop inside one request. The core performs no
+//! The TypeScript wrote the gap fill as an `await` loop inside one request. The core performs no
 //! I/O, so the loop is turned inside out: each page is one [`crate::Effect::SendRpc`] and the walk
 //! lives in [`crate::state::SubagentGap`] between the answers. The reads, their order and their
 //! stopping conditions are the same.
@@ -20,7 +15,7 @@ use crate::extras::subagent_target::{SubagentTarget, ROOT_AGENT_PATH};
 use crate::state::{ChatContext, ChatState, SubagentGap, SubagentRequest, SubagentState};
 use crate::wire::ChatRpcMethod;
 
-/// Messages per page read, the size React's viewer asks for.
+/// Messages per page read, the size React's viewer asked for.
 pub const PAGE_LIMIT: u32 = 300;
 /// How often an open viewer re-reads its newest page.
 pub const POLL_MS: f64 = 2_000.0;

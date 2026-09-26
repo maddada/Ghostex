@@ -232,6 +232,18 @@ impl GpuiContextMenu {
         );
     }
 
+    /// `toggle_below` for a trigger drawn in another window than the app's own root, given in
+    /// `window`'s coordinates.
+    pub(crate) fn toggle_below_for_app(
+        self,
+        app: Entity<GhostexGpuiApp>,
+        trigger_bounds: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.show_for_app_anchored(app, trigger_bounds, true, window, cx);
+    }
+
     fn show_for_app_anchored(
         mut self,
         app: Entity<GhostexGpuiApp>,

@@ -1,17 +1,16 @@
-//! Whether the drawn list is the real one, and what happens when one of the two things it waits
-//! for never arrives.
+//! Whether the drawn list is the real one, and what happens when the thing it waits for never
+//! arrives.
 //!
-//! CDXC:Sidebar 2026-09-21 WHY:
-//! The list waits for two legs: the sidebar's own state read back from client storage (collapse,
-//! Space, filters, hidden items), and the HUD the QuickJS runtime posts on the facts channel. Until
-//! both land the renderer draws the loading skeleton and every command that arrives is dropped
-//! (`gx_store_drop_sidebar_command_before_ready`). That was written as a launch-window wait of a
-//! few hundred milliseconds, and it had no end: if the runtime's service throws before
-//! `runtime.start()` (`sidebar/service/service.ts`) the HUD is never posted, and the sidebar stays a
-//! skeleton with every click counted and thrown away, for the life of the app, with nothing on
-//! screen saying why.
+//! CDXC:Sidebar 2026-09-25 WHY:
+//! The list waits for one leg: the sidebar's own state read back from client storage (collapse,
+//! Space, filters, hidden items). Until it lands the renderer draws the loading skeleton and every
+//! command that arrives is dropped (`gx_store_drop_sidebar_command_before_ready`). It used to wait
+//! for a second leg too, the HUD the QuickJS runtime posted on the facts channel, which never came
+//! when the runtime's service threw before `runtime.start()`. The HUD is composed in Rust now
+//! (gx_store/hud/, app runtime port family F2), from the settings alone before any read answers,
+//! so it is there from the store's start and is no longer waited for.
 //!
-//! **The list does not depend on either leg to DRAW, and that is the fix rather than a fallback.**
+//! **The list does not depend on the leg to DRAW, and that is the fix rather than a fallback.**
 //! The rows, their order, the sections, the Spaces, the collections, the machine tabs and every
 //! setting the view model reads come from the store and from the settings file
 //! (`SidebarInputs::settings`), not from the HUD. What the HUD really carries is Recent Projects
@@ -22,7 +21,7 @@
 //! appearance and an empty launcher instead of drawing nothing at all.
 //!
 //! So after `RECOVERY_WAIT` the missing leg is declared absent, the real list is drawn, and an
-//! UNCONDITIONAL error line names which leg it was. Nothing is hidden: the line is written whatever
+//! UNCONDITIONAL error line says so. Nothing is hidden: the line is written whatever
 //! the diagnostic settings say, and `gxStore.sidebarList.summary` carries `recoveredHud` and
 //! `recoveredState` for the rest of the run.
 //!
@@ -43,11 +42,11 @@ use serde_json::{Value, json};
 use super::diagnostics::GxStoreDiagnostics;
 use crate::GhostexGpuiApp;
 
-/// How long a leg may be missing before the list is drawn without it. Long enough that a cold
-/// launch on a busy computer never reaches it (both legs land in the first hundreds of
-/// milliseconds, and the HUD waits on the QuickJS service booting and gxserver answering) and short
-/// enough that the user is not left deciding the app is broken. Overshooting is cheap: a leg that
-/// arrives after the recovery takes over at once, because the real value is always preferred.
+/// How long the leg may be missing before the list is drawn without it. Long enough that a cold
+/// launch on a busy computer never reaches it (the read lands in the first hundreds of
+/// milliseconds) and short enough that the user is not left deciding the app is broken.
+/// Overshooting is cheap: a leg that arrives after the recovery takes over at once, because the
+/// real value is always preferred.
 const RECOVERY_WAIT: Duration = Duration::from_secs(8);
 
 /// The two legs the list waits for, and whether each one was given up on. A flag stays set for the
@@ -56,7 +55,8 @@ const RECOVERY_WAIT: Duration = Duration::from_secs(8);
 pub(super) struct SidebarReadyRecovery {
     /// When the wait started: the store's bootstrap, where the once-a-second tick is started.
     started_at: Option<Instant>,
-    /// The HUD never arrived and the list is drawn with an empty one.
+    /// The HUD never arrived and the list is drawn with an empty one. Never set since the HUD is
+    /// composed in Rust (gx_store/hud/); kept so the self-check line keeps its shape.
     pub(super) hud: bool,
     /// The client-storage read never succeeded and the list is drawn on the default sidebar state.
     /// Writes stay blocked.
@@ -77,39 +77,31 @@ impl GhostexGpuiApp {
     /// Whether the drawn list is the real one, so a command that names a row has something to name
     /// and an install is worth making.
     ///
-    /// CDXC:Sidebar 2026-09-21 WHY:
-    /// False only in the first instants of a launch, and for exactly two reasons: the sidebar's own
-    /// state has not been read back from client storage yet, so the real list would open every
-    /// project and hide nothing and then snap; and the runtime has not posted the HUD yet, so the
-    /// agent launcher, the Saved Actions and every `hud.settings.*` the renderer reads would be
-    /// empty. Until both land the renderer draws the loading skeleton
+    /// CDXC:Sidebar 2026-09-25 WHY:
+    /// False only in the first instants of a launch, because the sidebar's own state has not been
+    /// read back from client storage yet, so the real list would open every project and hide
+    /// nothing and then snap. Until it lands the renderer draws the loading skeleton
     /// (`gx_store_install_loading_sidebar_list`) and `dispatch_native_sidebar_ui` drops what
-    /// arrives, counted rather than routed to nobody. A leg that is still missing after
-    /// `RECOVERY_WAIT` is declared absent by `gx_store_check_sidebar_ready_recovery` and stops
-    /// holding the gate shut, because the skeleton had no other way out.
+    /// arrives, counted rather than routed to nobody. If it is still missing after
+    /// `RECOVERY_WAIT` it is declared absent by `gx_store_check_sidebar_ready_recovery` and stops
+    /// holding the gate shut, because the skeleton had no other way out. The HUD, which it also
+    /// waited for until 2026-09-25, is composed in Rust from the store's start (gx_store/hud/).
     ///
     /// A machine tab the host does not feed (no client, no last-seen copy) is NOT one of them any
     /// more: its list is empty because that machine really has no rows, and an empty list with its
     /// own empty state is the honest answer. Before step 6 that case kept the old projection's copy.
     pub(crate) fn gx_store_sidebar_list_ready(&self) -> bool {
-        let recovery = self.gx_store.sidebar_list.ready_recovery();
-        (self.gx_store.sidebar_ui.restored() || recovery.state)
-            && (self.gx_store.runtime_facts.hud().is_some() || recovery.hud)
+        self.gx_store.sidebar_ui.restored() || self.gx_store.sidebar_list.ready_recovery().state
     }
 
-    /// The HUD the installed list carries, which is an empty object once the HUD leg was given up
-    /// on. Every reader of it indexes and defaults, so an empty one is the built-in appearance and
-    /// an empty launcher rather than a list that is not drawn.
+    /// The HUD the installed list carries (gx_store/hud/). Every reader of it indexes and
+    /// defaults, so the empty object it is before the store's first composition is the built-in
+    /// appearance and an empty launcher rather than a list that is not drawn.
     pub(super) fn gx_store_sidebar_hud(&self) -> Option<Arc<Value>> {
-        match self.gx_store.runtime_facts.hud() {
-            Some(hud) => Some(Arc::clone(hud)),
-            None => self
-                .gx_store
-                .sidebar_list
-                .ready_recovery()
-                .hud
-                .then(|| Arc::new(json!({}))),
-        }
+        Some(match self.gx_store.runtime_facts.hud() {
+            Some(hud) => Arc::clone(hud),
+            None => Arc::new(json!({})),
+        })
     }
 
     /// Declares a leg absent once it has been missing for `RECOVERY_WAIT`, so the list is drawn.
@@ -124,7 +116,7 @@ impl GhostexGpuiApp {
         if waited < RECOVERY_WAIT {
             return;
         }
-        let hud_missing = self.gx_store.runtime_facts.hud().is_none();
+        let hud_missing = false;
         let state_missing = !self.gx_store.sidebar_ui.restored();
         let read_failures = self.gx_store.sidebar_ui.counters.read_failures;
         let read_error = self.gx_store.sidebar_ui.last_error();
@@ -165,8 +157,8 @@ impl GxStoreDiagnostics {
         self.warning(
             "gxStore.sidebarList.legMissing.error",
             json!({
-                // The runtime never posted the sidebar HUD: its service threw before
-                // `runtime.start()`, or the facts channel is not connected.
+                // Always false since the HUD is composed in Rust (gx_store/hud/); kept so the line
+                // keeps its shape for the logs already written.
                 "hudMissing": hud_missing,
                 // Client storage never answered with the sidebar's own state. The list is drawn on
                 // defaults and no write is made until a read succeeds.

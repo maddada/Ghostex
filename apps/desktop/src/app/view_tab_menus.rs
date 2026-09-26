@@ -113,12 +113,14 @@ impl GhostexGpuiApp {
             .toggle_below(trigger_bounds, window, cx);
     }
 
-    /// CDXC:Workarea 2026-09-20 DECISION:
-    /// User (screen 05): right-clicking a view tab is where its scope lives. `Show in <project>` and
-    /// `Show in space <space>` are checkable and each writes exactly one override; per ruling 1A the
-    /// space row names the project's OWN space and is absent when the project belongs to none.
+    /// CDXC:Workarea 2026-09-25 DECISION:
+    /// User (screen 05): right-clicking a view tab is where its scope lives. `Show in this Project`
+    /// and `Show in this Space` are checkable and each writes exactly one override; per ruling 1A the
+    /// space row is the project's OWN space and is absent when the project belongs to none.
     /// `Choose where it's shown…` opens the Settings editor for exactly this view, and the rest,
-    /// Reload, Sleep, Pop out and Close, act on the tab that was clicked rather than the active one.
+    /// Reload, Sleep, Open externally and Close, act on the tab that was clicked rather than the
+    /// active one. Supersedes 2026-09-20: the user moved the scope rows into their own section below
+    /// the tab actions and dropped the project and space names from their labels.
     pub(crate) fn show_view_tab_context_menu(
         &mut self,
         mode: TitlebarMode,
@@ -128,33 +130,6 @@ impl GhostexGpuiApp {
     ) {
         let mode_index = mode.switcher_index();
         let mut menu = GpuiContextMenu::new();
-        if let Some(scope_key) = self.titlebar_mode_view_scope_key(mode) {
-            let shown =
-                self.view_scope_state_for_active_project(&scope_key) == ViewScopeState::Shown;
-            menu = menu.menu_with_check(
-                format!("Show in {}", self.project_name),
-                shown,
-                Box::new(ToggleGpuiViewProjectScope { mode_index }),
-            );
-            for (space_key, space_name) in self.active_project_space_labels() {
-                let space_shown =
-                    self.view_scope_space_state(&scope_key, &space_key) != Some(false);
-                menu = menu.menu_with_check(
-                    format!("Show in space {space_name}"),
-                    space_shown,
-                    Box::new(ToggleGpuiViewSpaceScope {
-                        mode_index,
-                        space_key,
-                    }),
-                );
-            }
-            menu = menu
-                .menu(
-                    "Choose where it's shown…",
-                    Box::new(OpenGpuiViewScopeSettings { mode_index }),
-                )
-                .separator();
-        }
         if let TitlebarMode::Extension(id) = mode
             && mode
                 .website_provider()
@@ -230,16 +205,41 @@ impl GhostexGpuiApp {
                     }),
                 );
         }
-        menu.menu_with_disabled(
-            "Pop out to window",
+        menu = menu.menu_with_disabled(
+            "Open externally",
             self.view_pop_out_url(mode).is_none(),
             Box::new(PopOutGpuiViewTab { mode_index }),
-        )
-        .separator()
-        .submenu("Hidden here", self.hidden_here_submenu_rows())
-        .separator()
-        .menu("Close tab", Box::new(CloseGpuiViewTab { mode_index }))
-        .show(position, window, cx);
+        );
+        if let Some(scope_key) = self.titlebar_mode_view_scope_key(mode) {
+            let shown =
+                self.view_scope_state_for_active_project(&scope_key) == ViewScopeState::Shown;
+            menu = menu.separator().menu_with_check(
+                "Show in this Project",
+                shown,
+                Box::new(ToggleGpuiViewProjectScope { mode_index }),
+            );
+            for (space_key, _) in self.active_project_space_labels() {
+                let space_shown =
+                    self.view_scope_space_state(&scope_key, &space_key) != Some(false);
+                menu = menu.menu_with_check(
+                    "Show in this Space",
+                    space_shown,
+                    Box::new(ToggleGpuiViewSpaceScope {
+                        mode_index,
+                        space_key,
+                    }),
+                );
+            }
+            menu = menu.menu(
+                "Choose where it's shown…",
+                Box::new(OpenGpuiViewScopeSettings { mode_index }),
+            );
+        }
+        menu.separator()
+            .submenu("Hidden here", self.hidden_here_submenu_rows())
+            .separator()
+            .menu("Close tab", Box::new(CloseGpuiViewTab { mode_index }))
+            .show(position, window, cx);
     }
 
     /// A view's stored state for one space, with no precedence applied: the space row ticks what the

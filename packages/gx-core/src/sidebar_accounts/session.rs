@@ -15,9 +15,9 @@
 //! Show the selected provider and account email during a switch, starting before the request and
 //! clearing on success or failure.
 //!
-//! SEE-ALSO: the deleted sidebar page's `accounts.ts`,
-//! apps/desktop/sidebar/account-switch.ts, apps/desktop/sidebar/gxserver-runtime/core.ts
-//! (`requestSessionAccounts`), apps/desktop/src/app/gx_store/sidebar_accounts.rs.
+//! SEE-ALSO: the deleted sidebar page's `accounts.ts`, the runtime's `account-switch.ts` and
+//! `requestSessionAccounts` (deleted 2026-09-25, in git history),
+//! apps/desktop/src/app/gx_store/sidebar_accounts.rs.
 
 use std::collections::BTreeMap;
 

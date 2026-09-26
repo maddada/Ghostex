@@ -325,8 +325,8 @@ impl NativeAutomateView {
         );
     }
 
-    /// Asks the sidebar runtime for the project's agent sessions (Thread mode's picker), the
-    /// `getState` board request the React dialog sent when it opened.
+    /// Asks the store (gx_store/create/board.rs) for the project's agent sessions (Thread mode's
+    /// picker), the `getState` board request the React dialog sent when it opened.
     pub(crate) fn request_sessions(&mut self, project_id: &str, cx: &mut Context<Self>) {
         let Some(scope) = self.scope.as_ref() else {
             return;
@@ -361,7 +361,7 @@ impl NativeAutomateView {
         .detach();
     }
 
-    /// The sidebar runtime's answer to `request_sessions`; stale answers are dropped.
+    /// The store's answer to `request_sessions`; stale answers are dropped.
     pub(crate) fn receive_sessions_response(
         &mut self,
         response: &serde_json::Value,

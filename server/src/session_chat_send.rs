@@ -21,6 +21,7 @@ use crate::server::{
 use crate::session_chat::{SessionChatQuestion, SessionChatQuestionSelection};
 use crate::session_chat_follower::session_chat_agent_for_session;
 use crate::session_chat_options::schedule_session_chat_option_redetect;
+use crate::session_chat_question_row_align::QuestionRowAction;
 use crate::session_chat_queue_runtime::SessionChatMessageSource;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
@@ -123,8 +124,10 @@ const SESSION_CHAT_SHELL_PROMPT_NOT_REACHED: &str =
     "The agent did not exit back to the shell, so the resume command was not typed.";
 pub const SESSION_CHAT_COMPOSER_NOT_READY: &str =
     "The agent's input box is not on screen, so nothing was sent.";
-const SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED: &str =
-    "Claude Code settings did not close to reveal the input box, so nothing was sent.";
+const SESSION_CHAT_CLAUDE_PANEL_NOT_DISMISSED: &str =
+    "The Claude Code panel over the input box did not close, so nothing was sent.";
+/// Escape presses one send spends on a panel that stays up.
+const SESSION_CHAT_CLAUDE_PANEL_ESCAPES: u64 = 3;
 /// CDXC:SessionChat 2026-09-23 WHY:
 /// Native Windows Codex reads console input records through ConPTY, which turns a bare Escape into VK_ESCAPE but does not decode CSI-u Escape. Chat Stop's CSI-u write left a live turn streaming until physical Escape interrupted it. POSIX zmx (including WSL) retains CSI-u: bare Escape was dropped by kitty-enabled Claude Code in the verified 2026-08-01 flow.
 #[cfg(windows)]
@@ -308,6 +311,10 @@ pub enum AskAnswerKeyGroup {
     /// Put an arrow-driven list (Cursor, pi, omp) on a question and row from
     /// the screen as it is when the step runs.
     AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget),
+    /// Empty Claude's "Type something" field, set a multi-select tab's ticks
+    /// and bring the highlight to the tab's first row, from the screen as it
+    /// is when the step runs.
+    PrepareClaudeQuestion(crate::session_chat_claude_question_prep::ClaudeQuestionPrep),
 }
 
 /// The step that puts `ui`'s list on `row` of question `question`.
@@ -316,6 +323,24 @@ fn align_question_row(
     questions: &[SessionChatQuestion],
     question: usize,
     row: usize,
+) -> AskAnswerKeyGroup {
+    question_row_step(
+        ui,
+        questions,
+        question,
+        row,
+        crate::session_chat_question_row_align::QuestionRowAction::Move,
+    )
+}
+
+/// The step that runs `action` on question `question` of `ui`'s list, leaving
+/// the highlight on `row` (see QuestionRowAction for where each ends).
+fn question_row_step(
+    ui: crate::session_chat_question_row_align::QuestionListUi,
+    questions: &[SessionChatQuestion],
+    question: usize,
+    row: usize,
+    action: crate::session_chat_question_row_align::QuestionRowAction,
 ) -> AskAnswerKeyGroup {
     AskAnswerKeyGroup::AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget {
         ui,
@@ -335,6 +360,7 @@ fn align_question_row(
             })
             .unwrap_or_default(),
         row,
+        action,
     })
 }
 
@@ -379,7 +405,10 @@ the HIGHLIGHTED default and pasted label text does NOT move the highlight
 by each option's stable 1-based number, which matches the card's badge.
 Groups are paced NATIVE_CHAT_QUESTION_STEP_MS apart by the queue because a
 navigation keystroke batched with Enter commits before the selector applied
-it.
+it. Every question's keys start with a step that reads its tab when it runs
+(session_chat_claude_question_prep.rs): it empties leftover "Type something"
+text, sets a multi-select tab's ticks to exactly the picked options, and puts
+the highlight on the tab's first row.
 */
 pub fn build_claude_ask_answer_keys(
     questions: &[SessionChatQuestion],
@@ -394,11 +423,22 @@ pub fn build_claude_ask_answer_keys(
         let indices: &[usize] = selection
             .map(|selection| selection.indices.as_slice())
             .unwrap_or_default();
+        groups.push(AskAnswerKeyGroup::PrepareClaudeQuestion(
+            crate::session_chat_claude_question_prep::ClaudeQuestionPrep {
+                questions: questions.to_vec(),
+                question: question_index,
+                // Each digit TOGGLES a checkbox, so the step ticks only the
+                // rows that differ from the pick.
+                ticked: question.multi_select.then(|| {
+                    indices
+                        .iter()
+                        .copied()
+                        .filter(|index| *index < question.options.len())
+                        .collect()
+                }),
+            },
+        ));
         if question.multi_select {
-            for index in indices {
-                // Each digit TOGGLES a checkbox; the highlight stays on row 1.
-                groups.push(AskAnswerKeyGroup::Raw((index + 1).to_string()));
-            }
             if !other.is_empty() {
                 /*
                 CDXC:SessionChat 2026-09-23 WHY: Claude Code 2.1.280 edits the multi-select "Type something" row in place while it is highlighted: its digit only ticks the box, so text typed after it was dropped, and the Enter that followed toggled the highlighted first option off (Cheese + Peppers + a note arrived as "Peppers"). Typing on the highlighted row ticks it; Right is a caret move there, so the row below it (Next, or Submit on the last question) takes the Enter that moves on.
@@ -442,8 +482,15 @@ pub fn build_claude_ask_answer_keys(
             groups.push(AskAnswerKeyGroup::Raw(ASK_NEXT_TAB.to_string()));
         }
     }
+    if groups
+        .iter()
+        .all(|group| matches!(group, AskAnswerKeyGroup::PrepareClaudeQuestion(_)))
+    {
+        // Nothing to answer: leave the selector as the terminal has it.
+        return Vec::new();
+    }
     let ends_on_submit_tab = multi_question || (questions.len() == 1 && questions[0].multi_select);
-    if ends_on_submit_tab && !groups.is_empty() {
+    if ends_on_submit_tab {
         // Final Submit confirmation.
         groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string()));
     }
@@ -538,15 +585,43 @@ pub fn build_cursor_ask_answer_keys(
         }
 
         let ui = crate::session_chat_question_row_align::QuestionListUi::Cursor;
-        for index in indices {
-            if *index >= question.options.len() {
-                continue;
+        let other_row = question.options.len();
+        let picked: Vec<usize> = indices
+            .iter()
+            .copied()
+            .filter(|index| *index < question.options.len())
+            .collect();
+        // Other text left in the terminal would be joined to the typed answer
+        // or submitted beside the picked option.
+        groups.push(question_row_step(
+            ui,
+            questions,
+            question_index,
+            other_row,
+            QuestionRowAction::ClearText,
+        ));
+        if question.multi_select {
+            // Space toggles, so the step ticks only rows that differ from the
+            // pick. Enter ticks the highlighted row, so it rests on a picked
+            // row, or on Other when it takes the typed answer.
+            let rest = match picked.first() {
+                Some(first) if other.is_empty() => *first,
+                _ => other_row,
+            };
+            groups.push(question_row_step(
+                ui,
+                questions,
+                question_index,
+                rest,
+                QuestionRowAction::SetTicks(picked),
+            ));
+        } else {
+            for index in picked {
+                groups.push(align_question_row(ui, questions, question_index, index));
+                groups.push(AskAnswerKeyGroup::Raw(ASK_SPACE.to_string()));
             }
-            groups.push(align_question_row(ui, questions, question_index, *index));
-            groups.push(AskAnswerKeyGroup::Raw(ASK_SPACE.to_string()));
         }
         if !other.is_empty() {
-            let other_row = question.options.len();
             groups.push(align_question_row(ui, questions, question_index, other_row));
             groups.push(AskAnswerKeyGroup::Text(other.to_string()));
         }
@@ -739,6 +814,24 @@ pub fn build_omp_ask_answer_keys(
             .unwrap_or_default();
         if indices.is_empty() && other.is_empty() {
             if has_submit_tab {
+                if question.multi_select {
+                    // Rows the terminal ticked would still answer it.
+                    let other_row = question.options.len();
+                    groups.push(question_row_step(
+                        ui,
+                        questions,
+                        question_index,
+                        other_row,
+                        QuestionRowAction::UntickFreeRow,
+                    ));
+                    groups.push(question_row_step(
+                        ui,
+                        questions,
+                        question_index,
+                        0,
+                        QuestionRowAction::SetTicks(Vec::new()),
+                    ));
+                }
                 // Skip: step to the next question tab, leaving no answer.
                 groups.push(AskAnswerKeyGroup::Raw(ASK_TAB.to_string()));
                 continue;
@@ -749,13 +842,29 @@ pub fn build_omp_ask_answer_keys(
         }
         let other_row = question.options.len();
         if question.multi_select {
-            for index in indices {
-                if *index >= question.options.len() {
-                    continue;
-                }
-                groups.push(align_question_row(ui, questions, question_index, *index));
-                groups.push(AskAnswerKeyGroup::Raw(ASK_SPACE.to_string()));
-            }
+            let picked: Vec<usize> = indices
+                .iter()
+                .copied()
+                .filter(|index| *index < question.options.len())
+                .collect();
+            // An Other answer left in the terminal is dropped first; the
+            // chat's own text goes in below.
+            groups.push(question_row_step(
+                ui,
+                questions,
+                question_index,
+                other_row,
+                QuestionRowAction::UntickFreeRow,
+            ));
+            // Space toggles, so the step ticks only rows that differ from
+            // the pick.
+            groups.push(question_row_step(
+                ui,
+                questions,
+                question_index,
+                picked.first().copied().unwrap_or(other_row),
+                QuestionRowAction::SetTicks(picked),
+            ));
             if !other.is_empty() {
                 groups.push(align_question_row(ui, questions, question_index, other_row));
                 groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // open the prompt
@@ -767,9 +876,17 @@ pub fn build_omp_ask_answer_keys(
         }
         if !other.is_empty() {
             // Single-value answer: picked labels join the free text as one
-            // string through the custom-answer prompt (the Claude rule).
+            // string through the custom-answer prompt (the Claude rule). The
+            // prompt reopens holding an earlier answer, so it is emptied first.
             groups.push(align_question_row(ui, questions, question_index, other_row));
             groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // open the prompt
+            groups.push(question_row_step(
+                ui,
+                questions,
+                question_index,
+                other_row,
+                QuestionRowAction::ClearText,
+            ));
             groups.push(AskAnswerKeyGroup::Text(
                 answer_labels(question, selection).join(", "),
             ));
@@ -777,7 +894,19 @@ pub fn build_omp_ask_answer_keys(
             continue;
         }
         let index = (*indices.first().expect("indices checked non-empty")).min(other_row);
-        groups.push(align_question_row(ui, questions, question_index, index));
+        // A note the terminal left on the picked row would go with it.
+        let action = if index < other_row {
+            QuestionRowAction::DropNote
+        } else {
+            QuestionRowAction::Move
+        };
+        groups.push(question_row_step(
+            ui,
+            questions,
+            question_index,
+            index,
+            action,
+        ));
         groups.push(AskAnswerKeyGroup::Raw(ASK_ENTER.to_string())); // pick + advance/submit
     }
     if has_submit_tab && !cancelled && !groups.is_empty() {
@@ -871,9 +1000,12 @@ pub enum SessionChatSendStep {
     },
     /// See CDXC:SessionChat in session_chat_question_row_align.rs.
     AlignQuestionRow(crate::session_chat_question_row_align::QuestionRowTarget),
-    /// Close Claude Code's positively identified Settings screen, then require
-    /// its real composer to appear before any later input-line write can run.
-    DismissClaudeSettings {
+    /// See CDXC:SessionChat in session_chat_claude_question_prep.rs.
+    PrepareClaudeQuestion(crate::session_chat_claude_question_prep::ClaudeQuestionPrep),
+    /// Close a positively identified Claude Code panel whose Escape is safe (Settings, or
+    /// an offer listed in session_chat_claude_popups.rs), then require its real composer
+    /// to appear before any later input-line write can run.
+    DismissClaudePanel {
         agent: Option<String>,
         timeout_ms: u64,
     },
@@ -1040,11 +1172,11 @@ pub fn build_session_chat_message_steps(
     agent: Option<&str>,
     text: &str,
     image_paths: &[String],
-    dismiss_claude_settings: bool,
+    dismiss_claude_panel: bool,
 ) -> Vec<SessionChatSendStep> {
     let mut steps = Vec::new();
-    if dismiss_claude_settings {
-        steps.push(SessionChatSendStep::DismissClaudeSettings {
+    if dismiss_claude_panel {
+        steps.push(SessionChatSendStep::DismissClaudePanel {
             agent: agent.map(str::to_string),
             timeout_ms: SESSION_CHAT_COMPOSER_WAIT_TIMEOUT_MS,
         });
@@ -1225,6 +1357,7 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
                 groups[index - 1],
                 AskAnswerKeyGroup::AlignCodexQuestion { .. }
                     | AskAnswerKeyGroup::AlignQuestionRow(_)
+                    | AskAnswerKeyGroup::PrepareClaudeQuestion(_)
             );
         if index > 0 && !after_alignment {
             steps.push(SessionChatSendStep::SleepMs(SESSION_CHAT_QUESTION_STEP_MS));
@@ -1242,6 +1375,9 @@ pub fn build_ask_answer_steps(groups: &[AskAnswerKeyGroup]) -> Vec<SessionChatSe
             }
             AskAnswerKeyGroup::AlignQuestionRow(target) => {
                 SessionChatSendStep::AlignQuestionRow(target.clone())
+            }
+            AskAnswerKeyGroup::PrepareClaudeQuestion(prep) => {
+                SessionChatSendStep::PrepareClaudeQuestion(prep.clone())
             }
         });
     }
@@ -1632,6 +1768,25 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
+                SessionChatSendStep::PrepareClaudeQuestion(prep) => {
+                    if let Err(message) =
+                        crate::session_chat_claude_question_prep::prepare_claude_question(
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            &prep,
+                            &|| job_generation != generation.load(Ordering::SeqCst),
+                        )
+                        .await
+                    {
+                        outcome = Err(SessionChatSendError::new(
+                            SessionChatSendFailure::Write,
+                            message,
+                        ));
+                        break;
+                    }
+                }
                 SessionChatSendStep::DriveCodexAsyncQuestion(answer) => {
                     if let Err(message) = crate::session_chat_codex_async_answer::run(
                         &project_id,
@@ -2000,85 +2155,87 @@ async fn run_session_chat_send_worker(
                         break;
                     }
                 }
-                SessionChatSendStep::DismissClaudeSettings { agent, timeout_ms } => {
-                    if let Err(error) = write_session_chat_payload(
-                        &project_id,
-                        &session_id,
-                        &zmx_name,
-                        &source,
-                        SESSION_CHAT_INTERRUPT,
-                    )
-                    .await
-                    {
-                        outcome = Err(SessionChatSendError::new(
-                            SessionChatSendFailure::Write,
-                            error,
-                        ));
-                        break;
-                    }
-                    let wait = crate::session_chat_composer::wait_for_session_chat_composer(
-                        &zmx_name,
-                        agent.as_deref(),
-                        crate::session_chat_composer::SessionChatComposerWaitPolicy {
-                            settle_ms: 0,
-                            timeout_ms,
-                            // Once Escape has been sent, only positive composer
-                            // evidence may release the message writes.
-                            unknown_hold_ms: timeout_ms,
-                        },
-                        &|| job_generation != generation.load(Ordering::SeqCst),
-                    )
-                    .await;
-                    match wait {
-                        crate::session_chat_composer::SessionChatComposerWait::Ready => {}
-                        crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
-                            outcome = Err(SessionChatSendError::not_attempted(
-                                SESSION_CHAT_SEND_CANCELLED.to_string(),
+                SessionChatSendStep::DismissClaudePanel { agent, timeout_ms } => {
+                    // Claude can drop a key that lands the instant a panel opens, so Escape is
+                    // pressed again only while an Escape-safe panel is still what the screen
+                    // shows; any other screen stops the presses, so no stray Escape reaches the
+                    // input box.
+                    let attempt_ms = (timeout_ms / SESSION_CHAT_CLAUDE_PANEL_ESCAPES)
+                        .max(crate::session_chat_composer::SESSION_CHAT_COMPOSER_POLL_MS);
+                    let mut presses = 0;
+                    let failure = loop {
+                        presses += 1;
+                        if let Err(error) = write_session_chat_payload(
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            SESSION_CHAT_INTERRUPT,
+                        )
+                        .await
+                        {
+                            break Some(SessionChatSendError::new(
+                                SessionChatSendFailure::Write,
+                                error,
                             ));
-                            break;
                         }
-                        crate::session_chat_composer::SessionChatComposerWait::Unknown => {
-                            log_session_chat_paste_verification(
-                                LogLevel::Error,
-                                "sessionChatClaudeSettingsDismissFailed",
-                                &project_id,
-                                &session_id,
-                                &zmx_name,
-                                &source,
-                                0,
-                                timeout_ms,
-                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED,
-                            );
-                            outcome = Err(SessionChatSendError::new(
-                                SessionChatSendFailure::ComposerNotReady,
-                                SESSION_CHAT_CLAUDE_SETTINGS_NOT_DISMISSED.to_string(),
-                            ));
-                            break;
-                        }
-                        crate::session_chat_composer::SessionChatComposerWait::NotReady(
-                            readiness,
-                        ) => {
-                            let reason = readiness
+                        let wait = crate::session_chat_composer::wait_for_session_chat_composer(
+                            &zmx_name,
+                            agent.as_deref(),
+                            crate::session_chat_composer::SessionChatComposerWaitPolicy {
+                                settle_ms: 0,
+                                timeout_ms: attempt_ms,
+                                // Once Escape has been sent, only positive composer
+                                // evidence may release the message writes.
+                                unknown_hold_ms: attempt_ms,
+                            },
+                            &|| job_generation != generation.load(Ordering::SeqCst),
+                        )
+                        .await;
+                        let reason = match wait {
+                            crate::session_chat_composer::SessionChatComposerWait::Ready => {
+                                break None;
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::Cancelled => {
+                                break Some(SessionChatSendError::not_attempted(
+                                    SESSION_CHAT_SEND_CANCELLED.to_string(),
+                                ));
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                                readiness,
+                            ) if readiness.should_dismiss_with_escape()
+                                && presses < SESSION_CHAT_CLAUDE_PANEL_ESCAPES =>
+                            {
+                                continue;
+                            }
+                            crate::session_chat_composer::SessionChatComposerWait::NotReady(
+                                readiness,
+                            ) => readiness
                                 .reason
-                                .clone()
-                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string());
-                            log_session_chat_paste_verification(
-                                LogLevel::Error,
-                                "sessionChatComposerNotReady",
-                                &project_id,
-                                &session_id,
-                                &zmx_name,
-                                &source,
-                                0,
-                                timeout_ms,
-                                &reason,
-                            );
-                            outcome = Err(SessionChatSendError::new(
-                                SessionChatSendFailure::ComposerNotReady,
-                                reason,
-                            ));
-                            break;
-                        }
+                                .unwrap_or_else(|| SESSION_CHAT_COMPOSER_NOT_READY.to_string()),
+                            crate::session_chat_composer::SessionChatComposerWait::Unknown => {
+                                SESSION_CHAT_CLAUDE_PANEL_NOT_DISMISSED.to_string()
+                            }
+                        };
+                        log_session_chat_paste_verification(
+                            LogLevel::Error,
+                            "sessionChatClaudePanelDismissFailed",
+                            &project_id,
+                            &session_id,
+                            &zmx_name,
+                            &source,
+                            0,
+                            timeout_ms,
+                            &reason,
+                        );
+                        break Some(SessionChatSendError::new(
+                            SessionChatSendFailure::ComposerNotReady,
+                            reason,
+                        ));
+                    };
+                    if let Some(error) = failure {
+                        outcome = Err(error);
+                        break;
                     }
                 }
                 SessionChatSendStep::WaitForComposer {
@@ -2926,6 +3083,20 @@ mod tests {
         assert!(normalized.contains("firstlinehere"));
     }
 
+    fn claude_prep(
+        questions: &[SessionChatQuestion],
+        question: usize,
+        ticked: Option<&[usize]>,
+    ) -> AskAnswerKeyGroup {
+        AskAnswerKeyGroup::PrepareClaudeQuestion(
+            crate::session_chat_claude_question_prep::ClaudeQuestionPrep {
+                questions: questions.to_vec(),
+                question,
+                ticked: ticked.map(<[usize]>::to_vec),
+            },
+        )
+    }
+
     #[test]
     fn claude_single_question_single_select_commits_by_digit() {
         let questions = vec![question("Pick one", false, &["A", "B", "C"])];
@@ -2934,7 +3105,7 @@ mod tests {
         // Submit tab, so no trailing Enter.
         assert_eq!(
             build_claude_ask_answer_keys(&questions, &selections),
-            vec![raw("2")]
+            vec![claude_prep(&questions, 0, None), raw("2")]
         );
     }
 
@@ -2945,7 +3116,12 @@ mod tests {
         // "Type something" is row options.len()+1 = 3; label + other joined.
         assert_eq!(
             build_claude_ask_answer_keys(&questions, &selections),
-            vec![raw("3"), text("A, also this"), raw("\r")]
+            vec![
+                claude_prep(&questions, 0, None),
+                raw("3"),
+                text("A, also this"),
+                raw("\r")
+            ]
         );
     }
 
@@ -2953,11 +3129,16 @@ mod tests {
     fn claude_multi_select_toggles_then_advances_then_submits() {
         let questions = vec![question("Pick many", true, &["A", "B", "C"])];
         let selections = vec![selection(&[0, 2], None)];
-        // Toggle 1 and 3, step to Submit tab, then the final confirmation
-        // (single multiSelect question ends on the Submit tab).
+        // The prep step ticks exactly 1 and 3, then Right to the Submit tab
+        // and the final confirmation (single multiSelect question ends on
+        // the Submit tab).
         assert_eq!(
             build_claude_ask_answer_keys(&questions, &selections),
-            vec![raw("1"), raw("3"), raw("\u{1b}[C"), raw("\r")]
+            vec![
+                claude_prep(&questions, 0, Some(&[0, 2])),
+                raw("\u{1b}[C"),
+                raw("\r")
+            ]
         );
     }
 
@@ -2975,7 +3156,13 @@ mod tests {
         // ends on the Submit tab → final Enter.
         assert_eq!(
             build_claude_ask_answer_keys(&questions, &selections),
-            vec![raw("1"), raw("\u{1b}[C"), raw("\r")]
+            vec![
+                claude_prep(&questions, 0, None),
+                raw("1"),
+                claude_prep(&questions, 1, None),
+                raw("\u{1b}[C"),
+                raw("\r")
+            ]
         );
     }
 
@@ -3333,35 +3520,14 @@ pub(crate) async fn handle_send_session_chat_message_http(
     // CDXC:SessionChat 2026-09-09 DECISION:
     // User: sending in a new chat is immediate, but delivery waits for the agent's input box. A durable queue receipt lets both apps clear the composer while startup continues.
     if crate::agents::session_is_draft(&target.session) && image_paths.is_empty() {
-        let mut startup_params = params.clone();
-        startup_params.insert("startupSend".to_string(), json!(true));
-        return match crate::session_chat_queue::handle_session_chat_queue_endpoint(
-            &state.paths,
-            state.metadata.server_id.as_str(),
-            "/api/queueSessionChatPrompt",
-            &startup_params,
-        ) {
-            Ok(result) => {
-                crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
-                    state,
-                    &target.project_id,
-                    &target.session_id,
-                );
-                routed_json(
-                    Some(endpoint_path),
-                    StatusCode::OK,
-                    rpc_success(
-                        request_id,
-                        json!({
-                            "queued": true,
-                            "textBytes": text.len(),
-                            "queuedPromptId": result.value.pointer("/prompt/id"),
-                        }),
-                    ),
-                )
-            }
-            Err(error) => domain_error_response(endpoint_path, request_id, error),
-        };
+        return crate::session_chat_send_wake::queue_startup_send(
+            state,
+            endpoint_path,
+            request_id,
+            &params,
+            &target,
+            &text,
+        );
     }
     match crate::session_chat_queue_runtime::send_session_chat_message_with_draft(
         state,
@@ -3382,6 +3548,21 @@ pub(crate) async fn handle_send_session_chat_message_http(
                 json!({ "queued": true, "textBytes": text_bytes }),
             ),
         ),
+        Err(error)
+            if error.code == crate::session_chat_send_wake::SESSION_CHAT_SESSION_STARTING =>
+        {
+            crate::session_chat_send_wake::deliver_when_started(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                &image_paths,
+                draft_version.as_ref(),
+            )
+            .await
+        }
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
 }

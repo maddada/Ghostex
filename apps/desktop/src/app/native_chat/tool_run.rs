@@ -2,8 +2,7 @@
 //! preview, the "+N previous tool calls" fold, failed results in the error
 //! tone, and the subagent heading. Which rows a collapsed run keeps and what
 //! the fold's labels say are decided in
-//! `packages/shared/session-chat-presentation/tool-rows.ts`, the same rules the
-//! React transcript reads; this file only lays them out.
+//! `packages/gx-chat-core/src/transcript/tool_rows.rs`; this file only lays them out.
 
 use super::disclosure_body::{DisclosureRail, disclosure_body};
 use super::disclosure_motion::motion_clip_trailing;
@@ -46,12 +45,12 @@ impl NativeChatView {
         }
         let id = text(message, "id");
         // The run already sits under a heading that collapses it (a reasoning row, an assistant
-        // commentary heading), so it shows every row and adds no group of its own: React passes
-        // `showAllRows` at exactly those call sites, and the rule is shared in tool-rows.ts.
+        // commentary heading), so it shows every row and adds no group of its own: React passed
+        // `showAllRows` at exactly those call sites, and the core carries the rule in tool_rows.rs.
         let show_all = message["toolsShowAllRows"] == true;
         // An answered question renders as its own exchange card. It stays a plain row only where a
-        // hoisted card already shows the exchange somewhere else, which is React's
-        // `questionPairsAsRows` (question-hoisting.ts).
+        // hoisted card already shows the exchange somewhere else, which was React's
+        // `questionPairsAsRows` (now the core's questions/hoisting.rs).
         let questions_as_rows = show_all || self.in_work_fold;
         let visible: Vec<usize> = (0..tools.len())
             .filter(|index| questions_as_rows || tools[*index]["exchange"] != true)
@@ -61,7 +60,7 @@ impl NativeChatView {
         }
         if p.simple && !show_all {
             let key = format!("tools:{id}");
-            // React's run disclosure opens on demand and is never opened by verbose mode.
+            // The run disclosure opens on demand and is never opened by verbose mode, as React's was.
             let expanded = self.expanded.contains(&key);
             let motion = self.disclosure_frame(&key, expanded, cx);
             let mut rows = vec![self.disclosure(
@@ -378,7 +377,7 @@ impl NativeChatView {
     }
 
     /// One labelled block of a tool's detail: its arguments, the command it ran,
-    /// or what it reported back. React paints it as a plain monospaced `<pre>`
+    /// or what it reported back. React painted it as a plain monospaced `<pre>`
     /// (`.ghostex-chat-tool-body`), so this is verbatim text in a scroll-capped
     /// box, never a Markdown code block: that would put a language header and a
     /// copy control on output the agent never wrote as code.
@@ -409,7 +408,7 @@ impl NativeChatView {
                     key,
                     div()
                         .min_w_0()
-                        // React caps the block at 16.25 of its own lines plus its padding.
+                        // React capped the block at 16.25 of its own lines plus its padding.
                         .max_h(px(220.75 * s))
                         .px(px(10.0 * s))
                         .py(px(8.0 * s))

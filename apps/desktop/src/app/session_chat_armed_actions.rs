@@ -4,7 +4,7 @@ use crate::*;
 
 impl GhostexGpuiApp {
     /// The armed Delayed Send / Close After Done labels for a chat's session, from the native sidebar clock.
-    /// CDXC:SessionChat 2026-09-19 SEE-ALSO: packages/shared/session-chat-presentation/armed-actions.ts builds the labels; apps/desktop/src/app/gx_store/sidebar_clock.rs rebuilds them every second for all sessions, because the sidebar list omits rows hidden by machine, space, or tag filters.
+    /// CDXC:SessionChat 2026-09-19 SEE-ALSO: packages/gx-core/src/sidebar_view/armed_actions.rs builds the labels; apps/desktop/src/app/gx_store/sidebar_clock.rs rebuilds them every second for all sessions, because the sidebar list omits rows hidden by machine, space, or tag filters.
     pub(crate) fn session_chat_armed_actions(&self, session_id: TerminalSessionId) -> Value {
         let sidebar_session_id = match self.workspace_terminal_key_for_shell_session(session_id) {
             Some(GpuiWorkspaceTerminalSessionKey::Local(key)) => {

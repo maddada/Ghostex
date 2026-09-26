@@ -24,7 +24,7 @@ struct SpaceTransition {
     destination: Option<String>,
     phase: TransitionPhase,
     /// CDXC:Spaces 2026-09-18 WHY:
-    /// React selects the destination synchronously, so its exit fade runs straight into the enter fade. The native switch round-trips through the service thread, and waiting for the exit before asking left a blank list in between.
+    /// React selects the destination synchronously, so its exit fade runs straight into the enter fade. The native switch round-tripped through the service thread (until QuickJS was deleted on 2026-09-25), and waiting for the exit before asking left a blank list in between.
     /// The switch is requested the moment the gesture locks, while the outgoing Space keeps rendering from this frozen snapshot until its fade ends; the enter fade then starts on whatever the new Space already delivered.
     frozen: Option<Arc<NativeSidebarSnapshot>>,
 }

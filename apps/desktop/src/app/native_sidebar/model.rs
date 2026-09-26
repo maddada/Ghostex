@@ -9,7 +9,7 @@ pub(crate) struct NativeSidebarSnapshot {
     pub(crate) rename_request: Option<NativeSidebarRenameRequest>,
     pub(crate) reveal_request: Option<NativeSidebarRevealRequest>,
     pub(crate) empty_state: Value,
-    /// Shared with the runtime facts channel rather than copied per install
+    /// Shared with the store's runtime facts holder rather than copied per install
     /// (gx_store/runtime_facts.rs).
     pub(crate) hud: std::sync::Arc<Value>,
     pub(crate) groups: Vec<NativeSidebarGroup>,
@@ -62,6 +62,8 @@ pub(crate) struct NativeSidebarSection {
     pub(crate) contains_active_session: bool,
     pub(crate) working_count: usize,
     pub(crate) attention_count: usize,
+    #[serde(default)]
+    pub(crate) background_work_count: usize,
     pub(crate) question_count: usize,
     pub(crate) session_ids: Vec<String>,
 }
@@ -111,6 +113,8 @@ impl NativeSidebarSession {
 pub(crate) struct NativeSidebarMachine {
     pub(crate) working_count: usize,
     pub(crate) attention_count: usize,
+    #[serde(default)]
+    pub(crate) background_work_count: usize,
     pub(crate) id: String,
     pub(crate) label: String,
     pub(crate) state: String,
@@ -128,6 +132,8 @@ pub(crate) struct NativeSidebarSpace {
     pub(crate) contains_active_session: bool,
     pub(crate) working_count: usize,
     pub(crate) attention_count: usize,
+    #[serde(default)]
+    pub(crate) background_work_count: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -148,6 +154,8 @@ pub(crate) struct NativeSidebarCollection {
     pub(crate) contains_active_session: bool,
     pub(crate) working_count: usize,
     pub(crate) attention_count: usize,
+    #[serde(default)]
+    pub(crate) background_work_count: usize,
     pub(crate) menu: Arc<Value>,
 }
 

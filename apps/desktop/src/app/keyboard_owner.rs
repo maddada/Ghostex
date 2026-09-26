@@ -295,8 +295,12 @@ impl GhostexGpuiApp {
                     }
                 } else if self.active_mode != mode {
                     ShellKeyboardOwner::Nothing
-                } else if self.website_home_setup_visible(mode) || mode == TitlebarMode::Kanban {
-                    // Kanban is drawn natively (app/native_kanban/): no page to hand keys to.
+                } else if self.website_home_setup_visible(mode)
+                    || mode == TitlebarMode::Kanban
+                    || (mode == TitlebarMode::Manage
+                        && crate::app::native_docs::render::native_docs_enabled())
+                {
+                    // Kanban and native Docs are drawn natively: no page to hand keys to.
                     ShellKeyboardOwner::GpuiViewPanelSurface
                 } else if mode.is_project_editor_mode() {
                     ShellKeyboardOwner::WorkareaPage(mode)
@@ -366,6 +370,14 @@ impl GhostexGpuiApp {
         let Some(pending) = self.pending_keyboard_handoff else {
             return;
         };
+        // CDXC:FocusRouting 2026-09-25 WHY:
+        // An open dialog owns the keyboard. A handoff asked for before it opened (a new browser tab
+        // whose page was still being created, a pane still mounting) used to land when its surface
+        // arrived, focusing that surface under the dialog: typing into Add Worktree went nowhere
+        // until the pane was hidden. It waits for the dialog to close, then lands as it would have.
+        if self.native_app_modal.is_some() || self.app_modal_window.is_some() {
+            return;
+        }
         if pending.target != self.shell_focus {
             self.pending_keyboard_handoff = None;
             return;

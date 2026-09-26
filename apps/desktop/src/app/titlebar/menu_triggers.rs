@@ -22,14 +22,12 @@ use gpui::Window;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
-use crate::app::helpers::*;
 use crate::app::window::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// The titlebar Git control opens an in-app PopupMenu projected from the
-    /// sidebar runtime's shared Git menu builders. Selections keep dispatching
-    /// fixed action selectors only.
+    /// The titlebar Git control opens an in-app PopupMenu drawn from gx-core's Git menu
+    /// (gx_store/git/hud.rs). Selections keep dispatching fixed action selectors only.
     pub(crate) fn show_gpui_titlebar_git_menu(
         &mut self,
         trigger_bounds: Option<Bounds<Pixels>>,
@@ -38,9 +36,8 @@ impl GhostexGpuiApp {
     ) {
         let open = !self.titlebar_popup_menu_open(GpuiTitlebarPopupKind::Git);
         if open {
-            // Ask the runtime for a background state refresh so the menu
-            // converges on fresh rows; the open menu renders the last projected
-            // state honestly instead of fabricating fresh values.
+            // Ask for a background state refresh so the menu converges on fresh rows; the open
+            // menu renders the last read state honestly instead of fabricating fresh values.
             self.dispatch_gpui_titlebar_git_action_selector(
                 GPUI_TITLEBAR_GIT_ACTION_REFRESH_SELECTOR,
                 cx,
@@ -74,21 +71,14 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_titlebar_git_action_selector(action.selector(), cx);
     }
 
+    /// A Git menu row, the Commit button, a Git hotkey, or `refresh` as the menu opens: a fixed
+    /// selector, answered in Rust (gx_store/git/actions.rs).
     pub(crate) fn dispatch_gpui_titlebar_git_action_selector(
         &mut self,
         selector: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let message = serde_json::json!({
-            "action": selector,
-            "type": GPUI_SIDEBAR_TITLEBAR_GIT_ACTION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_TITLEBAR_GIT_ACTION_MESSAGE_VERSION,
-        });
-        let script = gpui_titlebar_git_action_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        self.gx_store_git_titlebar_action(selector, cx)
     }
 
     pub(crate) fn show_titlebar_settings_menu(

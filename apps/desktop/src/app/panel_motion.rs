@@ -39,6 +39,11 @@ pub(crate) fn panel_motion_duration() -> Duration {
 /// CSS `ease-out`.
 const PANEL_MOTION_EASING: [f32; 4] = [0.0, 0.0, 0.58, 1.0];
 
+/// `progress` (0 to 1) on the panels' curve, for another surface that slides like them.
+pub(crate) fn panel_motion_eased(progress: f32) -> f32 {
+    bezier(progress.clamp(0.0, 1.0), PANEL_MOTION_EASING)
+}
+
 /// The share of a tween over which the panel's content fades: in at the end of an opening, out at
 /// the start of a closing.
 const PANEL_CONTENT_FADE_SHARE: f32 = 0.5;
@@ -162,7 +167,7 @@ impl PanelMotion {
         self.frame = PanelFrame::default();
     }
 
-    fn sample(
+    pub(crate) fn sample(
         &mut self,
         open: bool,
         open_extent: f32,

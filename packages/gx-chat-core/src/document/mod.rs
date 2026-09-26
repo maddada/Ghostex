@@ -16,8 +16,7 @@ pub use crate::document::composer::{
 };
 pub use crate::document::frame::{Frame, ItemsSplice, MinimapMarker, RowDetails};
 pub use crate::document::panels::{
-    AccountStatus, DeferredWorkRow, HostAction, PreviewSettings, TerminalTail, TerminalTailNotice,
-    WorkingStrip,
+    AccountStatus, DeferredWorkRow, HostAction, TerminalTail, TerminalTailNotice, WorkingStrip,
 };
 pub use crate::document::queue::{Queue, QueueCapabilities, QueuedPrompt};
 pub use crate::document::question::{

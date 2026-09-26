@@ -4,7 +4,8 @@
 //! `stashedPrompts`) are one window: opening a second kind while it is showing re-targets the open
 //! window's tab instead of tearing it down, which is what kept the React child window stable when
 //! the tab rail switched pages.
-//! SEE-ALSO: apps/desktop/src/app/window/quick_access/ (the window), apps/desktop/sidebar/native-quick-access/ (the runtime controller).
+//! SEE-ALSO: apps/desktop/src/app/window/quick_access/ (the window), apps/desktop/src/app/quick_access/host.rs
+//! (the gx-core Quick Access model that answers every command and publishes every snapshot).
 
 use crate::app::window::quick_access::*;
 use crate::*;
@@ -63,23 +64,12 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_quick_access_command(open, cx);
     }
 
-    /// `postNativeQuickAccessSnapshot`: the runtime's display state for the open window.
-    pub(crate) fn receive_native_quick_access_update(
+    /// The model's display state for the open window: a snapshot, a row's actions menu, or close.
+    pub(crate) fn apply_native_quick_access_update(
         &mut self,
-        payload: &str,
+        update: QuickAccessUpdate,
         cx: &mut gpui::Context<Self>,
     ) {
-        let update = match serde_json::from_str::<QuickAccessUpdate>(payload) {
-            Ok(update) => update,
-            Err(error) => {
-                support_logs::append_repro(
-                    support_logs::GpuiSupportLog::SidebarRefresh,
-                    "gpui.quickAccess.invalidSnapshot",
-                    serde_json::json!({ "error": error.to_string() }),
-                );
-                return;
-            }
-        };
         let Some(kind) = self.native_app_modal_kind() else {
             return;
         };
@@ -139,19 +129,12 @@ impl GhostexGpuiApp {
         self.restore_gpui_app_modal_command_return_focus_if_needed(cx);
     }
 
-    /// Hands one command to the runtime's Quick Access controller.
+    /// Hands one command to the Quick Access model.
     pub(crate) fn dispatch_gpui_quick_access_command(
         &mut self,
         command: serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(service) = self.sidebar.clone() else {
-            return;
-        };
-        let script =
-            format!("window.ghostexGpui.onNativeQuickAccessCommand?.({command}); undefined;");
-        service.update(cx, |surface, _| {
-            surface.execute_app_owned_script(&script);
-        });
+        self.quick_access_command(command, cx);
     }
 }

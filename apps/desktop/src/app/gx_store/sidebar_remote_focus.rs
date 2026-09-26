@@ -9,53 +9,45 @@
 //!
 //! **The command no longer reaches the old runtime.** What its remote branch did besides the open
 //! is performed here, each at its end:
-//! - the attention acknowledgement goes to the runtime's attention subsystem as the one bridge
-//!   message the store already uses for a local row, with machine-scoped ids, and BEFORE the
-//!   open, as `focusSession` acknowledged first. The runtime keeps the minimum visible window,
-//!   the optimistic clear and the machine's `/api/updateAgentActivity` call, so the timer stays
-//!   one implementation;
-//! - the remote focus marks (`setRemotePresentationSessionFocus`) and their patch publish are what
-//!   the open's own tab-selected callback runs (`set_sidebar_gxserver_remote_attach_focus_state`,
-//!   reached synchronously from `begin_gpui_remote_attach_terminal_open`), so they already moved
-//!   once per click from the store's open and moved a SECOND time from the forwarded command;
+//! - the attention acknowledgement goes to the store's attention intent (gx_store/attention/),
+//!   BEFORE the open, as `focusSession` acknowledged first; the store keeps the minimum visible
+//!   window, the optimistic clear and the machine's `/api/updateAgentActivity` call for every door,
+//!   so the timer stays one implementation;
+//! - the remote focus (`setRemotePresentationSessionFocus`) and its publish are what the open's own
+//!   tab-selected callback runs (`set_sidebar_gxserver_remote_attach_focus_state`, reached
+//!   synchronously from `begin_gpui_remote_attach_terminal_open`), once per click;
 //! - the page's half of a click (clear the multi-selection, close an open app modal) is the
 //!   store's selection intent mirrored to the page, and the same close the bridge performs.
 //!
 //! So there is no runtime copy of the open any more, and nothing to drop: the echo marker, the
 //! page-entry duplicate check and the three counters that measured the copy are gone together.
 //!
-//! **The highlight is the store's own** (remote focus part 2 step 2). The open's tab selection
-//! reaches `dispatch_gpui_workspace_tab_session_selected`, whose remote branch hands the row to the
-//! core's focus (`gx_store_select_remote_session` in local_focus.rs) in the click's frame, so the
-//! row draws focused with the pane rather than one publish later, and the runtime is sent the
-//! store's stamp so its answering publish is not judged stale.
+//! **The focus is the store's own** (remote focus part 2 step 2, and the runtime's focus gone
+//! since 2026-09-25). The open's tab selection reaches `dispatch_gpui_workspace_tab_session_selected`,
+//! whose remote branch hands the row to the core's focus (`gx_store_select_remote_session` in
+//! local_focus.rs) in the click's frame, so the row draws focused with the pane, and the workspace
+//! is published from it.
 //!
-//! **`keepView` is planned from the group the RUNTIME holds, not from the core's focus.** The
-//! core names the user-made group a row sits in where the runtime names the project's own group,
-//! and the runtime's `activeGroupId` still moves on paths the store only sees in its publish (a
-//! group attach from navigation history or a Space restore, a lifecycle replacement). The host
-//! tracks it (`RuntimeActiveGroup` in gx-core): every remote tab selection it sends the runtime
-//! (the open's callback), every tell, and every focus state the runtime publishes.
+//! **`keepView` is planned from the group the runtime's `activeGroupId` would hold**, which the
+//! store's focus is now (`gx_store_remote_focus_group` in focus_perform.rs): a focused remote
+//! session answers its project's own group or its machine's Chats, never the user-made group its
+//! row sits in, because that is the group `setRemotePresentationSessionFocus` named and the string
+//! rule in gx-core `plan_remote_focus` was written against it. This supersedes the
+//! `RuntimeActiveGroup` tracking of what was sent to and published by the runtime.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_actions/remote_focus.rs,
 //! apps/desktop/src/app/native_sidebar/actions.rs, apps/desktop/src/app/remote_conn/native_action.rs
 //! (`handle_gpui_remote_session_native_action`, which ends in `begin_gpui_remote_attach_terminal_open`),
-//! apps/desktop/sidebar/gxserver-runtime/attention-tracking.ts
-//! (`handleGpuiWorkspaceSessionAttentionAcknowledge`).
+//! packages/gx-core/src/attention.rs.
 
 use ghostex_gx_core::{
-    PreferredInterfaceSettings, ProjectKey, RemoteFocusPlan, RuntimeActiveGroup, SessionKey,
-    plan_remote_focus, remote_focus_group,
+    PreferredInterfaceSettings, RemoteFocusPlan, SessionKey, plan_remote_focus,
 };
 use serde_json::{Value, json};
 
 use super::diagnostics::{record, routine_logging_enabled};
-use super::host::now_ms;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::{
-    GpuiGxserverPresentationFocusEcho, gpui_preferred_agent_interface_from_settings,
-    gpui_workspace_session_attention_acknowledge_script,
-};
+use crate::app::helpers::gpui_preferred_agent_interface_from_settings;
 use crate::app::model::GpuiPreferredAgentInterface;
 use crate::shared_settings;
 
@@ -71,37 +63,34 @@ pub(crate) struct SidebarRemoteFocusCounters {
     /// Of those, the ones that carried each option.
     pub(crate) keep_view: u64,
     pub(crate) chat_interface: u64,
-    /// Attention acknowledgements sent to the old runtime, one per answered click while it runs.
+    /// Attention acknowledgements asked of the store, one per answered click on a streamed machine.
     pub(crate) acknowledgements: u64,
-    /// Remote tab selections sent to the old runtime, from any sender (the store's opens and a
-    /// slow attach landing). Each one moves the remote focus marks: once per click on a row whose
-    /// tab exists, and for a row that needs an attach once in the click and once when it lands.
+    /// Remote tab selections, from any sender (the store's opens and a slow attach landing). Each
+    /// one moves the store's focus: once per click on a row whose tab exists, and for a row that
+    /// needs an attach once in the click and once when it lands.
     pub(crate) tab_selections: u64,
-    /// An answered click whose open sent no tab selection: the open was refused (no tunnel, no SSH
-    /// settings, a toast said so) or no runtime runs, and the marks did not move.
+    /// An answered click whose open made no tab selection: the open was refused (no tunnel, no SSH
+    /// settings, a toast said so), and the focus did not move.
     pub(crate) marks_missed: u64,
     /// A remote row's click the store did not answer because the renderer is not drawing its list.
     /// Local rows are not counted: they were never this path's.
     pub(crate) declined_source: u64,
-    /// A remote row's click the planner refused, which the old runtime then performs whole: in
-    /// practice a machine that is offline or has not streamed yet. Local and browser rows, and ids
-    /// that do not parse as remote, are not counted.
+    /// A remote row's click the planner refused. Nothing takes such a click any more (a machine
+    /// that is offline or has not streamed yet is answered too), so this stays zero on a healthy
+    /// run. Local and browser rows, and ids that do not parse as remote, are not counted.
     pub(crate) handed_back: u64,
     /// Remote selections the store's core focus took (`gx_store_select_remote_session`), from any
     /// sender: one per tab selection sent, so it follows `tab_selections`.
     pub(crate) core_focus: u64,
-    /// Of those, the ones naming a row the machine does not list, which the core refused and the
-    /// runtime's publish decides.
+    /// Of those, the ones naming a row the machine does not list, which the core refused and
+    /// holds until the row arrives (focus_publish.rs).
     pub(crate) core_unplaced: u64,
 }
 
-/// The counters, the tracked runtime group and the log budget.
+/// The counters and the log budget.
 #[derive(Default)]
 pub(crate) struct SidebarRemoteFocusHost {
     pub(crate) counters: SidebarRemoteFocusCounters,
-    /// The old runtime's `activeGroupId` as a click finds it, which is what `keepView` is planned
-    /// from.
-    runtime_group: RuntimeActiveGroup,
     records: u32,
 }
 
@@ -114,19 +103,12 @@ impl SidebarRemoteFocusHost {
         }
     }
 
-    /// The old runtime published its focus state. Every parsed publish comes through here.
-    pub(super) fn observe_runtime_publish(&mut self, echo: &GpuiGxserverPresentationFocusEcho) {
-        self.runtime_group.observe_publish(
-            echo.active_group_id.as_deref(),
-            echo.focus_stamp.unwrap_or(0),
-        );
-    }
 }
 
 impl GhostexGpuiApp {
-    /// The store's answer to a sidebar command that selects a remote row, or `None` when the old
-    /// runtime answers it alone (the command is then sent on as before). Performs nothing: the
-    /// caller hands the plan to [`Self::gx_store_focus_remote_row`].
+    /// The store's answer to a sidebar command that selects a remote row, or `None` when it names
+    /// no remote row (a local row's click goes on to `sidebar_focus_route.rs`). Performs nothing:
+    /// the caller hands the plan to [`Self::gx_store_focus_remote_row`].
     ///
     /// Two shapes arrive. `selectSession` with `mode: focus` is the RENDERER command a row click
     /// sends, which `selectNativeSidebarSession` turns into `{ type: 'focusSession', sessionId }`
@@ -153,16 +135,8 @@ impl GhostexGpuiApp {
             return None;
         }
         let settings = self.gx_store_preferred_interface_settings();
-        // Planned BEFORE the pending tell is flushed, so a pending tell is one the runtime will
-        // have handled by the time the open's tab selection reaches it.
-        let told_stamp = self.gx_store_told_stamp();
-        let tell_pending = self.gx_store.local_focus.pending_tell.is_some();
-        let runtime_group = self.gx_store.sidebar_remote_focus.runtime_group.current(
-            told_stamp,
-            tell_pending,
-            now_ms(),
-        );
-        let plan = plan_remote_focus(&self.gx_store.core, &message, &settings, runtime_group);
+        let group = self.gx_store_remote_focus_group();
+        let plan = plan_remote_focus(&self.gx_store.core, &message, &settings, group.as_deref());
         if plan.is_none() && remote_row {
             self.gx_store.sidebar_remote_focus.counters.handed_back += 1;
         }
@@ -187,14 +161,11 @@ impl GhostexGpuiApp {
             // cannot have it taken back by the modal's return focus a moment later.
             self.close_app_modal_from_bridge(cx);
         }
-        // The runtime handles scripts in order, so a local selection it has not heard of yet goes
-        // before the acknowledgement, as it went before the forwarded command.
-        self.gx_store_flush_old_runtime_tell(cx);
-        if let Some(sidebar) = self.sidebar.clone() {
-            let script = gpui_workspace_session_attention_acknowledge_script(
-                &plan.attention_acknowledgement,
-            );
-            sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
+        // The open's selection follows the store's newest local one, whose follow-up runs first.
+        self.gx_store_flush_local_selection(cx);
+        // A machine this run has not streamed holds no live row to acknowledge (`plan.live`).
+        if plan.live {
+            self.gx_store_acknowledge_attention(plan.session.clone(), cx);
             self.gx_store.sidebar_remote_focus.counters.acknowledgements += 1;
         }
         let tab_selections = self.gx_store.sidebar_remote_focus.counters.tab_selections;
@@ -225,41 +196,14 @@ impl GhostexGpuiApp {
         self.gx_store_record_remote_focus(plan);
     }
 
-    /// The host is sending the runtime the tab-selected callback for a REMOTE tab, which runs
-    /// `setRemotePresentationSessionFocus` when the session and the project name the same machine
-    /// and project. The store's own open sends one, and so does an attach that completes later, so
-    /// this is what keeps the tracked group right when a slow attach lands after a newer click.
-    pub(crate) fn gx_store_note_remote_tab_selection_sent(
-        &mut self,
-        scoped_project_id: &str,
-        scoped_session_id: &str,
-    ) {
-        let Some(session) = SessionKey::parse_remote_scoped_session_id(scoped_session_id) else {
-            return;
-        };
-        if ProjectKey::parse_workspace_project_id(scoped_project_id) != Some(session.project_key())
-        {
-            return;
-        }
-        let group = remote_focus_group(&self.gx_store.core, &session);
-        let told_stamp = self.gx_store_told_stamp();
-        let host = &mut self.gx_store.sidebar_remote_focus;
-        host.counters.tab_selections += 1;
-        host.runtime_group
-            .sent_remote_focus(group, told_stamp, now_ms());
-    }
-
-    fn gx_store_told_stamp(&self) -> u64 {
-        self.gx_store
-            .local_focus
-            .last_tell
-            .as_ref()
-            .map_or(0, |told| told.stamp)
+    /// A remote tab was selected (the store's own open, or an attach that completes later).
+    pub(crate) fn gx_store_note_remote_tab_selection(&mut self) {
+        self.gx_store.sidebar_remote_focus.counters.tab_selections += 1;
     }
 
     /// `resolveEffectivePreferredAgentInterface`'s inputs, read off the shared settings document
     /// the same way every other reader of the Default Agent View reads them.
-    fn gx_store_preferred_interface_settings(&self) -> PreferredInterfaceSettings {
+    pub(super) fn gx_store_preferred_interface_settings(&self) -> PreferredInterfaceSettings {
         let snapshot = shared_settings::shared_sidebar_settings_snapshot();
         let settings = snapshot.object();
         // The whole override map rather than one lookup: which agent the row has is the planner's

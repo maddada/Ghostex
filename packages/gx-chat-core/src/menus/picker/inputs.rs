@@ -118,6 +118,8 @@ fn model_menu_context(state: &ChatState, options: &NativeChatOptions) -> Option<
     );
     raw.insert("selectionError".into(), json!(selection_error));
     raw.insert("disabled".into(), json!(!options.can_pick_model));
+    let draft = state.session.available_agents.is_some();
+    raw.insert("draft".into(), json!(draft));
     Some(ModelMenuContext {
         provider: Some(provider),
         model_id: Some(catalog.model.id.clone()),
@@ -129,6 +131,7 @@ fn model_menu_context(state: &ChatState, options: &NativeChatOptions) -> Option<
         selection_error,
         disabled: !options.can_pick_model,
         session_key: options.session_key.clone(),
+        draft,
         raw: Value::Object(raw),
     })
 }

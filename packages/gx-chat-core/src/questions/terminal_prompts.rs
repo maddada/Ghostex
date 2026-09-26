@@ -7,6 +7,7 @@
 use serde_json::{json, Map, Value};
 
 use crate::questions::model::{TerminalDialog, TerminalNotice, TerminalNoticeAction};
+use crate::questions::terminal_dialog_copy::terminal_dialog_copy;
 
 /// The button copy for one of the dialog's named actions.
 fn action_label(action: &str) -> Option<&'static str> {
@@ -95,6 +96,7 @@ pub fn terminal_dialog_presentation(dialog: &TerminalDialog) -> Value {
         "multilineInput": multiline_input,
         "cancelLabel": cancel_label,
         "actions": actions,
+        "copy": terminal_dialog_copy(dialog),
     })
 }
 

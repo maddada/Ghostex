@@ -4,12 +4,12 @@
 //! Three kinds of value meet here and the file keeps them apart on purpose. The sidebar's own
 //! state (collapse, Space, filters, hidden items, selection) is the Rust store's, owned since
 //! M4b. The stored collections, the machine tabs and the unavailable clock are this app's own
-//! facts. The rest are taken from the RUNTIME's one-way facts channel (`runtime_facts.rs`),
-//! because their real source has not moved into Rust yet: the Recent Projects come from the
-//! daemon's sidebar HUD, the git numbers from the old runtime's background probe, and the Close
-//! After Done and Delayed Send timers from the runtime that owns them. Each of those is handed to
-//! M5 with the HUD and the session lifecycle; until then they are mirrored here and nowhere else,
-//! so there is one list of what is still borrowed. This used to read the old projection's newest
+//! facts. The rest are taken from the runtime facts holder (`runtime_facts.rs`): the Recent
+//! Projects from the sidebar HUD (gx_store/hud/), the git numbers from gx_store/git/poll.rs, and
+//! the Delayed Send timers from local_delayed_sends.rs. They arrived on the old runtime's one-way
+//! facts channel until each moved to a Rust writer (the channel was deleted with QuickJS on
+//! 2026-09-25); they are still mirrored here and nowhere else, so there is one list of what the
+//! list borrows. This used to read the old projection's newest
 //! publish; the channel replaced it in M4d part 2 step 3.
 
 use ghostex_gx_core::{
@@ -23,8 +23,8 @@ use super::runtime_facts::SidebarRuntimeFacts;
 /// The one sort mode any desktop HUD can have.
 ///
 /// CDXC:Sessions 2026-09-21 WHY:
-/// Both HUD builders pin `activeSessionsSortMode: 'lastActivity'` (`createGpuiSidebarHudState` in
-/// gxserver-runtime/helpers/command-pane.ts and the hydrate in
+/// Both HUD builders pin `activeSessionsSortMode: 'lastActivity'` (gx-core `compose_sidebar_hud` in
+/// hud/mod.rs and the hydrate in
 /// app/helpers/sidebar/settings_messages_and_width.rs) and no desktop handler answers
 /// `setActiveSessionsSortMode`, so Manual Sorting ends in a no-op (gx-core `sidebar_actions/sort.rs`).
 /// Reading it off the HUD document per update was a walk that could only ever produce this.
@@ -89,7 +89,7 @@ pub(super) fn refresh_inputs(
     }
 }
 
-/// The parked projects, from the HUD the runtime posts.
+/// The parked projects, from the HUD (composed in gx_store/hud/; the runtime posted it until 2026-09-25).
 fn refresh_recent_projects(host: &mut SidebarHostInputs, hud: Option<&Value>) {
     let recent_projects = hud
         .and_then(|hud| hud.get("recentProjects"))
@@ -136,11 +136,11 @@ fn refresh_recent_projects(host: &mut SidebarHostInputs, hud: Option<&Value>) {
     host.recent_project_count = recent_projects.len();
 }
 
-/// The per-row facts whose real source is still the old runtime: a project's git numbers and the
-/// two armed timers this app's runtime owns.
+/// The per-row facts this app computes: a project's git numbers and this app's own Delayed Sends.
+/// A row's Close After Done comes from gxserver's presentation (gx-core `CloseAfterDoneInput::from_session`).
 ///
 /// CDXC:Sidebar 2026-09-21 WHY:
-/// The three maps are taken whole rather than filtered to the drawn rows. The channel keys them
+/// The two maps are taken whole rather than filtered to the drawn rows. The channel keys them
 /// the way the view model looks them up (a project id, a sidebar session id), every reader asks
 /// per row it draws, and the channel's sets are supersets of the publish's, which only ever held
 /// the rows that survived the machine filter, the Space and the tag filters. A Delayed Send the
@@ -151,11 +151,6 @@ fn refresh_row_facts(host: &mut SidebarHostInputs, facts: &SidebarRuntimeFacts) 
         .project_diff_stats
         .iter()
         .map(|(project_id, stats)| (project_id.clone(), *stats))
-        .collect();
-    host.close_after_done = facts
-        .close_after_done
-        .iter()
-        .map(|(session_id, close)| (session_id.clone(), close.clone()))
         .collect();
     host.local_delayed_sends = facts
         .delayed_sends

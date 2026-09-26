@@ -1,5 +1,5 @@
-//! The `/`, `$` and `@` popup's measurements, shared with React's picker through
-//! `packages/shared/session-chat-presentation/composer-suggestions.json`.
+//! The `/`, `$` and `@` popup's measurements, read from
+//! `packages/gx-chat-core/visual/composer-suggestions.json`.
 
 use gpui::{AnyElement, IntoElement, ParentElement as _, Pixels, Styled as _, div, px};
 use serde::Deserialize;
@@ -44,12 +44,11 @@ pub(super) struct SuggestionShadow {
 }
 
 /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
-/// React's picker keeps these values as Tailwind classes in
-/// packages/core-ui/chat/session-chat-composer.tsx; composer-suggestions.ts names each class the
+/// React's picker kept these values as Tailwind classes in session-chat-composer.tsx, which the
 /// JSON mirrors. Borders stay whole pixels at every zoom, like the composer card's own border.
 pub(super) static SPEC: LazyLock<SuggestionPopupSpec> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../../packages/shared/session-chat-presentation/composer-suggestions.json"
+        "../../../../../../packages/gx-chat-core/visual/composer-suggestions.json"
     ))
     .expect("shared composer suggestion popup geometry")
 });
@@ -62,7 +61,7 @@ impl SuggestionPopupSpec {
             * scale)
     }
 
-    /// A pickable row: React's bare `<button>` carries the legacy 1px outline on both edges.
+    /// A pickable row: React's bare `<button>` carried the legacy 1px outline on both edges.
     pub(super) fn row_height(&self, scale: f32) -> Pixels {
         px(
             (self.row_padding_block_px * 2.0 + self.row_line_height_px) * scale
@@ -70,7 +69,7 @@ impl SuggestionPopupSpec {
         )
     }
 
-    /// The loading, empty or error row, which is a plain `div` in React and so has no outline.
+    /// The loading, empty or error row, which was a plain `div` in React and so has no outline.
     pub(super) fn status_height(&self, retry: bool, scale: f32) -> Pixels {
         let content = if retry {
             self.row_line_height_px.max(self.retry_height_px)
@@ -101,9 +100,9 @@ pub(in crate::app::native_chat) fn suggestion_panel_height(
     list.min(px(spec.list_max_height_px * scale)) + px(spec.border_px * 2.0)
 }
 
-/// The top edge of the panels React keeps inside the composer's field above the card (task list,
+/// The top edge of the panels kept inside the composer's field above the card (task list,
 /// subagents, the not-ready card or error, the saved-draft notice), collected over one frame.
-/// React's list opens above the topmost of them instead of covering them.
+/// The list opens above the topmost of them instead of covering them, as React's did.
 pub(in crate::app::native_chat) type StackTop = Rc<Cell<Option<Pixels>>>;
 
 /// Reports its parent's top edge into `top`.

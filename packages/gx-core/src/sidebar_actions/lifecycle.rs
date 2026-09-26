@@ -18,11 +18,13 @@
 //! matters here, and the base-recorded overlay does: it stops overlaying the moment the row leaves
 //! the value it was predicting FROM.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts (`setSessionSleeping`),
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! (`resolveLocalProjectListTransitionFocusTarget`, `localProjectTransitionSessionIds`),
-//! apps/desktop/sidebar/gxserver-runtime/helpers/auto-sleep.ts (`gxserverSleepWasDeclined`,
-//! `focusMovedElsewhereDuringWake`), apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
+//! Ported from `setSessionSleeping` (`gxserver-runtime/auto-sleep.ts`),
+//! `resolveLocalProjectListTransitionFocusTarget` and `localProjectTransitionSessionIds`
+//! (`gxserver-runtime/sessions-and-focus.ts`), and `gxserverSleepWasDeclined` and
+//! `focusMovedElsewhereDuringWake` (`gxserver-runtime/helpers/auto-sleep.ts`), all deleted with
+//! QuickJS on 2026-09-25 (see git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_lifecycle.rs.
 
 use serde_json::{json, Value};
 
@@ -125,7 +127,7 @@ impl FocusOptions {
 }
 
 impl LifecycleRequest {
-    /// The request in the shape the parity gate compares: the call and its payload, which is the
+    /// The request in the shape the parity gate compared while the TypeScript ran: the call and its payload, which is the
     /// half a list comparison cannot see.
     pub fn to_json(&self) -> Value {
         json!({

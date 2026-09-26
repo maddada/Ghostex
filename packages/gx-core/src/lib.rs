@@ -13,30 +13,51 @@
 //! - Daemon rows are replaced whole, never merged; local edits are overlays that never renumber
 //!   the revision.
 
+mod active_project_context;
+mod attention;
 mod change;
 mod connection;
 mod core;
 mod doc_sync;
 mod focus;
+pub mod hud;
+pub mod indicators;
+pub mod git_menu;
 mod keys;
+pub mod navigation_history;
+pub mod app_shot;
+mod notification_feed;
 mod overlay;
 mod presentation_store;
+mod refetch;
+mod renderer_commands;
+mod project_activation;
 mod project_docs;
+mod quick_access;
 mod selectors;
+mod session_create;
 mod sidebar_accounts;
 mod sidebar_actions;
+mod sidebar_command_run;
 mod sidebar_drag;
 mod sidebar_menu;
 mod sidebar_ui;
 mod sidebar_view;
 mod workspace_groups;
 
+pub use crate::active_project_context::{
+    active_project_context_payload, project_context_payload, quick_automations_payload,
+    quick_projectless_payload, ACTIVE_PROJECT_CONTEXT_MESSAGE_TYPE,
+    ACTIVE_PROJECT_CONTEXT_MESSAGE_VERSION,
+};
+pub use crate::attention::{
+    AgentActivityReport, ATTENTION_PATCH_TTL_MS, ESCAPE_DONE_SUPPRESSION_MS, MIN_ATTENTION_VISIBLE_MS,
+};
 pub use crate::change::{ChangeSummary, IgnoredReason, SideStateChanges};
 pub use crate::connection::{ConnectionPhase, ConnectionState, ConnectionUpdate};
 pub use crate::core::{Core, Effect, Event, Intent, Output, ResubscribeReason};
 pub use crate::doc_sync::{
-    document_hand_back_script, document_reconcile_wanted, document_request_script, DocumentSync,
-    EmptyEchoRule, SyncEffect, SyncPolicy, SyncedDocument,
+    document_reconcile_wanted, DocumentSync, EmptyEchoRule, SyncEffect, SyncPolicy, SyncedDocument,
 };
 pub use crate::focus::{
     default_group_for_project, empty_tab_list_confirmed, next_visible_sessions_for_local_focus,
@@ -46,9 +67,18 @@ pub use crate::keys::{
     decode_uri_component, encode_uri_component, encode_workspace_subgroup_id,
     parse_workspace_subgroup_id, MachineId, ProjectKey, SessionKey, CHATS_GROUP_ID,
 };
+pub use crate::notification_feed::{
+    notification_feed_jump_target, notification_feed_state_message, NotificationFeedCommand,
+    NOTIFICATION_FEED_READ_ENDPOINT, NOTIFICATION_FEED_STATE_MESSAGE_TYPE,
+    NOTIFICATION_FEED_UPDATE_ENDPOINT,
+};
 pub use crate::overlay::SessionPatch;
 pub use crate::sidebar_actions::{
     remote_focus_group, RuntimeActiveGroup, RUNTIME_GROUP_SENT_TRUST_MS,
+};
+pub use crate::project_activation::{
+    plan_project_activation, project_last_session_storage_key, ProjectActivation,
+    PROJECT_LAST_SESSION_KEY_PREFIX,
 };
 pub use crate::project_docs::{
     apply_space_row_reorder, can_drop_project_with_worktrees, create_collection,
@@ -96,9 +126,21 @@ pub use crate::sidebar_actions::{
     SESSION_SNOOZE_PRESETS, SNOOZE_MESSAGE_TYPES, SORT_ACTIONS,
 };
 pub use crate::sidebar_actions::{
-    normalize_remote_machine_settings, owns_agent_run_command, owns_delayed_send_command,
+    open_remote_session_terminal, plan_generate_session_title, plan_group_sleep,
+    provider_transition_committed,
+    running_local_session_ids,
+    terminal_lifecycle_fallback_focus, titlebar_sleep_inactive_ids,
+};
+pub use crate::sidebar_actions::{
+    delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
+    owns_delayed_send_command,
     owns_machine_disable_command, plan_agent_run, plan_delayed_send_action, plan_machine_disable,
     MACHINE_DISABLE_SETTINGS_SOURCE,
+};
+pub use crate::session_create::*;
+pub use crate::sidebar_command_run::{
+    plan_sidebar_command_run, SidebarCommandRun, SIDEBAR_COMMAND_ACTION_MESSAGE_TYPE,
+    SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION,
 };
 pub use crate::sidebar_accounts::{
     account_headline_windows, account_session_working, account_usage_detail, account_usage_label,
@@ -109,6 +151,7 @@ pub use crate::sidebar_accounts::{
     SessionAccounts, SessionAccountsCommand, SidebarAccountMenus, AGENT_ACCOUNTS_PATH,
     INVALID_ACCOUNTS_ANSWER, SESSION_COMPUTER_UNAVAILABLE,
 };
+pub use crate::renderer_commands::*;
 pub use crate::sidebar_drag::{
     owns_order_write_message, owns_project_move_command, owns_project_order_message,
     owns_session_move_command, plan_added_project_placement, plan_added_project_space_membership,
@@ -133,6 +176,13 @@ pub use crate::sidebar_ui::{
     HIDDEN_ITEMS_STORAGE_KEY, MACHINE_TAB_STORAGE_KEY, PROJECT_COLLECTIONS_STORAGE_KEY,
     SIDEBAR_WINDOW_SCOPE_ID,
 };
+pub use crate::quick_access::{
+    FixedClock, HotkeyPlatform, HotkeyPlatformWire, QuickAccessClock, QuickAccessCollection,
+    QuickAccessContext, QuickAccessController, QuickAccessData, QuickAccessEffect,
+    QuickAccessHiddenItems, QuickAccessOpenTarget, QuickAccessRecoveredDraft, QuickAccessRunState,
+    QuickAccessSession, QuickAccessStorage, QuickAccessStoreGroup, QuickAccessTab,
+    QuickAccessUpdate, quick_access_store_groups,
+};
 pub use crate::sidebar_view::{
     armed_actions_by_session, ArmedAction, ARMED_ACTION_CLOSE_AFTER_DONE,
     ARMED_ACTION_DELAYED_SEND,
@@ -155,12 +205,12 @@ pub use crate::sidebar_view::{
     WorktreeView, LOCAL_MACHINE_ID, MACHINE_STATE_CONNECTED, OTHER_SPACE_ID, UNTAGGED_TAG_FILTER,
 };
 pub use crate::workspace_groups::{
-    workspace_groups_hand_back_script, workspace_groups_request_script, AdoptOutcome,
-    ProjectWorkspaceGroups,
-    WorkspaceGroupsDocument, WorkspaceGroupsEffect, WorkspaceGroupsSync, WorkspaceSubgroup,
-    WORKSPACE_GROUPS_HAND_OFF_MESSAGE_TYPE, WORKSPACE_GROUPS_SCRIPT_PLACEHOLDER,
-    WORKSPACE_GROUPS_SYNC_DELAY_MS, WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS,
-    WORKSPACE_SESSION_GROUP_MAX_COUNT,
+    owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
+};
+pub use crate::workspace_groups::{
+    AdoptOutcome, ProjectWorkspaceGroups, WorkspaceGroupsDocument, WorkspaceGroupsEffect,
+    WorkspaceGroupsSync, WorkspaceSubgroup, WORKSPACE_GROUPS_SYNC_DELAY_MS,
+    WORKSPACE_GROUPS_SYNC_RETRY_DELAY_MS, WORKSPACE_SESSION_GROUP_MAX_COUNT,
 };
 
 /// The wire types, re-exported so a host needs one dependency.

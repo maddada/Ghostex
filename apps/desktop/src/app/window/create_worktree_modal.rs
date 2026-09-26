@@ -192,8 +192,8 @@ pub(crate) fn trim_prompt_editor_trailing_spaces(text: &str) -> String {
 
 /// `worktrees-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`.
 pub(crate) fn new_worktree_list_request_id() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let now = web_time::SystemTime::now()
+        .duration_since(web_time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis() as u64)
         .unwrap_or(0);
     let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();

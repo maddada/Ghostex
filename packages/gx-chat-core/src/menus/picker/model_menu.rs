@@ -5,11 +5,10 @@
 //! CDXC:SessionChat 2026-09-21 DECISION:
 //! User: the composer's model and effort pills become one pill that opens one picker: agent tabs
 //! with a favorites tab first, a model search, rows with a Cmd+number badge and a star, and a
-//! footer for reasoning, context window and fast mode. React and GPUI both draw what this module
-//! decides, so tabs, row order, search ranking, favorites and the footer can never differ between
-//! them.
-//! SEE-ALSO: packages/core-ui/chat/session-chat-model-menu.tsx,
-//! apps/desktop/src/app/native_chat/option_menu/model_menu/.
+//! footer for reasoning, context window and fast mode. Every renderer (the GPUI pop-up and the
+//! phone's sheet) draws what this module decides, so tabs, row order, search ranking, favorites
+//! and the footer can never differ between them.
+//! SEE-ALSO: apps/desktop/src/app/native_chat/option_menu/model_menu/.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -74,7 +73,8 @@ pub struct ModelMenuView {
 /// One model choice as family e1's session option catalog lists it.
 ///
 /// This is the slice of `SessionChatOptionChoice` the model menu reads. Family e1 owns the
-/// catalog that produces it (`packages/core-ui/chat/session-chat-session-options.ts`).
+/// catalog that produces it (`crate::menus::option_catalog`, ported from
+/// `packages/core-ui/chat/session-chat-session-options.ts`).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelChoice {
@@ -135,6 +135,19 @@ pub struct ModelMenuRow {
     pub shortcut: Option<usize>,
     /// Favorites mix agents, so those rows name theirs on a second line.
     pub show_agent: bool,
+    /// The reasoning levels this row's model offers, which Left and Right step through; empty for
+    /// a model without levels. Filled by [`crate::menus::picker::projection::model_menu_projection`].
+    pub efforts: Vec<ModelMenuEffort>,
+    /// The level a keyboard pick of this row starts on; empty when `efforts` is.
+    pub effort: String,
+}
+
+/// `ModelMenuEffort`: one reasoning level a row offers.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelMenuEffort {
+    pub value: String,
+    pub label: String,
 }
 
 /// One tab of the picker.
@@ -147,6 +160,10 @@ pub struct ModelMenuTab {
     pub icon: Option<String>,
     pub name: String,
     pub active: bool,
+    /// Another agent's tab in a started session: its models hand the conversation off to that
+    /// agent's CLI. Set by [`crate::menus::picker::projection::model_menu_projection`].
+    #[serde(default)]
+    pub handoff: bool,
 }
 
 /// `modelMenuFavoriteKey`.
@@ -244,6 +261,7 @@ pub fn model_menu_tabs(entries: &ModelMenuEntries, tab: ModelMenuTabId) -> Vec<M
         icon: None,
         name: "Favorites".to_string(),
         active: tab == ModelMenuTabId::Favorites,
+        handoff: false,
     }];
     for provider in MODEL_MENU_PROVIDERS {
         let rows = entries_of(entries, provider.as_str());
@@ -255,6 +273,7 @@ pub fn model_menu_tabs(entries: &ModelMenuEntries, tab: ModelMenuTabId) -> Vec<M
             icon: Some(first.icon.clone()),
             name: first.agent_name.clone(),
             active: tab == ModelMenuTabId::Provider(provider),
+            handoff: false,
         });
     }
     tabs
@@ -368,6 +387,8 @@ pub fn model_menu_rows(
             }),
             shortcut: (index < MODEL_MENU_SHORTCUT_ROWS).then_some(index + 1),
             show_agent: favorites_tab,
+            efforts: Vec::new(),
+            effort: String::new(),
             entry: (*entry).clone(),
         })
         .collect()

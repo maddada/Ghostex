@@ -584,6 +584,20 @@ pub fn dispatch_zmx_lifecycle_endpoint(
                         presentation_session: None,
                     });
                 }
+                /*
+                CDXC:SessionSleep 2026-09-24 DECISION:
+                User: a session whose agent still has a background shell or monitor running (the grey
+                dot) is not inactive, so Sleep Inactive, Close Inactive and Auto Sleep skip it. The
+                decline lives here so every client's sweep gets the same answer; an explicit Sleep on
+                the row still goes through.
+                */
+                if crate::presentation::session_background_work_detected_at(&session).is_some() {
+                    return Ok(ZmxEndpointOutput {
+                        created_workspace_terminal: None,
+                        result: json!({ "declined": "backgroundWork", "session": session }),
+                        presentation_session: None,
+                    });
+                }
             }
             let target_lifecycle = if endpoint_path == "/api/sleepSession" {
                 "sleeping"

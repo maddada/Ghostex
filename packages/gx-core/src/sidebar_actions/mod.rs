@@ -32,6 +32,8 @@ mod close;
 mod delayed_send;
 mod flags;
 mod fork;
+mod generate_title;
+mod group_sleep;
 mod lifecycle;
 mod machine_disable;
 mod modals;
@@ -44,9 +46,11 @@ mod remote;
 mod remote_focus;
 mod remote_machine_settings;
 mod resolve;
+mod sleep_sweep;
 mod snooze;
 mod sort;
 mod split;
+mod terminal_lifecycle;
 
 pub use agent_run::{owns_agent_run_command, plan_agent_run};
 pub use bulk::{
@@ -57,7 +61,9 @@ pub use close::{
     apply_close_answer, close_optimistic_follow_ups, owns_close_message, plan_close_request,
     CloseAnswer, CloseFollowUp, CloseRequest,
 };
-pub use delayed_send::{owns_delayed_send_command, plan_delayed_send_action};
+pub use delayed_send::{
+    delayed_send_seed, owns_delayed_send_command, plan_delayed_send_action,
+};
 pub use flags::{
     apply_flags_answer, owns_flags_message, plan_flags_request, FlagsFollowUp, FlagsRequest,
     SessionFlags, FLAGS_MESSAGE_TYPES,
@@ -65,6 +71,8 @@ pub use flags::{
 pub use fork::{
     apply_fork_answer, owns_fork_message, plan_fork_request, ForkFollowUp, ForkRequest,
 };
+pub use generate_title::plan_generate_session_title;
+pub use group_sleep::plan_group_sleep;
 pub use lifecycle::{
     apply_lifecycle_answer, owns_lifecycle_message, plan_lifecycle_request, FocusOptions,
     LifecycleAnswer, LifecycleCall, LifecycleFollowUp, LifecycleRequest, LIFECYCLE_PATCH_TTL_MS,
@@ -88,7 +96,8 @@ pub use remote::{
     REMOTE_FIRE_AND_FORGET_TIMEOUT_MS, REMOTE_SESSION_MESSAGE_TYPES,
 };
 pub use remote_focus::{
-    plan_remote_focus, remote_focus_group, PreferredInterfaceSettings, RemoteFocusPlan,
+    open_remote_session_terminal, plan_remote_focus, remote_focus_group,
+    PreferredInterfaceSettings, RemoteFocusPlan,
     RuntimeActiveGroup, REMOTE_FOCUS_MESSAGE_TYPES, RUNTIME_GROUP_SENT_TRUST_MS,
 };
 pub use remote_machine_settings::normalize_remote_machine_settings;
@@ -101,5 +110,7 @@ pub use snooze::{
     plan_snooze_action, plan_snooze_request, snooze_wake_ms, SnoozeAction, SnoozeCall, SnoozeClock,
     SnoozeFollowUp, SnoozeRequest, SESSION_SNOOZE_PRESETS, SNOOZE_MESSAGE_TYPES,
 };
+pub use sleep_sweep::{running_local_session_ids, titlebar_sleep_inactive_ids};
 pub use sort::{plan_sort_action, SORT_ACTIONS};
 pub use split::{owns_split_message, plan_split_right, SplitAction, SplitPlan};
+pub use terminal_lifecycle::{provider_transition_committed, terminal_lifecycle_fallback_focus};

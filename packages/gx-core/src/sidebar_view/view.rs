@@ -1,5 +1,5 @@
-//! What the sidebar draws: the same content the native renderer reads from the TypeScript
-//! snapshot today, minus menus, hover actions and header actions.
+//! What the sidebar draws: the same content the native renderer once read from the TypeScript
+//! snapshot, minus menus, hover actions and header actions (`sidebar_menu/` builds those).
 
 use std::sync::Arc;
 
@@ -50,6 +50,8 @@ impl SidebarView {
 pub struct MachineSummary {
     pub working_count: usize,
     pub attention_count: usize,
+    /// Rows drawn with the grey dot: idle, with a background shell or monitor still running.
+    pub background_work_count: usize,
 }
 
 /// One machine tab: what the host said about it, plus the counts its badge draws.
@@ -62,6 +64,7 @@ pub struct MachineTabView {
     pub message: Option<String>,
     pub working_count: usize,
     pub attention_count: usize,
+    pub background_work_count: usize,
 }
 
 /// The machine a drawn group belongs to; absent for this computer's groups.
@@ -141,6 +144,7 @@ pub struct WorktreeView {
 pub struct GroupSummary {
     pub working_count: usize,
     pub attention_count: usize,
+    pub background_work_count: usize,
     pub awake_count: usize,
 }
 
@@ -153,6 +157,7 @@ pub struct SectionView {
     pub contains_active_session: bool,
     pub working_count: usize,
     pub attention_count: usize,
+    pub background_work_count: usize,
     pub question_count: usize,
     /// The rows this heading draws: its sessions, minus the ones the compact list leaves out.
     pub session_ids: Vec<String>,
@@ -165,6 +170,14 @@ pub struct SessionView {
     pub is_focused: bool,
     pub is_visible: bool,
     pub is_multi_selected: bool,
+}
+
+impl SessionRow {
+    /// CDXC:SessionStatus 2026-09-24 DECISION:
+    /// User: a section, project, collection, Space or machine header shows the grey dot when it has no working session but has a grey-dot session, so the headers count exactly the rows that draw the grey dot: idle rows with a background shell or monitor still running.
+    pub fn shows_background_work(&self) -> bool {
+        self.has_background_work && self.activity != "working" && self.activity != "attention"
+    }
 }
 
 /// One session (or browser tab) as a sidebar row.
@@ -330,6 +343,7 @@ pub struct SpaceView {
     pub contains_active_session: bool,
     pub working_count: usize,
     pub attention_count: usize,
+    pub background_work_count: usize,
 }
 
 /// A collection (a colored folder of projects).
@@ -345,6 +359,7 @@ pub struct CollectionView {
     pub contains_active_session: bool,
     pub working_count: usize,
     pub attention_count: usize,
+    pub background_work_count: usize,
     pub awake_count: usize,
 }
 

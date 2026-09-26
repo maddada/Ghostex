@@ -13,8 +13,8 @@ pub(super) const MORE_ACTIONS_TRIGGER: &str = "chat-more-actions";
 const SEND_ACTIONS_TRIGGER: &str = "chat-send-actions";
 const SWITCH_ACCOUNT_TRIGGER: &str = "chat-notice-switch-account";
 
-/// More actions row icons, matching `HOST_ACTION_ICONS` and the Sleep moon in
-/// `packages/core-ui/chat/session-chat-composer-actions.tsx`.
+/// More actions row icons, ported from `HOST_ACTION_ICONS` and the Sleep moon in the React chat's
+/// `session-chat-composer-actions.tsx`.
 fn host_action_icon(id: &str) -> Option<&'static str> {
     Some(match id {
         "splitSessionRight" => "titlebar/layout-columns.svg",
@@ -35,9 +35,8 @@ impl NativeChatView {
     ///
     /// CDXC:SessionChat 2026-09-18 WHY:
     /// It is the chat's own popup, not the app shell's native menu, because
-    /// React draws it as one more `ghostex-session-chat-popup`
-    /// (`session-chat-composer.tsx`) and because the shell is not there to ask
-    /// in Chat Lab, where the two renderers are compared side by side.
+    /// React drew it as one more `ghostex-session-chat-popup`
+    /// (`session-chat-composer.tsx`).
     pub(crate) fn show_send_actions(
         &mut self,
         position: gpui::Point<gpui::Pixels>,
@@ -124,7 +123,7 @@ impl NativeChatView {
             rows.push(host_row(action));
         }
         for (id, action, label, icon) in super::toolbar::COMPOSER_CONTROLS {
-            // React folds an overflowed control into this menu only when the host gave it a handler.
+            // An overflowed control folds into this menu only when the host gave it a handler.
             if id != "summary"
                 && self.composer_control_overflowed(id)
                 && self.composer_control_available(id)
@@ -155,8 +154,10 @@ impl NativeChatView {
                     User: Switch Account in GPUI chat works like React chat. Claude and Codex
                     sessions open the Accounts & limits panel (SessionAccountsPanel); other
                     agents keep the daemon's switchable-agent rows. Either submenu opens on
-                    click only, per the 2026-09-12 decision in session-chat-composer-actions.tsx.
+                    click only, per the 2026-09-12 decision below.
                     */
+                    // CDXC:AgentProviders 2026-09-06 DECISION: User requested the Claude and Codex account controls under More actions > Switch Account as a submenu, replacing the standalone composer Accounts button and the old account row.
+                    // CDXC:AgentProviders 2026-09-12 DECISION: User: opening Switch Account under the chat's More actions requires a click; hovering must not open either version of the account submenu.
                     if self.snapshot["accountPanel"].is_object() {
                         rows.push(json!({"label":"Switch Account","iconPath":host_action_icon("switchAccount"),"openOnHover":false,"children":[{"accounts":self.snapshot["accountPanel"]}]}));
                         continue;

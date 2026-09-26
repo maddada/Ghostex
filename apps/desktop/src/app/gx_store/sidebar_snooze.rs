@@ -15,10 +15,7 @@
 //! dispatcher. So the tag reaches the flags path that already owns it and the snooze reaches the
 //! call below, and neither grows a second copy here.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/snooze.rs,
-//! tooling/gx-core/sidebar-page-frozen/session-actions.ts (`runNativeSessionAction`),
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`snoozeSession`,
-//! `runSessionLifecycleCommand`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/snooze.rs.
 
 use chrono::{Days, Local, NaiveTime, TimeZone as _};
 use ghostex_gx_core::{
@@ -27,8 +24,8 @@ use ghostex_gx_core::{
 };
 use serde_json::{Value, json};
 
+use super::rpc::gxserver_rpc_result_task;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::gpui_gxserver_rpc_result;
 
 /// What this app run did with the snooze actions the store owns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -135,12 +132,14 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(async move {
-                    gpui_gxserver_rpc_result(path, &params, super::sidebar_lifecycle::rpc_timeout())
-                })
-                .await;
+            let started = web_time::Instant::now();
+            let result = gxserver_rpc_result_task(
+                &background,
+                path,
+                params,
+                super::sidebar_lifecycle::rpc_timeout(),
+            )
+            .await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             let _ = this.update(cx, |this, cx| {
                 this.gx_store_apply_snooze_answer(&request, result.is_ok(), round_trip_ms, cx);

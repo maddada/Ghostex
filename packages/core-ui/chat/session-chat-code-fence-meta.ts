@@ -69,7 +69,7 @@ export function sessionChatFenceMeta(node: unknown): string | null {
  * shared presentation package so the GPUI code-block header shows the same
  * name this one does.
  */
-export { sessionChatFenceTitle } from '@/packages/shared/session-chat-presentation/file-paths';
+export { sessionChatFenceTitle } from '@/packages/core-ui/chat/presentation/file-paths';
 
 /**
  * The same three-glyph vocabulary the inline-code file chips use, so a path

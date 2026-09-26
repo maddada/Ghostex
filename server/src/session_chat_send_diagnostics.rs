@@ -92,6 +92,30 @@ pub(crate) async fn record_response(
     persist(state, &entry);
 }
 
+/// CDXC:SessionChat 2026-09-25 DECISION:
+/// User: log every break in sending with the terminal screen, so a problem they report can be diagnosed from the log alone. A send that had to clear something first (close a Claude panel with Escape, wake a sleeping session, hold a message for an agent still starting) writes one line here next to the failures, with the screen tail it acted on.
+pub(crate) fn record_send_recovery(
+    state: &AppState,
+    event: &str,
+    project_id: &str,
+    session_id: &str,
+    reason: &str,
+    screen_tail: &[String],
+) {
+    persist(
+        state,
+        &json!({
+            "ts": chrono::Utc::now().to_rfc3339(),
+            "event": event,
+            "serverId": state.metadata.server_id,
+            "projectId": project_id,
+            "sessionId": session_id,
+            "reason": reason,
+            "terminal": { "tail": screen_tail.join("\n") },
+        }),
+    );
+}
+
 fn persist(state: &AppState, entry: &Value) {
     if let Err(error) = append(&state.paths.logs_dir, entry) {
         eprintln!("session chat send diagnostic could not be written: {error}");

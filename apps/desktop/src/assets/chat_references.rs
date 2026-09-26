@@ -8,7 +8,7 @@ struct Artwork {
 
 static ARTWORK: LazyLock<Artwork> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../packages/shared/session-chat-presentation/reference-visual.json"
+        "../../../../packages/gx-chat-core/visual/reference-visual.json"
     ))
     .expect("shared reference artwork")
 });

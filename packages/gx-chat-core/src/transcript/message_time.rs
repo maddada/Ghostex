@@ -2,7 +2,7 @@
 //!
 //! Ported from `packages/shared/session-chat-presentation/message-time.ts`.
 //!
-//! The TypeScript reads the host's timezone through `Date`'s local accessors. The core cannot, so
+//! The TypeScript read the host's timezone through `Date`'s local accessors. The core cannot, so
 //! the boundary is computed from [`ChatContext::utc_offset_minutes`] instead
 //! (`docs/2026-09-21/rust-chat/FAMILIES.md`, family b's open question, answered). One offset is
 //! applied to both stamps, which is also what the rounded day difference below was already written

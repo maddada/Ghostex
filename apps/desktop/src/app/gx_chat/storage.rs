@@ -3,25 +3,22 @@
 //! The core names a store and a per-session suffix (`StorageKey { store, suffix }`) and never builds
 //! a key string; this file owns the prefix, the backend and the budget. Every row below is the
 //! matching entry of `packages/client-storage/catalog.ts`, which is the single source of truth, so a
-//! record written by the TypeScript brain is read back unchanged by this one and the other way
-//! round.
+//! record written by the TypeScript brain is read back unchanged, and the TypeScript pages that
+//! still use the catalog read what this one writes.
 //!
 //! CDXC:Drafts 2026-09-22 DECISION:
 //! User: a user's existing drafts, queued prompts, history and outbox must survive the switch to the
 //! Rust brain. The prefixes, the backends and the bounds are the catalog's; nothing here invents a
 //! key or a second storage file.
 //!
-//! **Two backends, two tables, one database.** A catalog row on `local` lives in the `preferences`
-//! table as `(key, value)` with the raw string; a row on `indexeddb` lives in `records` as
-//! `(key, store, value)` where `value` is the whole row JSON. Both go through the connection pool
-//! `src/app/gx_store/sidebar_ui_storage.rs` owns, for the reason written down there: a second pool
-//! would hold the write lock against the client-storage service.
+//! **Two backends.** A catalog row on `local` is one raw string per key; a row on `indexeddb` is a
+//! record with bounds and metadata. Where they live is `storage_backend.rs`: on the desktop the
+//! `preferences` and `records` tables of the one client-storage database, in the GPUI web build
+//! the page's own `packages/client-storage`, which applies the same catalog.
 
 use ghostex_gx_chat_core::StorageKey;
 
-use crate::app::gx_store::{
-    RecordRead, RecordStore, read_record_raw, remove_record, scan_record_raw, write_record,
-};
+use super::storage_backend;
 
 const KIB: i64 = 1024;
 const MIB: i64 = 1024 * 1024;
@@ -29,11 +26,27 @@ const DAY_MS: i64 = 86_400_000;
 
 /// Where a catalogued store's rows live.
 #[derive(Clone, Copy, Debug)]
-enum Backend {
-    /// The `preferences` table: one raw string per key.
+pub(super) enum Backend {
+    /// The `local` backend: one raw string per key.
     Local,
-    /// The `records` table: the whole row as JSON, with bounds and metadata.
-    Records(RecordStore),
+    /// The `indexeddb` backend: a record with bounds and metadata.
+    Records(RecordBounds),
+}
+
+/// One `indexeddb` catalog row's bounds, which the desktop's record door enforces itself. The web
+/// build's page storage applies its own copy of the catalog, so it reads only the id.
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
+pub(super) struct RecordBounds {
+    /// The catalog `id`.
+    pub(super) id: &'static str,
+    /// The catalog `version`.
+    pub(super) version: i64,
+    pub(super) max_entry_bytes: i64,
+    pub(super) max_bytes: i64,
+    pub(super) max_entries: i64,
+    /// The catalog `maxAgeMs`, `None` for a store that keeps its rows for ever.
+    pub(super) max_age_ms: Option<i64>,
 }
 
 /// One chat-owned row of `packages/client-storage/catalog.ts`.
@@ -50,7 +63,7 @@ struct ChatStore {
 
 /// The `disk` shorthand: an indexeddb collection, 2 MiB an entry, 16 MiB a store, 2000 entries.
 const fn disk(id: &'static str, max_age_ms: Option<i64>) -> Backend {
-    Backend::Records(RecordStore {
+    Backend::Records(RecordBounds {
         id,
         version: 1,
         max_entry_bytes: 2 * MIB,
@@ -62,7 +75,7 @@ const fn disk(id: &'static str, max_age_ms: Option<i64>) -> Backend {
 
 /// The `protectedDisk` shorthand: `disk` with 50,000 entries and 32 MiB, and no eviction.
 const fn protected_disk(id: &'static str) -> Backend {
-    Backend::Records(RecordStore {
+    Backend::Records(RecordBounds {
         id,
         version: 1,
         max_entry_bytes: 2 * MIB,
@@ -136,7 +149,7 @@ const STORES: &[ChatStore] = &[
         id: "modelCatalog",
         prefix: "ghostex.agentModelCatalog.v1",
         collection: false,
-        backend: Backend::Records(RecordStore {
+        backend: Backend::Records(RecordBounds {
             id: "modelCatalog",
             version: 1,
             max_entry_bytes: 2 * MIB,
@@ -208,7 +221,7 @@ const STORES: &[ChatStore] = &[
         id: "sentHistory",
         prefix: "ghostex.sessionChat.sent.",
         collection: true,
-        backend: Backend::Records(RecordStore {
+        backend: Backend::Records(RecordBounds {
             id: "sentHistory",
             version: 1,
             max_entry_bytes: 2 * MIB,
@@ -231,7 +244,7 @@ const STORES: &[ChatStore] = &[
         id: "chatSnapshots",
         prefix: "ghostex.sessionChat.snapshot.",
         collection: true,
-        backend: Backend::Records(RecordStore {
+        backend: Backend::Records(RecordBounds {
             id: "chatSnapshots",
             version: 1,
             max_entry_bytes: 2 * MIB,
@@ -260,37 +273,19 @@ pub(super) fn full_key(key: &StorageKey) -> Option<String> {
 /// Reads one record, `None` when nothing is stored or the catalog no longer admits it.
 ///
 /// A refusal is returned rather than swallowed so the caller can count it; the core treats a
-/// `None` value and a failed read the same way, which is what the TypeScript's `catch` does.
+/// `None` value and a failed read the same way, which is what the TypeScript's `catch` did.
 pub(super) fn read(key: &StorageKey, now_ms: i64) -> Result<Option<String>, &'static str> {
     let store = store(&key.store).ok_or("unregistered")?;
     let name = full_key(key).ok_or("unregistered")?;
-    match store.backend {
-        Backend::Local => crate::app::gx_store::with_read_connection(|connection| {
-            connection
-                .query_row(
-                    "SELECT value FROM preferences WHERE key=?1",
-                    [name.as_str()],
-                    |row| row.get::<_, String>(0),
-                )
-                .map(Some)
-                .or_else(|error| match error {
-                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
-                    _ => Err("query"),
-                })
-        }),
-        Backend::Records(definition) => match read_record_raw(definition, &name, now_ms)? {
-            RecordRead::Payload(raw) => Ok(Some(raw)),
-            RecordRead::Missing | RecordRead::Expired => Ok(None),
-        },
-    }
+    storage_backend::read(store.id, store.backend, &name, now_ms)
 }
 
 /// Every live record of a collection store whose SUFFIX starts with `prefix`, as
 /// `(suffix, raw)` pairs.
 ///
-/// The suffix is what the TypeScript calls the record's key once the store's own prefix is off
+/// The suffix is what the TypeScript called the record's key once the store's own prefix was off
 /// (`key.slice(STORAGE_PREFIX.length)` in `storedSessionChatOptionKeys`), so a caller compares and
-/// stores exactly the strings the other brain wrote. A singleton store has no suffix to scan and
+/// stores exactly the strings the TypeScript brain wrote. A singleton store has no suffix to scan and
 /// answers with nothing.
 pub(super) fn scan(
     store_id: &str,
@@ -308,7 +303,7 @@ pub(super) fn scan(
     };
     let full = format!("{}{}", store.prefix, prefix);
     let offset = store.prefix.len();
-    Ok(scan_record_raw(definition, &full, now_ms)?
+    Ok(storage_backend::scan(definition, &full, now_ms)?
         .into_iter()
         .filter_map(|(key, raw)| Some((key.get(offset..)?.to_string(), raw)))
         .collect())
@@ -329,32 +324,12 @@ pub(super) fn write(
 ) -> Result<(), &'static str> {
     let store = store(&key.store).ok_or("unregistered")?;
     let name = full_key(key).ok_or("unregistered")?;
-    match store.backend {
-        Backend::Local => crate::app::gx_store::with_write_connection(|connection| match value {
-            Some(raw) => {
-                if storage_bytes(&name, raw) > 64 * KIB {
-                    return Err("entry");
-                }
-                connection
-                        .execute(
-                            "INSERT INTO preferences VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                            rusqlite::params![name.as_str(), raw],
-                        )
-                        .map(|_| ())
-                        .map_err(|_| "write")
-            }
-            None => connection
-                .execute("DELETE FROM preferences WHERE key=?1", [name.as_str()])
-                .map(|_| ())
-                .map_err(|_| "write"),
-        }),
-        Backend::Records(definition) => match value {
-            Some(raw) => write_record(definition, &name, raw, now_ms).map(|_| ()),
-            // `removeItem`, which is a real DELETE. An emptied row is not the same as an absent one
-            // on this table: `remove_record` says why, and what it costs the TypeScript reader.
-            None => remove_record(&name),
-        },
+    if let (Backend::Local, Some(raw)) = (store.backend, value) {
+        if storage_bytes(&name, raw) > 64 * KIB {
+            return Err("entry");
+        }
     }
+    storage_backend::write(store.id, store.backend, &name, value, now_ms)
 }
 
 /// `packages/client-storage/budgets.ts`: conservative UTF-16 accounting of the key and the value

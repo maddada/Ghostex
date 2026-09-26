@@ -10,6 +10,7 @@
 
 pub(crate) mod agents;
 mod armed_actions;
+mod close_after_done;
 mod assemble;
 pub(crate) mod close_successor;
 pub(crate) mod collections;
@@ -21,7 +22,7 @@ mod model;
 pub(crate) mod ordering;
 pub(crate) mod projects;
 mod reveal;
-mod rows;
+pub(crate) mod rows;
 mod sections;
 pub(crate) mod session_slot;
 mod session_text;

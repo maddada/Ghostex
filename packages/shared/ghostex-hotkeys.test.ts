@@ -28,11 +28,11 @@ describe('normalizeghostexHotkeySettings', () => {
     expect(DEFAULT_ghostex_HOTKEYS.openSessionSearchPalette).toBe('cmd+p');
     /**
      * CDXC:Hotkeys 2026-05-14-08:09:
-     * The Commands panel must remain bound to bare F12 so terminal-focused AppKit dispatch and sidebar-focused DOM dispatch agree on the same user shortcut.
+     * The Commands panel must remain bound to bare F12 so terminal-focused AppKit dispatch and sidebar-focused DOM dispatch agree on the same user shortcut. F12 is a fixed binding since CDXC:Hotkeys 2026-09-25 gave the configurable default Cmd+J on Mac.
      */
-    expect(DEFAULT_ghostex_HOTKEYS.openCommandsPanel).toBe('f12');
+    expect(DEFAULT_ghostex_HOTKEYS.openCommandsPanel).toBe('cmd+j');
     expect(DEFAULT_ghostex_HOTKEYS.openSettings).toBe('cmd+,');
-    expect(DEFAULT_ghostex_HOTKEYS.openHotkeys).toBe('cmd+.');
+    expect(DEFAULT_ghostex_HOTKEYS.openHotkeys).toBe('cmd+/');
     /**
      * CDXC:Sidebar 2026-06-12-02:23:
      * Cmd+B is the complete sidebar collapse toggle. Moving the sidebar between
@@ -57,18 +57,18 @@ describe('normalizeghostexHotkeySettings', () => {
      * Focused pane-menu actions should be configurable hotkeys so the command
      * palette can expose the same actions users see in pane chrome.
      */
-    expect(DEFAULT_ghostex_HOTKEYS.openBrowserPane).toBe('cmd+n');
+    expect(DEFAULT_ghostex_HOTKEYS.openBrowserPane).toBe('cmd+t');
     expect(DEFAULT_ghostex_HOTKEYS.rotatePanesClockwise).toBe('ctrl+shift+l');
     expect(DEFAULT_ghostex_HOTKEYS.mergeAllTabs).toBe('ctrl+shift+m');
     expect(DEFAULT_ghostex_HOTKEYS.delayedSend).toBe('ctrl+shift+s');
     expect(DEFAULT_ghostex_HOTKEYS.stashedPrompts).toBe('cmd+alt+s');
     expect(DEFAULT_ghostex_HOTKEYS.stashPrompt).toBe('alt+s');
-    expect(DEFAULT_ghostex_HOTKEYS.sleepFocusedSession).toBe('');
+    expect(DEFAULT_ghostex_HOTKEYS.sleepFocusedSession).toBe('cmd+shift+a');
     expect(DEFAULT_ghostex_HOTKEYS.wakeFocusedSession).toBe('');
     expect(DEFAULT_ghostex_HOTKEYS.closeAfterDone).toBe('');
-    expect(DEFAULT_ghostex_HOTKEYS.closeFocusedSession).toBe('');
-    expect(DEFAULT_ghostex_HOTKEYS.forkSession).toBe('ctrl+shift+f');
-    expect(DEFAULT_ghostex_HOTKEYS.reloadSession).toBe('ctrl+shift+r');
+    expect(DEFAULT_ghostex_HOTKEYS.closeFocusedSession).toBe('cmd+shift+backspace');
+    expect(DEFAULT_ghostex_HOTKEYS.forkSession).toBe('cmd+ctrl+shift+f');
+    expect(DEFAULT_ghostex_HOTKEYS.reloadSession).toBe('');
     expect(DEFAULT_ghostex_HOTKEYS.popOutPane).toBe('ctrl+shift+o');
     /**
      * CDXC:Hotkeys 2026-06-15-11:12:
@@ -121,7 +121,7 @@ describe('normalizeghostexHotkeySettings', () => {
   });
 
   test('matches pane and prompt action hotkeys', () => {
-    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+n')).toBe('openBrowserPane');
+    expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+t')).toBe('openBrowserPane');
     expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'ctrl+shift+o')).toBe('popOutPane');
     expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+option+s')).toBe('stashedPrompts');
     expect(getghostexHotkeyActionIdForKey(DEFAULT_ghostex_HOTKEYS, 'cmd+alt+s')).toBe('stashedPrompts');
@@ -192,9 +192,9 @@ describe('normalizeghostexHotkeySettings', () => {
       focusPreviousGroup: '',
       focusPreviousSession: 'ctrl+shift+tab',
       focusRight: 'cmd+alt+right',
-      openBrowserPane: 'cmd+n',
+      openBrowserPane: 'cmd+t',
       openCommandPalette: 'cmd+shift+p',
-      openHotkeys: 'cmd+.',
+      openHotkeys: 'cmd+/',
       openSessionSearchPalette: 'cmd+p',
       toggleSidebarCollapsed: 'cmd+b',
     });

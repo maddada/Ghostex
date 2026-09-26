@@ -398,7 +398,7 @@ export function registerManageDocsOpenFileHandler(handler?: (path: string) => vo
  * CDXC:Docs 2026-09-15 DECISION:
  * User: an agent reply can be annotated like a document. The chat's Annotate action hands the reply's markdown to Docs, which opens it as a review document with no file behind it; its notes live only in memory and feedback goes back to the same session.
  * The handoff mirrors `ghostexOpenDocsFile`: the app injects the payload before React has mounted, so it parks until the handler registers.
- * SEE-ALSO: apps/desktop/src/app/session_chat.rs (`annotateReply`), packages/core-ui/chat/session-chat-message-list/rows.tsx (the Annotate button).
+ * SEE-ALSO: apps/desktop/src/app/session_chat.rs (`annotateReply`), apps/desktop/src/app/native_chat/message_actions.rs (the Annotate button).
  */
 let pendingManageDocsReviewDocument: ManageReviewDocument | undefined;
 let manageDocsOpenReviewHandler: ((document: ManageReviewDocument) => void) | undefined;
@@ -565,6 +565,14 @@ export function ManageApp() {
       ) {
         openDocuments.stashDraft(previousPath, draftContentRef.current, lastSavedContentRef.current);
       }
+      /*
+       * CDXC:Docs 2026-09-24 WHY:
+       * Re-reading the selected file (a chat link to the file Docs already shows, or the restored active file) must take its unsaved draft now, before the resets below clear the content. Read after the await, the refs hold the cleared '' and the file opened as an empty draft: a blank white HTML page until Reload.
+       */
+      const sameFileDraft =
+        !discardDraft && previousPath === path && draftContentRef.current !== lastSavedContentRef.current
+          ? { draft: draftContentRef.current, savedContent: lastSavedContentRef.current }
+          : undefined;
       openDocuments.openDocument(path);
       if (isManageReviewDocumentPath(previousPath)) {
         setReviewDocument(undefined);
@@ -598,7 +606,7 @@ export function ManageApp() {
         const pendingDraft = discardDraft
           ? undefined
           : previousPath === path
-            ? { draft: draftContentRef.current, savedContent: lastSavedContentRef.current }
+            ? sameFileDraft
             : openDocuments.takeDraft(path);
         const nextContent =
           pendingDraft && openedFile?.kind === 'text' && pendingDraft.draft !== savedContentOnDisk

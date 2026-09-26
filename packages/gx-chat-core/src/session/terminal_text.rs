@@ -77,6 +77,17 @@ pub fn is_completed_tool_summary(text: &str) -> bool {
     !parts.is_empty() && parts.iter().all(|part| is_summary_part(part))
 }
 
+/// A painted shell-command row (`Bash(cd … && …)`, `PowerShell(…)`): the agent gave the call no
+/// description, so the only label is the raw command.
+///
+/// CDXC:SessionChat 2026-09-24 DECISION: User: Claude chat sessions do not show the Bash/command status cards; a card whose label is the tool's description ("Running server tests, …") still shows.
+pub fn is_shell_command_tool_label(text: &str) -> bool {
+    let text = text.trim_start_matches(is_js_space);
+    ["Bash(", "PowerShell("]
+        .iter()
+        .any(|prefix| text.starts_with(prefix))
+}
+
 /// `split(/,\s*(?:and\s+)?|\s+and\s+/i)` over an already space-collapsed string.
 fn split_summary_parts(text: &str) -> Vec<String> {
     let chars: Vec<char> = text.chars().collect();

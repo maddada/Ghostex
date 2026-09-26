@@ -8,10 +8,11 @@
 //! computer's.
 //!
 //! The focus itself still goes out as the `focusSession` / `focusGroup` the page posted, through
-//! the same message route, because the runtime owns what a focus does to the panes.
+//! the same message route, which ends in the store's focus (focus_perform.rs), the owner of what a
+//! focus does to the panes since the runtime was deleted on 2026-09-25.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_view/space_switch.rs (the rows it picks from, and the
-//! one declared difference), tooling/gx-core/sidebar-page-frozen/space-navigation.ts.
+//! one declared difference).
 
 use ghostex_gx_core::{SpaceSwitchFocus, plan_space_switch_restore};
 use serde_json::{Value, json};

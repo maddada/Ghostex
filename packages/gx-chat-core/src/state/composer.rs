@@ -3,7 +3,7 @@
 //! **This file belongs to family d (composer).** No other family edits it. It holds what
 //! `packages/shared/session-chat-controller/queue.ts`, `submission.ts`, `native-suggestions.ts`,
 //! `native-composer-chrome.ts`, `skills.ts`, `files.ts`, `note.ts`, `draft-handoff.ts` and the
-//! plumbing's `native-composer.ts` keep: the draft text the core tracks (the host owns the text
+//! plumbing's `native-composer.ts` kept: the draft text the core tracks (the host owns the text
 //! field itself), the suggestion popup, the reference pills, the stash, the session note, the
 //! attachment count and what is in flight.
 //!
@@ -60,6 +60,8 @@ pub struct ComposerState {
     pub draft_attachment_count: u32,
     /// A draft offered from another client, or `None`.
     pub incoming_draft: Option<IncomingDraft>,
+    /// The offer's bookkeeping and the push waiting for typing to pause.
+    pub draft_sync: crate::composer::draft_sync::DraftSyncState,
     /// Which queue and draft endpoints this host can actually call.
     pub transport: TransportQueueMethods,
     /// Whether this host can offer the session note, the stash, attachments and the terminal.
@@ -117,8 +119,8 @@ pub struct ComposerSuggestionState {
 
 /// Which composer controls the host can actually serve.
 ///
-/// React gates these by only passing the handler it has; the native renderer needs the same answer
-/// so a control that would do nothing stays out of the toolbar.
+/// React gated these by only passing the handler it had; the native renderer needs the answer in
+/// the document so a control that would do nothing stays out of the toolbar.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ComposerActionAvailability {
     pub summary: bool,

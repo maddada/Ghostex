@@ -17,7 +17,9 @@ use crate::session::markers::{
 };
 use crate::session::pending::{pending_sends_as_messages, visible_pending_sends};
 use crate::session::startup_sends::pending_with_startup_sends;
-use crate::session::streaming::{derive_streaming_text, streaming_message};
+use crate::session::streaming::{
+    derive_streaming_text, streaming_message, without_trailing_section_titles,
+};
 use crate::session::terminal::{
     terminal_stream_is_tool, terminal_stream_retired, unreconciled_terminal_statuses,
     visible_terminal_tool,
@@ -307,11 +309,17 @@ pub fn compose(
     });
     let mut with_pending = boundaried.clone();
     with_pending.extend(pending_messages.iter().cloned());
+    // Titles at the end wait for the text under them while the message is still being painted;
+    // a stream that is no longer the newest thing on screen (a tool call, the turn's end) shows all.
     let streaming_text = match terminal_stream_text {
+        Some(stream) if stream.live => {
+            Some(without_trailing_section_titles(&stream.text).to_string())
+        }
         Some(stream) => Some(stream.text.clone()),
-        None => derive_streaming_text(&with_pending, preview_text, working),
+        None => derive_streaming_text(&with_pending, preview_text, working)
+            .map(|text| without_trailing_section_titles(&text).to_string()),
     };
-    if let Some(text) = streaming_text {
+    if let Some(text) = streaming_text.filter(|text| !text.is_empty()) {
         tail.push(streaming_message(&text));
     }
     if let Some(tool) = visible_tool {

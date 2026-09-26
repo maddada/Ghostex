@@ -275,7 +275,7 @@ pub fn local_command_identities(
     app_commands: &[Value],
     messages: &[ChatMessage],
 ) -> Vec<(String, String)> {
-    // Insertion-ordered, because the TypeScript's `Map` is and the consumer takes the FIRST
+    // Insertion-ordered, because the TypeScript's `Map` was and the consumer takes the FIRST
     // unconsumed match.
     let mut covered: Vec<(String, String)> = Vec::new();
     let mut set = |key: String, value: String| match covered

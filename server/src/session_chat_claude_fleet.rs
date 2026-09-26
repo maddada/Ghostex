@@ -29,6 +29,8 @@ struct Child {
     turn: Option<ChildTurn>,
     launched_at: Option<i64>,
     model: crate::session_chat_subagent::model::SubagentModel,
+    /// A finished agent of a workflow that is still running, which the footer still counts.
+    resident: bool,
 }
 
 #[derive(Clone, Default)]
@@ -37,6 +39,7 @@ struct Parent {
     children: HashMap<String, Child>,
     queued_notifications: HashMap<String, VecDeque<i64>>,
     started_at: Option<i64>,
+    workflows: crate::session_chat_claude_workflows::WorkflowRuns,
 }
 
 #[derive(Clone)]
@@ -120,6 +123,9 @@ fn notifications(parent: &mut Parent, content: &str, at: i64, queued: bool) {
                 }
                 original.unwrap_or(at)
             };
+            if parent.workflows.finish(id, at) {
+                continue;
+            }
             apply_turn(
                 parent.children.entry(id.to_string()).or_default(),
                 false,
@@ -163,6 +169,9 @@ fn read_parent_record(parent: &mut Parent, record: &Value) {
                 }
             }
         }
+    }
+    if let Some(result) = record.get("toolUseResult") {
+        parent.workflows.launch(result, at);
     }
     if let Some(id) = text(record.pointer("/toolUseResult/agentId")) {
         let launch = blocks
@@ -357,6 +366,25 @@ pub(crate) fn read_claude_fleet(
             }
         }
     }
+    for agent in parent.workflows.running_agents(&directory)? {
+        let child = parent.children.entry(agent.id).or_default();
+        child.model = crate::session_chat_subagent::model::read(
+            &agent.path,
+            SessionChatTranscriptAgent::Claude,
+        )?;
+        child.launched_at = agent.launched_at;
+        child.launch = Launch {
+            name: Some(agent.run.name),
+            task: agent.label,
+            at: agent.launched_at.unwrap_or(agent.run.launched_at),
+        };
+        child.turn = latest_child_turn(&agent.path, SessionChatTranscriptAgent::Claude)?;
+        // An agent the resumed run answered from its cache belongs to an earlier launch.
+        child.resident = child
+            .turn
+            .as_ref()
+            .is_some_and(|turn| turn.timestamp >= agent.run.launched_at);
+    }
     let hook_started = session
         .pointer("/runtimeSettings/sessionChatClaudeStartedAt")
         .and_then(Value::as_str)
@@ -372,7 +400,14 @@ pub(crate) fn read_claude_fleet(
         .into_iter()
         .filter_map(|(id, child)| {
             let turn = child.turn.filter(|turn| turn.timestamp >= boundary)?;
-            Some((id, child.launch, turn, child.launched_at, child.model))
+            Some((
+                id,
+                child.launch,
+                turn,
+                child.launched_at,
+                child.model,
+                child.resident,
+            ))
         })
         .collect();
     if current.is_empty() {
@@ -380,7 +415,7 @@ pub(crate) fn read_claude_fleet(
     }
     let (_, process_started) =
         crate::session_chat_fleet_process::current_process(session, "claude")?;
-    current.retain(|(_, _, turn, _, _)| turn.timestamp >= process_started);
+    current.retain(|(_, _, turn, _, _, _)| turn.timestamp >= process_started);
     current.sort_by(|a, b| {
         a.2.started_at
             .cmp(&b.2.started_at)
@@ -389,11 +424,12 @@ pub(crate) fn read_claude_fleet(
     let now = chrono::Utc::now().timestamp_millis();
     let children = current
         .into_iter()
-        .map(|(id, launch, turn, launched_at, model)| {
+        .map(|(id, launch, turn, launched_at, model, resident)| {
             let end = if turn.working { now } else { turn.timestamp };
             crate::session_chat_fleet_progress::ClaudeChild {
                 launched_at,
                 sampled_at: end,
+                resident,
                 agent: SessionChatSubAgent {
                     id: Some(id.clone()),
                     started_at: turn.started_at,

@@ -105,6 +105,7 @@ type Catalog = {
     description: string;
     defaultKey: string;
     windowsLinuxDefaultKey?: string;
+    retiredDefaultKeys?: readonly string[];
   }>;
 };
 
@@ -789,6 +790,8 @@ function buildCatalog(): Catalog {
     description: definition.description,
     defaultKey: definition.defaultKey,
     ...(definition.windowsLinuxDefaultKey ? { windowsLinuxDefaultKey: definition.windowsLinuxDefaultKey } : {}),
+    // `ghostex settings hotkeys` resolves a saved map exactly like normalizeghostexHotkeySettings.
+    ...(definition.retiredDefaultKeys?.length ? { retiredDefaultKeys: definition.retiredDefaultKeys } : {}),
   }));
 
   return {
@@ -907,7 +910,7 @@ function renderHotkeysMarkdown(catalog: Catalog): string {
   );
   lines.push('');
   lines.push(
-    'Default bindings are listed for macOS (`cmd`) with the Windows/Linux default where it differs. Users rebind them in Settings > Hotkeys; open it with `ghostex settings open --tab hotkeys`. Hotkey bindings are a structured setting, so agents cannot change them with `ghostex settings set`.'
+    'Default bindings are listed for macOS (`cmd`) with the Windows/Linux default where it differs. Users rebind them in Settings > Hotkeys, and agents change them with `ghostex settings hotkeys list`, `ghostex settings hotkeys set <id> <keys>` (`none` unassigns) and `ghostex settings hotkeys reset <id>|--all`; use the Id column below.'
   );
   lines.push('');
   lines.push('| Action | Default | Windows/Linux | What it does | Id |');

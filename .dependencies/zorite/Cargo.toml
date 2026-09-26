@@ -1,0 +1,10 @@
+# The Markdown editor crates native Docs is built on, vendored from packetThrower/zorite (MIT)
+# with small Docs changes, each marked `Local change` in the code. The Zorite app itself is GPL
+# and none of it is here. This workspace exists only so the crates' `gpui.workspace = true`
+# resolves to Ghostex's own GPUI checkout; apps/desktop depends on them by path.
+[workspace]
+resolver = "3"
+members = ["zorite-editor", "zorite-markdown", "gpui-bidi", "ratex-gpui"]
+
+[workspace.dependencies]
+gpui = { path = "../zed/crates/gpui" }

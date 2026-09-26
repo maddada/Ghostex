@@ -14,10 +14,11 @@ use crate::menus::picker::favorites::{
 };
 use crate::menus::picker::input::{ModelPickerWheelInput, PickerControl, PickerKeyInput};
 use crate::menus::picker::model_menu::ModelMenuTabId;
-use crate::menus::picker::model_picker::PaneSize;
+use crate::menus::picker::model_picker::{model_pick_scope, ModelPickerSelection, PaneSize};
 use crate::menus::picker::native::ModelPickerState;
 use crate::menus::picker::projection::{model_menu_pick, ModelMenuPick};
 use crate::menus::picker::request::create_model_picker_request;
+use crate::menus::picker::settle::queue_model_selection;
 use crate::state::{ChatContext, ChatState};
 
 /// Handles one model picker, model menu or fork branch action.
@@ -110,7 +111,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         }
         ActionKind::ModelMenuView => model_menu_view(state, action),
         ActionKind::ModelMenuFavorite => model_menu_favorite(state, action),
-        ActionKind::ModelMenuPick => model_menu_pick_action(state, action),
+        ActionKind::ModelMenuPick => model_menu_pick_action(state, action, context),
         ActionKind::ModelMenuTrait => model_menu_trait(state, action),
         ActionKind::SelectForkBranch => vec![Effect::HostAction {
             action: "selectForkBranch".to_string(),
@@ -244,7 +245,11 @@ fn model_menu_favorite(state: &mut ChatState, action: &UserAction) -> Vec<Effect
 ///
 /// A pick on the session's own agent becomes a `selectOption`, which is family e1's; a pick on
 /// another agent's model hands the conversation over, or switches a draft's agent.
-fn model_menu_pick_action(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+fn model_menu_pick_action(
+    state: &mut ChatState,
+    action: &UserAction,
+    context: &ChatContext,
+) -> Vec<Effect> {
     let Some(menu) = state.pickers.model_menu_context.clone() else {
         return Vec::new();
     };
@@ -258,9 +263,45 @@ fn model_menu_pick_action(state: &mut ChatState, action: &UserAction) -> Vec<Eff
     // `modelMenuEffortFor` needs the other agent's option catalog, which is family e1's. Until
     // it is wired the hand-off starts the model on no effort, which is what an agent without one
     // already gets.
-    let pick = model_menu_pick(&row, &menu, |_, _, _| String::new());
+    let effort = action
+        .param("effort")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let pick = model_menu_pick(&row, &menu, effort, |_, _, _| String::new());
     match pick {
-        ModelMenuPick::Select { value } => {
+        // A pick that carries a reasoning level queues model and level together, as the quick
+        // picker always did.
+        ModelMenuPick::Select {
+            value,
+            effort: Some(effort),
+        } => {
+            let Some(provider) = menu.provider else {
+                return Vec::new();
+            };
+            let secondary = action.param("secondary").and_then(Value::as_bool) == Some(true);
+            let scope = model_pick_scope(Some(provider), secondary);
+            let request = create_model_picker_request(
+                &state.menus.model_catalog,
+                provider,
+                menu.model_value.as_deref(),
+                menu.effort_value.as_deref(),
+                context.random_id(1),
+            );
+            queue_model_selection(
+                state,
+                ModelPickerSelection {
+                    model: value,
+                    effort,
+                },
+                request.as_ref(),
+                scope,
+                context.random_id(0),
+            )
+        }
+        ModelMenuPick::Select {
+            value,
+            effort: None,
+        } => {
             let mut params = Map::new();
             params.insert("type".into(), json!("selectOption"));
             params.insert("descriptorId".into(), json!(menu.model_id));
@@ -283,8 +324,8 @@ fn model_menu_pick_action(state: &mut ChatState, action: &UserAction) -> Vec<Eff
             //
             // CDXC:SessionChat 2026-09-22 WHY:
             // The agent is looked up HERE rather than handed to the host as a
-            // `switchDraftAgentForProvider` action nobody performs: `native-host.ts:1058` does the
-            // same `availableAgents.find(...)` before it dispatches `switchDraftAgent`, and the
+            // `switchDraftAgentForProvider` action nobody performs: `native-host.ts:1058` did the
+            // same `availableAgents.find(...)` before it dispatched `switchDraftAgent`, and the
             // core already holds the list.
             if state.session.available_agents.is_some() {
                 state.pickers.model_menu_view = Default::default();

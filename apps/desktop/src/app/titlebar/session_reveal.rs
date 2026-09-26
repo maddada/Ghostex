@@ -24,7 +24,7 @@ impl GhostexGpuiApp {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("current time is after the Unix epoch")
             .as_micros() as u64;
-        // This reveal is this app's own, so the runtime never posts it on the facts channel: the
+        // This reveal is this app's own, so it never came back on the runtime's facts channel: the
         // store records it as the newest request (which is what the installed list carries and what
         // scrolls the row into view) and answers it here rather than waiting for the publish that
         // used to carry it back (gx_store/runtime_facts.rs). Those two calls are the WHOLE reveal:
@@ -54,9 +54,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let focus = &self.sidebar_gxserver_presentation_focus_state;
-        let enabled = self.sidebar.is_some()
-            && focus.focused_session_id.is_some()
-            && focus.active_project_id.is_some();
+        let enabled = focus.focused_session_id.is_some() && focus.active_project_id.is_some();
         div()
             .id("ghostex-gpui-titlebar-reveal-active-session")
             .flex()

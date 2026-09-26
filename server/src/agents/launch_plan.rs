@@ -95,16 +95,13 @@ pub(crate) fn create_agent_session_params_for_project(
         .get("command")
         .and_then(Value::as_str)
         .is_some_and(|value| !value.trim().is_empty());
-    if params.get("requireLaunchCommand").and_then(Value::as_bool) == Some(true)
-        && !has_launch_command
-    {
-        /*
-        CDXC:RemoteMachines 2026-06-24-17:19:
-        Remote GPUI starts send only the selected agent id and require gxserver to resolve the command from remote project metadata or built-in defaults. Reject commandless launches so unknown custom agent ids do not create inert sessions that look successful.
-        */
-        return Err(DomainStateError::bad_request(
-            "Agent command is required to create this session.",
-        ));
+    /*
+    CDXC:AgentLauncher 2026-09-25 WHY: Every agent session gxserver creates must have a command to launch, whether or not the client sends `requireLaunchCommand`. A commandless row can never start: `startSessionProvider` declines it, so every attach surfaced as "gxserver did not confirm the zmx provider exists" (`ghostex create-agent hermes` resolved no command because the built-in id is `hermes-agent`). This supersedes the 2026-06-24 opt-in guard, which only remote GPUI starts, drafts, automations and board work set.
+    */
+    if !has_launch_command {
+        return Err(DomainStateError::bad_request(format!(
+            "Ghostex has no launch command for agent \"{agent_id}\", so it did not create the session. Use a built-in agent id (for example claude, codex or hermes-agent) or one configured for this project."
+        )));
     }
     let has_launch_startup_text = launch_plan_object
         .get("startupText")

@@ -170,7 +170,7 @@ pub(crate) fn gpui_normalized_app_toast_description(
 
 /// Parses the shared `createAppToastRequest` bridge payload. Action buttons are
 /// not parsed because no GPUI-side producer sends them yet; add routing back to
-/// the sidebar runtime when one does.
+/// the Rust store when one does.
 pub(crate) fn gpui_app_toast_from_bridge_message(
     message: &serde_json::Value,
     generated_id: String,

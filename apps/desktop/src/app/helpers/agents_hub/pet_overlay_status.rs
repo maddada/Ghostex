@@ -363,9 +363,3 @@ pub(crate) fn gpui_local_combined_session_original_id(session_id: &str) -> Optio
         && !decoded.chars().any(char::is_control))
     .then_some(decoded)
 }
-
-pub(crate) fn gpui_status_pet_activation_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onStatusPetActivation==='function'){{bridge.onStatusPetActivation(payload);}}else{{const pending=Array.isArray(bridge.pendingStatusPetActivations)?bridge.pendingStatusPetActivations:[];pending.push(payload);bridge.pendingStatusPetActivations=pending;}}}})(); undefined;"
-    )
-}

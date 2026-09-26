@@ -6,11 +6,11 @@
 //! resolution is ported line by line from the shipped TypeScript and the calls are values a gate
 //! can enumerate.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/core.ts (the `handleSidebarMessage` arms),
-//! apps/desktop/sidebar/gxserver-runtime/app-shot-and-misc.ts (`postProjectPathActionForGroup`,
-//! `copyWorkspaceProjectRemoteUrl`), apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! (`copySessionDetails`), apps/desktop/sidebar/gxserver-runtime/remote-machines.ts
-//! (`postRemoteSessionNativeAction`, `postRemoteProjectNativeAction`, `postRemoteToast`).
+//! Ported from these files of the deleted `apps/desktop/sidebar/gxserver-runtime/` (see git
+//! history): `core.ts` (the `handleSidebarMessage` arms), `app-shot-and-misc.ts`
+//! (`postProjectPathActionForGroup`, `copyWorkspaceProjectRemoteUrl`), `sessions-and-focus.ts`
+//! (`copySessionDetails`) and `remote-machines.ts` (`postRemoteSessionNativeAction`,
+//! `postRemoteProjectNativeAction`, `postRemoteToast`).
 
 use serde_json::Value;
 
@@ -23,8 +23,9 @@ use super::resolve::{
     local_project_group_project_id, native_project_path_action, non_empty, text_field,
 };
 
-/// Every message type this file answers. The host checks it before it decides to keep a command
-/// out of the old runtime, and the parity gate enumerates it, so the set lives in one place.
+/// Every message type this file answers. The host checks it before it handles a command (it kept
+/// such commands out of the old runtime, and the deleted parity gate enumerated it), so the set
+/// lives in one place.
 pub const READ_ONLY_MESSAGE_TYPES: [&str; 7] = [
     "copySessionDetails",
     "copyResumeCommand",

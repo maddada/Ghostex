@@ -34,7 +34,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.transcript_search = Tri::Value(search::project(&extras.search));
     into.save_markdown = Tri::Value(save_markdown::project(&extras.save_markdown));
 
-    // React picks this copy from the view, not the agent status.
+    // The copy comes from the view, not the agent status, as React picked it.
     let view_kind = into.view.kind.as_str();
     into.empty_state = empty_state_copy(
         if view_kind == "ready" {
@@ -45,7 +45,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         state.session.agent.as_deref(),
     );
     /*
-    The new-session welcome, projected for the native chat the same way React renders it: a
+    The new-session welcome, projected for the native chat the same way React rendered it: a
     `starting` or `empty` transcript greets the user with the agent mark and headline instead of
     falling through to the `emptyState` loading copy.
     */

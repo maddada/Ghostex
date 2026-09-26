@@ -8,18 +8,13 @@ use super::sidebar_bridge_manifest::{
     PROJECT_WORKAREA_BRIDGE_FUNCTION_SPECS, PROJECT_WORKAREA_BRIDGE_INSTALL_MESSAGE_NAME,
     PROJECT_WORKAREA_BRIDGE_PAYLOAD_MAX_CHARS, PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL,
     PROJECT_WORKAREA_MANAGE_DOCS_RESOURCE_BASE_URL_JS_FIELD, ProjectWorkareaBridgeFunctionId,
-    SIDEBAR_BRIDGE_FUNCTION_SPECS, SIDEBAR_EDITABLE_FOCUS_PROCESS_MESSAGE_NAME,
-    SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, SidebarBridgeFunctionId,
-    WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT,
+    SIDEBAR_PROJECT_CONTEXT_JS_NAMESPACE, WEBKIT_APP_MODAL_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_EXTENSION_HOST_MESSAGE_HANDLER_JS_OBJECT, WEBKIT_JS_OBJECT,
     WEBKIT_MESSAGE_HANDLERS_JS_OBJECT, WEBKIT_NATIVE_HOST_MESSAGE_HANDLER_JS_OBJECT,
     WEBKIT_POST_MESSAGE_JS_FUNCTION, project_workarea_bridge_function_spec_for_js_function,
     project_workarea_bridge_function_spec_for_process_message,
-    sidebar_bridge_function_spec_for_js_function, sidebar_bridge_function_spec_for_process_message,
-    sidebar_bridge_payload_max_chars,
 };
 pub use super::sidebar_bridge_manifest::{AppModalHostBridgeSurface, ExtensionBridgeSurfaceSpec};
-use crate::support_logs::{self, GpuiSupportLog};
 use anyhow::{Context as _, Result};
 use cef::rc::Rc as _;
 use cef::wrapper::resource_manager::{get_mime_type, get_url_without_query_or_fragment};
@@ -40,17 +35,16 @@ use cef::{
     PermissionPromptCallback, PermissionRequestResult, PermissionRequestTypes, PopupFeatures,
     ProcessId, ProcessMessage, RenderProcessHandler, Request, RequestHandler, ResourceHandler,
     ResourceReadCallback, ResourceRequestHandler, Response, ReturnValue, State, StreamReader, Task,
-    TerminationStatus, ThreadId, UnresponsiveProcessCallback, V8Handler, V8Propertyattribute,
-    V8Value, ValueType, WindowInfo, WindowOpenDisposition, WrapApp, WrapBrowserProcessHandler,
-    WrapClient, WrapContextMenuHandler, WrapDisplayHandler, WrapFindHandler, WrapFocusHandler,
-    WrapLifeSpanHandler, WrapLoadHandler, WrapPermissionHandler, WrapRenderProcessHandler,
-    WrapRequestHandler, WrapResourceHandler, WrapResourceRequestHandler, WrapTask, WrapV8Handler,
-    ZoomCommand, post_task, stream_reader_create_for_file, string_multimap_alloc,
-    string_multimap_append, wrap_app, wrap_browser_process_handler, wrap_client,
-    wrap_context_menu_handler, wrap_display_handler, wrap_find_handler, wrap_focus_handler,
-    wrap_life_span_handler, wrap_load_handler, wrap_permission_handler,
-    wrap_render_process_handler, wrap_request_handler, wrap_resource_handler,
-    wrap_resource_request_handler, wrap_task, wrap_v8_handler,
+    ThreadId, V8Handler, V8Propertyattribute, V8Value, ValueType, WindowInfo,
+    WindowOpenDisposition, WrapApp, WrapBrowserProcessHandler, WrapClient, WrapContextMenuHandler,
+    WrapDisplayHandler, WrapFindHandler, WrapFocusHandler, WrapLifeSpanHandler, WrapLoadHandler,
+    WrapPermissionHandler, WrapRenderProcessHandler, WrapRequestHandler, WrapResourceHandler,
+    WrapResourceRequestHandler, WrapTask, WrapV8Handler, ZoomCommand, post_task,
+    stream_reader_create_for_file, string_multimap_alloc, string_multimap_append, wrap_app,
+    wrap_browser_process_handler, wrap_client, wrap_context_menu_handler, wrap_display_handler,
+    wrap_find_handler, wrap_focus_handler, wrap_life_span_handler, wrap_load_handler,
+    wrap_permission_handler, wrap_render_process_handler, wrap_request_handler,
+    wrap_resource_handler, wrap_resource_request_handler, wrap_task, wrap_v8_handler,
 };
 use cef::{
     ImplKeyboardHandler, KeyEvent, KeyEventType, WrapKeyboardHandler, wrap_keyboard_handler,
@@ -96,28 +90,15 @@ struct CefRuntimeState {
 static CEF_RUNTIME: OnceLock<Mutex<Option<CefRuntimeState>>> = OnceLock::new();
 static CEF_CONTEXT_INITIALIZED: AtomicBool = AtomicBool::new(false);
 static CEF_SHUTDOWN_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
-const SIDEBAR_PROJECT_CONTEXT_INSTALL_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.installActiveProjectContextBridge";
-const SIDEBAR_RUNTIME_SETTINGS_UPDATE_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.runtimeSettingsChanged";
-const SIDEBAR_GXSERVER_BOOTSTRAP_UPDATE_MESSAGE_NAME: &str =
-    "ghostex.gpui.sidebar.gxserverBootstrapChanged";
 /*
 CDXC:SessionChat 2026-09-21 WHY:
 Bootstrap-only pages (Search by Prompt, gxserver-backed modal pages) need only
-the gxserver bootstrap (baseUrl/token/protocolVersion), never the sidebar
-post-function bridge. The sidebar bootstrap-update path deliberately refuses
-pages without the full installed sidebar bridge, so these pages use this
+the gxserver bootstrap (baseUrl/token/protocolVersion), so they use this
 dedicated message that installs exactly `window.ghostexGpui.gxserverBootstrap`.
 The message keeps its session-chat name from the removed desktop chat.html page.
 */
 const SESSION_CHAT_GXSERVER_BOOTSTRAP_MESSAGE_NAME: &str =
     "ghostex.gpui.sessionChat.gxserverBootstrap";
-const SIDEBAR_RUNTIME_SETTINGS_JS_OBJECT: &str = "runtimeSettings";
-const SIDEBAR_RUNTIME_SETTINGS_CHANGED_JS_CALLBACK: &str = "onRuntimeSettingsChanged";
-const SIDEBAR_RUNTIME_SETTINGS_DEBUGGING_MODE_JS_FIELD: &str = "debuggingMode";
-const SIDEBAR_RUNTIME_SETTINGS_SHOW_BETA_FEATURES_JS_FIELD: &str = "showBetaFeatures";
-const SIDEBAR_RUNTIME_SETTINGS_SAVED_SETTINGS_JS_FIELD: &str = "settings";
 const SIDEBAR_GXSERVER_BOOTSTRAP_JS_OBJECT: &str = "gxserverBootstrap";
 const SIDEBAR_GXSERVER_BOOTSTRAP_CHANGED_JS_CALLBACK: &str = "onGxserverBootstrapChanged";
 const SIDEBAR_GXSERVER_BOOTSTRAP_BASE_URL_JS_FIELD: &str = "baseUrl";
@@ -133,11 +114,6 @@ const CEF_CONTEXT_MENU_INSPECT_ELEMENT_COMMAND_ID: c_int = 26_001;
 // host (cef_command_ids.h).
 const CEF_CONTEXT_MENU_OPEN_LINK_NEW_TAB_COMMAND_ID: c_int = 50_100;
 const CEF_CONTEXT_MENU_OPEN_LINK_NEW_WINDOW_COMMAND_ID: c_int = 50_101;
-const SIDEBAR_RUNTIME_SETTINGS_DEBUGGING_MODE_ARGUMENT_INDEX: usize = 0;
-const SIDEBAR_RUNTIME_SETTINGS_SHOW_BETA_FEATURES_ARGUMENT_INDEX: usize = 1;
-const SIDEBAR_RUNTIME_SETTINGS_SAVED_SETTINGS_JSON_ARGUMENT_INDEX: usize = 2;
-const SIDEBAR_RUNTIME_SETTINGS_ARGUMENT_COUNT: usize = 3;
-const SIDEBAR_RUNTIME_SETTINGS_SAVED_SETTINGS_JSON_MAX_CHARS: usize = 1024 * 1024;
 const SIDEBAR_GXSERVER_BOOTSTRAP_PRESENT_ARGUMENT_INDEX: usize = 0;
 const SIDEBAR_GXSERVER_BOOTSTRAP_BASE_URL_ARGUMENT_INDEX: usize = 1;
 const SIDEBAR_GXSERVER_BOOTSTRAP_AUTH_TOKEN_ARGUMENT_INDEX: usize = 2;
@@ -167,17 +143,6 @@ thread_local! {
 // thread-local browser registries so a GPUI-root handoff is immediately
 // visible to the focus guard on whichever thread CEF invokes it.
 static ACTIVE_CEF_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
-
-/*
-CDXC:PlatformSupport 2026-07-25:
-Windows Chromium can report the final focus transfer into a newly mounted
-sidebar input as NAVIGATION even though the app already authorized that exact
-editable node through the fixed sidebar bridge. Keep that narrow grant
-separate from general active-CEF tracking: renderer focus requests remain
-unable to claim another surface, while the granted sidebar browser may finish
-moving focus from its wrapper HWND into Chromium's keyboard widget.
-*/
-static SIDEBAR_EDITABLE_FOCUS_NATIVE_VIEW: AtomicUsize = AtomicUsize::new(0);
 
 // C4 light split: the modules below hold the bulk of what used to be
 // this file's content; see docs/2026-08-22/repo-restructure/SPLITS.md C4

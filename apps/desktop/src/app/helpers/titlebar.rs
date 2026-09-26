@@ -149,14 +149,17 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
             trigger_bounds.top_right().x.as_f32() - width
         };
     let left = desired_left.clamp(min_left, max_left.max(min_left));
-    let below_top = main_window_bounds.origin.y.as_f32()
-        + trigger_bounds.bottom().as_f32()
-        + TITLEBAR_POPUP_MENU_GAP
-        - TITLEBAR_POPUP_VERTICAL_OFFSET;
-    let above_top = main_window_bounds.origin.y.as_f32() + trigger_bounds.top().as_f32()
-        - TITLEBAR_POPUP_MENU_GAP
-        - height
-        - TITLEBAR_POPUP_VERTICAL_OFFSET;
+    // A menu dropping from a button keeps the header gap; a context menu anchored to the pointer
+    // (a zero-height trigger) opens right at it.
+    let trigger_gap = if trigger_bounds.size.height > px(1.0) {
+        HEADER_MENU_TRIGGER_GAP
+    } else {
+        0.0
+    };
+    let below_top =
+        main_window_bounds.origin.y.as_f32() + trigger_bounds.bottom().as_f32() + trigger_gap;
+    let above_top =
+        main_window_bounds.origin.y.as_f32() + trigger_bounds.top().as_f32() - trigger_gap - height;
     let bottom_limit = main_window_bounds.origin.y.as_f32()
         + main_window_bounds.size.height.as_f32()
         - horizontal_margin;
@@ -1549,8 +1552,12 @@ pub(crate) fn titlebar_popup_menu_hover_color() -> Hsla {
         .into()
 }
 
+/// A menu's or tooltip's outline: a faint ink line, fainter still on the frosted menus of window
+/// glass, where it only has to catch the edge of the blur.
 pub(crate) fn titlebar_popup_menu_border_color() -> Hsla {
-    titlebar_overlay_base().opacity(0.12).into()
+    titlebar_overlay_base()
+        .opacity(if window_glass_active() { 0.10 } else { 0.12 })
+        .into()
 }
 
 pub(crate) fn apply_gpui_component_theme(cx: &mut App) {
@@ -1567,9 +1574,18 @@ pub(crate) fn apply_gpui_component_theme(cx: &mut App) {
     // CDXC:Theming 2026-09-23 DECISION: User: tooltips "dont fit the glass look". gpui-component's
     // tooltip paints `tokens.popover`, which kept the stock near-black, so it now takes the same
     // tinted menu colour as the app's menus.
-    theme.tokens.popover = titlebar_popup_menu_background().into();
+    // Under glass tooltips draw in the frosted tooltip window, which paints this token at the
+    // frosted alpha, so it takes the same lifted colour as the other frosted menus.
+    theme.tokens.popover = if window_glass_active() {
+        frosted_menu_fill(titlebar_popup_menu_background())
+            .opacity(1.0)
+            .into()
+    } else {
+        titlebar_popup_menu_background().into()
+    };
     theme.popover_foreground = titlebar_popup_menu_foreground();
     theme.border = titlebar_popup_menu_border_color();
+    gpui_component::tooltip::set_frosted_tooltip_alpha(frosted_menu_alpha());
     theme.radius = px(2.0);
     theme.scrollbar = gpui::transparent_black();
     theme.scrollbar_show = gpui_component::scroll::ScrollbarShow::Hover;
@@ -1711,7 +1727,7 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_RGB: u32 = 0x040607;
 
 /// Mirror of `CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS` in
 /// packages/shared/ghostex-settings.ts. Keep both tables in sync.
-pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 17] = [
+pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 25] = [
     (0x000000, 0x000000),
     (0xffffff, 0x0e0e0e),
     (0x808080, 0x0e0e0e),
@@ -1729,6 +1745,15 @@ pub(crate) const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS: [(u32, u32); 17]
     (0x6c4f8f, 0x0a0611),
     (0x854f7a, 0x100611),
     (0x8a4f5f, 0x100409),
+    // 2026-09-25 preset colours (Slate, Midnight, Indigo, Teal, Forest, Olive, Amber, Rose).
+    (0x4a6a8a, 0x070d14),
+    (0x1f3a8a, 0x02061a),
+    (0x4b4fa6, 0x08081c),
+    (0x2f7f7f, 0x021213),
+    (0x2e6a3a, 0x031205),
+    (0x6b6b35, 0x0e0f03),
+    (0x8a6a2a, 0x130c02),
+    (0x8a4a5c, 0x12040b),
 ];
 
 pub(crate) fn clamp_sidebar_titlebar_background_darkness_percent(value: f64) -> f64 {
@@ -1800,7 +1825,7 @@ pub(crate) const MIN_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT:
 pub(crate) const MAX_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT: f64 = 100.0;
 const CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_SCALE_REFERENCE_LIGHTNESS_PERCENT: f64 = 95.0;
 const CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_CALIBRATION_RGB: u32 = 0xf1f1f2;
-const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: [(u32, u32); 17] = [
+const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: [(u32, u32); 25] = [
     (0x000000, 0xf1f1f2),
     (0xffffff, 0xf1f1f2),
     (0x808080, 0xf1f1f2),
@@ -1818,6 +1843,15 @@ const CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_LIGHT_TINTS: [(u32, u32); 17] = [
     (0x6c4f8f, 0xf2edf7),
     (0x854f7a, 0xf7ecf3),
     (0x8a4f5f, 0xf7ecef),
+    // 2026-09-25 preset colours (Slate, Midnight, Indigo, Teal, Forest, Olive, Amber, Rose).
+    (0x4a6a8a, 0xebf1f8),
+    (0x1f3a8a, 0xedeff8),
+    (0x4b4fa6, 0xeeeef8),
+    (0x2f7f7f, 0xebf4f5),
+    (0x2e6a3a, 0xedf7f0),
+    (0x6b6b35, 0xf4f4ec),
+    (0x8a6a2a, 0xf6f2ec),
+    (0x8a4a5c, 0xf7edf0),
 ];
 
 pub(crate) fn clamp_sidebar_titlebar_light_background_lightness_percent(value: f64) -> f64 {
@@ -1870,33 +1904,54 @@ pub(crate) fn sidebar_titlebar_light_background_for_lightness(
     ])
 }
 
-/// CDXC:Theming 2026-09-22 SEE-ALSO:
+/// CDXC:Theming 2026-09-25 SEE-ALSO:
 /// Mirror of `DARK_THEME_PRESET_CONTROLS` / `LIGHT_THEME_PRESET_CONTROLS` in
-/// packages/shared/ghostex-settings/titlebar-color.ts: each preset is a (contrast, tint) pair fed
-/// through the same scale as the custom controls. Keep the tables in sync.
-const DARK_THEME_PRESET_CONTROLS: [(&str, f64, u32); 6] = [
+/// packages/shared/ghostex-settings/titlebar-color.ts: each of the sixteen presets per appearance is
+/// a (contrast, tint) pair fed through the same scale as the custom controls, and the new tints
+/// have matching entries in the tint tables above. Keep the tables in sync entry for entry.
+const DARK_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = [
     (
         "gray",
         DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
         DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_TINT_RGB,
     ),
     ("black", 100.0, 0x000000),
+    ("slate", 94.0, 0x4a6a8a),
+    ("midnight", 94.0, 0x1f3a8a),
     ("blue", 96.0, 0x336699),
+    ("indigo", 94.0, 0x4b4fa6),
+    ("teal", 94.0, 0x2f7f7f),
     ("green", 96.0, 0x3f7a5f),
+    ("forest", 94.0, 0x2e6a3a),
+    ("olive", 94.0, 0x6b6b35),
+    ("amber", 94.0, 0x8a6a2a),
+    ("orange", 96.0, 0x8a5330),
     ("red", 96.0, 0x884444),
+    ("rose", 94.0, 0x8a4a5c),
+    ("pink", 96.0, 0x854f7a),
     ("purple", 96.0, 0x6c4f8f),
 ];
-const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 6] = [
+const LIGHT_THEME_PRESET_CONTROLS: [(&str, f64, u32); 16] = [
     (
         "gray",
         DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT,
         DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_TINT_RGB,
     ),
     ("white", 100.0, 0xffffff),
+    ("slate", 95.0, 0x4a6a8a),
+    ("midnight", 94.0, 0x1f3a8a),
     ("blue", 95.0, 0x336699),
+    ("indigo", 95.0, 0x4b4fa6),
+    ("teal", 95.0, 0x2f7f7f),
     ("green", 95.0, 0x3f7a5f),
-    ("pink", 95.0, 0x854f7a),
+    ("forest", 94.0, 0x2e6a3a),
+    ("olive", 95.0, 0x6b6b35),
+    ("amber", 95.0, 0x8a6a2a),
     ("orange", 95.0, 0x8a5330),
+    ("red", 95.0, 0x884444),
+    ("rose", 95.0, 0x8a4a5c),
+    ("pink", 95.0, 0x854f7a),
+    ("purple", 95.0, 0x6c4f8f),
 ];
 
 /// The saved custom dark controls: the darkness slider (seeded from a valid legacy saved
@@ -3305,8 +3360,3 @@ pub(crate) fn gpui_titlebar_mode_hidden_from_settings(mode: TitlebarMode) -> boo
         })
 }
 
-pub(crate) fn gpui_titlebar_git_action_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onTitlebarGitAction==='function'){{bridge.onTitlebarGitAction(payload);}}else{{const pending=Array.isArray(bridge.pendingTitlebarGitActions)?bridge.pendingTitlebarGitActions:[];pending.push(payload);bridge.pendingTitlebarGitActions=pending;}}}})(); undefined;"
-    )
-}

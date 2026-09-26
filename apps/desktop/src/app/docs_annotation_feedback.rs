@@ -83,6 +83,14 @@ impl GhostexGpuiApp {
             return None;
         }
         let shell_session_id = *self.local_workspace_session_mappings.get(latest_key)?;
+        self.docs_annotation_feedback_target_for_session(shell_session_id)
+    }
+
+    /// `shell_session_id` as a feedback target, when it is a running agent session.
+    pub(crate) fn docs_annotation_feedback_target_for_session(
+        &self,
+        shell_session_id: TerminalSessionId,
+    ) -> Option<DocsAnnotationFeedbackTarget> {
         let session = self.agents_workspace.session(shell_session_id)?;
         if session.presentation_state != TerminalSessionPresentationState::Running {
             return None;
@@ -156,8 +164,7 @@ impl GhostexGpuiApp {
     }
 
     /// Handles the Docs page's `sendAnnotationFeedback` request end to end and
-    /// dispatches the bridge response itself, because the terminal path first
-    /// asks gxserver whether the agent's input box is on screen.
+    /// dispatches the bridge response itself.
     pub(crate) fn send_docs_annotation_feedback(
         &mut self,
         action: String,
@@ -165,24 +172,58 @@ impl GhostexGpuiApp {
         content: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.deliver_docs_annotation_feedback(content, None, cx, move |this, delivery, cx| {
+            let response = match delivery {
+                Ok(delivery) => {
+                    docs_annotation_feedback_delivery_response(&action, &request_id, delivery)
+                }
+                Err(error) => manage_files_bridge_error_response(&action, &request_id, &error),
+            };
+            this.dispatch_docs_annotation_feedback_response(&response, cx);
+        });
+    }
+
+    /// Where feedback goes: the session the document came from when there is one, else the
+    /// session last clicked in the sidebar.
+    ///
+    /// CDXC:Docs 2026-09-25 DECISION:
+    /// User chose that notes go back to the agent a document came from: an agent reply opened with Reply by Annotating, or a file opened by clicking it in an agent's chat, sends to that agent's session even after another session is clicked in the sidebar ("12a makes sense"). A file opened from the Docs files list has no origin and keeps the sidebar rule below. When the origin agent is no longer running the notes are copied, never sent to a different agent. This refines the 2026-09-15 rule that every send went to the last sidebar click.
+    pub(crate) fn docs_annotation_feedback_target_or_origin(
+        &self,
+        origin: Option<TerminalSessionId>,
+    ) -> Option<DocsAnnotationFeedbackTarget> {
+        match origin {
+            Some(origin) => self.docs_annotation_feedback_target_for_session(origin),
+            None => self.docs_annotation_feedback_target(),
+        }
+    }
+
+    /// Delivers annotation feedback to the target session's chat or agent CLI (see
+    /// `docs_annotation_feedback_target_or_origin`), or copies it, and reports where it went
+    /// (`chat`, `terminal` or `clipboard`) to `done`. The terminal path first asks gxserver
+    /// whether the agent's input box is on screen.
+    pub(crate) fn deliver_docs_annotation_feedback(
+        &mut self,
+        content: String,
+        origin: Option<TerminalSessionId>,
+        cx: &mut gpui::Context<Self>,
+        done: impl FnOnce(&mut Self, Result<&'static str, String>, &mut gpui::Context<Self>) + 'static,
+    ) {
         if content.trim().is_empty() {
-            let response = manage_files_bridge_error_response(
-                &action,
-                &request_id,
-                "There is nothing to send.",
-            );
-            self.dispatch_docs_annotation_feedback_response(&response, cx);
+            done(self, Err("There is nothing to send.".to_string()), cx);
             return;
         }
-        let Some(target) = self.docs_annotation_feedback_target() else {
+        let Some(target) = self.docs_annotation_feedback_target_or_origin(origin) else {
             self.copy_docs_annotation_feedback_to_clipboard(
                 &content,
-                "No running agent session is selected in the sidebar.",
+                if origin.is_some() {
+                    "The agent session this came from is not running."
+                } else {
+                    "No running agent session is selected in the sidebar."
+                },
                 cx,
             );
-            let response =
-                docs_annotation_feedback_delivery_response(&action, &request_id, "clipboard");
-            self.dispatch_docs_annotation_feedback_response(&response, cx);
+            done(self, Ok("clipboard"), cx);
             return;
         };
         if target.surface == DocsAnnotationFeedbackSurface::Chat {
@@ -197,9 +238,7 @@ impl GhostexGpuiApp {
                 );
                 "clipboard"
             };
-            let response =
-                docs_annotation_feedback_delivery_response(&action, &request_id, delivery);
-            self.dispatch_docs_annotation_feedback_response(&response, cx);
+            done(self, Ok(delivery), cx);
             return;
         }
         let Some(rpc_target) = self.docs_annotation_feedback_rpc_target(target.shell_session_id)
@@ -209,9 +248,7 @@ impl GhostexGpuiApp {
                 "The selected session's machine cannot be reached.",
                 cx,
             );
-            let response =
-                docs_annotation_feedback_delivery_response(&action, &request_id, "clipboard");
-            self.dispatch_docs_annotation_feedback_response(&response, cx);
+            done(self, Ok("clipboard"), cx);
             return;
         };
         let background = cx.background_executor().clone();
@@ -223,7 +260,7 @@ impl GhostexGpuiApp {
             let _ = this.update(cx, |this, cx| {
                 // The target is re-read after the round trip: the user may have
                 // clicked another session while gxserver looked at the screen.
-                let current = this.docs_annotation_feedback_target();
+                let current = this.docs_annotation_feedback_target_or_origin(origin);
                 let delivery = match (current, verdict.as_deref()) {
                     (Some(current), Some("ready"))
                         if current.shell_session_id == expected_session_id
@@ -254,9 +291,7 @@ impl GhostexGpuiApp {
                         "clipboard"
                     }
                 };
-                let response =
-                    docs_annotation_feedback_delivery_response(&action, &request_id, delivery);
-                this.dispatch_docs_annotation_feedback_response(&response, cx);
+                done(this, Ok(delivery), cx);
             });
         })
         .detach();
@@ -417,6 +452,7 @@ impl GhostexGpuiApp {
             "title": format!("Reply from {agent_label}"),
         });
         self.pending_docs_review_open = Some(payload.to_string());
+        self.native_docs.pending_origin = Some(session_id);
         self.switch_workarea_from_hotkey(TitlebarMode::Manage, window, cx);
         self.mark_project_editor_mode_awake(TitlebarMode::Manage, cx);
         self.focus_project_editor_surface(TitlebarMode::Manage, window, cx);
@@ -434,6 +470,11 @@ impl GhostexGpuiApp {
         let Some(payload) = self.pending_docs_review_open.clone() else {
             return false;
         };
+        if crate::app::native_docs::render::native_docs_enabled() {
+            self.pending_docs_review_open = None;
+            self.native_docs_open_review(&payload, cx);
+            return true;
+        }
         let Some(surface) = self
             .project_workarea_runtime_cef_surfaces
             .get(&ProjectWorkareaCefSurfaceSlotKey::Manage)

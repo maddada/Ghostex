@@ -163,20 +163,6 @@ pub(crate) fn gpui_remote_gxserver_presentation_client_id(remote_machine_id: &st
     format!("{GPUI_SIDEBAR_GXSERVER_CLIENT_ID}:{remote_machine_id}")
 }
 
-pub(crate) fn gpui_remote_presentation_client_id_from_command(
-    command: &serde_json::Map<String, serde_json::Value>,
-) -> Option<String> {
-    command
-        .get("clientId")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .filter(|value| value.chars().count() <= GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS)
-        .filter(|value| !value.contains('\0'))
-        .filter(|value| !value.chars().any(char::is_control))
-        .map(str::to_string)
-}
-
 pub(crate) fn gpui_remote_path_like_string_from_command(
     command: &serde_json::Map<String, serde_json::Value>,
     key: &str,

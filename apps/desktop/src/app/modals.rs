@@ -1990,7 +1990,7 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:AgentProviders 2026-06-24-11:39:
-        gxserver read/update responses are canonical for inherited agent launch policy. If the daemon reports either agent setting differently than the current GPUI render cache, persist those canonical values through the central shared Settings service and refresh the modal/sidebar runtime state again instead of writing a separate cache or logging private daemon details.
+        gxserver read/update responses are canonical for inherited agent launch policy. If the daemon reports either agent setting differently than the current GPUI render cache, persist those canonical values through the central shared Settings service and refresh the modal/sidebar settings state again instead of writing a separate cache or logging private daemon details.
         */
         let latest_settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
         if latest_settings_snapshot.gxserver_agent_settings() == canonical_agent_settings {
@@ -2180,18 +2180,17 @@ impl GhostexGpuiApp {
         */
         let Some(handle) = self.app_modal_window.clone() else {
             /*
-            CDXC:AppModal 2026-09-20 WHY:
-            Quick Access is a native GPUI window now, and its controller lives in the sidebar
-            runtime rather than in a modal-host page. Its answers (recent projects, saved prompts,
-            previous sessions, transcript sizes) reach it through the sidebar host-message bridge,
-            which re-emits them on the runtime's own message source.
+            CDXC:AppModal 2026-09-25 WHY:
+            Quick Access is a native GPUI window with no modal-host page; its model is gx-core's
+            (apps/desktop/src/app/quick_access/host.rs). Its answers (recent projects, saved
+            prompts, previous sessions, transcript sizes) go straight to that model.
             */
             if self
                 .native_app_modal_kind()
                 .and_then(crate::app::window::quick_access::QuickAccessTabId::from_modal_kind)
                 .is_some()
             {
-                self.dispatch_gpui_sidebar_host_message(payload, cx);
+                self.quick_access_receive(payload, cx);
             }
             return;
         };

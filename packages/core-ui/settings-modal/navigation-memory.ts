@@ -53,13 +53,20 @@ export function areSettingsModalNavigationStatesEqual(
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-let rememberedThemeAdvancedOpen = false;
+/** The Theme page's groups that have their own More options. */
+export type ThemeMoreOptionsGroup = 'colours' | 'transparency' | 'chatTerminal';
 
-/** Whether the Theme page's Advanced part was left open, for the rest of this app session. */
-export function getRememberedThemeAdvancedOpen(): boolean {
-  return rememberedThemeAdvancedOpen;
+const rememberedThemeMoreOptionsOpen: Record<ThemeMoreOptionsGroup, boolean> = {
+  colours: false,
+  transparency: false,
+  chatTerminal: false,
+};
+
+/** Whether a Theme page group's More options was left open, for the rest of this app session. */
+export function getRememberedThemeMoreOptionsOpen(group: ThemeMoreOptionsGroup): boolean {
+  return rememberedThemeMoreOptionsOpen[group];
 }
 
-export function rememberThemeAdvancedOpen(open: boolean): void {
-  rememberedThemeAdvancedOpen = open;
+export function rememberThemeMoreOptionsOpen(group: ThemeMoreOptionsGroup, open: boolean): void {
+  rememberedThemeMoreOptionsOpen[group] = open;
 }

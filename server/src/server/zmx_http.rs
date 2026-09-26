@@ -49,7 +49,7 @@ pub(crate) async fn handle_zmx_lifecycle_http(
     }
 }
 
-fn dispatch_zmx_lifecycle_http_blocking(
+pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
     state: &AppState,
     endpoint_path: String,
     request_id: String,
@@ -280,23 +280,18 @@ pub(crate) async fn handle_zmx_session_interaction_http(
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
+    // Sending to an agent id (no session) was a renderer command the desktop never answered; it
+    // is retired (see `RENDERER_COMMAND_ACTIONS`), so say so instead of timing out.
     if endpoint_path == "/api/sendSessionMessage" && !params.contains_key("sessionId") {
-        return match state
-            .event_hub
-            .dispatch_renderer_command("sendMessage".to_string(), params, 15_000)
-            .await
-        {
-            Ok(result) => routed_json(
-                Some(endpoint_path),
-                StatusCode::OK,
-                rpc_success(request_id, result),
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::BAD_REQUEST,
+            rpc_error(
+                "badRequest",
+                "send-message needs a session selector; sending to an agent id was retired.",
+                Some(request_id),
             ),
-            Err(error) => zmx_error_response(
-                endpoint_path,
-                request_id,
-                ZmxEndpointError::DependencyUnavailable(error.message),
-            ),
-        };
+        );
     }
     if endpoint_path == "/api/focusSession" {
         let prepared = {

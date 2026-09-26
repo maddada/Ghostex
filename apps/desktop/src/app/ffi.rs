@@ -108,6 +108,15 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
 
 #[cfg(target_os = "macos")]
 #[unsafe(no_mangle)]
+pub extern "C" fn GhostexGpuiPerformTextInputHistoryCommand(
+    gpui_root_view: *mut std::ffi::c_void,
+    redo: std::ffi::c_int,
+) -> std::ffi::c_int {
+    dispatch_text_input_history_from_edit_menu(gpui_root_view, redo != 0) as _
+}
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
 pub extern "C" fn GhostexGpuiKeyboardOwnerUsesRendererEditHotkeys(
     gpui_root_view: *mut std::ffi::c_void,
 ) -> std::ffi::c_int {

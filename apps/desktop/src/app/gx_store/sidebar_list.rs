@@ -45,7 +45,7 @@ const SLOW_UPDATE_US: u64 = 5_000;
 /// own source moved, so the comparison is four cheap numbers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct SidebarCarryKey {
-    /// The runtime facts channel's HUD, which the snapshot and the menus read.
+    /// The runtime facts holder's HUD (gx_store/hud/), which the snapshot and the menus read.
     hud_generation: u64,
     /// The settings content hash the two hotkey labels were formatted at.
     shortcuts_hash: u64,
@@ -203,6 +203,11 @@ impl SidebarList {
 
     pub(crate) fn view(&self) -> &SidebarView {
         self.model.view()
+    }
+
+    /// The model itself, for readers of the groups it built (Back/Forward's trail stop).
+    pub(crate) fn model(&self) -> &SidebarViewModel {
+        &self.model
     }
 
     /// The session Close Project focuses before it parks the project
@@ -384,6 +389,7 @@ impl GhostexGpuiApp {
     /// books the next clock deadline. Cheap to call: an update with nothing changed returns at
     /// once.
     pub(crate) fn gx_store_update_sidebar_list(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store_publish_if_focus_moved(cx);
         let now_ms = now_ms();
         let machine = self.gx_store.core.presentation().machine(&MachineId::Local);
         let loaded = machine.is_some_and(|machine| machine.loaded().is_some());
@@ -414,6 +420,8 @@ impl GhostexGpuiApp {
         let ui_generation = self.gx_store.sidebar_ui.generation();
         let changes = std::mem::take(&mut self.gx_store.sidebar_list.changes);
         let dirty = std::mem::take(&mut self.gx_store.sidebar_list.dirty);
+        self.gx_store_hud_store_changed(&changes, cx);
+        self.gx_store_quick_access_store_changed(true, cx);
         let mut inputs = std::mem::take(&mut self.gx_store.sidebar_list.last_inputs);
         let unavailable = self.gx_store.sidebar_list.unavailable;
         let store = &mut self.gx_store;
@@ -428,6 +436,7 @@ impl GhostexGpuiApp {
             unavailable,
             store.remote.tabs(),
         );
+        self.gx_store_indicators_changed(&changes, &inputs, cx);
         let settings_moved = self.gx_store.sidebar_list.last_inputs.settings != inputs.settings;
         let last_update = LastUpdate {
             changes_empty: changes.is_empty(),
@@ -528,12 +537,13 @@ impl GhostexGpuiApp {
         // this update's list. Nothing happens unless the focused row really changed
         // (`take_followed_session`), so every other path through here pays one comparison.
         self.gx_store_follow_active_session_space(cx);
+        self.navigation_history_sidebar_changed(cx);
         // Every so often the same inputs are also built from scratch and the two lists compared:
         // this port's own cache invalidation, which has no second list to lean on since the page
         // was deleted (gx_store/sidebar_self_check.rs).
         self.gx_store_sidebar_scratch_check();
         // The list itself moved, or a value it carries from outside the view model did (the HUD
-        // the runtime posts, the rename or reveal request, the two hotkey labels). Before step 3
+        // gx_store/hud/ composes, which the runtime posted until 2026-09-25, the rename or reveal request, the two hotkey labels). Before step 3
         // the second half was a publish's job; now every one of those arrives on a path that ends
         // here, so this is the one gate.
         if !self.gx_store_sidebar_list_ready() {

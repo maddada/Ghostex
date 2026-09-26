@@ -16,13 +16,13 @@ use crate::ghostex_cli::usage;
 /// The agent-facing settings catalog generated from the Settings modal's own
 /// search rows by `tooling/ghostex-help/generate.ts`. Embedded so the installed
 /// CLI validates against the catalog that matches its own build.
-const SETTINGS_CATALOG_JSON: &str =
+pub(super) const SETTINGS_CATALOG_JSON: &str =
     include_str!("../../../skills/ghostex-help/references/settings-catalog.json");
 
 const SETTINGS_FILE_NAME: &str = "native-sidebar-settings.json";
 const SETTINGS_WRITE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(3);
 const SETTINGS_WRITE_POLL_INTERVAL: Duration = Duration::from_millis(100);
-const SETTINGS_UPDATE_SOURCE: &str = "cli:settings";
+pub(super) const SETTINGS_UPDATE_SOURCE: &str = "cli:settings";
 
 /// Mirrors `SETTINGS_MODAL_NAVIGATION_TABS` in
 /// packages/shared/ghostex-settings/settings-modal-navigation.ts.
@@ -286,6 +286,7 @@ pub fn settings_command(args: &[String]) -> CliResult<()> {
         "set" => set_command(&rest),
         "reset" => reset_command(&rest),
         "open" => open_command(&rest),
+        "hotkeys" | "hotkey" => super::settings_hotkeys::hotkeys_command(&rest),
         other => Err(CliError::Other(format!(
             "Unknown settings command: {other}\n\n{}",
             usage::settings_usage()
@@ -445,6 +446,11 @@ fn get_command(args: &[String]) -> CliResult<()> {
 }
 
 fn not_writable_error(entry: &CatalogEntry) -> CliError {
+    if entry.key == "hotkeys" {
+        return CliError::Other(
+            "Hotkeys are changed one at a time: `ghostex settings hotkeys list`, `ghostex settings hotkeys set <id> <keys>`, `ghostex settings hotkeys reset <id>|--all`.".to_string(),
+        );
+    }
     let reason = match entry.value_type.as_str() {
         "json" => "it is a structured value that only the Settings UI can edit".to_string(),
         "ui" => "it is a Settings UI action, not a stored value".to_string(),
@@ -592,7 +598,7 @@ fn app_not_running_error(error: CliError, entry: &CatalogEntry) -> CliError {
 
 /// CDXC:Settings 2026-09-09 DECISION:
 /// User: agent settings writes go through the running desktop app (renderer command -> the Settings modal's own save path), not a direct file write, so every save gets the same normalization and fan-out; when the app is not running the command fails instead of writing the file.
-/// SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/app-shot-and-misc.ts, tooling/ghostex-help/generate.ts.
+/// SEE-ALSO: packages/gx-core/src/renderer_commands/verbs.rs (`updateSettingsPatch`), apps/desktop/src/app/gx_store/renderer_commands/perform.rs, tooling/ghostex-help/generate.ts.
 fn apply_setting(entry: &CatalogEntry, value: Value, flags: &Flags, verb: &str) -> CliResult<()> {
     if !entry.agent_writable {
         return Err(not_writable_error(entry));

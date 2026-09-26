@@ -108,7 +108,7 @@ impl GxStoreDiagnostics {
     }
 }
 
-/// The state counters as both records carry them: 8 keys, at depth 2.
+/// The state counters as both records carry them: 7 keys, at depth 2.
 pub(super) fn state_counters_json(counters: &SidebarStateActionCounters) -> serde_json::Value {
     json!({
         "delayedSends": counters.delayed_sends,
@@ -116,7 +116,6 @@ pub(super) fn state_counters_json(counters: &SidebarStateActionCounters) -> serd
         "agentRuns": counters.agent_runs,
         "configureAgents": counters.configure_agents,
         "agentNothing": counters.agent_nothing,
-        "agentRunsWithoutRuntime": counters.agent_runs_without_runtime,
         "machineHides": counters.machine_hides,
         "declinedSource": counters.declined_source,
     })

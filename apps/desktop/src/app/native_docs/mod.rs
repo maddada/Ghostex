@@ -1,0 +1,29 @@
+//! The desktop Docs view, drawn natively. The entry point is `render_native_docs` in `render.rs`.
+
+pub(crate) mod actions;
+pub(crate) mod annotations;
+pub(crate) mod blocks;
+pub(crate) mod bridge;
+pub(crate) mod browser_area;
+pub(crate) mod document_view;
+pub(crate) mod documents;
+pub(crate) mod drawer;
+pub(crate) mod editor_style;
+pub(crate) mod entry;
+pub(crate) mod files;
+pub(crate) mod files_list;
+pub(crate) mod find;
+pub(crate) mod fonts;
+pub(crate) mod format_bar;
+pub(crate) mod format_bar_window;
+pub(crate) mod gutter;
+pub(crate) mod live;
+pub(crate) mod notes;
+pub(crate) mod notes_view;
+pub(crate) mod palette;
+pub(crate) mod render;
+pub(crate) mod resources;
+pub(crate) mod sidebar;
+pub(crate) mod state;
+pub(crate) mod storage;
+pub(crate) mod watch;

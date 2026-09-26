@@ -27,7 +27,7 @@ import { playCopySound } from "../copy-sound";
 import type {
   SessionChatComposerInputApi,
   SessionChatComposerKeyEvent,
-} from "./session-chat-composer";
+} from "./session-chat-input-api";
 import { sessionChatCaretMovement } from "./session-chat-caret-navigation";
 import { revealSessionChatComposerCaret } from "./session-chat-composer-scroll";
 import {
@@ -201,7 +201,7 @@ export function SessionChatLexicalInput({
       const shouldReveal = revealSelection;
       revealSelection = false;
       root.dataset.empty = valueRef.current === "" ? "true" : "false";
-      // CDXC:SessionChat 2026-09-15 WHY: Chromium keeps the scroll-fade-y top animation frozen at its last value once the editor stops overflowing (maximizing a scrolled composer, deleting lines), so the first line stays faded with nothing to scroll. input.css removes the animation while this is false; the same guard lives in session-chat-agent-fleet-strip.tsx and session-chat-plain-input.tsx.
+      // CDXC:SessionChat 2026-09-15 WHY: Chromium keeps the scroll-fade-y top animation frozen at its last value once the editor stops overflowing (maximizing a scrolled composer, deleting lines), so the first line stays faded with nothing to scroll. input.css removes the animation while this is false; the same guard lived in the retired React chat's other scrolling strips.
       root.dataset.overflowing = String(root.scrollHeight > root.clientHeight);
       const current = readSelection();
       editor.getEditorState().read(() => {
@@ -648,7 +648,6 @@ export function SessionChatLexicalInput({
     /**
      * CDXC:Clipboard 2026-09-15 DECISION:
      * User: play the copy sound when copying text from the chat composer, with the Copy Sound setting controlling it.
-     * SEE-ALSO: session-chat-plain-input.tsx handles clipboard feedback for the plain composer.
      */
     const clipboard = (event: ClipboardEvent): void => {
       if (readOnlyRef.current && event.type !== "copy") {

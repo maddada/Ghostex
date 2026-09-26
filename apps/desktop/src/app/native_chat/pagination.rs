@@ -1,11 +1,11 @@
 //! Paging older turns into the transcript.
 //!
-//! React has no standing "load earlier" button inside a filled transcript: the
+//! React had no standing "load earlier" button inside a filled transcript: the
 //! reader scrolls and the next page starts on its own near the top, then the
 //! keyed prepend leaves the rows they were reading exactly where they were
 //! (session-chat-message-list/list.tsx, use-session-chat-scroll-restoration.ts).
 //! The native list follows the same two rules here, and the button stays only
-//! for the one case React keeps it: a transcript with no rows yet.
+//! for the one case React kept it: a transcript with no rows yet.
 
 use super::state::NativeChatView;
 use gpui::{Context, ListOffset, px};

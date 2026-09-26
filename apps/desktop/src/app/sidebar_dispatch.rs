@@ -4,7 +4,6 @@
 //
 // Cluster: sidebar runtime settings, host-message dispatch, sidebar divider/collapse
 
-use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -30,8 +29,6 @@ use gpui::Window;
 use gpui::div;
 use gpui::prelude::FluentBuilder as _;
 use gpui::px;
-use gpui_component::WindowExt;
-use gpui_component::notification::Notification;
 
 use crate::app::consts::*;
 use crate::app::ffi::*;
@@ -170,12 +167,8 @@ impl GhostexGpuiApp {
             ) != SourceCodeServerRuntimeSettings::from_sidebar_runtime_settings(&next_snapshot);
 
         self.sidebar_runtime_settings_snapshot = next_snapshot.clone();
-        if let Some(sidebar) = self.sidebar.clone() {
-            let next_snapshot = next_snapshot.clone();
-            sidebar.update(cx, |surface, _| {
-                surface.refresh_sidebar_runtime_settings(next_snapshot);
-            });
-        }
+        self.gx_store_hud_settings_changed(cx);
+        self.remote_reconnect_sync_with_settings(cx);
         if self.coerce_active_mode_to_available_project_context(cx) {
             self.update_project_workarea_runtime_cef_surface_visibility(cx);
         }
@@ -270,184 +263,8 @@ impl GhostexGpuiApp {
             });
         }
         self.refresh_extensions_in_background(cx);
-        if let Some(sidebar) = self.sidebar.clone() {
-            sidebar.update(cx, |surface, _| {
-                surface.refresh_sidebar_gxserver_bootstrap(next_bootstrap.clone());
-            });
-        }
         self.reconcile_agents_pane_surfaces(cx);
         true
-    }
-
-    /// Worktree modal commands cross from the app-modal window into the
-    /// sidebar runtime through a fixed type + field allowlist. The runtime
-    /// revalidates project/worktree identity against gxserver state before any
-    /// mutation, so this forward carries only the shared modal contract fields
-    /// and never invents scope.
-    pub(crate) fn forward_gpui_worktree_modal_command_to_sidebar(
-        &mut self,
-        command_type: &str,
-        command: &serde_json::Map<String, serde_json::Value>,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let allowed_string_fields: &[&str] = match command_type {
-            "requestProjectWorktrees" => {
-                &["requestId", "projectId", "projectPath", "remoteMachineId"]
-            }
-            "createProjectWorktree" => &[
-                "agentId",
-                "baseBranch",
-                "existingWorktreeKey",
-                "existingWorktreePath",
-                "mode",
-                "projectId",
-                "projectPath",
-                "prompt",
-                "remoteMachineId",
-            ],
-            "confirmDeleteWorktree" => &["projectId"],
-            /*
-            CDXC:Worktrees 2026-08-09-18:40:
-            The rename confirmation carries the typed name across the modal
-            boundary. It is NOT a path: the runtime revalidates the project and
-            gxserver derives the destination folder from the name itself, so this
-            forward can never point a move at a directory of the caller's
-            choosing. `renameBranch` is a boolean and needs the explicit block
-            below — the string loop would drop it silently.
-            */
-            "confirmRenameWorktree" => &["projectId", "name"],
-            "commitWorktreeBeforeDelete" => &["groupId"],
-            _ => return false,
-        };
-        let mut message = serde_json::Map::new();
-        message.insert("type".to_string(), serde_json::json!(command_type));
-        for field in allowed_string_fields {
-            if let Some(value) = command.get(*field).and_then(serde_json::Value::as_str) {
-                message.insert((*field).to_string(), serde_json::json!(value));
-            }
-        }
-        if command_type == "confirmDeleteWorktree" {
-            for field in ["deleteLocalBranch", "deleteRemoteBranch"] {
-                if let Some(value) = command.get(field).and_then(serde_json::Value::as_bool) {
-                    message.insert(field.to_string(), serde_json::json!(value));
-                }
-            }
-        }
-        if command_type == "confirmRenameWorktree" {
-            if let Some(value) = command
-                .get("renameBranch")
-                .and_then(serde_json::Value::as_bool)
-            {
-                message.insert("renameBranch".to_string(), serde_json::json!(value));
-            }
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_worktree_modal_command_script(&serde_json::Value::Object(message));
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
-    }
-
-    /// Git review commands originate in the owned app-modal window, while the
-    /// pending review and gxserver client live in the sidebar runtime. Forward
-    /// only the shared review contract so the runtime can revalidate request
-    /// ids and selected paths against its gxserver-derived pending request.
-    pub(crate) fn forward_gpui_git_commit_modal_command_to_sidebar(
-        &mut self,
-        command_type: &str,
-        command: &serde_json::Map<String, serde_json::Value>,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let allowed_string_fields: &[&str] = match command_type {
-            "confirmSidebarGitCommit" | "confirmSidebarGitDirectMerge" => {
-                &["agentId", "message", "requestId"]
-            }
-            "runSidebarGitMultipleCommits" => &["agentId", "requestId"],
-            "openSidebarGitChangedFileDiff" | "openSidebarGitChangedFile" => {
-                &["filePath", "requestId"]
-            }
-            "cancelSidebarGitCommit" => &["requestId"],
-            _ => return false,
-        };
-        let mut message = serde_json::Map::new();
-        message.insert("type".to_string(), serde_json::json!(command_type));
-        for field in allowed_string_fields {
-            if let Some(value) = command.get(*field).and_then(serde_json::Value::as_str) {
-                message.insert((*field).to_string(), serde_json::json!(value));
-            }
-        }
-        if command_type == "openSidebarGitChangedFile" {
-            if let Some(value) = command
-                .get("openLocation")
-                .and_then(serde_json::Value::as_bool)
-            {
-                message.insert("openLocation".to_string(), serde_json::json!(value));
-            }
-        }
-        if matches!(
-            command_type,
-            "confirmSidebarGitCommit" | "confirmSidebarGitDirectMerge"
-        ) {
-            for field in ["commitOnNewRef", "deleteWorktreeAfter"] {
-                if let Some(value) = command.get(field).and_then(serde_json::Value::as_bool) {
-                    message.insert(field.to_string(), serde_json::json!(value));
-                }
-            }
-            if let Some(file_paths) = command
-                .get("filePaths")
-                .and_then(serde_json::Value::as_array)
-            {
-                let file_paths = file_paths
-                    .iter()
-                    .filter_map(serde_json::Value::as_str)
-                    .map(str::to_string)
-                    .collect::<Vec<_>>();
-                message.insert("filePaths".to_string(), serde_json::json!(file_paths));
-            }
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_git_commit_modal_command_script(&serde_json::Value::Object(message));
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
-    }
-
-    /// The Export Transcript dialog's two sidebar-bound commands. The dialog
-    /// only knows the user's choices — the include-toggles for
-    /// `runExportSessionTranscript`, the configured agent for
-    /// `startExportedTranscriptConversation`, and the bounded request id that
-    /// ties either command to the current dialog. The sidebar runtime owns the
-    /// session context, the exported path, and the gxserver calls, so only
-    /// those whitelisted fields are forwarded and nothing else.
-    pub(crate) fn forward_gpui_export_transcript_modal_command_to_sidebar(
-        &mut self,
-        command_type: &str,
-        command: &serde_json::Map<String, serde_json::Value>,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let mut message = serde_json::Map::new();
-        message.insert("type".to_string(), serde_json::json!(command_type));
-        if let Some(request_id) = command
-            .get("requestId")
-            .and_then(serde_json::Value::as_str)
-            .filter(|request_id| !request_id.trim().is_empty() && request_id.chars().count() <= 128)
-        {
-            message.insert("requestId".to_string(), serde_json::json!(request_id));
-        }
-        if let Some(agent_id) = command.get("agentId").and_then(serde_json::Value::as_str) {
-            message.insert("agentId".to_string(), serde_json::json!(agent_id));
-        }
-        for toggle in ["includeCommands", "includePatches", "includeReasoning"] {
-            if let Some(value) = command.get(toggle).and_then(serde_json::Value::as_bool) {
-                message.insert(toggle.to_string(), serde_json::json!(value));
-            }
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script =
-            gpui_export_transcript_modal_command_script(&serde_json::Value::Object(message));
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
     /// CDXC:Spaces 2026-09-21 WHY:
@@ -455,10 +272,9 @@ impl GhostexGpuiApp {
     /// result has to cross back, and only bounded metadata does: the mode enum, a Space id, a name,
     /// an icon id, a colour, an optional member id and the owning machine id, never a Space
     /// document, a project path or daemon state. Supersedes `CDXC:Spaces 2026-08-27`'s placement,
-    /// which said SidebarApp owns the Space document: for THIS COMPUTER the app owns it now
-    /// (gx_store/space_editor.rs) and the page is only told, so its Space selection and its
-    /// projection stay in step. A REMOTE machine's document is still the page's, because
-    /// `updateRemoteSidebarSpaces` is a direct call down that machine's tunnel.
+    /// which said SidebarApp owns the Space document: the app owns it now, for this computer and
+    /// for a remote machine (gx_store/space_editor.rs). The runtime is no longer told: the page
+    /// that read `applySidebarSpaceEditorResult` is gone and nothing else did (ledger R022).
     pub(crate) fn forward_gpui_sidebar_space_editor_result_to_sidebar(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -499,17 +315,15 @@ impl GhostexGpuiApp {
         // gone, and the sidebar's own state is the store's since M5 piece 7c
         // (gx_store/sidebar_ui_paths.rs).
         self.gx_store_note_sidebar_space_editor_result(&message, cx);
-        // The document edit itself, for this computer. The page is still told, because it keeps its
-        // own Space selection and draws its own projection until that projection is deleted; what
-        // it no longer does is write the document, so there is one writer.
+        // The document edit itself, for this computer or a remote machine.
         self.gx_store_run_space_editor_result(&message, cx);
-        self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
+        true
     }
 
     /// CDXC:Spaces 2026-09-15 DECISION:
     /// User: a project added through the Add Project dialog joins the Space that is open in the sidebar and goes to the top of it.
-    /// The app applies both halves for THIS COMPUTER (gx_store/added_project.rs) and still tells the sidebar page, which keeps them for a remote machine and keeps its own selected Space; only the added project's raw id and the owning machine id cross under the inbound `assignAddedProjectToSelectedSpace` type.
-    /// It must be dispatched before the project activation so the membership exists when the activation reveal resolves the project's Space.
+    /// The app applies both halves, for this computer and for a remote machine (gx_store/added_project.rs); the runtime is no longer told, because nothing there read `assignAddedProjectToSelectedSpace` once the sidebar page was gone (ledger R023).
+    /// It must run before the project activation so the membership exists when the activation reveal resolves the project's Space.
     pub(crate) fn forward_gpui_added_project_to_sidebar(
         &mut self,
         project_id: &str,
@@ -526,25 +340,15 @@ impl GhostexGpuiApp {
         let Some(project_id) = bounded(project_id) else {
             return false;
         };
-        let mut message = serde_json::Map::new();
-        message.insert("projectId".to_string(), serde_json::json!(project_id));
-        message.insert(
-            "type".to_string(),
-            serde_json::json!("assignAddedProjectToSelectedSpace"),
-        );
         let remote_machine_id = remote_machine_id.and_then(bounded);
-        if let Some(machine_id) = &remote_machine_id {
-            message.insert("remoteMachineId".to_string(), serde_json::json!(machine_id));
-        }
         self.gx_store_note_added_project(&project_id, remote_machine_id.as_deref(), cx);
-        self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
+        true
     }
 
-    /// Forward an `updateCustomSessionTags` catalog write issued from an
-    /// app-modal window (Settings) to the sidebar runtime, which performs the
-    /// gxserver write exactly as it does for the same message posted by the
-    /// sidebar page. Only a bounded copy of the catalog crosses: tag ids, names,
-    /// icon ids, colors, the order, and the owning machine id.
+    /// An `updateCustomSessionTags` catalog write issued from an app-modal
+    /// window (Settings), performed by gx_store/custom_tags_sync.rs. Only a
+    /// bounded copy of the catalog goes on: tag ids, names, icon ids, colors,
+    /// the order, and the owning machine id.
     pub(crate) fn forward_gpui_custom_session_tags_update_to_sidebar(
         &mut self,
         command: &serde_json::Map<String, serde_json::Value>,
@@ -620,7 +424,8 @@ impl GhostexGpuiApp {
                 serde_json::Value::String(remote_machine_id),
             );
         }
-        self.dispatch_gpui_sidebar_host_message(serde_json::Value::Object(message), cx)
+        self.gx_store_update_custom_session_tags(&serde_json::Value::Object(message), cx);
+        true
     }
 
     /// Reveal the exported markdown file in the OS file manager. The path comes
@@ -655,16 +460,16 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         /*
-        CDXC:CommandPane 2026-06-24-23:49:
-        Command-pane Action run-state feedback targets only the first-party GPUI sidebar CEF surface and the typed `window.ghostexGpui.onSidebarHostMessage` callback installed by the SidebarApp runtime. The generated script carries only existing sidebar message JSON and must not expose generic eval IPC, command text, paths, terminal output, status-file paths, tokens, or persisted shell-state fields.
+        CDXC:Sidebar 2026-09-25 WHY:
+        The app's modals, the New Thread picker and the delayed-send menus hand the sidebar's own
+        messages here, and the store answers every one it has an owner for. What is left used to go
+        on to the app runtime's `onSidebarHostMessage`, which only re-posted it to a message source
+        nothing listens to any more, so it stops here and the answer is `false`.
         */
-        // Host messages carry the sidebar hotkeys (previous or next session, session and project slots), which change focus in the runtime: it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_host_message_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        if self.gx_store_claim_sidebar_host_message(&message, cx) {
+            return true;
+        }
+        self.gx_store_run_session_edit(&message, cx)
     }
 
     pub(crate) fn handle_gpui_pick_workspace_folder_message(
@@ -752,11 +557,7 @@ impl GhostexGpuiApp {
         message: serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_workspace_folder_picked_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        self.gx_store_workspace_folder_picked(&message, cx)
     }
 
     /// GPUI port of the macOS OS-integration entry points
@@ -1073,13 +874,7 @@ impl GhostexGpuiApp {
         message: serde_json::Value,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_os_integration_command_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        self.gx_store_run_os_integration_command(&message, cx)
     }
 
     pub(crate) fn handle_gpui_pick_repository_folder_message(
@@ -1208,6 +1003,74 @@ impl GhostexGpuiApp {
             },
             cx,
         );
+    }
+
+    /// Settings -> Window glass -> Video: the aerial wallpapers macOS has downloaded, for the dark
+    /// and light video dropdowns.
+    pub(crate) fn handle_gpui_list_window_glass_videos_message(
+        &mut self,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let videos: Vec<serde_json::Value> =
+            crate::app::helpers::window_glass_video::downloaded_aerial_videos()
+                .into_iter()
+                .map(|video| {
+                    serde_json::json!({
+                        "name": video.name,
+                        "value": crate::app::helpers::window_glass_video::aerial_reference(&video.id),
+                    })
+                })
+                .collect();
+        self.dispatch_open_gpui_app_modal_message(
+            serde_json::json!({ "type": "windowGlassVideosListed", "videos": videos }),
+            cx,
+        );
+    }
+
+    /// Settings -> Window glass -> Video: "Choose a file…" for the dark or light video. The dialog
+    /// cannot filter by type, so a picked file that is not a .mov, .mp4 or .m4v comes back as an
+    /// error for the row to show.
+    pub(crate) fn handle_gpui_pick_window_glass_video_message(
+        &mut self,
+        message: &serde_json::Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let appearance = if message["appearance"] == "light" {
+            "light"
+        } else {
+            "dark"
+        };
+        let receiver = cx.prompt_for_paths(gpui::PathPromptOptions {
+            files: true,
+            directories: false,
+            multiple: false,
+            prompt: Some("Choose Video".into()),
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(Ok(Some(paths))) = receiver.await else {
+                return;
+            };
+            let Some(path) = paths.into_iter().next() else {
+                return;
+            };
+            let message = if crate::app::helpers::window_glass_video::is_video_file(&path) {
+                serde_json::json!({
+                    "appearance": appearance,
+                    "path": path.to_string_lossy(),
+                    "type": "windowGlassVideoFilePicked",
+                })
+            } else {
+                serde_json::json!({
+                    "appearance": appearance,
+                    "error": "Choose a .mov, .mp4 or .m4v video.",
+                    "type": "windowGlassVideoFilePicked",
+                })
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.dispatch_open_gpui_app_modal_message(message, cx);
+            });
+        })
+        .detach();
     }
 
     /// A native image dialog whose picked absolute path is posted back to the open app-modal
@@ -1455,97 +1318,26 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:Workarea 2026-06-26-07:25:
-        Native GPUI workspace tab lifecycle uses a fixed Rust-to-sidebar callback, not a generic renderer bus. The request contains only request id, action, bounded gxserver project/session ids, and optional replacement ids so the sidebar can perform gxserver lifecycle ownership while Rust keeps pane/tab ownership local.
+        Native GPUI workspace tab lifecycle: the request carries only request id, action, bounded gxserver project/session ids, and optional replacement ids; the store performs the gxserver half (gx_store/terminal_lifecycle/lifecycle_requests.rs) while the workspace keeps pane/tab ownership local.
         */
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_workspace_terminal_lifecycle_request_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        self.gx_store_run_tab_lifecycle_request(&message, cx)
     }
 
+    /// A capture from the App Shots monitor: staged in Rust (gx_store/app_shot.rs).
     #[cfg(target_os = "macos")]
     pub(crate) fn handle_gpui_native_app_shot_capture(
         &mut self,
         capture: GpuiAppShotCapture,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.dispatch_gpui_native_app_shot_capture(capture, cx) {
-            return;
-        }
-        window.push_notification(
-            Notification::warning("App Shot captured, but the GPUI sidebar is not ready."),
-            cx,
-        );
-        self.dispatch_gpui_app_modal_toast(
-            "warning",
-            "App Shot Failed",
-            "The GPUI sidebar is not ready to stage the App Shot.",
-            cx,
-        );
+        self.gx_store_stage_app_shot(capture, cx);
     }
 
-    #[cfg(target_os = "macos")]
-    pub(crate) fn dispatch_gpui_native_app_shot_capture(
-        &mut self,
-        capture: GpuiAppShotCapture,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        /*
-        CDXC:AppShots 2026-06-25-23:28:
-        Native Rust owns App Shot capture, path creation, and settings reads. CEF receives only a transient first-party capture payload so the gxserver sidebar runtime can format the macOS-parity prompt, try focused/recent existing-session insertion, or create a prompt-agent session; this capture bridge must not accept renderer-provided screenshot paths, persist capture data, log app/window/path text, or become generic eval IPC.
-
-        CDXC:AppShots 2026-06-26-04:27:
-        Focused/recent App Shot staging may target a remote row only through the separate fixed prompt bridge and an already-mounted remote attach Agents surface. Capture metadata remains first-party and cannot authorize renderer paths, SSH details, URLs, tokens, commands, output, or terminal text.
-        */
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let mut payload = serde_json::Map::new();
-        payload.insert(
-            "type".to_string(),
-            serde_json::Value::String(GPUI_SIDEBAR_NATIVE_APP_SHOT_MESSAGE_TYPE.to_string()),
-        );
-        payload.insert(
-            "version".to_string(),
-            serde_json::json!(GPUI_SIDEBAR_NATIVE_APP_SHOT_MESSAGE_VERSION),
-        );
-        payload.insert(
-            "appName".to_string(),
-            serde_json::Value::String(capture.app_name),
-        );
-        payload.insert(
-            "imagePath".to_string(),
-            serde_json::Value::String(capture.image_path),
-        );
-        if let Some(bundle_identifier) = capture.bundle_identifier {
-            payload.insert(
-                "bundleIdentifier".to_string(),
-                serde_json::Value::String(bundle_identifier),
-            );
-        }
-        if let Some(window_title) = capture.window_title {
-            payload.insert(
-                "windowTitle".to_string(),
-                serde_json::Value::String(window_title),
-            );
-        }
-        if let Some(window_width) = capture.window_width {
-            payload.insert("windowWidth".to_string(), serde_json::json!(window_width));
-        }
-        if let Some(window_height) = capture.window_height {
-            payload.insert("windowHeight".to_string(), serde_json::json!(window_height));
-        }
-        if let Some(trigger) = capture.trigger {
-            payload.insert("trigger".to_string(), serde_json::Value::String(trigger));
-        }
-        let script = gpui_native_app_shot_capture_script(&serde_json::Value::Object(payload));
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
-    }
-
+    /// Called after every command-pane change; returns whether a tab's summary (status, focus,
+    /// timer labels) moved, which the policy poll and the ready replay use to repaint. The summaries
+    /// no longer cross to the app runtime: its HUD's command-session indicators had no reader once
+    /// the HUD became Rust's (ledger R032).
     pub(crate) fn refresh_sidebar_command_pane_sessions_if_changed(
         &mut self,
         cx: &mut gpui::Context<Self>,
@@ -1559,9 +1351,6 @@ impl GhostexGpuiApp {
         );
         let snapshot = sessions.to_string();
         if self.sidebar_command_pane_sessions_snapshot == snapshot {
-            return false;
-        }
-        if !self.dispatch_gpui_sidebar_command_pane_sessions(&sessions, cx) {
             return false;
         }
         self.sidebar_command_pane_sessions_snapshot = snapshot;
@@ -1630,201 +1419,9 @@ impl GhostexGpuiApp {
         if self.sidebar_agents_delayed_sends_snapshot == snapshot {
             return false;
         }
-        if !self.dispatch_gpui_sidebar_agents_delayed_sends(&sessions, cx) {
-            return false;
-        }
+        self.gx_store_set_local_delayed_sends(&sessions, cx);
         self.sidebar_agents_delayed_sends_snapshot = snapshot;
         true
-    }
-
-    pub(crate) fn refresh_gpui_sidebar_browser_tabs_if_changed(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let browser_mode_is_visible = self.active_mode == TitlebarMode::Browser
-            && self
-                .project_editor_shell
-                .is_mode_awake(TitlebarMode::Browser);
-        let focused_browser_tab_id = if browser_mode_is_visible {
-            match self.shell_focus {
-                ShellFocusTarget::BrowserPane(pane_id) => {
-                    self.browser_tabs.active_tab_id_for_pane(pane_id)
-                }
-                ShellFocusTarget::BrowserSurface => self
-                    .browser_tabs
-                    .active_tab_id_for_pane(self.browser_tabs.focused_pane),
-                _ => None,
-            }
-        } else {
-            None
-        };
-        let active_browser_project_id = self.browser_tabs_project_id.clone();
-        let active_browser_surface_tab_ids = self
-            .browser_surfaces
-            .keys()
-            .copied()
-            .collect::<HashSet<_>>();
-        /*
-        CDXC:Browser 2026-08-26:
-        A tab of an inactive project is asleep only when its page is really
-        gone. Since a project switch parks the outgoing project's pages instead
-        of destroying them, "awake" is per-project surface ownership: the live
-        map for the mounted project, that project's parked bundle for every
-        other one.
-        */
-        let parked_browser_surface_tab_ids = self
-            .parked_browser_runtimes_by_project
-            .iter()
-            .map(|(project_id, runtime)| (project_id.as_str(), runtime.surface_tab_ids()))
-            .collect::<HashMap<_, _>>();
-        let mut projects = self
-            .parked_browser_tabs_by_project
-            .iter()
-            .filter(|(project_id, _)| self.browser_tabs_project_id.as_ref() != Some(*project_id))
-            .map(|(project_id, tabs)| (project_id.as_str(), tabs))
-            .collect::<Vec<_>>();
-        if let Some(project_id) = self.browser_tabs_project_id.as_deref() {
-            projects.push((project_id, &self.browser_tabs));
-        }
-        projects.sort_by(|left, right| left.0.cmp(right.0));
-
-        let tabs = projects
-            .into_iter()
-            .flat_map(|(project_id, model)| {
-                let project_is_active = active_browser_project_id.as_deref() == Some(project_id);
-                let awake_tab_ids = if project_is_active {
-                    active_browser_surface_tab_ids.clone()
-                } else {
-                    parked_browser_surface_tab_ids
-                        .get(project_id)
-                        .cloned()
-                        .unwrap_or_default()
-                };
-                let visible_tab_ids = model
-                    .rendered_leaf_order()
-                    .into_iter()
-                    .filter_map(|pane_id| model.active_tab_id_for_pane(pane_id))
-                    .collect::<HashSet<_>>();
-                /*
-                CDXC:Browser 2026-07-12:
-                Only loaded tabs project as sidebar browser sessions. The
-                address-only "New Tab" placeholder (including the in-place
-                reset left behind by closing the last tab) stays out of the
-                sidebar, so closing the last browser tab removes its sidebar
-                row, and committing an address in the browser address bar
-                surfaces the loaded tab as a fresh sidebar session.
-                */
-                model
-                    .tabs
-                    .iter()
-                    .filter(|tab| tab.state == BrowserTabState::Loaded)
-                    .map(move |tab| {
-                        serde_json::json!({
-                            "isActive": project_is_active && focused_browser_tab_id == Some(tab.id),
-                            "isSleeping": !awake_tab_ids.contains(&tab.id),
-                            "isVisible": browser_mode_is_visible
-                                && project_is_active
-                                && visible_tab_ids.contains(&tab.id),
-                            "projectId": project_id,
-                            "tabId": tab.id.0.to_string(),
-                            "faviconUrl": tab
-                                .runtime_favicon_fetch
-                                .as_ref()
-                                .map(|source| source.url.as_str()),
-                            "title": tab.display_title(),
-                            "url": tab.address_value(),
-                        })
-                    })
-            })
-            .collect::<Vec<_>>();
-        let snapshot = serde_json::Value::Array(tabs).to_string();
-        if self.sidebar_browser_tabs_snapshot == snapshot {
-            return false;
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_browser_tabs_script(&snapshot);
-        if !sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script)) {
-            return false;
-        }
-        self.sidebar_browser_tabs_snapshot = snapshot;
-        true
-    }
-
-    pub(crate) fn refresh_gpui_sidebar_displayed_sessions_if_changed(
-        &mut self,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        /*
-        CDXC:SessionSleep 2026-08-20:
-        Auto Sleep ("Sleep idle agent sessions") runs in the sidebar runtime,
-        which only knows which rows it last saw selected. That is not the same
-        thing as what this shell is rendering: a session switched to Chat view
-        parks its terminal behind the chat surface, and a gxserver reconnect
-        drops the runtime's local focus/visible sets entirely. Either way an
-        idle agent the user is sitting in front of looked retirable.
-
-        Rust is the only party that knows what is on screen, so it publishes
-        that set (the Agents column's rendered leaves, chat-mode sessions
-        included, because the tab still owns its pane) and the sweep protects it. The
-        bridge carries bounded local gxserver session ids only: no titles,
-        paths, commands, terminal output, or project bodies.
-        */
-        let session_ids = self
-            .gpui_sidebar_visible_local_session_ids()
-            .into_iter()
-            .filter(|session_id| {
-                gpui_sidebar_local_gxserver_session_id_allowed(session_id.as_str())
-            })
-            .collect::<Vec<_>>();
-        let snapshot = serde_json::Value::Array(
-            session_ids
-                .into_iter()
-                .map(serde_json::Value::String)
-                .collect(),
-        )
-        .to_string();
-        if self.sidebar_displayed_sessions_snapshot == snapshot {
-            return false;
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_displayed_sessions_script(&snapshot);
-        if !sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script)) {
-            return false;
-        }
-        self.sidebar_displayed_sessions_snapshot = snapshot;
-        true
-    }
-
-    pub(crate) fn dispatch_gpui_sidebar_command_pane_sessions(
-        &mut self,
-        sessions: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        /*
-        CDXC:CommandPane 2026-06-25-10:50:
-        Command-pane session indicators use a dedicated first-party sidebar bridge callback and cached `window.ghostexGpui.commandPaneSessions` value so restored tabs can hydrate before React installs listeners. The script may carry only sanitized session summaries, never action command text, cwd, env, status-file paths, terminal output, or project paths.
-        */
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_command_pane_sessions_script(sessions);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
-    }
-
-    pub(crate) fn dispatch_gpui_sidebar_agents_delayed_sends(
-        &mut self,
-        sessions: &serde_json::Value,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let script = gpui_sidebar_agents_delayed_sends_script(sessions);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
     pub(crate) fn dispatch_gpui_sidebar_command_run_state(
@@ -1832,36 +1429,11 @@ impl GhostexGpuiApp {
         command_id: &str,
         run_id: &str,
         state: GpuiSidebarCommandRunState,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
+    ) {
         self.sidebar_command_run_feedback_states
             .entry(command_id.to_string())
             .or_default()
             .apply_run_state(run_id, state);
-        self.dispatch_gpui_sidebar_host_message(
-            serde_json::json!({
-                "commandId": command_id,
-                "runId": run_id,
-                "state": state.as_str(),
-                "type": "sidebarCommandRunStateChanged",
-            }),
-            cx,
-        )
-    }
-
-    pub(crate) fn dispatch_gpui_sidebar_command_run_state_cleared(
-        &mut self,
-        command_id: &str,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        self.sidebar_command_run_feedback_states.remove(command_id);
-        self.dispatch_gpui_sidebar_host_message(
-            serde_json::json!({
-                "commandId": command_id,
-                "type": "sidebarCommandRunStateCleared",
-            }),
-            cx,
-        )
     }
 
     pub(crate) fn dispatch_gpui_command_action_completions(
@@ -1874,7 +1446,6 @@ impl GhostexGpuiApp {
                 &completion.command_id,
                 &completion.run_id,
                 completion.run_state(),
-                cx,
             );
             if let Some(action) =
                 gpui_project_board_action_for_command_id(completion.command_id.as_str())
@@ -1940,52 +1511,6 @@ impl GhostexGpuiApp {
             self.restore_non_command_focus_after_surface_removed(keyboard_owner_before, cx);
         }
         self.scroll_command_group_active_tab(completed_tab.group_id);
-        self.scroll_focused_command_active_tab();
-        self.persist_shell_layout_state();
-        self.sync_gpui_keep_awake_automation_from_current_settings(cx);
-        self.refresh_sidebar_command_pane_sessions_if_changed(cx);
-        cx.notify();
-        true
-    }
-
-    pub(crate) fn close_gpui_sidebar_command_run(
-        &mut self,
-        command_id: &str,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        /*
-        CDXC:CommandPane 2026-06-25-10:34:
-        Ending a sidebar command run closes only the live command-pane Action tab mapped to that command id and clears sidebar button feedback. The tab is removed from the command-pane model immediately (macOS command close parity); render reconciliation drops any mounted surface. This path must not inspect command text, terminal output, titles, status-file contents, paths, URLs, or persisted shell JSON.
-        */
-        let slot = self
-            .command_pane
-            .take_action_session_slot_for_action_close(command_id);
-        self.dispatch_gpui_sidebar_command_run_state_cleared(command_id, cx);
-        let Some(slot) = slot else {
-            cx.notify();
-            return false;
-        };
-        let slot = CommandTerminalBodyMountSlotId {
-            group_id: slot.0,
-            session_id: slot.1,
-        };
-        self.clear_gpui_command_delayed_send_timer(slot.session_id);
-        self.clear_gpui_command_close_after_done_timer(slot.session_id);
-        if !self
-            .command_pane
-            .close_session(slot.group_id, slot.session_id)
-        {
-            cx.notify();
-            return false;
-        }
-        self.forget_command_gxserver_session_for_closed_tab(slot.session_id, cx);
-        self.clear_command_resize_hover_state_if_command_pane_hidden();
-        if self.command_pane.has_sessions() {
-            self.focus_command_pane(cx);
-        } else {
-            self.restore_previous_non_command_focus_or_default(cx);
-        }
-        self.scroll_command_group_active_tab(slot.group_id);
         self.scroll_focused_command_active_tab();
         self.persist_shell_layout_state();
         self.sync_gpui_keep_awake_automation_from_current_settings(cx);

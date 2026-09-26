@@ -1,5 +1,5 @@
 //! JSON export of the titlebar Resources panel snapshot, served to the
-//! `ghostex resources` CLI verb through the sidebar bridge.
+//! `ghostex resources` CLI verb.
 //!
 //! CDXC:Resources 2026-09-04 WHY:
 //! The Resources panel is sampled inside the running GPUI app from in-memory
@@ -7,14 +7,12 @@
 //! separate process can reproduce its numbers without re-implementing and
 //! drifting from `gpui_native_resources_snapshot_from_samples`. The CLI
 //! therefore asks the app for the very snapshot the panel renders: gxserver
-//! forwards a `readResourcesSnapshot` renderer command to the sidebar runtime,
-//! which posts `postResourcesSnapshotRequest` here, and this module answers
-//! with `onResourcesSnapshotResult`. Rows, section totals, and header totals
-//! are computed by the same code and arithmetic the panel uses, plus the
-//! per-process sample every row was summed from, so a RAM figure can be
-//! audited pid by pid.
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/resources-snapshot.ts,
-//! server/src/ghostex_cli/resources.rs, packages/shared/gxserver-protocol.ts.
+//! forwards a `readResourcesSnapshot` renderer command to the app's store
+//! socket, which answers with this export (gx_store/renderer_commands/). Rows,
+//! section totals, and header totals are computed by the same code and
+//! arithmetic the panel uses, plus the per-process sample every row was summed
+//! from, so a RAM figure can be audited pid by pid.
+//! SEE-ALSO: server/src/ghostex_cli/resources.rs, packages/shared/gxserver-protocol.ts.
 
 use std::collections::HashSet;
 
@@ -25,41 +23,17 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn receive_sidebar_resources_snapshot_request_payload(
+    /// The snapshot `ghostex resources` prints.
+    pub(crate) fn gpui_native_resources_snapshot_export(
         &mut self,
-        payload: &str,
         cx: &mut gpui::Context<Self>,
-    ) {
-        let request = serde_json::from_str::<Value>(payload).unwrap_or_default();
-        let request_id = request
-            .get("requestId")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .unwrap_or_default()
-            .to_string();
-        if request_id.is_empty() {
-            return;
-        }
+    ) -> Value {
         let processes = gpui_read_native_resource_processes();
         let servers = gpui_read_native_resource_servers();
         let snapshot =
             self.gpui_native_resources_snapshot_from_samples(processes.clone(), servers, cx);
-        let response = json!({
-            "requestId": request_id,
-            "snapshot": gpui_native_resources_snapshot_json(&snapshot, &processes),
-        });
-        let Some(sidebar) = self.sidebar.clone() else {
-            return;
-        };
-        let script = gpui_resources_snapshot_result_script(&response);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
+        gpui_native_resources_snapshot_json(&snapshot, &processes)
     }
-}
-
-pub(crate) fn gpui_resources_snapshot_result_script(message: &Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onResourcesSnapshotResult==='function'){{bridge.onResourcesSnapshotResult(payload);}}else{{const pending=Array.isArray(bridge.pendingResourcesSnapshotResults)?bridge.pendingResourcesSnapshotResults:[];pending.push(payload);bridge.pendingResourcesSnapshotResults=pending;}}}})(); undefined;"
-    )
 }
 
 /// The memory ledger `memoryMb` values come from on this platform, so a reader

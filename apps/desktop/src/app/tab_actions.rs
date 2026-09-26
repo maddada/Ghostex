@@ -158,9 +158,7 @@ impl GhostexGpuiApp {
                             cx,
                         );
                         this.refresh_gpui_remote_gxserver_presentation_in_background(
-                            remote_machine_id,
-                            false,
-                            cx,
+                            &remote_machine_id,
                         );
                     }
                     Err(message) => this.dispatch_gpui_workspace_action_toast(
@@ -1456,7 +1454,7 @@ impl GhostexGpuiApp {
         Cmd-W is surface-aware in the GPUI placeholder shell. Command focus closes the active command placeholder, Browser surface focus closes the active browser tab, Agents mode closes the active workspace tab, and Source/Kanban/Automate/Docs never close the project-editor surface itself.
 
         CDXC:Terminal 2026-06-26-23:59:
-        Cmd-W in Agents delegates to the same close helper as pane-tab close. Mapped workspace sessions bypass Ghostty close-confirm and go through SidebarApp lifecycle, while unmapped exact mounted Running surfaces can still request `ghostty_surface_request_close` before shell removal.
+        Cmd-W in Agents delegates to the same close helper as pane-tab close. Mapped workspace sessions bypass Ghostty close-confirm and go through the store's lifecycle (formerly SidebarApp's), while unmapped exact mounted Running surfaces can still request `ghostty_surface_request_close` before shell removal.
 
         CDXC:Terminal 2026-06-23-05:21:
         Cmd-W with command-pane focus must match command tab close parity: an exact current mounted command surface gets a Ghostty close request and stays in the command model until a confirmed close callback is consumed. Non-mounted command placeholders continue to close through the existing command shell model.

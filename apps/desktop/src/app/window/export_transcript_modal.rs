@@ -249,7 +249,7 @@ impl GpuiExportTranscriptModalWindow {
         cx.notify();
     }
 
-    /// The sidebar runtime's answer to `RunExport`.
+    /// The store's answer to `RunExport` (gx_store/git/export_transcript.rs).
     pub(crate) fn receive_result(
         &mut self,
         ok: bool,

@@ -10,8 +10,8 @@
 //! CDXC:Sidebar 2026-09-21 WHY:
 //! Nothing here is taken from the old projection's publish any more (M4d part 2 step 3). What the
 //! view model does not decide now has a Rust owner named at the call site
-//! (`gx_store_install_sidebar_list`): the HUD is the runtime's facts channel, the reveal is the
-//! newest request from that channel or from the titlebar, the rename is the store's pending
+//! (`gx_store_install_sidebar_list`): the HUD is the runtime facts holder's (composed in
+//! gx_store/hud/), the reveal is the newest request held there or from the titlebar, the rename is the store's pending
 //! collection rename, the two hotkey labels are the hotkey settings formatted here, and a machine
 //! tab's sanitized failure message is this app's own connect state. The daemon revision and the
 //! project facts the publish carried beside the store's (`canRemoveProject`, the editor identity,
@@ -241,7 +241,7 @@ impl SnapshotCache {
 /// Everything one install needs besides the view and the cache.
 pub(super) struct SnapshotInput<'a> {
     pub(super) menus: &'a SidebarMenus<'a>,
-    /// The sidebar HUD, from the runtime's facts channel.
+    /// The sidebar HUD, from the runtime facts holder (composed in gx_store/hud/).
     pub(super) hud: &'a std::sync::Arc<Value>,
     /// The collection whose inline rename the renderer opens next, and the row it scrolls to.
     pub(super) rename_request: Option<NativeSidebarRenameRequest>,
@@ -368,6 +368,7 @@ pub(super) fn snapshot_from_view(
             .map(|machine| NativeSidebarMachine {
                 working_count: machine.working_count,
                 attention_count: machine.attention_count,
+                background_work_count: machine.background_work_count,
                 id: machine.id.clone(),
                 label: machine.label.clone(),
                 state: machine.state.clone(),
@@ -391,6 +392,7 @@ pub(super) fn snapshot_from_view(
                     contains_active_session: space.contains_active_session,
                     working_count: space.working_count,
                     attention_count: space.attention_count,
+                    background_work_count: space.background_work_count,
                 },
             )
             .collect(),
@@ -469,6 +471,7 @@ fn native_group(
         summary: json!({
             "workingCount": core.summary.working_count,
             "attentionCount": core.summary.attention_count,
+            "backgroundWorkCount": core.summary.background_work_count,
             "awakeCount": core.summary.awake_count,
         }),
         collapsed: core.collapsed,
@@ -488,6 +491,7 @@ fn native_group(
                 contains_active_session: section.contains_active_session,
                 working_count: section.working_count,
                 attention_count: section.attention_count,
+                background_work_count: section.background_work_count,
                 question_count: section.question_count,
                 session_ids: section.session_ids.clone(),
             })
@@ -614,6 +618,7 @@ fn native_collection(
         contains_active_session: collection.contains_active_session,
         working_count: collection.working_count,
         attention_count: collection.attention_count,
+        background_work_count: collection.background_work_count,
         menu: collection_menu(collection, view, menus, cache),
     }
 }

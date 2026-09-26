@@ -17,13 +17,15 @@
 //! pane opens. That is the shipped behaviour and it is preserved rather than fixed, because taking
 //! the pane anyway would move the user away from the row they chose in the meantime.
 //!
-//! **The attention acknowledgement stays the old runtime's.** It is a subsystem, with a minimum
-//! visible window and its own timers keyed per session, and the store holds none of it; M3 already
-//! built the queue that tells the old runtime about a local selection, so a split queues the
-//! acknowledgement the same way a click does rather than growing a second copy.
+//! **The attention acknowledgement is not planned here.** It is a subsystem, with a minimum
+//! visible window and its own timers keyed per session (the old runtime's until 2026-09-25, now
+//! packages/gx-core/src/attention.rs); M3 built the queue a local selection feeds, so a split
+//! queues the acknowledgement the same way a click does rather than growing a second copy.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`splitSessionRight`),
-//! apps/desktop/src/app/gx_store/sidebar_reload.rs, apps/desktop/src/app/gx_store/burst.rs
+//! Ported from `splitSessionRight` in the deleted `gxserver-runtime/sessions-and-focus.ts` (see
+//! git history).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_reload.rs, apps/desktop/src/app/gx_store/burst.rs
 //! (`gx_store_queue_attention_acknowledge`).
 
 use serde_json::{json, Value};
@@ -40,8 +42,8 @@ use ghostex_gx_protocol::LifecycleState;
 /// What a Split Right does to the row it names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SplitAction {
-    /// The Quick Automations row, where the TypeScript returns before it does anything. Owned
-    /// rather than refused so the gate compares "nothing happens" instead of skipping it.
+    /// The Quick Automations row, where the TypeScript returned before it did anything. Owned
+    /// rather than refused so the gate compared "nothing happens" instead of skipping it.
     Nothing,
     /// A sleeping row: the wake message the single-session path answers, carrying the placement.
     Wake(Value),
@@ -84,8 +86,9 @@ pub fn owns_split_message(message: &Value) -> bool {
 ///
 /// - **A remote row**, which is not a wake and a selection at all but one open through the native
 ///   project-path action bridge. Since 2026-09-21 `remote_focus.rs` owns that open, including this
-///   payload's placement, so a remote Split Right is planned there rather than here; the gate
-///   asserts the TypeScript still acts on one, which is what makes the hand-off a hand-off.
+///   payload's placement, so a remote Split Right is planned there rather than here; the parity gate
+///   (deleted with the TypeScript) asserted the TypeScript still acted on one, which is what made
+///   the hand-off a hand-off.
 /// - **A browser row and an id that does not parse**, which are the TypeScript's own early return.
 ///
 /// A row the store holds no lifecycle for is NOT refused: see the note at the read below.

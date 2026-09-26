@@ -44,6 +44,67 @@ struct WindowGlassImages {
     light: String,
 }
 
+/// CDXC:Theming 2026-09-23 DECISION:
+/// User, asked whether the glass could show a video: "ok set those in the dropdown to pick from (if any are downloaded we can let the user pick those) / also allow the user to pick a specific mp4/mov file". Glass shows has a Video choice with one video for dark mode (`windowGlassVideoDark`) and one for light mode (`windowGlassVideoLight`): an aerial wallpaper macOS has downloaded (saved as `aerial:<id>`) or a picked .mov/.mp4/.m4v file. It plays muted and looping, blurred and placed like the picture (`windowGlassImagePlacement`).
+///
+/// CDXC:Theming 2026-09-23 WHY:
+/// A background video must cost nothing while nobody is looking, so it plays only while Ghostex is the front app and its window is on screen, and pauses while the displays sleep, in Low Power Mode, and on battery unless `windowGlassVideoOnlyOnPower` is off (on by default, to spare the battery); Reduce Motion shows its first frame instead. A mode with no video chosen, or one whose file or aerial is gone, shows the live blur.
+static WINDOW_GLASS_VIDEOS: std::sync::Mutex<WindowGlassVideos> =
+    std::sync::Mutex::new(WindowGlassVideos {
+        video: false,
+        dark: None,
+        light: None,
+        only_on_power: true,
+    });
+
+struct WindowGlassVideos {
+    video: bool,
+    dark: Option<std::path::PathBuf>,
+    light: Option<std::path::PathBuf>,
+    only_on_power: bool,
+}
+
+/// The video the main window's glass plays in the current appearance, when Glass shows is Video
+/// and a playable one is chosen for that appearance, and whether it pauses on battery.
+fn window_glass_video() -> (Option<std::path::PathBuf>, bool) {
+    let Ok(videos) = WINDOW_GLASS_VIDEOS.lock() else {
+        return (None, true);
+    };
+    if !videos.video {
+        return (None, videos.only_on_power);
+    }
+    let video = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+        videos.light.clone()
+    } else {
+        videos.dark.clone()
+    };
+    (video, videos.only_on_power)
+}
+
+/// Whether the glass shows a picture or video rather than the live blur: Wallpaper only always
+/// does, Custom image and Video only once one is chosen for the current appearance.
+fn window_glass_uses_backdrop(
+    image: &Option<std::path::PathBuf>,
+    video: &Option<std::path::PathBuf>,
+) -> bool {
+    if !WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed) {
+        return false;
+    }
+    let custom = WINDOW_GLASS_IMAGES.lock().is_ok_and(|images| images.custom);
+    let video_mode = WINDOW_GLASS_VIDEOS.lock().is_ok_and(|videos| videos.video);
+    if custom {
+        image.is_some()
+    } else if video_mode {
+        video.is_some()
+    } else {
+        true
+    }
+}
+
+/// What the main window's glass played last; see `APPLIED_MAIN_WINDOW_GLASS`.
+static APPLIED_MAIN_WINDOW_GLASS_VIDEO: std::sync::Mutex<(Option<std::path::PathBuf>, bool)> =
+    std::sync::Mutex::new((None, true));
+
 /// The picture the main window's glass shows in the current appearance, when Glass shows is
 /// Custom image and one is chosen for that appearance.
 fn window_glass_custom_image() -> Option<std::path::PathBuf> {
@@ -73,16 +134,15 @@ static APPLIED_MAIN_WINDOW_GLASS: AtomicU8 = AtomicU8::new(0);
 /// with `window_glass_active_in` so they stay opaque there.
 static MAIN_WINDOW_ID: AtomicU64 = AtomicU64::new(u64::MAX);
 
-/// Default coverage of the sidebar's tint over the blurred desktop. Dark chrome is measured so
-/// white text and the muted sidebar text keep their contrast even over a white desktop; light
-/// chrome needs more because the desktop's colour bleeds through a light tint more readily.
-const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.80;
-const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.88;
-
-/// Default coverage of the work area's own tint: what the sidebar tint plus the retired 40% extra
-/// layer added up to, so the work area stays a step darker than the sidebar by default.
-const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.88;
-const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.93;
+/// Default coverage of the sidebar's and the work area's tints over the blurred desktop: point 20
+/// of the Transparency strength slider (`transparencyStrengthPatch` in
+/// packages/core-ui/settings-modal/theme-simple-controls.tsx), which keeps the sidebar 7 points
+/// more solid than the work area. SEE-ALSO: the CDXC:Theming 2026-09-25 DECISION on
+/// `DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT` in packages/shared/ghostex-settings/types.ts.
+const SIDEBAR_GLASS_ALPHA_DARK: f32 = 0.88;
+const SIDEBAR_GLASS_ALPHA_LIGHT: f32 = 0.93;
+const WORK_AREA_GLASS_ALPHA_DARK: f32 = 0.81;
+const WORK_AREA_GLASS_ALPHA_LIGHT: f32 = 0.86;
 
 /// CDXC:Theming 2026-09-23 DECISION:
 /// User: "implement sliders for the glass for sidebar vs main area (2 different sliders for dark mode, and 2 for light mode)", then "can we make the sidebar darker than main area somehow? currently this isn't possible / i feel would be nicer if they are separate and each can be modified freely? not doubling up the transparency for workarea when i do for sidebar??". Under glass the sidebar and the work area each paint their own tint straight over the blurred desktop, and nothing tints the window underneath both, so either area can be the darker one. Settings holds four percentages (`windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`, `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`) whose defaults are the constants above. This supersedes the same day's shell tint under the whole window with the work area's value as an extra layer over it; a saved extra layer (`windowGlassMainOpacity*`) is carried over as the coverage the two layers added up to.
@@ -202,7 +262,7 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
     // The wallpaper and custom-image backdrops exist only in the macOS window backend; Settings
     // offers them only there.
     WINDOW_GLASS_WALLPAPER.store(
-        cfg!(target_os = "macos") && matches!(source, Some("wallpaper" | "customImage")),
+        cfg!(target_os = "macos") && matches!(source, Some("wallpaper" | "customImage" | "video")),
         Ordering::Relaxed,
     );
     WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.store(
@@ -224,6 +284,21 @@ pub(crate) fn refresh_window_glass(object: &serde_json::Map<String, serde_json::
         images.custom = source == Some("customImage");
         images.dark = image("windowGlassImageDark");
         images.light = image("windowGlassImageLight");
+    }
+    if let Ok(mut videos) = WINDOW_GLASS_VIDEOS.lock() {
+        let video = |key: &str| {
+            object
+                .get(key)
+                .and_then(serde_json::Value::as_str)
+                .and_then(window_glass_video::resolve_glass_video)
+        };
+        videos.video = source == Some("video");
+        videos.dark = video("windowGlassVideoDark");
+        videos.light = video("windowGlassVideoLight");
+        videos.only_on_power = object
+            .get("windowGlassVideoOnlyOnPower")
+            .and_then(serde_json::Value::as_bool)
+            != Some(false);
     }
     let active = cfg!(any(target_os = "macos", target_os = "windows"))
         && wanted
@@ -298,7 +373,18 @@ pub(crate) fn window_glass_active_for(window: Option<gpui::AnyWindowHandle>) -> 
             let id = window.window_id().as_u64();
             id == MAIN_WINDOW_ID.load(Ordering::Relaxed)
                 || id == FLOATING_REVEAL_WINDOW_ID.load(Ordering::Relaxed)
+                || id == DOCS_DRAWER_WINDOW_ID.load(Ordering::Relaxed)
         })
+}
+
+/// The Docs view's floating files list, which draws in a window of its own the same way.
+static DOCS_DRAWER_WINDOW_ID: AtomicU64 = AtomicU64::new(u64::MAX);
+
+pub(crate) fn set_docs_drawer_glass_window(window: Option<gpui::AnyWindowHandle>) {
+    DOCS_DRAWER_WINDOW_ID.store(
+        window.map_or(u64::MAX, |window| window.window_id().as_u64()),
+        Ordering::Relaxed,
+    );
 }
 
 /// The floating reveal panel draws the main window's sidebar and sessions column in a blurred
@@ -324,11 +410,12 @@ pub(crate) fn sync_overlay_window_glass(window: &Window, main_origin: gpui::Poin
         return;
     }
     let image = window_glass_custom_image();
-    let custom = WINDOW_GLASS_IMAGES.lock().is_ok_and(|images| images.custom);
-    let main_uses_picture =
-        WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed) && (!custom || image.is_some());
+    let (video, only_on_power) = window_glass_video();
+    let main_uses_picture = window_glass_uses_backdrop(&image, &video);
     let follows_screen =
         !main_uses_picture || WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed);
+    // The panel plays the main window's own player, so both show the same frame.
+    window.set_background_video(if main_uses_picture { video } else { None }, only_on_power);
     window.set_background_wallpaper_image(if main_uses_picture { image } else { None });
     window.set_background_wallpaper_follows_screen(follows_screen);
     window.set_background_wallpaper_cover(
@@ -371,10 +458,9 @@ impl GhostexGpuiApp {
             WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed),
         );
         let image = window_glass_custom_image();
-        let custom = WINDOW_GLASS_IMAGES.lock().is_ok_and(|images| images.custom);
-        // Custom image with no picture for this appearance is the live blur.
-        let wallpaper =
-            WINDOW_GLASS_WALLPAPER.load(Ordering::Relaxed) && (!custom || image.is_some());
+        let video = window_glass_video();
+        // Custom image or Video with nothing chosen for this appearance is the live blur.
+        let wallpaper = window_glass_uses_backdrop(&image, &video.0);
         let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
             (false, _) => 1,
             (true, false) => 2,
@@ -388,10 +474,19 @@ impl GhostexGpuiApp {
                 changed
             })
             .unwrap_or(true);
+        let video_changed = APPLIED_MAIN_WINDOW_GLASS_VIDEO
+            .lock()
+            .map(|mut applied| {
+                let changed = *applied != video;
+                *applied = video.clone();
+                changed
+            })
+            .unwrap_or(true);
         let previous = APPLIED_MAIN_WINDOW_GLASS.swap(code, Ordering::Relaxed);
-        if previous == code && !image_changed {
+        if previous == code && !image_changed && !video_changed {
             return;
         }
+        window.set_background_video(video.0, video.1);
         window.set_background_wallpaper_image(image);
         window.set_background_wallpaper(wallpaper);
         window.set_background_appearance(wanted);
@@ -405,13 +500,58 @@ impl GhostexGpuiApp {
 }
 
 /// Fill coverage of a menu or popover window under glass; its own window blurs what is behind it.
-pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.78;
+pub(crate) const WINDOW_GLASS_MENU_ALPHA: f32 = 0.32;
 
-/// The fill of a menu or panel that has a window of its own (the header's dropdowns): thinned under
-/// glass, where that window blurs whatever is behind it.
+/// `WINDOW_GLASS_MENU_ALPHA` in light mode.
+pub(crate) const WINDOW_GLASS_MENU_ALPHA_LIGHT: f32 = 0.6;
+
+/// How much a dark menu colour is lifted toward white under glass, so the frost reads as a light
+/// pane over the blur instead of a dark hole.
+const WINDOW_GLASS_MENU_LIFT_DARK: f32 = 0.08;
+
+/// CDXC:Theming 2026-09-25 DECISION:
+/// User: a single frosted menu was "not looking glassy at all", then "for the context menus and menus, we need them to be more transparent by default. Right now, the settings you have, they don't look transparent still." Every frosted menu and tooltip window uses one recipe: a 20px blur that keeps the backdrop's colour saturation (`FROSTED_MENU_BLUR_RADIUS`, `FROSTED_MENU_KEEP_SATURATION`, applied by `apply_frosted_menu_blur`; the main window's glass keeps its 60px, desaturated blur), and a fill of the theme's menu colour lifted a little toward white in dark mode covering 32% in dark mode and 60% in light mode (`frosted_menu_alpha`), so shapes and colours behind a menu read through it. Supersedes the same day's 50% fill over the main window's blur.
+pub(crate) fn frosted_menu_fill(color: Hsla) -> Hsla {
+    let lifted = if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+        color
+    } else {
+        color.blend(gpui::white().opacity(WINDOW_GLASS_MENU_LIFT_DARK))
+    };
+    lifted.opacity(frosted_menu_alpha())
+}
+
+/// How much of a frosted menu or tooltip its fill covers: little in dark mode, where the menu's
+/// light text reads over anything behind it, more in light mode, where dark text needs a lighter
+/// backing.
+pub(crate) fn frosted_menu_alpha() -> f32 {
+    if CHROME_LIGHT_APPEARANCE.load(Ordering::Relaxed) {
+        WINDOW_GLASS_MENU_ALPHA_LIGHT
+    } else {
+        WINDOW_GLASS_MENU_ALPHA
+    }
+}
+
+/// Blur radius of a frosted menu or tooltip window. Narrower than the main window's glass so the
+/// shapes and colours behind a menu still read through it.
+pub(crate) const FROSTED_MENU_BLUR_RADIUS: f32 = 20.0;
+
+/// Whether a frosted menu's backdrop keeps the colour saturation the main window's glass strips.
+pub(crate) const FROSTED_MENU_KEEP_SATURATION: bool = true;
+
+/// Gives a menu or tooltip window the frosted menus' blur (`FROSTED_MENU_BLUR_RADIUS`,
+/// `FROSTED_MENU_KEEP_SATURATION`). Call it where the window sets its corner radius.
+pub(crate) fn apply_frosted_menu_blur(window: &gpui::Window) {
+    window.set_background_blur_style(
+        gpui::px(FROSTED_MENU_BLUR_RADIUS),
+        FROSTED_MENU_KEEP_SATURATION,
+    );
+}
+
+/// The fill of a menu or panel that has a window of its own (the header's dropdowns): the frosted
+/// menu fill under glass, where that window blurs whatever is behind it.
 pub(crate) fn popup_window_surface(color: Hsla) -> Hsla {
     if window_glass_active() {
-        color.opacity(WINDOW_GLASS_MENU_ALPHA)
+        frosted_menu_fill(color)
     } else {
         color
     }

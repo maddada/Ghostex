@@ -56,12 +56,8 @@ impl NoteState {
     }
 }
 
-/// The stash and note reads that feed the composer's own buttons.
-///
-/// CDXC:SessionChat 2026-09-18 SEE-ALSO:
-/// The React chrome is `packages/core-ui/chat/session-chat-composer-actions.tsx`: a stash count
-/// badge, a session-note presence dot, and pressed Summary and Note buttons. `session-chat-view.tsx`
-/// reads the same two sources; this keeps GPUI chat reading them through one projection.
+/// The stash and note reads that feed the composer's own buttons: a stash count badge, a
+/// session-note presence dot, and pressed Summary and Note buttons.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ComposerChromeState {
     agent_session_id: Option<String>,

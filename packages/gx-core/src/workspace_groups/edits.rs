@@ -7,12 +7,14 @@
 //! every other path, so a reorder that puts a row back where it already was still writes the key
 //! and still schedules a push, and a port that answered "no change" for it would make one fewer
 //! storage write and one fewer push than the app makes today. The difference is only visible in a
-//! step-by-step comparison, which is what the gate does, so the identity semantics are modelled
+//! step-by-step comparison, which is what the parity gate did until the TypeScript was deleted, so the identity semantics are modelled
 //! rather than improved.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/workspace-session-groups.ts
-//! (`createGpuiWorkspaceSessionSubgroup`, `moveGpuiWorkspaceSessionToSubgroup`,
-//! `syncGpuiWorkspaceSessionOrderInSubgroup`), packages/gx-core/src/sidebar_drag/order_write.rs.
+//! Ported from the TypeScript `createGpuiWorkspaceSessionSubgroup`, `moveGpuiWorkspaceSessionToSubgroup`
+//! and `syncGpuiWorkspaceSessionOrderInSubgroup` (their frozen copy,
+//! `tooling/gx-core/workspace-session-groups-frozen.ts`, is deleted; see git history).
+//!
+//! SEE-ALSO: packages/gx-core/src/sidebar_drag/order_write.rs.
 
 use std::collections::BTreeSet;
 

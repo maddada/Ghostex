@@ -39,9 +39,7 @@ impl CefSurface {
         popup_open_handler: Option<cef::BrowserPopupOpenHandler>,
         page_metadata_handler: Option<cef::BrowserPageMetadataHandler>,
         media_access_handler: Option<cef::BrowserMediaAccessHandler>,
-        sidebar_runtime_settings: Option<cef::SidebarRuntimeSettingsSnapshot>,
         sidebar_gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
-        sidebar_bridge_event_handler: Option<cef::SidebarBridgeEventHandler>,
         project_workarea_bridge_event_handler: Option<cef::ProjectWorkareaBridgeEventHandler>,
         manage_docs_resource_scope: Option<cef::ManageDocsResourceScope>,
         app_modal_host_bridge_surface: Option<cef::AppModalHostBridgeSurface>,
@@ -59,9 +57,7 @@ impl CefSurface {
             popup_open_handler,
             page_metadata_handler,
             media_access_handler,
-            sidebar_runtime_settings,
             sidebar_gxserver_bootstrap,
-            sidebar_bridge_event_handler,
             project_workarea_bridge_event_handler,
             manage_docs_resource_scope,
             app_modal_host_bridge_surface,
@@ -94,8 +90,6 @@ impl CefSurface {
             &profile,
             prepaint_background_color,
             uses_system_page_appearance,
-            None,
-            None,
             None,
             None,
             None,
@@ -181,30 +175,6 @@ impl CefSurface {
             self.background = background;
             cx.notify();
         }
-    }
-
-    pub(crate) fn refresh_sidebar_runtime_settings(
-        &mut self,
-        runtime_settings: cef::SidebarRuntimeSettingsSnapshot,
-    ) {
-        /*
-        CDXC:CefRuntime 2026-06-23-06:57:
-        The GPUI sidebar needs a callable post-load refresh path for strict debug/beta gates plus the saved shared Settings object without adding a broad settings watcher or event bus. Keep this as a narrow CEF surface forwarder so future callers can target only the sidebar main frame.
-        */
-        self.browser
-            .refresh_sidebar_runtime_settings(runtime_settings);
-    }
-
-    pub(crate) fn refresh_sidebar_gxserver_bootstrap(
-        &mut self,
-        gxserver_bootstrap: Option<cef::SidebarGxserverBootstrap>,
-    ) {
-        /*
-        CDXC:ServerDaemon 2026-06-24-11:17:
-        Sidebar bootstrap refreshes use the existing CEF surface wrapper only for the sidebar main frame. This forwards an app-owned snapshot to the private browser-to-renderer message path and must not call generic JavaScript injection, touch Browser/workarea/modal CEF surfaces, persist tokens, log URLs/tokens/paths/titles, or synthesize fallback gxserver data.
-        */
-        self.browser
-            .refresh_sidebar_gxserver_bootstrap(gxserver_bootstrap);
     }
 
     pub(crate) fn refresh_session_chat_gxserver_bootstrap(
@@ -551,6 +521,8 @@ impl Element for CefElement {
 
         self.browser.set_visible(true);
         place_browser_view(&self.browser, bounds, window);
+        // CDXC:Tooltips 2026-09-24 SEE-ALSO: the tooltip positioners in gpui (`window.rs`) and gpui-component (`tooltip.rs`) lay tooltips out around the regions recorded here, because the page's native view draws over anything GPUI paints inside its frame.
+        window.occlude_native_region(bounds);
         #[cfg(target_os = "macos")]
         if self.surface_id != APP_MODAL_HOST_ID
             && let Some(native_view) = self.browser.native_view()

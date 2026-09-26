@@ -16,10 +16,10 @@
 //! `nativeProjectFamily` (a project, its worktrees, and every user-made group of all of them) and
 //! `nativeCollectionGroups` (every group of one collection).
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/space-navigation.ts
-//! (`describeNativeSidebarMachine`), tooling/gx-core/sidebar-page-frozen/project-drag.ts,
-//! apps/desktop/sidebar/gxserver-runtime/sidebar-groups.ts (`spliceWorkspaceSubgroups`, which is
-//! what gives a user-made group the same `projectContext` its project has).
+//! Ported from the TypeScript `describeNativeSidebarMachine` and project drag (frozen in the
+//! deleted `tooling/gx-core/sidebar-page-frozen/space-navigation.ts` and `project-drag.ts`) and
+//! `spliceWorkspaceSubgroups` in the deleted `gxserver-runtime/sidebar-groups.ts`, which is what
+//! gave a user-made group the same `projectContext` its project has; see git history.
 
 use crate::core::Core;
 use crate::keys::{MachineId, ProjectKey};

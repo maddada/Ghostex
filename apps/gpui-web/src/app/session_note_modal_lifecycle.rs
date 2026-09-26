@@ -1,0 +1,1 @@
+../../../desktop/src/app/session_note_modal_lifecycle.rs

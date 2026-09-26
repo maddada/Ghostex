@@ -17,6 +17,7 @@ pub(crate) mod native_action;
 pub(crate) mod presentation_and_watchdog;
 pub(crate) mod project_browse_and_add;
 pub(crate) mod reconnect;
+pub(crate) mod reconnect_ladder;
 pub(crate) mod settings_and_install_probe;
 pub(crate) mod sidebar_request_and_recent_projects;
 pub(crate) mod sidebar_rpc;

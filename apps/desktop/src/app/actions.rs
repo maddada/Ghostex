@@ -364,7 +364,7 @@ pub(crate) struct PopOutGpuiViewTab {
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct ToggleGpuiViewPanelMaximized;
 
-/// "Show in <project>" and "Show in space <space>": one override each, ticked when the view is
+/// "Show in this Project" and "Show in this Space": one override each, ticked when the view is
 /// currently shown there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]

@@ -459,6 +459,9 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
             let params = with_resolved_gxserver_session_params(payload, flags)?;
             rpc::call_gxserver_rpc("/api/cancelDelayedSend", &params, flags)
         }
+        "assertSidebarCard" | "saveAgent" | "setViewMode" | "setVisibleCount" | "waitFor" => {
+            Err(retired_renderer_action_error(action))
+        }
         /*
         CDXC:Sessions 2026-08-17:
         Close After Done remains owned by the connected sidebar renderer, so
@@ -466,8 +469,7 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         pretending that it is an unsupported CLI action. Delayed Send uses the
         first-class gxserver endpoints above.
         */
-        "assertSidebarCard"
-        | "clickButton"
+        "clickButton"
         | "focusGroup"
         | "fullReloadSession"
         | "moveProject"
@@ -478,16 +480,28 @@ pub fn send_gxserver_cli_action(action: &str, payload: &Value, flags: &Flags) ->
         | "readResourcesSnapshot"
         | "restartSession"
         | "runCommand"
-        | "saveAgent"
-        | "setViewMode"
-        | "setVisibleCount"
         | "switchProject"
         | "toggleCloseAfterDone"
         | "toggleSidebarCollapsed"
-        | "updateSettingsPatch"
-        | "waitFor" => dispatch_gxserver_renderer_command(action, payload, flags),
+        | "updateSettingsPatch" => dispatch_gxserver_renderer_command(action, payload, flags),
         other => Err(rpc::unsupported_action_error(other)),
     }
+}
+
+/// A verb whose feature is gone from the desktop app (why each one was retired:
+/// packages/gx-core/src/renderer_commands/verbs.rs).
+fn retired_renderer_action_error(action: &str) -> CliError {
+    let verb = match action {
+        "assertSidebarCard" => "assert-card",
+        "saveAgent" => "save-agent",
+        "setViewMode" => "set-view-mode",
+        "setVisibleCount" => "set-visible-count",
+        "waitFor" => "wait-for",
+        other => other,
+    };
+    CliError::Other(format!(
+        "`ghostex {verb}` was retired: the Ghostex app no longer has the feature it drove."
+    ))
 }
 
 /// dispatchGxserverRendererCommand: CLI commands that still need visible macOS

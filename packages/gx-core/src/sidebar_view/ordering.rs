@@ -226,7 +226,7 @@ fn sort_by_activity(rows: &[std::sync::Arc<SessionRow>], indices: &mut [usize]) 
 /// `sortParkedSessionIdsByLastActivity`: latest active first, ties by sidebar session id.
 ///
 /// CDXC:StateSync 2026-09-20 SEE-ALSO:
-/// packages/shared/active-sessions-sort.ts breaks the tie with `localeCompare`; see the note in projects.rs on why byte order is the same order in the desktop's QuickJS and is not in V8.
+/// packages/shared/active-sessions-sort.ts breaks the tie with `localeCompare`; see the note in projects.rs on why byte order was the same order in the desktop's QuickJS and is not in V8.
 fn sort_parked_by_last_activity(rows: &[std::sync::Arc<SessionRow>], indices: &mut [usize]) {
     indices.sort_by(|left, right| {
         let time = |index: &usize| rows[*index].timing.last_interaction_ms.unwrap_or(0);

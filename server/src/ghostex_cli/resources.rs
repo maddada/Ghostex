@@ -17,7 +17,7 @@ itself: the snapshot is produced by the running desktop app through the
 the panel would draw at the same instant. Formatting below mirrors the panel's
 compact CPU/RAM chips so the two can be compared line by line.
 SEE-ALSO: apps/desktop/src/app/titlebar/resources_snapshot_export.rs,
-apps/desktop/sidebar/gxserver-runtime/resources-snapshot.ts.
+apps/desktop/src/app/gx_store/renderer_commands/perform.rs (`ReadResourcesSnapshot`).
 */
 pub fn resources_command(args: &[String]) -> CliResult<()> {
     if args

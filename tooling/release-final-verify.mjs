@@ -247,7 +247,25 @@ function formatDuration(durationMs) {
   return seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
 
+// CDXC:TempCleanup 2026-09-25 WHY: every run used to leave its temp dirs and the
+// downloaded DMG in $TMPDIR (about 550 MB per run), so repeated verifications filled
+// the disk. verify() registers each temp path in cleanupPaths; main() removes them
+// all when verification finishes, passes or fails.
 async function main() {
+  const cleanupPaths = [];
+  try {
+    await verify(cleanupPaths);
+  } finally {
+    await Promise.all(cleanupPaths.map((entry) => rm(entry, { recursive: true, force: true }).catch(() => {})));
+  }
+}
+
+async function verify(cleanupPaths) {
+  const tempDir = async (prefix) => {
+    const dir = await mkdtemp(path.join(tmpdir(), prefix));
+    cleanupPaths.push(dir);
+    return dir;
+  };
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
     console.log(usage().trim());
@@ -345,7 +363,7 @@ async function main() {
         warn: `Expected difference: ${version} carries no ${assetName} (released before change-aware planning).`,
       };
     }
-    const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-provenance-verify-${version}-`));
+    const temporary = await tempDir(`ghostex-provenance-verify-${version}-`);
     await capture(
       `env -u GH_TOKEN -u GITHUB_TOKEN gh release download ${shellQuote(`v${version}`)} ` +
         `--repo ${shellQuote(githubRepo)} --pattern ${shellQuote(assetName)} --dir ${shellQuote(temporary)}`
@@ -418,7 +436,7 @@ async function main() {
     let plan = releaseProvenance?.plan?.products ? releaseProvenance.plan : null;
     let source = `the plan recorded in ${releaseProvenanceAssetName(version)}`;
     if (!plan && options.runId) {
-      const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-release-plan-${version}-`));
+      const temporary = await tempDir(`ghostex-release-plan-${version}-`);
       await capture(
         `env -u GH_TOKEN -u GITHUB_TOKEN gh run download ${shellQuote(options.runId)} --repo ${shellQuote(githubRepo)} ` +
           `--name ${shellQuote(RELEASE_PLAN_ARTIFACT_DIRECTORY)} --dir ${shellQuote(temporary)}`
@@ -477,7 +495,7 @@ async function main() {
     if (arches.length === 0) {
       return { warn: 'Release has no Velopack Windows update channels (legacy or Windows-excluded release).' };
     }
-    const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-windows-update-verify-${version}-`));
+    const temporary = await tempDir(`ghostex-windows-update-verify-${version}-`);
     const validated = [];
     for (const arch of arches) {
       const names = windowsUpdateArtifactNames(version, arch);
@@ -554,7 +572,7 @@ async function main() {
     if (options.skipSparkle) {
       return SKIPPED;
     }
-    const appcastPath = path.join(await mkdtemp(path.join(tmpdir(), `ghostex-verify-${version}-`)), 'appcast.xml');
+    const appcastPath = path.join(await tempDir(`ghostex-verify-${version}-`), 'appcast.xml');
     await writeFile(appcastPath, await githubContent(githubRepo, 'appcast.xml'));
     await capture(`xmllint --noout ${shellQuote(appcastPath)}`);
     const topVersion = await capture(
@@ -707,6 +725,7 @@ async function main() {
     }
     if (!dmgPath) {
       const downloadPath = path.join(tmpdir(), `ghostex-${version}-final-verify.dmg`);
+      cleanupPaths.push(downloadPath);
       await capture(
         `curl -fsSL ${shellQuote(`https://github.com/${githubRepo}/releases/download/v${version}/ghostex-${version}-arm64.dmg`)} -o ${shellQuote(downloadPath)}`,
         { timeoutMs: 1_800_000 }
@@ -871,7 +890,7 @@ async function main() {
     if (!componentRelease.exists) {
       throw new Error(`Component tag ${selected.component.downloadTag} was not found in any component repository.`);
     }
-    const temporary = await mkdtemp(path.join(tmpdir(), `ghostex-component-verify-${version}-`));
+    const temporary = await tempDir(`ghostex-component-verify-${version}-`);
     const archivePath = path.join(temporary, selected.asset.assetName);
     const extractPath = path.join(temporary, 'unpacked');
     await capture(

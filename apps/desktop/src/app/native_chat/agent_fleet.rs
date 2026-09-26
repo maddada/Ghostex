@@ -1,8 +1,7 @@
 //! The Subagents strip above the composer: one row per child the provider
 //! reports, with its model label, what it is doing, its token counter and its
-//! clock. Every value comes from `sessionChatAgentFleetRows`
-//! (packages/shared/session-chat-presentation/agent-fleet.ts), the same
-//! projection `session-chat-agent-fleet-strip.tsx` renders.
+//! clock. Every value comes from the core's fleet rows
+//! (packages/gx-chat-core/src/extras/agent_fleet.rs).
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt;
@@ -102,7 +101,7 @@ impl NativeChatView {
         )
     }
 
-    /// React lays the strip out as one grid whose model track is `fit-content(10rem)`, so every
+    /// React laid the strip out as one grid whose model track is `fit-content(10rem)`, so every
     /// task starts at the same x whatever the names above it are. GPUI has no such track, so the
     /// column is measured once from the widest label in the roster and handed to every row.
     fn fleet_name_column(rows: &[Value], p: &ChatAppearance, cx: &Context<Self>) -> gpui::Pixels {
@@ -136,7 +135,7 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        // Both cells React links open the same child transcript (session-chat-agent-fleet-strip.tsx).
+        // Both linked cells open the same child transcript, as in React's session-chat-agent-fleet-strip.tsx.
         let open = Self::subagent_open_command(row);
         let key = text(row, "key");
         // CDXC:SessionChat 2026-09-12 DECISION: User: Codex fleet rows show the name/path in the status column instead of the link tooltip.
@@ -218,7 +217,7 @@ impl NativeChatView {
         }
         if let Some(nested) = row["nested"].as_u64().filter(|nested| *nested > 0) {
             let title = text(row, "nestedTitle");
-            // React draws the overflow marker as a pill, not bare digits
+            // React drew the overflow marker as a pill, not bare digits
             // (`.ghostex-chat-agent-fleet-nested`), so it reads as a count of hidden children.
             work = work.child(
                 div()
@@ -244,7 +243,7 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .child(pulse)
-            // The name cell is the child's transcript link, the model label React renders inside it.
+            // The name cell is the child's transcript link, the model label React rendered inside it.
             .child(
                 div()
                     .flex_shrink_0()

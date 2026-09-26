@@ -1,20 +1,16 @@
 //! Running a sidebar action in Rust instead of sending it through the old runtime.
 //!
 //! CDXC:ContextMenus 2026-09-20 WHY:
-//! Every menu row already carries the payload the old runtime answers, and since M4c the store
-//! builds the row. What is left is the answer itself: a copy action reaches the clipboard today
-//! by leaving Rust for QuickJS, having an id resolved there, and coming straight back over the
-//! fixed native bridge. The store holds everything that resolution reads, so the round trip buys
-//! nothing and costs a frame. The rule this file follows is that the CALL must be identical, not
-//! merely the outcome: gx-core decides which call to make and the host only performs it, so the
-//! parity gate can enumerate the calls of both sides rather than compare a list that a wrong RPC
-//! would not move.
+//! Every menu row already carries the payload the old runtime answered, and since M4c the store
+//! builds the row. What was left was the answer itself: a copy action reached the clipboard by
+//! leaving Rust for QuickJS, having an id resolved there, and coming straight back over the fixed
+//! native bridge. The store holds everything that resolution reads, so the round trip bought
+//! nothing and cost a frame. The rule this file follows is that the CALL must be identical, not
+//! merely the outcome: gx-core decides which call to make and the host only performs it.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/ (what a payload does),
-//! apps/desktop/sidebar/gxserver-runtime/core.ts (`handleSidebarMessage`, the arms this replaces),
-//! tooling/gx-core/action-parity.ts (the gate).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/ (what a payload does).
 
-use std::time::Instant;
+use web_time::Instant;
 
 use ghostex_gx_core::{
     ActionEffect, READ_ONLY_MESSAGE_TYPES, SidebarActionPlan, plan_read_only_action,
@@ -142,10 +138,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// What the app modal host's `copySessionDetails` arm does. The sidebar's copy actions reach
-    /// it without the bridge now, so both callers must stay one function.
-    ///
-    /// SEE-ALSO: apps/desktop/src/app/remote_conn/app_modal_bridge.rs.
+    /// The one clipboard write for a session's copied details: the sidebar's copy actions and
+    /// Quick Access's copy rows (app/quick_access/host.rs) both come here, so they stay one
+    /// function. The app modal host's `copySessionDetails` arm that also did was deleted with the
+    /// QuickJS runtime, its last sender.
     pub(crate) fn gpui_copy_session_details_text(
         &mut self,
         details_text: &str,

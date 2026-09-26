@@ -1,7 +1,8 @@
 //! The buttons on a project header row, and the agent launcher behind the last one.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/project-actions.ts and
-//! tooling/gx-core/sidebar-page-frozen/agent-launcher.ts.
+//! Ported from the TypeScript sidebar page's project actions and agent launcher (frozen in the
+//! deleted `tooling/gx-core/sidebar-page-frozen/project-actions.ts` and `agent-launcher.ts`; see
+//! git history).
 
 use crate::sidebar_accounts::AccountsState;
 use crate::sidebar_view::SidebarSettings;

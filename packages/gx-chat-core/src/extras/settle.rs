@@ -25,9 +25,9 @@ use crate::wire::RpcOutcome;
 /// for.
 ///
 /// One of the six uniform per-family hooks `crate::dispatch::events::dispatch` runs in a fixed
-/// order. Ids come off the core's one allocator, taken out for the call and written back, so a
-/// replay reproduces them exactly and a late answer to a retired read cannot reach another
-/// family.
+/// order. Ids come off the core's one allocator, taken out for the call and written back, so the
+/// same inputs always produce the same ids and a late answer to a retired read cannot reach
+/// another family.
 pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Effect> {
     let mut allocated = state.core.next_request_id;
     let effects = settle_with_ids(state, event, context, || {
@@ -129,7 +129,7 @@ fn settle_with_ids(
 /// `computeSessionChatActivity`'s clock: the initializer on the first render, then
 /// `useEffect(() => { if (!hasClock) return; setNow(Date.now()); setInterval(...) },
 /// [activity?.detectedAt, hasClock])`. A new sample restarts the interval from its own moment,
-/// which is what puts the strip's ticks on the same records as the live brain's.
+/// which is what put the strip's ticks on the same records as the TypeScript brain's.
 fn settle_activity_clock(state: &mut ChatState, context: &ChatContext) {
     if !state.core.controller_started {
         return;

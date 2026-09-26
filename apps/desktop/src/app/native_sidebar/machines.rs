@@ -34,10 +34,13 @@ impl GhostexGpuiApp {
                     .when(index > 0, |row| row.border_l_1().border_color(appearance.foreground.opacity(0.12)))
                     .when(selected, |row| row.bg(appearance.selected)).hover(|row| row.bg(appearance.hover))
                     .child(div().id(format!("native-machine-connect-{id}")).flex_shrink_0().child(glyph)
-                        .when(id != "local" && machine.state != "connected" && !busy, |icon| icon.on_click(cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_command(json!({"type": "reconnectRemoteMachine", "remoteMachineId": reconnect}), cx); }))))
-                    .child(div().min_w_0().text_ellipsis().child(machine.label.clone()))
-                    .when(machine.working_count > 0, |row| row.child(div().text_color(rgb(super::status::WORKING_COLOR)).child(machine.working_count.to_string())))
-                    .when(machine.attention_count > 0, |row| row.child(div().text_color(rgb(0x95d7f6)).child(machine.attention_count.to_string())))
+                        .when(id != "local" && machine.state != "connected" && !busy, |icon| icon.on_click(cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.remote_reconnect_from_sidebar(&reconnect, cx); }))))
+                    .child(div().min_w_0().truncate().child(machine.label.clone()))
+                    /*
+                    CDXC:Sidebar 2026-09-25 DECISION:
+                    User: stop showing the status on the machine we're on and show it on the other machine tabs as dots, not numbers, exactly like the Spaces. The selected tab's sessions are already listed below it.
+                    */
+                    .when(!selected && (machine.working_count > 0 || machine.attention_count > 0 || machine.background_work_count > 0), |row| row.child(super::status::status_dot_stack(machine.working_count, machine.attention_count, machine.background_work_count, scale)))
                     .when(self.native_sidebar.pointer_inside && self.native_sidebar.menu.is_none() && !cx.has_active_drag(), |row| row.tooltip_show_delay(appearance.tooltip_delay).tooltip(move |window, cx| titlebar_tooltip(tooltip.clone(), window, cx)))
                     .on_click(cx.listener(move |app, _, _, cx| { cx.stop_propagation(); app.dispatch_native_sidebar_ui(json!({"type": "selectMachine", "machineId": id}), cx); }))
                     .when(machine.id != "local", |row| row.on_mouse_down(MouseButton::Right, move |event, window, cx| {

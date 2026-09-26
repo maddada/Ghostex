@@ -8,18 +8,20 @@ import {
 } from '../onboarding-state';
 import {
   APPEARANCE_CHOICES,
+  COLOURFULNESS_CHOICES,
   DARK_PRESET_FOR_LIGHT,
   LIGHT_PRESET_FOR_DARK,
-  THEME_CONTRAST_CHOICES,
   TRANSPARENCY_STRENGTH_MAX,
   TRANSPARENCY_STRENGTH_MIN,
   TRANSPARENCY_STRENGTH_STEP,
-  ThemeCardGrid,
-  darkThemeCards,
+  ThemeSwatchGrid,
+  colourfulnessPatch,
+  colourfulnessStepIndex,
+  darkThemeSwatches,
+  initialThemeScheme,
   isTransparencyEnabled,
-  lightThemeCards,
-  themeContrastChoiceIndex,
-  themeContrastPatch,
+  lightThemeSwatches,
+  themePresetLabel,
   transparencyStrengthFromSettings,
   transparencyStrengthPatch,
   windowGlassAvailable,
@@ -166,7 +168,14 @@ export function GetStartedPanel({ props, flow, setFlow, toast }: PanelProps) {
               ))}
             </div>
           </div>
-          {settings ? <LookCard settings={settings} onUpdate={updateSettings} toast={toast} /> : null}
+          {settings ? (
+            <LookCard
+              settings={settings}
+              onOpenThemeSettings={props.onOpenSettings ? () => props.onOpenSettings?.('theme') : undefined}
+              onUpdate={updateSettings}
+              toast={toast}
+            />
+          ) : null}
         </div>
         <p className='sub center pnote-flow'>
           {openError ? (
@@ -217,18 +226,27 @@ export function GetStartedPanel({ props, flow, setFlow, toast }: PanelProps) {
  * default we just pick the same color in the other scheme". Transparency is one row (switch, strength slider, value);
  * Theme shows one appearance's cards behind a Dark | Light switch, and picking a look fills in the matching look for
  * the other appearance until that one is picked on purpose.
+ *
+ * CDXC:Onboarding 2026-09-25 DECISION:
+ * User, of the Theme settings revamp: "keep in mind we'll apply this to the last page in the setup modal. But in the
+ * setup modal, we'll just have the simple thing, and then we need to tell it that you can go to settings to modify the
+ * theme even more." The look card keeps only the simple controls from Settings -> Theme (Appearance, the colour squares
+ * behind Dark | Light tabs, Colourfulness, one Transparency row) and ends with "More theme options in Settings ->
+ * Theme", which opens Settings on the Theme page. The project and agent choices stay in the card on the left.
  */
 function LookCard({
   settings,
+  onOpenThemeSettings,
   onUpdate,
   toast,
 }: {
   settings: NonNullable<PanelProps['props']['settings']>;
+  onOpenThemeSettings?: () => void;
   onUpdate: (patch: Partial<NonNullable<PanelProps['props']['settings']>>) => void;
   toast: PanelProps['toast'];
 }) {
   const transparencyOn = isTransparencyEnabled(settings.windowGlass);
-  const contrastIndex = themeContrastChoiceIndex(settings);
+  const colourfulnessIndex = colourfulnessStepIndex(settings);
   const strength = transparencyStrengthFromSettings(settings);
   /** Which appearance's cards are shown; starts on the one the window is using. */
   const [scheme, setScheme] = useState<'dark' | 'light'>(() => initialThemeScheme(settings.sidebarTheme));
@@ -286,7 +304,12 @@ function LookCard({
         ))}
       </div>
       <div className='plook-theme-head'>
-        <span className='label'>Theme</span>
+        <span className='label'>
+          Theme colour{' '}
+          <span className='plook-colour-readout'>
+            {themePresetLabel(scheme, scheme === 'dark' ? settings.darkThemePreset : settings.lightThemePreset)}
+          </span>
+        </span>
         <div className='plook-scheme' role='tablist' aria-label='Show themes for'>
           {(['dark', 'light'] as const).map((value) => (
             <button
@@ -303,25 +326,27 @@ function LookCard({
         </div>
       </div>
       {scheme === 'dark' ? (
-        <ThemeCardGrid
-          cards={darkThemeCards(settings, { includeCustom: false })}
-          label='Dark theme'
+        <ThemeSwatchGrid
+          className='plook-colour-grid'
+          label='Dark mode colour'
           onSelect={pickDark}
+          swatches={darkThemeSwatches(settings)}
           value={settings.darkThemePreset}
         />
       ) : (
-        <ThemeCardGrid
-          cards={lightThemeCards(settings, { includeCustom: false })}
-          label='Light theme'
+        <ThemeSwatchGrid
+          className='plook-colour-grid'
+          label='Light mode colour'
           onSelect={pickLight}
+          swatches={lightThemeSwatches(settings)}
           value={settings.lightThemePreset}
         />
       )}
       <StepSlider
-        label='Contrast'
-        steps={THEME_CONTRAST_CHOICES.map((choice) => choice.label)}
-        value={contrastIndex}
-        onChange={(index) => onUpdate(themeContrastPatch(settings, THEME_CONTRAST_CHOICES[index]!.value))}
+        label='Colourfulness'
+        steps={COLOURFULNESS_CHOICES.map((choice) => choice.label)}
+        value={colourfulnessIndex}
+        onChange={(index) => onUpdate(colourfulnessPatch(index))}
       />
       {windowGlassAvailable() ? (
         <SliderRow
@@ -336,18 +361,13 @@ function LookCard({
           valueText={!transparencyOn ? 'Off' : strength.exact === undefined ? 'Custom' : `${strength.nearest}%`}
         />
       ) : null}
+      {onOpenThemeSettings ? (
+        <button type='button' className='plook-more-link' onClick={onOpenThemeSettings}>
+          More theme options in Settings → Theme ›
+        </button>
+      ) : null}
     </div>
   );
-}
-
-/** The appearance whose theme cards show first: Light when the window is light, otherwise Dark. */
-function initialThemeScheme(sidebarTheme: string): 'dark' | 'light' {
-  if (sidebarTheme === 'system') {
-    return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches
-      ? 'light'
-      : 'dark';
-  }
-  return sidebarTheme.startsWith('dark') ? 'dark' : 'light';
 }
 
 /** One row: the label, a five-stop slider, and the current stop's name. `value` -1 means none (tuned by hand). */

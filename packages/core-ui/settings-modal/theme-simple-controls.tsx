@@ -1,9 +1,13 @@
 import { type CSSProperties } from 'react';
 import { cn } from '@/packages/components/utils';
 import {
+  DARK_THEME_PRESET_CONTROLS,
   DARK_THEME_PRESET_OPTIONS,
+  LIGHT_THEME_PRESET_CONTROLS,
   LIGHT_THEME_PRESET_OPTIONS,
   SIDEBAR_THEME_SETTING_OPTIONS,
+  getAccentColorForBackgroundTint,
+  getLightAccentColorForBackgroundTint,
   getWorkAreaBackgroundForSettings,
   getSidebarTitlebarBackgroundForDarkness,
   getSidebarTitlebarForegroundForBackground,
@@ -22,10 +26,10 @@ import {
 import { detectghostexHotkeyPlatform } from '../../shared/ghostex-hotkeys';
 
 /**
- * The Theme page's simple choices (Appearance, the dark and light theme cards, Enable Transparency), shared by the
+ * The Theme page's simple choices (Appearance, the theme colour squares, Colourfulness, transparency), shared by the
  * Settings Theme page and the onboarding's Get started panel so both offer the same options and write the same
- * settings. Each surface draws its own rows around them; the options, the theme previews and the transparency
- * mapping live only here.
+ * settings. Each surface draws its own rows around them; the options, the colour squares, the Colourfulness steps and
+ * the transparency mapping live only here.
  */
 
 /** Appearance reads System, Light, Dark, left to right. */
@@ -50,119 +54,202 @@ export function windowGlassForTransparency(current: WindowGlassMode, enabled: bo
   return current === 'opaque' ? 'auto' : current;
 }
 
-/** A little window drawn in one theme's colours: the sidebar, the work area and a composer. */
-type ThemePreviewColors = {
-  chrome: string;
-  foreground: string;
-  work: string;
+export type ThemeScheme = 'dark' | 'light';
+
+/** One colour square: a preset id, its name and the gradient it is drawn with. */
+export type ThemeSwatch<Preset extends string> = { label: string; style: CSSProperties; value: Preset };
+
+/** Neutral themes have no hue to glow with, so their squares take a grey sheen instead of the accent. */
+const NEUTRAL_SWATCH_ACCENT: Readonly<Record<string, readonly [string, string]>> = {
+  gray: ['#a3a3a8', '#6b6b70'],
+  black: ['#4a4a4f', '#c8c8cc'],
+  white: ['#4a4a4f', '#c8c8cc'],
 };
 
-export type ThemeCard<Preset extends string> = { colors: ThemePreviewColors; label: string; value: Preset };
-
-function previewColors(chrome: string, work: string): ThemePreviewColors {
-  return {
-    chrome,
-    foreground: getSidebarTitlebarForegroundForBackground(chrome),
-    work,
-  };
+function mixHex(from: string, to: string, amount: number): string {
+  const channels = (hex: string) => [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16));
+  const [a, b] = [channels(from), channels(to)];
+  return `#${a
+    .map((value, index) =>
+      Math.round(value + (b[index]! - value) * amount)
+        .toString(16)
+        .padStart(2, '0')
+    )
+    .join('')}`;
 }
 
-/** The dark theme cards; Custom previews the saved custom colours. */
-export function darkThemeCards(
-  settings: ghostexSettings,
-  { includeCustom = true }: { includeCustom?: boolean } = {}
-): ThemeCard<DarkThemePreset>[] {
-  return DARK_THEME_PRESET_OPTIONS.filter((option) => includeCustom || option.value !== 'custom').map((option) => {
-    // Presets preview with the theme contrast step applied, as the app paints them.
-    const withPreset = { ...settings, darkThemePreset: option.value };
-    const controls = resolveDarkChromeControls(withPreset);
-    return {
-      colors: previewColors(
-        getSidebarTitlebarBackgroundForDarkness(controls.darknessPercent, controls.tintColor),
-        getWorkAreaBackgroundForSettings(withPreset, false)
-      ),
-      label: option.label,
-      value: option.value,
-    };
-  });
+function alphaHex(alpha: number): string {
+  return Math.round(Math.min(1, Math.max(0, alpha)) * 255)
+    .toString(16)
+    .padStart(2, '0');
 }
 
-/** The light theme cards; Custom previews the saved custom colours. */
-export function lightThemeCards(
-  settings: ghostexSettings,
-  { includeCustom = true }: { includeCustom?: boolean } = {}
-): ThemeCard<LightThemePreset>[] {
-  return LIGHT_THEME_PRESET_OPTIONS.filter((option) => includeCustom || option.value !== 'custom').map((option) => {
-    const withPreset = { ...settings, lightThemePreset: option.value };
-    const controls = resolveLightChromeControls(withPreset);
-    return {
-      colors: previewColors(
-        getSidebarTitlebarLightBackgroundForLightness(controls.lightnessPercent, controls.tintColor),
-        getWorkAreaBackgroundForSettings(withPreset, true)
-      ),
-      label: option.label,
-      value: option.value,
-    };
-  });
-}
-
-function ThemePreviewWindow({ colors }: { colors: ThemePreviewColors }) {
-  return (
-    <span
-      aria-hidden='true'
-      className='theme-preview-window'
-      style={
-        {
-          '--theme-preview-chrome': colors.chrome,
-          '--theme-preview-foreground': colors.foreground,
-          '--theme-preview-work': colors.work,
-        } as CSSProperties
-      }
-    >
-      <span className='theme-preview-sidebar'>
-        <span className='theme-preview-row' />
-        <span className='theme-preview-row is-selected' />
-        <span className='theme-preview-row' />
-      </span>
-      <span className='theme-preview-work'>
-        <span className='theme-preview-bubble' />
-        <span className='theme-preview-text' />
-        <span className='theme-preview-text is-short' />
-        <span className='theme-preview-composer' />
-      </span>
-    </span>
+/** A preset's chrome at one Colourfulness step (0 Subtle ... 4 Vivid). */
+function presetChromeAtStep(scheme: ThemeScheme, preset: string, step: number): string {
+  const points = COLOURFULNESS_CHOICES[Math.max(0, Math.min(4, step))]!.points;
+  if (scheme === 'dark') {
+    const controls = DARK_THEME_PRESET_CONTROLS[preset as Exclude<DarkThemePreset, 'custom'>];
+    return getSidebarTitlebarBackgroundForDarkness(
+      presetDarknessWithContrast(controls.darknessPercent, points),
+      controls.tintColor
+    );
+  }
+  const controls = LIGHT_THEME_PRESET_CONTROLS[preset as Exclude<LightThemePreset, 'custom'>];
+  return getSidebarTitlebarLightBackgroundForLightness(
+    presetLightnessWithContrast(controls.lightnessPercent, points),
+    controls.tintColor
   );
 }
 
-export function ThemeCardGrid<Preset extends string>({
-  cards,
+/**
+ * CDXC:Theming 2026-09-25 DECISION:
+ * User: "I don't like the Previews that you're showing there for the different colors, please make them look like just gradient squares that look beautiful for each of the colors", then "the gradient colors look way better in light mode. Can we do something simpler like those ones in dark mode also" and "Make the color boxes (the squares) smaller". Each theme colour is a small gradient square: a lighter, more colourful top-left fading to the theme's own chrome, with a soft glow of the theme's accent. Dark squares lift their stops toward the accent so they read as clean gradients rather than near-black tiles. The squares follow the current Colourfulness step. Supersedes the 2026-09-23 small-window preview cards.
+ */
+function swatchStyle(scheme: ThemeScheme, preset: string, tint: string, step: number): CSSProperties {
+  const neutral = NEUTRAL_SWATCH_ACCENT[preset];
+  const accent = neutral
+    ? neutral[scheme === 'dark' ? 0 : 1]
+    : scheme === 'dark'
+      ? getAccentColorForBackgroundTint(tint)
+      : getLightAccentColorForBackgroundTint(tint);
+  const topChrome = presetChromeAtStep(scheme, preset, Math.min(4, step + 2));
+  const top = scheme === 'dark' ? mixHex(topChrome, accent, 0.34 + step * 0.03) : topChrome;
+  const base =
+    scheme === 'dark'
+      ? mixHex(presetChromeAtStep(scheme, preset, step), accent, 0.1)
+      : presetChromeAtStep(scheme, preset, step);
+  const glow = alphaHex(0.26 + step * 0.07);
+  const rim = alphaHex(0.1 + step * 0.03);
+  return {
+    background: `radial-gradient(130% 100% at 20% 8%, ${accent}${glow} 0%, ${accent}00 62%), radial-gradient(90% 70% at 100% 100%, ${accent}${rim} 0%, ${accent}00 70%), linear-gradient(150deg, ${top} 0%, ${base} 88%)`,
+  };
+}
+
+/** The sixteen dark colours, drawn at the current Colourfulness. */
+export function darkThemeSwatches(settings: ghostexSettings): ThemeSwatch<DarkThemePreset>[] {
+  const step = colourfulnessDisplayStep(settings.themeSidebarContrast);
+  return DARK_THEME_PRESET_OPTIONS.filter((option) => option.value !== 'custom').map((option) => {
+    const tint = DARK_THEME_PRESET_CONTROLS[option.value as Exclude<DarkThemePreset, 'custom'>].tintColor;
+    return { label: option.label, style: swatchStyle('dark', option.value, tint, step), value: option.value };
+  });
+}
+
+/** The sixteen light colours, drawn at the current Colourfulness. */
+export function lightThemeSwatches(settings: ghostexSettings): ThemeSwatch<LightThemePreset>[] {
+  const step = colourfulnessDisplayStep(settings.themeSidebarContrast);
+  return LIGHT_THEME_PRESET_OPTIONS.filter((option) => option.value !== 'custom').map((option) => {
+    const tint = LIGHT_THEME_PRESET_CONTROLS[option.value as Exclude<LightThemePreset, 'custom'>].tintColor;
+    return { label: option.label, style: swatchStyle('light', option.value, tint, step), value: option.value };
+  });
+}
+
+/** The name of the colour a preset id stands for, or Custom. */
+export function themePresetLabel(scheme: ThemeScheme, preset: string): string {
+  const options = scheme === 'dark' ? DARK_THEME_PRESET_OPTIONS : LIGHT_THEME_PRESET_OPTIONS;
+  return options.find((option) => option.value === preset)?.label ?? preset;
+}
+
+/** One full-width row of small gradient squares; the names live in each square's title and accessible name. */
+export function ThemeSwatchGrid<Preset extends string>({
+  className,
   id,
   label,
   onSelect,
+  swatches,
   value,
 }: {
+  className?: string;
   id?: string;
   label: string;
-  cards: ReadonlyArray<ThemeCard<Preset>>;
   onSelect: (value: Preset) => void;
+  swatches: ReadonlyArray<ThemeSwatch<Preset>>;
   value: Preset;
 }) {
   return (
-    <div aria-label={label} className='theme-card-grid' id={id} role='radiogroup'>
-      {cards.map((card) => (
+    <div aria-label={label} className={cn('theme-colour-grid', className)} id={id} role='radiogroup'>
+      {swatches.map((swatch) => (
         <button
-          aria-checked={card.value === value}
-          className={cn('theme-card', card.value === value && 'is-selected')}
-          key={card.value}
-          onClick={() => onSelect(card.value)}
+          aria-checked={swatch.value === value}
+          aria-label={swatch.label}
+          className={cn(
+            'theme-colour-swatch',
+            `theme-colour-${swatch.value}-swatch`,
+            swatch.value === value && 'is-selected'
+          )}
+          key={swatch.value}
+          onClick={() => onSelect(swatch.value)}
           role='radio'
+          title={swatch.label}
           type='button'
         >
-          <ThemePreviewWindow colors={card.colors} />
-          <span className='theme-card-name'>{card.value === 'custom' ? 'Custom…' : card.label}</span>
+          <span aria-hidden='true' className='theme-colour-square' style={swatch.style} />
         </button>
       ))}
     </div>
+  );
+}
+
+/** The Dark mode / Light mode switch above the colour squares: which appearance's colours are shown. */
+export function ThemeSchemeTabs({
+  labels = { dark: 'Dark mode', light: 'Light mode' },
+  onChange,
+  value,
+}: {
+  labels?: { dark: string; light: string };
+  onChange: (value: ThemeScheme) => void;
+  value: ThemeScheme;
+}) {
+  return (
+    <div aria-label='Show colours for' className='theme-scheme-tabs' role='tablist'>
+      {(['dark', 'light'] as const).map((scheme) => (
+        <button
+          aria-selected={value === scheme}
+          className={cn(value === scheme && 'is-selected')}
+          key={scheme}
+          onClick={() => onChange(scheme)}
+          role='tab'
+          type='button'
+        >
+          {labels[scheme]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** The appearance whose colours show first: Light when the window is light, otherwise Dark. */
+export function initialThemeScheme(sidebarTheme: string): ThemeScheme {
+  if (sidebarTheme === 'system') {
+    return typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: light)').matches
+      ? 'light'
+      : 'dark';
+  }
+  return sidebarTheme.startsWith('dark') ? 'dark' : 'light';
+}
+
+/** Sidebar | work area in the chosen appearance's colours, so Colourfulness shows what it does. */
+export function ColourfulnessPreview({ scheme, settings }: { scheme: ThemeScheme; settings: ghostexSettings }) {
+  const light = scheme === 'light';
+  const chrome = light
+    ? (() => {
+        const controls = resolveLightChromeControls(settings);
+        return getSidebarTitlebarLightBackgroundForLightness(controls.lightnessPercent, controls.tintColor);
+      })()
+    : (() => {
+        const controls = resolveDarkChromeControls(settings);
+        return getSidebarTitlebarBackgroundForDarkness(controls.darknessPercent, controls.tintColor);
+      })();
+  const work = getWorkAreaBackgroundForSettings(settings, light);
+  return (
+    <span
+      aria-hidden='true'
+      className='theme-colour-live-preview'
+      style={{ '--theme-preview-foreground': getSidebarTitlebarForegroundForBackground(chrome) } as CSSProperties}
+      title='Sidebar | Work area'
+    >
+      <span className='theme-colour-live-preview-sidebar' style={{ background: chrome }} />
+      <span className='theme-colour-live-preview-work' style={{ background: work }} />
+    </span>
   );
 }
 
@@ -193,28 +280,39 @@ export function windowGlassRestartNote(): string {
 }
 
 /**
- * The five background contrast steps, lowest first.
- *
- * CDXC:Theming 2026-09-23 DECISION:
- * User: "contrast values dont make sense please make it clearer.. you can change it's name ... and make the main one
- * outside of the advanced settings affect both at the same time (dark and light basically)". The control is Background
- * contrast, Lowest to Highest with Normal in the middle: higher makes dark backgrounds darker and light backgrounds
- * whiter, always for both appearances at once.
+ * CDXC:Theming 2026-09-25 DECISION:
+ * User: "I don't like the low, medium, high contrast. I feel this doesn't represent what's happening to the colors, so you can say more. You can switch it between more colorful and less colorful". Background contrast becomes Colourfulness, five steps from Subtle to Vivid: lower contrast makes the chrome lighter and lets more of the theme colour show, higher makes it deeper and nearly neutral. Each step sets the sidebar and work area contrast together (Subtle +4, Soft 0 = the shipped default, Balanced -4, Rich -8, Vivid -12 points); More colour options can set the two areas apart. Supersedes the 2026-09-23 Background contrast (Lowest to Highest).
  */
-export const THEME_CONTRAST_CHOICES: readonly { value: number; label: string }[] = [
-  { value: -8, label: 'Lowest' },
-  { value: -4, label: 'Low' },
-  { value: 0, label: 'Normal' },
-  { value: 2, label: 'High' },
-  { value: 4, label: 'Highest' },
+export const COLOURFULNESS_CHOICES: readonly { label: string; points: number }[] = [
+  { label: 'Subtle', points: 4 },
+  { label: 'Soft', points: 0 },
+  { label: 'Balanced', points: -4 },
+  { label: 'Rich', points: -8 },
+  { label: 'Vivid', points: -12 },
 ];
 
-/** The five-step choice both contrast values sit on, or -1 when they differ or sit between steps. */
-export function themeContrastChoiceIndex(settings: ghostexSettings): number {
+/** The step a contrast value sits on, or -1 between steps. */
+export function colourfulnessStepForPoints(points: number): number {
+  return COLOURFULNESS_CHOICES.findIndex((choice) => choice.points === points);
+}
+
+/** The nearest step to a contrast value, for drawing a slider or a square when it sits between steps. */
+export function colourfulnessDisplayStep(points: number): number {
+  let best = 0;
+  COLOURFULNESS_CHOICES.forEach((choice, index) => {
+    if (Math.abs(choice.points - points) < Math.abs(COLOURFULNESS_CHOICES[best]!.points - points)) {
+      best = index;
+    }
+  });
+  return best;
+}
+
+/** The one step both areas share, or -1 once they are set apart or sit between steps. */
+export function colourfulnessStepIndex(settings: ghostexSettings): number {
   if (settings.themeSidebarContrast !== settings.themeWorkAreaContrast) {
     return -1;
   }
-  return THEME_CONTRAST_CHOICES.findIndex((choice) => choice.value === settings.themeSidebarContrast);
+  return colourfulnessStepForPoints(settings.themeSidebarContrast);
 }
 
 /**
@@ -223,7 +321,7 @@ export function themeContrastChoiceIndex(settings: ghostexSettings): number {
  * darker than main not vice versa", then "make it 7 point difference and make it a slider with more options".
  * Transparency strength is one 0-100 slider in steps of 5 (higher shows more of the desktop) that sets the four glass
  * tint sliders at once: the sidebar's tint falls from 95 (dark) / 98 (light) as it rises, and the work area is always
- * 7 points more see-through than the sidebar. The sliders under Settings -> Theme -> Advanced -> Glass stay the exact
+ * 7 points more see-through than the sidebar. The tint sliders under Settings -> Theme -> More transparency options stay the exact
  * controls.
  */
 export const TRANSPARENCY_STRENGTH_MIN = 0;
@@ -266,10 +364,11 @@ export function transparencyStrengthFromSettings(settings: ghostexSettings): { e
 }
 
 /**
- * The settings patch for one contrast step: the sidebar and work area contrast together, and the dark and light Custom
- * contrast sliders under Advanced moved in step, so the friendly control drives whatever is painted.
+ * The settings patch for one Colourfulness step: the sidebar and work area contrast together, and the dark and light
+ * Custom colour contrast moved in step, so the friendly control drives whatever is painted.
  */
-export function themeContrastPatch(_settings: ghostexSettings, points: number): Partial<ghostexSettings> {
+export function colourfulnessPatch(step: number): Partial<ghostexSettings> {
+  const points = COLOURFULNESS_CHOICES[Math.max(0, Math.min(COLOURFULNESS_CHOICES.length - 1, step))]!.points;
   return {
     themeSidebarContrast: points,
     themeWorkAreaContrast: points,
@@ -284,21 +383,41 @@ export function themeContrastPatch(_settings: ghostexSettings, points: number): 
   };
 }
 
-/** Each dark preset's nearest light preset, so picking one look fills in the other appearance to match. */
+/** Each dark colour's match in light mode, so picking one look fills in the other appearance to match. */
 export const LIGHT_PRESET_FOR_DARK: Readonly<Record<Exclude<DarkThemePreset, 'custom'>, LightThemePreset>> = {
   gray: 'gray',
   black: 'white',
+  slate: 'slate',
+  midnight: 'midnight',
   blue: 'blue',
+  indigo: 'indigo',
+  teal: 'teal',
   green: 'green',
-  red: 'orange',
-  purple: 'pink',
+  forest: 'forest',
+  olive: 'olive',
+  amber: 'amber',
+  orange: 'orange',
+  red: 'red',
+  rose: 'rose',
+  pink: 'pink',
+  purple: 'purple',
 };
 
 export const DARK_PRESET_FOR_LIGHT: Readonly<Record<Exclude<LightThemePreset, 'custom'>, DarkThemePreset>> = {
   gray: 'gray',
   white: 'black',
+  slate: 'slate',
+  midnight: 'midnight',
   blue: 'blue',
+  indigo: 'indigo',
+  teal: 'teal',
   green: 'green',
-  orange: 'red',
-  pink: 'purple',
+  forest: 'forest',
+  olive: 'olive',
+  amber: 'amber',
+  orange: 'orange',
+  red: 'red',
+  rose: 'rose',
+  pink: 'pink',
+  purple: 'purple',
 };

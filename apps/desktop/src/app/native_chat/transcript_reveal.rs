@@ -9,32 +9,26 @@ User: no skeleton when a GPUI chat view is focused, because the transcript loads
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    Animation, AnimationExt as _, AnyElement, Context, Div, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, div, px,
+    AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _,
+    StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
+use web_time::Instant;
 
-const REVEAL_MS: u64 = 250;
+const FADE: Duration = Duration::from_millis(250);
+/// A hold shorter than this was not seen as a blank, so its content needs no fade.
+const FADE_AFTER_HOLD: Duration = Duration::from_millis(60);
 
-/// Whether the transcript is being held back, and which reveal its fade belongs to.
+/// When the loading hold went up, and when the transcript that replaced it began fading in.
+///
+/// CDXC:SessionChat 2026-09-25 DECISION:
+/// User: fade in only when it is actually needed; a session whose chat is already loaded switches instantly. So content fades only after the blank hold was on screen for `FADE_AFTER_HOLD`; a view created with its transcript already read, or a re-read that finishes within a frame or two, draws at once.
+/// WHY: the fade's clock lives here, not in a gpui `with_animation`: that keeps its start in per-frame element state, which gpui drops for a chat that is not drawn, so every switch back to an already loaded chat replayed the fade.
+#[derive(Default)]
 pub(crate) struct TranscriptReveal {
-    /// Nothing of this transcript has been drawn since the view was created or last drew the
-    /// loading hold, so the next content fades in.
-    held: bool,
-    /// Bumped each time content replaces a hold, so the next session's content fades in afresh.
-    generation: Option<u64>,
-}
-
-impl Default for TranscriptReveal {
-    /// A new view fades its first content in too: the pane showed the pre-view placeholder
-    /// (session_chat_skeleton.rs) until it existed, often with the transcript already read.
-    fn default() -> Self {
-        Self {
-            held: true,
-            generation: None,
-        }
-    }
+    hold_since: Option<Instant>,
+    fade_started: Option<Instant>,
 }
 
 impl NativeChatView {
@@ -53,7 +47,9 @@ impl NativeChatView {
         p: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        self.transcript_reveal.held = true;
+        self.transcript_reveal
+            .hold_since
+            .get_or_insert_with(Instant::now);
         let s = p.scale;
         div()
             .flex_1()
@@ -87,23 +83,26 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The transcript region, fading in when it replaces a loading hold.
-    pub(super) fn reveal_transcript(&mut self, region: Div) -> AnyElement {
+    /// The transcript region, fading in when it replaces a hold that was on screen.
+    pub(super) fn reveal_transcript(&mut self, region: Div, window: &mut Window) -> AnyElement {
         let reveal = &mut self.transcript_reveal;
-        if std::mem::take(&mut reveal.held) {
-            reveal.generation = Some(reveal.generation.map_or(0, |generation| generation + 1));
+        if let Some(hold_since) = reveal.hold_since.take() {
+            reveal.fade_started = (hold_since.elapsed() >= FADE_AFTER_HOLD
+                && !crate::app::helpers::gpui_macos_reduce_motion_enabled())
+            .then(Instant::now);
         }
-        match reveal.generation {
-            // Stays wrapped after the fade ends so the rows keep one element path.
-            Some(generation) => region
-                .with_animation(
-                    gpui::ElementId::NamedInteger("chat-transcript-reveal".into(), generation),
-                    // Not ease-out-quint: that is ~95% opaque a third of the way in, which reads as a pop.
-                    Animation::new(Duration::from_millis(REVEAL_MS)).with_easing(gpui::ease_in_out),
-                    |region, delta| region.opacity(delta),
-                )
-                .into_any_element(),
-            None => region.into_any_element(),
+        let Some(started) = reveal.fade_started else {
+            return region.into_any_element();
+        };
+        let progress = started.elapsed().as_secs_f32() / FADE.as_secs_f32();
+        if progress >= 1.0 {
+            reveal.fade_started = None;
+            return region.into_any_element();
         }
+        window.request_animation_frame();
+        // Not ease-out-quint: that is ~95% opaque a third of the way in, which reads as a pop.
+        region
+            .opacity(gpui::ease_in_out(progress))
+            .into_any_element()
     }
 }

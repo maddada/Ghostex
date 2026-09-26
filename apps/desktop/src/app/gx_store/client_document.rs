@@ -37,9 +37,10 @@ use std::time::Duration;
 use ghostex_gx_core::{AdoptOutcome, DocumentSync, SyncEffect, SyncedDocument};
 use serde_json::Value;
 
+use super::rpc::gxserver_rpc_result_task;
 use super::sidebar_ui_storage;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::board_gxserver::gxserver_health_and_daemon::gpui_gxserver_rpc_result;
+use crate::app::helpers::gpui_gxserver_rpc_result;
 
 /// The push is a plain write-through, so it gets the same timeout every other sidebar call has.
 const PUSH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -394,7 +395,7 @@ impl GhostexGpuiApp {
 
     /// A write that does not reach storage is OWED again rather than counted and dropped: the
     /// database is WAL, so reads never block, but a second connection's write really does fail
-    /// after the busy timeout while the QuickJS service holds a write transaction.
+    /// after the busy timeout while another connection holds a write transaction.
     fn gx_document_write_storage<D: ClientDocument>(
         &mut self,
         document: &Value,
@@ -581,7 +582,7 @@ impl GhostexGpuiApp {
             background.timer(Duration::from_millis(delay_ms)).await;
             let _ = this.update(cx, |this, cx| {
                 // A booking that was replaced fires nothing: `clearTimeout` is what the TypeScript
-                // does, and a timer that cannot be cancelled has to check instead.
+                // did, and a timer that cannot be cancelled has to check instead.
                 if D::host(this).booking == booking {
                     this.gx_document_push::<D>(cx);
                 }
@@ -596,9 +597,8 @@ impl GhostexGpuiApp {
         let params = serde_json::json!({ "state": document });
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let result = background
-                .spawn(async move { gpui_gxserver_rpc_result(D::RPC_PATH, &params, PUSH_TIMEOUT) })
-                .await;
+            let result =
+                gxserver_rpc_result_task(&background, D::RPC_PATH, params, PUSH_TIMEOUT).await;
             let _ = this.update(cx, |this, cx| {
                 let ok = result.is_ok();
                 if !ok {

@@ -7,17 +7,18 @@
 use serde_json::{json, Value};
 
 use crate::menus::catalog::AgentModelCatalog;
+use crate::menus::option_catalog::session_option_catalog;
 use crate::menus::picker::model_menu::{
     model_menu_empty_text, model_menu_entries, model_menu_opening_tab, model_menu_pick_value,
-    model_menu_rows, model_menu_tabs, ModelMenuCatalogs, ModelMenuCurrent, ModelMenuRow,
-    ModelMenuView, MODEL_MENU_SEARCH_PLACEHOLDER,
+    model_menu_rows, model_menu_tabs, ModelMenuCatalogs, ModelMenuCurrent, ModelMenuEffort,
+    ModelMenuRow, ModelMenuView, MODEL_MENU_FAVORITES_TAB, MODEL_MENU_SEARCH_PLACEHOLDER,
 };
 use crate::menus::picker::model_picker::{
     model_picker_supports_session_scope, ModelPickerProvider,
     MODEL_PICKER_DEFAULT_SCOPE_ONLY_REASON,
 };
 use crate::menus::picker::traits::{
-    model_menu_pill_labels, model_menu_traits, ResolvedOptionDescriptor,
+    model_menu_pill_labels, model_menu_traits, OptionRows, ResolvedOptionDescriptor,
 };
 
 /// The model menu's inputs, published as `modelMenuContext` and consumed by every pick.
@@ -46,6 +47,9 @@ pub struct ModelMenuContext {
     /// `sessionOptions.sessionKey`: the picker checks it again when it finishes, because the
     /// session can change under an open picker.
     pub session_key: Option<String>,
+    /// A draft has no conversation yet, so another agent's model switches the draft instead of
+    /// handing off.
+    pub draft: bool,
     /// The value `modelMenuContext` itself is published as.
     ///
     /// Its `descriptors` and `state` are family e1's own shapes, which e2 does not model, so e1
@@ -63,8 +67,13 @@ impl ModelMenuContext {
 /// What a click on a model row means for this session.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ModelMenuPick {
-    /// The row belongs to this session's own agent, so it is an ordinary option pick.
-    Select { value: String },
+    /// The row belongs to this session's own agent, so it is an ordinary option pick. `effort` is
+    /// set when the pick carries a reasoning level (the keyboard's Left and Right); a plain click
+    /// leaves it out.
+    Select {
+        value: String,
+        effort: Option<String>,
+    },
     /// Another agent's model: hand the conversation over, or switch a draft's agent.
     Handoff {
         provider: ModelPickerProvider,
@@ -81,6 +90,7 @@ pub enum ModelMenuPick {
 pub fn model_menu_pick(
     row: &ModelMenuRow,
     context: &ModelMenuContext,
+    effort: Option<String>,
     effort_for: impl FnOnce(ModelPickerProvider, &str, Option<&str>) -> String,
 ) -> ModelMenuPick {
     if Some(row.entry.provider) == context.provider {
@@ -90,15 +100,90 @@ pub fn model_menu_pick(
                 context.model_value.as_deref(),
                 context.model_default.as_deref(),
             ),
+            effort,
         };
     }
     let model = model_menu_pick_value(&row.entry, None, None);
-    let effort = effort_for(row.entry.provider, &model, context.effort_value.as_deref());
+    let effort = effort
+        .unwrap_or_else(|| effort_for(row.entry.provider, &model, context.effort_value.as_deref()));
     ModelMenuPick::Handoff {
         provider: row.entry.provider,
         model,
         effort,
     }
+}
+
+/// `modelMenuRowEfforts`: the reasoning levels a row's model offers and the one its pick starts
+/// on. For the session's own model the levels come from the session's live descriptor, so they
+/// match what the Reasoning button lists today; any other row asks its agent's catalog about the
+/// model the pick would run.
+fn model_menu_row_efforts(
+    row: &ModelMenuRow,
+    context: &ModelMenuContext,
+    catalog: &AgentModelCatalog,
+) -> (Vec<ModelMenuEffort>, String) {
+    let session_effort = context
+        .descriptors
+        .iter()
+        .find(|descriptor| descriptor.id == "effort");
+    let (choices, default_value) = match session_effort {
+        Some(descriptor) if row.selected => match &descriptor.rows {
+            OptionRows::Choices { choices, .. } => (
+                choices
+                    .iter()
+                    .map(|choice| (choice.value.clone(), choice.label.clone()))
+                    .collect(),
+                descriptor.default_value.clone(),
+            ),
+            _ => (Vec::new(), None),
+        },
+        _ => {
+            let pick_value = match model_menu_pick(row, context, None, |_, _, _| String::new()) {
+                ModelMenuPick::Select { value, .. } => value,
+                ModelMenuPick::Handoff { model, .. } => model,
+            };
+            session_option_catalog(catalog, Some(row.entry.provider.as_str()))
+                .and_then(|options| {
+                    options
+                        .options_for_model(&pick_value)
+                        .into_iter()
+                        .find(|descriptor| descriptor.id == "effort")
+                })
+                .map(|descriptor| {
+                    (
+                        descriptor
+                            .choice_list()
+                            .iter()
+                            .map(|choice| (choice.value.clone(), choice.label.clone()))
+                            .collect(),
+                        descriptor.default_value.clone(),
+                    )
+                })
+                .unwrap_or_default()
+        }
+    };
+    let efforts: Vec<ModelMenuEffort> = choices
+        .into_iter()
+        .map(|(value, label)| {
+            let named = catalog.effort_label(&value);
+            ModelMenuEffort {
+                label: if named.is_empty() { label } else { named },
+                value,
+            }
+        })
+        .collect();
+    if efforts.is_empty() {
+        return (efforts, String::new());
+    }
+    let offered = |value: Option<&str>| {
+        value
+            .filter(|value| efforts.iter().any(|effort| effort.value == *value))
+            .map(str::to_string)
+    };
+    let effort = offered(context.effort_value.as_deref())
+        .or_else(|| offered(default_value.as_deref()))
+        .unwrap_or_else(|| efforts[efforts.len() / 2].value.clone());
+    (efforts, effort)
 }
 
 /// `modelMenuProjection`: the whole `modelMenu` document key.
@@ -124,7 +209,7 @@ pub fn model_menu_projection(
             .and_then(Value::as_str),
         catalog,
     );
-    let rows = model_menu_rows(
+    let rows: Vec<ModelMenuRow> = model_menu_rows(
         &entries,
         tab,
         &view.query,
@@ -135,7 +220,13 @@ pub fn model_menu_projection(
                 .map(|provider| provider.as_str().to_string()),
             model: context.model_value.clone(),
         },
-    );
+    )
+    .into_iter()
+    .map(|mut row| {
+        (row.efforts, row.effort) = model_menu_row_efforts(&row, context, catalog);
+        row
+    })
+    .collect();
     let session_scope = context
         .provider
         .is_some_and(model_picker_supports_session_scope);
@@ -143,7 +234,15 @@ pub fn model_menu_projection(
         "tab": tab.as_str(),
         "query": view.query,
         "placeholder": MODEL_MENU_SEARCH_PLACEHOLDER,
-        "tabs": model_menu_tabs(&entries, tab),
+        "tabs": model_menu_tabs(&entries, tab)
+            .into_iter()
+            .map(|mut entry| {
+                entry.handoff = entry.id != MODEL_MENU_FAVORITES_TAB
+                    && context.provider.map(|provider| provider.as_str()) != Some(entry.id.as_str())
+                    && !context.draft;
+                entry
+            })
+            .collect::<Vec<_>>(),
         "rows": rows,
         "emptyText": rows
             .is_empty()

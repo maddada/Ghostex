@@ -850,7 +850,7 @@ impl GhostexGpuiApp {
                 let _ = self.paste_image_or_send_control_v(cx);
             }
             TerminalViewEvent::PathsDropped(paths) => {
-                self.insert_paths_into_gpui_engine_terminal(target, paths, cx);
+                self.insert_paths_into_gpui_engine_terminal(target, runtime_session_id, paths, cx);
             }
             TerminalViewEvent::AttachPathsRequested => {
                 if let Some(attachment_target) =
@@ -982,8 +982,9 @@ impl GhostexGpuiApp {
             }
             // The chat's and the terminal bar's Fork run the store's fork, the one the sidebar
             // row's Fork runs, so both switch to the fork the same way (CDXC:SessionFork
-            // 2026-09-24 in gx_store/sidebar_lifecycle.rs). The runtime keeps the forks the store
-            // declines.
+            // 2026-09-24 in gx_store/sidebar_lifecycle.rs). A fork the store declines goes on to
+            // the session action route (gx_store/terminal_lifecycle/runtime_actions.rs), which runs
+            // the same store fork; until 2026-09-25 the runtime took the forks the store declined.
             TerminalAgentActionRequest::Fork => {
                 let key = self
                     .local_workspace_session_mappings
@@ -1011,10 +1012,11 @@ impl GhostexGpuiApp {
             CDXC:TranscriptExport 2026-08-20:
             The transcript file only exists on the machine that runs the agent,
             so the export is a daemon call, not a local read. Route it through
-            the same sidebar-runtime lifecycle path Fork uses: the runtime owns
-            the gxserver client for the local daemon and the authenticated
-            tunnel for remote machines, and it opens the result dialog once the
-            daemon answers with the written path.
+            the same session action path Fork uses: the store
+            (gx_store/git/export_transcript.rs; the sidebar runtime until
+            2026-09-25) owns the gxserver client for the local daemon and the
+            authenticated tunnel for remote machines, and it opens the result
+            dialog once the daemon answers with the written path.
             */
             TerminalAgentActionRequest::ExportTranscript => {
                 let _ = self.dispatch_gpui_workspace_terminal_runtime_action(

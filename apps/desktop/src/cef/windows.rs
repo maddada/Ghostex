@@ -206,28 +206,6 @@ pub(super) fn prepare_native_view_for_focus(_native_view: *mut c_void) {
     // needed here.
 }
 
-pub(super) fn set_native_view_mouse_focus_passive(_native_view: *mut c_void, _passive: bool) {
-    // Mouse-focus passivity is an AppKit first-responder policy; Win32
-    // keyboard focus routing for the sidebar is not implemented here yet.
-}
-
-pub(super) fn set_native_view_passive_focus_grant(_native_view: *mut c_void, _granted: bool) {}
-
-pub(super) fn return_focus_to_gpui_root(native_view: *mut c_void) {
-    let hwnd: HWND = native_view.cast();
-    if hwnd.is_null() {
-        return;
-    }
-    let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
-    if root.is_null() {
-        return;
-    }
-    super::shell::clear_active_native_view();
-    unsafe {
-        SetFocus(root);
-    }
-}
-
 pub(super) fn set_native_view_frame(
     native_view: *mut c_void,
     x: f64,

@@ -1,16 +1,16 @@
 //! The chat box's transition: the native form of React's
-//! `packages/core-ui/chat/use-session-chat-composer-transition.ts`.
+//! `use-session-chat-composer-transition.ts`.
 //!
-//! React tweens the composer's painted height whenever its content changes shape (a scroll
+//! React tweened the composer's painted height whenever its content changed shape (a scroll
 //! collapse, an expansion, the editor auto-growing a line, a queue strip or an attachment strip
-//! arriving) and fades the option pills and toolbar in over the second half of an expansion. The
+//! arriving) and faded the option pills and toolbar in over the second half of an expansion. The
 //! same thing happens here: the box measures its natural content height every frame, and while the
 //! measured height differs from the one it is painting the box is pinned to an eased value that
 //! walks to the new one. Interrupting a tween restarts it from the value on screen, never from the
 //! value it started at, so a reversal continues instead of snapping.
 //!
-//! Timing, easing and the collapsed/expanded metrics come from the file both renderers read,
-//! `packages/shared/session-chat-presentation/composer-animation.json`.
+//! Timing, easing and the collapsed/expanded metrics come from
+//! `packages/gx-chat-core/visual/composer-animation.json`.
 
 use serde::Deserialize;
 use std::{cell::Cell, rc::Rc, sync::LazyLock};
@@ -38,7 +38,7 @@ pub(super) struct ComposerAnimationMetrics {
 
 pub(super) static METRICS: LazyLock<ComposerAnimationMetrics> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/composer-animation.json"
+        "../../../../../packages/gx-chat-core/visual/composer-animation.json"
     ))
     .expect("shared composer animation metrics")
 });
@@ -110,7 +110,7 @@ impl ComposerAnimation {
     }
 
     /// Note the collapse state this frame renders in; leaving the collapsed shape fades the option
-    /// pills and the toolbar back in, the way React animates its `CONTROLS` selector on expansion.
+    /// pills and the toolbar back in, the way React animated its `CONTROLS` selector on expansion.
     pub(super) fn set_collapsed(&mut self, collapsed: bool, reduce_motion: bool) {
         if collapsed == self.collapsed {
             return;

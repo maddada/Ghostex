@@ -143,6 +143,11 @@ impl GxserverEventHub {
         self.inner.broadcast_tx.subscribe()
     }
 
+    /// Event-stream sockets open right now (each WebSocket subscribes once).
+    pub fn subscriber_count(&self) -> usize {
+        self.inner.broadcast_tx.receiver_count()
+    }
+
     pub fn client_channel(&self) -> (EventClientSender, EventClientReceiver) {
         /*
         Match the hub's 256-event broadcast retention with one bounded

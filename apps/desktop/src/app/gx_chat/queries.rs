@@ -1,8 +1,8 @@
-//! The five pure helpers the renderer asks for one gesture and uses at once.
+//! The pure helpers the renderer asks for one gesture and uses at once.
 //!
 //! They are not events: the composer asks `composerReferences` on every paint and a right-click
 //! asks `transcriptMenu` before it can open a menu, so both need an answer in the same turn rather
-//! than a frame later. The QuickJS brain exposes them beside `action` on the same global
+//! than a frame later. The deleted QuickJS brain exposed them beside `action` on the same global
 //! (`native-host.ts`); the Rust core exposes them as plain functions over `&ChatState`, so the
 //! worker can answer one without touching the core's state at all.
 //!
@@ -14,6 +14,7 @@ use ghostex_gx_chat_core::composer::keys::ComposerKeyEvent;
 use ghostex_gx_chat_core::composer::queries::{
     composer_key_intent, composer_references, reference_menu, send_blocked_toast, transcript_menu,
 };
+use ghostex_gx_chat_core::query::{answer_attachments_edit, chat_reference_removal};
 use ghostex_gx_chat_core::{ChatContext, ChatState};
 use serde_json::Value;
 
@@ -52,6 +53,8 @@ pub(super) fn answer(
             };
             to_value(&send_blocked_toast(&reason))
         }
+        "insertAnswerAttachments" => to_value(&answer_attachments_edit(arguments)?),
+        "removeChatReference" => to_value(&chat_reference_removal(arguments)?),
         _ => return None,
     })
 }

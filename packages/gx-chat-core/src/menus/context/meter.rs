@@ -23,14 +23,17 @@ use crate::menus::context::usage::{
 pub const CONTEXT_METER_REFRESH_MS: f64 = 30_000.0;
 
 /// CDXC:SessionChat 2026-09-19 SEE-ALSO:
-/// One status-line row, the height both renderers hold free under the chat box from the first
-/// frame so the box never shifts when the values arrive. React applies it as `min-height` in the
-/// `.ghostex-chat-status-line.is-reserved` rule of `packages/core-ui/styles/chat.css`;
-/// `apps/desktop/src/app/native_chat/context_meter.rs` reserves the same height.
+/// One status-line row, the height the renderer holds free under the chat box from the first
+/// frame so the box never shifts when the values arrive.
+/// `apps/desktop/src/app/native_chat/context_meter.rs` reserves this height.
 pub const STATUS_LINE_ROW_HEIGHT_PX: u32 = 16;
 
 /// `sessionChatStatusLineReserved`: configured items reserve the row while their values are still
 /// loading, so the first paint already has room for the line the session is going to show.
+///
+/// CDXC:AgentProviders 2026-09-14 DECISION:
+/// User: show the status line as soon as its values are known, including on the first load.
+/// This supersedes the fixed three-second initial wait; configured items still reserve space while loading.
 pub fn status_line_reserved(has_configured_items: bool, item_count: usize) -> bool {
     has_configured_items || item_count > 0
 }
@@ -112,6 +115,8 @@ pub struct ContextMeterInput<'a> {
     /// `chat.working`: Compact is refused while the agent is busy.
     pub working: bool,
     /// Masks account text everywhere the chat shows it.
+    ///
+    /// CDXC:AgentProviders 2026-09-10 DECISION: Hide emails also applies to the chat status line, context meter details, and Context details dialog previews, including hover text.
     pub hide_account_emails: bool,
 }
 
@@ -223,8 +228,8 @@ pub fn compute_context_meter(
         "label": label,
         "summary": summary,
         "hasConfiguredItems": has_configured_items,
-        // The native status line holds its row of space by the same rule React's `is-reserved`
-        // class applies.
+        // The native status line holds its row of space by the rule React's `is-reserved` class
+        // applied.
         "statusLineReserved": status_line_reserved(has_configured_items, starred.len()),
         "details": match details {
             None => Value::Null,

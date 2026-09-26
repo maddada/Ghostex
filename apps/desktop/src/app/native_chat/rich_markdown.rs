@@ -17,9 +17,10 @@ use serde_json::{Value, json};
  * pieces out.
  *
  * CDXC:SessionChat 2026-09-18 SEE-ALSO:
- * The marks are written by sessionChatNativeMarkdown in
- * packages/shared/session-chat-presentation/native-markdown.ts. Alert colours
- * mirror the --alert-* families in packages/core-ui/styles/chat.css.
+ * The marks are written by the core's native Markdown pass
+ * (packages/gx-chat-core/src/transcript/native_markdown.rs). Alert colours
+ * mirror the --alert-* families the React chat's theme rules defined in
+ * packages/core-ui/styles/chat.css until 2026-09-25.
  */
 
 const ALERT_OPEN: &str = "\u{E000}alert:";
@@ -316,14 +317,10 @@ pub(super) fn table_copy_action(
 /// The right-aligned toolbar under a table: what a reader can do with it.
 ///
 /// It keeps its row of space and fades in with the pointer, because a two-by-two
-/// table of short cells is the common case and deserves no chrome at all. The
-/// same four things React offers (session-chat-markdown.tsx): open it in the
-/// table modal, expand its cells to wrap or collapse them back to one line, and
-/// copy it as Markdown or as CSV.
+/// table of short cells is the common case and deserves no chrome at all. It
+/// opens the table in the larger preview, and copies it as Markdown or as CSV.
 fn table_actions(
-    key: String,
     source: String,
-    expanded: bool,
     chat: &gpui::WeakEntity<NativeChatView>,
     p: &ChatAppearance,
 ) -> AnyElement {
@@ -331,7 +328,6 @@ fn table_actions(
     let markdown = source.clone();
     let csv = source.clone();
     let open_chat = chat.clone();
-    let collapse_chat = chat.clone();
     div()
         .flex()
         .justify_end()
@@ -346,20 +342,6 @@ fn table_actions(
             move |cx| {
                 let source = source.clone();
                 let _ = open_chat.update(cx, |chat, cx| chat.open_table_preview(source, cx));
-            },
-        ))
-        .child(table_action(
-            "collapse-table",
-            if expanded {
-                "titlebar/arrows-diagonal-minimize.svg"
-            } else {
-                "titlebar/arrows-diagonal-expand.svg"
-            },
-            p,
-            move |cx| {
-                let key = key.clone();
-                let _ = collapse_chat
-                    .update(cx, |chat, cx| chat.set_table_collapsed(key, expanded, cx));
             },
         ))
         .child(table_copy_action("copy-table", "MD", p, move |cx| {
@@ -395,30 +377,6 @@ impl NativeChatView {
         cx.notify();
     }
 
-    /// The reader collapsed one table's cells to a single clipped line, or expanded them again.
-    ///
-    /// Both keep the same capped column widths, so the columns stay where the reader was looking
-    /// and only the rows change height.
-    ///
-    /// CDXC:SessionChat 2026-09-24 DECISION:
-    /// "Make expanded default": a collapsed table cut its cells' text off, so every table starts
-    /// with its cells wrapped and only the reader collapses one. A table wider than the pane
-    /// scrolls sideways either way. Supersedes the same day's collapsed default.
-    pub(super) fn set_table_collapsed(
-        &mut self,
-        key: String,
-        collapsed: bool,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        if collapsed {
-            self.table_collapsed.insert(key);
-        } else {
-            self.table_collapsed.remove(&key);
-        }
-        self.list.remeasure();
-        cx.notify();
-    }
-
     fn text_view(
         &self,
         id: String,
@@ -442,7 +400,10 @@ impl NativeChatView {
             cell_max = cell_max.min(pane_width * 0.6);
         }
         style.table_cell_max_width = Some(px(cell_max));
-        style.table_wrap_cells = !self.table_collapsed.contains(&id);
+        // CDXC:SessionChat 2026-09-25 DECISION: collapsed cells cut their text off, so the user
+        // took the option away: every table wraps its cells inside the capped columns, and a table
+        // wider than the pane scrolls sideways. Supersedes the 2026-09-24 collapse toggle.
+        style.table_wrap_cells = true;
         let references = super::markdown_links::presentations(references, p);
         let header_id = id.clone();
         let wrap_id = id.clone();
@@ -516,13 +477,7 @@ impl NativeChatView {
                     .min_w_0()
                     .gap(px(2.0 * s))
                     .child(self.text_view(key.clone(), source.clone(), references, p, cx))
-                    .child(table_actions(
-                        key.clone(),
-                        source.clone(),
-                        !self.table_collapsed.contains(&key),
-                        &cx.weak_entity(),
-                        p,
-                    ))
+                    .child(table_actions(source.clone(), &cx.weak_entity(), p))
                     .into_any_element()
             }
             // The air around an inline picture is the picture's own margin, exactly as React's

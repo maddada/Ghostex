@@ -6,7 +6,6 @@ use std::{fs, path::PathBuf};
 
 use gpui::Window;
 
-use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
 use crate::app::window::*;
@@ -626,21 +625,7 @@ impl GhostexGpuiApp {
                 self.copy_path_for_disabled_project_workarea(open_value, "Browser", cx);
                 return;
             }
-            let Some(sidebar) = self.sidebar.clone() else {
-                return;
-            };
-            let payload = serde_json::json!({
-                "reuse": "similar",
-                "type": GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_TYPE,
-                "url": open_value,
-                "version": GPUI_SIDEBAR_OPEN_BROWSER_URL_MESSAGE_VERSION,
-            });
-            let script = format!(
-                "(function(){{const post=window.ghostexGpui?.postOpenBrowserUrl;if(typeof post==='function'){{post(JSON.stringify({payload}));}}}})(); undefined;"
-            );
-            sidebar.update(cx, |surface, _| {
-                surface.execute_app_owned_script(&script);
-            });
+            self.gx_store_open_terminal_link_in_browser(open_value, cx);
             return;
         }
         let remote_key = match target {

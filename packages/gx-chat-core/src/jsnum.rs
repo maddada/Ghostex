@@ -1,16 +1,17 @@
 //! JavaScript's number semantics, in one place for every family.
 //!
 //! Every label in the chat was built by a template string over a `number`, every stored stamp and
-//! every wire count was read back with `JSON.parse`, and none of that behaves the way the Rust
-//! spelling of the same line does. The three rules that bite, and what they cost when a family
-//! writes the obvious Rust instead:
+//! every wire count was read back with `JSON.parse`, and the renderers and the saved records still
+//! expect exactly those results. None of that behaves the way the Rust spelling of the same line
+//! does. The three rules that bite, and what they cost when a family writes the obvious Rust
+//! instead:
 //!
 //! - **`String(value)`** is [`js_number`]. Rust's `Display` for `f64` never emits an exponent, so
 //!   `1e21` printed as 22 digits where JavaScript writes `1e+21`, and `value as i64` saturated
 //!   every integral double above `i64::MAX` to `9223372036854775807`.
 //! - **Reading a JSON number** is [`js_number_of`]. `serde_json::Value::as_i64` answers `None` for
 //!   a token written `3.0` or `3e0`, which JavaScript cannot tell apart from `3` at all, so a
-//!   caller that fell back to a default took a branch the TypeScript never takes.
+//!   caller that fell back to a default took a branch the TypeScript never took.
 //! - **`Math.round`** is [`js_round`]: halves go towards positive infinity, where `f64::round`
 //!   sends them away from zero.
 //!
@@ -102,7 +103,7 @@ pub fn js_number(value: f64) -> String {
 /// `Value::as_i64` and `as_u64` answer `None` for `3.0`, `3e0` and anything with a fraction, and
 /// every caller that fell back to a default on that `None` took a branch `JSON.parse` cannot
 /// produce: there are no integer tokens in JavaScript, only doubles. Use this, then apply the
-/// same guard the TypeScript applies (`Number.isInteger`, `>= 0`, a length test).
+/// same guard the TypeScript applied (`Number.isInteger`, `>= 0`, a length test).
 pub fn js_number_of(value: Option<&Value>) -> Option<f64> {
     value?.as_f64()
 }
@@ -120,9 +121,10 @@ pub fn js_safe_integer(value: Option<&Value>) -> Option<i64> {
 
 /// `#[serde(with = "js_optional_number")]` for a stored or wire field that is a JavaScript number.
 ///
-/// A `f64` field serde writes by itself comes out as `1700000000000.0`, which is not a record the
-/// TypeScript brain wrote and not one it compares equal. This keeps the double all the way through
-/// (no truncation, no `as i64` saturation) and still writes the bytes `JSON.stringify` writes.
+/// A `f64` field serde writes by itself comes out as `1700000000000.0`, which is not the record the
+/// TypeScript brain saved and breaks the document's integers-stay-integers rule. This keeps the
+/// double all the way through (no truncation, no `as i64` saturation) and still writes the bytes
+/// `JSON.stringify` writes.
 pub mod js_optional_number {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 

@@ -293,6 +293,8 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     colors: PickerColors,
     /// Set by the app when the picker's window is blurred under window glass.
     pub(crate) glass: bool,
+    /// The app's frosted menu fill for this picker's surface, set with `glass`.
+    pub(crate) frosted_fill: Option<gpui::Hsla>,
     input: Entity<InputState>,
     agents: Vec<NewThreadPickerAgent>,
     agents_loaded: bool,
@@ -310,6 +312,11 @@ pub(crate) struct GpuiNewThreadPickerWindow {
 }
 
 impl GpuiNewThreadPickerWindow {
+    /// The picker's own surface colour, which the app thins into its frosted menu fill.
+    pub(crate) fn surface_color(&self) -> gpui::Hsla {
+        hsla(self.colors.surface)
+    }
+
     pub(crate) fn new(
         config: NewThreadPickerConfig,
         host: NewThreadPickerHost,
@@ -341,6 +348,7 @@ impl GpuiNewThreadPickerWindow {
         input.update(cx, |input, cx| input.focus(window, cx));
         Self {
             glass: false,
+            frosted_fill: None,
             host,
             colors: PickerColors::resolve(&config.palette),
             input,
@@ -1299,11 +1307,9 @@ impl Render for GpuiNewThreadPickerWindow {
             .border_1()
             .border_color(hsla(c.frame_border))
             // Under window glass the picker's window blurs what is behind it, so its fill thins.
-            .bg(hsla(if self.glass {
-                rgba_of(c.surface, 0.78)
-            } else {
-                c.surface
-            }))
+            // Under glass it takes the app's frosted menu fill, passed in by the app because this
+            // file also builds into the demo binary (`frosted_menu_fill` in helpers/window_glass.rs).
+            .bg(self.frosted_fill.unwrap_or_else(|| hsla(c.surface)))
             .font_family(PICKER_FONT)
             .text_size(px(ROW_TEXT_SIZE))
             .line_height(px(ROW_LINE_HEIGHT))

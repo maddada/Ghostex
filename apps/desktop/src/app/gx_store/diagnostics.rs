@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use ghostex_gx_client::{ClientDiagnostic, StartError, redact_quoted_values};
@@ -6,15 +5,14 @@ use ghostex_gx_core::{ConnectionUpdate, Core, Loadable, MachineId, ProjectKey, R
 use serde_json::{Value, json};
 
 use super::host::GxStoreCounters;
-use super::shadow_diff::{ShadowCounters, ShadowDiff, ShadowMismatch};
+use super::focus_perform::FocusPerformCounters;
+use super::focus_publish::FocusPublishCounters;
 use super::sidebar_list::{LastUpdate, SidebarListCounters};
 use super::sidebar_scratch_compare::ScratchDifference;
 use super::sidebar_self_check::SidebarSelfCheckCounters;
 use super::sidebar_ui::SidebarUiCounters;
 use crate::{shared_settings, support_logs};
 
-/// Distinct mismatch records one app run may write; later ones are only counted.
-const MAX_DISTINCT_MISMATCH_RECORDS: usize = 200;
 /// Records of the kept list disagreeing with a fresh one. Each one is a bug, so a handful is
 /// plenty to name it and the counter carries the rate.
 const MAX_SCRATCH_RECORDS: u32 = 4;
@@ -39,24 +37,23 @@ pub(super) const PERIODIC_SUMMARY_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Log lines of the store, all in the `native.sidebar.refresh` support log.
 ///
-/// Routine lines (`gxStore.loaded`, `gxStore.connection`, `gxStore.shadow.*`) are written only
+/// Routine lines (`gxStore.loaded`, `gxStore.connection`, `gxStore.focus.summary`) are written only
 /// while "Show debug UI controls" and that scenario are on, which the support log enforces.
 /// Warnings (a frame that does not parse, snapshot rows that were skipped) are written always,
 /// capped per run. Every line holds ids, counts, enum names, and field names: never a title, a
 /// path, or frame content.
 #[derive(Default)]
 pub(crate) struct GxStoreDiagnostics {
-    logged_mismatches: HashSet<u64>,
     warning_lines: u32,
     /// When the summary was last considered, so a run with logging off reads the settings at
     /// most once per interval, and the totals it last wrote.
-    shadow_summary_considered_at: Option<Instant>,
-    shadow_summary_written: ShadowCounters,
+    focus_summary_considered_at: Option<Instant>,
+    focus_summary_written: (FocusPublishCounters, FocusPerformCounters),
     sidebar_summary_considered_at: Option<Instant>,
     sidebar_summary_written: SidebarSelfCheckCounters,
     sidebar_ui_summary_considered_at: Option<Instant>,
     sidebar_ui_summary_written: SidebarUiCounters,
-    /// The runtime facts channel's periodic line (`diagnostics_runtime_facts.rs`).
+    /// The runtime facts holder's periodic line (`diagnostics_runtime_facts.rs`).
     pub(super) runtime_facts_summary_at: Option<Instant>,
     #[allow(clippy::type_complexity)]
     pub(super) runtime_facts_summary_written: Option<(
@@ -332,70 +329,43 @@ impl GxStoreDiagnostics {
         append(event, details);
     }
 
-    /// One bounded record per distinct mismatch. A mismatch seen while logging is off is not
-    /// remembered, so turning the scenario on later still records it when it happens again.
-    pub(super) fn shadow_mismatch(&mut self, mismatch: &ShadowMismatch, core: &Core) {
-        let signature = mismatch.signature();
-        if self.logged_mismatches.contains(&signature)
-            || self.logged_mismatches.len() >= MAX_DISTINCT_MISMATCH_RECORDS
-            || !routine_logging_enabled()
-        {
-            return;
-        }
-        self.logged_mismatches.insert(signature);
-        let fields: Vec<serde_json::Value> = mismatch
-            .fields
-            .iter()
-            .map(|(tab, names)| json!({ "tab": tab, "names": names }))
-            .collect();
-        record(
-            "gxStore.shadow.mismatch",
-            json!({
-                "storeGroup": log_text(mismatch.store_group.as_str()),
-                "storeRevision": store_revision(core),
-                "oldTabCount": mismatch.old_tab_count,
-                "storeTabCount": mismatch.store_tab_count,
-                "onlyOld": log_texts(&mismatch.only_old),
-                "onlyStore": log_texts(&mismatch.only_store),
-                "orderDiffers": mismatch.order_differs,
-                "fields": fields,
-            }),
-        );
-    }
-
-    /// The running totals, at most once a minute and only when they moved. Without it a run
-    /// with no mismatch would leave no trace that comparisons ran.
-    pub(super) fn shadow_summary(&mut self, shadow: &ShadowDiff, core: &Core) {
-        let counters = shadow.counters();
-        if counters == self.shadow_summary_written
+    /// The focus the store published and performed, at most once a minute and only when it moved.
+    /// Counts only.
+    pub(super) fn focus_summary(
+        &mut self,
+        publish: FocusPublishCounters,
+        perform: FocusPerformCounters,
+        core: &Core,
+    ) {
+        if (publish, perform) == self.focus_summary_written
             || self
-                .shadow_summary_considered_at
+                .focus_summary_considered_at
                 .is_some_and(|at| at.elapsed() < PERIODIC_SUMMARY_INTERVAL)
         {
             return;
         }
-        self.shadow_summary_considered_at = Some(Instant::now());
+        self.focus_summary_considered_at = Some(Instant::now());
         if !routine_logging_enabled() {
             return;
         }
-        self.shadow_summary_written = counters;
+        self.focus_summary_written = (publish, perform);
         let active_tabs = match core.active_tab_sessions() {
             Loadable::Loaded(tabs) => Some(tabs.len()),
             Loadable::NotLoaded | Loadable::Missing => None,
         };
         record(
-            "gxStore.shadow.summary",
+            "gxStore.focus.summary",
             json!({
-                "observed": counters.observed,
-                "matches": counters.matches,
-                "mismatches": counters.mismatches,
-                "distinctMismatches": counters.distinct_mismatches,
-                "transient": counters.transient,
-                "notComparable": counters.not_comparable,
-                "remoteSkipped": counters.remote_skipped,
-                "iconDifferences": counters.icon_differences,
-                "staleExternalFocus": counters.stale_external_focus,
-                "pending": shadow.is_pending(),
+                "publishes": publish.publishes,
+                "contexts": publish.contexts,
+                "unplacedHolds": publish.unplaced_holds,
+                "unplacedPlaced": publish.unplaced_placed,
+                "startupRestores": publish.startup_restores,
+                "sessionFocuses": perform.sessions,
+                "remoteSessionFocuses": perform.remote_sessions,
+                "groupFocuses": perform.groups,
+                "wakes": perform.wakes,
+                "refused": perform.refused,
                 "storeRevision": store_revision(core),
                 "storeActiveTabs": active_tabs,
                 "tabsGeneration": core.tabs_generation(),
@@ -1162,15 +1132,10 @@ impl GxStoreDiagnostics {
                 // for this document, which is what makes a non-zero value worth reading.
                 "echoesUnparsable": counters.echoes_unparsable,
                 "echoesPushedBack": counters.echoes_pushed_back,
-                "handOffs": counters.hand_offs,
-                "handBacks": counters.hand_backs,
-                "handBacksDropped": counters.hand_backs_dropped,
                 "hostMessagesDropped": super::workspace_groups::native_host_messages_dropped(),
                 "prunes": counters.prunes,
                 "storageRefusals": counters.storage_refusals,
                 "readFailures": counters.read_failures,
-                "handOffsRefused": counters.hand_offs_refused,
-                "handOffsRequested": counters.hand_offs_requested,
                 "echoesDeferred": counters.echoes_deferred,
                 "deferredRecovered": counters.deferred_recovered,
                 "reconcileSeen": counters.reconcile_seen,

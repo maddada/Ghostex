@@ -70,7 +70,7 @@ pub(crate) async fn project_worktree_list_payload(
 
 /// CDXC:Worktrees 2026-09-16 WHY:
 /// Git lists the main repository first, even when bare; selecting the first non-bare entry hides a linked checkout from the picker and adoption API.
-/// SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/helpers/worktrees.ts, server/src/domain/git_worktree.rs.
+/// SEE-ALSO: packages/gx-core/src/git_menu/worktree.rs (`normalizeGpuiExistingWorktreeOptions`), apps/desktop/src/app/gx_store/git/worktree_list.rs, server/src/domain/git_worktree.rs.
 pub(crate) async fn project_worktree_options(
     context: &ProjectWorktreeOperationContext,
 ) -> std::result::Result<Vec<ProjectWorktreeOptionRow>, ProjectWorktreeOperationError> {
@@ -245,7 +245,7 @@ pub(crate) fn register_project_worktree_path(
 pub(crate) async fn prepare_registered_worktree_project(
     state: &AppState,
     project: &Value,
-    setup_project_id: &str,
+    setup_project_id: Option<&str>,
 ) -> std::result::Result<(), ProjectWorktreeOperationError> {
     let project_id = value_text(project, "projectId")?;
     let projects = list_domain_projects(state)?;
@@ -265,6 +265,9 @@ pub(crate) async fn prepare_registered_worktree_project(
         }
         .into());
     }
+    let Some(setup_project_id) = setup_project_id else {
+        return Ok(());
+    };
     let setup_project = projects
         .iter()
         .find(|candidate| {

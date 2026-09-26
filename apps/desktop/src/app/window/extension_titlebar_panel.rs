@@ -44,8 +44,6 @@ impl GpuiTitlebarExtensionPanel {
             None,
             None,
             None,
-            None,
-            None,
             bridge_surface,
             bridge_event_handler,
             None,

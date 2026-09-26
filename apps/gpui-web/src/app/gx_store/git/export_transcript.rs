@@ -1,0 +1,1 @@
+../../../../../desktop/src/app/gx_store/git/export_transcript.rs

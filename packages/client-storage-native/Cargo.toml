@@ -1,0 +1,15 @@
+[package]
+name = "ghostex-client-storage"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+anyhow = "1"
+# `preserve_order`: the start-up migrations rebuild browser-era rows with `JSON.stringify`, which keeps key order. The desktop already unifies this feature through gx-chat-core.
+serde_json = { version = "1", features = ["preserve_order"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+chromium-storage-indexeddb-core = "0.2"
+chromium-storage-localstorage-core = "0.2"
+leveldb-core = "0.1.2"
+snap = "1"

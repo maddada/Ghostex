@@ -1,5 +1,5 @@
 //! Open, sidebar bridge, and result plumbing for the native Add Worktree dialog.
-//! SEE-ALSO: apps/desktop/src/app/window/create_worktree_modal.rs (the window entity and its decision record), apps/desktop/src/app/native_app_modal_lifecycle.rs (the shared window path), apps/desktop/src/app/sidebar_dispatch.rs (`forward_gpui_worktree_modal_command_to_sidebar`, `handle_gpui_pick_worktree_images_message`).
+//! SEE-ALSO: apps/desktop/src/app/window/create_worktree_modal.rs (the window entity and its decision record), apps/desktop/src/app/native_app_modal_lifecycle.rs (the shared window path), apps/desktop/src/app/gx_store/git/modal_commands.rs (`forward_gpui_worktree_modal_command_to_sidebar`), apps/desktop/src/app/sidebar_dispatch.rs (`handle_gpui_pick_worktree_images_message`).
 use crate::app::window::*;
 use crate::*;
 
@@ -31,14 +31,15 @@ fn optional_text(message: &serde_json::Value, key: &str) -> Option<String> {
 
 impl GhostexGpuiApp {
     /*
-    CDXC:Worktrees 2026-09-15 WHY:
-    The sidebar runtime still owns the branch and worktree listing, the trusted
-    path check, the gxserver worktree creation and the first agent session.
-    The native dialog therefore posts the same `requestProjectWorktrees` and
-    `createProjectWorktree` bridge commands the React page did, through the
-    same field allowlist, and receives the same `projectWorktreesResult` and
-    `worktreeImageFilesPicked` answers. Only the window and its rendering moved
-    to GPUI.
+    CDXC:Worktrees 2026-09-25 WHY:
+    The branch and worktree listing, the trusted Open Existing keys, the
+    gxserver worktree creation and the first agent session are Rust's since the
+    app runtime port (gx_store/git/worktree_list.rs, worktree_create.rs), which
+    supersedes the 2026-09-15 note that the sidebar runtime owned them. The
+    dialog still posts the same `requestProjectWorktrees` and
+    `createProjectWorktree` commands through the same field allowlist and
+    receives the same `projectWorktreesResult` and `worktreeImageFilesPicked`
+    answers.
     */
     /// Opens the native dialog for the sidebar's `open` message of the
     /// `worktree` modal kind. The React host accepts any object here (every
@@ -110,24 +111,11 @@ impl GhostexGpuiApp {
         match command {
             CreateWorktreeModalCommand::RequestWorktrees { request_id } => {
                 message.insert("requestId".to_string(), serde_json::json!(request_id));
-                if !self.forward_gpui_worktree_modal_command_to_sidebar(
+                self.forward_gpui_worktree_modal_command_to_sidebar(
                     "requestProjectWorktrees",
                     &message,
                     cx,
-                ) {
-                    let result = serde_json::json!({
-                        "error": "The sidebar runtime is not available.",
-                        "ok": false,
-                        "requestId": request_id,
-                        "type": "projectWorktreesResult",
-                    });
-                    let app = cx.entity();
-                    cx.defer(move |cx| {
-                        app.update(cx, |app, cx| {
-                            app.receive_gpui_create_worktree_modal_message(&result, cx);
-                        });
-                    });
-                }
+                );
             }
             CreateWorktreeModalCommand::PickImages => {
                 self.handle_gpui_pick_worktree_images_message(cx);

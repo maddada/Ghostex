@@ -1,5 +1,5 @@
 import { storageScope, type ScopedStorage } from '@/packages/client-storage';
-import { sessionChatDraftClientId } from '@/packages/shared/session-chat-controller/client-id';
+import { sessionChatDraftClientId } from './session-chat-client-id';
 import type { SessionChatDraftVersion, SessionChatDraft } from '@/packages/shared/session-chat-queue';
 /**
  * Local cache for composer drafts and the Recovered list. Every edit carries a

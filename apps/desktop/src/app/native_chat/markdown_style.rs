@@ -28,7 +28,7 @@ struct InlineCodeVisual {
 /// CDXC:SessionChat 2026-09-17 SEE-ALSO: Markdown typography and inline code metrics come from markdown-visual.json, also consumed by session-chat-markdown.tsx.
 static VISUAL: LazyLock<MarkdownVisual> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/markdown-visual.json"
+        "../../../../../packages/gx-chat-core/visual/markdown-visual.json"
     ))
     .expect("shared Markdown appearance")
 });
@@ -48,11 +48,11 @@ struct CodeThemes {
 /// The two themes are the GitHub palettes React highlights with through Shiki
 /// (`SESSION_CHAT_SHIKI_DARK_THEME` / `_LIGHT_THEME` in
 /// packages/core-ui/chat/session-chat-code-highlight.ts), written out in
-/// packages/shared/session-chat-presentation/code-theme.json for the Rust
+/// packages/gx-chat-core/visual/code-theme.json for the Rust
 /// highlighter. Change the Shiki themes and these colours together.
 static CODE_THEMES: LazyLock<CodeThemes> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/code-theme.json"
+        "../../../../../packages/gx-chat-core/visual/code-theme.json"
     ))
     .expect("shared code theme")
 });
@@ -63,7 +63,7 @@ static LIGHT_CODE_THEME: LazyLock<Arc<HighlightTheme>> =
     LazyLock::new(|| Arc::new(CODE_THEMES.light.clone()));
 
 /// The syntax palette a fenced block is painted with, matching React's Shiki themes.
-pub(super) fn highlight_theme(light: bool) -> Arc<HighlightTheme> {
+pub(crate) fn highlight_theme(light: bool) -> Arc<HighlightTheme> {
     if light {
         LIGHT_CODE_THEME.clone()
     } else {
@@ -87,7 +87,7 @@ pub(super) fn text_style(p: &ChatAppearance) -> TextViewStyle {
             base * VISUAL.heading_font_sizes[(level.clamp(1, 6) - 1) as usize] / 14.0
         });
     // The card a fenced block sits in, and its header's rule, exactly as the
-    // React transcript draws them.
+    // React transcript drew them.
     style.code_block = StyleRefinement::default()
         .bg(p.input)
         .border_1()
@@ -103,7 +103,7 @@ pub(super) fn text_style(p: &ChatAppearance) -> TextViewStyle {
     // scrollbar at the very bottom below the table", matching the transcript's own bar: the same
     // 5px thumb in the app's scrollbar colours, under the table rather than over its last row.
     style.table_scrollbar = Some(px(super::scrollbar::THICKNESS * p.scale));
-    // The React transcript draws a table as rules, not as a grid: no frame
+    // The React transcript drew a table as rules, not as a grid: no frame
     // around it, no rule between columns, a full-strength rule under the header
     // and a lighter one under every body row.
     style.table_track = StyleRefinement::default().border(px(0.0)).rounded(px(0.0));

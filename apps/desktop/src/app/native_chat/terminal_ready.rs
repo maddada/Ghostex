@@ -6,8 +6,9 @@
 //! Only a measured verdict tints the glyph: `unknown`, an unreadable screen and
 //! the time before the first hover keep the inherited footer color, because the
 //! daemon fails open on `unknown` and a red button would accuse a session that
-//! sends fine. Colors match `.ghostex-chat-footer-control[data-terminal-ready]`
-//! in packages/core-ui/styles/chat.css.
+//! sends fine. Colors match the React chat's
+//! `.ghostex-chat-footer-control[data-terminal-ready]` (packages/core-ui/styles/chat.css until
+//! 2026-09-25).
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -18,7 +19,7 @@ use gpui::{
 use serde_json::json;
 
 impl NativeChatView {
-    /// CDXC:SessionChat 2026-09-24 DECISION: The user asked for the Terminal View button's hover tooltip (the "Agent CLI Preview" with the readiness reason and screen tail) to stop showing; it is commented out rather than deleted.
+    /// CDXC:SessionChat 2026-09-24 DECISION: The user asked for the Terminal View button's tooltip to say only "Switch to Terminal"; the old "Agent CLI Preview" tooltip with the readiness reason and screen tail is commented out rather than deleted.
     pub(super) fn render_terminal_view_button(
         &self,
         p: &ChatAppearance,
@@ -62,6 +63,9 @@ impl NativeChatView {
             // .tooltip(move |window, cx| {
             //     gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
             // })
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Switch to Terminal").build(window, cx)
+            })
             // Hovering still reads the terminal tail so the glyph's readiness tint stays current.
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 if *hovered {

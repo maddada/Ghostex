@@ -43,7 +43,7 @@ pub fn handle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Ve
 /// Family a's uniform settle hook, the first of the six.
 ///
 /// It owns the seam's own bookkeeping rather than a surface: the answer an in-flight action was
-/// waiting on is what ends that action's turn, and `action` in `native-host.ts` publishes there
+/// waiting on is what ends that action's turn, and `action` in `native-host.ts` published there
 /// (`crate::dispatch::actions::dispatch`).
 pub fn settle(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Effect> {
     let effects = settle_awaits(state, event);
@@ -141,10 +141,10 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
 
 /// The host is opening this chat.
 ///
-/// Nothing the document can see moves here, and nothing is subscribed: `start` in `native-host.ts`
-/// asks for `composer('read')` and waits, so the first frame the host drains carries no snapshot at
-/// all. The identity, the cached transcript and the first two calls all land in [`boot_read`]. The
-/// one read that does go out here is the store's own hydration
+/// Nothing the document can see moves here, and nothing is subscribed: like `start` in
+/// `native-host.ts`, the core asks for `composer('read')` and waits, so the first frame the host
+/// drains carries no snapshot at all. The identity, the cached transcript and the first two calls
+/// all land in [`boot_read`]. The one read that does go out here is the store's own hydration
 /// (`apps/desktop/sidebar/session-chat-runtime/store.ts:113`, in the `RetainedSession`
 /// constructor), which runs beside the boot read rather than after it.
 fn start(state: &mut ChatState, config: &StartConfig, context: &ChatContext) -> Vec<Effect> {
@@ -195,8 +195,8 @@ fn boot_failed(state: &mut ChatState, error: &str) -> Vec<Effect> {
 
 /// The boot read answered: adopt the client id and the cached transcript, then subscribe and seed.
 ///
-/// This is `start`'s `.then(...)` in `native-host.ts`: it adopts the catalog, the preferences and
-/// the settings, pushes `composerInit`, and only then builds the controller, whose subscribe
+/// The port of `start`'s `.then(...)` in `native-host.ts`: it adopts the catalog, the preferences
+/// and the settings, pushes `composerInit`, and only then builds the controller, whose subscribe
 /// effect opens the stream and whose seed read fills the transcript.
 pub fn boot_read(
     state: &mut ChatState,
@@ -215,11 +215,10 @@ pub fn boot_read(
         state.core.title = settings.title;
     }
     let config = state.session.boot_config.clone().unwrap_or_default();
-    state.core.preview_settings = config.preview.clone();
     // The `sessionChanged` branch of the subscribe effect (`controller.ts:853`): the agent
     // identity, the status line's own options and the working directory come back from the shared
     // cache before anything is read, which is what makes a return to a chat immediate.
-    // `setWorkingDirectory` is read again on every publish in `native-host.ts:415`, and it is what
+    // `setWorkingDirectory` was read again on every publish in `native-host.ts:415`, and it is what
     // turns a diff card's absolute path into one relative to the project.
     crate::session::presentation::seed(state, config.initial_presentation.as_ref());
 
@@ -585,13 +584,13 @@ fn seed_read_settled(
 }
 
 /// `applyDraftAgentCarriage(result); applyAuthoritative(result, …)` for a seed or resync read,
-/// and the render the live brain runs when that handed a setter a new object.
+/// and the render the TypeScript brain ran when that handed a setter a new object.
 ///
 /// A read result is parsed fresh, so every object it carries is new to the setters: the
 /// frame's rule ([`side_state_moves`]) plus `setAvailableAgents(result.availableAgents ?? null)`
 /// and `setSwitchableAgents(...)`, which a read carries and an ordinary frame does not. The core
 /// published a read only when the document changed, so a resync that confirmed what was on
-/// screen shipped nothing where the live brain re-rendered and published.
+/// screen shipped nothing where the TypeScript brain re-rendered and published.
 fn apply_read_result(
     state: &mut ChatState,
     read: &ghostex_gx_protocol::ReadSessionChatResult,

@@ -1,5 +1,5 @@
 //! How everything in the chat that opens and closes moves: the native form of
-//! `packages/core-ui/chat/session-chat-disclosure-body.tsx` and
+//! the React chat's `session-chat-disclosure-body.tsx` and
 //! `session-chat-worked-fold.tsx`.
 //!
 //! A finished turn folds the moment the transcript settles, so the rows the reader was just
@@ -8,8 +8,7 @@
 //! line grow in. Every other disclosure (a tool's detail, a tool group, a reasoning row, a card
 //! body, a capped block's "Show more", the worked fold's own log) eases its height and opacity
 //! between shut and open whenever its open state changes, at the faster manual timing. The
-//! timing is `packages/shared/session-chat-presentation/worked-fold-animation.json`, which React
-//! reads too. This file only keeps time; the renderers paint what [`DisclosureMotions::observe`]
+//! timing is `packages/gx-chat-core/visual/worked-fold-animation.json`. This file only keeps time; the renderers paint what [`DisclosureMotions::observe`]
 //! reports through [`motion_clip`].
 //!
 //! Disclosures are watched rather than hooked: each renderer reports the state it is drawing, and
@@ -46,7 +45,7 @@ struct WorkedFoldMetrics {
 
 static METRICS: LazyLock<WorkedFoldMetrics> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/worked-fold-animation.json"
+        "../../../../../packages/gx-chat-core/visual/worked-fold-animation.json"
     ))
     .expect("shared worked-fold animation metrics")
 });

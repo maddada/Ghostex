@@ -6,7 +6,6 @@ import type { DarkThemePreset, LightThemePreset } from './titlebar-color';
 import {
   type AppShotsHotkey,
   type AutoSleepIdleMinutes,
-  type ChatBrain,
   type ChatFileOpenView,
   type CommandsPanelSide,
   type DefaultEditorCommand,
@@ -63,11 +62,21 @@ export const DARK_THEME_PRESET_OPTIONS: ReadonlyArray<{
   label: string;
   value: DarkThemePreset;
 }> = [
-  { label: 'Dark Gray', value: 'gray' },
+  { label: 'Graphite', value: 'gray' },
   { label: 'Black', value: 'black' },
+  { label: 'Slate', value: 'slate' },
+  { label: 'Midnight', value: 'midnight' },
   { label: 'Blue', value: 'blue' },
+  { label: 'Indigo', value: 'indigo' },
+  { label: 'Teal', value: 'teal' },
   { label: 'Green', value: 'green' },
+  { label: 'Forest', value: 'forest' },
+  { label: 'Olive', value: 'olive' },
+  { label: 'Amber', value: 'amber' },
+  { label: 'Orange', value: 'orange' },
   { label: 'Red', value: 'red' },
+  { label: 'Rose', value: 'rose' },
+  { label: 'Pink', value: 'pink' },
   { label: 'Purple', value: 'purple' },
   { label: 'Custom', value: 'custom' },
 ];
@@ -76,12 +85,22 @@ export const LIGHT_THEME_PRESET_OPTIONS: ReadonlyArray<{
   label: string;
   value: LightThemePreset;
 }> = [
-  { label: 'Light Gray', value: 'gray' },
+  { label: 'Graphite', value: 'gray' },
   { label: 'White', value: 'white' },
+  { label: 'Slate', value: 'slate' },
+  { label: 'Midnight', value: 'midnight' },
   { label: 'Blue', value: 'blue' },
+  { label: 'Indigo', value: 'indigo' },
+  { label: 'Teal', value: 'teal' },
   { label: 'Green', value: 'green' },
-  { label: 'Pink', value: 'pink' },
+  { label: 'Forest', value: 'forest' },
+  { label: 'Olive', value: 'olive' },
+  { label: 'Amber', value: 'amber' },
   { label: 'Orange', value: 'orange' },
+  { label: 'Red', value: 'red' },
+  { label: 'Rose', value: 'rose' },
+  { label: 'Pink', value: 'pink' },
+  { label: 'Purple', value: 'purple' },
   { label: 'Custom', value: 'custom' },
 ];
 
@@ -156,6 +175,7 @@ export const WINDOW_GLASS_SOURCE_OPTIONS: ReadonlyArray<{
   { label: 'Desktop and windows', value: 'desktopAndWindows' },
   { label: 'Wallpaper only', value: 'wallpaper' },
   { label: 'Custom image', value: 'customImage' },
+  { label: 'Video', value: 'video' },
 ];
 
 export const WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS: ReadonlyArray<{
@@ -315,14 +335,6 @@ export const GHOSTTY_SCROLLBAR_OPTIONS: ReadonlyArray<{
 }> = [
   { label: 'System', value: 'system' },
   { label: 'Never', value: 'never' },
-];
-
-export const CHAT_BRAIN_OPTIONS: ReadonlyArray<{
-  label: string;
-  value: ChatBrain;
-}> = [
-  { label: 'Rust', value: 'rust' },
-  { label: 'QuickJS (previous engine)', value: 'quickjs' },
 ];
 
 export const PROMPT_EDITOR_BACKEND_OPTIONS: ReadonlyArray<{

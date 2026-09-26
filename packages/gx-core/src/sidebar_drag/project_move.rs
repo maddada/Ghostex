@@ -13,13 +13,12 @@
 //! `saveNativeCollections` writes the key and posts the update for whatever it is handed, an
 //! unchanged document included, and `post({ type: 'syncGroupOrder' })` goes out after a drop the
 //! worktree rules forbade and left the order exactly as it was. Both are reproduced rather than
-//! optimized away, for the reason the session moves reproduced theirs: the gate compares what the
-//! shipped code does, and a port that wrote less would make one fewer push per drag.
+//! optimized away, for the reason the session moves reproduced theirs: the parity gate compared
+//! what the shipped code did, and a port that wrote less would make one fewer push per drag.
+//! The TypeScript was frozen in `tooling/gx-core/sidebar-page-frozen/` (`reorder.ts`,
+//! `project-drag.ts`, `membership.ts`), since deleted; see git history.
 //!
-//! SEE-ALSO: tooling/gx-core/sidebar-page-frozen/reorder.ts,
-//! tooling/gx-core/sidebar-page-frozen/project-drag.ts,
-//! tooling/gx-core/sidebar-page-frozen/membership.ts,
-//! packages/gx-core/src/project_docs/, apps/desktop/src/app/gx_store/project_docs.rs.
+//! SEE-ALSO: packages/gx-core/src/project_docs/, apps/desktop/src/app/gx_store/project_docs.rs.
 
 use serde_json::{json, Value};
 
@@ -74,7 +73,7 @@ pub enum ProjectWrite {
 }
 
 impl ProjectWrite {
-    /// The write as the parity gate compares it. Each document is compared WHOLE, because it is
+    /// The write as the parity gate compared it while the TypeScript ran. Each document is compared WHOLE, because it is
     /// the thing a stale echo would undo and a subset would hide a member that moved.
     pub fn to_json(&self) -> Value {
         match self {
@@ -112,7 +111,7 @@ impl ProjectWrite {
 ///
 /// An EMPTY list is a real answer and not a refusal: every guard in `runNativeProjectDrop` and
 /// `reorderNativeSidebar` is a bare `return`, so "this drop is not allowed" and "nothing happens"
-/// are the same thing on both sides, and the gate compares that rather than skipping it.
+/// were the same thing on both sides, and the gate compared that rather than skipping it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProjectMovePlan {
     pub writes: Vec<ProjectWrite>,

@@ -4,7 +4,7 @@
  * commands, plus the adjacent native Background Image picker round trip. The
  * two effects keep their original relative order inside this hook.
  */
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { type SidebarAppIconStateMessage } from '../../shared/session-grid-contract';
 import { type ghostexSettings } from '../../shared/ghostex-settings';
 import { type WebviewApi } from '../webview-api';
@@ -116,6 +116,54 @@ export function useAppIconSettings({
     }
     vscode.postMessage({ appearance, type: 'pickWindowGlassImageFile' });
   };
+  /** Settings -> Window glass -> Video: the downloaded aerial wallpapers the host lists, and why a picked file was refused. */
+  const [windowGlassVideos, setWindowGlassVideos] = useState<readonly { name: string; value: string }[]>([]);
+  const [windowGlassVideoError, setWindowGlassVideoError] = useState<{
+    appearance: 'dark' | 'light';
+    message: string;
+  }>();
+  const chooseWindowGlassVideoFile = (appearance: 'dark' | 'light') => {
+    if (!vscode) {
+      return;
+    }
+    setWindowGlassVideoError(undefined);
+    vscode.postMessage({ appearance, type: 'pickWindowGlassVideoFile' });
+  };
+  useEffect(() => {
+    if (!isOpen || !nativeFilePickerAvailable || !vscode) {
+      return;
+    }
+    const handleVideoMessage = (event: Event) => {
+      const message = (event as CustomEvent<unknown>).detail;
+      if (!message || typeof message !== 'object' || !('type' in message)) {
+        return;
+      }
+      if (message.type === 'windowGlassVideosListed' && 'videos' in message && Array.isArray(message.videos)) {
+        setWindowGlassVideos(
+          message.videos.filter(
+            (video): video is { name: string; value: string } =>
+              typeof video?.name === 'string' && typeof video?.value === 'string'
+          )
+        );
+      } else if (message.type === 'windowGlassVideoFilePicked') {
+        const appearance = 'appearance' in message && message.appearance === 'light' ? 'light' : 'dark';
+        const error = 'error' in message && typeof message.error === 'string' ? message.error : '';
+        const path = 'path' in message && typeof message.path === 'string' ? message.path.trim() : '';
+        if (error) {
+          setWindowGlassVideoError({ appearance, message: error });
+        } else if (path) {
+          setWindowGlassVideoError(undefined);
+          updateDraft(appearance === 'light' ? 'windowGlassVideoLight' : 'windowGlassVideoDark', path);
+        }
+      }
+    };
+    window.addEventListener('ghostex-app-modal-host-message', handleVideoMessage);
+    // The aerials macOS keeps change as it downloads and deletes them, so the list is asked for each time Settings opens.
+    vscode.postMessage({ type: 'listWindowGlassVideos' });
+    return () => {
+      window.removeEventListener('ghostex-app-modal-host-message', handleVideoMessage);
+    };
+  }, [isOpen, nativeFilePickerAvailable]);
   useEffect(() => {
     if (!isOpen || !nativeFilePickerAvailable) {
       return;
@@ -146,7 +194,10 @@ export function useAppIconSettings({
     chooseAppIconFile,
     chooseTerminalBackgroundImageFile,
     chooseWindowGlassImageFile,
+    chooseWindowGlassVideoFile,
     nativeFilePickerAvailable,
     selectAppIcon,
+    windowGlassVideoError,
+    windowGlassVideos,
   };
 }

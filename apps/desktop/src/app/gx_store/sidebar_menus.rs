@@ -10,11 +10,10 @@
 //! the install path.
 //!
 //! What the menus still read from outside the store is one list, and it is all HUD (M5): the
-//! agents the launcher offers and the Saved Actions pinned to a project header. Since M4d part 2
-//! step 3 the HUD arrives on the runtime's own facts channel (`runtime_facts.rs`) instead of
-//! riding the old projection's publish. The agent the user launched last and the keep-awake
-//! duration are client storage, read through `sidebar_ui_storage.rs` behind a one-second cache,
-//! because the TypeScript writes both while the app runs.
+//! agents the launcher offers and the Saved Actions pinned to a project header. The HUD is held in
+//! `runtime_facts.rs` instead of riding the old projection's publish. The agent the user launched
+//! last and the keep-awake duration are client storage, read through `sidebar_ui_storage.rs` behind
+//! a one-second cache, because both change while the app runs.
 
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
@@ -126,7 +125,11 @@ impl GhostexGpuiApp {
             project_commands: hud
                 .map(|hud| commands_by_project(&hud["commandsByProject"]))
                 .unwrap_or_default(),
-            keep_awake_minutes: self.gx_store.menu_host.keep_awake_minutes,
+            // The Keep Awake period this app is running, which the More menu ticks.
+            keep_awake_minutes: self
+                .keep_awake_runtime
+                .as_ref()
+                .map(|runtime| runtime.duration_minutes.minutes() as i64),
             machine_connected,
         }
     }
@@ -169,7 +172,7 @@ impl GhostexGpuiApp {
             })
         };
         // A row the list no longer draws answers with nothing, which closes the panel, exactly as
-        // the TypeScript's empty reply does.
+        // the TypeScript's empty reply did.
         let items = items.unwrap_or_default();
         let owns_panel = self
             .native_sidebar

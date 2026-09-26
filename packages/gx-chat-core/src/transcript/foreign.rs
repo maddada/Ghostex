@@ -58,9 +58,9 @@ fn sort_rank(message: &ChatMessage) -> u8 {
 
 /// Family a, `orderSessionChatMessages`.
 ///
-/// The TypeScript's last tie-break before the id is a `WeakMap` of arrival order, which only the
-/// incremental assembler fills. A list that reaches the projection through a read has no entries in
-/// it, so the id decides, which is what this reproduces.
+/// The TypeScript's last tie-break before the id was a `WeakMap` of arrival order, which only the
+/// incremental assembler filled. A list that reaches the projection through a read has no entries
+/// in it, so the id decides, which is what this reproduces.
 pub fn order_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
     let mut ordered = messages.to_vec();
     ordered.sort_by(|left, right| {
@@ -84,7 +84,7 @@ pub fn order_messages(messages: &[ChatMessage]) -> Vec<ChatMessage> {
 /// Family a, `mergeSessionChatMessagesWith`, in the one shape family b uses it: an id already in
 /// the list is replaced in place, a new id is appended.
 ///
-/// The source-priority argument the TypeScript takes is its default here, because the deferred rows
+/// The source-priority argument the TypeScript took is its default here, because the deferred rows
 /// this merges carry the same source as the turn's own work.
 pub fn merge_messages_with(existing: &[ChatMessage], incoming: &[ChatMessage]) -> Vec<ChatMessage> {
     let mut list = existing.to_vec();

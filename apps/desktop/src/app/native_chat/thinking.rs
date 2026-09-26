@@ -10,7 +10,7 @@ use serde_json::Value;
 
 /// The transcript column fits roughly this many characters at the prose size.
 const WRAP_COLUMNS: usize = 90;
-/// React caps a secondary block at 18rem (`.ghostex-chat-scroll-cap`).
+/// React capped a secondary block at 18rem (`.ghostex-chat-scroll-cap`).
 const CAP_HEIGHT: f32 = 288.0;
 const LINE_HEIGHT: f32 = 22.75;
 
@@ -45,7 +45,7 @@ pub(super) fn lane_marker(color: Hsla, p: &ChatAppearance) -> AnyElement {
 }
 
 impl NativeChatView {
-    /// A reasoning turn that carries no tool calls: the quiet lane React draws
+    /// A reasoning turn that carries no tool calls: the quiet lane React drew
     /// with `.ghostex-chat-thinking-row`, the same bullet and prose size as the
     /// answer in a muted voice, with a long thought capped so it cannot own the
     /// transcript's scrollbar.

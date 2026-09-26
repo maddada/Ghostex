@@ -33,7 +33,7 @@ handshake can hold for 16s, and it leaves no Saved Prompts residue.
 SEE-ALSO: session_chat_send.rs (interrupt endpoint, last-send registry calls),
 session_chat_queue_runtime.rs (registry, `sendCancelled`), session_chat_follower.rs
 and session_chat_read.rs (row filter, `returnedPrompt` carriage),
-packages/core-ui/chat/session-chat-returned-prompt.ts (client apply-once).
+packages/gx-chat-core/src/composer/storage.rs (client apply-once).
 */
 
 use std::{

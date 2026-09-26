@@ -13,11 +13,11 @@ use std::{
 };
 
 /// CDXC:SessionChat 2026-09-23 DECISION:
-/// User: a loading agent chat must keep its composer and status line visible, using the existing skeleton treatment for unknown values. React's SessionChatStatusLine and the pre-view shell use this same geometry.
+/// User: a loading agent chat must keep its composer and status line visible, using the existing skeleton treatment for unknown values. The pre-view shell uses this same geometry.
 pub(crate) fn status_line_skeleton(p: &ChatAppearance) -> AnyElement {
     static GEOMETRY: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
         serde_json::from_str(include_str!(
-            "../../../../../packages/shared/session-chat-presentation/status-line-skeleton.json"
+            "../../../../../packages/gx-chat-core/visual/status-line-skeleton.json"
         ))
         .expect("status line skeleton geometry")
     });
@@ -37,14 +37,13 @@ pub(crate) fn status_line_skeleton(p: &ChatAppearance) -> AnyElement {
         .into_any_element()
 }
 
-/// One status-line row: the value of `SESSION_CHAT_STATUS_LINE_ROW_HEIGHT_PX` in
-/// `packages/shared/session-chat-presentation/status-line-layout.ts`, which React applies as the
+/// One status-line row: the value of `STATUS_LINE_ROW_HEIGHT_PX` in
+/// `packages/gx-chat-core/src/menus/context/meter.rs`, which React applied as the
 /// `min-height` of `.ghostex-chat-status-line.is-reserved`.
 pub(super) const STATUS_LINE_ROW_HEIGHT: f32 = 16.0;
 
-/// Width the status line's edit pen takes after the last item: the value of
-/// `SESSION_CHAT_STATUS_LINE_EDIT_RESERVE_PX` in
-/// `packages/shared/session-chat-presentation/status-line-layout.ts`.
+/// Width the status line's edit pen takes after the last item: the value of React's
+/// `SESSION_CHAT_STATUS_LINE_EDIT_RESERVE_PX`.
 const STATUS_LINE_EDIT_RESERVE: f32 = 18.0;
 
 /// The hover group of the status line, which reveals its edit pen.
@@ -55,9 +54,9 @@ const CONTEXT_METER_TRIGGER: &str = "chat-context-meter";
 
 thread_local! {
     /// CDXC:SessionChat 2026-09-19 WHY:
-    /// React knows from its first render whether a session shows a status line, because it reads the
+    /// React knew from its first render whether a session shows a status line, because it read the
     /// starred context details straight out of client storage. The native chat learns it from the
-    /// shared controller, which replies over a CEF round trip on another thread, so the box used to
+    /// chat core, whose answer arrives from the chat host after the first paint, so the box used to
     /// paint without the line's row and then jump when the answer landed. The last answer for this
     /// session, or failing that the last answer any session gave (kept on disk, so a fresh process
     /// has one too), stands until the controller speaks.
@@ -167,9 +166,9 @@ pub(super) fn ring(percentage: f32, appearance: &ChatAppearance) -> AnyElement {
 }
 
 impl NativeChatView {
-    /// Whether the status line holds its row of space, by the rule both renderers share
-    /// (`sessionChatStatusLineReserved` in the shared `status-line-layout.ts`). The shared
-    /// controller answers it; until it has, the last answer for this session stands.
+    /// Whether the status line holds its row of space, by the core's rule
+    /// (`status_line_reserved` in `menus/context/meter.rs`). The core
+    /// answers it; until it has, the last answer for this session stands.
     pub(super) fn status_line_reserved(&self) -> bool {
         self.status_line_reserved || self.status_line_loading()
     }
@@ -202,13 +201,13 @@ impl NativeChatView {
         vec![json!({"context":self.snapshot["contextMeter"]})]
     }
 
+    /// CDXC:SessionChat 2026-09-24 DECISION: The user asked for the context window button's tooltip to say only "Statusline Config" instead of the usage summary.
     pub(super) fn render_context_meter(
         &self,
         appearance: &ChatAppearance,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let context = &self.snapshot["contextMeter"];
-        let tooltip = text(context, "tooltip");
         let bounds = Rc::new(Cell::new(Bounds::default()));
         let measured = bounds.clone();
         let percentage = context["usedPercentage"].as_f64().unwrap_or(0.0) as f32;
@@ -229,8 +228,8 @@ impl NativeChatView {
                 this.bg(appearance.border)
             })
             .hover(|style| style.bg(appearance.border))
-            .tooltip(move |window, cx| {
-                gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+            .tooltip(|window, cx| {
+                gpui_component::tooltip::Tooltip::new("Statusline Config").build(window, cx)
             })
             .child(ring(percentage, appearance))
             .on_click(cx.listener(move |chat, _, window, cx| {

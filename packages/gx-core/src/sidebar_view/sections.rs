@@ -77,6 +77,10 @@ pub(crate) fn project_session_sections(
                         row(index).activity == "attention" && row(index).pending_question_count == 0
                     })
                     .count(),
+                background_work_count: members
+                    .iter()
+                    .filter(|index| row(index).shows_background_work())
+                    .count(),
                 question_count: members
                     .iter()
                     .filter(|index| row(index).pending_question_count > 0)

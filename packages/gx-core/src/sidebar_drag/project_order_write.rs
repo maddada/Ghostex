@@ -14,9 +14,10 @@
 //! as given would put a project in the order more than once; `syncGpuiWorkspaceProjectOrder`
 //! de-duplicates, and the re-nest runs first so the de-duplication keeps the first position.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts
-//! (`syncWorkspaceGroupOrder`, `normalizeWorkspaceProjectOrder`),
-//! packages/gx-core/src/sidebar_drag/project_move.rs.
+//! Ported from `syncWorkspaceGroupOrder` and `normalizeWorkspaceProjectOrder` in the deleted
+//! `gxserver-runtime/workspace-groups-sync.ts` (see git history).
+//!
+//! SEE-ALSO: packages/gx-core/src/sidebar_drag/project_move.rs.
 
 use serde_json::Value;
 
@@ -37,12 +38,14 @@ pub fn owns_project_order_message(message: &Value) -> bool {
     message.get("type").and_then(Value::as_str) == Some(PROJECT_ORDER_MESSAGE_TYPE)
 }
 
-/// What `syncGroupOrder` writes, or `None` when the store must not answer it.
+/// What `syncGroupOrder` writes, or `None` for a message that is not one.
 ///
-/// **Refused, with the reason at the refusal:** an order holding ANY remote group id.
-/// `syncWorkspaceGroupOrder` sends those down that machine's tunnel as a whole-order replacement,
-/// and it refuses outright when the ids name more than one machine, so a port that took the local
-/// half would write an order the app never writes.
+/// CDXC:Projects 2026-09-25 WHY:
+/// An order holding ANY remote project group id is not a document edit at all:
+/// `syncWorkspaceGroupOrder` sent it down that machine's tunnel as a whole-order replacement of the
+/// machine's own project order, and refused outright when the ids named more than one machine or
+/// held anything else, so it is planned as exactly that call (`OrderWrite::RemoteProjectOrder`) or
+/// as nothing. It used to be declined here and performed by the old runtime.
 pub fn plan_project_order_write(
     core: &Core,
     inputs: &SidebarInputs,
@@ -58,9 +61,9 @@ pub fn plan_project_order_write(
         .iter()
         .filter_map(Value::as_str)
         .collect();
-    // `remoteReferences.some(Boolean)`. A remote id is one whose project key names a machine.
+    // `remoteReferences.some(Boolean)`: a remote PROJECT group id, never a user-made group's.
     if group_ids.iter().any(is_remote_group_id) {
-        return None;
+        return Some(plan_remote_project_order(core, &group_ids));
     }
     let project_ids: Vec<String> = group_ids
         .iter()
@@ -82,12 +85,11 @@ pub fn plan_project_order_write(
     // The subgroup orders, by project, in the order the projects first appear.
     let mut by_project: Vec<(String, Vec<String>)> = Vec::new();
     for group_id in &group_ids {
+        // A remote project's user-made groups live in this document too, under its machine-scoped
+        // key, and `parseGpuiWorkspaceSessionSubgroupId` reads them like any other.
         let Some((project, subgroup_id)) = parse_workspace_subgroup_id(group_id) else {
             continue;
         };
-        if !project.machine.is_local() {
-            continue;
-        }
         let key = project.to_workspace_project_id();
         match by_project
             .iter_mut()
@@ -148,10 +150,52 @@ fn normalize_project_order(
         .collect()
 }
 
-/// `parseGpuiRemotePresentationGroupId`: a group id naming a machine.
+/// `parseGpuiRemotePresentationGroupId`: a project group id naming a machine.
 fn is_remote_group_id(group_id: &&str) -> bool {
-    if let Some((project, _)) = parse_workspace_subgroup_id(group_id) {
-        return !project.machine.is_local();
+    remote_project_of(group_id).is_some()
+}
+
+fn remote_project_of(group_id: &str) -> Option<ProjectKey> {
+    ProjectKey::parse_sidebar_group_id(group_id).filter(|project| !project.machine.is_local())
+}
+
+/// `updateRemoteWorkspaceGroups(machineId, projectOrder)`: every id a remote project group of ONE
+/// machine, sent with the machine's own user-made groups as they were last received.
+fn plan_remote_project_order(core: &Core, group_ids: &[&str]) -> OrderWritePlan {
+    let projects: Vec<Option<ProjectKey>> =
+        group_ids.iter().map(|id| remote_project_of(id)).collect();
+    let machine = match projects.first() {
+        Some(Some(project)) => project.machine.clone(),
+        _ => return OrderWritePlan::refused("remoteOrderMixed"),
+    };
+    if projects
+        .iter()
+        .any(|project| project.as_ref().map(|project| &project.machine) != Some(&machine))
+    {
+        return OrderWritePlan::refused("remoteOrderMixed");
     }
-    ProjectKey::parse_sidebar_group_id(group_id).is_some_and(|project| !project.machine.is_local())
+    let MachineId::Remote(machine_id) = &machine else {
+        return OrderWritePlan::refused("remoteOrderMixed");
+    };
+    let project_order: Vec<String> = projects
+        .into_iter()
+        .flatten()
+        .map(|project| project.project_id)
+        .collect();
+    let held_projects = core
+        .presentation()
+        .machine(&machine)
+        .and_then(|entry| entry.side_state().workspace_groups.as_ref())
+        .map(|groups| serde_json::to_value(&groups.projects).unwrap_or_default())
+        .unwrap_or_else(|| serde_json::json!({}));
+    OrderWritePlan {
+        writes: vec![super::order_write::OrderWrite::RemoteProjectOrder {
+            machine_id: machine_id.clone(),
+            state: serde_json::json!({
+                "projectOrder": project_order,
+                "projects": held_projects,
+            }),
+        }],
+        refusal: None,
+    }
 }

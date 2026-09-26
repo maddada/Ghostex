@@ -16,14 +16,15 @@
 //! `setSessionParked` says the wait is there to prevent.
 //!
 //! The legs of one action run in order, and a failed WAITED leg stops the rest, which is what the
-//! TypeScript's chain of `await`s does: a park whose update failed does not sleep, a snooze the
+//! TypeScript's chain of `await`s did: a park whose update failed does not sleep, a snooze the
 //! machine refused does not sleep, and a reload whose sleep failed does not wake.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/remote-machines.ts (`requestRemoteGxserver`,
-//! `postRemoteGxserverSidebarRequest`), apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! and auto-sleep.ts (every remote leg answered here), apps/desktop/src/app/remote_conn/sidebar_rpc.rs
-//! (the one function the bridge and this path both call), apps/desktop/src/app/gx_store/sidebar_remote.rs
-//! (the host), tooling/gx-core/remote-action-parity.ts (the gate).
+//! Ported from the deleted `gxserver-runtime/remote-machines.ts` (`requestRemoteGxserver`,
+//! `postRemoteGxserverSidebarRequest`), `sessions-and-focus.ts` and `auto-sleep.ts` (every remote
+//! leg answered here); its parity gate, `tooling/gx-core/remote-action-parity.ts`, is deleted too.
+//!
+//! SEE-ALSO: apps/desktop/src/app/remote_conn/sidebar_rpc.rs (the one function the bridge and this
+//! path both call), apps/desktop/src/app/gx_store/sidebar_remote.rs (the host).
 
 use serde_json::{json, Value};
 

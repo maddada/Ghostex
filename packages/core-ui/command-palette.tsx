@@ -505,6 +505,7 @@ export function CommandPalette({
       (definition) =>
         definition.id !== 'openCommandPalette' &&
         definition.id !== 'openSessionSearchPalette' &&
+        definition.id !== 'openProjectSearchPalette' &&
         definition.id !== 'openExtensions' &&
         definition.action.kind !== 'runActionSlot' &&
         definition.action.kind !== 'chatAction' &&

@@ -9,7 +9,7 @@
 //! answer `unregistered` for every one of them, which the core reads as a refused submission and
 //! puts the text back in the composer.
 //!
-//! The bodies are `nativeComposerRequest`'s three arms in
+//! The bodies are ports of `nativeComposerRequest`'s three arms in the deleted
 //! `apps/desktop/sidebar/session-chat-runtime/native-composer.ts`, in their order.
 
 use ghostex_gx_chat_core::StorageKey;
@@ -68,7 +68,7 @@ pub(super) fn submitted(
         write_draft(session_key, &cleared, now_ms)?;
     }
     // `recordSentSessionChatMessage(text, sessionKey)`, the one call site the Step 4 host was
-    // missing: without it Up-arrow recall and the Saved prompts Sent tab stay empty under the Rust
+    // missing: without it Up-arrow recall and the Saved prompts Sent tab stayed empty under the Rust
     // brain while the QuickJS brain kept filling them.
     //
     // CDXC:SavedPrompts 2026-09-22 WHY:
@@ -79,7 +79,7 @@ pub(super) fn submitted(
     // answers by putting the text back in the composer, so a full or refusing `sentHistory` store
     // would have offered the user a prompt gxserver had already taken and invited them to send it
     // twice. Everything above this line still propagates: those are the stored draft, the outbox
-    // row and the recovery checkpoints, and the TypeScript arm lets each of them throw.
+    // row and the recovery checkpoints, and the TypeScript arm let each of them throw.
     if host_records::record_sent_prompt(
         text,
         Some(session_key),
@@ -135,7 +135,7 @@ pub(super) fn park(
     };
     write_draft(session_key, &parked, now_ms)?;
     Ok(ParkResult {
-        handoff_id: uuid::Uuid::new_v4().to_string(),
+        handoff_id: super::platform::uuid_v4(),
         content: current.text,
         draft_version: current
             .version
@@ -175,7 +175,7 @@ pub(super) fn receive(session_key: &str, value: &Value, now_ms: i64) -> Result<(
 /// to read back as a checkpoint. `dismissDraftRecovery` then compacts, and so does this: the
 /// markers become `recoveryDismissed` ranges and their records are removed
 /// (`super::dismissals`).
-fn retire_recovery(
+pub(super) fn retire_recovery(
     session_key: &str,
     version: &DraftVersion,
     now_ms: i64,
@@ -259,7 +259,7 @@ fn version(value: &Value) -> Option<DraftVersion> {
 
 /// Whether a stored record still carries the revision an operation claimed.
 ///
-/// With no claimed version the TypeScript compares `updatedAt` instead; nothing in the Rust send
+/// With no claimed version the TypeScript compared `updatedAt` instead; nothing in the Rust send
 /// path omits it, so an operation without one matches only a record that has none either.
 fn matches(record: &StoredDraftRecord, version: Option<&DraftVersion>) -> bool {
     match (record.version.as_ref(), version) {

@@ -221,43 +221,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// The sidebar and chat service runs in QuickJS and needs no CEF page, so launch starts it on its own while CEF stays deferred (CDXC:CefRuntime 2026-09-19).
-    pub(crate) fn ensure_native_service(&mut self, cx: &mut gpui::Context<Self>) -> bool {
-        if self.sidebar.is_some() {
-            return true;
-        }
-        let sidebar_handler = self.sidebar_bridge_event_handler(cx);
-        let host_handler = self.app_modal_host_bridge_event_handler(cx);
-        match crate::app::native_service::NativeService::new(
-            self.sidebar_runtime_settings_snapshot.clone(),
-            self.sidebar_gxserver_bootstrap.clone(),
-            sidebar_handler,
-            host_handler,
-            cx,
-        ) {
-            Ok(service) => {
-                self.sidebar = Some(service);
-                true
-            }
-            Err(error) => {
-                support_logs::append(
-                    support_logs::GpuiSupportLog::CrashReports,
-                    "gpui.nativeService.startFailed",
-                    serde_json::json!({
-                        "error": error.lines().next().unwrap_or_default(),
-                        "stack": error.lines().skip(1).take(12).collect::<Vec<_>>(),
-                    }),
-                );
-                false
-            }
-        }
-    }
-
     pub(crate) fn initialize_cef(&mut self, cx: &mut gpui::Context<Self>) {
-        if !self.ensure_native_service(cx) {
-            return;
-        }
-
         cef::initialize(cx).expect("failed to initialize CEF");
         if !cef::context_initialized() {
             if self.cef_context_initialization_waiting {

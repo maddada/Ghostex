@@ -1,6 +1,5 @@
-//! New Agent Session (Cmd+T, or Cmd+Shift+T when Terminal is the default interface) and the
-//! cleanup of the chats agent launchers leave empty.
-//! SEE-ALSO: packages/shared/ghostex-hotkeys.ts (CDXC:Hotkeys 2026-09-24), apps/desktop/src/app/hotkeys.rs.
+//! New Agent Session (Cmd+Shift+O) and the cleanup of the chats agent launchers leave empty.
+//! SEE-ALSO: packages/shared/ghostex-hotkeys.ts (CDXC:Hotkeys 2026-09-25), apps/desktop/src/app/hotkeys.rs.
 use super::native_chat::state::NativeChatView;
 use super::new_thread_picker_lifecycle::order_new_thread_picker_agents;
 use crate::app::helpers::*;
@@ -30,33 +29,6 @@ fn agent_chat_untouched(view: &NativeChatView) -> bool {
 }
 
 impl GhostexGpuiApp {
-    /// CDXC:Hotkeys 2026-09-24 DECISION:
-    /// User: in a browser tab, Cmd+T opens a new browser tab like Chrome; everywhere else it starts a new chat, or a terminal when Terminal is the default interface.
-    /// A focused Commands pane or Terminal view keeps Cmd+T as its own new-tab key too, as it had before the swap. Only the key press is redirected: running New Agent Session or New Terminal from Quick Access still does what its row says.
-    pub(crate) fn run_new_session_hotkey(
-        &mut self,
-        action_id: &str,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        if !matches!(action_id, "createAgentSession" | "createSession")
-            || gpui_configured_hotkey_key(action_id).as_deref() != Some("cmd+t")
-        {
-            return false;
-        }
-        match self.shell_focus {
-            ShellFocusTarget::BrowserSurface | ShellFocusTarget::BrowserPane(_) => {
-                self.add_browser_tab_from_hotkey(window, cx);
-                true
-            }
-            ShellFocusTarget::CommandPane => {
-                self.add_terminal_placeholder_tab_from_hotkey(window, cx);
-                true
-            }
-            ShellFocusTarget::AgentsPane(_) | ShellFocusTarget::ProjectEditorSurface(_) => false,
-        }
-    }
-
     /// New Agent Session: the New Thread picker's first row (the last-used agent) without the
     /// picker. Before any agent is known the picker opens instead, so the key still does something.
     pub(crate) fn start_new_agent_session(&mut self, cx: &mut gpui::Context<Self>) {
@@ -102,10 +74,8 @@ impl GhostexGpuiApp {
             message["accountId"] = json!(account_id);
         }
         self.sidebar_primary_agent_launcher_id = Some(agent_id);
-        if self.sidebar.is_some() {
-            self.stage_agent_launch_placeholder(&message, cx);
-            self.focus_staged_chat_after_picker(cx);
-        }
+        self.stage_agent_launch_placeholder(&message, cx);
+        self.focus_staged_chat_after_picker(cx);
         self.dispatch_gpui_sidebar_host_message(message, cx);
     }
 

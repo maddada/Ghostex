@@ -24,7 +24,8 @@ pub(crate) fn temporary_epoch_ms() -> u64 {
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum GpuiDiagnosticScenario {
     SidebarRefresh,
-    ChatReplay,
+    SessionChat,
+    TerminalFocus,
 }
 
 /// Scenario-gated disk logging has no disk to write to here, so no scenario is ever on.
@@ -39,4 +40,9 @@ pub(crate) fn append_temporary(log: GpuiSupportLog, event: &str, details: Value)
 /// The desktop records the shape of dictated text for a reproduction; nothing is recorded here.
 pub(crate) fn temporary_fluid_voice_text_shape(_text: &str) -> Value {
     Value::Null
+}
+
+/// Written even with no scenario on, on the desktop; the console takes it like any other.
+pub(crate) fn append_repro(log: GpuiSupportLog, event: &str, details: Value) {
+    append(log, event, details);
 }

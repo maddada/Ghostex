@@ -97,6 +97,10 @@ impl GhostexGpuiApp {
                 }
             } else {
                 self.sleep_parked_browser_project(project_id, cx);
+                // Stays asleep on the way back in, like the active project's views above.
+                if let Some(state) = self.project_view_states_by_project.get_mut(project_id) {
+                    state.active_view_awake = false;
+                }
             }
         }
         if !plan.session_ids.is_empty() {

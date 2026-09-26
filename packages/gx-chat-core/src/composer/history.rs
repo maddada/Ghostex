@@ -1,11 +1,10 @@
 //! Up-arrow recall of what this machine's composers have sent.
 //!
 //! Port of `packages/core-ui/chat/session-chat-composer-state.ts`, minus its
-//! `pushSessionChatComposerHistory`: the native host never pushes locally, it re-reads. The ring
+//! `pushSessionChatComposerHistory`: the native host never pushed locally, it re-read. The ring
 //! is filled by `composer('history')` alone (`native-host.ts:1210`), which the HOST answers from
 //! the `sentHistory` store `composer('submitted')` writes, so a prompt sent in another chat is in
-//! the ring here too and this crate has no writer for it by design. React's composer keeps the
-//! local push; when it moves onto this core it reads the same way.
+//! the ring here too and this crate has no writer for it by design.
 
 /// The recall ring: what was sent, and where the cursor sits in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

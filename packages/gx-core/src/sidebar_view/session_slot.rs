@@ -18,7 +18,8 @@
 //!
 //! SEE-ALSO: the deleted sidebar page's `hotkeys.ts` (`runNativeSidebarHotkey`) and
 //! `selection.ts` (`renderedNativeSidebarSessionIds`),
-//! apps/desktop/src/app/gx_store/sidebar_session_slot.rs, tooling/gx-core/session-slot-parity.ts.
+//! apps/desktop/src/app/gx_store/sidebar_session_slot.rs. (The parity gate,
+//! `tooling/gx-core/session-slot-parity.ts`, was deleted with the TypeScript.)
 
 use super::view::{OrderKind, SidebarView};
 use crate::sidebar_ui::SidebarUiIntent;

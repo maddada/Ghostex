@@ -5,8 +5,8 @@
 //! The values live in the `preferences` table of the client-storage database, under the keys the
 //! TypeScript sidebar wrote them under, because an installation that upgrades keeps its collapsed
 //! groups, its Space, its hidden items and its filters, and a build from before the port must
-//! still read them. This is a second door into that database: the client-storage service in
-//! QuickJS owns the first one, and there is a `CDXC:Settings` decision saying all storage goes
+//! still read them. This was a second door into that database: the client-storage service in
+//! QuickJS owned the first one until 2026-09-25, and there is a `CDXC:Settings` decision saying all storage goes
 //! through one system so it cannot silently fill up. The second door is what the port is for, and
 //! it carries that decision's obligations itself rather than dropping them: the catalog's entry
 //! bound is enforced below, a refused or failed write is counted and reported
@@ -22,7 +22,7 @@
 //! by one writer while the other replaces it.
 //!
 //! SEE-ALSO: packages/client-storage/catalog.ts (the entry and store bounds this mirrors),
-//! packages/chat-runtime/src/storage.rs (the service's own door to the same file).
+//! packages/client-storage-native/src/storage_records.rs (the `records` door to the same file).
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -37,7 +37,8 @@ use ghostex_gx_core::{
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde_json::Value;
 
-/// How long a read or a write waits for the service thread's own transaction.
+/// How long a read or a write waits for another writer's transaction (the QuickJS service thread's
+/// until 2026-09-25).
 const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 /// How long the sizes the storage bounds are measured against are reused before they are read
 /// again. They are a guard against filling a shared budget, so a few seconds of drift in what
@@ -45,9 +46,8 @@ const BUSY_TIMEOUT: Duration = Duration::from_millis(500);
 /// exact whatever the age.
 const TOTALS_MAX_AGE: Duration = Duration::from_secs(10);
 /// `maxEntryBytes` of the stores these keys belong to (`packages/client-storage/catalog.ts`). The
-/// service in QuickJS refuses a larger entry, and this door has to refuse it too, or a payload
-/// this side stored would be one the other side cannot write: `admission` would throw, the
-/// TypeScript sidebar swallows that, and it would stop persisting while this side kept writing.
+/// client-storage service refuses a larger entry, and this door refuses it too so the catalog's
+/// bound holds for every writer of these keys.
 const MAX_ENTRY_BYTES: usize = 64 * 1024;
 /// The `workspaceGroups` and `collections` rows, which carry the SAME numbers
 /// (`{ maxEntryBytes: 256 * KiB, maxBytes: 256 * KiB }` on top of the singleton defaults). Their
@@ -69,7 +69,7 @@ const MAX_BACKEND_BYTES: usize = 2 * 1024 * 1024;
 /// about twice as much. One implementation for both tables, in the crate the `records` door's
 /// bounds live in, because two stores measured by two counters is a bound that disagrees with
 /// itself.
-pub(super) use ghostex_chat_runtime::storage_bytes;
+pub(super) use ghostex_client_storage::storage_bytes;
 
 /// The sidebar state as storage holds it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -158,8 +158,8 @@ fn machine_tab_key() -> String {
 
 /// The two client-storage values the sidebar's menus read that are not part of its own state:
 /// the agent the user launched last, and the keep-awake duration that is running. Both are
-/// written by the TypeScript side and read fresh (behind a short cache) rather than restored
-/// once, because either can change while the app runs.
+/// read fresh (behind a short cache) rather than restored once, because either can change while
+/// the app runs (the keep-awake duration is written by the titlebar page).
 pub(super) fn read_menu_host_state() -> Result<(Option<String>, Option<i64>), &'static str> {
     let mut held = connections()
         .lock()
@@ -557,7 +557,7 @@ pub(crate) fn with_write_connection<T>(
 /// One preference by key, for a caller that owns a single key rather than the sidebar's set. The
 /// workspace session groups document (K4) is read and written through here so the connection pool,
 /// the busy timeout and the error vocabulary are the ones every other key already uses.
-pub(super) fn read_preference_value(key: &str) -> Result<Option<String>, &'static str> {
+pub(crate) fn read_preference_value(key: &str) -> Result<Option<String>, &'static str> {
     let mut held = connections()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -583,7 +583,7 @@ pub(super) fn read_preference_value(key: &str) -> Result<Option<String>, &'stati
 /// prevent; the first cut of K4's write was a bare `INSERT ... ON CONFLICT` with none of
 /// `admission`'s four refusals, inside no transaction. The bounds are the `workspaceGroups`
 /// catalog row's own, which are four times the entry size the other three share.
-pub(super) fn write_client_document_value(
+pub(crate) fn write_client_document_value(
     key: &str,
     raw: Option<&str>,
 ) -> Result<Option<&'static str>, &'static str> {

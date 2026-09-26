@@ -297,6 +297,7 @@ impl GhostexGpuiApp {
                     ""
                 });
                 window.set_background_corner_radius(px(10.0));
+                crate::app::helpers::apply_frosted_menu_blur(window);
                 crate::app::window::popup_frame::strip_gpui_popup_window_frame(window);
                 if visible {
                     window.activate_window();
@@ -304,6 +305,9 @@ impl GhostexGpuiApp {
                 let picker = cx.new(|cx| {
                     let mut picker = GpuiNewThreadPickerWindow::new(config, host, window, cx);
                     picker.glass = window_glass_active();
+                    picker.frosted_fill = picker
+                        .glass
+                        .then(|| crate::app::helpers::frosted_menu_fill(picker.surface_color()));
                     picker
                 });
                 *picker_out.borrow_mut() = Some(picker.clone());

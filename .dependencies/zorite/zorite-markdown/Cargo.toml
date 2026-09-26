@@ -1,0 +1,32 @@
+[package]
+name = "zorite-markdown"
+version = "0.10.0"
+edition = "2024"
+description = "A Markdown reading view for GPUI: wrapped text, clickable links and wiki-links, tables, alerts, images, and right-to-left text."
+license = "MIT"
+repository = "https://github.com/packetThrower/zorite"
+homepage = "https://packetthrower.github.io/zorite/reference/crates/zorite-markdown/"
+keywords = ["gpui", "markdown", "renderer", "wiki-links", "rtl"]
+categories = ["gui", "text-processing"]
+
+[features]
+default = ["view"]
+# The reader view (MarkdownView + renderers). Without it the crate is just
+# `syntax` — the dependency-free construct recognition zorite-editor consumes.
+view = ["dep:gpui", "dep:markdown", "dep:gpui-bidi"]
+
+[dependencies]
+# Shared workspace spec (the root pins the rev) so Cargo unifies to one gpui.
+gpui = { workspace = true, optional = true }
+markdown = { version = "1", optional = true }
+
+# Logical-order line breaking for RTL paragraphs (#66). gpui wraps by
+# slicing the already-reordered glyph run, which puts an RTL paragraph's
+# last words in its first row; `RtlText` breaks the text instead. A leaf
+# utility crate, depended on by both renderers (see AGENTS.md).
+gpui-bidi = { path = "../gpui-bidi", version = "0.1", optional = true }
+
+# docs.rs builds with every feature so the whole API is documented.
+[package.metadata.docs.rs]
+all-features = true
+

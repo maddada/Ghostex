@@ -70,7 +70,7 @@ impl GhostexGpuiApp {
         sidebar reports as available, across every project, whether or not a
         pane is mounted for it. The count therefore comes from the sidebar's
         session inventory matched against running zmx processes, and the
-        button's action (the sidebar runtime's inactive sweep) already covers
+        button's action (the store's inactive sweep, gx_store/terminal_lifecycle/runtime_actions.rs) already covers
         every project the same way.
         */
         let indicator_sessions = self

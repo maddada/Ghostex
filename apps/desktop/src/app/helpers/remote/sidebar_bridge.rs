@@ -3,24 +3,8 @@
 // no logic changes). This file holds the remote sidebar RPC request/response
 // param and payload builders. See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::time::Duration;
-
 use crate::app::helpers::*;
 use crate::*;
-
-pub(crate) fn gpui_remote_sidebar_request_timeout(
-    command: &serde_json::Map<String, serde_json::Value>,
-) -> Duration {
-    let timeout_ms = command
-        .get("timeoutMs")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(15_000)
-        .clamp(
-            GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MIN_MS,
-            GPUI_REMOTE_GXSERVER_SIDEBAR_REQUEST_TIMEOUT_MAX_MS,
-        );
-    Duration::from_millis(timeout_ms)
-}
 
 pub(crate) fn gpui_remote_sidebar_request_path_allowed(path: &str) -> bool {
     matches!(
@@ -337,6 +321,11 @@ pub(crate) fn gpui_remote_sidebar_project_collections_state(
         return None;
     }
 
+    // CDXC:RemoteMachines 2026-09-25 WHY:
+    // A collection carries no `collapsed` flag any more: gxserver's normalizer drops it and the
+    // store's document (gx-core `CollectionsDocument::to_wire_json`) never writes it, since the
+    // collapsed state lives in the sidebar's own client state. Requiring it here refused every
+    // remote Project Group edit before it was sent.
     fn bounded_text(candidate: &str, max_chars: usize) -> Option<&str> {
         let trimmed = candidate.trim();
         (!trimmed.is_empty()
@@ -362,7 +351,6 @@ pub(crate) fn gpui_remote_sidebar_project_collections_state(
         }
         let title = bounded_text(candidate.get("title")?.as_str()?, MAX_TITLE_CHARS)?;
         let color = candidate.get("color")?.as_str()?;
-        let collapsed = candidate.get("collapsed")?.as_bool()?;
         let source_project_ids = candidate.get("projectIds")?.as_array()?;
         if !valid_color(color)
             || source_project_ids.is_empty()
@@ -381,7 +369,6 @@ pub(crate) fn gpui_remote_sidebar_project_collections_state(
         collections.insert(
             normalized_collection_id.to_string(),
             serde_json::json!({
-                "collapsed": collapsed,
                 "collectionId": normalized_collection_id,
                 "color": color,
                 "projectIds": project_ids,

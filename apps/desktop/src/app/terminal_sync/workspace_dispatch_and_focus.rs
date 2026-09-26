@@ -221,10 +221,10 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// Fork/Reload for Agents terminals follow macOS ownership: Rust resolves
-    /// the mapped gxserver identity and the sidebar runtime commits the
-    /// gxserver mutation (`/api/forkSession` or the sleep→wake full reload).
-    /// Unmapped local placeholder tabs have no gxserver identity and no-op.
+    /// Fork/Reload for Agents terminals follow macOS ownership: Rust resolves the mapped gxserver
+    /// identity and runs the same store action a sidebar row runs (`/api/forkSession` or the
+    /// sleep then wake full reload). Unmapped local placeholder tabs have no gxserver identity and
+    /// no-op.
     pub(crate) fn dispatch_gpui_workspace_terminal_runtime_action(
         &mut self,
         action: &str,
@@ -241,9 +241,8 @@ impl GhostexGpuiApp {
         self.dispatch_gpui_workspace_session_key_runtime_action(action, &key, cx)
     }
 
-    /// Same sidebar-runtime lifecycle route addressed by gxserver identity, for
-    /// sessions that exist in the daemon presentation without a mounted pane in
-    /// this window.
+    /// Same store lifecycle route addressed by gxserver identity, for sessions that exist in the
+    /// daemon presentation without a mounted pane in this window.
     pub(crate) fn dispatch_gpui_workspace_session_key_runtime_action(
         &mut self,
         action: &str,
@@ -255,8 +254,8 @@ impl GhostexGpuiApp {
 
     /// CDXC:AgentProviders 2026-09-03: Switch Account from the terminal action
     /// bar or the chat composer, addressed like Fork / Full reload but carrying
-    /// the picked agent id, which the runtime forwards to
-    /// `/api/switchSessionAgent` before running its Full reload.
+    /// the picked agent id, which goes to `/api/switchSessionAgent` before the
+    /// Full reload.
     pub(crate) fn dispatch_gpui_workspace_terminal_switch_account(
         &mut self,
         shell_session_id: TerminalSessionId,
@@ -278,8 +277,8 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// The chat model picker chose another agent's model. It takes the Handoff / Export route, carrying the target so the sidebar runtime opens the dialog with that agent selected.
-    /// SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/export-transcript.ts (`exportSessionTranscript`), apps/desktop/sidebar/gxserver-runtime/helpers/terminal-lifecycle.ts (the payload's field allowlist).
+    /// The chat model picker chose another agent's model. It takes the Handoff / Export route, carrying the target so the dialog opens with that agent selected.
+    /// SEE-ALSO: apps/desktop/src/app/gx_store/git/export_transcript.rs (`git_export_session_transcript`).
     pub(crate) fn dispatch_gpui_workspace_terminal_handoff_to_model(
         &mut self,
         shell_session_id: TerminalSessionId,
@@ -288,6 +287,14 @@ impl GhostexGpuiApp {
         effort: &str,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
+        // The picked model must name a model family and a model (`normalizeGpuiWorkspaceTerminalRuntimeAction`).
+        let provider_known = matches!(
+            provider,
+            "claude" | "codex" | "cursor" | "grok" | "antigravity"
+        );
+        if !provider_known || model.trim().is_empty() {
+            return false;
+        }
         let Some(key) = self
             .local_workspace_session_mappings
             .iter()
@@ -295,19 +302,17 @@ impl GhostexGpuiApp {
         else {
             return false;
         };
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let message = serde_json::json!({
-            "action": "handoffToModel",
-            "projectId": key.project_id,
-            "sessionId": key.session_id,
-            "target": { "provider": provider, "model": model, "effort": effort },
-            "type": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_VERSION,
-        });
-        let script = gpui_workspace_terminal_runtime_action_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        let session = ghostex_gx_core::SessionKey::local(key.project_id, key.session_id);
+        self.git_export_session_transcript(
+            &session.to_sidebar_session_id(),
+            Some(crate::app::gx_store::git::HandoffTarget {
+                provider: provider.to_string(),
+                model: model.trim().to_string(),
+                effort: (!effort.trim().is_empty()).then(|| effort.to_string()),
+            }),
+            cx,
+        );
+        true
     }
 
     fn dispatch_gpui_workspace_session_key_runtime_action_with_agent(
@@ -317,24 +322,22 @@ impl GhostexGpuiApp {
         agent_id: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let mut message = serde_json::json!({
-            "action": action,
-            "projectId": key.project_id,
-            "sessionId": key.session_id,
-            "type": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_WORKSPACE_TERMINAL_RUNTIME_ACTION_MESSAGE_VERSION,
-        });
-        if let (Some(agent_id), Some(object)) = (agent_id, message.as_object_mut()) {
-            object.insert(
-                "agentId".to_string(),
-                serde_json::Value::String(agent_id.to_string()),
-            );
+        // Close, Sleep, Fork, Full Reload, Note and Switch Account are the store's own session
+        // actions (gx_store/terminal_lifecycle/runtime_actions.rs).
+        if let Some(performed) =
+            self.gx_store_run_workspace_runtime_action(action, key, agent_id, cx)
+        {
+            return performed;
         }
-        let script = gpui_workspace_terminal_runtime_action_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
+        // Handoff / Export opens its dialog in Rust (gx_store/git/export_transcript.rs). Nothing
+        // else reaches the old runtime from here any more.
+        if action != "exportTranscript" {
+            return false;
+        }
+        let session =
+            ghostex_gx_core::SessionKey::local(key.project_id.as_str(), key.session_id.as_str());
+        self.git_export_session_transcript(&session.to_sidebar_session_id(), None, cx);
+        true
     }
 
     pub(crate) fn focused_agents_workspace_shell_session_id(&self) -> Option<TerminalSessionId> {

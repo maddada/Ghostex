@@ -130,7 +130,7 @@ fn claude_launches(root: &Path) -> anyhow::Result<Vec<Launch>> {
 /// Claude's fleet repeats agent types such as Explore and paints a changing activity sentence, neither of which identifies a transcript.
 /// Match the captured roster's order and start times to the parent's launch records and toolUseId sidecars. Two seconds cover the whole-second clock and screen-capture delay.
 /// Prefix/suffix matching preserves launch order for simultaneous same-type spawns; ambiguous matches are refused rather than opening another child's conversation.
-/// SEE-ALSO: packages/core-ui/chat/session-chat-agent-fleet-strip.tsx.
+/// SEE-ALSO: packages/gx-chat-core/src/extras/agent_fleet.rs.
 pub(super) fn resolve_fleet_selector(
     root: &Path,
     family: SessionChatTranscriptAgent,

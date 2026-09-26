@@ -1,6 +1,6 @@
 //! Reconciling the card and the notice with whatever the wire last folded in.
 //!
-//! `publish` in `packages/shared/session-chat-controller/native-host.ts` does this at the top of
+//! `publish` in `packages/shared/session-chat-controller/native-host.ts` did this at the top of
 //! every publish: a new notice forgets the answered key and the refusal, a new prompt forgets the
 //! dismissal, and a new prompt body resets the card and re-reads its saved answers. The core
 //! cannot mutate state while assembling a document, so the seam calls this after every event and

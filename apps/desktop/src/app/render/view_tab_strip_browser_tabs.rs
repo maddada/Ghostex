@@ -42,9 +42,8 @@ impl GhostexGpuiApp {
     /// meant to list its open files the same way later, which is why the strip takes a second group
     /// rather than the Browser view owning a tab bar of its own.
     /// SEE-ALSO: apps/desktop/src/app/render/view_tab_strip.rs (the strip these join),
-    /// apps/desktop/sidebar/gxserver-runtime/sidebar-groups.ts and
-    /// apps/desktop/src/app/gx_store/sidebar_list_inputs.rs (the two sidebar projections that
-    /// stopped listing them).
+    /// apps/desktop/src/app/gx_store/sidebar_list_inputs.rs (the sidebar projection that stopped
+    /// listing them).
     pub(crate) fn view_strip_browser_tabs(&self) -> Vec<ViewStripBrowserTab> {
         if !self.open_view_tabs().contains(&TitlebarMode::Browser) {
             return Vec::new();

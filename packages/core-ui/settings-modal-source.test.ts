@@ -454,12 +454,10 @@ describe('settings modal source', () => {
     const gatedRows = sourceFrom(settingsModalDebuggingTabSource, '{settings.debuggingMode ? (');
 
     expect(debuggingSearch).toContain("key: 'diagnosticLogging'");
-    expect(debuggingSearch).toContain("key: 'chatBrain'");
     expect(debuggingSearch).toContain("key: 'showSessionCommandCopyActions'");
     expect(debuggingSearch).toContain("key: 'showSessionDetailsCopyAction'");
     expect(settingsModalDebuggingTabSource).toContain('checked={settings.debuggingMode}');
     expect(gatedRows).toContain("visible('controls', 'diagnosticLogging')");
-    expect(gatedRows).toContain("visible('controls', 'chatBrain')");
     expect(gatedRows).toContain("visible('controls', 'showSessionCommandCopyActions')");
     expect(gatedRows).toContain("visible('controls', 'showSessionDetailsCopyAction')");
     expect(settingsModalDebuggingTabSource).toContain(

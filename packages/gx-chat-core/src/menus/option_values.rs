@@ -60,7 +60,7 @@ impl Serialize for OptionSource {
     }
 }
 
-/// One option's local value. The field order is the order the TypeScript writes it.
+/// One option's local value. The field order is the order the TypeScript wrote it.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OptionValue {

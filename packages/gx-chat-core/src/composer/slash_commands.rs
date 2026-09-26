@@ -2,11 +2,6 @@
 //!
 //! Port of `packages/core-ui/chat/session-chat-slash-commands.ts`. The six catalogs themselves are
 //! in `slash_catalogs.rs`; this file is the filter and the headings.
-//!
-//! CDXC:SessionChat 2026-09-22 SEE-ALSO:
-//! `packages/core-ui/chat/session-chat-slash-commands.ts` holds the same six catalogs and the
-//! instructions for re-verifying them; React reads that file, the Rust core reads this one, and a
-//! command added to one must be added to the other.
 
 use serde::{Deserialize, Serialize};
 

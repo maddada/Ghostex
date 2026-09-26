@@ -1,21 +1,18 @@
 /*
 CDXC:SessionChat 2026-08-21:
-Shiki assets for the two Ghostex chat surfaces that cannot load ES modules.
+Shiki assets for the Ghostex pages that cannot load ES modules.
 
 Session Chat highlights fenced code with Shiki and loads the engine plus one
 grammar per language on demand (packages/core-ui/chat/session-chat-shiki-engine.ts and
 packages/core-ui/chat/session-chat-code-grammars.ts). On the web that is plain dynamic
-`import()` and the bundler splits it. Two hosts cannot do that:
-
-  * gpui packaged CEF surfaces are file:// documents.
-  * The React Native chat webview loads from file:///android_asset (Android) or
-    the app bundle (iOS).
+`import()` and the bundler splits it. The desktop's packaged CEF pages cannot
+do that: they are file:// documents.
 
 Measured in Chromium on a real file:// document: `import()` fails ("Failed to
 fetch dynamically imported module") and `fetch()` fails, but a classic
-`<script src>` loads fine. Both hosts therefore get the same treatment — the
-grammars ship as classic scripts staged beside the page, and the shared modules
-are swapped at build time for a `<script src>` loader.
+`<script src>` loads fine. So the grammars ship as classic scripts staged
+beside the page, and the shared modules are swapped at build time for a
+`<script src>` loader.
 
 Grammars are stored SPLIT, not flattened. `@shikijs/langs/html` re-exports
 `[...javascript, ...css, html]`, so staging each language's full export
@@ -202,8 +199,6 @@ export function loadSessionChatGrammar(language) {
 `;
 
 const ENGINE_SHIM_SOURCE = `${CLASSIC_LOADER_SOURCE}
-export const SESSION_CHAT_HIGHLIGHTING_AVAILABLE = true;
-
 export function createSessionChatHighlighterCore() {
   return loadShikiScript("${SHIKI_CORE_FILE_NAME}").then(() => {
     const factory = globalThis.${SHIKI_CORE_GLOBAL};
@@ -217,8 +212,7 @@ export function createSessionChatHighlighterCore() {
 
 /**
  * esbuild plugin replacing the two dynamic-import modules with the classic
- * script loader. Both bundles that need it (gpui's single-file CEF entries and
- * the mobile chat page) use this one plugin so their loaders cannot drift.
+ * script loader, used by the desktop's single-file CEF entries.
  */
 export function shikiClassicScriptEsbuildPlugin() {
   return {

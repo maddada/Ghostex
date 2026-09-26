@@ -5,6 +5,8 @@ use serde_json::{Value, json};
 use std::{ops::Range, time::Duration};
 
 impl NativeChatView {
+    /// CDXC:Clipboard 2026-09-23 DECISION:
+    /// User: images pasted into a question answer should appear as [Image #1] and render exactly like the GPUI chat composer.
     pub(super) fn finish_answer_attachments(
         &mut self,
         key: String,

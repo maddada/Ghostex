@@ -10,8 +10,9 @@
 //!
 //! **A REMOTE machine's tab goes down that machine's tunnel**, exactly as the project moves do
 //! since 2026-09-21: the document is that machine's held copy, the edit is the same one, and the
-//! result is sent to the runtime as `updateSidebarProjectCollections` with a `remoteMachineId`
-//! (`gx_store/remote_project_docs.rs`). It is not refused any more, because the payload reached
+//! result is sent down that machine's tunnel as `/api/updateSidebarProjectCollections`
+//! (`gx_store/remote_project_docs.rs`; until 2026-09-25 it went to the runtime as
+//! `updateSidebarProjectCollections` with a `remoteMachineId`). It is not refused any more, because the payload reached
 //! `runNativeCollectionAction` in a page that is being deleted and nothing forwards it in its place.
 //!
 //! SEE-ALSO: packages/gx-core/src/project_docs/collection_menu.rs,
@@ -79,7 +80,7 @@ impl GhostexGpuiApp {
                 false,
                 self.gx_store.collection_menu,
             );
-            // Answered: the TypeScript's `if (!collection) return` writes nothing and sends the
+            // Answered: the TypeScript's `if (!collection) return` wrote nothing and sent the
             // payload nowhere else either, so handing it on would be a second, different answer.
             return true;
         };

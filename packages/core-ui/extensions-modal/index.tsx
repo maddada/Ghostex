@@ -18,7 +18,9 @@ import type {
 } from '@/packages/shared/ghostex-extensions';
 import { InstalledExtensionDetail, StoreExtensionDetail } from './extension-detail';
 import { InstallConsentDialog } from './install-consent';
-import { StoreTab } from './store-tab';
+import { filterStoreExtensions, StoreTab, storeCategories } from './store-tab';
+import { DEFAULT_EXTENSION_FILTER, type ExtensionFilter } from './extension-filter';
+import { ExtensionsFilterBar } from './extension-filter-bar';
 import { ExtensionEmptyState } from './extension-surface';
 import { extensionStaticAssetUrl, type ExtensionsModalTransport } from './transport';
 
@@ -230,11 +232,19 @@ function ExtensionsErrorBanner({ error }: { error?: string }) {
 
 /** The store/installed list, rendered inside the Extensions Store section. */
 export function ExtensionsBrowserList({
+  editingScopeId,
+  filter: externalFilter,
   onEditScope,
   renderScopeEditor,
   scopeSummaryFor,
   state,
 }: {
+  editingScopeId?: string;
+  /**
+   * The Settings page owns one filter for every extension group and passes it here. Without one (the
+   * standalone browser) the list keeps its own filter and draws its own filter bar.
+   */
+  filter?: ExtensionFilter;
   /**
    * CDXC:Extensions 2026-09-18 DECISION:
    * User: an installed extension gets the same Edit button and the same scope editor as a built-in view.
@@ -245,9 +255,27 @@ export function ExtensionsBrowserList({
   scopeSummaryFor?: (extension: GhostexInstalledExtension) => string | undefined;
   state: ExtensionsBrowserState;
 }) {
+  const [ownFilter, setOwnFilter] = useState<ExtensionFilter>(DEFAULT_EXTENSION_FILTER);
+  const filter = externalFilter ?? ownFilter;
+  const { consentEntry } = state;
+  const shown = filterStoreExtensions(filter, state.catalog, state.installed);
+  const all = filterStoreExtensions(DEFAULT_EXTENSION_FILTER, state.catalog, state.installed);
+  const total = all.installed.length + all.store.length;
   return (
     <div className='flex flex-col gap-3'>
       <ExtensionsErrorBanner error={state.error} />
+      {externalFilter ? null : (
+        <ExtensionsFilterBar
+          categories={storeCategories(state.catalog, state.installed)}
+          filter={ownFilter}
+          loading={state.loading}
+          onChange={setOwnFilter}
+          onRefresh={() => void state.load()}
+          shownCount={shown.installed.length + shown.store.length}
+          sources={['installed', 'store']}
+          totalCount={total}
+        />
+      )}
       {state.loading && !state.catalogSnapshot ? (
         <ExtensionEmptyState
           description='Reading the installed registry and extension catalog.'
@@ -269,13 +297,14 @@ export function ExtensionsBrowserList({
       ) : (
         <StoreTab
           catalog={state.catalog}
+          editingScopeId={editingScopeId}
+          filter={filter}
           iconUrlForCatalogEntry={state.iconUrlForCatalogEntry}
           iconUrlForInstalled={state.iconUrlForInstalled}
           installed={state.installed}
-          loading={state.loading}
           onEditScope={onEditScope}
+          onInstall={(entry) => state.setConsentEntry(entry)}
           onInstalledDetails={(extension) => state.setSelectedInstalledId(extension.id)}
-          onRefresh={() => void state.load()}
           onRemove={(extension) => void state.uninstallExtension(extension)}
           onSetChatBarAutoOpen={(extension, chatBarAutoOpen) =>
             void state.setExtensionState(extension, { chatBarAutoOpen })
@@ -287,6 +316,15 @@ export function ExtensionsBrowserList({
           scopeSummaryFor={scopeSummaryFor}
         />
       )}
+      <InstallConsentDialog
+        entry={consentEntry}
+        installing={Boolean(consentEntry && state.pendingIds.has(consentEntry.name))}
+        onCancel={() => state.setConsentEntry(undefined)}
+        onConfirm={() => {
+          if (consentEntry) void state.installExtension(consentEntry);
+        }}
+        open={Boolean(consentEntry)}
+      />
     </div>
   );
 }
@@ -344,7 +382,18 @@ export function ExtensionsBrowser({ active, transport }: { active: boolean; tran
   return state.detailOpen ? <ExtensionsBrowserDetail state={state} /> : <ExtensionsBrowserList state={state} />;
 }
 
-export { InstalledExtensionCard, StoreExtensionCard } from './extension-card';
+export {
+  ExtensionCardGrid,
+  ExtensionCardGridWide,
+  ExtensionGridCard,
+  ExtensionIcon,
+  InstalledExtensionCard,
+  StoreExtensionCard,
+} from './extension-card';
+export { ExtensionsFilterBar } from './extension-filter-bar';
+export * from './extension-filter';
+export { catalogFilterSubject, filterStoreExtensions, installedFilterSubject, storeCategories } from './store-tab';
+export { ExtensionCardGroup, ExtensionEmptyStateFilter } from './extension-surface';
 export { InstalledExtensionDetail, StoreExtensionDetail } from './extension-detail';
 export { InstallConsentDialog } from './install-consent';
 export { InstalledTab } from './installed-tab';

@@ -119,7 +119,7 @@ impl NativeChatView {
                 appearance: p.clone(),
             };
             // CDXC:SessionChat 2026-09-22 WHY: the id is load-bearing. GPUI applies a group-hover refinement at LAYOUT time only from per-element hover state, which exists only for a div with an id; without one the `w_auto` never reaches layout and the buttons stay clipped at width 0 while the row is hovered.
-            // CDXC:SessionChat 2026-09-24 DECISION: a row that could not be delivered keeps its controls on screen; see failedRowLabel in packages/core-ui/chat/session-chat-queue-rows.tsx.
+            // CDXC:SessionChat 2026-09-24 DECISION: a row that could not be delivered keeps its controls on screen.
             let mut actions = div()
                 .id(format!("queue-actions:{id}"))
                 .flex()

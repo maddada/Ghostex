@@ -3,7 +3,6 @@ import Fuse from 'fuse.js';
 import { Command } from '@/packages/components/ui/command';
 import {
   APP_SHOTS_HOTKEY_OPTIONS,
-  CHAT_BRAIN_OPTIONS,
   DIAGNOSTIC_LOGGING_SCENARIOS,
   SESSION_TITLE_GENERATION_AGENT_OPTIONS,
 } from '../../shared/ghostex-settings';
@@ -275,12 +274,6 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             ]),
           },
           {
-            key: 'chatBrain',
-            title: 'Chat brain',
-            subtitle: 'Which engine runs the chat. Rust is the default; switch back to QuickJS only if a chat misbehaves, then tell us.',
-            options: CHAT_BRAIN_OPTIONS.map((option) => ({ label: option.label, value: option.value })),
-          },
-          {
             key: 'showSessionCommandCopyActions',
             title: 'Show command copy actions',
             subtitle: 'Show Copy resume and Copy attach command in session context menus.',
@@ -539,19 +532,7 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
             title: 'Chromium runtime (CEF)',
           },
         ],
-        title: 'Official Extensions',
-      },
-      {
-        id: 'accountUsage',
-        settings: [
-          {
-            key: 'accountTitlebarUsage',
-            title: 'Account usage in the sidebar',
-            subtitle:
-              'Show or hide usage stats for saved Claude and Codex accounts at the bottom of the desktop sidebar. Star accounts to pin their usage.',
-          },
-        ],
-        title: 'Account usage in the sidebar',
+        title: 'Built-in',
       },
       {
         id: 'store',
@@ -575,6 +556,18 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           },
         ],
         title: 'Your views',
+      },
+      {
+        id: 'accountUsage',
+        settings: [
+          {
+            key: 'accountTitlebarUsage',
+            title: 'Account usage in the sidebar',
+            subtitle:
+              'Show or hide usage stats for saved Claude and Codex accounts at the bottom of the desktop sidebar. Star accounts to pin their usage.',
+          },
+        ],
+        title: 'Account usage in the sidebar',
       },
     ],
     title: 'Extensions',

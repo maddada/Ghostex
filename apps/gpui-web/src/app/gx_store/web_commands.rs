@@ -1,9 +1,5 @@
-//! What a sidebar command does in the browser. The desktop spreads this over a dozen `sidebar_*.rs` files, most of which also keep its old QuickJS runtime in step; here a command is either the sidebar's own state (the core's `SidebarUiStore`, saved to localStorage under the same keys and formats the desktop uses), a menu the core builds, a focus intent, or a daemon call.
-use ghostex_gx_core::{
-    ChangeSummary, Event, HoverAction, Intent, LifecycleAnswer, LifecycleFollowUp, MenuItem,
-    SectionId, SidebarMenus, SidebarUiIntent, apply_lifecycle_answer, owns_lifecycle_message,
-    plan_lifecycle_request,
-};
+//! What a sidebar command does in the browser: the desktop's own `sidebar_*.rs` executor files (symlinked into this folder) in the desktop's order, then the page's parts: the sidebar's own state (the core's `SidebarUiStore`, saved to localStorage under the same keys and formats the desktop uses), a row's menu, and focus (the page opens the session in its work area).
+use ghostex_gx_core::{Event, HoverAction, Intent, MenuItem, SectionId, SidebarMenus, SidebarUiIntent};
 use ghostex_gx_core as sidebar_ui;
 use serde_json::Value;
 
@@ -64,6 +60,20 @@ impl GhostexGpuiApp {
         );
     }
 
+    /// The desktop's `gx_store_apply_sidebar_ui_intent`: moves the sidebar's own state, saves it, and rebuilds the list. Returns whether it moved.
+    pub(crate) fn gx_store_apply_sidebar_ui_intent(
+        &mut self,
+        intent: SidebarUiIntent,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        let changed = self.gx_store.sidebar_ui.apply(intent).changed;
+        if changed {
+            self.gx_store_persist_sidebar_ui();
+            self.gx_store_sidebar_state_changed(cx);
+        }
+        changed
+    }
+
     fn sidebar_ui_intent(&self, command: &Value) -> Option<SidebarUiIntent> {
         let text = |key: &str| command.get(key).and_then(Value::as_str).map(str::to_string);
         match command.get("type").and_then(Value::as_str)? {
@@ -84,27 +94,49 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// A sidebar command, through the desktop's own store handlers in the desktop's order (`native_sidebar/actions.rs` `dispatch_native_sidebar_ui`), each on the envelope it expects: a gxserver message wrapped as `{type: "command", message}`, a renderer command at the top level. Left out are the handlers for what a page does not have: remote machines, the accounts pages, Keep Awake, Space Sleep's views.
     pub(crate) fn web_run_sidebar_command(&mut self, command: Value, cx: &mut gpui::Context<Self>) {
+        if !self.gx_store_sidebar_list_ready() {
+            return;
+        }
+        if self.web_answer_session_menu(&command, cx)
+            || self.gx_store_run_sidebar_git(&command, cx)
+            || self.gx_store_run_sidebar_action(&command, cx)
+            || self.gx_store_run_sidebar_lifecycle(&command, cx)
+            || self.gx_store_run_sidebar_close(&command, cx)
+            || self.gx_store_run_close_after_done(&command, cx)
+            || self.gx_store_run_session_edit_command(&command, cx)
+            || self.gx_store_run_group_sleep(&command, cx)
+            || self.gx_store_run_sidebar_fork(&command, cx)
+            || self.gx_store_run_sidebar_flags(&command, cx)
+            || self.gx_store_run_sidebar_modal(&command, cx)
+            || self.gx_store_run_sidebar_open(&command, cx)
+            || self.gx_store_run_sidebar_snooze_action(&command, cx)
+            || self.gx_store_run_sidebar_snooze(&command, cx)
+            || self.gx_store_run_sidebar_reload(&command, cx)
+            || self.gx_store_run_sidebar_reload_set(&command, cx)
+            || self.gx_store_run_sidebar_split(&command, cx)
+            || self.gx_store_run_sidebar_session_move(&command, cx)
+            || self.gx_store_run_sidebar_order_write(&command, cx)
+            || self.gx_store_run_project_move(&command, cx)
+            || self.gx_store_run_collection_menu_edit(&command, cx)
+            || self.gx_store_run_sidebar_batch(&command, cx)
+            || self.gx_store_run_sidebar_bulk(&command, cx)
+            || self.gx_store_run_sidebar_create(&command, cx)
+        {
+            return;
+        }
         // The drawing code wraps runtime-bound messages as `{type: "command", message}`.
         let command = match command.get("type").and_then(Value::as_str) {
             Some("command") => command["message"].clone(),
             _ => command,
         };
-        if self.web_answer_session_menu(&command, cx) {
-            return;
-        }
         if let Some(intent) = self.sidebar_ui_intent(&command) {
-            if self.gx_store.sidebar_ui.apply(intent).changed {
-                self.gx_store_persist_sidebar_ui();
-                self.gx_store_update_sidebar_list(&ChangeSummary::default(), cx);
-            }
+            self.gx_store_apply_sidebar_ui_intent(intent, cx);
             // The sidebar's own state is the whole answer; a clear-selection click also focuses, below.
             if command["type"] != "selectSession" {
                 return;
             }
-        }
-        if self.web_run_lifecycle(&command, cx) {
-            return;
         }
         if command["type"] == "selectSession" && command["mode"] == "focus" {
             if let Some(row_id) = command["sessionId"].as_str() {
@@ -112,48 +144,7 @@ impl GhostexGpuiApp {
             }
             return;
         }
-        log::info!("sidebar command not handled on web yet: {}", command["type"]);
-    }
-
-    /// Sleep and Wake: the core plans the daemon call and what follows its answer; this host only performs the call with `fetch`.
-    fn web_run_lifecycle(&mut self, message: &Value, cx: &mut gpui::Context<Self>) -> bool {
-        if !owns_lifecycle_message(message) {
-            return false;
-        }
-        let Some(request) = plan_lifecycle_request(&self.gx_store.core, message) else {
-            return false;
-        };
-        let Some(endpoint) = self.gx_store.endpoint.clone() else {
-            return true;
-        };
-        if request.rpc_path.is_empty() {
-            return true;
-        }
-        cx.spawn(async move |app, cx| {
-            let result =
-                super::web_transport::rpc(&endpoint, request.rpc_path, request.rpc_params.clone()).await;
-            let answer = LifecycleAnswer::read(result.as_ref().map_err(String::as_str));
-            let _ = app.update(cx, |app, cx| {
-                let focused = app.gx_store.core.focus().focused_session.clone();
-                for follow_up in apply_lifecycle_answer(&request, answer, focused.as_ref(), now_ms()) {
-                    match follow_up {
-                        LifecycleFollowUp::Patch { session, patch } => app.gx_store_handle(
-                            Event::Intent(Intent::PatchSession { session, patch }),
-                            cx,
-                        ),
-                        LifecycleFollowUp::Focus { session, .. } => {
-                            app.open_session = Some(session.clone());
-                            app.gx_store_handle(
-                                Event::Intent(Intent::FocusSession { session, visible: None }),
-                                cx,
-                            );
-                        }
-                    }
-                }
-            });
-        })
-        .detach();
-        true
+        log::info!("sidebar command not handled on web: {}", command["type"]);
     }
 
     /// `?session=<projectId>:<sessionId>` opens that session once the list has it, and `&surface=terminal` shows its terminal: a deep link, and what the screenshot driver uses.
@@ -195,6 +186,19 @@ impl GhostexGpuiApp {
         self.web_open_session(session, cx);
     }
 
+    /// Opens `session` in the work area on the surface asked for: its terminal, or its chat.
+    pub(crate) fn web_open_session_in_work_area(
+        &mut self,
+        session: ghostex_gx_core::SessionKey,
+        terminal: bool,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.web_open_session(session, cx);
+        if terminal != self.show_terminal {
+            self.web_show_terminal(terminal, cx);
+        }
+    }
+
     fn web_open_session(&mut self, session: ghostex_gx_core::SessionKey, cx: &mut gpui::Context<Self>) {
         self.open_session = Some(session.clone());
         self.ensure_native_chat(&session, cx);
@@ -202,6 +206,12 @@ impl GhostexGpuiApp {
             self.ensure_terminal(&session, cx);
         }
         self.gx_store_handle(Event::Intent(Intent::FocusSession { session, visible: None }), cx);
+        // The Git state follows the active project, as the desktop's workspace reconcile does.
+        let active = self.gpui_app_modal_active_project_id();
+        if active != self.web_host.git_active_project {
+            self.web_host.git_active_project = active;
+            self.gx_store_git_active_project_changed(cx);
+        }
         cx.notify();
     }
 
@@ -215,8 +225,13 @@ impl GhostexGpuiApp {
         let owner_id = command["ownerId"].as_str().unwrap_or_default();
         let action = command["action"].as_str().and_then(HoverAction::from_id);
         let store = &self.gx_store;
-        let menus =
-            SidebarMenus::new(&store.core, store.model.view(), &store.inputs, &store.menu_host, now_ms());
+        let menus = SidebarMenus::new(
+            &store.core,
+            store.sidebar_list.view(),
+            &store.sidebar_list.last_inputs,
+            &store.menu_host,
+            now_ms(),
+        );
         let items = match action {
             Some(action) => menus.row_hover_submenu(session_id, action),
             None => menus.row_menu(session_id),

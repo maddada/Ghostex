@@ -1,8 +1,8 @@
 //! Where an account request goes and what its answer reads as.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/core.ts (`requestGroupAccounts`,
-//! `requestSessionAccounts`), apps/desktop/sidebar/gxserver-runtime/client.ts (`rpc`),
-//! apps/desktop/sidebar/gxserver-runtime/helpers/records.ts (`gpuiGxserverRpcErrorMessage`).
+//! Ported from the runtime's `requestGroupAccounts` and `requestSessionAccounts`,
+//! `gxserver-runtime/client.ts` (`rpc`) and `gxserver-runtime/helpers/records.ts`
+//! (`gpuiGxserverRpcErrorMessage`), all deleted 2026-09-25 (see git history).
 
 use serde_json::Value;
 

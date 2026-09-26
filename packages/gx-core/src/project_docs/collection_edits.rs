@@ -8,12 +8,11 @@
 //! `moveProjectsToSidebarCollection` returns the SAME OBJECT for an empty id list or a target
 //! collection that does not exist, and `saveNativeCollections` writes the key and posts the update
 //! anyway. That identity is modelled rather than improved for the same reason the session moves
-//! model theirs: a port that skipped the write would make one fewer push per drag and the gate
-//! would see it.
+//! model theirs: a port that skipped the write would make one fewer push per drag, which the
+//! parity gate saw while the TypeScript still ran. That TypeScript was frozen in the deleted
+//! `tooling/gx-core/sidebar-page-frozen/membership.ts` and `project-drag.ts` (see git history).
 //!
-//! SEE-ALSO: packages/core-ui/project-collections.ts,
-//! tooling/gx-core/sidebar-page-frozen/membership.ts,
-//! tooling/gx-core/sidebar-page-frozen/project-drag.ts.
+//! SEE-ALSO: packages/core-ui/project-collections.ts.
 
 use crate::sidebar_view::text::js_trim;
 use crate::sidebar_view::{Collection, CollectionsState};

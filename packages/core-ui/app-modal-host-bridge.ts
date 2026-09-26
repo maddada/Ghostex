@@ -149,9 +149,9 @@ export type OpenAppModalMessage =
       /**
        * CDXC:TranscriptExport 2026-08-20 / CDXC:TranscriptExport 2026-08-24:
        * The Export Transcript dialog. Opened without `path` it starts on its
-       * include-toggle options stage and the sidebar runtime later answers the
-       * dialog's export request with an `exportSessionTranscriptResult`
-       * message; opened with `path` it shows that already-written file
+       * include-toggle options stage and the host (gx_store/git/export_transcript.rs;
+       * the sidebar runtime until 2026-09-25) later answers the dialog's export
+       * request with an `exportSessionTranscriptResult` message; opened with `path` it shows that already-written file
        * directly. `path` is absolute on the machine that owns the transcript,
        * so `canReveal` is false for a remote session's export: the host
        * running this dialog has no such file and must not offer to reveal one.

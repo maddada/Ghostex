@@ -142,6 +142,12 @@ impl GhostexGpuiApp {
             "pickWindowGlassImageFile" => {
                 self.handle_gpui_pick_window_glass_image_message(&message, cx);
             }
+            "listWindowGlassVideos" => {
+                self.handle_gpui_list_window_glass_videos_message(cx);
+            }
+            "pickWindowGlassVideoFile" => {
+                self.handle_gpui_pick_window_glass_video_message(&message, cx);
+            }
             "pickFirstLaunchProjectFolder" => {
                 self.handle_gpui_pick_first_launch_project_folder_message(cx);
             }
@@ -168,11 +174,6 @@ impl GhostexGpuiApp {
                     self.handle_gpui_probe_remote_gxserver_install_message(command, cx);
                 }
             }
-            "remoteGxserverSubscribePresentation" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_remote_gxserver_subscribe_presentation_message(command, cx);
-                }
-            }
             "browseRemoteProjectDirectories" => {
                 if let Some(command) = message.as_object() {
                     self.handle_gpui_browse_remote_project_directories_message(command, cx);
@@ -193,22 +194,6 @@ impl GhostexGpuiApp {
             }
             "pickRepositoryFolder" => {
                 self.handle_gpui_pick_repository_folder_message(cx);
-            }
-            "copySessionDetails" => {
-                // One function, because the sidebar's own copy actions reach the same clipboard
-                // write from Rust now without passing through this bridge
-                // (gx_store/sidebar_actions.rs).
-                if let Some(details_text) = message
-                    .get("detailsText")
-                    .and_then(serde_json::Value::as_str)
-                {
-                    self.gpui_copy_session_details_text(details_text, cx);
-                }
-            }
-            "gpuiRemoteGxserverSidebarRequest" => {
-                if let Some(command) = message.as_object() {
-                    self.handle_gpui_remote_gxserver_sidebar_request_message(command, cx);
-                }
             }
             "completeFirstLaunchSetup" => {
                 let is_first_launch_setup = self.app_modal_window.clone().is_some_and(|handle| {
@@ -238,85 +223,6 @@ impl GhostexGpuiApp {
             }
             "sidebarCommand" => {
                 self.handle_gpui_app_modal_sidebar_command(message, window, cx);
-            }
-            "projectWorktreesResult" => {
-                // The sidebar runtime answers the Worktree modal's existing
-                // worktree/branch list request through the app-modal host, the
-                // same route macOS uses. Forward only the shared result fields
-                // into the open modal window.
-                let Some(request_id) = message
-                    .get("requestId")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|request_id| !request_id.trim().is_empty())
-                else {
-                    return;
-                };
-                let mut result = serde_json::json!({
-                    "ok": message.get("ok").and_then(serde_json::Value::as_bool) == Some(true),
-                    "requestId": request_id,
-                    "type": "projectWorktreesResult",
-                });
-                if let Some(error) = message.get("error").and_then(serde_json::Value::as_str) {
-                    result["error"] = serde_json::json!(error);
-                }
-                if let Some(branches) = message.get("branches").filter(|value| value.is_array()) {
-                    result["branches"] = branches.clone();
-                }
-                if let Some(worktrees) = message.get("worktrees").filter(|value| value.is_array()) {
-                    result["worktrees"] = worktrees.clone();
-                }
-                self.dispatch_open_gpui_app_modal_message(result, cx);
-            }
-            "exportSessionTranscriptResult" => {
-                /*
-                CDXC:TranscriptExport 2026-08-24:
-                The sidebar runtime's answer to the Export Transcript dialog's
-                `runExportSessionTranscript` request. Forward only the shared
-                result fields into the open modal window, and capture the
-                exported path for Reveal in Finder here — the same Rust-held
-                state the dialog's old done-stage open message used to seed —
-                so Reveal never trusts a path posted back by the modal page.
-                */
-                let Some(request_id) = message
-                    .get("requestId")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|request_id| {
-                        !request_id.trim().is_empty() && request_id.chars().count() <= 128
-                    })
-                else {
-                    return;
-                };
-                let ok = message.get("ok").and_then(serde_json::Value::as_bool) == Some(true);
-                let can_reveal = message
-                    .get("canReveal")
-                    .and_then(serde_json::Value::as_bool)
-                    == Some(true);
-                let path = message
-                    .get("path")
-                    .and_then(serde_json::Value::as_str)
-                    .filter(|path| !path.trim().is_empty());
-                self.pending_export_transcript_reveal_path = (ok && can_reveal)
-                    .then(|| path.map(str::to_string))
-                    .flatten();
-                let mut result = serde_json::json!({
-                    "canReveal": can_reveal,
-                    "ok": ok,
-                    "requestId": request_id,
-                    "type": "exportSessionTranscriptResult",
-                });
-                if let Some(path) = path {
-                    result["path"] = serde_json::json!(path);
-                }
-                if let Some(agent_id) = message.get("agentId").and_then(serde_json::Value::as_str) {
-                    result["agentId"] = serde_json::json!(agent_id);
-                }
-                if let Some(error) = message.get("error").and_then(serde_json::Value::as_str) {
-                    result["error"] = serde_json::json!(error);
-                }
-                if self.receive_gpui_export_transcript_result(&result, cx) {
-                    return;
-                }
-                self.dispatch_open_gpui_app_modal_message(result, cx);
             }
             "firstLaunchCreateProjectSessionResult" => {
                 let Some(command) = message.as_object() else {
@@ -433,11 +339,6 @@ impl GhostexGpuiApp {
             return;
         };
 
-        if message_type == "sessionChatRuntimeBroker" {
-            self.receive_session_chat_runtime_broker(&message, cx);
-            return;
-        }
-
         match message_type {
             "sidebarDiagnosticLog" => {
                 let Some(scenario_id) = message
@@ -463,12 +364,6 @@ impl GhostexGpuiApp {
                         .cloned()
                         .unwrap_or(serde_json::Value::Null),
                 );
-            }
-            navigation_history::NAVIGATION_HISTORY_STATE_MESSAGE_TYPE => {
-                self.receive_navigation_history_state_message(&message, cx);
-            }
-            notification_feed::NOTIFICATION_FEED_STATE_MESSAGE_TYPE => {
-                self.receive_notification_feed_state_message(&message, cx);
             }
             "runProcess" => {
                 self.receive_gpui_titlebar_native_host_run_process(message, cx);
@@ -496,28 +391,8 @@ impl GhostexGpuiApp {
             "quitResourcesFromTitlebar" => {
                 self.receive_gpui_titlebar_resources_quit_message(&message, window, cx);
             }
-            // The old runtime edited the workspace session groups document. Since M5 piece 7c it
-            // writes neither client storage nor the daemon: this is the one writer, behind the
-            // pending-push guard (gx_store/workspace_groups.rs). A payload whose `state` is not an
-            // object is dropped rather than parsed, because an empty document REMOVES the key and a
-            // malformed message must never be the thing that deletes the user's groups.
-            ghostex_gx_core::WORKSPACE_GROUPS_HAND_OFF_MESSAGE_TYPE => {
-                let Some(state) = message.get("state").filter(|state| state.is_object()) else {
-                    return;
-                };
-                let state = state.clone();
-                self.gx_store_receive_workspace_groups_hand_off(&state, cx);
-            }
-            "primaryAgentLauncherChanged" => {
-                self.sidebar_primary_agent_launcher_id = message["agentId"]
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|agent_id| !agent_id.is_empty() && agent_id.len() <= 128)
-                    .map(str::to_string);
-            }
             // The sidebar's own Load Sessions row reaches the same three steps without this
             // bridge since M5 (gx_store/sidebar_open.rs), so they are one function.
-            "startGxserverFromTitlebar" => self.start_local_gxserver_from_sidebar(cx),
             "accountSwitchProgress" => {
                 let (Some(project_id), Some(session_id)) =
                     (message["projectId"].as_str(), message["sessionId"].as_str())
@@ -537,38 +412,6 @@ impl GhostexGpuiApp {
                     })
                 };
                 self.set_session_account_switch_progress(key, &message["progress"], None, cx);
-            }
-            "gxserverPresentationReady" => {
-                self.refresh_gpui_new_thread_picker_agents(cx);
-                self.refresh_gpui_new_thread_picker_accounts(cx);
-                self.ensure_gpui_new_thread_picker_preloaded(cx);
-                if !self.sidebar_timer_presentations_replayed_after_ready {
-                    /*
-                    CDXC:DelayedSend 2026-07-22:
-                    Restored timer state is re-armed before the sidebar CEF
-                    surface exists. The first renderer presentation hydrate is
-                    the earliest authority that its bridge and React runtime
-                    can receive timer projections. Discard any pre-ready
-                    dispatch snapshots and replay both Agents and Commands
-                    summaries exactly once at that boundary so a restored
-                    timer cannot remain active without its sidebar chrome.
-                    */
-                    self.sidebar_command_pane_sessions_snapshot.clear();
-                    self.sidebar_agents_delayed_sends_snapshot.clear();
-                    let command_timers_replayed =
-                        self.refresh_sidebar_command_pane_sessions_if_changed(cx);
-                    let agents_timers_replayed =
-                        self.refresh_sidebar_agents_delayed_sends_if_changed(cx);
-                    self.sidebar_timer_presentations_replayed_after_ready =
-                        command_timers_replayed && agents_timers_replayed;
-                }
-                let loading_toast_visible = self
-                    .app_toasts
-                    .iter()
-                    .any(|toast| toast.id == GPUI_GXSERVER_DAEMON_TOAST_ID && toast.loading);
-                if loading_toast_visible {
-                    self.remove_gpui_app_toast(GPUI_GXSERVER_DAEMON_TOAST_ID, cx);
-                }
             }
             "stopGxserverFromTitlebar" => {
                 self.stop_gpui_local_gxserver_from_titlebar(false, cx);
@@ -646,8 +489,8 @@ impl GhostexGpuiApp {
         /*
         CDXC:Resources 2026-07-08:
         React sends the exact inactive session ids it derived from the Resources
-        rows, but the GPUI sidebar runtime's existing batch path revalidates the
-        current inactive set itself. Reuse that owner instead of introducing a
+        rows, but the store's existing batch path (gx_store/terminal_lifecycle/runtime_actions.rs)
+        revalidates the current inactive set itself. Reuse that owner instead of introducing a
         second explicit-id lifecycle route in this phase.
         */
         let _ = self.dispatch_gpui_workspace_sleep_inactive_sessions(cx);
@@ -671,7 +514,7 @@ impl GhostexGpuiApp {
                 CDXC:Resources 2026-07-26:
                 Resources now also lists sessions this window has not mounted,
                 so Close cannot stop at the local pane map. Sessions that carry
-                a gxserver identity close through the sidebar runtime's existing
+                a gxserver identity close through the store's existing
                 lifecycle route, exactly like a sidebar card close.
                 */
                 if let Some(key) = gpui_combined_presentation_session_key(&session_id) {

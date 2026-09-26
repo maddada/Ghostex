@@ -5,32 +5,6 @@ use crate::app::model::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    pub(crate) fn handle_gpui_remote_gxserver_subscribe_presentation_message(
-        &mut self,
-        command: &serde_json::Map<String, serde_json::Value>,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        let Some(remote_machine_id) = command
-            .get("remoteMachineId")
-            .and_then(serde_json::Value::as_str)
-            .and_then(gpui_normalize_remote_machine_id)
-        else {
-            return;
-        };
-        let Some(client_id) = gpui_remote_presentation_client_id_from_command(command) else {
-            return;
-        };
-        let last_revision = command
-            .get("lastRevision")
-            .and_then(serde_json::Value::as_u64);
-        self.restart_gpui_remote_gxserver_presentation_stream(
-            remote_machine_id,
-            client_id,
-            last_revision,
-            cx,
-        );
-    }
-
     pub(crate) fn open_gpui_remote_gxserver_install_modal(
         &mut self,
         remote_machine_id: String,
@@ -227,11 +201,7 @@ impl GhostexGpuiApp {
                 broken in the first place — so a failure answer is exactly when
                 a snapshot pull is needed for the project to become visible.
                 */
-                this.refresh_gpui_remote_gxserver_presentation_in_background(
-                    remote_machine_id,
-                    false,
-                    cx,
-                );
+                this.refresh_gpui_remote_gxserver_presentation_in_background(&remote_machine_id);
             });
         })
         .detach();
@@ -476,9 +446,7 @@ impl GhostexGpuiApp {
                     */
                     Some(remote_machine_id) => {
                         this.refresh_gpui_remote_gxserver_presentation_in_background(
-                            remote_machine_id.clone(),
-                            false,
-                            cx,
+                            &remote_machine_id,
                         );
                         if clone_answer_lost {
                             if let Some(job_id) = clone_watch_job_id {

@@ -54,7 +54,7 @@ impl Render for SuggestionPanel {
         let outline = if glass {
             gpui::transparent_black()
         } else {
-            row_outline(&state)
+            row_outline()
         };
         let card_border = if glass { p.border } else { p.input_border };
         let inline = px(spec.padding_inline_px * s);
@@ -108,7 +108,7 @@ impl Render for SuggestionPanel {
                     .gap(gap)
                     .h(spec.status_height(retry, s))
                     .px(inline)
-                    // React dims the loading and empty rows; the error keeps the popup's text colour.
+                    // React dimmed the loading and empty rows; the error keeps the popup's text colour.
                     .when(!retry, |row| row.text_color(p.muted))
                     .when(data["loading"] == true, |row| {
                         row.child(suggestion_spinner(px(spec.icon_px * s), p.muted))
@@ -248,7 +248,7 @@ impl Render for SuggestionPanel {
 
 impl NativeChatView {
     /// CDXC:SessionChat 2026-09-19 WHY:
-    /// React's list casts `shadow-xl` over the transcript and the top of the composer card. The popup's child window cannot paint it: the window would have to grow past the card, and that transparent margin would sit over the composer and the transcript and take their clicks, while the macOS window shadow outlines the card with a dark rim instead. The pane paints the shadow at the popup's frame as plain chrome with no hit area, and the popup's opaque card covers the part beneath it.
+    /// React's list cast `shadow-xl` over the transcript and the top of the composer card. The popup's child window cannot paint it: the window would have to grow past the card, and that transparent margin would sit over the composer and the transcript and take their clicks, while the macOS window shadow outlines the card with a dark rim instead. The pane paints the shadow at the popup's frame as plain chrome with no hit area, and the popup's opaque card covers the part beneath it.
     pub(in crate::app::native_chat) fn render_suggestion_shadow(
         &self,
         p: &ChatAppearance,
@@ -283,15 +283,14 @@ impl NativeChatView {
     }
 }
 
-/// Every React row is a bare `<button>`, so theme.css's legacy base outlines it with the app
+/// Every React row was a bare `<button>`, so theme.css's legacy base outlined it with the app
 /// theme's `--app-border`, whatever the chat's own theme: black at 12% under the plain light app
 /// theme and white at 11% under every other one.
-fn row_outline(state: &serde_json::Value) -> Hsla {
+fn row_outline() -> Hsla {
     let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
-    let settings = state["previewSettings"]
-        .as_object()
-        .unwrap_or_else(|| snapshot.object());
-    if crate::app::helpers::gpui_app_modal_sidebar_theme_from_settings(settings) == "plain-light" {
+    if crate::app::helpers::gpui_app_modal_sidebar_theme_from_settings(snapshot.object())
+        == "plain-light"
+    {
         Hsla::from(rgb(0x000000)).opacity(0.12)
     } else {
         Hsla::from(rgb(0xffffff)).opacity(0.11)

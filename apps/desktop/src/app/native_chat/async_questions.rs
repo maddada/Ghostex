@@ -96,6 +96,7 @@ impl NativeChatView {
                             "Question from Codex"
                         }),
                 )
+                // CDXC:SessionChat 2026-09-14 DECISION: User: remove the idle "Reply when ready" label from the Codex questions card.
                 .child(div().min_w_0().flex_1().text_color(p.muted).child(
                     if state["working"] == true {
                         "Still working"
@@ -207,6 +208,7 @@ impl NativeChatView {
                             cx,
                         )
                     }
+                    // CDXC:SessionChat 2026-09-12 DECISION: User: Enter sends a question answer; Shift+Enter inserts a newline.
                     InputEvent::PressEnter { shift: false, .. } => {
                         if this.async_answer_echo.pending == 0 {
                             this.invoke(json!({"type":"asyncQuestionSend"}), cx)
@@ -318,6 +320,7 @@ impl NativeChatView {
                                     .inset(),
                             ])
                         })
+                        // CDXC:SessionChat 2026-09-12 DECISION: User: the async question answer textarea must be rounded too.
                         .rounded(px(12.0 * s))
                         .bg(p.background)
                         .px(px(10.0 * s))

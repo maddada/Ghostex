@@ -750,6 +750,16 @@ pub fn detect_session_chat_composer_ready(
             screen_tail,
         );
     }
+    if matches!(agent.as_str(), "claude" | "openclaude") {
+        if let Some(popup) =
+            crate::session_chat_claude_popups::claude_escape_safe_popup(screen_text)
+        {
+            return SessionChatComposerReadiness::not_ready_dismiss_with_escape(
+                format!("Claude Code's {popup} is open instead of the input box."),
+                screen_tail,
+            );
+        }
+    }
     if agent == "claude" && is_claude_usage_limit_dialog(screen_text) {
         return SessionChatComposerReadiness::not_ready_dismiss_with_escape(
             "Claude Code's usage-limit dialog is open instead of the input box.".to_string(),
@@ -782,7 +792,16 @@ pub fn detect_session_chat_composer_ready(
     } else {
         signature_matches(signature, &lines)
     };
-    if matches {
+    if matches
+        && matches!(agent.as_str(), "claude" | "openclaude")
+        && crate::session_chat_claude_popups::claude_agents_list_focused(screen_text)
+    {
+        SessionChatComposerReadiness::not_ready_dismiss_with_escape(
+            "Claude Code's background-agents list has the keyboard instead of the input box."
+                .to_string(),
+            screen_tail,
+        )
+    } else if matches {
         SessionChatComposerReadiness::ready(screen_tail)
     } else {
         SessionChatComposerReadiness::not_ready(
@@ -805,6 +824,11 @@ pub fn detect_session_chat_composer_readiness(
     notice: Option<&SessionChatTerminalNotice>,
 ) -> SessionChatComposerReadiness {
     let readiness = detect_session_chat_composer_ready(agent_id, screen_text);
+    // A notice read off the same panel must not erase this verdict: the panel is the one Escape
+    // closes, and the send path closes it instead of refusing.
+    if readiness.should_dismiss_with_escape() {
+        return readiness;
+    }
     match notice.filter(|notice| notice.blocks_input()) {
         Some(notice) => SessionChatComposerReadiness::not_ready(
             format!("{}. Clear it in the terminal before sending.", notice.title),

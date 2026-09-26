@@ -131,8 +131,8 @@ impl GpuiNativeResourcesSnapshot {
 }
 
 /// Fixed selector set for titlebar Git menu rows. Menu selections dispatch
-/// only one of these validated selectors back into the sidebar runtime's
-/// `runSidebarGitAction` path; labels, branch text, and reasons from the
+/// only one of these validated selectors back into the store's
+/// `runSidebarGitAction` path (gx_store/git/actions.rs); labels, branch text, and reasons from the
 /// renderer never become action payloads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum GpuiTitlebarGitMenuActionId {

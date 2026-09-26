@@ -4,7 +4,6 @@
 //
 // Cluster: status pet overlay presentation and menu-bar/command-palette activations
 
-use std::collections::HashSet;
 use std::time::Instant;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
@@ -545,24 +544,12 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:StatusPet 2026-06-26-05:07:
-        Visible GPUI status activation returns only a bounded session id to the sidebar runtime's existing focusSession path. Rust never wakes, creates, restores, or materializes a session from these clicks, and the transient callback shape is deliberately reusable for a later pet slice without exposing a generic event bus, paths, URLs, commands, tokens, titles, or terminal text.
+        Visible GPUI status activation returns only a bounded session id to the store's existing focusSession path (gx_store/activation_focus.rs; the sidebar runtime's until 2026-09-25). Rust never wakes, creates, restores, or materializes a session from these clicks, and the transient callback shape is deliberately reusable for a later pet slice without exposing a generic event bus, paths, URLs, commands, tokens, titles, or terminal text.
         */
         if !gpui_status_bridge_id_allowed(session_id) {
             return false;
         }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let message = serde_json::json!({
-            "sessionId": session_id,
-            "type": GPUI_SIDEBAR_STATUS_PET_ACTIVATION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_STATUS_PET_ACTIVATION_MESSAGE_VERSION,
-        });
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_status_pet_activation_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        true
+        self.gx_store_focus_activated_session(session_id.trim(), cx)
     }
 
     pub(crate) fn dispatch_gpui_menu_bar_project_activation(
@@ -572,24 +559,14 @@ impl GhostexGpuiApp {
     ) -> bool {
         /*
         CDXC:StatusPet 2026-06-26-06:05:
-        Menu-bar project rows route through a fixed first-party sidebar callback carrying only one bounded project id. The sidebar runtime owns project focus and publishing; Rust does not add a generic bus, derive paths/titles, or materialize terminals from project-only clicks.
+        Menu-bar project rows carry only one bounded project id. Rust does not add a generic bus or derive paths or titles from project-only clicks; the store opens the project (gx_store/project_activation.rs), which lands on its remembered session or creates the default one.
         */
         if !gpui_status_bridge_id_allowed(project_id) {
             return false;
         }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let message = serde_json::json!({
-            "projectId": project_id,
-            "type": GPUI_SIDEBAR_MENU_BAR_PROJECT_ACTIVATION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_MENU_BAR_PROJECT_ACTIVATION_MESSAGE_VERSION,
-        });
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_menu_bar_project_activation_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        true
+        // A project opens from the store's newest selection (gx_store/burst.rs).
+        self.gx_store_flush_local_selection(cx);
+        self.gx_store_activate_project(project_id, cx)
     }
 
     pub(crate) fn dispatch_gpui_menu_bar_session_activation(
@@ -606,20 +583,12 @@ impl GhostexGpuiApp {
         {
             return false;
         }
-        let Some(sidebar) = self.sidebar.clone() else {
+        let (project_id, session_id) = (project_id.trim(), session_id.trim());
+        if project_id.is_empty() || session_id.is_empty() {
             return false;
-        };
-        let message = serde_json::json!({
-            "projectId": project_id,
-            "sessionId": session_id,
-            "type": GPUI_SIDEBAR_MENU_BAR_SESSION_ACTIVATION_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_MENU_BAR_SESSION_ACTIVATION_MESSAGE_VERSION,
-        });
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_menu_bar_session_activation_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        true
+        }
+        let focus_id = crate::app::gx_store::menu_bar_session_focus_id(project_id, session_id);
+        self.gx_store_focus_activated_session(&focus_id, cx)
     }
 
     pub(crate) fn dispatch_gpui_project_board_conversation_request(
@@ -628,8 +597,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         // The Kanban page's board request is first-party JSON, but Rust still
-        // bounds it and requires the envelope fields before it enters the
-        // sidebar runtime's script context.
+        // bounds it and requires the envelope fields before the store
+        // (gx_store/create/board.rs) handles it.
         if !request.is_object() {
             return false;
         }
@@ -643,7 +612,7 @@ impl GhostexGpuiApp {
         }
         // macOS `appendProjectBoardDebugLog` parity: the board page's debug
         // breadcrumbs persist to the GPUI project-board support log
-        // (scenario-gated) while the runtime still answers the state echo.
+        // (scenario-gated) while gx_store/create/board.rs answers the state echo.
         // Details arrive as a JSON string and are parsed at the writer
         // boundary like the Swift writers, then sanitized.
         if request.get("action").and_then(serde_json::Value::as_str) == Some("appendDebugLog") {
@@ -661,24 +630,7 @@ impl GhostexGpuiApp {
                 support_logs::append(support_logs::GpuiSupportLog::ProjectBoard, event, details);
             }
         }
-        let message = serde_json::json!({
-            "request": request,
-            "type": GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_REQUEST_MESSAGE_VERSION,
-        });
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_project_board_conversation_request_script(&message);
-        if script.chars().count() > GPUI_SIDEBAR_PROJECT_BOARD_CONVERSATION_PAYLOAD_MAX_CHARS {
-            return false;
-        }
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        sidebar.update(cx, |surface, _| {
-            let _ = surface.execute_app_owned_script(&script);
-        });
-        true
+        self.gx_store_run_board_conversation_request(request, cx)
     }
 
     pub(crate) fn dispatch_gpui_command_palette_session_focus(
@@ -687,27 +639,18 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         // Palette rows carry projected sidebar session ids (combined local or
-        // remote-shaped). Rust only bounds the string; the sidebar runtime
-        // validates the shape and reuses the reviewed focusSession routing.
+        // remote-shaped). The string is bounded and its shape checked here, then it
+        // takes the reviewed focusSession routing (gx_store/activation_focus.rs).
         if session_id.is_empty()
             || session_id.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS
             || session_id.chars().any(char::is_control)
         {
             return false;
         }
-        let Some(sidebar) = self.sidebar.clone() else {
+        let Some(session_id) = crate::app::gx_store::palette_session_focus_id(session_id) else {
             return false;
         };
-        let message = serde_json::json!({
-            "sessionId": session_id,
-            "type": GPUI_SIDEBAR_COMMAND_PALETTE_SESSION_FOCUS_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_COMMAND_PALETTE_SESSION_FOCUS_MESSAGE_VERSION,
-        });
-        // The runtime can answer this with a focus change, so it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let script = gpui_command_palette_session_focus_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        true
+        self.gx_store_focus_activated_session(session_id, cx)
     }
 
     pub(crate) fn dispatch_gpui_command_palette_run_sidebar_command(
@@ -722,9 +665,9 @@ impl GhostexGpuiApp {
     /*
     CDXC:AgentLauncher 2026-08-01-19:00:
     A run-by-id selector cannot tell a Global Action from a Project Action with
-    the same id, so the tab strip stamps its scope and the sidebar runtime
-    resolves that list exclusively. The Command Palette keeps sending no scope,
-    which the runtime reads as project — unchanged behaviour for every existing
+    the same id, so the tab strip stamps its scope and the store
+    (gx_store/sidebar_command_run.rs) resolves that list exclusively. The Command Palette keeps sending no scope,
+    which the store reads as project: unchanged behaviour for every existing
     caller.
     */
     pub(crate) fn dispatch_gpui_run_sidebar_command_with_scope(
@@ -735,8 +678,8 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> bool {
         // The palette payload is an Action selector only (command id + optional
-        // run mode). The sidebar runtime resolves the trusted saved/HUD command
-        // and executes through the existing strict SidebarCommandAction bridge;
+        // run mode). The store (gx_store/sidebar_command_run.rs) resolves the trusted saved/HUD command
+        // and executes it;
         // renderer-supplied command text, URLs, or paths never enter this path.
         let bounded = |value: &str| {
             !value.is_empty()
@@ -746,25 +689,7 @@ impl GhostexGpuiApp {
         if !bounded(command_id) || run_mode.is_some_and(|run_mode| !bounded(run_mode)) {
             return false;
         }
-        // A sidebar command can change focus in the runtime: it must hear the newest local selection first (gx_store/burst.rs).
-        self.gx_store_flush_old_runtime_tell(cx);
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let mut message = serde_json::json!({
-            "commandId": command_id,
-            "type": GPUI_SIDEBAR_COMMAND_PALETTE_RUN_COMMAND_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_COMMAND_PALETTE_RUN_COMMAND_MESSAGE_VERSION,
-        });
-        if let Some(run_mode) = run_mode {
-            message["runMode"] = serde_json::json!(run_mode);
-        }
-        if let Some(scope) = scope {
-            message["scope"] = serde_json::json!(scope);
-        }
-        let script = gpui_command_palette_run_sidebar_command_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
-        true
+        self.gx_store_run_activated_sidebar_command(command_id, run_mode, scope, cx)
     }
 
     pub(crate) fn dispatch_gpui_workspace_tab_session_selected(
@@ -783,15 +708,15 @@ impl GhostexGpuiApp {
         MacOS reattaches a stale locally sleeping pane tab when gxserver already reports that canonical session running. Send only a true `localWasSleeping` flag for that reconciliation check; ordinary tab selections remain one-way sidebar focus updates.
 
         CDXC:FocusRouting 2026-07-11:
-        Restored-after-restart Running tabs can have no live terminal owner, no parked owner, and no pending attach payload behind them; selecting one shows an empty body. Send only a true `localRuntimeMissing` flag so the sidebar runtime can reconcile through one bounded WorkspaceTerminalFocus when gxserver still reports that canonical session running, reusing the exact gxserver attach pipeline instead of mounting anything from renderer input.
+        Restored-after-restart Running tabs can have no live terminal owner, no parked owner, and no pending attach payload behind them; selecting one shows an empty body. Send only a true `localRuntimeMissing` flag so the store can reconcile through one bounded WorkspaceTerminalFocus when gxserver still reports that canonical session running, reusing the exact gxserver attach pipeline instead of mounting anything from renderer input.
 
         Sidebar visibility follows the actual rendered workspace rather than a
         click-history set. Carry the bounded gxserver ids for every active
         rendered Agents leaf or companion slot with the selected id so split
         siblings keep the visible tier and hidden tabs lose it immediately.
 
-        CDXC:FocusRouting 2026-09-19 WHY:
-        Focus is owned by the Rust store (the user decision is recorded in gx_store/local_focus.rs). A local session's selection changes the store at once and reaches the sidebar runtime once per burst, about 120 ms after the last selection, with the store's focus stamp (gx_store/local_focus.rs, gx_store/burst.rs). This supersedes the immediate callback of 2026-06-26 for local sessions; every rule above about what the callback carries still holds. Remote sessions keep the immediate callback, and since 2026-09-21 the store's focus takes them first and the callback carries the store's stamp (gx_store_select_remote_session in gx_store/local_focus.rs).
+        CDXC:FocusRouting 2026-09-25 WHY:
+        Focus is owned by the Rust store alone (the user decision is recorded in gx_store/local_focus.rs). A local session's selection changes the store at once and its follow-up (the workspace publish, the attention acknowledge, the remembered session, the reconcile the two flags ask for) runs once per burst, about 120 ms after the last selection (gx_store/burst.rs). A remote session's selection is taken by the store at once and published (gx_store_select_remote_session in gx_store/local_focus.rs). This supersedes the 2026-09-19 note that told the sidebar runtime about both; every rule above about what a selection carries still holds.
         */
         if !gpui_status_bridge_id_allowed(project_id) || !gpui_status_bridge_id_allowed(session_id)
         {
@@ -806,69 +731,14 @@ impl GhostexGpuiApp {
             self.gx_store_select_local_session(&key, local_was_sleeping, local_runtime_missing, cx);
             return true;
         }
-        // The sidebar runtime handles messages in order: a local selection it has not heard of
-        // yet must not arrive after the remote one that followed it.
-        self.gx_store_flush_old_runtime_tell(cx);
-        // Without the service nothing is taken, the same rule the local tell is guarded by
-        // (gx_store/burst.rs): the store's focus may not move to a row whose message carrying the
-        // stamp is never sent, or every publish of the launch window reads as stale.
-        let Some(sidebar) = self.sidebar.clone() else {
+        // The remote selection follows the store's newest local one, whose follow-up runs first.
+        self.gx_store_flush_local_selection(cx);
+        let _ = (local_was_sleeping, local_runtime_missing);
+        if !self.gx_store_select_remote_session(project_id, session_id, cx) {
             return false;
-        };
-        // The store's core focus takes the remote row now (after the flush, whose tell carries the
-        // stamp from before it), and the stamp it returns rides on the tab selection so the
-        // runtime's answering publish echoes it.
-        let focus_stamp = self.gx_store_select_remote_session(project_id, session_id, cx);
-        let mut visible_session_ids = self.gpui_sidebar_visible_local_session_ids();
-        if !visible_session_ids
-            .iter()
-            .any(|visible_session_id| visible_session_id == session_id)
-        {
-            visible_session_ids.push(session_id.to_string());
         }
-        let mut message = serde_json::json!({
-            "projectId": project_id,
-            "sessionId": session_id,
-            "type": GPUI_SIDEBAR_WORKSPACE_TAB_SESSION_SELECTED_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_WORKSPACE_TAB_SESSION_SELECTED_MESSAGE_VERSION,
-            "visibleSessionIds": visible_session_ids,
-        });
-        if local_was_sleeping {
-            message["localWasSleeping"] = serde_json::Value::Bool(true);
-        }
-        if local_runtime_missing {
-            message["localRuntimeMissing"] = serde_json::Value::Bool(true);
-        }
-        if let Some(focus_stamp) = focus_stamp {
-            message["focusStamp"] = serde_json::Value::from(focus_stamp);
-        }
-        let script = gpui_workspace_tab_session_selected_script(&message);
-        // The runtime's active group moves with this script, which `keepView` for the next remote
-        // click is planned from (gx_store/sidebar_remote_focus.rs).
-        self.gx_store_note_remote_tab_selection_sent(project_id, session_id);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script));
+        self.gx_store_note_remote_tab_selection();
         true
     }
-
-    pub(crate) fn gpui_sidebar_visible_local_session_ids(&self) -> Vec<String> {
-        let shell_session_ids = self
-            .agents_workspace
-            .rendered_leaf_order()
-            .into_iter()
-            .filter_map(|pane_id| self.agents_workspace.active_session_in_pane(pane_id))
-            .collect::<Vec<_>>();
-
-        let mut seen = HashSet::new();
-        shell_session_ids
-            .into_iter()
-            .filter_map(|shell_session_id| {
-                self.local_workspace_session_mappings
-                    .iter()
-                    .find_map(|(key, mapped_session_id)| {
-                        (*mapped_session_id == shell_session_id).then(|| key.session_id.clone())
-                    })
-            })
-            .filter(|session_id| seen.insert(session_id.clone()))
-            .collect()
-    }
 }
+

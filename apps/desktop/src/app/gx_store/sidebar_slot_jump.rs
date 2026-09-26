@@ -9,7 +9,7 @@
 //! store's list is the only list since M4d part 2 step 6.
 //!
 //! **Where each effect ends, read rather than assumed.** The FOCUS ends where a row click's ends,
-//! because it is one: the row click's `selectSession` (which the old page turns into the runtime's
+//! because it is one: the row click's `selectSession` (which the old page turned into the runtime's
 //! `focusSession`, the call `runNativeProjectSlotHotkey` itself made through the same
 //! `selectNativeSidebarSession`) and the click's in-process reaction
 //! (`react_to_native_sidebar_session_click`: the project swap, the tab selection or staged tab, and
@@ -56,8 +56,9 @@ pub(crate) struct SlotJumpCounters {
     pub(crate) focuses: u64,
     pub(crate) in_process: u64,
     pub(crate) staged: u64,
-    /// The click reaction did not apply (a row the drawn snapshot does not hold): the runtime's
-    /// `focusSession`, reached through the same `selectSession`, owns the whole selection.
+    /// The click reaction did not apply (a row the drawn snapshot does not hold): the store's
+    /// `focusSession` (focus_perform.rs; the runtime's until 2026-09-25), reached through the same
+    /// `selectSession`, owns the whole selection.
     pub(crate) handed_to_runtime: u64,
     pub(crate) reveals: u64,
     /// Changes the reveals made to the sidebar's own state.

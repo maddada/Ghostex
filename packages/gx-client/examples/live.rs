@@ -67,6 +67,8 @@ fn main() -> ExitCode {
             held_revision: held_revision.clone(),
             // A tool wants to see every wire type; the desktop host leaves this off.
             forward_chat_frames: true,
+            // A tool must never take the CLI's renderer commands away from the running app.
+            renderer_commands: false,
         },
         move || {
             let _ = wake_sender.send(());
@@ -111,6 +113,8 @@ fn main() -> ExitCode {
                     events.push(event);
                 }
                 ClientOutput::Diagnostic(diagnostic) => report.note_diagnostic(diagnostic),
+                // Never produced: this example does not register as the renderer target.
+                ClientOutput::RendererCommand(_) => {}
             }
         }
         if events.is_empty() {

@@ -517,46 +517,48 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'darkThemePreset',
           options: DARK_THEME_PRESET_OPTIONS,
-          subtitle: 'Preset dark chrome for the sidebar and window, or Custom to tune its contrast and tint.',
-          title: 'Dark theme',
+          subtitle:
+            'The colour of the sidebar and window in dark mode: one of sixteen colour squares, or a custom colour under More colour options.',
+          title: 'Dark mode colour',
         },
         {
           key: 'customSidebarTitlebarBackgroundDarknessPercent',
-          subtitle: 'Contrast of the dark sidebar and window chrome background while Dark theme is Custom.',
-          title: 'Dark theme background contrast',
+          subtitle: 'How deep the custom dark mode colour is, while Custom colour in dark mode is on.',
+          title: 'Custom dark mode depth',
         },
         {
           key: 'customSidebarTitlebarBackgroundTintColor',
-          subtitle: 'Subtle tint of the dark sidebar and window chrome background while Dark theme is Custom.',
-          title: 'Dark theme background tint',
+          subtitle: 'The hue of the custom dark mode colour, while Custom colour in dark mode is on.',
+          title: 'Custom dark mode tint',
         },
         {
           key: 'lightThemePreset',
           options: LIGHT_THEME_PRESET_OPTIONS,
-          subtitle: 'Preset light chrome for the sidebar and window, or Custom to tune its contrast and tint.',
-          title: 'Light theme',
+          subtitle:
+            'The colour of the sidebar and window in light mode: one of sixteen colour squares, or a custom colour under More colour options.',
+          title: 'Light mode colour',
         },
         {
           key: 'themeSidebarContrast',
           subtitle:
-            "The sidebar's contrast. Higher makes dark backgrounds darker and light backgrounds whiter; 0 is the theme's own.",
-          title: 'Sidebar contrast',
+            'How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) to Vivid (lighter, more colourful). Colourfulness sets the sidebar and work area together.',
+          title: 'Sidebar colourfulness',
         },
         {
           key: 'themeWorkAreaContrast',
           subtitle:
-            "The work area's contrast (chat, terminals and views). Higher makes dark backgrounds darker and light backgrounds whiter; 0 is the theme's own.",
-          title: 'Work area contrast',
+            'How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Vivid. Colourfulness sets the sidebar and work area together.',
+          title: 'Work area colourfulness',
         },
         {
           key: 'customSidebarTitlebarLightBackgroundLightnessPercent',
-          subtitle: 'Contrast of the light sidebar and window chrome background while Light theme is Custom.',
-          title: 'Light theme background contrast',
+          subtitle: 'How deep the custom light mode colour is, while Custom colour in light mode is on.',
+          title: 'Custom light mode depth',
         },
         {
           key: 'customSidebarTitlebarLightBackgroundTintColor',
-          subtitle: 'Subtle tint of the light sidebar and window chrome background while Light theme is Custom.',
-          title: 'Light theme background tint',
+          subtitle: 'The hue of the custom light mode colour, while Custom colour in light mode is on.',
+          title: 'Custom light mode tint',
         },
         {
           key: 'sessionChatTheme',
@@ -576,43 +578,61 @@ export function getSettingsSearchSectionDefinitions() {
             (option) => option.value !== '__ghostex_ghostty_theme_unmanaged__'
           ),
           subtitle: 'Uses your configured Ghostty light theme, or GitHub Light when no theme is configured.',
-          title: 'Terminal light palette',
+          title: 'Terminal palette in light mode',
         },
         {
           key: 'terminalGhosttyTheme',
           options: GHOSTTY_THEME_SETTING_OPTIONS,
           subtitle: 'Uses your configured Ghostty dark theme, or GitHub Dark when no theme is configured.',
-          title: 'Terminal dark palette',
+          title: 'Terminal palette in dark mode',
         },
         {
           key: 'windowGlass',
           options: WINDOW_GLASS_OPTIONS,
-          subtitle: 'Let the blurred desktop show through the window. By default, light mode stays opaque.',
-          title: 'Window glass',
+          subtitle:
+            'Let your desktop show through the window. Use transparency picks Automatic (dark mode only), Always or Never.',
+          title: 'Enable transparency',
         },
         {
           key: 'windowGlassSource',
           options: WINDOW_GLASS_SOURCE_OPTIONS,
-          subtitle:
-            'Wallpaper only keeps other windows from showing through the glass. Custom image shows a picture you choose.',
-          title: 'Glass shows',
+          subtitle: 'Desktop and windows, your wallpaper, a picture you choose, or a video playing behind the glass.',
+          title: 'What shows behind the glass',
         },
         {
           key: 'windowGlassImagePlacement',
           options: WINDOW_GLASS_IMAGE_PLACEMENT_OPTIONS,
           subtitle:
-            'Where the wallpaper or custom picture sits behind the glass. Stays with the desktop can trail the window while you drag it.',
-          title: 'Glass picture position',
+            'Where the wallpaper, custom picture or video sits behind the glass. Stays with the desktop can trail the window while you drag it.',
+          title: 'Picture position',
         },
         {
           key: 'windowGlassImageDark',
-          subtitle: 'The picture the glass blurs in dark mode when Glass shows is Custom image.',
-          title: 'Glass image for dark mode',
+          subtitle: 'The picture the glass blurs in dark mode when Picture shows behind the glass.',
+          title: 'Picture for dark mode',
         },
         {
           key: 'windowGlassImageLight',
-          subtitle: 'The picture the glass blurs in light mode when Glass shows is Custom image.',
-          title: 'Glass image for light mode',
+          subtitle: 'The picture the glass blurs in light mode when Picture shows behind the glass.',
+          title: 'Picture for light mode',
+        },
+        {
+          key: 'windowGlassVideoDark',
+          subtitle:
+            'The video the glass plays in dark mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.',
+          title: 'Video for dark mode',
+        },
+        {
+          key: 'windowGlassVideoLight',
+          subtitle:
+            'The video the glass plays in light mode when Video shows behind the glass: an aerial wallpaper your computer has downloaded, or a video file you choose.',
+          title: 'Video for light mode',
+        },
+        {
+          key: 'windowGlassVideoOnlyOnPower',
+          subtitle:
+            'Pause the glass video while your computer runs on battery. It always pauses when Ghostex is in the background.',
+          title: 'Play only when plugged in',
         },
         {
           key: 'windowGlassSidebarOpacityDark',
@@ -641,12 +661,12 @@ export function getSettingsSearchSectionDefinitions() {
         {
           key: 'showActivePaneOutline',
           subtitle: 'Show an outline around the currently focused pane.',
-          title: 'Show Active Pane Outline',
+          title: 'Show active pane outline',
         },
         {
           key: 'workspaceActivePaneBorderColor',
           subtitle: 'Color of the outline around the currently focused pane.',
-          title: 'Active Pane Border',
+          title: 'Active pane outline colour',
         },
       ],
     },

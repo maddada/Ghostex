@@ -17,7 +17,7 @@ use crate::wire::ChatRpcMethod;
 /// Handles one action family f owns.
 ///
 /// `next_request_id` hands out the core's own monotonic ids; the default [`handle`] passes a
-/// counter family a owns, so a replay reproduces them exactly.
+/// counter family a owns, so the same inputs always produce the same ids.
 pub fn handle_with_ids(
     state: &mut ChatState,
     action: &UserAction,

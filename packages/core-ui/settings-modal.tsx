@@ -944,8 +944,11 @@ export function SettingsModal({
     chooseAppIconFile,
     chooseTerminalBackgroundImageFile,
     chooseWindowGlassImageFile,
+    chooseWindowGlassVideoFile,
     nativeFilePickerAvailable,
     selectAppIcon,
+    windowGlassVideoError,
+    windowGlassVideos,
   } = useAppIconSettings({
     appIconPickerUnavailable,
     appIconState,
@@ -2732,6 +2735,9 @@ export function SettingsModal({
                       appIconState={appIconState}
                       chooseAppIconFile={chooseAppIconFile}
                       chooseWindowGlassImageFile={chooseWindowGlassImageFile}
+                      chooseWindowGlassVideoFile={chooseWindowGlassVideoFile}
+                      windowGlassVideoError={windowGlassVideoError}
+                      windowGlassVideos={windowGlassVideos}
                       draft={draft}
                       getSettingModificationProps={getSettingModificationProps}
                       nativeFilePickerAvailable={nativeFilePickerAvailable}
@@ -2942,7 +2948,6 @@ export function SettingsModal({
                         'expandCollapsedProjectsOnJump'
                       )}
                       hotkeys={draft.hotkeys}
-                      preferredAgentInterface={draft.preferredAgentInterface}
                       sectionRefs={hotkeySectionRefs}
                       sectionSearches={hotkeySectionSearches}
                       showLessForExpandedProjectJumps={draft.showLessForExpandedProjectJumps}

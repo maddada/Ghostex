@@ -7,6 +7,7 @@
 pub(crate) mod account_usage;
 pub(crate) mod agent_hooks_required_modal;
 pub(crate) mod copied_indicator;
+pub(crate) mod frosted_host;
 pub(crate) mod create_worktree_modal;
 pub(crate) mod delayed_send_modal;
 pub(crate) mod delete_worktree_modal;

@@ -1,9 +1,8 @@
 //! The Subagents strip, ported from `packages/shared/session-chat-presentation/agent-fleet.ts`.
 //!
 //! CDXC:AgentScreenDetection 2026-09-18 SEE-ALSO:
-//! packages/core-ui/chat/session-chat-agent-fleet-strip.tsx and
-//! apps/desktop/src/app/native_chat/agent_fleet.rs render this projection; the roster's counts,
-//! status text, clocks and transcript selectors must not be recomputed in either renderer.
+//! apps/desktop/src/app/native_chat/agent_fleet.rs renders this projection; the roster's counts,
+//! status text, clocks and transcript selectors must not be recomputed in a renderer.
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

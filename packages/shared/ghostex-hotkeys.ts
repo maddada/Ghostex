@@ -13,6 +13,7 @@ export type ghostexHotkeyActionId =
   | 'mergeAllTabs'
   | 'openCommandPalette'
   | 'openSessionSearchPalette'
+  | 'openProjectSearchPalette'
   | 'openNewThreadPalette'
   | 'openBrowserPane'
   | 'openSettings'
@@ -29,6 +30,9 @@ export type ghostexHotkeyActionId =
   | 'sleepFocusedSession'
   | 'scrollTerminalToBottom'
   | 'scrollChatToBottom'
+  | 'focusChatComposer'
+  | 'copyLastChatCodeBlock'
+  | 'copyLastChatReply'
   | 'scrollTerminalToTop'
   | 'stashPrompt'
   | 'stashedPrompts'
@@ -73,6 +77,12 @@ export type ghostexHotkeyActionId =
 
 export type ghostexHotkeySettings = Partial<Record<ghostexHotkeyActionId, string>>;
 
+/** Chords the chat answers itself while it has focus; they are never bound app-wide. */
+export type ghostexChatHotkeyActionId = Extract<
+  ghostexHotkeyActionId,
+  'scrollChatToBottom' | 'focusChatComposer' | 'copyLastChatCodeBlock' | 'copyLastChatReply'
+>;
+
 export type ghostexFocusedPaneAction =
   | 'splitSessionRight'
   | 'closeAfterDone'
@@ -101,7 +111,7 @@ export type ghostexTerminalToolbarAction =
   | 'toggleChatView';
 
 export type ghostexHotkeyAction =
-  | { id: 'scrollChatToBottom'; kind: 'chatAction' }
+  | { id: ghostexChatHotkeyActionId; kind: 'chatAction' }
   | { id: ghostexHotkeyActionId; kind: 'createAgentSession' }
   | { id: ghostexHotkeyActionId; kind: 'createSession' }
   | { id: ghostexHotkeyActionId; kind: 'cyclePaneTab'; direction: -1 | 1 }
@@ -114,6 +124,7 @@ export type ghostexHotkeyAction =
   | { command: 'open' | 'jumpToLatestUnread' | 'deferAndJumpNext'; id: ghostexHotkeyActionId; kind: 'notificationFeed' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openSessionSearchPalette' }
+  | { id: ghostexHotkeyActionId; kind: 'openProjectSearchPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openNewThreadPalette' }
   | { id: ghostexHotkeyActionId; kind: 'openCommandsPanel' }
   | { id: ghostexHotkeyActionId; kind: 'openExtensions' }
@@ -168,16 +179,40 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Scroll Chat to Bottom',
   },
   {
+    action: { id: 'focusChatComposer', kind: 'chatAction' },
+    defaultKey: 'shift+escape',
+    description: 'Move the keyboard to the chat box of the chat you are in.',
+    id: 'focusChatComposer',
+    title: 'Focus Chat Box',
+  },
+  {
+    action: { id: 'copyLastChatCodeBlock', kind: 'chatAction' },
+    defaultKey: 'cmd+shift+;',
+    description: 'Copy the last code block an agent wrote in the chat you are in.',
+    id: 'copyLastChatCodeBlock',
+    title: 'Copy Last Code Block',
+  },
+  {
+    action: { id: 'copyLastChatReply', kind: 'chatAction' },
+    defaultKey: 'cmd+shift+c',
+    description: "Copy the agent's last reply in the chat you are in.",
+    id: 'copyLastChatReply',
+    title: 'Copy Last Reply',
+    // Ctrl+Shift+C is terminal copy on Windows and Linux.
+    windowsLinuxDefaultKey: '',
+  },
+  {
     action: { id: 'createAgentSession', kind: 'createAgentSession' },
     /**
-     * CDXC:Hotkeys 2026-09-24 DECISION:
-     * User: Cmd+T starts a new chat with the last-used agent and Cmd+Shift+T creates a new terminal; when Terminal is the default interface the two swap. The agent list moved to Cmd+Option+T. This supersedes the 2026-06-06 Cmd+T New Terminal Tab default.
-     * The swap is applied at read time by `applyNewSessionHotkeyLayout`, so switching the default interface moves the keys even after the hotkey map was saved.
-     * SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`gpui_new_session_hotkey_layout`).
+     * CDXC:Hotkeys 2026-09-25 DECISION:
+     * User: Cmd+Shift+O starts a new session and Cmd+N shows the agent picker, Cmd+T always opens a new browser tab, and Fork Session is Cmd+Ctrl+Shift+F (Ctrl+Alt+Shift+F on Windows and Linux), matching the ChatGPT and Codex apps. New Terminal stays on Cmd+Shift+T. This supersedes the 2026-09-24 layout (Cmd+T new chat, swapped by the default interface, picker on Cmd+Option+T).
+     * The same day the user took more ChatGPT/Codex keys: Cmd+/ opens Hotkeys (was Cmd+.), Cmd+Shift+Backspace closes the focused session (Cmd+W stays), Cmd+J opens the Commands panel on Mac only (F12 keeps working everywhere; no Ctrl+J on Windows and Linux), Rename is Cmd+R on Mac and Ctrl+Shift+R on Windows and Linux because Ctrl+R belongs to the terminal, Reload Session has no default, Cmd+Shift+A also sleeps the focused session (Option+Shift+S stays), Cmd+Option+Shift+O opens Quick Access on recent projects, and in chat Shift+Esc focuses the chat box, Cmd+Shift+; copies the last code block and Cmd+Shift+C (Mac only) copies the last reply.
+     * SEE-ALSO: apps/desktop/src/app/hotkeys.rs (`GPUI_DEFAULT_GHOSTEX_HOTKEYS`, `gpui_migrated_hotkey_for_action`), apps/desktop/src/terminal_element.rs (`terminal_overlay_hotkey_label`).
      */
-    defaultKey: 'cmd+t',
+    defaultKey: 'cmd+shift+o',
     description: 'Start your last-used agent in the active project, in your default interface.',
     id: 'createAgentSession',
+    retiredDefaultKeys: ['cmd+t'],
     title: 'New Agent Session',
   },
   {
@@ -189,12 +224,12 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * everyday navigation.
      *
      * CDXC:Hotkeys 2026-06-06-04:36:
-     * New Terminal creates a terminal tab in the focused workspace split pane, immediately after the currently focused tab. Its default chord follows CDXC:Hotkeys 2026-09-24 on createAgentSession.
+     * New Terminal creates a terminal tab in the focused workspace split pane, immediately after the currently focused tab. Its default chord follows CDXC:Hotkeys 2026-09-25 on createAgentSession.
      */
     defaultKey: 'cmd+shift+t',
     description: 'Create a terminal session.',
     id: 'createSession',
-    retiredDefaultKeys: ['cmd+n'],
+    retiredDefaultKeys: ['cmd+n', 'cmd+t'],
     title: 'New Terminal',
   },
   {
@@ -228,25 +263,34 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     title: 'Open Quick Access: Recent Sessions',
   },
   {
+    action: { id: 'openProjectSearchPalette', kind: 'openProjectSearchPalette' },
+    defaultKey: 'cmd+alt+shift+o',
+    description: 'Open Ghostex Quick Access on Recent Projects.',
+    id: 'openProjectSearchPalette',
+    title: 'Open Quick Access: Recent Projects',
+  },
+  {
     action: { id: 'openNewThreadPalette', kind: 'openNewThreadPalette' },
     /**
      * CDXC:AgentLauncher 2026-09-09 DECISION:
      * User: a hotkey opens a borderless picker that starts a new thread in the active project. It lists the agents with the last-used one preselected at the top, filters as you type, and ends with Browser and Terminal rows. Tab on Claude or Codex drills into that provider's accounts, mirroring the project-header agent dropdown.
      * SEE-ALSO: packages/core-ui/new-thread-palette.tsx, apps/desktop/src/app/model/app_modal_kind.rs.
      */
-    defaultKey: 'cmd+alt+t',
+    defaultKey: 'cmd+n',
     description: 'Pick an agent, Browser, or Terminal to start in the active project.',
     id: 'openNewThreadPalette',
-    retiredDefaultKeys: ['cmd+shift+t'],
+    retiredDefaultKeys: ['cmd+shift+t', 'cmd+alt+t'],
     title: 'New Thread in Active Project',
   },
   {
     action: { id: 'openCommandsPanel', kind: 'openCommandsPanel' },
-    defaultKey: 'f12',
+    defaultKey: 'cmd+j',
     description:
-      'Open the project command terminal panel. When the pane is already focused, hide it; press again to show it.',
+      'Open the project command terminal panel (F12 always works too). When the pane is already focused, hide it; press again to show it.',
     id: 'openCommandsPanel',
+    retiredDefaultKeys: ['f12'],
     title: 'Open Commands Panel',
+    windowsLinuxDefaultKey: 'f12',
   },
   {
     action: { id: 'openSettings', kind: 'openSettings' },
@@ -277,11 +321,12 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     action: { id: 'openHotkeys', kind: 'openHotkeys' },
     /**
      * CDXC:Hotkeys 2026-06-19-00:35:
-     * The far-right titlebar Settings menu advertises Cmd+. beside Hotkeys. Make Hotkeys a real configurable app shortcut so the menu label, Settings editor, sidebar dispatch, and terminal-focused AppKit dispatch all describe the same behavior.
+     * The far-right titlebar Settings menu advertises the Hotkeys chord. Make Hotkeys a real configurable app shortcut so the menu label, Settings editor, sidebar dispatch, and terminal-focused AppKit dispatch all describe the same behavior.
      */
-    defaultKey: 'cmd+.',
+    defaultKey: 'cmd+/',
     description: 'Open app hotkeys.',
     id: 'openHotkeys',
+    retiredDefaultKeys: ['cmd+.'],
     title: 'Hotkeys',
   },
   {
@@ -333,6 +378,8 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     description: 'Rename the focused session.',
     id: 'renameActiveSession',
     title: 'Rename Active Session',
+    // Ctrl+R is reverse history search in the terminal.
+    windowsLinuxDefaultKey: 'cmd+shift+r',
   },
   {
     action: { focusedPaneAction: 'openBrowserPane', id: 'openBrowserPane', kind: 'focusedPaneAction' },
@@ -343,12 +390,12 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
      * keyboard use follows the same scope as the visible pane menu.
      *
      * CDXC:Hotkeys 2026-06-06-04:36:
-     * Cmd+N is the default New Browser Tab action. It opens the browser as the next tab in the focused workspace split pane instead of creating a separate split or app window.
+     * New Browser Tab opens the browser as the next tab in the focused workspace split pane instead of creating a separate split or app window. Its default chord follows CDXC:Hotkeys 2026-09-25 on createAgentSession.
      */
-    defaultKey: 'cmd+n',
+    defaultKey: 'cmd+t',
     description: 'Open a browser tab beside the focused tab.',
     id: 'openBrowserPane',
-    retiredDefaultKeys: ['ctrl+shift+b'],
+    retiredDefaultKeys: ['ctrl+shift+b', 'cmd+n'],
     title: 'Open Browser Pane',
   },
   ...(
@@ -609,19 +656,20 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
   },
   {
     action: { focusedPaneAction: 'forkSession', id: 'forkSession', kind: 'focusedPaneAction' },
-    defaultKey: 'ctrl+shift+f',
+    defaultKey: 'cmd+ctrl+shift+f',
     description: 'Fork the focused session.',
     id: 'forkSession',
+    retiredDefaultKeys: ['ctrl+shift+f', 'cmd+alt+f'],
     title: 'Fork Session',
-    windowsLinuxDefaultKey: 'cmd+alt+f',
+    windowsLinuxDefaultKey: 'cmd+alt+shift+f',
   },
   {
     action: { focusedPaneAction: 'reloadSession', id: 'reloadSession', kind: 'focusedPaneAction' },
-    defaultKey: 'ctrl+shift+r',
+    defaultKey: '',
     description: 'Reload the focused session.',
     id: 'reloadSession',
+    retiredDefaultKeys: ['ctrl+shift+r', 'cmd+alt+r'],
     title: 'Reload Session',
-    windowsLinuxDefaultKey: 'cmd+alt+r',
   },
   {
     action: {
@@ -629,7 +677,8 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
       id: 'sleepFocusedSession',
       kind: 'focusedPaneAction',
     },
-    defaultKey: '',
+    // Option+Shift+S stays bound as a fixed shortcut beside this one.
+    defaultKey: 'cmd+shift+a',
     description: 'Sleep the focused terminal session.',
     id: 'sleepFocusedSession',
     retiredDefaultKeys: ['alt+shift+s'],
@@ -658,9 +707,9 @@ export const GHOSTEX_HOTKEY_DEFINITIONS: readonly ghostexHotkeyDefinition[] = [
     },
     /**
      * CDXC:FocusMode 2026-06-19-15:43:
-     * Close is already available from pane/tab chrome and Cmd+W, but it should be bindable and runnable from the command palette without claiming a second default shortcut.
+     * Close is already available from pane/tab chrome and Cmd+W, and it is bindable and runnable from the command palette. Its Cmd+Shift+Backspace default follows CDXC:Hotkeys 2026-09-25 on createAgentSession.
      */
-    defaultKey: '',
+    defaultKey: 'cmd+shift+backspace',
     description: 'Close the focused pane or session.',
     id: 'closeFocusedSession',
     title: 'Close Focused Session',
@@ -921,15 +970,7 @@ export function isReservedghostexHotkeyText(
   return Boolean(openingChord) && getReservedghostexHotkeyChords(platform).includes(openingChord);
 }
 
-export type ghostexHotkeyNormalizeOptions = {
-  /** The app-wide Default interface setting; the New Agent Session / New Terminal chords follow it. */
-  preferredAgentInterface?: string;
-};
-
-export function normalizeghostexHotkeySettings(
-  candidate: unknown,
-  options: ghostexHotkeyNormalizeOptions = {}
-): ghostexHotkeySettings {
+export function normalizeghostexHotkeySettings(candidate: unknown): ghostexHotkeySettings {
   const source = isRecord(candidate) ? candidate : {};
   const platform = detectghostexHotkeyPlatform();
   const normalized: ghostexHotkeySettings = {};
@@ -956,35 +997,7 @@ export function normalizeghostexHotkeySettings(
     }
     normalized[definition.id] = platformDefaultKey;
   }
-  applyNewSessionHotkeyLayout(normalized, source, options.preferredAgentInterface);
   return normalized;
-}
-
-const NEW_SESSION_PRIMARY_KEY = 'cmd+t';
-const NEW_SESSION_SECONDARY_KEY = 'cmd+shift+t';
-
-/**
- * Cmd+T opens the default interface's kind of session and Cmd+Shift+T the other one
- * (CDXC:Hotkeys 2026-09-24 on createAgentSession). Whenever New Agent Session and New Terminal
- * hold that pair, in either order, it is reassigned from the Default interface, so the keys follow
- * the setting even in a saved hotkey map. A map saved before New Agent Session existed still has
- * New Terminal on Cmd+T, which is the old default and is moved to the pair's second key first.
- */
-function applyNewSessionHotkeyLayout(
-  normalized: ghostexHotkeySettings,
-  source: Record<string, unknown>,
-  preferredAgentInterface: string | undefined
-): void {
-  if (typeof source.createAgentSession !== 'string' && normalized.createSession === NEW_SESSION_PRIMARY_KEY) {
-    normalized.createSession = NEW_SESSION_SECONDARY_KEY;
-  }
-  const pair = [normalized.createAgentSession, normalized.createSession];
-  if (!pair.includes(NEW_SESSION_PRIMARY_KEY) || !pair.includes(NEW_SESSION_SECONDARY_KEY)) {
-    return;
-  }
-  const terminalFirst = preferredAgentInterface === 'terminal';
-  normalized.createAgentSession = terminalFirst ? NEW_SESSION_SECONDARY_KEY : NEW_SESSION_PRIMARY_KEY;
-  normalized.createSession = terminalFirst ? NEW_SESSION_PRIMARY_KEY : NEW_SESSION_SECONDARY_KEY;
 }
 
 /**

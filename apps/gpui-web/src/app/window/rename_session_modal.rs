@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/rename_session_modal.rs

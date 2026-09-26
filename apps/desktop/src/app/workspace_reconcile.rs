@@ -250,39 +250,13 @@ impl GhostexGpuiApp {
         }
     }
 
-    pub(crate) fn receive_sidebar_native_app_shot_prompt_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:AppShots 2026-06-25-23:28:
-        Existing-session App Shot insertion accepts only the fixed sidebar App Shot prompt payload: a gxserver presentation session id plus the already formatted prompt string. Rust maps that id to a live Agents shell tab, selects it through normal workspace state if needed, verifies the exact mounted Ghostty owner/runtime id, and returns only a transient boolean result to the sidebar.
-
-        CDXC:AppShots 2026-06-26-04:27:
-        Remote App Shot insertion uses the same fixed prompt bridge with a machine-scoped remote presentation session id. It may write only to an already-mounted remote attach Agents terminal in `remote_attach_sessions`; it must not wake, create, or materialize remote tabs, and it stores no prompt, path, SSH, title, URL, or terminal content.
-        */
-        let Ok(message) = gpui_sidebar_native_app_shot_prompt_from_json(payload) else {
-            return;
-        };
-        let ok = if let Some(reference) =
-            gpui_remote_attach_session_reference_from_project_id(message.session_id.as_str())
-        {
-            self.insert_native_app_shot_prompt_into_remote_agents_session(
-                &reference,
-                message.prompt.as_str(),
-                cx,
-            )
-        } else {
-            self.insert_native_app_shot_prompt_into_local_agents_session(
-                message.session_id.as_str(),
-                message.prompt.as_str(),
-                cx,
-            )
-        };
-        self.dispatch_gpui_native_app_shot_prompt_result(message.session_id.as_str(), ok, cx);
-    }
-
+    /// Types an App Shot prompt into a local Agents tab (gx_store/app_shot.rs picks the session).
+    ///
+    /// CDXC:AppShots 2026-06-25-23:28:
+    /// Existing-session App Shot insertion takes a gxserver presentation session id plus the already formatted prompt string. Rust maps that id to a live Agents shell tab, selects it through normal workspace state if needed, writes into that tab's chat composer or terminal (`app_shot_write_into_agents_tab` in gx_store/app_shot.rs), and answers only whether it wrote.
+    ///
+    /// CDXC:AppShots 2026-06-26-04:27:
+    /// Remote App Shot insertion (`insert_native_app_shot_prompt_into_remote_agents_session`) may write only to an already-mounted remote attach Agents terminal in `remote_attach_sessions`; it must not wake, create, or materialize remote tabs, and it stores no prompt, path, SSH, title, URL, or terminal content.
     pub(crate) fn insert_native_app_shot_prompt_into_local_agents_session(
         &mut self,
         session_id: &str,
@@ -321,14 +295,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
-            let slot_id = AgentsTerminalBodyMountSlotId {
-                pane_id,
-                session_id: shell_session_id,
-            };
-            if !self.agents_terminal_ghostty_surface_matches(slot_id) {
-                return false;
-            }
-            if !self.send_text_bytes_to_focused_agents_terminal_surface(prompt.as_bytes()) {
+            if !self.app_shot_write_into_agents_tab(shell_session_id, prompt, cx) {
                 return false;
             }
             self.persist_shell_layout_state();
@@ -375,14 +342,7 @@ impl GhostexGpuiApp {
             self.focus_shell_target(ShellFocusTarget::AgentsPane(pane_id), cx);
             self.scroll_workspace_pane_active_tab(pane_id);
 
-            let slot_id = AgentsTerminalBodyMountSlotId {
-                pane_id,
-                session_id: shell_session_id,
-            };
-            if !self.agents_terminal_ghostty_surface_matches(slot_id) {
-                return false;
-            }
-            if !self.send_text_bytes_to_focused_agents_terminal_surface(prompt.as_bytes()) {
+            if !self.app_shot_write_into_agents_tab(shell_session_id, prompt, cx) {
                 return false;
             }
             self.persist_shell_layout_state();
@@ -396,25 +356,6 @@ impl GhostexGpuiApp {
             let _ = (reference, prompt, cx);
             false
         }
-    }
-
-    pub(crate) fn dispatch_gpui_native_app_shot_prompt_result(
-        &mut self,
-        session_id: &str,
-        ok: bool,
-        cx: &mut gpui::Context<Self>,
-    ) -> bool {
-        let Some(sidebar) = self.sidebar.clone() else {
-            return false;
-        };
-        let message = serde_json::json!({
-            "ok": ok,
-            "sessionId": session_id,
-            "type": GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_TYPE,
-            "version": GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_RESULT_MESSAGE_VERSION,
-        });
-        let script = gpui_native_app_shot_prompt_result_script(&message);
-        sidebar.update(cx, |surface, _| surface.execute_app_owned_script(&script))
     }
 
     pub(crate) fn set_sidebar_gxserver_remote_attach_focus_state(
@@ -548,46 +489,6 @@ impl GhostexGpuiApp {
         self.run_gpui_titlebar_action(action, window, cx);
     }
 
-    pub(crate) fn receive_sidebar_command_run_end_payload(
-        &mut self,
-        payload: &str,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:CommandPane 2026-06-25-10:34:
-        Shared SidebarApp `endSidebarCommandRun` must close the GPUI command-pane Action tab mapped to the command id and clear sidebar button feedback, matching macOS. Accept only the fixed command-run-end payload; do not accept command text, URLs, cwd/env, run ids, status-file paths, terminal output, project paths, or generic IPC fields.
-        */
-        let Ok(command_id) = gpui_sidebar_command_run_end_from_json(payload) else {
-            return;
-        };
-        self.close_gpui_sidebar_command_run(&command_id, cx);
-    }
-
-    pub(crate) fn receive_sidebar_ghostex_hotkey_action_payload(
-        &mut self,
-        payload: &str,
-        window: &mut Window,
-        cx: &mut gpui::Context<Self>,
-    ) {
-        /*
-        CDXC:CommandPalette 2026-06-27-08:17:
-        Shared SidebarApp and command-palette hotkey rows reach GPUI through the CEF sidebar runtime, not the native WKScriptMessage path. Parse only the fixed action-id selector and feed the existing Rust `runGhostexHotkeyAction` dispatcher so Open Commands Panel uses the shared open/focus/minimize route and focused-pane, Settings, and modal routes do not accept renderer-owned sessions, paths, commands, URLs, or launch metadata.
-        */
-        let Ok(action_id) = gpui_sidebar_ghostex_hotkey_action_from_json(payload) else {
-            return;
-        };
-        self.handle_gpui_app_modal_sidebar_command(
-            serde_json::json!({
-                "message": {
-                    "actionId": action_id,
-                    "type": "runGhostexHotkeyAction",
-                },
-            }),
-            window,
-            cx,
-        );
-    }
-
     pub(crate) fn land_quick_automations_active_project_on_automate_mode(
         &mut self,
         window: &mut Window,
@@ -649,27 +550,13 @@ impl GhostexGpuiApp {
         CDXC:Workarea 2026-06-29-00:02:
         Active-project changes no longer reconcile Source/Browser/Kanban/Automate/Manage readiness stores. The stored snapshot immediately feeds titlebar availability and the direct runtime URL/CEF gates, so stale proof state cannot keep or block a workarea surface.
         */
-        let local_stamp = self.gx_store_local_focus_stamp();
-        let workspace_project_id = self.agents_workspace_project_id.clone();
-        let mut refused_stamp = None;
+        // Since 2026-09-25 the payload is the store's own (gx_store/focus_publish.rs), built from the
+        // one focus there is, so nothing can be older than a newer local selection any more.
         let stored = store_latest_gpui_project_snapshot_from_sidebar_contract_json(
             &mut self.latest_sidebar_project_snapshot,
             payload,
-            |snapshot, focus_stamp| {
-                // Same project: context data only, nothing to swap. Another project from before the newest local selection: the runtime had not heard of that selection yet.
-                let observed_stamp = focus_stamp.unwrap_or(0);
-                let admitted = observed_stamp >= local_stamp
-                    || gpui_active_project_id_from_snapshot(Some(snapshot))
-                        == workspace_project_id.as_deref();
-                if !admitted {
-                    refused_stamp = Some(observed_stamp);
-                }
-                admitted
-            },
+            |_, _| true,
         );
-        if let Some(observed_stamp) = refused_stamp {
-            self.gx_store_note_stale_project_context(observed_stamp);
-        }
         match stored {
             Ok(GpuiProjectSnapshotStoreResult::Changed) => {
                 /*
@@ -708,6 +595,7 @@ impl GhostexGpuiApp {
         self.project_name = titlebar_project_label_from_latest_sidebar_snapshot(
             self.latest_sidebar_project_snapshot.as_ref(),
         );
+        self.gx_store_git_active_project_changed(cx);
         self.restore_gpui_titlebar_project_selections();
         self.refresh_titlebar_actions_in_background(cx);
         self.swap_agents_workspace_for_active_project(cx);
@@ -718,6 +606,7 @@ impl GhostexGpuiApp {
         self.coerce_active_mode_to_available_project_context(cx);
         self.land_quick_automations_active_project_on_automate_mode(window, cx);
         self.land_pending_source_file_open_on_source_mode(window, cx);
+        self.gx_store_land_pending_browser_open(window, cx);
         self.ensure_project_workarea_runtime_cef_surfaces_for_current_context(cx);
         self.broadcast_extension_context_changes(cx);
         cx.notify();
@@ -989,18 +878,16 @@ impl GhostexGpuiApp {
                         parked_at: Some(Instant::now()),
                     },
                 );
-                if let Some(replaced) = self
-                    .parked_agents_chat_runtimes_by_project
-                    .insert(old_project_id, parked_chat_runtime)
-                {
-                    self.release_parked_session_chat_runtime_subscriptions(&replaced, cx);
-                }
+                // A replaced parking's views drop here, which detaches them from the chat host.
+                drop(
+                    self.parked_agents_chat_runtimes_by_project
+                        .insert(old_project_id, parked_chat_runtime),
+                );
             }
             // No owning project id means there is nothing to park these pages
             // under and nothing that could ever restore them, so they are
             // destroyed here exactly as the pre-parking teardown did.
             None => {
-                self.release_parked_session_chat_runtime_subscriptions(&parked_chat_runtime, cx);
                 drop(parked_chat_runtime);
             }
         }
@@ -1079,6 +966,7 @@ impl GhostexGpuiApp {
         self.local_workspace_latest_focus_key = None;
         self.local_app_shot_session_mappings.clear();
         self.agents_chat_mode_sessions = chat_mode_sessions;
+        self.terminal_agent_bar_sessions.clear();
         self.agents_terminal_startup_coordinator = AgentsTerminalStartupCoordinator::new();
         self.agents_terminal_surface_host = NativeTerminalSurfaceHost::new();
         self.agents_terminal_surface_lifecycle = NativeTerminalSurfaceLifecycleState::new();
@@ -1932,17 +1820,14 @@ impl GhostexGpuiApp {
     ) {
         /*
         CDXC:FocusMode 2026-06-22-12:51:
-        Cmd+N is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.
+        New Browser Tab is an explicit Browser-opening command in the GPUI shell. Switch to Browser before reusing the normal new-tab helper so the new address-only tab is inserted in the focused Browser pane, Browser lifecycle is marked awake, shell focus moves to Browser, address/CEF visibility sync runs, the active tab scrolls into view, and shell state persists.
 
         CDXC:Titlebar 2026-06-22-15:52:
-        Cmd+N must respect Quick/projectless titlebar availability before switching modes. Browser placeholder tabs stay part of durable shell state, but user-facing Browser creation commands cannot make Browser active when the native titlebar would show it disabled.
+        New Browser Tab must respect Quick/projectless titlebar availability before switching modes. Browser placeholder tabs stay part of durable shell state, but user-facing Browser creation commands cannot make Browser active when the native titlebar would show it disabled.
 
-        CDXC:CommandPalette 2026-06-26-06:47:
-        Focused-pane Browser open commands must match native command-panel parity: CommandPane shell focus no-ops because the native command terminal titlebar branch default-returns, while Agents, Browser, and project-editor focus still create and focus a Browser tab.
+        CDXC:Hotkeys 2026-09-25 DECISION:
+        User: Cmd+T always opens a new browser tab (Ctrl+T on Windows and Linux), so it works from the Commands pane and the Terminal view too. This supersedes the 2026-06-26 CommandPalette rule that made it a no-op while a command terminal had focus; New Terminal (Cmd+Shift+T) opens a terminal tab there.
         */
-        if !gpui_focused_pane_open_browser_hotkey_should_open(self.shell_focus) {
-            return;
-        }
         if !self.titlebar_mode_available(TitlebarMode::Browser) {
             return;
         }

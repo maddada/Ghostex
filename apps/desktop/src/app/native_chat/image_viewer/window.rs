@@ -127,7 +127,7 @@ impl NativeChatView {
         if self.image_viewer.handle.is_some() || self.image_viewer.opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.image_viewer.opening = true;

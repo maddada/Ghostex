@@ -71,7 +71,6 @@ import {
   type KeepAwakeDurationMinutes,
   type PortlessProtocol,
   type PreferredAgentInterface,
-  type ChatBrain,
   type PromptEditorBackend,
   type SidebarSpaceSwitchBehavior,
   type SidebarVisibilityMemory,
@@ -443,7 +442,6 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
     ),
     analyticsEnabled: readBoolean(source, 'analyticsEnabled', DEFAULT_ghostex_SETTINGS.analyticsEnabled),
     debuggingMode: readBoolean(source, 'debuggingMode', DEFAULT_ghostex_SETTINGS.debuggingMode),
-    chatBrain: normalizeChatBrain(source),
     diagnosticLogging: normalizeDiagnosticLoggingSettings(source.diagnosticLogging),
     renameSessionOnDoubleClick: readBoolean(
       source,
@@ -956,11 +954,7 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
      * read so older settings files gain configurable native hotkeys without a
      * migration or fallback execution path.
      */
-    hotkeys: normalizeghostexHotkeySettings(source.hotkeys, {
-      preferredAgentInterface: normalizePreferredAgentInterface(
-        readString(source, 'preferredAgentInterface', DEFAULT_ghostex_SETTINGS.preferredAgentInterface)
-      ),
-    }),
+    hotkeys: normalizeghostexHotkeySettings(source.hotkeys),
     showActivePaneOutline: readBoolean(source, 'showActivePaneOutline', DEFAULT_ghostex_SETTINGS.showActivePaneOutline),
     windowGlass: normalizeWindowGlassMode(readString(source, 'windowGlass', DEFAULT_ghostex_SETTINGS.windowGlass)),
     windowGlassSource: normalizeWindowGlassSource(
@@ -979,6 +973,21 @@ export function normalizeghostexSettings(candidate: unknown): ghostexSettings {
       'windowGlassImageLight',
       DEFAULT_ghostex_SETTINGS.windowGlassImageLight
     ).trim(),
+    windowGlassVideoDark: readString(
+      source,
+      'windowGlassVideoDark',
+      DEFAULT_ghostex_SETTINGS.windowGlassVideoDark
+    ).trim(),
+    windowGlassVideoLight: readString(
+      source,
+      'windowGlassVideoLight',
+      DEFAULT_ghostex_SETTINGS.windowGlassVideoLight
+    ).trim(),
+    windowGlassVideoOnlyOnPower: readBoolean(
+      source,
+      'windowGlassVideoOnlyOnPower',
+      DEFAULT_ghostex_SETTINGS.windowGlassVideoOnlyOnPower
+    ),
     windowGlassSidebarOpacityDark: clampWindowGlassSidebarOpacityPercent(
       readNumber(source, 'windowGlassSidebarOpacityDark', DEFAULT_ghostex_SETTINGS.windowGlassSidebarOpacityDark),
       DEFAULT_ghostex_SETTINGS.windowGlassSidebarOpacityDark
@@ -1248,7 +1257,7 @@ function normalizeWindowGlassMode(value: string | undefined): WindowGlassMode {
 }
 
 function normalizeWindowGlassSource(value: string | undefined): WindowGlassSource {
-  return value === 'wallpaper' || value === 'desktopAndWindows' || value === 'customImage'
+  return value === 'wallpaper' || value === 'desktopAndWindows' || value === 'customImage' || value === 'video'
     ? value
     : DEFAULT_ghostex_SETTINGS.windowGlassSource;
 }
@@ -1340,14 +1349,6 @@ function normalizeCompletionSoundPreference(source: Record<string, unknown>) {
   return clampCompletionSoundPreference(
     readString(source, 'completionSound', DEFAULT_ghostex_SETTINGS.completionSound)
   );
-}
-
-function normalizeChatBrain(source: Record<string, unknown>): ChatBrain {
-  const brain = readString(source, 'chatBrain', '');
-  if (brain === 'quickjs' || brain === 'rust') {
-    return brain;
-  }
-  return DEFAULT_ghostex_SETTINGS.chatBrain;
 }
 
 function normalizePromptEditorBackend(source: Record<string, unknown>): PromptEditorBackend {

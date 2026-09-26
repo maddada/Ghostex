@@ -1,7 +1,7 @@
 //! One option dispatch, walked a step at a time.
 //!
 //! Port of `dispatchSessionChatOption`'s `run` (`option-dispatch.ts`) and of the
-//! `onDispatchCommand` / `onDispatchKey` callbacks `native-host.ts` hands it, which are
+//! `onDispatchCommand` / `onDispatchKey` callbacks `native-host.ts` handed it, which were
 //! `option-command.ts`'s `sendSessionChatOptionAware`. Those steps are `await`ed ONE AT A TIME
 //! (a `command-confirm-picker` types the command and then presses Enter; a cyclic mode change
 //! presses Shift+Tab as many times as the cycle is long), so the plan is a queue here rather than
@@ -63,7 +63,7 @@ fn advance(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
             return finish(state, context);
         };
         match step {
-            // Neither of these waits for anything: the TypeScript calls them synchronously
+            // Neither of these waits for anything: the TypeScript called them synchronously
             // between two awaits, so the loop runs straight on to the next step.
             DispatchStep::Switching(switching) => {
                 run.switching = switching;

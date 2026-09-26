@@ -1,8 +1,8 @@
 //! What the host tells the core about the world outside it, once per turn.
 //!
-//! The core reads no clock and knows no timezone, so both arrive here. A replay that feeds the
-//! recorded values back therefore reproduces the document exactly, including the "Today" and
-//! "Yesterday" boundaries the transcript computes against local midnight.
+//! The core reads no clock and knows no timezone, so both arrive here. The same values therefore
+//! always produce the same document, including the "Today" and "Yesterday" boundaries the
+//! transcript computes against local midnight.
 
 use serde::{Deserialize, Serialize};
 
@@ -49,7 +49,8 @@ pub struct ChatContext {
     /// Minutes to add to UTC to get the user's local time, the negation of
     /// `Date.prototype.getTimezoneOffset()`.
     ///
-    /// `packages/shared/session-chat-presentation/message-time.ts` groups rows by local midnight,
+    /// `crate::transcript::message_time` (ported from
+    /// `packages/shared/session-chat-presentation/message-time.ts`) groups rows by local midnight,
     /// which is the only timezone-dependent rule in the brain.
     pub utc_offset_minutes: i32,
     /// The host's uniform random draws for this turn, in `[0, 1)`, consumed in order.
@@ -57,37 +58,34 @@ pub struct ChatContext {
     /// The core generates no random values. The one rule that needs them is the working strip's
     /// stint word (`pickSessionChatWorkingWord`), and it can draw twice in a single turn: the
     /// `useState` initializer, then the `useEffect` that immediately replaces it when the first
-    /// computation already sees a working session. Two slots is therefore the whole supply, and a
-    /// replay feeds the recorded `Math.random()` queue straight into it
-    /// (`docs/2026-09-21/rust-chat/REPLAY.md`).
+    /// computation already sees a working session. Two slots is therefore the whole supply.
     pub random_units: [f64; 2],
     /// The host's fresh random ids for this turn, consumed in order.
     ///
     /// The core mints no identities either. Two rules need one: the model-selection intent
     /// (`crypto.randomUUID()` in `model-selection.ts`) and the model picker's request id. A host
-    /// passes two draws of 128 random bits, [`ChatContext::random_id`] lays them out as a
-    /// version 4 UUID, and a replay parses the recorded `u` queue back into the same numbers, so
-    /// the id the two brains write is the same string.
+    /// passes two draws of 128 random bits and [`ChatContext::random_id`] lays them out as a
+    /// version 4 UUID.
     ///
     /// Numbers rather than strings so this type stays UniFFI friendly.
     pub random_ids: [u128; 2],
     /// Stamps the host has already rendered in the user's locale, for this turn.
     ///
     /// Empty is the normal case and means "use the crate's own `en-US` rendering", which is what
-    /// QuickJS printed under V8's default and therefore what the replay must reproduce. A desktop
+    /// the TypeScript brain printed under V8's default. A desktop
     /// or mobile host that wants the user's real locale fills the entries it knows the stamps for;
     /// anything it leaves out falls back.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub formatted_times: Vec<FormattedTime>,
     /// Every clock value the brain read during this turn, in order, when the host knows them.
     ///
-    /// The TypeScript reads `Date.now()` more than once inside one call, and some of those reads
-    /// are LATCHED: the stall watchdog's `now`, a `setNow(Date.now())` inside an interval's
+    /// The TypeScript read `Date.now()` more than once inside one call, and some of those reads
+    /// were LATCHED: the stall watchdog's `now`, a `setNow(Date.now())` inside an interval's
     /// callback, the `useState(Date.now)` of the first render. They are not the first read of the
     /// call, so a core that measures everything against [`ChatContext::now_ms`] lands a
     /// millisecond early on a fraction of turns, and a latched millisecond is republished for the
-    /// rest of the session. A replay passes the recording's `c` queue here (index 0 is `now_ms`
-    /// itself) and the core takes the k-th read where the TypeScript took it
+    /// rest of the session. The replay that checked the port passed the recording's `c` queue here
+    /// (index 0 is `now_ms` itself) and the core takes the k-th read where the TypeScript took it
     /// ([`crate::state::CoreState::read_clock`]). Empty for a live host, whose reads all answer
     /// `now_ms`: nothing here changes behaviour, only the millisecond.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -162,8 +160,8 @@ impl ChatContext {
 
     /// The host's rendering of `stamp_ms` in `style`, or `None` when the host supplied none.
     ///
-    /// A caller that gets `None` falls back to the crate's own `en-US` formatter, which is what the
-    /// replay wants (V8's default under Bun) and what a host that has not wired its locale gets.
+    /// A caller that gets `None` falls back to the crate's own `en-US` formatter (V8's default
+    /// under Bun), which is what a host that has not wired its locale gets.
     pub fn formatted_time(&self, style: FormattedTimeStyle, stamp_ms: i64) -> Option<&str> {
         self.formatted_times
             .iter()
@@ -174,8 +172,8 @@ impl ChatContext {
     /// One of the turn's random ids, as the canonical lowercase UUID text.
     ///
     /// The version and variant bits are forced the way `crypto.randomUUID()` sets them, so a host
-    /// may pass raw entropy and a replay may pass a recorded UUID parsed back to a number: both
-    /// print the same string.
+    /// may pass raw entropy and still get a valid version 4 UUID, and a UUID parsed back to a
+    /// number prints as itself.
     pub fn random_id(&self, slot: usize) -> String {
         let bits = self.random_ids.get(slot).copied().unwrap_or_default();
         let bytes = bits.to_be_bytes();

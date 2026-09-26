@@ -4,6 +4,7 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { SettingsModal, type TailcatSettingsRpc } from './settings-modal';
 import { DEFAULT_ghostex_SETTINGS, type ghostexSettings } from '../shared/ghostex-settings';
 import type { ProjectViewProject, ProjectViewSpace } from '../shared/ghostex-settings/project-views';
+import type { WebviewApi } from './webview-api';
 import { normalizeSessionCardHoverButtons } from '../shared/session-card-hover-actions';
 import { DEFAULT_SIDEBAR_AGENTS } from '../shared/sidebar-agents';
 import { encodeEasyConnectCode, encodeTailscaleCode } from '../shared/ghostex-remote-pairing';
@@ -187,6 +188,7 @@ function SettingsModalStory({
   projectViewProjects,
   projectViewSpaces,
   remoteRpc,
+  vscode,
 }: {
   cuaDriverInstalled?: boolean;
   cuaPermissionsGranted?: boolean;
@@ -208,6 +210,7 @@ function SettingsModalStory({
   projectViewProjects?: ProjectViewProject[];
   projectViewSpaces?: ProjectViewSpace[];
   remoteRpc?: TailcatSettingsRpc;
+  vscode?: WebviewApi;
 }) {
   const [settings, setSettings] = useState<ghostexSettings>(initialSettings);
   useEffect(() => {
@@ -342,6 +345,7 @@ function SettingsModalStory({
         settings={settings}
         tailcatRpc={remoteRpc}
         theme={settings.sidebarTheme === 'plain-light' ? 'plain-light' : 'dark-blue'}
+        vscode={vscode}
       />
     </div>
   );
@@ -441,6 +445,13 @@ const storyPluginStatus: SidebarPluginSettingsStatusMessage = {
 export const Extensions: Story = {
   render: () => (
     <SettingsModalStory
+      initialSettings={{
+        ...modalSettings,
+        customViews: [
+          { enabled: true, id: 'custom-view-tasks', name: 'Tasks', url: 'https://ticktick.com/webapp#q/all/tasks' },
+          { enabled: false, id: 'custom-view-tower', name: 'Tower', url: 'https://tower.wecourts.com/' },
+        ],
+      }}
       initialTab='extensions'
       pluginSettingsStatus={storyPluginStatus}
       projects={storyProjects}
@@ -461,6 +472,45 @@ export const Extensions: Story = {
  */
 export const Theme: Story = {
   render: () => <SettingsModalStory initialTab='theme' />,
+};
+
+/** A desktop host that answers the glass video list with two downloaded aerial wallpapers. */
+const glassVideoHost: WebviewApi = {
+  postMessage: (message) => {
+    if (message.type !== 'listWindowGlassVideos') {
+      return;
+    }
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent('ghostex-app-modal-host-message', {
+          detail: {
+            type: 'windowGlassVideosListed',
+            videos: [
+              { name: 'Hawaii Coast', value: 'aerial:0A1B2C3D' },
+              { name: 'New York Night', value: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE' },
+            ],
+          },
+        })
+      );
+    }, 0);
+  },
+};
+
+/** Theme with Glass shows set to Video: a downloaded aerial for dark mode, a picked file for light mode. */
+export const ThemeGlassVideo: Story = {
+  render: () => (
+    <SettingsModalStory
+      initialSettings={{
+        ...modalSettings,
+        windowGlass: 'frosted',
+        windowGlassSource: 'video',
+        windowGlassVideoDark: 'aerial:B1B5DDC5-73C8-4920-8133-BACCE38A08DE',
+        windowGlassVideoLight: '/Users/you/Movies/clouds.mp4',
+      }}
+      initialTab='theme'
+      vscode={glassVideoHost}
+    />
+  ),
 };
 
 export const Hotkeys: Story = {

@@ -14,7 +14,7 @@ use crate::session_chat_terminal_dialog::{TerminalDialog, TerminalDialogRow};
 /// CDXC:AgentScreenDetection 2026-09-05 DECISION:
 /// User: drive Claude's commands through zmx and make their interactions usable in chat, as for Codex.
 /// Claude's panel boundary survives nested menus and clipped footers; a later composer means the panel is historical.
-/// SEE-ALSO: packages/core-ui/chat/session-chat-terminal-dialog.tsx.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/terminal_dialog.rs.
 pub fn detect_claude_dialog(text: &str) -> Option<TerminalDialog> {
     if let Some(dialog) = crate::session_chat_claude_effort_notice::detect_effort_notice(text) {
         return Some(dialog);

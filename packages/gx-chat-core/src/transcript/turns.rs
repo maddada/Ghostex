@@ -2,10 +2,11 @@
 //!
 //! Ported from `packages/shared/session-chat-presentation/turns.ts`.
 //!
-//! CDXC:SessionChat 2026-09-17 DECISION:
-//! User: keep React as the desktop default, make GPUI chat opt-in, and share behavior, presentation
-//! rules, and settings with the retained React chat. Turn boundaries, completed work, final
-//! replies, and summaries have one implementation consumed by both renderers.
+//! CDXC:SessionChat 2026-09-25 DECISION:
+//! User: delete the TypeScript chat rules and the React chat, so the Rust core is the only chat
+//! brain. Turn boundaries, completed work, final replies, and summaries have this one
+//! implementation, drawn by the GPUI chat and the phone's native chat. Supersedes the 2026-09-17
+//! decision that kept React as the desktop default with GPUI opt-in.
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
 

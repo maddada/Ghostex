@@ -10,13 +10,14 @@
 //! side only because the `case` arm asks the id first, so they are one function here too.
 //!
 //! Nothing in this file decides a refusal from a rule: every early return below is one the
-//! TypeScript has, at the same place and for the same id.
+//! TypeScript had, at the same place and for the same id. It was ported from
+//! `gxserver-runtime/workspace-groups-sync.ts` (`syncWorkspaceSubgroupSessionOrder`,
+//! `moveSessionToWorkspaceGroup`, `createWorkspaceGroupFromSession`),
+//! `gxserver-runtime/sessions-and-focus.ts` (`syncSessionOrder`) and
+//! `packages/shared/gxserver-presentation-cache.ts` (`reorderPresentationProjectSessions`), all
+//! deleted; see git history.
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts
-//! (`syncWorkspaceSubgroupSessionOrder`, `moveSessionToWorkspaceGroup`,
-//! `createWorkspaceGroupFromSession`), apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts
-//! (`syncSessionOrder`), packages/shared/gxserver-presentation-cache.ts
-//! (`reorderPresentationProjectSessions`), apps/desktop/src/app/gx_store/sidebar_drag.rs.
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_drag.rs.
 
 use serde_json::{json, Value};
 
@@ -52,10 +53,13 @@ pub enum OrderWrite {
     },
     /// `postSidebarActionToast('info', 'Group limit reached for this project.')`.
     Toast { level: ToastLevel, title: String },
+    /// `updateRemoteWorkspaceGroups`: `/api/updateWorkspaceSessionGroups` with `{ state }` down one
+    /// remote machine's tunnel (project_order_write.rs).
+    RemoteProjectOrder { machine_id: String, state: Value },
 }
 
 impl OrderWrite {
-    /// The write as the parity gate compares it. The document is compared whole, because it is the
+    /// The write as the parity gate compared it while the TypeScript ran. The document is compared whole, because it is the
     /// thing a stale echo would undo.
     pub fn to_json(&self) -> Value {
         match self {
@@ -72,16 +76,28 @@ impl OrderWrite {
                     "params": { "projectId": project.project_id, "sessionIds": session_ids },
                 },
             }),
-            // Named the way the TypeScript names them, because these two fields ARE
-            // `activeProjectId` and `activeGroupId` and the gate compares them by name.
-            Self::ActivateSubgroup { project, group_id } => json!({
-                "write": "activateSubgroup",
-                "activeProjectId": project.project_id,
-                "activeGroupId": crate::keys::encode_workspace_subgroup_id(project, group_id),
-            }),
+            // Named the way the TypeScript named them, because these two fields ARE
+            // `activeProjectId` and `activeGroupId` and the gate compared them by name.
+            // The runtime's `activeProjectId` was this computer's projects only, so a remote
+            // group moves its `activeGroupId` alone.
+            Self::ActivateSubgroup { project, group_id } => {
+                let mut value = json!({
+                    "write": "activateSubgroup",
+                    "activeGroupId": crate::keys::encode_workspace_subgroup_id(project, group_id),
+                });
+                if project.machine.is_local() {
+                    value["activeProjectId"] = json!(project.project_id);
+                }
+                value
+            }
             Self::Toast { level, title } => {
                 json!({ "write": "toast", "level": level.as_str(), "title": title })
             }
+            Self::RemoteProjectOrder { machine_id, state } => json!({
+                "write": "remoteProjectOrder",
+                "remoteMachineId": machine_id,
+                "rpc": { "path": "/api/updateWorkspaceSessionGroups", "params": { "state": state } },
+            }),
         }
     }
 }
@@ -125,20 +141,18 @@ pub fn owns_order_write_message(message: &Value) -> bool {
 
 /// What an order message does to the document the sync holds.
 ///
-/// `None` means this payload is NOT ported and must reach the old runtime untouched. The one shape
-/// that reaches it is a REMOTE row or a remote group, and the document is NOT the reason: a remote
-/// project's user-made groups live in THIS computer's document under `remote:<machine>:project:<id>`,
-/// and the store reads them there (`PresentationStore::user_groups_of_project`). The reasons are
-/// these. `syncSessionOrder` and `moveSessionToGroup` naming a remote row are posted only by
-/// `reorderNativeSidebar`, which returns for a remote group before it posts anything, so neither
-/// can arrive from the sidebar. `createGroupFromSession` on a remote row CAN arrive (Move to New
-/// Group), and both its edit and its highlight are portable now that the store's focus owns remote
-/// rows (remote focus part 2 step 2). What is not is the RUNTIME's half: it makes the new group
-/// its `activeGroupId` WITHOUT making the project active, and that id is what its remote tab list
-/// for the workspace is read from and what `keepView` is planned from (`RuntimeActiveGroup`). No
-/// message the store sends the runtime can set its active group to a user-made group of a remote
-/// project (the tab selection always names the project's own group), so answering here would leave
-/// the workspace's tab list and the next click's `keepView` on the old group.
+/// `None` means the payload is malformed (a missing id or a type this file does not answer).
+///
+/// CDXC:Sessions 2026-09-25 WHY:
+/// Remote rows and remote groups are answered here too. A remote project's user-made groups live in
+/// THIS computer's document under `remote:<machine>:project:<id>`, and the store reads them there
+/// (`PresentationStore::user_groups_of_project`), so the edit is the same edit. The reason they used
+/// to go to the old runtime was its half of `createGroupFromSession`: it makes the new group its
+/// `activeGroupId` without making the project active, and its remote tab list and the next click's
+/// `keepView` are read from that id (`RuntimeActiveGroup`). The runtime's own `focusGroup` with the
+/// user-made group's id does exactly that, so the host sends it for a remote `ActivateSubgroup`
+/// (gx_store/sidebar_drag.rs) and nothing about a remote row needs the runtime's handler any more.
+/// Supersedes the 2026-09-21 note that said no message could set that group.
 pub fn plan_order_write(
     document: &WorkspaceGroupsDocument,
     message: &Value,
@@ -164,15 +178,14 @@ fn plan_sync_session_order(
         .filter_map(Value::as_str)
         .collect();
     if let Some((project, subgroup_id)) = parse_workspace_subgroup_id(group_id) {
-        if !project.machine.is_local() {
-            return None;
-        }
         // `parseGxserverPresentationProjectSessionId` then `reference.projectId === projectId`: an
-        // id of another project is dropped rather than carried into the group.
+        // id of another project is dropped rather than carried into the group. That parser reads
+        // THIS computer's session ids only, so a remote group's order names no session and the
+        // edit keeps the group's order, still writing the document as the TypeScript did.
         let raw_ids: Vec<String> = session_ids
             .iter()
             .filter_map(|id| SessionKey::parse_sidebar_session_id(id))
-            .filter(|key| key.project_key() == project)
+            .filter(|key| key.machine.is_local() && key.project_key() == project)
             .map(|key| key.session_id)
             .collect();
         return Some(
@@ -196,8 +209,9 @@ fn plan_sync_session_order(
     let Some(project) = ProjectKey::parse_sidebar_group_id(group_id) else {
         return Some(OrderWritePlan::refused("notAProjectGroup"));
     };
+    // `syncSessionOrder` keeps no order for a remote project's own group.
     if !project.machine.is_local() {
-        return None;
+        return Some(OrderWritePlan::refused("remoteProjectGroup"));
     }
     let raw_ids: Vec<String> = session_ids
         .iter()
@@ -225,9 +239,6 @@ fn plan_move_session_to_group(
     message: &Value,
 ) -> Option<OrderWritePlan> {
     let session = SessionKey::parse_sidebar_session_id(message.get("sessionId")?.as_str()?)?;
-    if !session.machine.is_local() {
-        return None;
-    }
     let group_id = message.get("groupId")?.as_str()?;
     let target_index = message.get("targetIndex").and_then(Value::as_i64);
     let project = session.project_key();
@@ -276,9 +287,6 @@ fn plan_create_group_from_session(
     message: &Value,
 ) -> Option<OrderWritePlan> {
     let session = SessionKey::parse_sidebar_session_id(message.get("sessionId")?.as_str()?)?;
-    if !session.machine.is_local() {
-        return None;
-    }
     let project = session.project_key();
     let Some((group_id, document)) = document.create_subgroup(
         &project.to_workspace_project_id(),

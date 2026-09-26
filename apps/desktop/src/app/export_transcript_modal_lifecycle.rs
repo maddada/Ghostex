@@ -13,15 +13,14 @@ pub(crate) fn gpui_export_transcript_modal_prefs_path() -> PathBuf {
 
 impl GhostexGpuiApp {
     /*
-    CDXC:TranscriptExport 2026-09-15 WHY:
-    The sidebar runtime still owns the session context, the gxserver export
-    call (local and remote), the exported path, and the follow-up session
-    creation. The native dialog therefore posts the same
+    CDXC:TranscriptExport 2026-09-25 WHY:
+    The session context, the gxserver export call (local and remote), the
+    exported path and the follow-up session are Rust's since the app runtime
+    port (gx_store/git/export_transcript.rs), which supersedes the 2026-09-15
+    note that the sidebar runtime owned them. The dialog still posts the same
     `runExportSessionTranscript`, `startExportedTranscriptConversation` and
-    `cancelExportSessionTranscript` bridge commands the React page did and
-    receives the same `exportSessionTranscriptResult` answer, so remote
-    sessions keep working without a Rust tunnel client. Only the window and
-    its rendering moved to GPUI.
+    `cancelExportSessionTranscript` commands through the same allowlist and
+    receives the same `exportSessionTranscriptResult` answer.
     */
     /// Opens the native dialog for the sidebar's `open` message of the
     /// `exportTranscriptResult` modal kind.
@@ -102,24 +101,11 @@ impl GhostexGpuiApp {
                     "includeReasoning".to_string(),
                     serde_json::json!(include.reasoning),
                 );
-                if !self.forward_gpui_export_transcript_modal_command_to_sidebar(
+                self.forward_gpui_export_transcript_modal_command_to_sidebar(
                     "runExportSessionTranscript",
                     &message,
                     cx,
-                ) {
-                    let result = serde_json::json!({
-                        "error": "The sidebar runtime is not available.",
-                        "ok": false,
-                        "requestId": request_id,
-                        "type": "exportSessionTranscriptResult",
-                    });
-                    let app = cx.entity();
-                    cx.defer(move |cx| {
-                        app.update(cx, |app, cx| {
-                            app.receive_gpui_export_transcript_result(&result, cx);
-                        });
-                    });
-                }
+                );
             }
             ExportTranscriptModalCommand::StartConversation { agent_id } => {
                 message.insert("agentId".to_string(), serde_json::json!(agent_id));
@@ -149,7 +135,7 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Delivers the sidebar runtime's sanitized `exportSessionTranscriptResult`
+    /// Delivers the export's sanitized `exportSessionTranscriptResult`
     /// to the native dialog. Returns false when no native dialog is open so the
     /// caller can hand the result to the React modal host instead.
     pub(crate) fn receive_gpui_export_transcript_result(

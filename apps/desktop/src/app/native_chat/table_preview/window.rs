@@ -65,7 +65,7 @@ impl NativeChatView {
         if self.table_preview.handle.is_some() || self.table_preview.opening {
             return;
         }
-        let Some(main) = self.main_window else {
+        let Some(main) = self.open_main_window(cx) else {
             return;
         };
         self.table_preview.opening = true;

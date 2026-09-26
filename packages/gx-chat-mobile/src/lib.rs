@@ -12,7 +12,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Mutex;
 
-use ghostex_gx_chat_core::bridge::{answer_query, BridgeQuery};
+use ghostex_gx_chat_core::query::{answer_query, Query};
 use ghostex_gx_chat_core::session::persistence::storage_key;
 use ghostex_gx_chat_core::ChatCore;
 use serde_json::{json, Value};
@@ -92,11 +92,12 @@ impl MobileChatCore {
             .unwrap_or_default()
     }
 
-    /// One of the five pure helpers (`composerReferences`, `composerKeyIntent`, `referenceMenu`,
-    /// `transcriptMenu`, `sendBlockedToast`), answered from the current state.
+    /// One of the pure helpers (`composerReferences`, `composerKeyIntent`, `referenceMenu`,
+    /// `transcriptMenu`, `sendBlockedToast`, `insertAnswerAttachments`, `removeChatReference`),
+    /// answered from the current state.
     pub fn query(&self, name: String, arguments_json: String) -> String {
         self.run(|core| {
-            let query = BridgeQuery::from_wire(&name)
+            let query = Query::from_wire(&name)
                 .ok_or_else(|| error("unknownQuery", &format!("no helper named {name:?}")))?;
             let arguments: Vec<Value> = serde_json::from_str(&arguments_json)
                 .map_err(|e| error("badArguments", &e.to_string()))?;

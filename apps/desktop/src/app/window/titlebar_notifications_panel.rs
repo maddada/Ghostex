@@ -1,5 +1,5 @@
 //! The Notifications dropdown: the reading-panel variant behind the titlebar
-//! bell. It renders the cached feed the sidebar runtime pushed (see
+//! bell. It renders the cached feed the Rust store pushed (see
 //! `crate::notification_feed`), edits its own copy optimistically so clicks
 //! feel instant, and sends one command per click back through the main app.
 use super::resources_style::*;
@@ -83,7 +83,7 @@ impl GpuiTitlebarReadingPanel {
             ));
         }
         self.send_notification_feed_command("open", Some(id), cx);
-        // The sidebar runtime focuses and reveals the session; this only makes sure a collapsed sidebar opens so the reveal is visible, the same as the titlebar's reveal-active-session button.
+        // The store (gx_store/notifications/) focuses and reveals the session; this only makes sure a collapsed sidebar opens so the reveal is visible, the same as the titlebar's reveal-active-session button.
         if let Some(session_id) = reveal_session_id {
             let _ = self.main_app.update_in(cx, move |app, _main_window, cx| {
                 app.reveal_sidebar_session(&session_id, cx);

@@ -39,6 +39,9 @@ impl GhostexGpuiApp {
             .get("automatic")
             .and_then(serde_json::Value::as_bool)
             == Some(true);
+        if !self.remote_reconnect_admit(&remote_machine_id, automatic) {
+            return;
+        }
         let connect_generation =
             self.next_gpui_remote_gxserver_connect_generation(&remote_machine_id);
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();

@@ -3,19 +3,6 @@ use anyhow::Result;
 use crate::app::helpers::*;
 use crate::*;
 
-#[cfg(target_os = "macos")]
-pub(crate) fn gpui_native_app_shot_capture_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onNativeAppShotCaptured==='function'){{bridge.onNativeAppShotCaptured(payload);}}else{{const pending=Array.isArray(bridge.pendingNativeAppShots)?bridge.pendingNativeAppShots:[];pending.push(payload);bridge.pendingNativeAppShots=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_native_app_shot_prompt_result_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onNativeAppShotPromptResult==='function'){{bridge.onNativeAppShotPromptResult(payload);}}else{{const pending=Array.isArray(bridge.pendingNativeAppShotPromptResults)?bridge.pendingNativeAppShotPromptResults:[];pending.push(payload);bridge.pendingNativeAppShotPromptResults=pending;}}}})(); undefined;"
-    )
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum GpuiMacOSNotificationAuthorizationStatus {
     Unsupported,

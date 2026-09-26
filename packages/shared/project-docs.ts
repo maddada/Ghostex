@@ -68,6 +68,7 @@ export type ProjectDocsRequest = {
     | 'move'
     | 'revealInFinder'
     | 'openDocsFoldersSettings'
+    | 'openDocsFile'
     | 'annotationSendTarget'
     | 'sendAnnotationFeedback';
   content?: string;

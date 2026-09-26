@@ -25,7 +25,7 @@ struct ScrollBottom {
 
 static SPEC: LazyLock<ScrollBottom> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/scroll-bottom.json"
+        "../../../../../packages/gx-chat-core/visual/scroll-bottom.json"
     ))
     .expect("shared scroll button appearance")
 });

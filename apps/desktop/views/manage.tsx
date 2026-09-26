@@ -3,6 +3,7 @@ import '@fontsource-variable/inter';
 import { createRoot } from 'react-dom/client';
 import { TooltipProvider } from '@/packages/core-ui/app-tooltip';
 import { ManageApp } from './manage/manage-app';
+import { ManageEmbed } from './manage/embed';
 import { MANAGE_STYLES } from './manage/styles';
 
 const styleElement = document.createElement('style');
@@ -11,7 +12,7 @@ document.head.append(styleElement);
 
 createRoot(document.getElementById('root')!).render(
   <TooltipProvider>
-    <ManageApp />
+    {new URLSearchParams(window.location.search).get('embed') === '1' ? <ManageEmbed /> : <ManageApp />}
   </TooltipProvider>
 );
 

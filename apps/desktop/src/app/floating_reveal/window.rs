@@ -347,7 +347,12 @@ impl GhostexGpuiApp {
                         // the popup is shown by the platform when it is created.
                         show: !cfg!(target_os = "macos"),
                         kind: gpui::WindowKind::PopUp,
-                        window_background: window_glass_background_appearance(),
+                        // Clear outside its rounded corners when the window is not glass.
+                        window_background: if window_glass_active() {
+                            gpui::WindowBackgroundAppearance::Blurred
+                        } else {
+                            gpui::WindowBackgroundAppearance::Transparent
+                        },
                         is_movable: false,
                         is_resizable: false,
                         is_minimizable: false,
@@ -362,6 +367,7 @@ impl GhostexGpuiApp {
             };
             let observed = app.clone();
             let result = cx.open_window(options, move |window, cx| {
+                window.set_background_corner_radius(gpui::px(FLOATING_PANEL_CORNER_RADIUS));
                 let view = cx.new(|cx| FloatingRevealWindow {
                     app: observed.downgrade(),
                     _subscription: cx.observe(&observed, |_, _, cx| cx.notify()),
@@ -398,6 +404,9 @@ impl GhostexGpuiApp {
                 .update(cx, |_, window, _| cef_parent_native_view(window))
                 .ok()
                 .and_then(Result::ok);
+            if let Some(native_view) = native_view {
+                crate::app::native_docs::drawer::round_floating_panel(native_view);
+            }
             let anchor = app.read(cx).floating_reveal_frame(width).origin;
             set_floating_reveal_glass_window(Some(handle.into()));
             app.update(cx, |app, cx| {

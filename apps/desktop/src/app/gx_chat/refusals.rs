@@ -46,36 +46,9 @@ pub(super) fn note_rpc_refusal(counters: &mut HostCounters, arguments: &[Value])
 
 /// Counts one renderer call the host could not turn into an event, by its method.
 ///
-/// `method` is already a constant: it is the `&'static str` the view passed to `call`. A
-/// `brokerMessage` is split by its `kind`, because that is where the app runtime's messages differ.
-pub(super) fn note_unrouted(
-    counters: &mut HostCounters,
-    method: &'static str,
-    arguments: &[Value],
-) {
-    let name = if method == "brokerMessage" {
-        broker_kind_name(arguments.first())
-    } else {
-        method
-    };
-    *counters.actions_unrouted.entry(name).or_insert(0) += 1;
-}
-
-/// The name a `brokerMessage` is counted under.
-pub(super) fn broker_kind_name(message: Option<&Value>) -> &'static str {
-    match message
-        .and_then(|message| message.get("kind"))
-        .and_then(Value::as_str)
-    {
-        Some("event") => "brokerMessage.event",
-        Some("chunk") => "brokerMessage.chunk",
-        Some("response") => "brokerMessage.response",
-        Some("reset") => "brokerMessage.reset",
-        Some("chatSettings") => "brokerMessage.chatSettings",
-        Some("contextPreferences") => "brokerMessage.contextPreferences",
-        Some("catalog") => "brokerMessage.catalog",
-        _ => "brokerMessage.other",
-    }
+/// `method` is already a constant: it is the `&'static str` the view passed to `call`.
+pub(super) fn note_unrouted(counters: &mut HostCounters, method: &'static str) {
+    *counters.actions_unrouted.entry(method).or_insert(0) += 1;
 }
 
 /// A gxserver code is a short identifier; anything else is not printed.

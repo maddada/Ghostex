@@ -19,8 +19,7 @@
 //! machine tab and `actions` is still zero means the command never reached here.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_actions/remote.rs,
-//! apps/desktop/src/app/remote_conn/sidebar_rpc.rs,
-//! tooling/gx-core/remote-action-parity.ts (the gate).
+//! apps/desktop/src/app/remote_conn/sidebar_rpc.rs.
 
 use std::time::{Duration, Instant};
 
@@ -327,7 +326,7 @@ impl GhostexGpuiApp {
         let session_slot = self.gx_store.session_slot.counters;
         // Close Project's successor (gx_store/sidebar_close_project.rs).
         let close_project = self.gx_store_close_project_counters();
-        // A local row's click, routed straight to the runtime (gx_store/sidebar_focus_route.rs).
+        // A local row's click, performed by the store's focus route (gx_store/sidebar_focus_route.rs).
         let local_focus = self.gx_store_local_focus_route_counters();
         // The two documents of a REMOTE machine (gx_store/remote_project_docs.rs).
         let remote_docs = self.gx_store_remote_project_doc_counters();

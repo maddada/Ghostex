@@ -195,30 +195,6 @@ pub(crate) fn gpui_status_indicator_session_from_value(
     })
 }
 
-pub(crate) fn gpui_menu_bar_project_activation_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onMenuBarProjectActivation==='function'){{bridge.onMenuBarProjectActivation(payload);}}else{{const pending=Array.isArray(bridge.pendingMenuBarProjectActivations)?bridge.pendingMenuBarProjectActivations:[];pending.push(payload);bridge.pendingMenuBarProjectActivations=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_menu_bar_session_activation_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onMenuBarSessionActivation==='function'){{bridge.onMenuBarSessionActivation(payload);}}else{{const pending=Array.isArray(bridge.pendingMenuBarSessionActivations)?bridge.pendingMenuBarSessionActivations:[];pending.push(payload);bridge.pendingMenuBarSessionActivations=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_command_palette_session_focus_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onCommandPaletteSessionFocus==='function'){{bridge.onCommandPaletteSessionFocus(payload);}}else{{const pending=Array.isArray(bridge.pendingCommandPaletteSessionFocusRequests)?bridge.pendingCommandPaletteSessionFocusRequests:[];pending.push(payload);bridge.pendingCommandPaletteSessionFocusRequests=pending;}}}})(); undefined;"
-    )
-}
-
-pub(crate) fn gpui_workspace_tab_session_selected_script(message: &serde_json::Value) -> String {
-    format!(
-        "(function(){{const bridge=window.ghostexGpui=window.ghostexGpui||{{}};const payload={message};if(typeof bridge.onWorkspaceTabSessionSelected==='function'){{bridge.onWorkspaceTabSessionSelected(payload);}}else{{const pending=Array.isArray(bridge.pendingWorkspaceTabSessionSelections)?bridge.pendingWorkspaceTabSessionSelections:[];pending.push(payload);bridge.pendingWorkspaceTabSessionSelections=pending;}}}})(); undefined;"
-    )
-}
-
 pub(crate) fn gpui_workspace_terminal_rename_command_input(
     command: GpuiWorkspaceTerminalRenameCommandKind,
     title: &str,

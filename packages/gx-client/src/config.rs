@@ -52,6 +52,13 @@ pub struct GxClientConfig {
     /// the chat milestone, so a host leaves this off and they are dropped unparsed like
     /// `apiRequestHandled`. Tools turn it on to check the chat wire types against live traffic.
     pub forward_chat_frames: bool,
+    /// Registers this socket as the daemon's renderer-command target (`rendererCommands: true` on
+    /// every subscribe) and hands each `rendererCommand` frame to the host as
+    /// [`crate::ClientOutput::RendererCommand`], which the host must answer with
+    /// [`crate::GxClient::answer_renderer_command`]. Only the desktop's local store turns it on: the
+    /// daemon sends every command to the FIRST open socket that registered, so a second registrant
+    /// in the same app would split the CLI's commands between two answerers.
+    pub renderer_commands: bool,
 }
 
 /// Written by hand so the bearer token can never reach a log through `{:?}`.
@@ -65,6 +72,7 @@ impl std::fmt::Debug for GxClientConfig {
             .field("client_id", &self.client_id)
             .field("held_revision", &self.held_revision)
             .field("forward_chat_frames", &self.forward_chat_frames)
+            .field("renderer_commands", &self.renderer_commands)
             .finish()
     }
 }

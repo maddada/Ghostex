@@ -22,8 +22,8 @@ use serde_json::Value;
 use crate::session::constants::{TERMINAL_TOOL_HOLD_MS, TIMER_TERMINAL_TOOL_HOLD};
 use crate::session::startup_sends::parse_iso_ms;
 use crate::session::terminal_text::{
-    ends_with_ellipsis, is_completed_tool_summary, joined_text, message_text, normalized_tool_text,
-    terminal_status_text,
+    ends_with_ellipsis, is_completed_tool_summary, is_shell_command_tool_label, joined_text,
+    message_text, normalized_tool_text, terminal_status_text,
 };
 use crate::state::{ChatContext, ChatState, TerminalStream};
 
@@ -414,8 +414,8 @@ pub fn terminal_stream_retired(stream: &TerminalStream, transcript: &[ChatMessag
 
 /// `applyTerminalActivity`: where one activity payload lands.
 ///
-/// Exactly one of four places: dropped as a completed-tool summary, the streaming bubble, the
-/// pending tool row, a transient status row, or the working strip's activity.
+/// Exactly one of four places: dropped as a completed-tool summary or a bare shell command, the
+/// streaming bubble, the pending tool row, a transient status row, or the working strip's activity.
 pub fn apply_terminal_activity(
     state: &mut ChatState,
     activity: Option<&Value>,
@@ -426,7 +426,8 @@ pub fn apply_terminal_activity(
         if matches!(
             kind(activity),
             CLAUDE_TERMINAL_TOOL_KIND | CLAUDE_TERMINAL_STATUS_KIND | AGENT_TERMINAL_STREAM_KIND
-        ) && is_completed_tool_summary(summary_text)
+        ) && (is_completed_tool_summary(summary_text)
+            || is_shell_command_tool_label(summary_text))
         {
             clear_tool_hold(state);
             state.pending.terminal_tool = None;

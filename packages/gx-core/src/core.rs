@@ -86,6 +86,20 @@ pub enum Intent {
     ClearSessionPatch {
         session: SessionKey,
     },
+    /// The user saw the session: acknowledge its attention now, or once it has been visible for
+    /// the minimum time (`attention.rs`).
+    AcknowledgeAttention {
+        session: SessionKey,
+    },
+    /// The timer an [`Effect::ArmAttentionAcknowledge`] asked for fired.
+    AttentionAcknowledgeDue {
+        session: SessionKey,
+        entered_at_ms: u64,
+    },
+    /// Escape was pressed in the session's terminal (`attention.rs`).
+    TerminalEscape {
+        session: SessionKey,
+    },
     /// The manual order of a project's sessions, written locally before `/api/updateSessionOrder`
     /// is awaited so the rows move under the user's finger.
     ReorderProjectSessions {
@@ -157,6 +171,36 @@ pub enum Effect {
     RefetchSidebarHud { machine: MachineId },
     /// `notificationFeedChanged` carries no payload: read `/api/readNotificationFeed`.
     RefetchNotificationFeed { machine: MachineId },
+    /// The machine's stream just went live: a first connect, or back after a loss, when the
+    /// payload-less announcements above may have been missed. Read the HUD, the recent projects
+    /// and the notification feed again (`refetch.rs`).
+    MachineLive { machine: MachineId },
+    /// An applied delta carried a project's domain row, or removed a project. Agents and project
+    /// Actions are project metadata, so the HUD is read again; the recent projects too when
+    /// `removed`, when the row says `is_recent_project`, or when the host lists the project as
+    /// recent (`refetch.rs`).
+    DomainProjectChanged {
+        machine: MachineId,
+        project_id: String,
+        is_recent_project: bool,
+        removed: bool,
+    },
+    /// Call back with [`Intent::AttentionAcknowledgeDue`] after `delay_ms`: the attention has not
+    /// been visible for the minimum time yet.
+    ArmAttentionAcknowledge {
+        session: SessionKey,
+        delay_ms: u64,
+        entered_at_ms: u64,
+    },
+    /// Tell the session's daemon: `/api/updateAgentActivity` with `event` and `agentName` when known.
+    ReportAgentActivity {
+        session: SessionKey,
+        report: crate::attention::AgentActivityReport,
+        agent_name: Option<String>,
+    },
+    /// A live delta moved a session of this computer into unacknowledged attention: play the
+    /// completion sound unless the user turned it off.
+    SessionAttentionRaised { session: SessionKey },
     /// Persist the user's last selected session of a project (it must survive restarts, and the
     /// project being closed and reopened).
     ///
@@ -192,6 +236,7 @@ pub struct Core {
     presentation: PresentationStore,
     focus: FocusState,
     tabs_generation: u64,
+    attention: crate::attention::AttentionTracker,
 }
 
 impl Core {
@@ -310,6 +355,12 @@ impl Core {
     /// Applies one event. Synchronous and free of I/O; `now_ms` is the host's clock.
     pub fn handle(&mut self, event: Event, now_ms: u64) -> Output {
         let mut output = Output::default();
+        let live_delta = match &event {
+            Event::Frame { machine, frame } => {
+                matches!(**frame, ServerEvent::PresentationDelta(_)).then(|| machine.clone())
+            }
+            _ => None,
+        };
         match event {
             Event::Frame { machine, frame } => {
                 self.handle_frame(&machine, *frame, now_ms, &mut output)
@@ -324,7 +375,9 @@ impl Core {
                 output.changes = self.presentation.set_domain_projects(&machine, projects);
             }
             Event::Connection { machine, update } => {
+                let was_live = self.is_live(&machine);
                 output.changes = self.presentation.apply_connection(&machine, update, now_ms);
+                self.note_went_live(&machine, was_live, &mut output);
             }
             Event::MachineUnloaded { machine } => {
                 output.changes = self.presentation.unload_machine(&machine);
@@ -335,6 +388,13 @@ impl Core {
             Event::Tick => output.changes = self.presentation.expire_patches(now_ms),
         }
         self.settle_after_change(&mut output);
+        self.attention.observe(
+            &self.presentation,
+            &output.changes,
+            live_delta.as_ref(),
+            now_ms,
+            &mut output.effects,
+        );
         output
     }
 
@@ -395,6 +455,7 @@ impl Core {
                 }
             }
             ServerEvent::PresentationDelta(frame) => {
+                let refetch = crate::refetch::delta_refetch(machine, &frame.delta);
                 output.changes = self.presentation.apply_delta(
                     machine,
                     &frame.header.server_id,
@@ -402,6 +463,9 @@ impl Core {
                     frame.delta,
                 );
                 self.resubscribe_if_server_changed(machine, output);
+                if output.changes.ignored.is_none() {
+                    output.effects.extend(refetch);
+                }
             }
             ServerEvent::WorkspaceGroupsChanged(frame) => self.handle_side_state(
                 machine,
@@ -476,10 +540,27 @@ impl Core {
 
     /// A stream snapshot or a snapshot-current answer means the stream is live.
     fn note_stream_acknowledged(&mut self, machine: &MachineId, now_ms: u64, output: &mut Output) {
+        let was_live = self.is_live(machine);
         let connection =
             self.presentation
                 .apply_connection(machine, ConnectionUpdate::Live, now_ms);
         output.changes.merge(connection);
+        self.note_went_live(machine, was_live, output);
+    }
+
+    fn is_live(&self, machine: &MachineId) -> bool {
+        self.presentation
+            .machine(machine)
+            .is_some_and(|entry| entry.connection().phase == crate::ConnectionPhase::Live)
+    }
+
+    /// Asks the host to read again what the stream only announces, once per transition to live.
+    fn note_went_live(&self, machine: &MachineId, was_live: bool, output: &mut Output) {
+        if !was_live && self.is_live(machine) {
+            output.effects.push(Effect::MachineLive {
+                machine: machine.clone(),
+            });
+        }
     }
 
     fn resubscribe_if_server_changed(&mut self, machine: &MachineId, output: &mut Output) {
@@ -574,6 +655,31 @@ impl Core {
             Intent::ClearSessionPatch { session } => {
                 output.changes = self.presentation.clear_session_patch(&session);
             }
+            Intent::AcknowledgeAttention { session } => crate::attention::acknowledge(
+                &mut self.attention,
+                &mut self.presentation,
+                &session,
+                now_ms,
+                output,
+            ),
+            Intent::AttentionAcknowledgeDue {
+                session,
+                entered_at_ms,
+            } => crate::attention::acknowledge_due(
+                &mut self.attention,
+                &mut self.presentation,
+                &session,
+                entered_at_ms,
+                now_ms,
+                output,
+            ),
+            Intent::TerminalEscape { session } => crate::attention::terminal_escape(
+                &mut self.attention,
+                &mut self.presentation,
+                &session,
+                now_ms,
+                output,
+            ),
             Intent::ReorderProjectSessions {
                 project,
                 session_ids,

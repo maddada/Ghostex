@@ -11,8 +11,8 @@
 //! sanitizer pass the TypeScript never makes.
 //!
 //! SEE-ALSO: packages/core-ui/spaces.ts (`applySidebarSpaceEditorResult`),
-//! packages/core-ui/space-colors.ts, tooling/gx-core/sidebar-page-frozen/metadata.ts,
-//! apps/desktop/src/app/gx_store/space_editor.rs.
+//! packages/core-ui/space-colors.ts, apps/desktop/src/app/gx_store/space_editor.rs. (The sidebar
+//! page's half was frozen in the deleted `tooling/gx-core/sidebar-page-frozen/metadata.ts`.)
 
 use serde_json::Value;
 

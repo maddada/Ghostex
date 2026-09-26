@@ -460,7 +460,7 @@ pub fn session_chat_option_agent(agent: Option<&str>) -> Option<SessionChatOptio
 }
 
 /// Slash commands whose dispatch can change what the statusline reports. Mirrors
-/// `sessionChatOptionCommandNames` in packages/core-ui/chat/session-chat-session-options.ts.
+/// `session_option_command_names` in packages/gx-chat-core/src/menus/option_catalog.rs.
 pub fn is_session_chat_option_command_text(agent: Option<&str>, text: &str) -> bool {
     if session_chat_option_agent(agent).is_none() {
         return false;
@@ -1101,8 +1101,8 @@ fn match_grok_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
 // `<model> · <effort>` for the Gemini rows, whose ids are model and effort
 // flattened (`gemini-3.8-flash-high`, see `agy models`), and a bare `<model>`
 // for the rows without an effort slider. The pill values are the catalog's
-// model part, exactly what `antigravityModelCommand` re-flattens when it types
-// `/model` (packages/core-ui/chat/session-chat-session-options.ts). Only names
+// model part, exactly what `antigravity_model_command` re-flattens when it types
+// `/model` (packages/gx-chat-core/src/menus/option_catalog.rs). Only names
 // the catalog knows are accepted, so a prose line that ends in `· high` never
 // becomes state.
 // ---------------------------------------------------------------------------
@@ -2121,7 +2121,7 @@ fn overlay_session_chat_option_selection(
 /// CDXC:AgentScreenDetection 2026-09-08 DECISION:
 /// User: terminal evidence always has the highest priority, including for Claude.
 /// This supersedes preserving an older Claude model variant over the model visible in the terminal; a visible (1M) suffix is parsed from the terminal itself.
-/// SEE-ALSO: packages/core-ui/chat/session-chat-session-options.ts preserves source priority when reads arrive separately.
+/// SEE-ALSO: `merge_options` in packages/gx-chat-core/src/session/fold.rs preserves source priority when reads arrive separately.
 fn merge_session_chat_option_selections(
     transcript: Option<SessionChatDetectedSelection>,
     statusline: Option<SessionChatDetectedSelection>,

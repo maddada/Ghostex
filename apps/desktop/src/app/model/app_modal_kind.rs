@@ -490,6 +490,7 @@ pub(crate) fn gpui_app_modal_kind_for_hotkey_action_id(
         "openCommandPalette" => Some(GpuiAppModalKind::CommandPalette),
         "openFindPrompts" => Some(GpuiAppModalKind::FindPrompts),
         "openSessionSearchPalette" => Some(GpuiAppModalKind::PreviousSessions),
+        "openProjectSearchPalette" => Some(GpuiAppModalKind::RecentProjects),
         "openPreviousSessions" => Some(GpuiAppModalKind::PreviousSessions),
         "agentsHub" | "openAgentsHub" => Some(GpuiAppModalKind::AgentsHub),
         "configureAgents" => Some(GpuiAppModalKind::ConfigureAgents),

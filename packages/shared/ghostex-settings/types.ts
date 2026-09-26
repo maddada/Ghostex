@@ -37,17 +37,24 @@ export type DefaultEditorCommand =
   'code' | 'code-insiders' | 'zed' | 'zeditor' | 'cursor' | 'windsurf' | 'codium' | 'subl' | 'other';
 export type CommandsPanelSide = 'bottom' | 'right';
 export type WindowGlassMode = 'auto' | 'frosted' | 'opaque';
-export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage';
+export type WindowGlassSource = 'wallpaper' | 'desktopAndWindows' | 'customImage' | 'video';
 export type WindowGlassImagePlacement = 'static' | 'desktop';
 export type PanelAnimationSpeed = 'off' | 'slow' | 'normal' | 'fast';
 export const MIN_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 40;
 export const MAX_WINDOW_GLASS_SIDEBAR_OPACITY_PERCENT = 100;
 export const MIN_WINDOW_GLASS_WORK_AREA_TINT_PERCENT = 0;
 export const MAX_WINDOW_GLASS_WORK_AREA_TINT_PERCENT = 100;
-export const DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT = 80;
-export const DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_LIGHT_PERCENT = 88;
-export const DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_DARK_PERCENT = 88;
-export const DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_LIGHT_PERCENT = 93;
+/**
+ * CDXC:Theming 2026-09-25 DECISION:
+ * User picked "Default to 20" for new users' Transparency strength, so a fresh install lands on a point of the
+ * strength slider (sidebar 88 / work area 81 in dark, 93 / 86 in light; `transparencyStrengthPatch(20)`) instead of
+ * showing Custom. Supersedes the sidebar 80 / work area 88 defaults. SEE-ALSO: the matching constants in
+ * apps/desktop/src/app/helpers/window_glass.rs.
+ */
+export const DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_DARK_PERCENT = 88;
+export const DEFAULT_WINDOW_GLASS_SIDEBAR_OPACITY_LIGHT_PERCENT = 93;
+export const DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_DARK_PERCENT = 81;
+export const DEFAULT_WINDOW_GLASS_WORK_AREA_TINT_LIGHT_PERCENT = 86;
 
 export function clampWindowGlassSidebarOpacityPercent(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
@@ -148,14 +155,6 @@ export function clampSidebarTooltipDelayMs(value: number): number {
 export type PreferredAgentInterface = 'terminal' | 'chat';
 export type SidebarSettingsPresetId = 'codex' | 'minimal' | 'detailed' | 'recommended';
 export type PromptEditorBackend = 'inherit' | 'monaco';
-/**
- * CDXC:SessionChat 2026-09-22 WHY:
- * Temporary. The chat's rules exist twice while the brain moves from the TypeScript bundle running
- * in QuickJS to the Rust core in `packages/gx-chat-core`, and this picks which one a chat view
- * creates. It is a developer switch on the Debugging page, not a product choice, and it goes away
- * with the TypeScript brain once the desktop app runs on `rust` alone.
- */
-export type ChatBrain = 'quickjs' | 'rust';
 export type SessionTitleGenerationAgent = 'codex' | 'cursor' | 'claude' | 'grok' | 'pi' | 'antigravity' | 'custom';
 export type AppShotsHotkey = 'both-command' | 'both-shift' | 'both-option' | 'double-left-shift' | 'double-left-option';
 export type KeepAwakeDurationMinutes = 0 | 120 | 300;
@@ -466,8 +465,6 @@ export type ghostexSettings = {
    */
   analyticsEnabled: boolean;
   debuggingMode: boolean;
-  /** Which chat brain a chat view creates. See {@link ChatBrain}; `quickjs` is the shipped one. */
-  chatBrain: ChatBrain;
   /**
    * CDXC:Diagnostics 2026-06-27-22:07:
    * Debugging Mode no longer acts as the broad disk-logging switch. Routine
@@ -664,7 +661,7 @@ export type ghostexSettings = {
   /**
    * Reveal thinking-owned tool calls by default in Session Chat. Chats that
    * use the composer's Verbose pill store their own value and stop following
-   * this (packages/core-ui/chat/session-chat-verbose-override.ts).
+   * this (the `verbose` store, packages/gx-chat-core/src/composer/storage.rs).
    */
   sessionChatVerboseMode: boolean;
   /** CDXC:SessionChat 2026-09-13 DECISION:
@@ -819,6 +816,13 @@ export type ghostexSettings = {
    */
   windowGlassImageDark: string;
   windowGlassImageLight: string;
+  /**
+   * CDXC:Theming 2026-09-23 SEE-ALSO:
+   * The videos Video glass plays in dark and light mode: `aerial:<id>` for an aerial wallpaper macOS has downloaded, or the absolute path of a .mov/.mp4/.m4v file (empty: none chosen, the live blur shows). `windowGlassVideoOnlyOnPower` pauses them on battery. window_glass.rs holds the user's decision and the GPUI macOS window plays them.
+   */
+  windowGlassVideoDark: string;
+  windowGlassVideoLight: string;
+  windowGlassVideoOnlyOnPower: boolean;
   /**
    * CDXC:Theming 2026-09-23 SEE-ALSO:
    * Whether the Wallpaper only or Custom image picture covers the window and moves with it (static) or stays still against the screen (desktop); window_glass.rs holds the user's decision and the GPUI macOS window places it.

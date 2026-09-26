@@ -281,16 +281,6 @@ pub(crate) fn gpui_command_palette_adjacent_group_focus_source_allowed(
     )
 }
 
-pub(crate) fn gpui_focused_pane_open_browser_hotkey_should_open(
-    shell_focus: ShellFocusTarget,
-) -> bool {
-    /*
-    CDXC:CommandPalette 2026-06-26-06:47:
-    Native `runFocusedPaneHotkeyAction("openBrowserPane")` dispatches through `handleNativeTerminalTitleBarAction`; a live command terminal hits the command-panel branch and default-returns. GPUI should preserve that no-op for CommandPane focus while keeping Browser creation for Agents, Browser, and project-editor focus.
-    */
-    !matches!(shell_focus, ShellFocusTarget::CommandPane)
-}
-
 pub(crate) fn gpui_focused_pane_rotate_agents_hotkey_target(
     active_mode: TitlebarMode,
     shell_focus: ShellFocusTarget,

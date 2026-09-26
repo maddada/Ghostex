@@ -6,13 +6,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::collections::{project_sidebar_collections, CollectionItem, CollectionsState};
-use super::groups::{group_summary, GroupBuild, GroupKind, GroupPlan};
-use super::inputs::{SidebarHostInputs, SidebarSettings, SidebarUiState, LOCAL_MACHINE_ID};
+use super::collections::{CollectionItem, CollectionsState, project_sidebar_collections};
+use super::groups::{GroupBuild, GroupKind, GroupPlan, group_summary};
+use super::inputs::{LOCAL_MACHINE_ID, SidebarHostInputs, SidebarSettings, SidebarUiState};
 use super::projects::ProjectMeta;
 use super::spaces::{
-    resolve_selected_space, selection_shows_project, space_for_group, SpaceSelection, SpacesState,
-    OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL,
+    OTHER_SPACE_ICON, OTHER_SPACE_ID, OTHER_SPACE_LABEL, SpaceSelection, SpacesState,
+    resolve_selected_space, selection_shows_project, space_for_group,
 };
 use super::view::{
     CollectionView, EmptyState, GroupView, MachineSummary, MachineTabView, OrderItem, OrderKind,
@@ -166,6 +166,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             let mut session_ids: BTreeSet<&str> = BTreeSet::new();
             let mut working_count = 0;
             let mut attention_count = 0;
+            let mut background_work_count = 0;
             for group_id in group_ids
                 .iter()
                 .filter(|group_id| shows_group(&view, group_id))
@@ -184,12 +185,16 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                     {
                         attention_count += 1;
                     }
+                    if session.row.shows_background_work() {
+                        background_work_count += 1;
+                    }
                 }
             }
             row.selected = selection.space_id() == row.id;
             row.contains_active_session = active_space_id.as_deref() == Some(row.id.as_str());
             row.working_count = working_count;
             row.attention_count = attention_count;
+            row.background_work_count = background_work_count;
         }
         spaces = rows;
     }
@@ -278,6 +283,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                     contains_active_session: sessions.iter().any(|session| session.is_focused),
                     working_count: summary.working_count,
                     attention_count: summary.attention_count,
+                    background_work_count: summary.background_work_count,
                     awake_count: summary.awake_count,
                 });
                 order.push(OrderItem {
@@ -299,6 +305,9 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
             }
             if session.row.activity == "attention" || session.row.pending_question_count > 0 {
                 machine_summary.attention_count += 1;
+            }
+            if session.row.shows_background_work() {
+                machine_summary.background_work_count += 1;
             }
         }
     }
@@ -325,6 +334,7 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
                 message: machine.message.clone(),
                 working_count: counts.working_count,
                 attention_count: counts.attention_count,
+                background_work_count: counts.background_work_count,
             }
         })
         .collect();

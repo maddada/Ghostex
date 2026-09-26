@@ -52,7 +52,7 @@ impl GhostexGpuiApp {
             TitlebarMode::Source => self.render_source_workarea_surface(cx),
             TitlebarMode::Kanban => self.render_kanban_workarea_surface(window, cx),
             TitlebarMode::Automate => self.render_automate_workarea_surface(window, cx),
-            TitlebarMode::Manage => self.render_manage_workarea_surface(cx),
+            TitlebarMode::Manage => self.render_manage_workarea_surface(window, cx),
             TitlebarMode::Extension(id) => self.render_extension_workarea_surface(id, window, cx),
         }
     }
@@ -260,9 +260,13 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn render_manage_workarea_surface(
-        &self,
+        &mut self,
+        window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) -> AnyElement {
+        if let Some(docs) = self.render_native_docs(window, cx) {
+            return docs;
+        }
         /*
         CDXC:Workarea 2026-06-24-10:12:
         Manage now checks the permanent app-owned CEF surface map first. When a real Manage runtime URL has already produced an owned CefSurface and the CEF/file-bridge gate permits replacement, render returns that normal-layout CEF child; otherwise the placeholder remains because real navigable URL and file-bridge authority are absent.

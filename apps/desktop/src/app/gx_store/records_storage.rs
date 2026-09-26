@@ -1,6 +1,6 @@
 //! The second table of the client-storage database: `records`, where an indexeddb-catalogued store
 //! keeps its rows. This file is the CONNECTION half; the row shape, the bounds and the bookkeeping
-//! are `packages/chat-runtime/src/storage_records.rs`, so a harness can drive them.
+//! are `packages/client-storage-native/src/storage_records.rs`, so a harness can drive them.
 //!
 //! CDXC:Settings 2026-09-21 WHY:
 //! Every Rust storage door before this one writes the `preferences` table, which is `(key, value)`
@@ -9,7 +9,7 @@
 //! `(key, store, value)` where `value` is the WHOLE ROW as JSON,
 //! `{ key, store, raw, bytes, updatedAt, revision, schemaVersion }` (`applyDatabaseMutations` in
 //! `packages/client-storage/adapters/database-transaction.ts`, `recordWrite` in
-//! `packages/chat-runtime/src/storage.rs`), with `bytes` the UTF-16 accounting of the key and the
+//! `packages/client-storage-native/src/storage.rs`), with `bytes` the UTF-16 accounting of the key and the
 //! raw together and `schemaVersion` the catalog row's `version`. Beside it are the `metadata` rows
 //! the table's writers all owe, which `apply_record_metadata` rebuilds rather than adjusts.
 //!
@@ -24,11 +24,11 @@
 //!
 //! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_ui_storage.rs (the `preferences` door, whose
 //! connection pool, busy timeout and error vocabulary this one borrows),
-//! packages/chat-runtime/src/storage_records.rs (everything this file hands a connection to).
+//! packages/client-storage-native/src/storage_records.rs (everything this file hands a connection to).
 
 use rusqlite::Connection;
 
-pub(crate) use ghostex_chat_runtime::{RecordRead, RecordStore, RecordWrite};
+pub(crate) use ghostex_client_storage::{RecordRead, RecordStore, RecordWrite};
 
 use super::sidebar_ui_storage::{with_read_connection, with_write_connection};
 
@@ -39,19 +39,18 @@ pub(crate) fn read_record_raw(
     now_ms: i64,
 ) -> Result<RecordRead, &'static str> {
     with_read_connection(|connection| {
-        ghostex_chat_runtime::read_record(connection, store, key, now_ms)
+        ghostex_client_storage::read_record(connection, store, key, now_ms)
     })
 }
 
 /// Every live record of one store whose key starts with `prefix`, as `(key, raw)` pairs.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
-/// `Storage::call` has `recordScan` on the JavaScript side and this door had no equivalent, so the
+/// `Storage::call` had `recordScan` on the JavaScript side and this door had no equivalent, so the
 /// Rust chat host could only read a record whose whole key it already knew. Two of the chat's own
 /// records are keyed by a SCOPE it cannot know in advance (`<sessionKey>#<scope>` for the option
-/// pills and the model-selection outbox, `storedSessionChatOptionKeys` in
-/// `packages/core-ui/chat/session-chat-session-options.ts`), and the draft save outbox is keyed by
-/// a revision, so a prefix scan is the only way to find them.
+/// pills and the model-selection outbox, `packages/gx-chat-core/src/menus/option_storage.rs`), and
+/// the draft save outbox is keyed by a revision, so a prefix scan is the only way to find them.
 ///
 /// The scan is a RANGE over the primary key rather than a pattern, so it reads the rows it returns
 /// and not the table: `key >= prefix AND key < <prefix with its last byte raised>`. A prefix whose
@@ -131,7 +130,7 @@ pub(crate) fn write_record(
         connection
             .execute_batch("BEGIN IMMEDIATE")
             .map_err(|_| "begin")?;
-        let result = ghostex_chat_runtime::write_record(connection, store, key, raw, now_ms);
+        let result = ghostex_client_storage::write_record(connection, store, key, raw, now_ms);
         match &result {
             Ok(RecordWrite::Stored) => {
                 connection.execute_batch("COMMIT").map_err(|_| "commit")?;
@@ -153,7 +152,7 @@ pub(crate) fn write_record(
 /// lists it, and `SessionChatStorageIndex` (`packages/core-ui/chat/session-chat-storage-index.ts`)
 /// decodes every key of its namespace with `JSON.parse`, which THROWS on `""` and takes the whole
 /// index down with it: one emptied `ghostex.sessionChat.outbox.` row would make `pendingDrafts`
-/// return nothing for every session, so the TypeScript brain would stop retrying every unsaved
+/// return nothing for every session, so the TypeScript outbox would stop retrying every unsaved
 /// draft on the computer. The store codecs say the same thing from the other side: `draftOutbox`
 /// and `sentHistory` are object codecs and `writeManaged` refuses a value they cannot decode.
 ///
@@ -174,7 +173,7 @@ pub(crate) fn remove_record(key: &str) -> Result<(), &'static str> {
         if removed == 0 {
             return finish_without_writing(connection);
         }
-        if ghostex_chat_runtime::recompute_record_metadata(connection).is_err() {
+        if ghostex_client_storage::recompute_record_metadata(connection).is_err() {
             finish_without_writing(connection)?;
             return Err("metadata");
         }

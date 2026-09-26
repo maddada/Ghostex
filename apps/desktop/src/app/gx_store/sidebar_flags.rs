@@ -4,16 +4,14 @@
 //! The decision is gx-core's (`sidebar_actions/flags.rs`) and this file is the call and the two
 //! things that follow it. Nothing happens before the call, which was checked rather than assumed:
 //! every caller of `updateSessionFlags` was found, and the only local-first session writes in the
-//! codebase belong to the React sidebar and never reach the native path. A call that fails leaves
-//! the row exactly as the daemon has it, and shows nothing, which is what the TypeScript does when
-//! its promise rejects.
+//! codebase belonged to the React sidebar and never reached the native path. A call that fails
+//! leaves the row exactly as the daemon has it, and shows nothing, which is what the TypeScript did
+//! when its promise rejected.
 //!
 //! Parking can also sleep, and that sleep is NOT reimplemented here: it is handed to the lifecycle
 //! path, which already owns its call, its three answers and its echo guard.
 //!
-//! SEE-ALSO: packages/gx-core/src/sidebar_actions/flags.rs,
-//! apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`updateSessionFlags`,
-//! `setSessionParked`).
+//! SEE-ALSO: packages/gx-core/src/sidebar_actions/flags.rs.
 
 use ghostex_gx_core::{
     Event, FLAGS_MESSAGE_TYPES, FlagsFollowUp, FlagsRequest, Intent, apply_flags_answer,
@@ -22,8 +20,8 @@ use ghostex_gx_core::{
 use serde_json::{Value, json};
 
 use super::host::now_ms;
+use super::rpc::gxserver_rpc_result_task;
 use crate::GhostexGpuiApp;
-use crate::app::helpers::gpui_gxserver_rpc_result;
 
 /// What this app run did with the flag actions the store owns.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -78,12 +76,14 @@ impl GhostexGpuiApp {
         let params = request.rpc_params.clone();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
-            let started = std::time::Instant::now();
-            let result = background
-                .spawn(async move {
-                    gpui_gxserver_rpc_result(path, &params, super::sidebar_lifecycle::rpc_timeout())
-                })
-                .await;
+            let started = web_time::Instant::now();
+            let result = gxserver_rpc_result_task(
+                &background,
+                path,
+                params,
+                super::sidebar_lifecycle::rpc_timeout(),
+            )
+            .await;
             let round_trip_ms = started.elapsed().as_millis() as u64;
             let _ = this.update(cx, |this, cx| {
                 this.gx_store_apply_flags_answer(&request, result.is_ok(), round_trip_ms, cx);

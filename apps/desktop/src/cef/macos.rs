@@ -69,9 +69,6 @@ unsafe extern "C" {
     fn GhostexGpuiCEFRemoveNativeViewFromSuperview(native_view: *mut c_void);
     fn GhostexGpuiCEFPrepareNativeViewForFocus(native_view: *mut c_void);
     fn GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view: *mut c_void, disabled: bool);
-    fn GhostexGpuiCEFSetNativeViewMouseFocusPassive(native_view: *mut c_void, passive: bool);
-    fn GhostexGpuiCEFSetNativeViewPassiveFocusGrant(native_view: *mut c_void, granted: bool);
-    fn GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(native_view: *mut c_void);
     fn GhostexGpuiCEFFocusNativeView(native_view: *mut c_void);
     fn GhostexGpuiCEFActivateNativeViewWindow(native_view: *mut c_void);
     fn GhostexGpuiCEFFocusGpuiRootView(native_view: *mut c_void);
@@ -289,27 +286,9 @@ pub(super) fn prepare_native_view_for_focus(native_view: *mut c_void) {
     }
 }
 
-pub(super) fn set_native_view_mouse_focus_passive(native_view: *mut c_void, passive: bool) {
-    unsafe {
-        GhostexGpuiCEFSetNativeViewMouseFocusPassive(native_view, passive);
-    }
-}
-
 pub(super) fn set_native_view_pinch_zoom_disabled(native_view: *mut c_void, disabled: bool) {
     unsafe {
         GhostexGpuiCEFSetNativeViewPinchZoomDisabled(native_view, disabled);
-    }
-}
-
-pub(super) fn set_native_view_passive_focus_grant(native_view: *mut c_void, granted: bool) {
-    unsafe {
-        GhostexGpuiCEFSetNativeViewPassiveFocusGrant(native_view, granted);
-    }
-}
-
-pub(super) fn return_focus_to_gpui_root(native_view: *mut c_void) {
-    unsafe {
-        GhostexGpuiCEFReturnFocusToGpuiRootFromNativeView(native_view);
     }
 }
 

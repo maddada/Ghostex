@@ -3,6 +3,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use ghostex_gx_core::Event;
+use ghostex_gx_protocol::RendererCommand;
 
 /// One item of the client's channel.
 #[derive(Clone, Debug, PartialEq)]
@@ -11,6 +12,10 @@ pub enum ClientOutput {
     Event(Event),
     /// Something the host should log. Never carries frame content.
     Diagnostic(ClientDiagnostic),
+    /// A command the daemon dispatched to this socket (only when the config registered it as the
+    /// renderer-command target). The host performs it and answers with
+    /// [`crate::GxClient::answer_renderer_command`] before the command's `timeout_ms`.
+    RendererCommand(RendererCommand),
 }
 
 /// A problem worth a log line. Payloads never appear here: a frame is described by its `type`
@@ -50,6 +55,8 @@ pub struct ClientStats {
     pub(crate) frames_forwarded: AtomicU64,
     pub(crate) parse_failures: AtomicU64,
     pub(crate) domain_project_reads: AtomicU64,
+    pub(crate) renderer_commands: AtomicU64,
+    pub(crate) renderer_answers: AtomicU64,
 }
 
 /// A copy of [`ClientStats`] at one moment.
@@ -70,6 +77,10 @@ pub struct ClientStatsSnapshot {
     pub parse_failures: u64,
     /// Successful `/api/listProjects` reads.
     pub domain_project_reads: u64,
+    /// `rendererCommand` frames handed to the host.
+    pub renderer_commands: u64,
+    /// `rendererCommandResult` messages written back to the daemon.
+    pub renderer_answers: u64,
 }
 
 impl ClientStats {
@@ -85,6 +96,8 @@ impl ClientStats {
             frames_forwarded: read(&self.frames_forwarded),
             parse_failures: read(&self.parse_failures),
             domain_project_reads: read(&self.domain_project_reads),
+            renderer_commands: read(&self.renderer_commands),
+            renderer_answers: read(&self.renderer_answers),
         }
     }
 }

@@ -11,9 +11,8 @@ const clientStorage = storageScope(["codeWrap"]);
  * as it scrolls in, the next session, the next launch — start the way the
  * reader last asked for.
  *
- * Same per-client localStorage shape the other chat preferences on this surface
- * use (session-chat-verbose-override.ts, session-chat-queue.ts); nothing here
- * reaches gxserver or the Ghostex settings.
+ * A per-client client-storage preference; nothing here reaches gxserver or the
+ * Ghostex settings.
  */
 
 const STORAGE_KEY = 'ghostex.sessionChat.codeWrap';

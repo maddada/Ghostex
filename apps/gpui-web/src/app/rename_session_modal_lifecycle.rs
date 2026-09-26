@@ -1,0 +1,1 @@
+../../../desktop/src/app/rename_session_modal_lifecycle.rs

@@ -1,6 +1,6 @@
 //! The text only an open row shows: a tool's arguments and result, a file card's diff.
 //!
-//! CDXC:SessionChat 2026-09-21 DECISION: User chose to stop sending text a collapsed row never shows. A row asks for its detail while it is drawn open (or, with File edit previews on, while a file card is on screen), and the host sends only those (`rowDetails` in native-host.ts).
+//! CDXC:SessionChat 2026-09-21 DECISION: User chose to stop sending text a collapsed row never shows. A row asks for its detail while it is drawn open (or, with File edit previews on, while a file card is on screen), and the host sends only those (`rowDetails` in gx-chat-core).
 
 use super::state::NativeChatView;
 use gpui::{Context, Window};

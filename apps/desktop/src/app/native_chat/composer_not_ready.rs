@@ -3,7 +3,7 @@
 //! first-run step and never painted an input box.
 //!
 //! "Message could not be sent" is useless for that, so the card says what is
-//! wrong and offers the two ways out React offers (session-chat-composer-not-
+//! wrong and offers the two ways out React offered (session-chat-composer-not-
 //! ready.tsx): a read-only excerpt of the CURRENT screen, re-read on every
 //! expand, and a switch to the session's terminal surface.
 

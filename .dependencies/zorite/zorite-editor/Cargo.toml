@@ -1,0 +1,33 @@
+[package]
+name = "zorite-editor"
+version = "0.11.1"
+edition = "2024"
+description = "A multi-line text editor for GPUI with live Markdown preview, tables, images, and math. The editor behind Zorite's notes."
+license = "MIT"
+repository = "https://github.com/packetThrower/zorite"
+homepage = "https://packetthrower.github.io/zorite/reference/crates/zorite-editor/"
+keywords = ["gpui", "editor", "markdown", "wysiwyg", "text-editor"]
+categories = ["gui", "text-editors"]
+
+[dependencies]
+# Shared workspace spec (the root pins the rev) so Cargo unifies to one gpui.
+gpui = { workspace = true }
+
+# Grapheme-cluster boundaries for cursor movement, so an emoji / combining mark
+# moves as a single unit (matches gpui's own input example).
+unicode-segmentation = "1"
+
+# Shared markdown-construct recognition (`zorite_markdown::syntax`): alert kinds,
+# table styles, heading scales — so WYSIWYG and the reader can never drift
+# apart on what a construct IS. The one sanctioned sibling-crate dependency
+# (see AGENTS.md); rendering stays entirely this crate's own.
+zorite-markdown = { path = "../zorite-markdown", version = "0.10", default-features = false }
+
+# Bidi index↔x mapping (#66). gpui's own `x_for_index` / `index_for_x` assume
+# byte index and x rise together, which is false for a right-to-left line — so
+# every caret/click lookup in this crate goes through `VisualMap` on RTL rows.
+gpui-bidi = { path = "../gpui-bidi", version = "0.1" }
+
+# The standalone demo needs a platform backend to open a real window (the `gpui`
+# crate alone has no app entry point in this setup — it's split into
+# `gpui_platform`, same as the host app). Shared workspace spec, one graph.

@@ -1,0 +1,1 @@
+../../../../desktop/src/app/native_chat/chat_hotkeys.rs

@@ -30,17 +30,17 @@
 //!
 //! **And the group id is the OLD RUNTIME's, handed in, never the core's focus.**
 //! CDXC:RemoteMachines 2026-09-21 WHY:
-//! Since remote focus part 2 step 2 the core's focus DOES follow a remote focus (the host's tab selection takes it, and the shadow mirror follows the runtime's own), but it still cannot stand in for the runtime's group, for two reasons. The core names the user-made group a row sits in (`group_of_session`), where `setRemotePresentationSessionFocus` always names the project's own group or the machine's Chats, and the string rule above answers differently for the two. And the runtime's `activeGroupId` still moves on paths the store does not see in the moment (a group attach from navigation history or a Space restore, a lifecycle replacement and its restores); the store learns those from the runtime's publish, which lags the command. Planning from `core.focus()` before step 2 sent a `keepView` the runtime did not on every second click inside the active remote project. So the group is what the runtime holds at the moment of the click, which [`RuntimeActiveGroup`] tracks from what the host SENT the runtime and what the runtime last PUBLISHED; its comment has the proof.
+//! Since remote focus part 2 step 2 the core's focus DOES follow a remote focus (the host's tab selection takes it), but it still cannot stand in for the runtime's group, for two reasons. The core names the user-made group a row sits in (`group_of_session`), where `setRemotePresentationSessionFocus` always names the project's own group or the machine's Chats, and the string rule above answers differently for the two. And the runtime's `activeGroupId` still moves on paths the store does not see in the moment (a group attach from navigation history or a Space restore, a lifecycle replacement and its restores); the store learns those from the runtime's publish, which lags the command. Planning from `core.focus()` before step 2 sent a `keepView` the runtime did not on every second click inside the active remote project. So the group is what the runtime holds at the moment of the click, which [`RuntimeActiveGroup`] tracks from what the host SENT the runtime and what the runtime last PUBLISHED; its comment has the proof.
 //!
 //! Refused, each with its reason: a LOCAL row (the store's own focus path owns it), a browser row
-//! (an app tab, not a session), an id that does not parse as a remote session, and a machine whose
+//! (an app tab, not a session), and an id that does not parse as a remote session. A machine whose
 //! rows did not come from THIS run's stream (not loaded yet, or drawn from the stored last-seen
-//! copy), because the old runtime reads the agent from its live presentations only and so sends a
-//! different payload for such a row than the store's rows would give.
+//! copy) is answered too, the way the old runtime answered it: see [`RemoteFocusPlan::live`].
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/sessions-and-focus.ts (`focusSession`'s remote
-//! branch, `focusChangesActiveProject`, `sessionPreferredAgentInterface`, `splitSessionRight`),
-//! apps/desktop/src/app/gx_store/sidebar_remote_focus.rs,
+//! Ported from the deleted `gxserver-runtime/sessions-and-focus.ts` (`focusSession`'s remote
+//! branch, `focusChangesActiveProject`, `sessionPreferredAgentInterface`, `splitSessionRight`).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_remote_focus.rs,
 //! apps/desktop/src/app/remote_conn/native_action.rs.
 
 use serde_json::{json, Map, Value};
@@ -102,6 +102,16 @@ impl PreferredInterfaceSettings {
 pub struct RemoteFocusPlan {
     /// The row, as a key that carries its machine.
     pub session: SessionKey,
+    /// Whether the machine's rows came from THIS run's stream.
+    ///
+    /// CDXC:RemoteMachines 2026-09-25 WHY:
+    /// For a machine that is offline and showing its last-seen rows, or connected with no snapshot
+    /// yet, the old runtime still posted the open, but WITHOUT `preferredInterface` (it read the
+    /// agent from `this.remotePresentations`, which holds only what a stream delivered), and its
+    /// attention acknowledgement found no row and did nothing. The planner used to refuse such a
+    /// click and hand it back, but no runtime path was left to take it: the click reached nobody.
+    /// It is answered here now with that same payload, and the host skips the acknowledgement.
+    pub live: bool,
     /// The acknowledgement the host sends the old runtime BEFORE the open, as `focusSession` and
     /// `splitSessionRight` both acknowledge first. Always sent: whether the row is in attention,
     /// and whether the minimum visible window defers the clear, is the runtime's to decide, so the
@@ -128,9 +138,9 @@ impl RemoteFocusPlan {
 
     /// The ids the open's tab-selected callback carries (`set_sidebar_gxserver_remote_attach_focus_state`
     /// builds them from the attach key with `gpui_remote_scoped_project_id` and
-    /// `gpui_remote_scoped_session_id`). Not sent by the host: the open sends it. The gate replays it
-    /// through `handleGpuiWorkspaceTabSessionSelected` to prove it moves the marks the forwarded
-    /// command used to move.
+    /// `gpui_remote_scoped_session_id`). Not sent by the host: the open sends it. The deleted parity
+    /// gate replayed it through `handleGpuiWorkspaceTabSessionSelected` to prove it moved the marks
+    /// the forwarded command used to move.
     pub fn tab_selection(&self) -> Value {
         json!({
             "projectId": self.session.project_key().to_workspace_project_id(),
@@ -138,7 +148,7 @@ impl RemoteFocusPlan {
         })
     }
 
-    /// The plan in the shape the parity gate compares: the payload that opens the pane and the
+    /// The plan in the shape the parity gate compared while the TypeScript ran: the payload that opens the pane and the
     /// marks that follow it.
     pub fn to_json(&self) -> Value {
         json!({
@@ -176,17 +186,9 @@ pub fn plan_remote_focus(
         return None;
     }
     let session = SessionKey::parse_remote_scoped_session_id(sidebar_session_id)?;
-    // CDXC:RemoteMachines 2026-09-21 WHY:
-    // Only a machine THIS run's stream delivered is answered here. `sessionPreferredAgentInterface`
-    // reads the row out of `this.remotePresentations`, which holds only what a stream delivered and
-    // loses the machine on disconnect; it never reads the last-seen map it draws faded rows from.
-    // So for a machine that is offline and showing its last-seen rows, or connected with no snapshot
-    // yet, the old runtime still posts the open but WITHOUT `preferredInterface`, while the store's
-    // last-seen rows would name the agent and add the field. Handing the click back keeps the one
-    // payload that has always been sent, exactly as `loaded_live` does for the set planners.
-    if core.presentation().loaded_live(&session.machine).is_none() {
-        return None;
-    }
+    // `sessionPreferredAgentInterface` reads the row out of the machine's LIVE presentation only
+    // (see `RemoteFocusPlan::live`), so a machine this run has not streamed opens without it.
+    let live = core.presentation().loaded_live(&session.machine).is_some();
     let split_right = kind == "splitSessionRight";
     // Split Right hands `focusLocalWorkspaceSession` a placement and NOTHING else: no `keepView`,
     // and no preferred interface either, so the two fields are the focus click's alone.
@@ -197,7 +199,7 @@ pub fn plan_remote_focus(
                 || focus_changes_active_project(runtime_active_group, &session)
         }
     };
-    let preferred_interface = match split_right {
+    let preferred_interface = match split_right || !live {
         true => None,
         false => settings
             .resolve(agent_id_of(core, &session))
@@ -217,6 +219,7 @@ pub fn plan_remote_focus(
         "version": SESSION_ATTENTION_ACKNOWLEDGE_MESSAGE_VERSION,
     });
     Some(RemoteFocusPlan {
+        live,
         session,
         attention_acknowledgement,
         keep_view,
@@ -230,7 +233,7 @@ pub fn plan_remote_focus(
 /// `postNativeProjectPathAction`'s payload, with the three options that ride only when they are
 /// set: the TypeScript spreads `options.placement ? { placement } : {}`, and an absent key is a
 /// different message from a `false` or a `null` to the strict parser on the other side.
-fn open_remote_session_terminal(
+pub fn open_remote_session_terminal(
     scoped_session_id: &str,
     keep_view: bool,
     preferred_interface: Option<&str>,

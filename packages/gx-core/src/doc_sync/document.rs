@@ -31,7 +31,8 @@
 //!   has nothing", which is the one input the empty rule exists to distinguish.
 //!
 //! SEE-ALSO: packages/gx-core/src/doc_sync/sync.rs,
-//! apps/desktop/sidebar/gxserver-runtime/workspace-groups-sync.ts.
+//! apps/desktop/src/app/gx_store/workspace_groups.rs (the TypeScript twin,
+//! `gxserver-runtime/workspace-groups-sync.ts`, was deleted with QuickJS on 2026-09-25).
 
 use serde_json::Value;
 

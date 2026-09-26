@@ -47,3 +47,16 @@ pub fn install(object: Map<String, Value>) {
         current.object = Arc::new(object);
     });
 }
+
+/// The desktop's storage folders. A page has no file system; the one reader (an extension modal's manifest size) finds nothing there and uses its default.
+pub struct GhostexStoragePaths;
+
+impl GhostexStoragePaths {
+    pub fn extensions_dir(&self) -> std::path::PathBuf {
+        std::path::PathBuf::from("/ghostex-web-state/extensions")
+    }
+}
+
+pub fn ghostex_storage_paths() -> GhostexStoragePaths {
+    GhostexStoragePaths
+}

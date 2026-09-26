@@ -1,9 +1,10 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { IconArrowUpRight, IconPencil, IconPuzzle, IconTrash } from '@tabler/icons-react';
 import { Button } from '@/packages/components/ui/button';
 import { Switch } from '@/packages/components/ui/switch';
 import { cn } from '@/packages/components/utils';
 import type { GhostexExtensionCatalogEntry, GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
+import './extension-grid.css';
 
 /** Same chrome gray as titlebar extension glyphs (`normalize_extension_titlebar_svg`). */
 const EXTENSION_ICON_COLOR = '#b9b9b9';
@@ -48,7 +49,87 @@ function placementLabel(extension: GhostexInstalledExtension): string {
   return placement[0].toUpperCase() + placement.slice(1);
 }
 
+/**
+ * CDXC:Extensions 2026-09-24 DECISION:
+ * User: every extension on the Settings Extensions page (built-in, installed, Store and the user's own views)
+ * is a card in a grid, three to a row, instead of a list row. One card shape serves all four so they read as
+ * one family: icon and the on/off switch (or Install) on top, title, description, an optional scope label,
+ * and a footer with the type or author on the left and the row actions, which appear on hover or focus.
+ * The switch is the state, so the old green status dot is gone; a card that is off dims its icon.
+ */
+export function ExtensionGridCard({
+  actions,
+  children,
+  className,
+  control,
+  dataAttributes,
+  description,
+  editing,
+  enabled = true,
+  icon,
+  leading,
+  meta,
+  scopeSummary,
+  title,
+}: {
+  actions?: ReactNode;
+  /** Extra content under the description, such as a secondary switch. */
+  children?: ReactNode;
+  className?: string;
+  control?: ReactNode;
+  dataAttributes?: Record<`data-${string}`, string>;
+  description: ReactNode;
+  editing?: boolean;
+  enabled?: boolean;
+  icon: ReactNode;
+  leading?: ReactNode;
+  meta?: ReactNode;
+  scopeSummary?: string;
+  title: ReactNode;
+}) {
+  return (
+    <div
+      className={cn('extension-grid-card', className)}
+      data-editing={editing ? 'true' : undefined}
+      data-enabled={enabled ? 'true' : 'false'}
+      {...dataAttributes}
+    >
+      <div className='extension-grid-card-head'>
+        {leading}
+        <span className='extension-grid-card-icon'>{icon}</span>
+        <span className='extension-grid-card-control'>{control}</span>
+      </div>
+      <div className='extension-grid-card-title'>{title}</div>
+      <p className='extension-grid-card-description'>{description}</p>
+      {children}
+      {scopeSummary ? <span className='extension-grid-card-scope'>{scopeSummary}</span> : null}
+      <div className='extension-grid-card-foot'>
+        <span className='extension-grid-card-meta'>{meta}</span>
+        {actions ? <span className='extension-grid-card-actions'>{actions}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Lays cards out three to a row. An inline editor passed after a card spans the whole row and, because the
+ * grid packs densely, lands directly under the row that holds that card while the cards after it fill the
+ * row first. That keeps the editor readable at any column count without measuring rows in script.
+ */
+export function ExtensionCardGrid({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className='extension-card-grid-container'>
+      <div className={cn('extension-card-grid', className)}>{children}</div>
+    </div>
+  );
+}
+
+export function ExtensionCardGridWide({ children }: { children: ReactNode }) {
+  return children ? <div className='extension-card-grid-wide'>{children}</div> : null;
+}
+
 export function InstalledExtensionCard({
+  editing,
   extension,
   iconUrl,
   onDetails,
@@ -59,6 +140,7 @@ export function InstalledExtensionCard({
   pending,
   scopeSummary,
 }: {
+  editing?: boolean;
   extension: GhostexInstalledExtension;
   iconUrl?: string;
   onDetails: () => void;
@@ -75,71 +157,77 @@ export function InstalledExtensionCard({
   scopeSummary?: string;
 }) {
   const supportsChatBar = extension.manifest.placements?.includes('chat-bar') === true;
+  const title = extension.manifest.title;
   return (
-    <div
-      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
-      data-extension-id={extension.id}
-    >
-      <span
-        aria-hidden='true'
-        className={cn('size-1.5 shrink-0 rounded-full', extension.state.enabled ? 'bg-emerald-400/80' : 'bg-white/20')}
-      />
-      <ExtensionIcon src={iconUrl} title={extension.manifest.title} />
-      <div className='min-w-0 flex-1'>
-        <div className='flex min-w-0 items-baseline gap-2'>
-          <span className='truncate text-sm font-normal text-foreground'>{extension.manifest.title}</span>
-        </div>
-        <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{extension.manifest.description}</p>
-        <p className='mt-0.5 truncate text-[13px] font-normal text-muted-foreground'>
-          {[
-            extension.manifest.author,
-            `v${extension.state.version}`,
-            placementLabel(extension),
-            supportsChatBar && extension.state.chatBarAutoOpen ? 'Opens automatically in sessions' : undefined,
-            scopeSummary,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
-      </div>
-      <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
-        {supportsChatBar ? (
-          <div className='mr-1 flex items-center gap-2 text-[13px] font-normal text-muted-foreground'>
-            Auto-open
-            <Switch
-              aria-label={`${extension.state.chatBarAutoOpen ? 'Disable' : 'Enable'} automatic opening for ${extension.manifest.title}`}
-              checked={extension.state.chatBarAutoOpen}
-              disabled={pending}
-              onCheckedChange={onSetChatBarAutoOpen}
-              size='sm'
-            />
-          </div>
-        ) : null}
-        <Button className='font-normal' disabled={pending} onClick={onDetails} size='sm' type='button' variant='ghost'>
-          Details
-        </Button>
-        {onEditScope ? (
-          <Button disabled={pending} onClick={onEditScope} size='icon-sm' type='button' variant='ghost'>
-            <IconPencil />
-            <span className='sr-only'>{`Choose where ${extension.manifest.title} is shown`}</span>
+    <ExtensionGridCard
+      actions={
+        <>
+          <Button
+            className='font-normal'
+            disabled={pending}
+            onClick={onDetails}
+            size='xs'
+            type='button'
+            variant='ghost'
+          >
+            Details
           </Button>
-        ) : null}
-        <Button disabled={pending} onClick={onRemove} size='icon-sm' type='button' variant='ghost'>
-          <IconTrash />
-          <span className='sr-only'>Remove</span>
-        </Button>
-      </div>
-      {/* CDXC:Settings 2026-09-09 DECISION: User: never show On or Off text beside a toggle in Settings. The switch itself is the state. */}
-      <div className='ml-1 flex shrink-0 items-center gap-2'>
+          {onEditScope ? (
+            <Button
+              aria-label={`Choose where ${title} is shown`}
+              disabled={pending}
+              onClick={onEditScope}
+              size='icon-xs'
+              type='button'
+              variant='ghost'
+            >
+              <IconPencil />
+            </Button>
+          ) : null}
+          <Button
+            aria-label={`Remove ${title}`}
+            disabled={pending}
+            onClick={onRemove}
+            size='icon-xs'
+            type='button'
+            variant='ghost'
+          >
+            <IconTrash />
+          </Button>
+        </>
+      }
+      control={
+        /* CDXC:Settings 2026-09-09 DECISION: User: never show On or Off text beside a toggle in Settings. The switch itself is the state. */
         <Switch
-          aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${extension.manifest.title}`}
+          aria-label={`${extension.state.enabled ? 'Disable' : 'Enable'} ${title}`}
           checked={extension.state.enabled}
           disabled={pending}
           onCheckedChange={onSetEnabled}
           size='sm'
         />
-      </div>
-    </div>
+      }
+      dataAttributes={{ 'data-extension-id': extension.id }}
+      description={extension.manifest.description}
+      editing={editing}
+      enabled={extension.state.enabled}
+      icon={<ExtensionIcon src={iconUrl} title={title} />}
+      meta={[extension.manifest.author, `v${extension.state.version}`, placementLabel(extension)].join(' · ')}
+      scopeSummary={scopeSummary}
+      title={title}
+    >
+      {supportsChatBar ? (
+        <label className='extension-grid-card-option'>
+          Open automatically in sessions
+          <Switch
+            aria-label={`${extension.state.chatBarAutoOpen ? 'Disable' : 'Enable'} automatic opening for ${title}`}
+            checked={extension.state.chatBarAutoOpen}
+            disabled={pending}
+            onCheckedChange={onSetChatBarAutoOpen}
+            size='sm'
+          />
+        </label>
+      ) : null}
+    </ExtensionGridCard>
   );
 }
 
@@ -147,45 +235,49 @@ export function StoreExtensionCard({
   entry,
   iconUrl,
   installedVersion,
+  installing,
   onDetails,
+  onInstall,
 }: {
   entry: GhostexExtensionCatalogEntry;
   iconUrl?: string;
   installedVersion?: string;
+  installing?: boolean;
   onDetails: () => void;
+  /** Starts the install consent flow; absent where the host cannot install from the list. */
+  onInstall?: () => void;
 }) {
-  const metadata = [entry.author, `v${entry.version}`, ...entry.categories.slice(0, 2)];
   return (
-    <div
-      className='extensions-row group/row flex min-h-20 items-center gap-3 px-3 py-2.5 transition-colors'
-      data-extension-id={entry.name}
-    >
-      <span
-        aria-hidden='true'
-        className={cn('size-1.5 shrink-0 rounded-full', installedVersion ? 'bg-emerald-400/80' : 'bg-white/20')}
-      />
-      <ExtensionIcon src={iconUrl} title={entry.title} />
-      <div className='min-w-0 flex-1'>
-        <div className='flex min-w-0 items-baseline gap-2'>
-          <span className='truncate text-sm font-normal text-foreground'>{entry.title}</span>
-          {installedVersion ? (
-            <span className='shrink-0 text-[13px] font-normal text-muted-foreground'>Installed</span>
-          ) : null}
-        </div>
-        <p className='mt-0.5 truncate text-[13px] font-normal text-foreground/75'>{entry.description}</p>
-        <p className='mt-0.5 truncate text-[13px] font-normal text-muted-foreground'>{metadata.join(' · ')}</p>
-      </div>
-      <div className='flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100'>
-        <Button className='font-normal' onClick={onDetails} size='sm' type='button' variant='ghost'>
+    <ExtensionGridCard
+      actions={
+        <Button className='font-normal' onClick={onDetails} size='xs' type='button' variant='ghost'>
           Details
           <IconArrowUpRight data-icon='inline-end' />
         </Button>
-      </div>
-      {installedVersion ? (
-        <span className='ml-1 shrink-0 text-[13px] font-normal text-muted-foreground'>
-          {installedVersion === entry.version ? 'Up to date' : `Installed v${installedVersion}`}
-        </span>
-      ) : null}
-    </div>
+      }
+      control={
+        installedVersion ? (
+          <span className='extension-grid-card-status'>
+            {installedVersion === entry.version ? 'Up to date' : `Installed v${installedVersion}`}
+          </span>
+        ) : onInstall ? (
+          <Button
+            className='font-normal'
+            disabled={installing}
+            onClick={onInstall}
+            size='xs'
+            type='button'
+            variant='outline'
+          >
+            {installing ? 'Installing…' : 'Install'}
+          </Button>
+        ) : null
+      }
+      dataAttributes={{ 'data-extension-id': entry.name }}
+      description={entry.description}
+      icon={<ExtensionIcon src={iconUrl} title={entry.title} />}
+      meta={[entry.author, `v${entry.version}`, ...entry.categories.slice(0, 1)].join(' · ')}
+      title={entry.title}
+    />
   );
 }

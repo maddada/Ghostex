@@ -12,7 +12,6 @@ mod browser_history;
 mod cef;
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod cef_component_window;
-mod chat_preview;
 mod component_store;
 mod ghostty_kit;
 mod ghostty_vt;
@@ -174,10 +173,6 @@ fn main() {
     if gpui_run_windows_remote_ssh_askpass() {
         return;
     }
-    if std::env::var_os("GHOSTEX_CHAT_PREVIEW_STATE").is_some() {
-        chat_preview::run();
-        return;
-    }
     #[cfg(target_os = "windows")]
     windows_updater::run_startup_hooks();
 
@@ -235,6 +230,7 @@ fn main() {
     // (GPUI previously lost panics to stderr; macOS counterpart:
     // NativeCrashDiagnostics).
     support_logs::install_panic_hook();
+    app::gx_store::initialize_client_storage_at_start();
     cef::prepare_application();
     #[cfg(target_os = "macos")]
     reconcile_gpui_managed_ghostty_config();
@@ -328,10 +324,10 @@ fn main() {
             gpui_key_binding_from_shared_hotkey("cmd+b", ToggleGpuiSidebarCollapsed, None),
             gpui_key_binding_from_shared_hotkey("cmd+alt+b", ToggleViewPanel, None),
             KeyBinding::new(SLEEP_FOCUSED_SESSION_DEFAULT_KEY, SleepFocusedSession, None),
-            gpui_key_binding_from_shared_hotkey("cmd+t", NewTerminalTab, None),
+            gpui_key_binding_from_shared_hotkey("cmd+shift+t", NewTerminalTab, None),
             gpui_key_binding_from_shared_hotkey("cmd+d", SplitFocusedTerminalRight, None),
             gpui_key_binding_from_shared_hotkey("cmd+shift+d", SplitFocusedTerminalDown, None),
-            gpui_key_binding_from_shared_hotkey("cmd+n", NewBrowserTab, None),
+            gpui_key_binding_from_shared_hotkey("cmd+t", NewBrowserTab, None),
             gpui_key_binding_from_shared_hotkey("cmd+ctrl+f", ToggleAgentsFocusMode, None),
             gpui_key_binding_from_shared_hotkey(
                 gpui_platform_hotkey_for_action("mergeAllTabs", "ctrl+shift+m"),

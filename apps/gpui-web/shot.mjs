@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Drives the page in headless Chrome over the DevTools protocol (no dependencies): waits in real time so the gxserver WebSocket can deliver, prints the page's console, and saves a screenshot.
-// usage: node shot.mjs <out.png> [--wait ms] [--size WxH] [--url url] [--click x,y]... [--type text] [--key Enter]
+// usage: node shot.mjs <out.png> [--wait ms] [--timeout ms] [--size WxH] [--url url] [--click x,y]... [--wheel x,y,deltaY] [--type text] [--key Enter]
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,7 +14,7 @@ const option = (name, fallback) => {
 };
 const steps = [];
 for (let i = 0; i < args.length; i += 2) {
-  if (['--click', '--rightclick', '--type', '--key', '--pause', '--move', '--eval', '--print', '--pasteimage'].includes(args[i])) {
+  if (['--click', '--rightclick', '--type', '--key', '--pause', '--move', '--eval', '--print', '--pasteimage', '--wheel'].includes(args[i])) {
     steps.push([args[i].slice(2), args[i + 1]]);
   }
 }
@@ -27,6 +27,8 @@ import { homedir } from 'node:os';
 
 // Playwright's Chrome for Testing when it is installed (the system Chrome stopped exposing DevTools in headless mode after its 153 update), else the system Chrome.
 function chromeBinary() {
+  // An explicit binary wins: Playwright's headless shell keeps working when Chrome for Testing stalls on a loaded machine (its navigations never commit).
+  if (process.env.SHOT_CHROME) return process.env.SHOT_CHROME;
   if (process.platform === 'win32') {
     const cache = join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData/Local'), 'ms-playwright');
     const builds = existsSync(cache) ? readdirSync(cache).filter(name => /^chromium-\d+$/.test(name)).sort().reverse() : [];
@@ -68,6 +70,13 @@ const chrome = spawn(
 );
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let socket;
+// A run that stalls (a page that stops answering, a navigation that never commits) would otherwise be killed from outside, skipping the `finally` below and leaving its Chrome and its ~100 MB profile behind. The watchdog ends it from inside.
+const watchdog = setTimeout(() => {
+  console.log('[timeout] the run did not finish; Chrome was stopped');
+  chrome.kill('SIGKILL');
+  rmSync(profileDir, { recursive: true, force: true });
+  process.exit(2);
+}, Number(option('--timeout', 90000)));
 
 try {
   let target;
@@ -120,6 +129,11 @@ try {
         await mouse('mousePressed', x, y, button);
         await mouse('mouseReleased', x, y, button);
       }
+    } else if (kind === 'wheel') {
+      // `x,y,deltaY`: one wheel event over the point, for reaching a sidebar row far down the list.
+      const [x, y, deltaY] = value.split(',').map(Number);
+      await mouse('mouseMoved', x, y, 'none');
+      await send('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY, pointerType: 'mouse' });
     } else if (kind === 'type') {
       // Real key events, one per character: the canvas listens for keydown, not for DOM text input.
       for (const character of value) {
@@ -163,5 +177,8 @@ try {
   await send('Browser.close');
 } finally {
   socket?.close();
-  chrome.kill();
+  clearTimeout(watchdog);
+  chrome.kill('SIGKILL');
+  // The throwaway Chrome profile is ~100 MB; without this every screenshot left one in $TMPDIR.
+  setTimeout(() => rmSync(profileDir, { recursive: true, force: true }), 500);
 }

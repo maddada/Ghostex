@@ -20,7 +20,7 @@ use crate::session::constants::{
 
 /// One message plus its position in the file-ordered transport list.
 ///
-/// The TypeScript keeps that position in a `WeakMap` keyed by object identity
+/// The TypeScript kept that position in a `WeakMap` keyed by object identity
 /// (`stampSessionChatArrivalOrder`). Rust has no object identity to key on, so the stamp rides
 /// with the message instead. It is a tie-break only: rows the server stamped with a byte offset
 /// never consult it.

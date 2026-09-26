@@ -11,12 +11,6 @@ use crate::app::helpers::*;
 use crate::*;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct GpuiSidebarNativeAppShotPromptMessage {
-    pub(crate) prompt: String,
-    pub(crate) session_id: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct GpuiSessionAttentionNotificationCandidate {
     pub(crate) body: String,
     pub(crate) icon_data_url: Option<String>,
@@ -145,51 +139,6 @@ pub(crate) fn gpui_menu_bar_status_item_visible_state(
         available_count: state.available_count,
         working_count: 0,
     })
-}
-
-pub(crate) fn gpui_sidebar_native_app_shot_prompt_from_json(
-    text: &str,
-) -> Result<GpuiSidebarNativeAppShotPromptMessage, ()> {
-    /*
-    CDXC:AppShots 2026-06-25-23:28:
-    App Shot prompt insertion is a strictly allowlisted session contract. Accept only version/type, one bounded gxserver presentation session id, and the already formatted prompt string; reject generic action names, paths as separate fields, command/stdout/stderr data, NULs, and oversized payloads before terminal ownership is consulted.
-
-    CDXC:AppShots 2026-06-26-04:27:
-    Remote App Shot insertion may identify only a machine-scoped `remote:<machine>:session:<project>:<session>` row. The parser must still reject malformed remote ids and any renderer-provided path, SSH, URL, token, command, output, or terminal text fields.
-    */
-    let value = serde_json::from_str::<serde_json::Value>(text).map_err(|_| ())?;
-    let object = value.as_object().ok_or(())?;
-    if object
-        .keys()
-        .any(|key| !["version", "type", "sessionId", "prompt"].contains(&key.as_str()))
-    {
-        return Err(());
-    }
-    if object.get("version").and_then(serde_json::Value::as_u64)
-        != Some(GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_MESSAGE_VERSION)
-        || object.get("type").and_then(serde_json::Value::as_str)
-            != Some(GPUI_SIDEBAR_NATIVE_APP_SHOT_PROMPT_MESSAGE_TYPE)
-    {
-        return Err(());
-    }
-    let session_id = object
-        .get("sessionId")
-        .and_then(serde_json::Value::as_str)
-        .map(str::trim)
-        .filter(|session_id| gpui_sidebar_gxserver_presentation_session_id_allowed(session_id))
-        .ok_or(())?
-        .to_string();
-    let prompt = object
-        .get("prompt")
-        .and_then(serde_json::Value::as_str)
-        .filter(|prompt| {
-            !prompt.trim().is_empty()
-                && prompt.chars().count() <= GPUI_NATIVE_APP_SHOT_PROMPT_MAX_CHARS
-                && !prompt.contains('\0')
-        })
-        .ok_or(())?
-        .to_string();
-    Ok(GpuiSidebarNativeAppShotPromptMessage { prompt, session_id })
 }
 
 pub(crate) fn gpui_spawn_custom_workspace_editor_command(

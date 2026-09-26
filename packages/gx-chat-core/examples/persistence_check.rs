@@ -1,15 +1,15 @@
 //! The cold start: what a chat knows before its first read answers, and what survives a restart.
 //!
-//! No recording can grade this. The two round trips are `store.ts`'s and
-//! `session-chat-presentation-cache.ts`'s, not `native-host.ts`'s: they never crossed the bridge,
-//! so a replay of the bridge's traffic sees neither the read at boot nor the write after a fold.
-//! Both had zero call sites until 2026-09-22, which is why a Ghostex that had just started drew an
-//! empty transcript and an empty bottom bar on a session it had been in five seconds earlier.
+//! The two round trips were `store.ts`'s and `session-chat-presentation-cache.ts`'s in the
+//! TypeScript brain, not `native-host.ts`'s, so the port first missed both: the read at boot and
+//! the write after a fold had zero call sites until 2026-09-22, which is why a Ghostex that had
+//! just started drew an empty transcript and an empty bottom bar on a session it had been in five
+//! seconds earlier.
 //!
 //! What it walks:
 //!
 //!  1. A boot asks for the retained record, a frame folds, and the debounce writes it back with the
-//!     record key, the stamp and the requested window the TypeScript writes.
+//!     record key, the stamp and the requested window the TypeScript wrote.
 //!  2. A SECOND core, given only those bytes, draws the same first document as the first core.
 //!  3. A record older than the seven-day bound, and one whose snapshot is over the two-megabyte
 //!     bound, are refused and deleted respectively.

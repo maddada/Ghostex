@@ -6,7 +6,7 @@ import {
 // Markdown body for chat bubbles: react-markdown + remark-gfm (per the
 // client-integration map both are in the root package.json for this purpose).
 //
-// Link handling is three-way (session-chat-links.ts classifies the href):
+// Link handling is three-way (session-chat-links.tsx classifies the href):
 // image destinations stay as thumbnails that open in the centered viewer,
 // machine-path links use the same typed pills as the composer and invoke the
 // host's Docs/Code route, and web URLs go to the host's browser (gpui: its own
@@ -53,8 +53,8 @@ import {
   type ReactNode,
 } from 'react';
 import ReactMarkdown, { defaultUrlTransform, type Components, type ExtraProps } from 'react-markdown';
-import referenceVisual from '@/packages/shared/session-chat-presentation/reference-visual.json';
-import markdownVisual from '@/packages/shared/session-chat-presentation/markdown-visual.json';
+import referenceVisual from '@/packages/gx-chat-core/visual/reference-visual.json';
+import markdownVisual from '@/packages/gx-chat-core/visual/markdown-visual.json';
 import remarkGfm from 'remark-gfm';
 
 /** CDXC:SessionChat 2026-09-17 SEE-ALSO: Native Markdown consumes these same typography and inline code metrics in native_chat/markdown_style.rs. */
@@ -99,7 +99,6 @@ import {
   estimateSessionChatHighlightSize,
   highlightSessionChatCode,
   resolveSessionChatCodeLanguage,
-  SESSION_CHAT_HIGHLIGHTING_AVAILABLE,
   sessionChatHighlightCache,
   sessionChatHighlightCacheKey,
   sessionChatHighlighter,
@@ -135,7 +134,7 @@ import {
   useSessionChatHostLinks,
   type SessionChatHostLinks,
 } from './session-chat-links';
-import { sessionChatMarkdownReference } from '@/packages/shared/session-chat-presentation/markdown-links';
+import { sessionChatMarkdownReference } from '@/packages/core-ui/chat/presentation/markdown-links';
 import {
   SESSION_CHAT_COPY_CODE_ATTRIBUTE,
   sessionChatTableToCsv,
@@ -172,9 +171,10 @@ const LINE_BREAK_REMARK_PLUGINS = [...REMARK_PLUGINS, remarkSessionChatHardBreak
 const REHYPE_PLUGINS = [rehypeSessionChatColorSwatches];
 
 /**
- * GitHub's five alert kinds, with GitHub's own labels and colour families. The
- * colours live in chat.css so both chat themes can carry their own value; this
- * side only picks the label and the icon.
+ * GitHub's five alert kinds, with GitHub's own labels. The colours are the
+ * `--alert-*` variables chat.css maps onto the rule and title; the React chat's
+ * theme rules defined them (deleted 2026-09-25), and no CEF page sets them now.
+ * This side only picks the label and the icon.
  */
 const ALERT_PRESENTATIONS: Record<SessionChatAlertKind, { Icon: typeof IconInfoCircle; label: string }> = {
   caution: { Icon: IconAlertOctagon, label: 'Caution' },
@@ -448,10 +448,7 @@ function MarkdownCodeBlock({ children, node }: ComponentProps<'pre'> & ExtraProp
   // would make the block jump a row shorter the moment highlighting lands.
   const source = nodeText(children);
   const text = source.replace(/\n$/, '');
-  // Hosts that cannot load the highlighter at all (the mobile webview has no
-  // origin to load anything from) build the flag as false, so no fence even
-  // starts a load that cannot succeed.
-  const shikiLanguage = SESSION_CHAT_HIGHLIGHTING_AVAILABLE ? resolveSessionChatCodeLanguage(fenceInfo) : null;
+  const shikiLanguage = resolveSessionChatCodeLanguage(fenceInfo);
   // Unlabelled and unsupported fences are a normal outcome, not a failure:
   // they stay exactly as they render today.
   const plainBlock = <pre>{children}</pre>;

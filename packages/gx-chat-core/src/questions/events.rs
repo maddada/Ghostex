@@ -1,6 +1,6 @@
 //! What happens when the work an action started comes back.
 //!
-//! The TypeScript awaits inside the action handler; the core cannot, so the same `try`, `catch`
+//! The TypeScript awaited inside the action handler; the core cannot, so the same `try`, `catch`
 //! and `finally` bodies live here and run when the host reports the answer. Each entry point
 //! matches on the request id or the storage key family c recorded, and answers `None` for
 //! anything that is not its own.

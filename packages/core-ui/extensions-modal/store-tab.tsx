@@ -1,53 +1,72 @@
-import { IconRefresh, IconSearch } from '@tabler/icons-react';
-import { Fragment, useMemo, useState, type ReactNode } from 'react';
-import { Button } from '@/packages/components/ui/button';
-import { Field, FieldLabel } from '@/packages/components/ui/field';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/packages/components/ui/input-group';
+import { IconSearch } from '@tabler/icons-react';
+import { Fragment, type ReactNode } from 'react';
+import type { GhostexExtensionCatalogEntry, GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
+import { ExtensionCardGrid, ExtensionCardGridWide, InstalledExtensionCard, StoreExtensionCard } from './extension-card';
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/packages/components/ui/select';
-import { APP_MODAL_SELECT_CONTENT_CLASS } from '@/packages/core-ui/app-modal-shell';
-import type {
-  GhostexExtensionCatalogEntry,
-  GhostexExtensionPlacement,
-  GhostexInstalledExtension,
-} from '@/packages/shared/ghostex-extensions';
-import { InstalledExtensionCard, StoreExtensionCard } from './extension-card';
-import { ExtensionEmptyState, ExtensionGroup } from './extension-surface';
+  catalogTypes,
+  extensionFilterMatches,
+  type ExtensionFilter,
+  type ExtensionFilterSubject,
+} from './extension-filter';
+import { ExtensionCardGroup, ExtensionEmptyState } from './extension-surface';
 
-type TypeFilter = 'all' | GhostexExtensionPlacement | 'terminal-pane';
-
-function entrySupportsType(
-  entry: Pick<GhostexExtensionCatalogEntry, 'kind' | 'placements'>,
-  type: TypeFilter
-): boolean {
-  if (type === 'all') return true;
-  return entry.kind === 'terminal-pane'
-    ? type === 'terminal-pane'
-    : entry.placements?.includes(type as GhostexExtensionPlacement) === true;
+export function installedFilterSubject(extension: GhostexInstalledExtension): ExtensionFilterSubject {
+  return {
+    categories: extension.manifest.categories,
+    searchText: [extension.manifest.description, extension.manifest.author],
+    source: 'installed',
+    title: extension.manifest.title,
+    types: catalogTypes(extension.manifest),
+  };
 }
 
-function typeLabel(type: TypeFilter): string {
-  if (type === 'all') return 'All types';
-  if (type === 'chat-bar') return 'Chat bar';
-  if (type === 'terminal-pane') return 'Terminal pane';
-  return type[0].toUpperCase() + type.slice(1);
+export function catalogFilterSubject(entry: GhostexExtensionCatalogEntry): ExtensionFilterSubject {
+  return {
+    categories: entry.categories,
+    searchText: [entry.description, entry.author],
+    source: 'store',
+    title: entry.title,
+    types: catalogTypes(entry),
+  };
+}
+
+export function storeCategories(
+  catalog: readonly GhostexExtensionCatalogEntry[],
+  installed: readonly GhostexInstalledExtension[]
+): string[] {
+  return Array.from(
+    new Set([
+      ...catalog.flatMap((entry) => entry.categories),
+      ...installed.flatMap((extension) => extension.manifest.categories),
+    ])
+  );
+}
+
+/** The installed list and the not-yet-installed Store entries that match the filter. */
+export function filterStoreExtensions(
+  filter: ExtensionFilter,
+  catalog: readonly GhostexExtensionCatalogEntry[],
+  installed: readonly GhostexInstalledExtension[]
+) {
+  const installedIds = new Set(installed.map((extension) => extension.id));
+  return {
+    installed: installed.filter((extension) => extensionFilterMatches(filter, installedFilterSubject(extension))),
+    store: catalog.filter(
+      (entry) => !installedIds.has(entry.name) && extensionFilterMatches(filter, catalogFilterSubject(entry))
+    ),
+  };
 }
 
 export function StoreTab({
   catalog,
+  editingScopeId,
+  filter,
   iconUrlForCatalogEntry,
   iconUrlForInstalled,
   installed,
-  loading,
   onEditScope,
+  onInstall,
   onInstalledDetails,
-  onRefresh,
   onRemove,
   onSetChatBarAutoOpen,
   onSetEnabled,
@@ -57,13 +76,15 @@ export function StoreTab({
   scopeSummaryFor,
 }: {
   catalog: readonly GhostexExtensionCatalogEntry[];
+  /** The installed extension whose scope editor is open, so its card shows the editing ring. */
+  editingScopeId?: string;
+  filter: ExtensionFilter;
   iconUrlForCatalogEntry: (entry: GhostexExtensionCatalogEntry) => string | undefined;
   iconUrlForInstalled: (extension: GhostexInstalledExtension) => string | undefined;
   installed: readonly GhostexInstalledExtension[];
-  loading: boolean;
   onEditScope?: (extension: GhostexInstalledExtension) => void;
+  onInstall?: (entry: GhostexExtensionCatalogEntry) => void;
   onInstalledDetails: (extension: GhostexInstalledExtension) => void;
-  onRefresh: () => void;
   onRemove: (extension: GhostexInstalledExtension) => void;
   onSetChatBarAutoOpen: (extension: GhostexInstalledExtension, autoOpen: boolean) => void;
   onSetEnabled: (extension: GhostexInstalledExtension, enabled: boolean) => void;
@@ -72,143 +93,57 @@ export function StoreTab({
   renderScopeEditor?: (extension: GhostexInstalledExtension) => ReactNode;
   scopeSummaryFor?: (extension: GhostexInstalledExtension) => string | undefined;
 }) {
-  const [query, setQuery] = useState('');
-  const [category, setCategory] = useState('all');
-  const [type, setType] = useState<TypeFilter>('all');
-  const categories = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...catalog.flatMap((entry) => entry.categories),
-          ...installed.flatMap((extension) => extension.manifest.categories),
-        ])
-      ).sort((left, right) => left.localeCompare(right)),
-    [catalog, installed]
-  );
-  const installedById = useMemo(() => new Map(installed.map((extension) => [extension.id, extension])), [installed]);
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const matchesFilters = (entry: GhostexExtensionCatalogEntry | GhostexInstalledExtension['manifest']) => {
-    const matchesQuery =
-      !normalizedQuery ||
-      `${entry.title} ${entry.description} ${entry.author} ${entry.categories.join(' ')}`
-        .toLocaleLowerCase()
-        .includes(normalizedQuery);
+  const filtered = filterStoreExtensions(filter, catalog, installed);
+  if (!filtered.installed.length && !filtered.store.length) {
     return (
-      matchesQuery && (category === 'all' || entry.categories.includes(category)) && entrySupportsType(entry, type)
+      <ExtensionEmptyState
+        description='Try a different search or clear one of the filters.'
+        icon={IconSearch}
+        title='No matching extensions'
+      />
     );
-  };
-  const filteredInstalled = installed.filter((extension) => matchesFilters(extension.manifest));
-  const filteredStore = catalog.filter((entry) => !installedById.has(entry.name) && matchesFilters(entry));
-  const shownCount = filteredInstalled.length + filteredStore.length;
-
+  }
   return (
-    <div className='flex flex-col gap-3'>
-      <div className='flex flex-wrap items-center gap-2'>
-        <Field className='min-w-48 flex-1 gap-0'>
-          <FieldLabel className='sr-only' htmlFor='extensions-store-search'>
-            Search extensions
-          </FieldLabel>
-          <InputGroup className='h-8'>
-            <InputGroupAddon>
-              <IconSearch aria-hidden='true' />
-            </InputGroupAddon>
-            <InputGroupInput
-              /*
-               * CDXC:Extensions 2026-08-30:
-               * This list is embedded in the Settings Extensions page, so the
-               * query field must never autofocus: opening Settings on this page
-               * would steal focus from the global settings search field.
-               */
-              className='h-8 font-normal'
-              id='extensions-store-search'
-              onChange={(event) => setQuery(event.currentTarget.value)}
-              placeholder='Search extensions'
-              value={query}
-            />
-          </InputGroup>
-        </Field>
-        <Select onValueChange={(value) => setType(value as TypeFilter)} value={type}>
-          <SelectTrigger aria-label='Filter extensions by type' className='w-36 font-normal'>
-            <SelectValue>{typeLabel(type)}</SelectValue>
-          </SelectTrigger>
-          <SelectContent align='end' className={APP_MODAL_SELECT_CONTENT_CLASS}>
-            <SelectGroup>
-              {(['all', 'view', 'chat-bar', 'popup', 'modal', 'terminal-pane'] as const).map((value) => (
-                <SelectItem key={value} value={value}>
-                  {typeLabel(value)}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        {categories.length ? (
-          <Select onValueChange={setCategory} value={category}>
-            <SelectTrigger aria-label='Filter extensions by category' className='w-40 font-normal'>
-              <SelectValue>{category === 'all' ? 'All categories' : category}</SelectValue>
-            </SelectTrigger>
-            <SelectContent align='end' className={APP_MODAL_SELECT_CONTENT_CLASS}>
-              <SelectGroup>
-                <SelectItem value='all'>All categories</SelectItem>
-                {categories.map((value) => (
-                  <SelectItem key={value} value={value}>
-                    {value}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-        ) : null}
-        <span className='shrink-0 text-[13px] font-normal text-muted-foreground'>{shownCount} shown</span>
-        <Button
-          aria-label='Refresh extensions'
-          disabled={loading}
-          onClick={onRefresh}
-          size='icon-sm'
-          type='button'
-          variant='ghost'
-        >
-          <IconRefresh />
-        </Button>
-      </div>
-      {shownCount ? (
-        <ExtensionGroup>
-          {filteredInstalled.map((extension) => (
-            <Fragment key={extension.id}>
-              <InstalledExtensionCard
-                extension={extension}
-                iconUrl={iconUrlForInstalled(extension)}
-                onDetails={() => onInstalledDetails(extension)}
-                onEditScope={onEditScope ? () => onEditScope(extension) : undefined}
-                onRemove={() => onRemove(extension)}
-                onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
-                onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
-                pending={pendingIds.has(extension.id)}
-                scopeSummary={scopeSummaryFor?.(extension)}
+    <div className='flex flex-col'>
+      {filtered.installed.length ? (
+        <ExtensionCardGroup count={filtered.installed.length} label='Installed'>
+          <ExtensionCardGrid>
+            {filtered.installed.map((extension) => (
+              <Fragment key={extension.id}>
+                <InstalledExtensionCard
+                  editing={editingScopeId === extension.id}
+                  extension={extension}
+                  iconUrl={iconUrlForInstalled(extension)}
+                  onDetails={() => onInstalledDetails(extension)}
+                  onEditScope={onEditScope ? () => onEditScope(extension) : undefined}
+                  onRemove={() => onRemove(extension)}
+                  onSetChatBarAutoOpen={(autoOpen) => onSetChatBarAutoOpen(extension, autoOpen)}
+                  onSetEnabled={(enabled) => onSetEnabled(extension, enabled)}
+                  pending={pendingIds.has(extension.id)}
+                  scopeSummary={scopeSummaryFor?.(extension)}
+                />
+                <ExtensionCardGridWide>{renderScopeEditor?.(extension)}</ExtensionCardGridWide>
+              </Fragment>
+            ))}
+          </ExtensionCardGrid>
+        </ExtensionCardGroup>
+      ) : null}
+      {filtered.store.length ? (
+        <ExtensionCardGroup count={filtered.store.length} label='Available'>
+          <ExtensionCardGrid>
+            {filtered.store.map((entry) => (
+              <StoreExtensionCard
+                entry={entry}
+                iconUrl={iconUrlForCatalogEntry(entry)}
+                installing={pendingIds.has(entry.name)}
+                key={entry.name}
+                onDetails={() => onStoreDetails(entry)}
+                onInstall={onInstall ? () => onInstall(entry) : undefined}
               />
-              <ScopeEditorInset>{renderScopeEditor?.(extension)}</ScopeEditorInset>
-            </Fragment>
-          ))}
-          {filteredStore.map((entry) => (
-            <StoreExtensionCard
-              entry={entry}
-              iconUrl={iconUrlForCatalogEntry(entry)}
-              key={entry.name}
-              onDetails={() => onStoreDetails(entry)}
-            />
-          ))}
-        </ExtensionGroup>
-      ) : (
-        <ExtensionEmptyState
-          description='Try a different search or clear one of the filters.'
-          icon={IconSearch}
-          title='No matching extensions'
-        />
-      )}
+            ))}
+          </ExtensionCardGrid>
+        </ExtensionCardGroup>
+      ) : null}
     </div>
   );
-}
-
-/** The scope editor drops its own horizontal padding for a host list's inset; this list has none, so it borrows the row's. */
-function ScopeEditorInset({ children }: { children: ReactNode }) {
-  return children ? <div className='px-3'>{children}</div> : null;
 }

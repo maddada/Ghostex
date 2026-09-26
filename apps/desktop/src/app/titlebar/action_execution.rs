@@ -224,9 +224,6 @@ impl GhostexGpuiApp {
         CDXC:CommandPane 2026-06-27-01:45:
         Default terminal Actions select and reveal their command tab but keep the current shell first responder, matching native `focusAfterCreate: false`. Only explicit command-pane focus routes and Debug Actions may transfer typing focus.
 
-        CDXC:CommandPane 2026-06-27-02:05:
-        After Action run-start metadata is installed and sidebar run-state feedback is posted, GPUI must immediately refresh the cached sanitized `commandPaneSessions` bridge like native `runNativeSidebarCommand.publish()`. The bridge may carry only session ids, active/focus booleans, sanitized titles, semantic statuses, sleeping/timer fields, and sanitized action command ids; command text, cwd/env, run ids, status-file paths, terminal output, persisted shell data, and project paths must stay out.
-
         CDXC:CommandPane 2026-06-27-07:54:
         Default terminal Action execution is mutually exclusive like native: mounted idle reuse writes the staged wrapper to the exact current command surface and submits Return without enqueueing startup data, while created or unmounted Action tabs receive an exact-slot launch payload for first mount. Do not use a launch payload as fallback for a mounted reused shell.
         */
@@ -327,7 +324,6 @@ impl GhostexGpuiApp {
             &command_id,
             &run_id,
             GpuiSidebarCommandRunState::Running,
-            cx,
         );
         self.refresh_sidebar_command_pane_sessions_if_changed(cx);
         let wrote_to_mounted_reuse = mounted_reuse_surface_available

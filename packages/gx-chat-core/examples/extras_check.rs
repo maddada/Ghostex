@@ -1,11 +1,10 @@
 //! Family f's wiring check: drives a [`ChatCore`] through the actions family f owns and asserts
 //! what the document says afterwards.
 //!
-//! The parity gate next door (`extras_parity.rs`) grades the rules; this grades the plumbing
-//! around them, which a table of pure inputs cannot reach: the panel folds and their storage
-//! write, the search cursor surviving a re-query, the terminal tail's two independent reads, the
-//! subagent viewer's page walk and poll, the Save to Markdown sheet's two Docs calls, and the
-//! stint word coming off the context rather than out of the core.
+//! It grades the plumbing around the rules, which a table of pure inputs cannot reach: the panel
+//! folds and their storage write, the search cursor surviving a re-query, the terminal tail's two
+//! independent reads, the subagent viewer's page walk and poll, the Save to Markdown sheet's two
+//! Docs calls, and the stint word coming off the context rather than out of the core.
 //!
 //! ```text
 //! cargo run --example extras_check
@@ -470,7 +469,7 @@ impl Core {
     fn new() -> Self {
         let mut core = Self {
             core: ChatCore::new(),
-            // 2026-09-22T12:00:00.000Z, the same instant `extras-parity.ts` fixes.
+            // 2026-09-22T12:00:00.000Z, a fixed instant so the clocks below are stable.
             context: ChatContext::at(1_790_078_400_000.0),
             last_effects: Vec::new(),
             document: Value::Null,

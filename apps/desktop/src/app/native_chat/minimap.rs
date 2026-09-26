@@ -7,10 +7,9 @@
 //! alone would pull off center.
 //!
 //! What a dash means, how wide it gets near the pointer, how long a preview runs
-//! and how far apart the dashes sit are shared with React's rail
-//! (packages/shared/session-chat-presentation/minimap.ts and minimap.json, read
-//! by packages/core-ui/chat/session-chat-minimap.tsx). The rows themselves are
-//! projected once per change in packages/shared/session-chat-controller/native-minimap.ts.
+//! and how far apart the dashes sit come from packages/gx-chat-core/visual/minimap.json
+//! (read by `extras/minimap_rail.rs` in the core). The rows themselves are
+//! projected once per change in packages/gx-chat-core/src/extras/minimap.rs.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -41,7 +40,7 @@ const TRANSCRIPT_MAX_WIDTH: f32 = 768.0;
 
 static SPEC: LazyLock<MinimapSpec> = LazyLock::new(|| {
     serde_json::from_str(include_str!(
-        "../../../../../packages/shared/session-chat-presentation/minimap.json"
+        "../../../../../packages/gx-chat-core/visual/minimap.json"
     ))
     .expect("shared minimap geometry")
 });
@@ -121,7 +120,7 @@ impl NativeChatView {
     }
 
     /// Scroll the transcript so the chosen prompt starts the viewport, the
-    /// `align: 'start'` React's rail uses. Aiming at a row before the end also
+    /// `align: 'start'` React's rail used. Aiming at a row before the end also
     /// releases the list's tail follow.
     fn minimap_jump(&mut self, item: usize, cx: &mut Context<Self>) {
         self.list.scroll_to(gpui::ListOffset {
@@ -132,8 +131,8 @@ impl NativeChatView {
     }
 
     fn minimap_dash_color(&self, distance: usize, in_view: bool, p: &ChatAppearance) -> Hsla {
-        // React paints in-view over hovered: both rules have the same weight and
-        // the in-view one comes last in session-chat-minimap.css.
+        // React painted in-view over hovered: both rules had the same weight and
+        // the in-view one came last in session-chat-minimap.css.
         if in_view {
             p.foreground.opacity(0.9)
         } else if distance == 0 {
@@ -158,7 +157,7 @@ impl NativeChatView {
             .max(px(0.0))
             .as_f32();
         // The rail keeps one `spacing` step per turn until it runs out of room,
-        // then it compresses, the way React's `max-height: 100%` rail does.
+        // then it compresses, the way React's `max-height: 100%` rail did.
         let natural = SPEC.spacing * s;
         let step = px(if available > 0.0 {
             natural.min((available / markers.len() as f32).max(1.0))
@@ -174,7 +173,7 @@ impl NativeChatView {
             .flex_shrink_0()
             .w(px(SPEC.rail_width * s))
             .child(
-                // The hairline React draws behind the dashes; visual only.
+                // The hairline React drew behind the dashes; visual only.
                 div()
                     .absolute()
                     .top_0()
@@ -249,10 +248,10 @@ impl NativeChatView {
     /// the rows stay centered on the composer.
     ///
     /// CDXC:SessionChat 2026-09-18 WHY:
-    /// React floats its rail over the transcript, which costs the rows no width. A native overlay
+    /// React floated its rail over the transcript, which cost the rows no width. A native overlay
     /// on an interactive region is out (AGENTS.md layout discipline), so the rail is a real column
     /// that may only eat the empty margin beside the centered rows. On a pane too narrow to have
-    /// that margin the rail is dropped rather than made to wrap the text earlier than React does.
+    /// that margin the rail is dropped rather than made to wrap the text earlier than React did.
     pub(super) fn minimap_row(&self, transcript: AnyElement, cx: &Context<Self>) -> AnyElement {
         if !self.minimap_visible() {
             return transcript;

@@ -53,9 +53,9 @@ impl GhostexGpuiApp {
         );
     }
 
-    /// Forwards the same `setSessionNote` command the React page posted to
-    /// the sidebar runtime (which owns the gxserver client and the
-    /// local/remote routing), with the checks the app-modal bridge applies,
+    /// Hands the same `setSessionNote` command the React page posted to
+    /// the Rust store (gx_store/terminal_lifecycle/session_edits.rs, which owns the
+    /// gxserver call and the local/remote routing), with the checks the app-modal bridge applies,
     /// then releases the window the dialog already removed.
     fn handle_gpui_session_note_modal_command(
         &mut self,

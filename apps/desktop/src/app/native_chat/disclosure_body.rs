@@ -1,8 +1,9 @@
 //! The body of an open disclosure: the vertical rail down its left and the
 //! indent that hangs its content off that rail.
 //!
-//! React draws it with `SessionChatExpansion` (session-chat-expansion.tsx) and
-//! the `.ghostex-chat-expansion*` rules in styles/chat.css: a two-pixel line in
+//! React drew it with `SessionChatExpansion` (session-chat-expansion.tsx) and
+//! the `.ghostex-chat-expansion*` rules in styles/chat.css (both deleted on
+//! 2026-09-25): a two-pixel line in
 //! `muted-foreground` at 42%, stretched over the whole body, with the content
 //! starting a fixed distance to the right of it. Everything that opens onto
 //! more rows uses it, so a reader can see at a glance which rows belong to the
@@ -10,7 +11,7 @@
 //! detail and tool run, an expanded tool's arguments and result, and the
 //! "+N previous tool calls" and "N tool calls" groups. Pressing the rail closes
 //! the disclosure it belongs to, as React's `.ghostex-chat-expansion-rail`
-//! button does.
+//! button did.
 
 use super::appearance::ChatAppearance;
 use super::state::NativeChatView;
@@ -33,7 +34,7 @@ pub(super) enum DisclosureRail {
 }
 
 impl DisclosureRail {
-    /// The centre of the two-pixel line. React reaches these two values through
+    /// The centre of the two-pixel line. React reached these two values through
     /// the marker-column tokens plus `.ghostex-chat-expansion`'s own negative
     /// inset, which `.ghostex-chat-work-detail` overrides and the other bodies
     /// do not; they are written out here because GPUI has no cascade to inherit
@@ -55,7 +56,7 @@ const RAIL_BOX: f32 = 15.0;
 /// `calc(0.75rem - 5px)` on `.ghostex-chat-expansion`.
 const RAIL_TO_CONTENT: f32 = 7.0;
 
-/// Hovering the rail's box lights the line inside it, as React's `:hover::before` does.
+/// Hovering the rail's box lights the line inside it, as React's `:hover::before` did.
 const RAIL_GROUP: &str = "native-chat-disclosure-rail";
 
 /// Wrap an open disclosure's rows in the rail that says they belong to the
@@ -77,7 +78,7 @@ pub(super) fn disclosure_body(
     div()
         .flex()
         .min_w_0()
-        // Negative on the marker rail, as React's `margin-inline-start: -5px` is: the box widens
+        // Negative on the marker rail, as React's `margin-inline-start: -5px` was: the box widens
         // into the row's own padding, never over a neighbouring control.
         .ml(px((rail.centre() - RAIL_BOX / 2.0) * s))
         .gap(px(RAIL_TO_CONTENT * s))

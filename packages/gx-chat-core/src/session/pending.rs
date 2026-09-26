@@ -3,8 +3,8 @@
 //! Ported from `packages/core-ui/chat/session-chat-pending.ts`. Pending echoes render identically
 //! to real user turns, so replacement by the real transcript turn causes no visible state change.
 //!
-//! The TypeScript's `afterMessageId` has three states; only two ever occur, because both
-//! constructors write an explicit id or an explicit `null`. `None` here is that `null`: no prior
+//! The TypeScript's `afterMessageId` had three states; only two ever occurred, because both
+//! constructors wrote an explicit id or an explicit `null`. `None` here is that `null`: no prior
 //! row, so the boundary falls back to the send time.
 
 use std::collections::BTreeMap;

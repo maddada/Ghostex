@@ -2,7 +2,7 @@
 //! references, the note and the host-action menu.
 //!
 //! The twenty keys below are the ones `publish` in
-//! `packages/shared/session-chat-controller/native-host.ts` builds from composer state; everything
+//! `packages/shared/session-chat-controller/native-host.ts` built from composer state; everything
 //! they read comes out of [`ChatState`], never out of the half-built document.
 
 use ghostex_gx_protocol::Tri;
@@ -76,17 +76,14 @@ pub fn document(state: &ChatState, _context: &ChatContext, into: &mut Document) 
     into.composer_collapsed = collapse_eligible && composer.collapsed;
 
     into.composer_overflow = composer.overflow.clone();
-    // `stash`, `attach` and `terminal` are `!preview` (`native-host.ts:529`): the Chat Lab has no
-    // stash bridge, no attachment picker and no terminal to switch to, so those controls stay out
-    // of the toolbar instead of doing nothing when clicked. They read the host's own capability
-    // block first, so a transport narrower than the desktop's can still clear one.
-    let live = state.core.preview_settings.is_none();
+    // The actions read the host's own capability block, so a transport narrower than the
+    // desktop's can clear one.
     into.composer_actions = ComposerActions {
         summary: composer.actions.summary,
         note: composer.actions.note && state.session.agent_session_id.is_some(),
-        stash: composer.actions.stash && live,
-        attach: composer.actions.attach && live,
-        terminal: composer.actions.terminal && live,
+        stash: composer.actions.stash,
+        attach: composer.actions.attach,
+        terminal: composer.actions.terminal,
     };
     into.composer_chrome = composer
         .chrome

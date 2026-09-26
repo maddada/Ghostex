@@ -3,13 +3,14 @@
 //! `docs/2026-09-21/rust-chat/HOST-TODO.md` section 3: the recovery checkpoints, the durable save
 //! outbox, the sent-prompt history and the delivery receipts need disk and a retry worker, which a
 //! platform-neutral core cannot have. The brain reads none of them; the host keeps writing them
-//! exactly as the TypeScript does and hands the core only what the boot read carries.
+//! exactly as the TypeScript did and hands the core only what the boot read carries.
 //!
 //! CDXC:Drafts 2026-09-22 DECISION:
 //! User: a user's existing drafts, queued prompts, history and outbox must survive the switch to the
 //! Rust brain. Every key format, field name and cap below is the TypeScript's, from
 //! `packages/core-ui/chat/session-chat-draft-recovery.ts`, `session-chat-draft-outbox.ts` and
-//! `session-chat-sent-history.ts`, so a record written by one brain is read back by the other.
+//! `session-chat-sent-history.ts`, so a record written before the switch reads back unchanged and
+//! the Stashed Prompts modal, which still uses those files, reads what this host writes.
 
 // One item here has no caller: `DRAFT_SAVE_FAILURE`, the composer's save-failure line, which no
 // family has ported into the document yet. It is kept because the sentence is the user's and must
@@ -222,7 +223,7 @@ pub(super) fn record_sent_prompt(
         "sent:{}",
         delivery_id
             .map(str::to_string)
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+            .unwrap_or_else(super::platform::uuid_v4)
     );
     let prompt = SentPrompt {
         prompt_id: prompt_id.clone(),
@@ -245,7 +246,7 @@ pub(super) fn record_sent_prompt(
     };
     let raw = serde_json::to_string(&prompt).map_err(|_| "schema")?;
     // `listSentSessionChatMessages()` runs on both sides of `sentIndex.set`, and this door needs
-    // the first pass more than the TypeScript does: see `prune_sent_history`.
+    // the first pass more than the TypeScript did: see `prune_sent_history`.
     prune_sent_history(MAX_SENT_MESSAGES - 1, now_ms);
     storage::write(
         &StorageKey {
@@ -338,7 +339,7 @@ fn prune_sent_history(keep: usize, now_ms: i64) {
 ///
 /// CDXC:SavedPrompts 2026-09-22 WHY:
 /// This is a SCAN of a host-owned store, not a record read, which is why the core cannot answer it
-/// from anything the boot read carries. `native-composer.ts` is
+/// from anything the boot read carries. The deleted `native-composer.ts` was
 /// `listSentSessionChatMessages().map(message => message.content).reverse()`, and all three steps
 /// are load bearing: the list is sorted newest first and capped at 50, the `reverse()` is what makes
 /// the ring oldest-first so `recallPreviousSessionChatDraft` walks backwards from the end, and the
@@ -346,8 +347,8 @@ fn prune_sent_history(keep: usize, now_ms: i64) {
 /// that grew past the cap. A prompt with no `content` reads as the empty string, which is what
 /// `message.content` does for a record written before that field existed.
 ///
-/// The host reads it lazily, exactly like `native-host.ts:1210`: the TypeScript asks only on the
-/// first Up of a chat, so a session that never recalls never touches the store.
+/// The host reads it lazily, exactly like `native-host.ts:1210` did: the TypeScript asked only on
+/// the first Up of a chat, so a session that never recalls never touches the store.
 pub(super) fn sent_history_contents(now_ms: i64) -> Vec<String> {
     let mut contents: Vec<String> = sorted_sent_prompts(now_ms)
         .into_iter()

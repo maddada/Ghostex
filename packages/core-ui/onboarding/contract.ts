@@ -106,6 +106,7 @@ export type OnboardingModalProps = {
    * project and session exist; rejects with the host's error message, in which case the Get started panel
    * stays put and shows it. The finished screen is only shown after it resolves. */
   onFinishFirstLaunch: (options: { agentId: OnboardingAgentChoice; path: string }) => Promise<void>;
-  /** Open the full Settings modal ("Advanced settings later"). */
-  onOpenSettings?: () => void;
+  /** Open the full Settings modal ("Advanced settings later"), or one of its pages (the look card's "More theme
+   * options" opens the Theme page). */
+  onOpenSettings?: (tab?: 'theme') => void;
 };

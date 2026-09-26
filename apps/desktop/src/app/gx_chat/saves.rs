@@ -19,7 +19,7 @@ use ghostex_gx_chat_core::HostRequest;
 
 use super::host_records::{self, DraftVersion, PendingDraft, RecoveryCheckpoint};
 use super::outbox::{self, DraftWorker};
-use super::worker::{World, now_millis, publish};
+use super::world::{World, now_millis, publish};
 
 /// How many saves may be in flight before the oldest is forgotten.
 ///
@@ -38,8 +38,8 @@ const MAX_REMEMBERED_DELIVERIES: usize = 256;
 
 /// Writes the sent history for every draft gxserver reports it delivered, once each.
 ///
-/// `onDeliveredDrafts` in `native-host.ts` hands the receipts to `composer('deliveries')`, which is
-/// `recordDeliveredSessionChatDrafts`. The core folds them onto `session.synced_draft`
+/// `onDeliveredDrafts` in `native-host.ts` handed the receipts to `composer('deliveries')`, which
+/// was `recordDeliveredSessionChatDrafts`. The core folds them onto `session.synced_draft`
 /// (`merge_draft_state`), so the host reads them there rather than needing a callback into the
 /// core.
 pub(super) fn record_deliveries(world: &mut World, key: &str) {

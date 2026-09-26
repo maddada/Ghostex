@@ -28,7 +28,7 @@
 //! emails and usage never reach a log line: only counts do.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_accounts/, apps/desktop/src/app/native_sidebar/menus.rs
-//! (the panel a flyout or the launcher opens), tooling/gx-core/account-menu-parity.ts.
+//! (the panel a flyout or the launcher opens).
 
 use std::time::Duration;
 
@@ -110,8 +110,8 @@ impl GhostexGpuiApp {
         let launcher = command["type"] == "agentAccounts";
         // What the old dispatcher did for this command before handing it on, and which it now
         // never reaches: the instant mounting tab of a launch (CDXC:AgentLauncher 2026-09-19
-        // DECISION), only when there is a sidebar page, since it returned before staging otherwise.
-        if launcher && command["action"] == "launch" && self.sidebar.is_some() {
+        // DECISION).
+        if launcher && command["action"] == "launch" {
             self.stage_agent_launch_placeholder(command, cx);
         }
         let menu_host = self.gx_store_menu_host();
@@ -297,7 +297,8 @@ impl GhostexGpuiApp {
         if let Some(account_id) = account_id {
             command["accountId"] = Value::String(account_id);
         }
-        // The runtime writes the primary agent id on this launch, which the menus read.
+        // This launch writes the primary agent id (gx_store/primary_launcher.rs; the runtime until
+        // 2026-09-25), which the menus read.
         self.gx_store_note_menu_host_write(&command);
         let message =
             plan_agent_run(self.gx_store.sidebar_list.view(), &command).and_then(|plan| {
@@ -307,7 +308,7 @@ impl GhostexGpuiApp {
                 })
             });
         match message {
-            Some(message) if self.sidebar.is_some() => {
+            Some(message) => {
                 self.gx_store.sidebar_accounts.counters.launches += 1;
                 self.dispatch_gpui_sidebar_host_message(message, cx);
             }

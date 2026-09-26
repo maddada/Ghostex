@@ -146,7 +146,8 @@ pub(crate) fn register_ghostex_gpui_main_menu_actions(
 /// CEF and Ghostty views handle them natively), and Window → Minimize/Zoom.
 /// Undo/Redo are omitted from the GPUI-owned menu because gpui routes them
 /// through app actions instead of first-responder selectors; the macOS CEF hook
-/// installs them after each menu replacement.
+/// installs them after each menu replacement, targeted at an object that picks
+/// the focused web page or [`dispatch_text_input_history_from_edit_menu`].
 pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
     source_workarea_cef_owns_native_focus: bool,
 ) -> Vec<gpui::Menu> {
@@ -200,4 +201,46 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
             MenuItem::action("Zoom", ZoomGhostexGpuiWindow),
         ]),
     ]
+}
+
+/// Runs Edit > Undo or Redo against the focused text field of the active GPUI window. The macOS
+/// menu target calls this when no web page owns the keyboard; a Cmd+Z the text field already took
+/// never gets here.
+#[cfg(target_os = "macos")]
+pub(crate) fn dispatch_text_input_history_from_edit_menu(
+    gpui_root_view: *mut std::ffi::c_void,
+    redo: bool,
+) -> bool {
+    let async_app = GPUI_KEYBOARD_ROUTER_TARGETS.with(|targets| {
+        let targets = targets.borrow();
+        targets
+            .get(&(gpui_root_view as usize))
+            .or_else(|| targets.values().next())
+            .map(|target| target.async_app.clone())
+    });
+    let Some(async_app) = async_app else {
+        return false;
+    };
+    async_app
+        .foreground_executor()
+        .spawn({
+            let async_app = async_app.clone();
+            async move {
+                async_app.update(|cx| {
+                    let Some(window) = cx.active_window() else {
+                        return;
+                    };
+                    let _ = window.update(cx, |_, window, cx| {
+                        let action: Box<dyn gpui::Action> = if redo {
+                            Box::new(gpui_component::input::Redo)
+                        } else {
+                            Box::new(gpui_component::input::Undo)
+                        };
+                        window.dispatch_action(action, cx);
+                    });
+                });
+            }
+        })
+        .detach();
+    true
 }

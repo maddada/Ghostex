@@ -1,19 +1,16 @@
 //! Where each `Effect` goes: this thread, or the renderer's own dispatch.
 //!
-//! The core returns `Vec<Effect>` from every `handle`. Half of them are I/O this host performs off
-//! the UI thread (gxserver is not one of them: see below); the other half are things only the view
-//! can do, because it owns the composer field, the clipboard, the window and the app shell. Those
-//! ride back in the frame's `requests` array in the exact wire form
+//! The core returns `Vec<Effect>` from every `handle`. Half of them are I/O this host performs
+//! itself (storage, timers, and the chat socket in `transport.rs`); the other half are things only
+//! the view can do, because it owns the composer field, the clipboard, the window and the app
+//! shell. Those ride back in the frame's `requests` array in the exact wire form
 //! `apps/desktop/src/app/native_chat/state.rs` already dispatches, so no drawing or dispatch code
 //! changes when the brain does.
 //!
 //! CDXC:SessionChat 2026-09-22 WHY:
-//! `Effect::SendRpc` is forwarded as a `rpc` request rather than called from this thread, and the
-//! socket stays the one the app runtime already owns. `packages/gx-client` deliberately refuses to
-//! subscribe to a session chat (a second subscriber starts a new epoch and rebroadcasts a snapshot
-//! to every client) and has no public `POST /api/{method}`, so a Rust-side transport would be a
-//! second client against the same daemon, not a reuse of the first. The brain moves first; the
-//! transport follows when `gx-client` grows a chat subscription.
+//! `Effect::SendRpc` is forwarded as a `rpc` request rather than called from this thread: the view
+//! already performs every chat RPC (`native_chat/rpc.rs`, with the remote machine's target and the
+//! web build's `fetch`), and an answer is `resolve`d back by the id the core allocated.
 
 use ghostex_gx_chat_core::{Effect, HostRequest, OpenTarget, RequestKind, UserAction};
 use serde_json::{Map, Value};
@@ -26,25 +23,25 @@ pub(super) enum Routed {
     Renderer(Box<HostRequest>),
     /// The core itself, as a gesture it asked to have replayed at it.
     SelfAction(Box<UserAction>),
-    /// Nothing, on purpose, because the QuickJS brain performs nothing either. Named so the
+    /// Nothing, on purpose, because the QuickJS brain performed nothing either. Named so the
     /// deliberate no-op is visible in the counters rather than looking like a lost effect.
     Swallowed(&'static str),
 }
 
-/// The host actions this host deliberately performs nothing for, because the shipped brain does
+/// The host actions this host deliberately performs nothing for, because the QuickJS brain did
 /// not either.
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
-/// The spec for the parity window is what the app does TODAY, not what it ought to do, and today
-/// the QuickJS brain SWALLOWS `suggestionSend`. It is the slash picker saying "the draft is already
+/// The spec for the parity window was what the app did then, not what it ought to do, and the
+/// QuickJS brain SWALLOWED `suggestionSend`. It is the slash picker saying "the draft is already
 /// the whole command, send it instead of completing it", and `native-host.ts`'s `suggestionKey` arm
-/// keeps only a completion that carries `content`, so `{send: true}` falls out of the switch and
-/// nothing at all is pushed. The real send happens one step EARLIER, in the view: `keyboard.rs`
+/// kept only a completion that carried `content`, so `{send: true}` fell out of the switch and
+/// nothing at all was pushed. The real send happens one step EARLIER, in the view: `keyboard.rs`
 /// reads `suggestions.sendOnEnter` off the snapshot and calls `send` itself rather than dispatching
 /// `suggestionKey`, and that flag is the same rule the core's inner test is
 /// (`composer/suggestions.rs`), so the effect is reached only when the view's snapshot is a turn
 /// stale. This host therefore swallows it too, explicitly: forwarding it to the app shell (which is
-/// what this file did until now) is a request the QuickJS brain never sends, and performing the send
+/// what this file once did) is a request the QuickJS brain never sent, and performing the send
 /// here is impossible anyway, because a send needs the composer field, the draft id and the draft
 /// revision, all of which are the view's. The name is a code constant, never a user's data.
 pub(super) const SWALLOWED_HOST_ACTIONS: &[&str] = &["suggestionSend"];
@@ -63,12 +60,15 @@ pub(super) fn route(effect: Effect) -> Routed {
         | Effect::FlushStorage { .. }
         | Effect::ReadRetainedSnapshot
         | Effect::WriteRetainedSnapshot { .. }
-        | Effect::SetTimer { .. } => Routed::Host(effect),
+        | Effect::SetTimer { .. }
+        | Effect::Subscribe { .. }
+        | Effect::Unsubscribe
+        | Effect::Reconnect => Routed::Host(effect),
         // `{kind: 'broker', method: 'presentation', params: {state}}`, which is what
-        // `native-host.ts:676` pushes and what `relay_session_chat_runtime_request` already reads
+        // `native-host.ts:676` pushed and what each app's chat binding reads
         // (`message["method"] == "presentation"` takes `params.state`). It goes to the renderer
-        // rather than being performed here because the cache it feeds is the SIDEBAR's, owned by
-        // the app runtime beside the socket; this host has no door onto it.
+        // rather than being performed here because the cache it feeds is the APP's (the next view
+        // of the session opens from it); this host has no door onto it.
         Effect::UpdatePresentation { state } => {
             let mut params = Map::new();
             params.insert("state".into(), *state);
@@ -84,14 +84,6 @@ pub(super) fn route(effect: Effect) -> Routed {
             method: method.as_str().to_string(),
             params: object(*params),
         })),
-        Effect::Subscribe { limit, catalog } => {
-            let mut params = Map::new();
-            params.insert("limit".into(), Value::from(limit));
-            params.insert("catalog".into(), Value::Bool(catalog));
-            Routed::Renderer(Box::new(broker("subscribe", params)))
-        }
-        Effect::Unsubscribe => Routed::Renderer(Box::new(broker("unsubscribe", Map::new()))),
-        Effect::Reconnect => Routed::Renderer(Box::new(broker("reconnect", Map::new()))),
         Effect::SetComposerText {
             content,
             caret,
@@ -167,7 +159,7 @@ pub(super) fn route(effect: Effect) -> Routed {
             }))
         }
         // `{kind: 'returnedPrompt', method: 'restore', params: {text}}`, which is what
-        // `native-host.ts:1179` pushes for `restoreReturned`. The view compares it against its own
+        // `native-host.ts:1179` pushed for `restoreReturned`. The view compares it against its own
         // composer text before it applies it, so the text crosses and the decision stays the
         // view's. Before this arm the effect fell through to the wildcard and was counted as
         // `effectsUnrouted`: a prompt the agent handed back reached no composer.
@@ -213,13 +205,11 @@ pub(super) const UNROUTED: &str = "unrouted";
 ///
 /// CDXC:SessionChat 2026-09-22 WHY:
 /// `switchToTerminal` is forwarded from here unchanged, and the app shell drops it. That is
-/// deliberate: `native-host.ts` pushes the identical `{kind: 'host', method: 'switchToTerminal'}`
+/// deliberate: `native-host.ts` pushed the identical `{kind: 'host', method: 'switchToTerminal'}`
 /// and `receive_session_chat_host_action` has no arm for that spelling (it knows `terminalView`), so
-/// both brains do exactly the same nothing. The missing arm is an app-shell gap that predates this
-/// port and affects the shipped brain just as much; fixing it in `session_chat.rs` would change
-/// behaviour for both at once, which is a change for after the parity window, not a host routing
-/// decision. Forwarding is what keeps the two brains equal either way: on the day the shell grows
-/// the arm, both start switching together.
+/// the QuickJS brain did exactly the same nothing. The missing arm is an app-shell gap that predates
+/// this port; fixing it belongs in `session_chat.rs`, not in host routing. Forwarding means that on
+/// the day the shell grows the arm, the chat starts switching with no change here.
 fn host_action(action: String, params: Value) -> Routed {
     if let Some(name) = SWALLOWED_HOST_ACTIONS
         .iter()
@@ -245,7 +235,7 @@ fn host_action(action: String, params: Value) -> Routed {
     Routed::Renderer(Box::new(dispatched(&action, object(params))))
 }
 
-/// `{kind: "broker", method, params}`: what the view forwards to the app runtime's transport.
+/// `{kind: "broker", method, params}`: what the view hands its app, which is the presentation cache.
 fn broker(method: &str, params: Map<String, Value>) -> HostRequest {
     HostRequest {
         id: None,

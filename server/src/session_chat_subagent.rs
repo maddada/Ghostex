@@ -111,7 +111,12 @@ fn claude_child(root: &Path, selector: &str) -> anyhow::Result<ChildTranscript> 
     let directory = root.with_extension("").join("subagents");
     if safe_agent_id(selector) {
         let path = directory.join(format!("agent-{selector}.jsonl"));
-        if path.is_file() {
+        let path = if path.is_file() {
+            Some(path)
+        } else {
+            crate::session_chat_claude_workflows::find_workflow_transcript(&directory, selector)?
+        };
+        if let Some(path) = path {
             return Ok(ChildTranscript {
                 id: selector.to_string(),
                 name: selector.to_string(),

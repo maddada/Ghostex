@@ -24,14 +24,16 @@
 //! throttling). A batch of per-session sleeps from the bulk MENU is not paced either, because it
 //! never goes through the plural payload. Getting that backwards is invisible in any list
 //! comparison and would either hammer the daemon or make Sleep Selected feel broken, so the plan
-//! carries the interval and the gate compares it.
+//! carries the interval (the parity gate compared it while the TypeScript still ran).
 //!
-//! SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts (`setSessionsSleeping`,
-//! `setGroupSleeping`, `collectInactiveProjectSessionIds`, `wakeProjectSleepingSessions`),
-//! apps/desktop/sidebar/bulk-sleep-pacing.ts, the deleted sidebar page's `controller.ts`
-//! (the `batch` arm), apps/desktop/src/app/gx_store/sidebar_bulk.rs.
+//! Ported from `setSessionsSleeping`, `setGroupSleeping`, `collectInactiveProjectSessionIds` and
+//! `wakeProjectSleepingSessions` in the deleted `gxserver-runtime/auto-sleep.ts` (frozen for the
+//! gates in the since-deleted `tooling/gx-core/bulk-sleep-pacing-frozen.ts`) and the deleted
+//! sidebar page's `controller.ts` (the `batch` arm).
+//!
+//! SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_bulk.rs.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::core::Core;
 use crate::keys::{ProjectKey, SessionKey};
@@ -223,10 +225,11 @@ pub fn owns_batch_command(command: &Value) -> bool {
 ///   payloads parse each id independently and the single-session path answers each one, exactly as
 ///   the fan-out does there.
 ///
-/// SEE-ALSO: apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts (`setGroupSleeping`,
-/// `collectInactiveProjectSessionIds`, `wakeProjectSleepingSessions`, which lost the same legs in
-/// the same change and must keep answering these four payloads the same way while they still reach
-/// it), apps/desktop/src/app/gx_store/sidebar_bulk.rs.
+/// Ported from `setGroupSleeping`, `collectInactiveProjectSessionIds` and
+/// `wakeProjectSleepingSessions` in `gxserver-runtime/auto-sleep.ts` (deleted with QuickJS on
+/// 2026-09-25).
+///
+/// SEE-ALSO: apps/desktop/src/app/gx_store/sidebar_bulk.rs.
 pub fn plan_bulk_request(core: &Core, message: &Value) -> Option<BulkRequest> {
     match text_field(message, "type")? {
         // An explicit list from a multi-selection. The ids are the menu's own and are fanned out
@@ -366,10 +369,13 @@ fn project_of_group(message: &Value) -> Option<ProjectKey> {
 /// `isGpuiInactiveProjectPresentationSession`: awake, and neither working nor waiting on the user.
 /// Stopped history that is pinned, tagged or starred stays in the presentation and is deliberately
 /// NOT included, because sleeping it would promote it back into the active shelf.
+/// CDXC:SessionSleep 2026-09-24 DECISION:
+/// User: a session with a background shell or monitor still running (the grey dot) is not inactive; Sleep Inactive and Close Inactive leave it alone.
 pub(super) fn is_inactive(row: &ghostex_gx_protocol::PresentationSession) -> bool {
     row.lifecycle_state == LifecycleState::Running
         && row.activity != SessionActivity::Working
         && row.activity != SessionActivity::Attention
+        && row.background_work_detected_at.is_none()
 }
 
 /// The project's rows that pass a test, in the daemon's own array order.

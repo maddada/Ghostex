@@ -1,5 +1,5 @@
 use super::super::window::ChatOptionMenuPanel;
-use gpui::{Context, Focusable as _, ScrollStrategy, Window};
+use gpui::{Context, ScrollStrategy, Window};
 use serde_json::json;
 
 #[derive(Clone, Debug, PartialEq, gpui::Action)]
@@ -12,13 +12,9 @@ struct ModelMenuKeysRegistered(Option<String>);
 impl gpui::Global for ModelMenuKeysRegistered {}
 
 pub(super) const KEY_CONTEXT: &str = "ChatModelMenu";
-/// The card's context while the search is empty, where F and C are footer shortcuts rather than text.
-pub(super) const EMPTY_QUERY_KEY_CONTEXT: &str = "ChatModelMenu model_menu_query_empty";
 
-/// The search field keeps focus the whole visit, and gpui resolves the field's own bindings
-/// (arrows, Enter, Escape) before any key listener, so the picker claims its keys as an action in
-/// the field's context, the way the composer does (keyboard.rs). Keys it does not use fall through
-/// to the field.
+/// The card holds focus the whole visit and claims its keys as an action in its own context, the
+/// way the composer does (keyboard.rs).
 pub(super) fn register(cx: &mut gpui::App) {
     bind_toggle_chord(cx);
     if cx.has_global::<KeysBound>() {
@@ -41,25 +37,18 @@ pub(super) fn register(cx: &mut gpui::App) {
     .into_iter()
     .map(str::to_owned)
     .chain((1..=9).map(|slot| format!("secondary-{slot}")))
-    .chain(BUTTON_LETTERS.iter().map(|(_, letter)| format!("alt-{}", letter.to_lowercase())));
-    // The card itself holds focus after a side list closes or the window is re-activated, so the same keys are bound there too.
-    cx.bind_keys(keys.flat_map(|key| {
-        ["ChatModelMenu > Input", "ChatModelMenu"].map(|context| {
-            gpui::KeyBinding::new(&key, ModelMenuKey { key: key.clone() }, Some(context))
-        })
-    }));
-    // Once the search has text, F and C are letters of it.
-    cx.bind_keys(["f", "c"].into_iter().flat_map(|key| {
-        [
-            "(ChatModelMenu && model_menu_query_empty) > Input",
-            "ChatModelMenu && model_menu_query_empty",
-        ]
-        .map(|context| gpui::KeyBinding::new(key, ModelMenuKey { key: key.into() }, Some(context)))
+    .chain(
+        BUTTON_LETTERS
+            .iter()
+            .map(|(_, letter)| letter.to_lowercase()),
+    );
+    cx.bind_keys(keys.map(|key| {
+        gpui::KeyBinding::new(&key, ModelMenuKey { key: key.clone() }, Some(KEY_CONTEXT))
     }));
 }
 
 /// CDXC:SessionChat 2026-09-24 DECISION:
-/// User: each footer button shows a letter for its hotkey, with A for the Account list. Plain letters belong to the search field, so the letter is pressed with Option; pressing it again closes a side list it opened.
+/// User: each footer button's hotkey is "just the letter in a filled circle floating to the bottom right of the icon": R Reasoning, C Context, F Fast mode, A Account ("i want a as hotkey for accounts"). The picker has no search field ("just remove the search it's useless"), so the plain letter is the key; it works like a click, and pressing it again closes a side list it opened.
 const BUTTON_LETTERS: [(&str, &str); 4] = [
     ("reasoning", "R"),
     ("context", "C"),
@@ -67,7 +56,7 @@ const BUTTON_LETTERS: [(&str, &str); 4] = [
     ("account", "A"),
 ];
 
-/// The letter the footer button with this icon answers to with Option held.
+/// The letter the footer button with this icon answers to.
 pub(super) fn button_letter(icon: &str) -> Option<&'static str> {
     BUTTON_LETTERS
         .iter()
@@ -93,15 +82,13 @@ fn bind_toggle_chord(cx: &mut gpui::App) {
     let Some(chord) = chord else {
         return;
     };
-    cx.bind_keys(["ChatModelMenu > Input", "ChatModelMenu"].map(|context| {
-        gpui::KeyBinding::new(
-            &chord,
-            ModelMenuKey {
-                key: "toggle".into(),
-            },
-            Some(context),
-        )
-    }));
+    cx.bind_keys([gpui::KeyBinding::new(
+        &chord,
+        ModelMenuKey {
+            key: "toggle".into(),
+        },
+        Some(KEY_CONTEXT),
+    )]);
 }
 
 impl ChatOptionMenuPanel {
@@ -111,13 +98,6 @@ impl ChatOptionMenuPanel {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        // Whatever held focus, the next typed letter belongs to the search field.
-        if let Some(state) = self.model_menu.as_ref() {
-            let input = state.input.clone();
-            if !input.read(cx).focus_handle(cx).is_focused(window) {
-                input.update(cx, |input, cx| input.focus(window, cx));
-            }
-        }
         if self.model_menu_key(&action.key, window, cx) {
             cx.stop_propagation();
             window.prevent_default();
@@ -125,11 +105,10 @@ impl ChatOptionMenuPanel {
         }
     }
 
-    /// True when the picker used the key; anything else belongs to the search field.
+    /// True when the picker used the key.
     ///
     /// CDXC:SessionChat 2026-09-24 DECISION:
-    /// User: the model pop-up is the one model picker and is driven from the keyboard (docs/2026-09-24/model-popup-keyboard/): Up and Down move through the models and then the footer buttons and stop at the top and bottom instead of wrapping round ("make it not loop to the top when I press down while I'm at the bottom", 2026-09-24, superseding the wrap); Left and Right move the highlighted model's reasoning a level (a shake at either end or on a model without levels) and move along the footer; Enter uses the highlighted model and level in this session and Shift+Enter saves them as the agent's default, and either one closes the pop-up (2026-09-24); Cmd+1 to Cmd+9 only highlight that row and never apply it ("I should press enter to apply the model change", 2026-09-24, superseding Cmd+number picking); F toggles Fast mode and C the context window while the search is empty (2026-09-24), since otherwise they are letters of the search; Tab and Shift+Tab switch agent tabs; Escape or the picker hotkey close without saving. The mouse keeps its old meaning: a click saves the default, a right-click this session only.
-    /// SEE-ALSO: packages/core-ui/chat/session-chat-model-menu.tsx (`onKeyDown`) answers the same keys for React.
+    /// User: the model pop-up is the one model picker and is driven from the keyboard (docs/2026-09-24/model-popup-keyboard/): Up and Down move through the models and then the footer buttons and stop at the top and bottom instead of wrapping round ("make it not loop to the top when I press down while I'm at the bottom", 2026-09-24, superseding the wrap); Left and Right move the highlighted model's reasoning a level (a shake at either end or on a model without levels) and move along the footer; Enter uses the highlighted model and level in this session and Shift+Enter saves them as the agent's default, and either one closes the pop-up (2026-09-24); Cmd+1 to Cmd+9 only highlight that row and never apply it ("I should press enter to apply the model change", 2026-09-24, superseding Cmd+number picking); the footer buttons answer to their letters (see `BUTTON_LETTERS`); Tab and Shift+Tab switch agent tabs; Escape or the picker hotkey close without saving. The mouse keeps its old meaning: a click saves the default, a right-click this session only.
     fn model_menu_key(&mut self, key: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let Some(state) = self.model_menu.as_mut() else {
             return false;
@@ -191,16 +170,6 @@ impl ChatOptionMenuPanel {
                     self.activate_model_button(active - rows, key == "shift-enter", window, cx);
                 }
             }
-            "f" | "c" => {
-                let icon = if key == "f" { "fast" } else { "context" };
-                let index = state
-                    .display_traits(&self.menu.read(cx).model_efforts)
-                    .iter()
-                    .position(|setting| setting["icon"] == icon);
-                if let Some(index) = index {
-                    self.activate_model_button(index, false, window, cx);
-                }
-            }
             "left" | "right" if state.active >= rows => {
                 let buttons = count - rows;
                 let index = state.active - rows;
@@ -225,8 +194,8 @@ impl ChatOptionMenuPanel {
                     None => state.shake_at = Some(std::time::Instant::now()),
                 }
             }
-            _ if key.starts_with("alt-") => {
-                let letter = key["alt-".len()..].to_uppercase();
+            _ if key.len() == 1 => {
+                let letter = key.to_uppercase();
                 let Some(index) = state.traits().iter().position(|setting| {
                     setting["icon"]
                         .as_str()

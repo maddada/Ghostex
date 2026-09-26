@@ -18,7 +18,6 @@
 //! reached here, which is the failure the envelope bug of piece 3d was.
 //!
 //! SEE-ALSO: packages/gx-core/src/sidebar_actions/bulk.rs,
-//! apps/desktop/sidebar/gxserver-runtime/auto-sleep.ts,
 //! the deleted sidebar page's `controller.ts` (the `batch` arm).
 
 use std::time::Duration;

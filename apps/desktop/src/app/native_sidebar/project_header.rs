@@ -98,7 +98,7 @@ impl GhostexGpuiApp {
                 .flex()
                 .items_center()
                 .font_weight(gpui::FontWeight::LIGHT)
-                .child(div().min_w_0().text_ellipsis().child(group.title.clone()))
+                .child(div().min_w_0().truncate().child(group.title.clone()))
                 .when_some(tooltip, |title, tooltip| {
                     title.when(
                         self.native_sidebar.pointer_inside
@@ -308,13 +308,14 @@ impl GhostexGpuiApp {
                                     move |app, event: &gpui::ClickEvent, window, cx| {
                                         cx.stop_propagation();
                                         if let Some(children) = &children {
-                                            // React opens project header menus 6px below the button, right-aligned to it (`getControlMenuPosition`).
+                                            // Project header menus open `HEADER_MENU_TRIGGER_GAP` below the button, right-aligned to it.
                                             let anchor = trigger
                                                 .get()
                                                 .map(|bounds| {
                                                     gpui::Point::new(
                                                         bounds.right(),
-                                                        bounds.bottom() + px(6.0 * scale),
+                                                        bounds.bottom()
+                                                            + px(crate::app::consts::HEADER_MENU_TRIGGER_GAP * scale),
                                                     )
                                                 })
                                                 .unwrap_or_else(|| event.position());

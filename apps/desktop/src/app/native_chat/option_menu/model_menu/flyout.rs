@@ -101,7 +101,7 @@ impl ChatOptionMenuPanel {
         // Beside the card rather than over it, level with the button's line.
         let mut anchor = window.bounds();
         anchor.origin.y += px((1.0
-            + BAR_HEIGHT * 2.0
+            + BAR_HEIGHT
             + error
             + LIST_HEIGHT
             + 5.0

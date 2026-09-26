@@ -1,9 +1,9 @@
 //! The envelope the host drains from the core once per turn of the loop.
 //!
-//! This is the exact shape `nativeChat.take(lastRevision)` returns today
+//! This is the exact shape `nativeChat.take(lastRevision)` returned
 //! (`packages/shared/session-chat-controller/native-host.ts`), which
 //! `apps/desktop/src/app/native_chat/state.rs` destructures key by key. Keeping it identical is
-//! what lets the Rust core replace the QuickJS producer without touching any drawing code.
+//! what let the Rust core replace the QuickJS producer without touching any drawing code.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -61,15 +61,15 @@ pub struct ItemsSplice {
     /// The producer's own count after the splice.
     ///
     /// `apps/desktop/src/app/native_chat/state.rs` never reads it and rebuilds the length from its
-    /// own vector instead. Kept on the wire so the frame stays byte-comparable with the
-    /// TypeScript producer during the parity window.
+    /// own vector instead. Kept on the wire because the TypeScript producer's frame carried it.
     pub length: usize,
 }
 
 /// One dash on the transcript minimap.
 ///
-/// Free-form for now: `packages/shared/session-chat-presentation/minimap.ts` owns the marker shape
-/// and `apps/desktop/src/app/native_chat/minimap.rs` reads it by key. Family f types it.
+/// Free-form for now: the marker shape is `crate::extras::minimap_rail`'s (ported from
+/// `packages/shared/session-chat-presentation/minimap.ts`) and
+/// `apps/desktop/src/app/native_chat/minimap.rs` reads it by key. Family f types it.
 pub type MinimapMarker = Value;
 
 /// Open-row details keyed by the renderer's row key.

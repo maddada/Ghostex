@@ -4,7 +4,7 @@ User: "i want codex to list the available models and efforts and if fast is enab
 
 CDXC:AgentScreenDetection 2026-09-03 WHY:
 Codex has no non-interactive way to set the model. `/model <name>` is not a command: the CLI sends it to the model as a prompt and starts a turn (measured on Codex 0.153). The only channel is its own `/model` picker: a numbered "Select Model and Effort" list, then a numbered "Select Reasoning Level for <model>" list, where a digit both selects and confirms a row. So `/api/selectSessionChatModel` drives that picker in the session's terminal the way the Claude rewind driver drives `/rewind`: every keystroke is preceded by a screen capture that must show the expected list, the digit is read off the row that names the requested model (never computed from a catalog index), and any capture that disagrees aborts with Escape instead of typing into whatever is on screen. The whole drive is one job on the session's serialized send worker, so a queued prompt can never land inside the picker.
-SEE-ALSO: packages/core-ui/chat/session-chat-session-options.ts (the `model-picker` dispatch), session_chat_rewind.rs (the driver pattern).
+SEE-ALSO: packages/gx-chat-core/src/menus/option_catalog.rs (the `model-picker` dispatch), session_chat_rewind.rs (the driver pattern).
 */
 
 use std::collections::HashMap;

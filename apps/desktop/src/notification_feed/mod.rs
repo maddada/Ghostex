@@ -6,19 +6,18 @@ waiting for, and hotkeys to open the panel and jump through unread items. This
 supersedes the 2026-09-11 wording that put the bell in the titlebar immediately
 to the right of the Next button.
 
-Ownership mirrors the Back/Forward trail on purpose:
+Ownership:
 - gxserver owns the feed rows, their read state, and the jump order
   (`server/src/notification_feed`), so the desktop app, the web app, and mobile
   read one list.
-- The CEF sidebar runtime talks to gxserver and activates the session a row
-  points at, because it already owns session activation and attention
-  acknowledgement.
+- The Rust store reads the feed and performs each command
+  (`app/gx_store/notifications/`, the rules in gx-core `notification_feed.rs`);
+  until 2026-09-25 the QuickJS sidebar runtime did.
 - This module owns pixels and hotkey routing only. It renders from the cached
-  state the sidebar pushes over the native-host bridge and sends one command
-  back per click or keypress. Nothing here calls gxserver or blocks the frame.
+  state and sends one command per click or keypress. Nothing here calls
+  gxserver or blocks the frame.
 SEE-ALSO: packages/shared/notification-feed/notification-feed-contract.ts,
-apps/desktop/sidebar/gxserver-runtime (the `notificationFeedState` bridge post
-and the `ghostex-gpui-sidebar-notification-feed-command` listener).
+apps/desktop/src/app/gx_store/notifications/.
 */
 
 use std::cell::Cell;
@@ -39,11 +38,6 @@ use crate::{
     titlebar_tooltip, titlebar_tooltip_label,
 };
 
-/// Page-side event the sidebar runtime listens for. Must stay identical to
-/// GPUI_SIDEBAR_NOTIFICATION_FEED_COMMAND_EVENT_NAME in the sidebar runtime.
-const NOTIFICATION_FEED_COMMAND_EVENT_NAME: &str = "ghostex-gpui-sidebar-notification-feed-command";
-/// Bridge message the sidebar runtime posts whenever the feed changes.
-pub(crate) const NOTIFICATION_FEED_STATE_MESSAGE_TYPE: &str = "notificationFeedState";
 
 const NOTIFICATION_BELL_ICON: &str = "titlebar/bell.svg";
 const NOTIFICATION_BELL_ICON_SIZE: f32 = 15.0;
@@ -141,9 +135,10 @@ pub(crate) struct GpuiNotificationFeedState {
 }
 
 impl GpuiNotificationFeedState {
-    /// Strictly parse the sidebar's bridge payload. A malformed message (or a
-    /// malformed row) leaves the previous state alone rather than blanking the
-    /// bell: this is the only source of truth the titlebar has.
+    /// Strictly parse the state message (gx-core `notification_feed_state_message`).
+    /// A malformed message (or a malformed row) leaves the previous state alone
+    /// rather than blanking the bell: this is the only source of truth the
+    /// titlebar has.
     pub(crate) fn from_bridge_message(message: &serde_json::Value) -> Option<Self> {
         let unread_count = message.get("unreadCount")?.as_u64()? as usize;
         let items = message
@@ -165,8 +160,7 @@ impl GpuiNotificationFeedState {
 }
 
 /// Map the shared hotkey action ids (`packages/shared/ghostex-hotkeys.ts`) onto
-/// the command the sidebar runtime executes, so a keypress and a panel click
-/// enter the exact same route.
+/// the feed command, so a keypress and a panel click enter the exact same route.
 pub(crate) fn notification_feed_hotkey_command(action_id: &str) -> Option<&'static str> {
     match action_id {
         "openNotifications" => Some("open"),
@@ -176,8 +170,8 @@ pub(crate) fn notification_feed_hotkey_command(action_id: &str) -> Option<&'stat
     }
 }
 
-/// Ids ride inside a JS string literal in the command script, so only the
-/// characters a uuid can contain are ever interpolated.
+/// Only the characters a uuid can contain: a row whose id has anything else is
+/// refused with its whole message.
 pub(crate) fn notification_feed_id_is_safe(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
@@ -294,9 +288,9 @@ pub(crate) fn notification_feed_badge_label(unread_count: usize) -> String {
 }
 
 impl GhostexGpuiApp {
-    /// `{ "type": "notificationFeedState", … }` from the sidebar's native-host
-    /// bridge. Repaints the bell only when the feed actually changed, and pushes
-    /// the new rows into the dropdown when it is open so the list stays live.
+    /// `{ "type": "notificationFeedState", … }` from the Rust store's feed reads.
+    /// Repaints the bell only when the feed actually changed, and pushes the new
+    /// rows into the dropdown when it is open so the list stays live.
     pub(crate) fn receive_notification_feed_state_message(
         &mut self,
         message: &serde_json::Value,
@@ -320,31 +314,21 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
-    /// Ask the sidebar runtime to act on the feed. Rust deliberately does not
-    /// call gxserver itself: the runtime owns both the daemon conversation and
-    /// the session activation that follows an `open`.
+    /// Acts on the feed: the Rust store performs the command against gxserver
+    /// (`app/gx_store/notifications/commands.rs`).
     pub(crate) fn request_notification_feed_command(
         &mut self,
         action: &'static str,
         notification_id: Option<&str>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(sidebar) = self.sidebar.clone() else {
+        let Some(command) = ghostex_gx_core::NotificationFeedCommand::from_action(action) else {
             return;
         };
-        let detail = match notification_id {
-            Some(id) if notification_feed_id_is_safe(id) => {
-                format!("{{ action: '{action}', notificationId: '{id}' }}")
-            }
-            Some(_) => return,
-            None => format!("{{ action: '{action}' }}"),
-        };
-        let script = format!(
-            "window.dispatchEvent(new CustomEvent('{NOTIFICATION_FEED_COMMAND_EVENT_NAME}', {{ detail: {detail} }})); undefined;"
-        );
-        sidebar.update(cx, |surface, _| {
-            surface.execute_app_owned_script(&script);
-        });
+        if notification_id.is_some_and(|id| !notification_feed_id_is_safe(id)) {
+            return;
+        }
+        self.gx_store_notification_feed_command(command, notification_id, cx);
     }
 
     pub(crate) fn titlebar_notification_bell_visible(&self) -> bool {

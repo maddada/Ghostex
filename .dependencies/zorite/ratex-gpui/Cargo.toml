@@ -1,0 +1,41 @@
+[package]
+name = "ratex-gpui"
+version = "0.4.1"
+edition = "2024"
+description = "Math for GPUI: render LaTeX to images, and edit formulas in a structural, MathQuill-style editor. Built on the RaTeX engine."
+license = "MIT"
+repository = "https://github.com/packetThrower/zorite"
+homepage = "https://packetthrower.github.io/zorite/reference/crates/ratex-gpui/"
+keywords = ["gpui", "latex", "math", "mathquill", "ratex"]
+categories = ["gui", "mathematics"]
+
+[features]
+default = ["editor"]
+# The interactive structural editor — `MathEditor` plus the `cursor` / `geometry` / `input` /
+# `view` modules. Disable (`default-features = false`) for a render-only build: LaTeX →
+# image / PNG / SVG (`render`) and the parse/serialize core (`parse_latex`, `editor::model`),
+# without the gpui view + editing machinery.
+editor = []
+
+[dependencies]
+# RaTeX typesetting engine — crates.io, GUI-agnostic (parse → layout → render).
+# `editor::model` serializes to LaTeX; `editor::geometry` lays it out and reads box rects.
+ratex-parser = "0.1"
+ratex-layout = "0.1"
+# Raster backend with KaTeX fonts embedded — `render` rasterizes a formula to a PNG that
+# becomes a `gpui::RenderImage`. `embed-fonts` so no external font directory is needed.
+ratex-render = { version = "0.1", features = ["embed-fonts"] }
+# Vector SVG backend — used by the "Export SVG" context menu action. `embed-fonts` so the
+# exported SVG carries its own glyph paths (KaTeX fonts), instead of `<text>` that references
+# KaTeX font-families the viewer won't have — which renders with the wrong shapes.
+ratex-svg = { version = "0.1", features = ["embed-fonts"] }
+
+# Shared workspace spec (the root pins the rev) so Cargo unifies to one gpui.
+# NOT crates.io 0.2 — Zed doesn't keep that
+# current. Used by the `render` + `editor::view` modules (landing in later milestones).
+gpui = { workspace = true }
+
+# Decode RaTeX's PNG into BGRA frames for `RenderImage`. Pin to gpui's `image` minor
+# (0.25), like `gpui-pdf`, so `Frame`/`RgbaImage` unify with what `RenderImage::new` wants.
+image = "0.25"
+

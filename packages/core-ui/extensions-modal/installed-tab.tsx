@@ -1,7 +1,7 @@
 import { IconPuzzle } from '@tabler/icons-react';
 import type { GhostexInstalledExtension } from '@/packages/shared/ghostex-extensions';
-import { InstalledExtensionCard } from './extension-card';
-import { ExtensionEmptyState, ExtensionGroup } from './extension-surface';
+import { ExtensionCardGrid, InstalledExtensionCard } from './extension-card';
+import { ExtensionEmptyState } from './extension-surface';
 
 export function InstalledTab({
   extensions,
@@ -33,7 +33,7 @@ export function InstalledTab({
   }
   return (
     <div className='vertical-scroll-fade-mask h-full min-h-0 overflow-y-auto p-3 [--edge-fade-distance:16px]'>
-      <ExtensionGroup>
+      <ExtensionCardGrid>
         {extensions.map((extension) => (
           <InstalledExtensionCard
             extension={extension}
@@ -46,7 +46,7 @@ export function InstalledTab({
             pending={pendingIds?.has(extension.id)}
           />
         ))}
-      </ExtensionGroup>
+      </ExtensionCardGrid>
     </div>
   );
 }

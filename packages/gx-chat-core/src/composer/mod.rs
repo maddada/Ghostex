@@ -6,6 +6,7 @@
 
 pub mod actions;
 pub mod document;
+pub mod draft_sync;
 pub mod history;
 pub mod host_actions;
 pub mod json;
