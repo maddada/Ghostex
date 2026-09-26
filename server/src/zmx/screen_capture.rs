@@ -145,20 +145,33 @@ pub(crate) fn remove_zmx_session_socket(_session_name: &str) {}
 /// alternate-screen capture. Old daemons use History with a client-side tail cap.
 #[cfg(unix)]
 pub(crate) fn read_zmx_session_screen_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
-    read_zmx_session_screen_capture_format(zmx_name, ZMX_IPC_HISTORY_FORMAT_PLAIN)
+    read_zmx_session_screen_capture_format(
+        zmx_name,
+        ZMX_IPC_HISTORY_FORMAT_PLAIN,
+        ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS,
+    )
 }
 
 #[cfg(unix)]
 pub(crate) fn read_zmx_session_screen_capture_vt(
     zmx_name: &str,
 ) -> Result<ZmxHistoryCapture, String> {
-    read_zmx_session_screen_capture_format(zmx_name, 1)
+    read_zmx_session_screen_capture_format(zmx_name, 1, ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS)
+}
+
+/// The live grid alone, as plain text: no scrollback rows, so the daemon
+/// serializes one screenful. Cheap enough to take every second to learn
+/// whether the screen changed, never enough to classify it.
+#[cfg(unix)]
+pub(crate) fn read_zmx_session_grid_capture(zmx_name: &str) -> Result<ZmxHistoryCapture, String> {
+    read_zmx_session_screen_capture_format(zmx_name, ZMX_IPC_HISTORY_FORMAT_PLAIN, 0)
 }
 
 #[cfg(unix)]
 fn read_zmx_session_screen_capture_format(
     zmx_name: &str,
     format: u8,
+    scrollback_rows: u32,
 ) -> Result<ZmxHistoryCapture, String> {
     let socket_path = zmx_session_socket_path(zmx_name);
     let mut stream = std::os::unix::net::UnixStream::connect(&socket_path).map_err(|error| {
@@ -180,7 +193,7 @@ fn read_zmx_session_screen_capture_format(
     request[1..5].copy_from_slice(&(ZMX_IPC_CAPTURE_BYTES as u32).to_le_bytes());
     request[ZMX_IPC_HEADER_BYTES] = format;
     request[ZMX_IPC_HEADER_BYTES + 1..ZMX_IPC_HEADER_BYTES + 5]
-        .copy_from_slice(&ZMX_SCREEN_CAPTURE_SCROLLBACK_ROWS.to_le_bytes());
+        .copy_from_slice(&scrollback_rows.to_le_bytes());
     request[ZMX_IPC_HEADER_BYTES + ZMX_IPC_CAPTURE_BYTES] = ZMX_IPC_TAG_INFO;
     stream
         .write_all(&request)

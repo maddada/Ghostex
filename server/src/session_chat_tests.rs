@@ -1170,6 +1170,7 @@ mod tests {
             state_reader: Some(state_reader),
             options_reader: None,
             options_change_watch: None,
+            screen_change_watch: None,
             queue_reader: None,
             successor_hooks: Some(hooks),
             notice_publisher: None,

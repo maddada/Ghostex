@@ -145,6 +145,8 @@ pub struct AgentStreamRow {
     pub indent: usize,
     /// A blank row separated this row from the previous one.
     pub after_blank: bool,
+    /// Every character of the row is painted bold.
+    pub bold: bool,
 }
 
 /// The rows of one Claude message block as painted, and whether they start at
@@ -701,24 +703,33 @@ struct ScreenRow {
     /// Column after the row's last character on the physical row, before any
     /// space collapsing, so a right-aligned row can be told from a wrapped one.
     end: usize,
+    /// Every character of the row is painted bold (known only from a VT capture).
+    bold: bool,
 }
 
-fn screen_rows(screen_text: &str) -> Vec<ScreenRow> {
+fn screen_rows(screen_text: &str, styled_text: Option<&str>) -> Vec<ScreenRow> {
+    let mut styled_lines = styled_text.map(str::lines);
+    let mut bold_rows = crate::session_chat_screen_styles::BoldRows::default();
     let mut rows = Vec::new();
     let mut after_blank = false;
     for raw in screen_text.lines() {
+        let styled = styled_lines.as_mut().and_then(Iterator::next);
         let stripped = crate::session_chat_options::strip_ansi_sgr(raw);
         let line = crate::session_chat_options::normalize_spaces(&stripped);
         let text = line.trim();
+        let indent = line.len() - line.trim_start().len();
+        let end = stripped.trim_end().chars().count();
+        let bold = styled.is_some_and(|styled| bold_rows.next_row(styled, indent, end));
         if text.is_empty() {
             after_blank = true;
             continue;
         }
         rows.push(ScreenRow {
             text: text.to_string(),
-            indent: line.len() - line.trim_start().len(),
+            indent,
             after_blank,
-            end: stripped.trim_end().chars().count(),
+            end,
+            bold,
         });
         after_blank = false;
     }
@@ -982,14 +993,25 @@ fn claude_tool_gutter_text(rows: &[ScreenRow], gutter: usize) -> Option<String> 
     (!text.trim().is_empty()).then_some(text)
 }
 
-/// `Some` while the agent is painting a live line this build understands.
+/// [`detect_session_chat_terminal_activity_styled`] without the VT capture.
+pub fn detect_session_chat_terminal_activity(
+    agent: Option<&str>,
+    screen_text: &str,
+) -> Option<SessionChatTerminalActivity> {
+    detect_session_chat_terminal_activity_styled(agent, screen_text, None)
+}
+
+/// `Some` while the agent is painting a live line this build understands. `styled_text` is the VT
+/// capture `screen_text` was read from, row for row; with it, a streamed Claude message keeps its
+/// bold titles.
 ///
 /// CDXC:AgentScreenDetection 2026-09-11 DECISION:
 /// User: detect compaction and Claude's other live activity across the whole terminal screen so long queued messages cannot hide their chat indicators.
 /// This extends the compaction-only scan decision from 2026-09-10 to tool progress, workflow waits, and running shell/monitor indicators.
-pub fn detect_session_chat_terminal_activity(
+pub fn detect_session_chat_terminal_activity_styled(
     agent: Option<&str>,
     screen_text: &str,
+    styled_text: Option<&str>,
 ) -> Option<SessionChatTerminalActivity> {
     let agent = session_chat_option_agent(agent)?;
     if agent == SessionChatOptionAgent::Grok {
@@ -1018,7 +1040,7 @@ pub fn detect_session_chat_terminal_activity(
     if agent != SessionChatOptionAgent::Claude {
         return None;
     }
-    let mut rows = screen_rows(screen_text);
+    let mut rows = screen_rows(screen_text, styled_text);
     strip_claude_hook_receipt_rows(&mut rows);
     for index in (0..rows.len()).rev() {
         if let Some(mut activity) = compacting_activity_from_line(&rows[index].text) {
@@ -1101,6 +1123,7 @@ fn agent_stream_row(row: &ScreenRow) -> AgentStreamRow {
         text: row.text.clone(),
         indent: row.indent,
         after_blank: row.after_blank,
+        bold: row.bold,
     }
 }
 
@@ -1115,9 +1138,10 @@ fn claude_stream_activity(rows: &[ScreenRow], head: Option<usize>) -> SessionCha
                 .strip_prefix('⏺')
                 .map_or(rows[head].text.as_str(), str::trim_start);
             block.push(AgentStreamRow {
-                text: text.to_string(),
+                text: without_claude_arrow_key_hint(text).to_string(),
                 indent: CLAUDE_STATUS_CONTINUATION_INDENT,
                 after_blank: false,
+                bold: rows[head].bold,
             });
             head + 1
         }
@@ -1142,6 +1166,14 @@ fn claude_stream_activity(rows: &[ScreenRow], head: Option<usize>) -> SessionCha
     });
     activity.render_agent_stream();
     activity
+}
+
+/// CDXC:AgentScreenDetection 2026-09-26 DECISION:
+/// User: Claude's `⏺ 2 background agents launched (↓ to manage)` row shows in chat without its `(↓ to manage)` hint. The hint names a key that only works in the terminal, so the chat keeps the sentence and the agent rows under it.
+fn without_claude_arrow_key_hint(text: &str) -> &str {
+    text.strip_suffix(')')
+        .and_then(|rest| rest.rsplit_once(" (↓ to "))
+        .map_or(text, |(sentence, _)| sentence.trim_end())
 }
 
 /*
@@ -1233,23 +1265,31 @@ impl SessionChatTerminalActivity {
     /// paragraph, blank rows separate paragraphs, and rows Claude painted
     /// deeper than the message indent (list nesting, code) or that open a list
     /// item keep their own line with their relative indent.
+    ///
+    /// CDXC:AgentScreenDetection 2026-09-26 SEE-ALSO:
+    /// A paragraph painted entirely bold is a heading or a bold-only title line (Claude draws both in bold and drops the Markdown), so it goes out as `**Title**`. The chat core holds such a title at the end of the stream until the text under it arrives (`without_trailing_section_titles` in packages/gx-chat-core/src/session/streaming.rs). The label stays plain because it is the transcript match key.
     fn render_agent_stream(&mut self) {
         let Some(stream) = self.stream.as_ref() else {
             return;
         };
         let mut lines: Vec<String> = Vec::new();
         let mut paragraph = String::new();
+        let mut paragraph_bold = true;
         let mut first_paragraph: Option<String> = None;
-        let flush =
-            |paragraph: &mut String, lines: &mut Vec<String>, first: &mut Option<String>| {
-                if paragraph.is_empty() {
-                    return;
-                }
-                if first.is_none() {
-                    *first = Some(paragraph.clone());
-                }
-                lines.push(std::mem::take(paragraph));
-            };
+        let flush = |paragraph: &mut String,
+                     bold: &mut bool,
+                     lines: &mut Vec<String>,
+                     first: &mut Option<String>| {
+            if paragraph.is_empty() {
+                return;
+            }
+            if first.is_none() {
+                *first = Some(paragraph.clone());
+            }
+            let text = std::mem::take(paragraph);
+            lines.push(if *bold { format!("**{text}**") } else { text });
+            *bold = true;
+        };
         for row in &stream.rows {
             // Capped below four spaces: markdown reads a deeper indent as a
             // code block, and a nested list row or a wrapped tip painted deep
@@ -1260,11 +1300,21 @@ impl SessionChatTerminalActivity {
                 .min(AGENT_STREAM_MAX_RENDERED_INDENT);
             let own_line = relative > 0 || starts_list_item(&row.text);
             if row.after_blank {
-                flush(&mut paragraph, &mut lines, &mut first_paragraph);
+                flush(
+                    &mut paragraph,
+                    &mut paragraph_bold,
+                    &mut lines,
+                    &mut first_paragraph,
+                );
                 lines.push(String::new());
             }
             if own_line {
-                flush(&mut paragraph, &mut lines, &mut first_paragraph);
+                flush(
+                    &mut paragraph,
+                    &mut paragraph_bold,
+                    &mut lines,
+                    &mut first_paragraph,
+                );
                 if first_paragraph.is_none() {
                     first_paragraph = Some(row.text.clone());
                 }
@@ -1275,8 +1325,14 @@ impl SessionChatTerminalActivity {
                 paragraph.push(' ');
             }
             paragraph.push_str(&row.text);
+            paragraph_bold &= row.bold;
         }
-        flush(&mut paragraph, &mut lines, &mut first_paragraph);
+        flush(
+            &mut paragraph,
+            &mut paragraph_bold,
+            &mut lines,
+            &mut first_paragraph,
+        );
         let mut text = lines.join("\n");
         if !stream.head_visible {
             text.insert_str(0, "… ");

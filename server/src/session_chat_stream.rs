@@ -262,6 +262,11 @@ pub struct SessionChatFollowerConfig {
     /// compaction instead of waiting for the idle 30s tier. Absent ⇒ the
     /// steady cadence alone.
     pub options_change_watch: Option<crate::session_chat_options::SessionChatOptionsChangeWatch>,
+    /// Answers "did the live terminal grid change since I last looked?", so an
+    /// idle session re-probes within a tick of a dialog appearing or closing
+    /// in its terminal (see session_chat_screen_watch.rs). Absent ⇒ the
+    /// steady cadence alone.
+    pub screen_change_watch: Option<crate::session_chat_screen_watch::SessionChatScreenChangeWatch>,
     /// Queue + draft source for snapshot / replaced / state frames. Absent ⇒
     /// the fields are omitted, which clients read as "this daemon has no queue"
     /// and answer by hiding every queue control.

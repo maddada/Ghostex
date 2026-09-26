@@ -196,7 +196,9 @@ pub struct CodexStatus {
 pub struct CursorStatus {
     pub version: Option<String>,
     pub current_dir: Option<String>,
-    pub project_dir: Option<String>,
+    /// The checkout's folder name. Cursor's own `project_dir` is its internal
+    /// `~/.cursor/projects/…` folder, so gxserver names the repository instead.
+    pub repo: Option<String>,
     pub worktree: Option<String>,
     pub output_style: Option<String>,
     pub total_output_tokens: Option<f64>,
@@ -321,20 +323,12 @@ pub struct ClaudeStatus {
 
 /// `cursorCommonStatus`: Cursor's values under the Claude field names the shared rows read.
 fn cursor_common_status(cursor: &CursorStatus) -> ContextDetailStatus {
-    let repo_name = cursor.project_dir.as_deref().and_then(|dir| {
-        dir.trim_end_matches(['/', '\\'])
-            .rsplit(['/', '\\'])
-            .next()
-            .filter(|name| !name.is_empty())
-            .map(str::to_string)
-    });
     ContextDetailStatus {
         version: cursor.version.clone(),
         current_dir: cursor.current_dir.clone(),
-        project_dir: cursor.project_dir.clone(),
         output_style: cursor.output_style.clone(),
         total_output_tokens: cursor.total_output_tokens,
-        repo: repo_name.map(|name| RepoInfo {
+        repo: cursor.repo.clone().map(|name| RepoInfo {
             name: Some(name),
             ..RepoInfo::default()
         }),

@@ -652,6 +652,21 @@ pub(crate) fn read_zmx_session_history_capture(
     capture.map_err(ZmxEndpointError::DependencyUnavailable)
 }
 
+/// The session's screen as a VT capture whatever the agent, for a reader that needs the styling.
+pub(crate) fn read_zmx_session_history_capture_vt(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) -> ZmxEndpointResult<ZmxHistoryCapture> {
+    let lifecycle = LifecycleParams {
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
+    };
+    let session = require_session(repository, &lifecycle)?;
+    let zmx_name = provider_zmx_session_name(&session)?;
+    read_zmx_session_screen_capture_vt(&zmx_name).map_err(ZmxEndpointError::DependencyUnavailable)
+}
+
 /*
 CDXC:SessionChat 2026-08-24:
 One `/api/sendSessionText` or `/api/sendSessionEnter` call, resolved against the

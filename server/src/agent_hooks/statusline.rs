@@ -35,7 +35,9 @@ use crate::domain::DomainStateError;
 use super::config::{HookPaths, STATUSLINE_HOOK_MARKER, STATUSLINE_HOOK_VERSION};
 use super::install::{read_json_object, write_executable_notify_hook};
 use super::plugin_sources::shell_quote;
-use super::probing::{expand_home_path, io_error, now_iso, path_string, temp_path_for};
+use super::probing::{
+    expand_home_path, io_error, now_iso, parse_global_session_ref, path_string, temp_path_for,
+};
 
 /// Directory under the hook state directory holding one payload per Claude
 /// session id.
@@ -361,6 +363,28 @@ pub fn statusline_payload_path(
     )
 }
 
+/*
+CDXC:AgentHooks 2026-09-26 WHY:
+Cursor's payloads are keyed by the Ghostex session the script runs in
+(`GHOSTEX_GLOBAL_SESSION_REF`, which every Ghostex terminal exports), not by
+Cursor's own session id: a new Cursor chat has no agent session id on its row
+until its first prompt, so a payload keyed by Cursor's id could not be found (or
+watched) for the whole draft, and the chat's model pill and status line waited
+for the 30-second draft probe. A Cursor run outside Ghostex stores nothing.
+*/
+/// Path of the stored Cursor payload for one Ghostex session.
+pub fn cursor_statusline_payload_path(
+    hook_state_directory: &Path,
+    project_id: &str,
+    session_id: &str,
+) -> Option<PathBuf> {
+    statusline_payload_path(
+        hook_state_directory,
+        StatuslineAgent::Cursor,
+        &format!("ghostex-{project_id}-{session_id}"),
+    )
+}
+
 /// The stored statusLine payload for a Claude session: the raw object Claude
 /// piped, plus when it was stored.
 pub struct ClaudeStatuslinePayload {
@@ -382,8 +406,16 @@ pub fn read_statusline_payload(
     agent: StatuslineAgent,
     session_id: &str,
 ) -> Option<ClaudeStatuslinePayload> {
-    let path = statusline_payload_path(hook_state_directory, agent, session_id)?;
-    let text = fs::read_to_string(&path).ok()?;
+    read_statusline_payload_file(&statusline_payload_path(
+        hook_state_directory,
+        agent,
+        session_id,
+    )?)
+}
+
+/// A stored statusLine payload file.
+pub fn read_statusline_payload_file(path: &Path) -> Option<ClaudeStatuslinePayload> {
+    let text = fs::read_to_string(path).ok()?;
     let data = read_json_object(&text);
     let payload = data.get("payload")?.as_object()?.clone();
     let updated_at = data
@@ -419,10 +451,22 @@ pub fn run_statusline_hook(args: Vec<String>) -> Result<(), DomainStateError> {
         .ok()
         .and_then(|value| value.as_object().cloned())
         .unwrap_or_default();
-    if let Some(session_id) = payload.get("session_id").and_then(Value::as_str) {
-        if let Some(path) = statusline_payload_path(&hook_state_dir, agent, session_id) {
-            store_statusline_payload(&path, &payload)?;
+    let path = match agent {
+        StatuslineAgent::Claude => payload
+            .get("session_id")
+            .and_then(Value::as_str)
+            .and_then(|session_id| statusline_payload_path(&hook_state_dir, agent, session_id)),
+        StatuslineAgent::Cursor => {
+            std::env::var("GHOSTEX_GLOBAL_SESSION_REF")
+                .ok()
+                .and_then(|reference| {
+                    let (project_id, session_id) = parse_global_session_ref(&reference);
+                    cursor_statusline_payload_path(&hook_state_dir, &project_id?, &session_id?)
+                })
         }
+    };
+    if let Some(path) = path {
+        store_statusline_payload(&path, &payload)?;
     }
     if render {
         let line = match agent {

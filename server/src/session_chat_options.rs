@@ -289,7 +289,9 @@ impl SessionChatDetectedOptions {
         if let Some(status) = self.selection.cursor_status.as_ref() {
             map.insert("cursorStatus".to_string(), status.clone());
         }
-        if let Some(catalog) = &self.selection.model_catalog { map.insert("modelCatalog".into(), catalog.clone()); }
+        if let Some(catalog) = &self.selection.model_catalog {
+            map.insert("modelCatalog".into(), catalog.clone());
+        }
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         Value::Object(map)
     }
@@ -390,32 +392,42 @@ pub type SessionChatOptionsChangeWatch = std::sync::Arc<dyn Fn(Option<&str>) -> 
 pub(crate) fn claude_statusline_change_watch(
     hook_state_directory: std::path::PathBuf,
 ) -> SessionChatOptionsChangeWatch {
-    statusline_change_watch(
-        hook_state_directory,
-        crate::agent_hooks::statusline::StatuslineAgent::Claude,
-    )
+    payload_change_watch(move |agent_session_id| {
+        agent_session_id.and_then(|id| {
+            crate::agent_hooks::statusline::claude_statusline_payload_path(
+                &hook_state_directory,
+                id,
+            )
+        })
+    })
 }
 
-/// Fires when the agent's stored statusline payload changes.
-pub(crate) fn statusline_change_watch(
+/// Fires when Cursor's stored payload for this Ghostex session changes, which
+/// it does from the first footer Cursor draws, draft or not.
+pub(crate) fn cursor_statusline_change_watch(
     hook_state_directory: std::path::PathBuf,
-    agent: crate::agent_hooks::statusline::StatuslineAgent,
+    project_id: String,
+    session_id: String,
+) -> SessionChatOptionsChangeWatch {
+    payload_change_watch(move |_| {
+        crate::agent_hooks::statusline::cursor_statusline_payload_path(
+            &hook_state_directory,
+            &project_id,
+            &session_id,
+        )
+    })
+}
+
+fn payload_change_watch(
+    path: impl Fn(Option<&str>) -> Option<std::path::PathBuf> + Send + Sync + 'static,
 ) -> SessionChatOptionsChangeWatch {
     let observed: Mutex<Option<Option<std::time::SystemTime>>> = Mutex::new(None);
     Arc::new(move |agent_session_id: Option<&str>| {
-        let modified = agent_session_id
-            .and_then(|id| {
-                crate::agent_hooks::statusline::statusline_payload_path(
-                    &hook_state_directory,
-                    agent,
-                    id,
-                )
-            })
-            .and_then(|path| {
-                std::fs::metadata(path)
-                    .and_then(|meta| meta.modified())
-                    .ok()
-            });
+        let modified = path(agent_session_id).and_then(|path| {
+            std::fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .ok()
+        });
         let Ok(mut observed) = observed.lock() else {
             return false;
         };
@@ -540,6 +552,12 @@ pub(crate) fn strip_ansi_sgr(line: &str) -> String {
                         break;
                     }
                 }
+            }
+            // A character-set designation (`ESC ( B`), which the VT capture appends after a
+            // row that switched sets.
+            Some('(' | ')' | '*' | '+') => {
+                chars.next();
+                chars.next();
             }
             _ => {}
         }
@@ -1708,7 +1726,7 @@ fn detect_session_chat_transcript_selection(
                     claude_status: None,
                     codex_status: None,
                     cursor_status: None,
-        model_catalog: None,
+                    model_catalog: None,
                 }
             }
             _ => continue,
@@ -2157,8 +2175,13 @@ pub fn detect_session_chat_terminal_state(
     agent_id: Option<&str>,
 ) -> SessionChatTerminalDetection {
     if agent_id == Some("opencode") {
-        return repository.get_session(project_id, session_id).ok().flatten()
-            .as_ref().map(crate::session_chat_opencode::detect).unwrap_or_default();
+        return repository
+            .get_session(project_id, session_id)
+            .ok()
+            .flatten()
+            .as_ref()
+            .map(crate::session_chat_opencode::detect)
+            .unwrap_or_default();
     }
     /*
     CDXC:SessionChat 2026-08-26:
@@ -2226,34 +2249,47 @@ pub fn detect_session_chat_terminal_state(
         claude_session_path.as_deref(),
     );
     let mut diff_panel_screen = None;
-    let capture = crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id)
-        .ok()
-        .map(|mut capture| {
-            if !capture.truncated {
-                crate::session_chat_app_command::refresh_local_command_output(
-                    project_id,
-                    session_id,
-                    &capture.text,
-                );
-            }
-            // CDXC:SessionChatTerminalActivity 2026-09-06 WHY:
-            // The close helper rechecks the diff header, so passing the stripped conversation made auto-close reject the pane we had just detected.
-            if agent == Some(SessionChatOptionAgent::Claude)
-                && !capture.truncated
-                && crate::session_chat_diff_panel::claude_diff_panel_on_screen(&capture.text)
-            {
-                diff_panel_screen = Some(capture.text.clone());
-            }
-            // One cut for every detector below (see session_chat_screen_pane.rs).
-            // CDXC:AgentScreenDetection 2026-09-05 WHY:
-            // Agent dialogs align descriptions and setting values in columns; the diff-pane heuristic mistook those columns for a side pane and deleted them.
-            if agent == Some(SessionChatOptionAgent::Claude)
-                && crate::session_chat_claude_dialog::detect_claude_dialog(&capture.text).is_none()
-            {
-                capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
-            }
-            capture
-        });
+    // CDXC:AgentScreenDetection 2026-09-26 WHY:
+    // Claude paints headings and bold-only title lines in bold and drops their Markdown, so only the VT capture can tell a title from a one-line paragraph. Claude is read as VT once and every detector below gets the plain text it always had; the streamed message alone also reads the styling.
+    let mut styled_screen = None;
+    let capture = if agent == Some(SessionChatOptionAgent::Claude) {
+        crate::zmx::read_zmx_session_history_capture_vt(repository, project_id, session_id).map(
+            |mut capture| {
+                let plain = crate::session_chat_screen_styles::plain_screen_text(&capture.text);
+                styled_screen = Some(std::mem::replace(&mut capture.text, plain));
+                capture
+            },
+        )
+    } else {
+        crate::zmx::read_zmx_session_history_capture(repository, project_id, session_id)
+    }
+    .ok()
+    .map(|mut capture| {
+        if !capture.truncated {
+            crate::session_chat_app_command::refresh_local_command_output(
+                project_id,
+                session_id,
+                &capture.text,
+            );
+        }
+        // CDXC:SessionChatTerminalActivity 2026-09-06 WHY:
+        // The close helper rechecks the diff header, so passing the stripped conversation made auto-close reject the pane we had just detected.
+        if agent == Some(SessionChatOptionAgent::Claude)
+            && !capture.truncated
+            && crate::session_chat_diff_panel::claude_diff_panel_on_screen(&capture.text)
+        {
+            diff_panel_screen = Some(capture.text.clone());
+        }
+        // One cut for every detector below (see session_chat_screen_pane.rs).
+        // CDXC:AgentScreenDetection 2026-09-05 WHY:
+        // Agent dialogs align descriptions and setting values in columns; the diff-pane heuristic mistook those columns for a side pane and deleted them.
+        if agent == Some(SessionChatOptionAgent::Claude)
+            && crate::session_chat_claude_dialog::detect_claude_dialog(&capture.text).is_none()
+        {
+            capture.text = crate::session_chat_screen_pane::strip_side_pane(&capture.text);
+        }
+        capture
+    });
     // A capped capture lost its tail, so the live screen is not in it.
     let screen = capture.as_ref().filter(|capture| !capture.truncated);
     let terminal = agent
@@ -2319,9 +2355,10 @@ pub fn detect_session_chat_terminal_state(
     }
     let activity = screen
         .and_then(|capture| {
-            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity(
+            crate::session_chat_terminal_activity::detect_session_chat_terminal_activity_styled(
                 agent_id,
                 &capture.text,
+                styled_screen.as_deref(),
             )
         })
         .filter(|activity| {
@@ -2808,7 +2845,7 @@ mod tests {
             claude_status: None,
             codex_status: None,
             cursor_status: None,
-        model_catalog: None,
+            model_catalog: None,
         };
         let terminal = claude("Ctx Used: 1% | Opus 4.8").unwrap();
         let merged = merge_session_chat_option_selections(Some(transcript), None, Some(terminal))
@@ -2863,7 +2900,7 @@ mod tests {
                 claude_status: None,
                 codex_status: None,
                 cursor_status: None,
-        model_catalog: None,
+                model_catalog: None,
             },
             detected_at: "2026-08-01T12:00:00.000Z".to_string(),
         };

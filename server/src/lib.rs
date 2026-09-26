@@ -119,6 +119,8 @@ pub mod session_chat_returned_prompt;
 pub mod session_chat_rewind;
 pub mod session_chat_rewind_state;
 pub mod session_chat_screen_pane;
+pub(crate) mod session_chat_screen_styles;
+pub(crate) mod session_chat_screen_watch;
 pub mod session_chat_send;
 pub(crate) mod session_chat_send_diagnostics;
 pub(crate) mod session_chat_send_wake;
