@@ -204,7 +204,24 @@ impl<'a> DomainRepository<'a> {
         self.update_session_inner(params, true)
     }
 
+    /// CDXC:Sessions 2026-09-26 WHY: The update reads the whole row and writes the whole row back, so two calls that overlap on separate connections lose one write: Park with a tag sends the tag and the park as two concurrent `/api/updateSession` calls, and when the tag call read before the park landed it wrote `isParked = 0` straight back, so the row popped back unparked. Take SQLite's writer reservation before the read so overlapping updates queue and each merges onto the other's result; a caller already inside a transaction owns its own atomicity.
     fn update_session_inner(
+        &self,
+        params: &Map<String, Value>,
+        allow_stopped_lifecycle_revive: bool,
+    ) -> DomainResult<Value> {
+        if !self.db.is_autocommit() {
+            return self.update_session_row(params, allow_stopped_lifecycle_revive);
+        }
+        let transaction = Transaction::new_unchecked(self.db, TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        let session = DomainRepository::new(&transaction, self.server_id.as_str())
+            .update_session_row(params, allow_stopped_lifecycle_revive)?;
+        transaction.commit().map_err(sql_error)?;
+        Ok(session)
+    }
+
+    fn update_session_row(
         &self,
         params: &Map<String, Value>,
         allow_stopped_lifecycle_revive: bool,
