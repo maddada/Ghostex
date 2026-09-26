@@ -15,10 +15,15 @@ use gpui_component::input::Input;
 use super::annotations::{DocsAnnotationType, DocsQuickLabelId, annotation_review_counts};
 use super::files_list::{header_icon, header_tile};
 use super::notes::{DocsSendStatus, SEND_STATUS_DURATION, hex};
+use super::notes_windows::{COMPOSER_RADIUS, notes_frosted};
 use super::palette::DocsPalette;
 use crate::GhostexGpuiApp;
 use crate::app::context_menu::GpuiContextMenu;
-use crate::app::helpers::{titlebar_svg_icon, titlebar_tooltip};
+use crate::app::helpers::{
+    frosted_menu_fill, titlebar_popup_menu_background, titlebar_popup_menu_border_color,
+    titlebar_svg_icon, titlebar_tooltip,
+};
+use crate::app::window::frosted_host::DOCS_SELECTION_TOOLBAR_RADIUS;
 
 thread_local! {
     static NOTES_LIST_ANCHOR: Cell<Bounds<Pixels>> = Cell::new(Bounds::default());
@@ -26,10 +31,29 @@ thread_local! {
     static REVIEW_MENU_ANCHOR: Cell<Bounds<Pixels>> = Cell::new(Bounds::default());
 }
 
-const TOOLBAR_HEIGHT: f32 = 42.0;
-const TOOLBAR_WIDTH_ESTIMATE: f32 = 228.0;
+const TOOLBAR_BUTTON: f32 = 32.0;
+/// The toolbar's padding and the gap between its buttons.
+const TOOLBAR_SPACING: f32 = 5.0;
 const TOOLBAR_EDGE_MARGIN: f32 = 18.0;
 const TOOLBAR_GAP: f32 = 8.0;
+
+/// The composer's height: the close button's 34px row, the 116px field, the 10px gap, the 28px
+/// button row, the 12px bottom padding and the 1px border on each side.
+const COMPOSER_HEIGHT: f32 = 202.0;
+
+/// How many buttons the toolbar shows: Comment, Formatting, the three quick labels and Remove,
+/// or Annotations and the seven formatting marks.
+fn selection_toolbar_buttons(formatting: bool) -> usize {
+    if formatting { 8 } else { 6 }
+}
+
+/// The toolbar's size: its buttons, the gaps between them, its padding and its 1px border.
+fn selection_toolbar_size(formatting: bool) -> gpui::Size<Pixels> {
+    let buttons = selection_toolbar_buttons(formatting) as f32;
+    let height = TOOLBAR_BUTTON + 2.0 * TOOLBAR_SPACING + 2.0;
+    let width = buttons * TOOLBAR_BUTTON + (buttons + 1.0) * TOOLBAR_SPACING + 2.0;
+    gpui::size(px(width), px(height))
+}
 
 fn probe(cell: &'static std::thread::LocalKey<Cell<Bounds<Pixels>>>) -> impl IntoElement {
     gpui::canvas(
@@ -182,9 +206,9 @@ impl GhostexGpuiApp {
             )
             .child(probe(&GLOBAL_COMMENT_ANCHOR))
             .tooltip(|window, cx| titlebar_tooltip("Add global comment", window, cx))
-            .on_click(cx.listener(|this, _, window, cx| {
+            .on_click(cx.listener(|this, _, _, cx| {
                 let anchor = GLOBAL_COMMENT_ANCHOR.with(|cell| cell.get());
-                this.native_docs_open_composer(Some(anchor), None, "", window, cx);
+                this.native_docs_open_composer(Some(anchor), None, "", cx);
             }))
             .into_any_element(),
             div()
@@ -303,23 +327,57 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let frame = self.native_docs_selection_toolbar_frame(header_bottom, window, cx);
+        // Under glass the toolbar draws in its frosted host (`notes_windows.rs`), which would float
+        // over the Annotations list, so it steps aside while that is open.
+        let hosted = notes_frosted();
+        let host_frame = frame.filter(|_| hosted && !self.native_docs.notes_list_open);
+        self.native_docs_sync_toolbar_host(host_frame, window, cx);
+        let frame = frame.filter(|_| !hosted)?;
+        let toolbar = self.native_docs_selection_toolbar_panel(p, false, cx);
+        Some(
+            deferred(anchored().position(frame.origin).child(toolbar))
+                .with_priority(1)
+                .into_any_element(),
+        )
+    }
+
+    /// Where the toolbar goes, in window coordinates, while text is selected and no composer is
+    /// open.
+    fn native_docs_selection_toolbar_frame(
+        &self,
+        header_bottom: Pixels,
+        window: &Window,
+        cx: &Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
         if self.native_docs.composer.is_some() {
             return None;
         }
         let (_, anchor) = self.native_docs_selection_quote(cx)?;
         let viewport = window.viewport_size();
-        let half = TOOLBAR_WIDTH_ESTIMATE / 2.0;
+        let toolbar = selection_toolbar_size(self.native_docs.toolbar_formatting);
+        let half = f32::from(toolbar.width) / 2.0;
         let center = f32::from(anchor.center().x).clamp(
             half + TOOLBAR_EDGE_MARGIN,
             (f32::from(viewport.width) - half - TOOLBAR_EDGE_MARGIN)
                 .max(half + TOOLBAR_EDGE_MARGIN),
         );
-        let above = anchor.top() - px(TOOLBAR_GAP + TOOLBAR_HEIGHT);
+        let above = anchor.top() - px(TOOLBAR_GAP) - toolbar.height;
         let top = if above < header_bottom + px(TOOLBAR_GAP) {
             anchor.bottom() + px(TOOLBAR_GAP)
         } else {
             above
         };
+        Some(Bounds::new(point(px(center - half), top), toolbar))
+    }
+
+    /// The toolbar's bar. `frosted` draws it for its frosted host, which it fills.
+    pub(crate) fn native_docs_selection_toolbar_panel(
+        &mut self,
+        p: &DocsPalette,
+        frosted: bool,
+        cx: &mut Context<Self>,
+    ) -> gpui::Stateful<gpui::Div> {
         let light = p.light;
         let button = move |id: &'static str,
                            icon: &'static str,
@@ -332,7 +390,7 @@ impl GhostexGpuiApp {
                 .flex()
                 .items_center()
                 .justify_center()
-                .size(px(32.0))
+                .size(px(TOOLBAR_BUTTON))
                 .rounded(px(6.0))
                 .cursor_pointer()
                 .hover(move |style| style.bg(tint.opacity(0.16)))
@@ -417,8 +475,8 @@ impl GhostexGpuiApp {
                     "#926b0e",
                     "Comment (C)",
                 )
-                .on_click(cx.listener(|this, _, window, cx| {
-                    this.native_docs_open_composer(None, None, "", window, cx);
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.native_docs_open_composer(None, None, "", cx);
                 }))
                 .into_any_element(),
                 button(
@@ -470,28 +528,29 @@ impl GhostexGpuiApp {
                 .into_any_element(),
             ]
         };
-        let toolbar = div()
+        debug_assert_eq!(
+            buttons.len(),
+            selection_toolbar_buttons(self.native_docs.toolbar_formatting)
+        );
+        div()
             .id("native-docs-selection-toolbar")
             .flex()
             .items_center()
-            .gap(px(5.0))
-            .p(px(5.0))
-            .rounded(px(8.0))
-            .bg(p.raised)
+            .gap(px(TOOLBAR_SPACING))
+            .p(px(TOOLBAR_SPACING))
+            .rounded(px(DOCS_SELECTION_TOOLBAR_RADIUS))
             .border_1()
-            .border_color(p.border_strong)
-            .shadow_lg()
+            .map(|this| {
+                if frosted {
+                    this.size_full()
+                        .bg(frosted_menu_fill(titlebar_popup_menu_background()))
+                        .border_color(titlebar_popup_menu_border_color())
+                } else {
+                    this.bg(p.raised).border_color(p.border_strong).shadow_lg()
+                }
+            })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .children(buttons);
-        Some(
-            deferred(
-                anchored()
-                    .position(point(px(center - half), top))
-                    .child(toolbar),
-            )
-            .with_priority(1)
-            .into_any_element(),
-        )
+            .children(buttons)
     }
 
     /// Wraps the selection in markdown markers (or unwraps it) in the open editor.
@@ -536,7 +595,7 @@ impl GhostexGpuiApp {
             "d" | "backspace" | "delete" => {
                 self.native_docs_quick_note(DocsAnnotationType::Redline, None, cx)
             }
-            "c" => self.native_docs_open_composer(None, None, "", window, cx),
+            "c" => self.native_docs_open_composer(None, None, "", cx),
             "1" => self.native_docs_quick_note(
                 DocsAnnotationType::Comment,
                 Some(DocsQuickLabelId::Clarify),
@@ -570,7 +629,7 @@ impl GhostexGpuiApp {
                 else {
                     return;
                 };
-                self.native_docs_open_composer(None, None, &typed, window, cx);
+                self.native_docs_open_composer(None, None, &typed, cx);
             }
         }
         cx.stop_propagation();
@@ -583,7 +642,10 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let composer = self.native_docs.composer.as_ref()?;
+        let Some(composer) = self.native_docs.composer.as_ref() else {
+            self.native_docs_sync_composer_window(None, cx);
+            return None;
+        };
         let viewport = window.viewport_size();
         let width = (f32::from(viewport.width) - 24.0).clamp(280.0, 360.0);
         let left = (f32::from(composer.anchor.center().x) - width / 2.0)
@@ -591,7 +653,37 @@ impl GhostexGpuiApp {
         let top = (f32::from(composer.anchor.top()) + 12.0)
             .min(f32::from(viewport.height) - 260.0)
             .max(12.0);
-        let editing = composer.editing.is_some();
+        // Under glass the composer draws in its frosted window (`notes_windows.rs`).
+        let frame = Bounds::new(
+            point(px(left), px(top)),
+            gpui::size(px(width), px(COMPOSER_HEIGHT)),
+        );
+        let hosted = notes_frosted();
+        self.native_docs_sync_composer_window(hosted.then_some(frame), cx);
+        if hosted {
+            return None;
+        }
+        let panel = self
+            .native_docs_composer_panel(p, false, window, cx)?
+            .w(px(width));
+        Some(
+            deferred(anchored().position(frame.origin).child(panel))
+                .with_priority(2)
+                .into_any_element(),
+        )
+    }
+
+    /// The composer's card, with its text field made for `window`. `frosted` draws it for its
+    /// frosted window, which it fills.
+    pub(crate) fn native_docs_composer_panel(
+        &mut self,
+        p: &DocsPalette,
+        frosted: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Stateful<gpui::Div>> {
+        let input = self.native_docs_composer_input(window, cx)?;
+        let editing = self.native_docs.composer.as_ref()?.editing.is_some();
         let chord = if cfg!(target_os = "macos") {
             "⌘↩"
         } else {
@@ -600,18 +692,27 @@ impl GhostexGpuiApp {
         let panel = div()
             .id("native-docs-composer")
             .relative()
-            .w(px(width))
             .flex()
             .flex_col()
             .gap(px(10.0))
             .pt(px(34.0))
             .px(px(12.0))
             .pb(px(12.0))
-            .rounded(px(10.0))
-            .bg(p.raised)
+            .rounded(px(COMPOSER_RADIUS))
             .border_1()
-            .border_color(p.border_strong)
-            .shadow_lg()
+            .map(|this| {
+                if frosted {
+                    // Its own window inherits no type from the Docs view.
+                    this.size_full()
+                        .font_family(p.font.clone())
+                        .text_size(px(13.0))
+                        .text_color(p.text)
+                        .bg(frosted_menu_fill(titlebar_popup_menu_background()))
+                        .border_color(titlebar_popup_menu_border_color())
+                } else {
+                    this.bg(p.raised).border_color(p.border_strong).shadow_lg()
+                }
+            })
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
             .on_key_down(cx.listener(|this, event: &KeyDownEvent, _, cx| {
                 if event.keystroke.key == "escape" {
@@ -643,7 +744,7 @@ impl GhostexGpuiApp {
                     .border_color(p.border_strong)
                     .text_size(px(12.0))
                     .p(px(8.0))
-                    .child(Input::new(&composer.input).appearance(false).h_full()),
+                    .child(Input::new(&input).appearance(false).h_full()),
             )
             .child(
                 div()
@@ -681,11 +782,7 @@ impl GhostexGpuiApp {
                             })),
                     ),
             );
-        Some(
-            deferred(anchored().position(point(px(left), px(top))).child(panel))
-                .with_priority(2)
-                .into_any_element(),
-        )
+        Some(panel)
     }
 
     /// The Annotations list, under its header button.
@@ -789,13 +886,12 @@ impl GhostexGpuiApp {
                                 .cursor_pointer()
                                 .hover(|style| style.bg(p.control_hover))
                                 .child(titlebar_svg_icon("titlebar/pencil.svg", 13.0, p.muted))
-                                .on_click(cx.listener(move |this, _, window, cx| {
+                                .on_click(cx.listener(move |this, _, _, cx| {
                                     let anchor = NOTES_LIST_ANCHOR.with(|cell| cell.get());
                                     this.native_docs_open_composer(
                                         Some(anchor),
                                         Some(edit_id.clone()),
                                         "",
-                                        window,
                                         cx,
                                     );
                                 })),

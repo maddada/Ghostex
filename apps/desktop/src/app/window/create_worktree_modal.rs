@@ -1358,7 +1358,7 @@ impl GpuiCreateWorktreeModalWindow {
                             .rounded(px(MODAL_RADIUS_CONTROL))
                             .border_1()
                             .border_color(hsla(popup_border))
-                            .bg(hsla(p.surface))
+                            .bg(hsla(p.solid_surface))
                             .shadow_lg()
                             .on_mouse_down_out(cx.listener(
                                 move |this, event: &gpui::MouseDownEvent, window, cx| {

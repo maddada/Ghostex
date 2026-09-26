@@ -214,7 +214,7 @@ fn editor_button<V: 'static>(
         .border_color(hsla(p.hairline))
         .text_size(px(12.0))
         .when(primary, |this| {
-            this.bg(hsla(p.foreground)).text_color(hsla(p.window))
+            this.bg(hsla(p.foreground)).text_color(hsla(p.solid_window))
         })
         .when(!primary, |this| this.text_color(hsla(p.foreground)))
         .when(disabled, |this| this.opacity(0.45).cursor_default())

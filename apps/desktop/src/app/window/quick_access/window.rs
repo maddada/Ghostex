@@ -15,9 +15,9 @@
 //! packages/core-ui/command-palette.tsx, recent-projects-modal.tsx, previous-sessions-modal.tsx, stashed-prompts-modal.tsx (the retained React twins).
 use super::actions_menu::{QuickAccessMenuRequest, QuickAccessOpenMenu};
 use super::chrome::{
-    QuickAccessMenuState, capture_bounds, quick_access_filter_trigger, quick_access_footer,
-    quick_access_search_bar, quick_access_select_menu, quick_access_tooltip, segments_as_select,
-    visible_options,
+    QuickAccessMenuFrames, QuickAccessMenuPaint, QuickAccessMenuState, capture_bounds,
+    quick_access_filter_trigger, quick_access_footer, quick_access_search_bar,
+    quick_access_select_menu, quick_access_tooltip, segments_as_select, visible_options,
 };
 use super::editor::{quick_access_prompt_editor, quick_access_tag_composer};
 use super::model::{QuickAccessSnapshot, QuickAccessTabId, QuickAccessToolbar};
@@ -71,6 +71,11 @@ pub(crate) struct GpuiQuickAccessWindow {
     suppress_scroll: bool,
     last_load_more: Option<web_time::Instant>,
     was_active: bool,
+    /// Window glass was on when the window opened, so its window blurs what is behind it
+    /// (`open_native_app_modal`) and the palette is frosted to match.
+    glass: bool,
+    /// Where the open menus' stand-ins sit while the menus draw in their frosted host windows.
+    menu_frames: QuickAccessMenuFrames,
     focus_handle: FocusHandle,
     subscriptions: Vec<Subscription>,
 }
@@ -100,6 +105,11 @@ impl GpuiQuickAccessWindow {
                 this.close(cx);
             }
         });
+        let release = cx.on_release(|_, cx| {
+            use crate::app::window::frosted_host::{FrostedHostKind, hide_frosted_host};
+            hide_frosted_host(FrostedHostKind::QuickAccessPicker, cx);
+            hide_frosted_host(FrostedHostKind::QuickAccessActions, cx);
+        });
         search.update(cx, |input, cx| input.focus(window, cx));
         Self {
             host,
@@ -124,8 +134,10 @@ impl GpuiQuickAccessWindow {
             suppress_scroll: false,
             last_load_more: None,
             was_active: window.is_window_active(),
+            glass: crate::app::helpers::window_glass_active(),
+            menu_frames: QuickAccessMenuFrames::default(),
             focus_handle: cx.focus_handle(),
-            subscriptions: vec![change, activation],
+            subscriptions: vec![change, activation, release],
         }
     }
 
@@ -135,14 +147,19 @@ impl GpuiQuickAccessWindow {
     pub(crate) fn palette(&self) -> QuickAccessPalette {
         let light = crate::CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed);
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
-        QuickAccessPalette::resolve(
+        let palette = QuickAccessPalette::resolve(
             light,
             settings
                 .object()
                 .get("sidebarTheme")
                 .and_then(serde_json::Value::as_str),
             self.window_background(),
-        )
+        );
+        if !self.glass {
+            return palette;
+        }
+        let fill = crate::app::helpers::frosted_menu_fill(hsla(palette.window));
+        palette.frosted(light, fill.into())
     }
 
     fn window_background(&self) -> Rgba {
@@ -466,6 +483,11 @@ impl GpuiQuickAccessWindow {
                 self.post(json!({ "type": "project", "value": value }), cx);
             }
             "tag" => {
+                // "New tag…" opens the create-tag popover where this menu stands, so it takes the
+                // menu's place instead of opening under it.
+                if value == "tag:new" {
+                    self.tag_menu.close();
+                }
                 self.post(json!({ "type": "tagFilter", "value": value }), cx);
             }
             "editorProject" => {
@@ -714,110 +736,14 @@ impl Render for GpuiQuickAccessWindow {
             self.scroll.scroll_to_item(index);
         }
         let mut overlays: Vec<AnyElement> = Vec::new();
+        let paint = if self.hosts_menus() {
+            QuickAccessMenuPaint::StandIn(self.menu_frames.clone())
+        } else {
+            QuickAccessMenuPaint::InWindow
+        };
         if let Some(snapshot) = snapshot.as_ref() {
-            if let Some(menu) = quick_access_select_menu(
-                &p,
-                &view_select(snapshot).unwrap_or_default(),
-                &self.view_menu,
-                "quick-access-view-menu",
-                160.0,
-                |this: &mut Self, value, _window, cx| {
-                    this.choose_menu_value("view", value, cx);
-                    cx.notify();
-                },
-                |this: &mut Self, _window, cx| {
-                    this.view_menu.close();
-                    cx.notify();
-                },
-                window,
-                cx,
-            ) {
-                overlays.push(menu);
-            }
-            if let Some(menu) = quick_access_select_menu(
-                &p,
-                &project_select(snapshot).unwrap_or_default(),
-                &self.project_menu,
-                "quick-access-project-menu",
-                240.0,
-                |this: &mut Self, value, _window, cx| {
-                    this.project_menu.close();
-                    this.post(json!({ "type": "project", "value": value }), cx);
-                    cx.notify();
-                },
-                |this: &mut Self, _window, cx| {
-                    this.project_menu.close();
-                    cx.notify();
-                },
-                window,
-                cx,
-            ) {
-                overlays.push(menu);
-            }
-            if let Some(menu) = quick_access_select_menu(
-                &p,
-                &tag_select(snapshot).unwrap_or_default(),
-                &self.tag_menu,
-                "quick-access-tag-menu",
-                224.0,
-                |this: &mut Self, value, _window, cx| {
-                    this.post(json!({ "type": "tagFilter", "value": value }), cx);
-                    cx.notify();
-                },
-                |this: &mut Self, _window, cx| {
-                    this.tag_menu.close();
-                    cx.notify();
-                },
-                window,
-                cx,
-            ) {
-                overlays.push(menu);
-            }
-            if let Some(editor) = snapshot.editor.as_ref() {
-                if let Some(menu) = quick_access_select_menu(
-                    &p,
-                    &editor.projects,
-                    &self.editor_project_menu,
-                    "quick-access-editor-project-menu",
-                    240.0,
-                    |this: &mut Self, value, _window, cx| {
-                        this.editor_project_menu.close();
-                        this.post(
-                            json!({ "type": "editorField", "field": "project", "value": value }),
-                            cx,
-                        );
-                        cx.notify();
-                    },
-                    |this: &mut Self, _window, cx| {
-                        this.editor_project_menu.close();
-                        cx.notify();
-                    },
-                    window,
-                    cx,
-                ) {
-                    overlays.push(menu);
-                }
-                if let Some(menu) = quick_access_select_menu(
-                    &p,
-                    &editor.tags,
-                    &self.editor_tag_menu,
-                    "quick-access-editor-tag-menu",
-                    224.0,
-                    |this: &mut Self, value, _window, cx| {
-                        this.editor_tag_menu.close();
-                        this.post(
-                            json!({ "type": "editorField", "field": "tag", "value": value }),
-                            cx,
-                        );
-                        cx.notify();
-                    },
-                    |this: &mut Self, _window, cx| {
-                        this.editor_tag_menu.close();
-                        cx.notify();
-                    },
-                    window,
-                    cx,
-                ) {
+            for which in QUICK_ACCESS_PICKERS {
+                if let Some(menu) = self.picker_menu(which, &p, &paint, window, cx) {
                     overlays.push(menu);
                 }
             }
@@ -836,9 +762,10 @@ impl Render for GpuiQuickAccessWindow {
                 ));
             }
             if let Some(menu) = self.context_menu.as_ref() {
-                overlays.push(self.render_context_menu(&p, menu, cx));
+                overlays.push(self.render_context_menu(&p, menu, &paint, cx));
             }
         }
+        self.sync_menu_hosts(window, cx);
         let primary_action = snapshot
             .as_ref()
             .filter(|snapshot| snapshot.editor.is_none())
@@ -1195,6 +1122,164 @@ impl GpuiQuickAccessWindow {
                     .text_color(hsla(p.muted)),
             )
             .into_any_element()
+    }
+}
+
+/// The search line's pickers and the editor's, in the order their menus stack.
+const QUICK_ACCESS_PICKERS: [&str; 5] = ["view", "project", "tag", "editorProject", "editorTag"];
+
+/// Menus under window glass: each draws in a frosted host window over this one
+/// (`QuickAccessMenuPaint`).
+impl GpuiQuickAccessWindow {
+    /// Whether the menus draw in frosted host windows (macOS, window glass on when this opened).
+    fn hosts_menus(&self) -> bool {
+        self.glass && crate::app::window::frosted_host::frosted_hosting_active()
+    }
+
+    fn picker_state(&self, which: &str) -> &QuickAccessMenuState {
+        match which {
+            "view" => &self.view_menu,
+            "project" => &self.project_menu,
+            "tag" => &self.tag_menu,
+            "editorProject" => &self.editor_project_menu,
+            _ => &self.editor_tag_menu,
+        }
+    }
+
+    fn picker_state_mut(&mut self, which: &str) -> &mut QuickAccessMenuState {
+        match which {
+            "view" => &mut self.view_menu,
+            "project" => &mut self.project_menu,
+            "tag" => &mut self.tag_menu,
+            "editorProject" => &mut self.editor_project_menu,
+            _ => &mut self.editor_tag_menu,
+        }
+    }
+
+    fn picker_id(which: &str) -> &'static str {
+        match which {
+            "view" => "quick-access-view-menu",
+            "project" => "quick-access-project-menu",
+            "tag" => "quick-access-tag-menu",
+            "editorProject" => "quick-access-editor-project-menu",
+            _ => "quick-access-editor-tag-menu",
+        }
+    }
+
+    /// One picker's menu, drawn as `paint` asks, while it is open.
+    fn picker_menu(
+        &self,
+        which: &'static str,
+        p: &QuickAccessPalette,
+        paint: &QuickAccessMenuPaint,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let snapshot = self.snapshot.as_ref()?;
+        let (select, min_width) = match which {
+            "view" => (view_select(snapshot).unwrap_or_default(), 160.0),
+            "project" => (project_select(snapshot).unwrap_or_default(), 240.0),
+            "tag" => (tag_select(snapshot).unwrap_or_default(), 224.0),
+            "editorProject" => (snapshot.editor.as_ref()?.projects.clone(), 240.0),
+            _ => (snapshot.editor.as_ref()?.tags.clone(), 224.0),
+        };
+        quick_access_select_menu(
+            p,
+            &select,
+            self.picker_state(which),
+            Self::picker_id(which),
+            min_width,
+            paint,
+            move |this: &mut Self, value, _window, cx| {
+                this.choose_menu_value(which, value, cx);
+                cx.notify();
+            },
+            move |this: &mut Self, _window, cx| {
+                this.picker_state_mut(which).close();
+                cx.notify();
+            },
+            window,
+            cx,
+        )
+    }
+
+    /// Shows the open menu in its frosted host window at the frame its stand-in laid out, and
+    /// hides the host windows no menu needs.
+    fn sync_menu_hosts(&self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::app::window::frosted_host::{
+            FrostedHostKind, hide_frosted_host, show_frosted_host,
+        };
+        let open_pickers = QUICK_ACCESS_PICKERS
+            .into_iter()
+            .filter(|which| self.hosts_menus() && self.picker_state(which).open)
+            .collect::<Vec<_>>();
+        let actions_open = self.hosts_menus() && self.context_menu.is_some();
+        // The actions menu stacks above the pickers, so it takes the host when both are open.
+        let open = if actions_open {
+            Some((
+                FrostedHostKind::QuickAccessActions,
+                None,
+                "quick-access-context-menu",
+            ))
+        } else {
+            open_pickers.first().map(|which| {
+                (
+                    FrostedHostKind::QuickAccessPicker,
+                    Some(*which),
+                    Self::picker_id(which),
+                )
+            })
+        };
+        // Until the stand-in has laid the menu out there is no frame to show it at.
+        let shown = {
+            let mut frames = self.menu_frames.borrow_mut();
+            frames.retain(|(id, _)| {
+                (actions_open && *id == "quick-access-context-menu")
+                    || open_pickers
+                        .iter()
+                        .any(|which| Self::picker_id(which) == *id)
+            });
+            open.and_then(|(kind, which, id)| {
+                let (_, frame) = frames.iter().find(|(laid_out, _)| *laid_out == id)?;
+                Some((kind, which, *frame))
+            })
+        };
+        for kind in [
+            FrostedHostKind::QuickAccessPicker,
+            FrostedHostKind::QuickAccessActions,
+        ] {
+            if shown.is_none_or(|(shown, _, _)| shown != kind) {
+                hide_frosted_host(kind, cx);
+            }
+        }
+        let Some((kind, which, frame)) = shown else {
+            return;
+        };
+        let view = cx.weak_entity();
+        show_frosted_host(
+            kind,
+            window.window_handle(),
+            frame,
+            None,
+            Rc::new(move |window, cx| {
+                view.update(cx, |this, cx| {
+                    let p = this.palette();
+                    match which {
+                        Some(which) => {
+                            this.picker_menu(which, &p, &QuickAccessMenuPaint::Hosted, window, cx)
+                        }
+                        None => this.context_menu.as_ref().map(|menu| {
+                            this.render_context_menu(&p, menu, &QuickAccessMenuPaint::Hosted, cx)
+                        }),
+                    }
+                })
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| div().into_any_element())
+            }),
+            None,
+            cx,
+        );
     }
 }
 

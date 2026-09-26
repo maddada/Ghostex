@@ -329,6 +329,9 @@ pub(crate) struct NativeDocsState {
     pub(crate) format_bar_room: std::rc::Rc<std::cell::Cell<f32>>,
     /// The formatting bar's frosted window under glass (`format_bar_window.rs`).
     pub(crate) format_bar_window: super::format_bar_window::DocsFormatBarWindow,
+    /// The selection toolbar's and the composer's frosted windows under glass
+    /// (`notes_windows.rs`).
+    pub(crate) notes_windows: super::notes_windows::DocsNotesWindows,
     /// A field of the floating list to focus once its window draws (the search, a rename).
     pub(crate) drawer_focus: Option<gpui::Entity<gpui_component::input::InputState>>,
 }
@@ -361,6 +364,7 @@ impl NativeDocsState {
             watch_task: self.watch_task.take(),
             drawer: self.drawer.take(),
             format_bar_window: std::mem::take(&mut self.format_bar_window),
+            notes_windows: std::mem::take(&mut self.notes_windows),
             drawer_opening: self.drawer_opening,
             ..Self::default()
         };

@@ -187,6 +187,7 @@ impl Render for GhostexGpuiApp {
         crate::app::window::frosted_host::sync_frosted_tooltip_presenter(window, cx);
         self.native_docs_drop_unseen_drawer(cx);
         self.native_docs_drop_unseen_format_bar(cx);
+        self.native_docs_drop_unseen_notes_windows(cx);
         self.main_window_display_id = window.display(cx).map(|display| display.id());
         #[cfg(target_os = "windows")]
         if self.windows_first_run_setup_state != GpuiWindowsFirstRunSetupState::Ready {
@@ -287,41 +288,6 @@ impl Render for GhostexGpuiApp {
                             let outside_extension_popup = app
                                 .titlebar_extension_popup_bounds(window)
                                 .is_some_and(|bounds| !bounds.contains(&event.position));
-                            let popup_kind = app
-                                .titlebar_popup_menu
-                                .as_ref()
-                                .map(|state| state.kind.diagnostic_label())
-                                .or_else(|| {
-                                    app.titlebar_extension_popup
-                                        .as_ref()
-                                        .map(|_| "extension")
-                                });
-                            let trigger_bounds = app
-                                .titlebar_popup_menu
-                                .as_ref()
-                                .map(|state| {
-                                    gpui_titlebar_popup_bounds_diagnostic(Some(
-                                        state.trigger_bounds,
-                                    ))
-                                })
-                                .or_else(|| {
-                                    app.titlebar_extension_popup.as_ref().map(|state| {
-                                        gpui_titlebar_popup_bounds_diagnostic(Some(
-                                            state.trigger_bounds,
-                                        ))
-                                    })
-                                });
-                            log_gpui_titlebar_popup_repro(
-                                "gpui.titlebarPopup.mainWindowMouseCapture",
-                                serde_json::json!({
-                                    "kind": popup_kind,
-                                    "mainWindowActive": window.is_window_active(),
-                                    "outsideTrigger": outside_popup_menu_trigger || outside_extension_trigger,
-                                    "pointerX": event.position.x.as_f32(),
-                                    "pointerY": event.position.y.as_f32(),
-                                    "triggerBounds": trigger_bounds,
-                                }),
-                            );
                             if outside_popup_menu_trigger {
                                 app.close_gpui_titlebar_popup(None, window, cx);
                             } else if outside_extension_trigger && outside_extension_popup {
@@ -514,10 +480,6 @@ impl Render for GhostexGpuiApp {
                     this.cancel_gpui_titlebar_popup(window, cx);
                 } else if this.titlebar_extension_popup.is_some() {
                     this.close_titlebar_extension_popup(window, cx);
-                } else if this.titlebar_resources_panel_open {
-                    this.set_gpui_titlebar_resources_panel_open(false, window, cx);
-                } else if this.titlebar_tips_panel_open {
-                    this.set_gpui_titlebar_tips_panel_open(false, window, cx);
                 } else {
                     cx.propagate();
                 }

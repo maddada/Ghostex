@@ -3,14 +3,15 @@
 //!
 //! The pointer menu opens where the click landed. The Actions panel opens above the footer's
 //! right edge, is driven from the keyboard, and filters as the user types, like Raycast's.
-use super::chrome::quick_access_icon;
+use super::chrome::{QuickAccessMenuPaint, quick_access_icon, quick_access_menu_stand_in};
 use super::model::QuickAccessMenuItem;
 use super::palette::{
-    QUICK_ACCESS_FOOTER_HEIGHT, QUICK_ACCESS_ITEM_FONT_SIZE, QUICK_ACCESS_RADIUS_MENU_ITEM,
-    QuickAccessPalette, hsla,
+    QUICK_ACCESS_FOOTER_HEIGHT, QUICK_ACCESS_ITEM_FONT_SIZE, QUICK_ACCESS_RADIUS_ACTIONS_MENU,
+    QUICK_ACCESS_RADIUS_MENU_ITEM, QuickAccessPalette, hsla,
 };
 use super::rows::hotkey_keycaps;
 use super::window::GpuiQuickAccessWindow;
+use crate::app::window::native_modal_kit::MODAL_UI_FONT;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Anchor, AnyElement, ClickEvent, Context, InteractiveElement as _, IntoElement, KeyDownEvent,
@@ -231,6 +232,7 @@ impl GpuiQuickAccessWindow {
         &self,
         p: &QuickAccessPalette,
         menu: &QuickAccessOpenMenu,
+        paint: &QuickAccessMenuPaint,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let p = *p;
@@ -325,31 +327,49 @@ impl GpuiQuickAccessWindow {
                 .text_color(hsla(p.muted))
                 .child("No matching actions")
         });
+        let surface = v_flex()
+            .id("quick-access-context-menu")
+            .p(px(5.0))
+            .gap(px(1.0))
+            .rounded(px(QUICK_ACCESS_RADIUS_ACTIONS_MENU))
+            .border_1()
+            .border_color(hsla(p.menu_border))
+            .children(rows)
+            .children(empty)
+            .children(filter_line);
+        if matches!(paint, QuickAccessMenuPaint::Hosted) {
+            return surface
+                .size_full()
+                .font_family(MODAL_UI_FONT)
+                .bg(hsla(p.hosted_menu_background))
+                .into_any_element();
+        }
+        let surface = surface.w(px(if panel { 290.0 } else { 240.0 }));
+        let on_mouse_down_out = cx.listener(|this, _: &MouseDownEvent, _window, cx| {
+            this.context_menu = None;
+            cx.notify();
+        });
+        let content = match paint {
+            QuickAccessMenuPaint::StandIn(frames) => quick_access_menu_stand_in(
+                surface.invisible(),
+                "quick-access-context-menu",
+                frames.clone(),
+                on_mouse_down_out,
+                cx,
+            ),
+            _ => surface
+                .occlude()
+                .bg(hsla(p.menu_background))
+                .shadow_lg()
+                .on_mouse_down_out(on_mouse_down_out)
+                .into_any_element(),
+        };
         deferred(
             anchored()
                 .anchor(menu.request.corner)
                 .position(menu.request.position)
                 .snap_to_window_with_margin(px(8.0))
-                .child(
-                    v_flex()
-                        .id("quick-access-context-menu")
-                        .occlude()
-                        .w(px(if panel { 290.0 } else { 240.0 }))
-                        .p(px(5.0))
-                        .gap(px(1.0))
-                        .rounded(px(11.0))
-                        .border_1()
-                        .border_color(hsla(p.menu_border))
-                        .bg(hsla(p.menu_background))
-                        .shadow_lg()
-                        .on_mouse_down_out(cx.listener(|this, _: &MouseDownEvent, _window, cx| {
-                            this.context_menu = None;
-                            cx.notify();
-                        }))
-                        .children(rows)
-                        .children(empty)
-                        .children(filter_line),
-                ),
+                .child(content),
         )
         .with_priority(2)
         .into_any_element()

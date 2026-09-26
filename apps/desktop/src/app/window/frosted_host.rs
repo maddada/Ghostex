@@ -24,6 +24,13 @@ pub(crate) enum FrostedHostKind {
     Tooltip,
     /// One panel of the sidebar's menu: the menu itself at 0, each submenu stacked above it.
     SidebarMenu(u8),
+    /// The Docs toolbar over selected text (`native_docs/notes_windows.rs`).
+    DocsSelectionToolbar,
+    /// A Quick Access filter's picker (`window/quick_access/chrome.rs`), drawn over the Quick
+    /// Access window rather than the main one.
+    QuickAccessPicker,
+    /// A Quick Access row's actions menu or its Actions panel (`window/quick_access/actions_menu.rs`).
+    QuickAccessActions,
 }
 
 /// How many stacked sidebar menu panels get a window of their own; deeper ones share none.
@@ -31,6 +38,9 @@ pub(crate) const SIDEBAR_MENU_HOST_LEVELS: u8 = 4;
 
 /// The corner radius of a sidebar menu panel's window (the panel's own 8px at 100% zoom).
 pub(crate) const SIDEBAR_MENU_HOST_RADIUS: f32 = 8.0;
+
+/// The corner radius of the Docs selection toolbar, which its window's blur takes too.
+pub(crate) const DOCS_SELECTION_TOOLBAR_RADIUS: f32 = 8.0;
 
 /// Whether menus and tooltips drawn inside the main window move into frosted host windows now.
 /// macOS only: a host's blur is limited to its content's frames, which only the macOS window
@@ -58,12 +68,24 @@ struct HostSlot {
 
 thread_local! {
     static TOOLTIP_HOST: RefCell<HostSlot> = RefCell::default();
+    static DOCS_SELECTION_TOOLBAR_HOST: RefCell<HostSlot> = RefCell::default();
+    static QUICK_ACCESS_PICKER_HOST: RefCell<HostSlot> = RefCell::default();
+    static QUICK_ACCESS_ACTIONS_HOST: RefCell<HostSlot> = RefCell::default();
     static SIDEBAR_MENU_HOSTS: RefCell<Vec<HostSlot>> = RefCell::default();
 }
 
 fn with_slot<R>(kind: FrostedHostKind, f: impl FnOnce(&mut HostSlot) -> R) -> R {
     match kind {
         FrostedHostKind::Tooltip => TOOLTIP_HOST.with(|slot| f(&mut slot.borrow_mut())),
+        FrostedHostKind::DocsSelectionToolbar => {
+            DOCS_SELECTION_TOOLBAR_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::QuickAccessPicker => {
+            QUICK_ACCESS_PICKER_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
+        FrostedHostKind::QuickAccessActions => {
+            QUICK_ACCESS_ACTIONS_HOST.with(|slot| f(&mut slot.borrow_mut()))
+        }
         FrostedHostKind::SidebarMenu(level) => SIDEBAR_MENU_HOSTS.with(|slots| {
             let mut slots = slots.borrow_mut();
             let level = usize::from(level);
@@ -241,8 +263,21 @@ fn open_host(
                 FrostedHostKind::SidebarMenu(_) => {
                     window.set_background_corner_radius(gpui::px(SIDEBAR_MENU_HOST_RADIUS))
                 }
+                FrostedHostKind::DocsSelectionToolbar => {
+                    window.set_background_corner_radius(gpui::px(DOCS_SELECTION_TOOLBAR_RADIUS))
+                }
+                FrostedHostKind::QuickAccessPicker => {
+                    window.set_background_corner_radius(gpui::px(
+                        crate::app::window::quick_access::palette::QUICK_ACCESS_RADIUS_CONTROL,
+                    ))
+                }
+                FrostedHostKind::QuickAccessActions => {
+                    window.set_background_corner_radius(gpui::px(
+                        crate::app::window::quick_access::palette::QUICK_ACCESS_RADIUS_ACTIONS_MENU,
+                    ))
+                }
             }
-            attach_host_window(window, parent_view, kind == FrostedHostKind::Tooltip);
+            attach_host_window(window, parent_view, kind);
             let observe = with_slot(kind, |slot| slot.observe.clone());
             cx.new(|cx| {
                 let mut view = FrostedHostView {
@@ -307,7 +342,8 @@ fn native_view(_: &Window) -> Option<*mut std::ffi::c_void> {
 /// Attaches the host above its parent without ever taking key status from it (the same attachment
 /// the composer's suggestions use), and lets a tooltip pass the mouse through.
 #[cfg(target_os = "macos")]
-fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, ignores_mouse: bool) {
+fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, kind: FrostedHostKind) {
+    let ignores_mouse = kind == FrostedHostKind::Tooltip;
     unsafe extern "C" {
         fn GhostexGpuiAttachComposerSuggestionsWindow(
             view: *mut std::ffi::c_void,
@@ -326,7 +362,7 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, ignore
             // non-opaque window it sees as transparent, which is how clicks on the frosted menu's
             // rows fell through to the sidebar underneath.
             GhostexGpuiSetWindowIgnoresMouse(view, ignores_mouse);
-            if !ignores_mouse {
+            if matches!(kind, FrostedHostKind::SidebarMenu(_)) {
                 // The sidebar's outside-click monitor must not read a press here as leaving the menu.
                 GhostexGpuiSetWindowIdentifier(view, c"ghostex.frostedSidebarMenu".as_ptr());
             }
@@ -335,7 +371,7 @@ fn attach_host_window(window: &mut Window, parent: *mut std::ffi::c_void, ignore
 }
 
 #[cfg(not(target_os = "macos"))]
-fn attach_host_window(_: &mut Window, _: *mut std::ffi::c_void, _: bool) {}
+fn attach_host_window(_: &mut Window, _: *mut std::ffi::c_void, _: FrostedHostKind) {}
 
 #[cfg(target_os = "macos")]
 fn set_visible(

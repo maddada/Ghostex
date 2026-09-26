@@ -869,7 +869,7 @@ impl GpuiSpaceEditorModalWindow {
                                         inset: false,
                                     },
                                     BoxShadow {
-                                        color: hsla(p.surface),
+                                        color: hsla(p.solid_surface),
                                         offset: point(px(0.0), px(0.0)),
                                         blur_radius: px(0.0),
                                         spread_radius: px(2.0),

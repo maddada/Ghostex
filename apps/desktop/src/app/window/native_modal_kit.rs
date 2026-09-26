@@ -71,6 +71,12 @@ pub(crate) struct ModalPalette {
     pub(crate) accent: Rgba,
     pub(crate) menu_background: Rgba,
     pub(crate) menu_border: Rgba,
+    /// The dialog surface as an opaque colour. Equal to `surface`, except under window glass
+    /// (`frosted`), where `surface` is thinned and the dropdowns drawn inside the modal's window,
+    /// which nothing blurs, stay solid on this.
+    pub(crate) solid_surface: Rgba,
+    /// The modal's window blurs what is behind it (`frosted`).
+    pub(crate) glass: bool,
     pub(crate) light: bool,
 }
 
@@ -139,6 +145,7 @@ impl ModalPalette {
         let ink = if self.light { 0x000000 } else { 0xffffff };
         let step = |amount: f32| css_mix(rgb(ink), amount, chrome);
         self.surface = chrome;
+        self.solid_surface = chrome;
         self.panel = step(0.03);
         if self.light {
             self.raised = step(0.05);
@@ -147,6 +154,25 @@ impl ModalPalette {
             self.raised = step(0.06);
             self.raised_hover = step(0.085);
         }
+        self
+    }
+
+    /// CDXC:Theming 2026-09-26 DECISION:
+    /// User, of the Rename Session dialog drawn as an opaque dark box over the glass window: "please make all these kinds of GPUI modals in the app match the glass look when transparency is enabled". Under window glass every native app modal is a frosted surface like the menus: its window blurs what is behind it, `fill` (the app's frosted menu fill of `surface`) replaces the solid surface, and the panels, raised controls and hovers become ink washes at the same steps `tinted` mixes into the chrome, so they read as lighter panes on the glass instead of solid slabs. Glass off, nothing changes.
+    pub(crate) fn frosted(mut self, fill: Rgba) -> Self {
+        let ink = if self.light { 0x000000 } else { 0xffffff };
+        self.surface = fill;
+        self.panel = modal_rgba(ink, 0.03);
+        if self.light {
+            self.raised = modal_rgba(ink, 0.05);
+            self.raised_hover = modal_rgba(ink, 0.09);
+            self.accent = modal_rgba(ink, 0.08);
+        } else {
+            self.raised = modal_rgba(ink, 0.06);
+            self.raised_hover = modal_rgba(ink, 0.085);
+            self.accent = modal_rgba(ink, 0.09);
+        }
+        self.glass = true;
         self
     }
 
@@ -170,6 +196,8 @@ impl ModalPalette {
                 accent: rgb(0xe9e9e9),
                 menu_background: rgb(0xffffff),
                 menu_border: modal_rgba(0x000000, 0.16),
+                solid_surface: rgb(0xffffff),
+                glass: false,
                 light: true,
             }
         } else {
@@ -192,6 +220,8 @@ impl ModalPalette {
                 accent: rgb(0x262626),
                 menu_background: rgb(0x161616),
                 menu_border: modal_rgba(0xffffff, 0.08),
+                solid_surface: rgb(0x0e0e0e),
+                glass: false,
                 light: false,
             }
         }
@@ -225,7 +255,7 @@ impl ModalPalette {
     /// The Windows modal window's system border: 16% ink over the surface, so it stays visible against the same-coloured app chrome.
     pub(crate) fn window_border(&self) -> Rgba {
         let ink = if self.light { 0x000000 } else { 0xffffff };
-        css_mix(rgb(ink), 0.16, self.surface)
+        css_mix(rgb(ink), 0.16, self.solid_surface)
     }
 }
 
@@ -965,12 +995,14 @@ pub(crate) struct ModalLegacyPalette {
     pub(crate) muted_fill: Rgba,
     /// `--settings-raised-hover`: the default button's hover fill.
     pub(crate) raised_hover: Rgba,
+    /// The modal's window is frosted (`ModalPalette::frosted`).
+    pub(crate) glass: bool,
     pub(crate) light: bool,
 }
 
 impl ModalLegacyPalette {
     pub(crate) fn resolve(p: &ModalPalette) -> Self {
-        if p.light {
+        let lp = if p.light {
             Self {
                 window: p.surface,
                 surface: p.surface,
@@ -985,6 +1017,7 @@ impl ModalLegacyPalette {
                 destructive: p.destructive,
                 muted_fill: rgb(0xf1f1f1),
                 raised_hover: p.raised_hover,
+                glass: false,
                 light: true,
             }
         } else {
@@ -1013,8 +1046,22 @@ impl ModalLegacyPalette {
                 destructive: rgb(0xff6467),
                 muted_fill: p.raised,
                 raised_hover: p.raised,
+                glass: false,
                 light: false,
             }
+        };
+        if !p.glass {
+            return lp;
+        }
+        // Under window glass the window's frosted fill is the only layer: the dialog drawn on it
+        // is clear, and its fixed raised tones become the kit's ink washes.
+        Self {
+            window: p.surface,
+            surface: css_fade(p.surface, 0.0),
+            raised: p.raised,
+            muted_fill: p.raised,
+            glass: true,
+            ..lp
         }
     }
 
@@ -1231,7 +1278,11 @@ pub(crate) fn modal_legacy_shell<V: Render>(
                         .flex_shrink_0()
                         .rounded(px(MODAL_RADIUS_SECTION))
                         .border_1()
-                        .border_color(hsla(lp.window))
+                        .border_color(if lp.glass {
+                            transparent()
+                        } else {
+                            hsla(lp.window)
+                        })
                         .bg(hsla(lp.surface))
                         .overflow_hidden()
                         .child(
@@ -1435,12 +1486,12 @@ pub(crate) fn modal_searchable_select_menu<V: 'static>(
     let (input_border, input_background) = if p.light {
         (
             modal_rgba(0x000000, 0.16),
-            css_mix(rgb(0x000000), 0.16 * 0.3, p.surface),
+            css_mix(rgb(0x000000), 0.16 * 0.3, p.solid_surface),
         )
     } else {
         (
             modal_rgba(0xffffff, 0.15),
-            css_mix(rgb(0xffffff), 0.15 * 0.3, p.surface),
+            css_mix(rgb(0xffffff), 0.15 * 0.3, p.solid_surface),
         )
     };
     // `--ring`: oklch(55.6% 0 0) dark, #737373 light.
@@ -1547,7 +1598,7 @@ pub(crate) fn modal_searchable_select_menu<V: 'static>(
         .rounded(px(MODAL_RADIUS_CONTROL))
         .border_1()
         .border_color(hsla(popup_border))
-        .bg(hsla(p.surface))
+        .bg(hsla(p.solid_surface))
         .text_color(hsla(p.foreground))
         .shadow(vec![gpui::BoxShadow {
             color: hsla(modal_rgba(0x000000, 0.35)),

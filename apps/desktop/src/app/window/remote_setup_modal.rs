@@ -378,7 +378,11 @@ impl GpuiRemoteSetupModalWindow {
             .rounded(px(MODAL_RADIUS_CONTROL))
             .border_1()
             .border_color(hsla(self.shadcn_border()))
-            .bg(hsla(p.background))
+            .bg(if p.glass {
+                transparent()
+            } else {
+                hsla(p.background)
+            })
             .text_size(px(14.0))
             .line_height(px(20.0))
             .font_weight(FontWeight::NORMAL)

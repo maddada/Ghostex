@@ -115,7 +115,8 @@ impl PickerColors {
         if p.light {
             let foreground = rgb(0x262626);
             Self {
-                surface: p.surface,
+                // Solid: under glass the app thins it into its frosted fill (`surface_color`).
+                surface: p.solid_surface,
                 frame_border: p.hairline,
                 item: rgb(0x404040),
                 foreground,
@@ -133,7 +134,7 @@ impl PickerColors {
         } else {
             let foreground = rgb(0xb4b8bf);
             Self {
-                surface: p.surface,
+                surface: p.solid_surface,
                 frame_border: modal_rgba(0xffffff, 0.12),
                 item: foreground,
                 foreground,

@@ -5,8 +5,8 @@
 use std::time::{Duration, Instant};
 
 use gpui::{
-    AppContext as _, Bounds, ClipboardItem, Context, Entity, Hsla, Pixels, Subscription, Window,
-    rgb,
+    AnyWindowHandle, AppContext as _, Bounds, ClipboardItem, Context, Entity, Hsla, Pixels,
+    Subscription, Window, rgb,
 };
 use gpui_component::input::{InputEvent, InputState};
 use serde_json::json;
@@ -40,7 +40,11 @@ pub(crate) enum DocsSendStatus {
 
 /// The note composer: the text field and what the note will be attached to.
 pub(crate) struct DocsComposer {
-    pub(crate) input: Entity<InputState>,
+    /// The text field, made by the window that draws the composer (`native_docs_composer_input`).
+    pub(crate) input: Option<DocsComposerInput>,
+    /// What the field starts with, until it is made.
+    pub(crate) initial: String,
+    pub(crate) placeholder: &'static str,
     /// The selected source text; empty for a global comment.
     pub(crate) quote: String,
     /// The note being edited, if this is an edit rather than a new note.
@@ -48,7 +52,14 @@ pub(crate) struct DocsComposer {
     /// Where the composer opens (the selection, or the global-comment button), in window
     /// coordinates.
     pub(crate) anchor: Bounds<Pixels>,
-    pub(crate) _subscription: Subscription,
+}
+
+/// The composer's text field and the window it was made in. A text field starts its caret, and
+/// notices focus, only in that window, so the composer's frosted window makes one of its own.
+pub(crate) struct DocsComposerInput {
+    pub(crate) state: Entity<InputState>,
+    window: AnyWindowHandle,
+    _subscription: Subscription,
 }
 
 /// A `#rrggbb` colour at `alpha`.
@@ -216,7 +227,6 @@ impl GhostexGpuiApp {
         global_anchor: Option<Bounds<Pixels>>,
         editing: Option<String>,
         initial: &str,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let (quote, anchor, text) = if let Some(id) = editing.as_deref() {
@@ -242,14 +252,43 @@ impl GhostexGpuiApp {
         } else {
             "Add a comment"
         };
-        let input = cx.new(|cx| {
+        self.native_docs.composer = Some(DocsComposer {
+            input: None,
+            initial: text,
+            placeholder,
+            quote,
+            editing,
+            anchor,
+        });
+        self.native_docs_notify(cx);
+    }
+
+    /// The composer's text field for `window`, the window drawing the composer. The first draw in
+    /// a window makes the field there and focuses it; a field made in another window (the
+    /// composer moved into or out of its frosted window) hands its text over.
+    pub(crate) fn native_docs_composer_input(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Option<Entity<InputState>> {
+        let composer = self.native_docs.composer.as_mut()?;
+        let here = window.window_handle();
+        if let Some(input) = composer.input.as_ref().filter(|input| input.window == here) {
+            return Some(input.state.clone());
+        }
+        let text = composer.input.as_ref().map_or_else(
+            || composer.initial.clone(),
+            |input| input.state.read(cx).value().to_string(),
+        );
+        let placeholder = composer.placeholder;
+        let state = cx.new(|cx| {
             InputState::new(window, cx)
                 .multi_line(true)
                 .placeholder(placeholder)
                 .default_value(text)
         });
         let subscription = cx.subscribe_in(
-            &input,
+            &state,
             window,
             |this: &mut Self, _input, event: &InputEvent, window, cx| {
                 if let InputEvent::PressEnter {
@@ -260,18 +299,16 @@ impl GhostexGpuiApp {
                 }
             },
         );
-        let focus = input.clone();
+        let focus = state.clone();
         window.on_next_frame(move |window, cx| {
             focus.update(cx, |input, cx| input.focus(window, cx));
         });
-        self.native_docs.composer = Some(DocsComposer {
-            input,
-            quote,
-            editing,
-            anchor,
+        composer.input = Some(DocsComposerInput {
+            state: state.clone(),
+            window: here,
             _subscription: subscription,
         });
-        self.native_docs_notify(cx);
+        Some(state)
     }
 
     /// Add (or Save when editing): stores the note and closes the composer.
@@ -286,7 +323,9 @@ impl GhostexGpuiApp {
         let Some(composer) = self.native_docs.composer.take() else {
             return;
         };
-        let text = composer.input.read(cx).value().to_string();
+        let text = composer.input.as_ref().map_or(composer.initial, |input| {
+            input.state.read(cx).value().to_string()
+        });
         if let Some(id) = composer.editing {
             if let Some(path) = self.native_docs.active.clone()
                 && let Some(notes) = self.native_docs.notes.get_mut(&path)

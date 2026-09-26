@@ -8,6 +8,7 @@ use super::palette::{
     QUICK_ACCESS_RADIUS_MENU_ITEM, QUICK_ACCESS_SEARCH_BAR_HEIGHT, QUICK_ACCESS_SEARCH_FONT_SIZE,
     QuickAccessPalette, hsla, parse_css_color,
 };
+use crate::app::window::native_modal_kit::MODAL_UI_FONT;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, Context, InteractiveElement as _, IntoElement,
@@ -17,12 +18,64 @@ use gpui::{
 };
 use gpui_component::input::{Input, InputState};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 pub(crate) const ICON_SEARCH: &str = "modals/kit/search.svg";
 pub(crate) const ICON_CLEAR: &str = "modals/kit/x.svg";
 pub(crate) const ICON_SELECTOR: &str = "modals/kit/selector.svg";
+pub(crate) const ICON_CHECK: &str = "titlebar/check.svg";
+
+/// The frames the open menus' stand-ins last laid out, in the Quick Access window's coordinates,
+/// each with the id of the menu it stands in for.
+pub(crate) type QuickAccessMenuFrames = Rc<RefCell<Vec<(&'static str, Bounds<Pixels>)>>>;
+
+/// Where a Quick Access menu draws.
+///
+/// CDXC:Theming 2026-09-26 DECISION:
+/// User, of the Sessions scope dropdown drawn as a solid dark box over the frosted Quick Access window: "the dropdown here shouldn't show like this when app has transparency enabled", "i want the dropdown to be glassy when transparency is enabled". Nothing inside a window can blur what is under it, so under glass on macOS every Quick Access menu (the filter pickers, a row's actions menu, the Actions panel) draws in a frosted host window of its own (`frosted_host.rs`) with the app's frosted menu fill, the way the sidebar's menus do. Quick Access keeps an invisible stand-in of the same size where the menu would be: it sets the host's frame, keeps the rows under the menu from lighting up, and closes the menu on a click elsewhere. Glass off, the menus draw in the window with their solid fill as before.
+#[derive(Clone)]
+pub(crate) enum QuickAccessMenuPaint {
+    InWindow,
+    StandIn(QuickAccessMenuFrames),
+    /// The menu itself, filling its frosted host window.
+    Hosted,
+}
+
+/// Wraps an invisible menu panel as its stand-in (`QuickAccessMenuPaint::StandIn`): it reports the
+/// panel's frame to `frames`, rendering the window again when that frame moves, takes the pointer
+/// over the menu's area, and runs `on_mouse_down_out` for a press anywhere else in the window.
+pub(crate) fn quick_access_menu_stand_in<V: 'static>(
+    panel: impl IntoElement,
+    id: &'static str,
+    frames: QuickAccessMenuFrames,
+    on_mouse_down_out: impl Fn(&MouseDownEvent, &mut Window, &mut App) + 'static,
+    cx: &mut Context<V>,
+) -> AnyElement {
+    let view = cx.entity().downgrade();
+    div()
+        .flex()
+        .occlude()
+        .on_mouse_down_out(on_mouse_down_out)
+        .on_children_prepainted(move |bounds, _window, cx| {
+            let Some(bounds) = bounds.first().copied() else {
+                return;
+            };
+            {
+                let mut frames = frames.borrow_mut();
+                match frames.iter_mut().find(|(laid_out, _)| *laid_out == id) {
+                    Some((_, known)) if *known == bounds => return,
+                    Some((_, known)) => *known = bounds,
+                    None => frames.push((id, bounds)),
+                }
+            }
+            if let Some(view) = view.upgrade() {
+                view.update(cx, |_, cx| cx.notify());
+            }
+        })
+        .child(panel)
+        .into_any_element()
+}
 
 /// `titlebar/<kebab-name>.svg`, the same bundle the sidebar's action icons use.
 pub(crate) fn asset_icon_path(name: &str) -> SharedString {
@@ -507,6 +560,9 @@ pub(crate) fn quick_access_select_trigger<V: 'static>(
 
 /// The portaled picker: the Codex popup surface with 28px rows, restated here
 /// the way `.previous-sessions-tag-filter-menu` restates it outside the modal.
+///
+/// CDXC:Theming 2026-09-26 DECISION:
+/// User, of the accent-blue text on the chosen option: "we shouldn't show this color for selected item's text, just keep it default color for the text". A chosen option keeps the row's text colour and carries the check the app's other menus use, which is also what shows the tags a multi-choice tag filter has on.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn quick_access_select_menu<V: 'static>(
     p: &QuickAccessPalette,
@@ -514,6 +570,7 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
     menu: &QuickAccessMenuState,
     id: &'static str,
     min_width: f32,
+    paint: &QuickAccessMenuPaint,
     on_choose: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + Clone + 'static,
     on_dismiss: impl Fn(&mut V, &mut Window, &mut Context<V>) + 'static,
     window: &Window,
@@ -562,16 +619,11 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
                         .rounded(px(QUICK_ACCESS_RADIUS_MENU_ITEM))
                         .text_size(px(QUICK_ACCESS_ITEM_FONT_SIZE))
                         .line_height(px(20.0))
-                        .text_color(hsla(if option.selected { p.accent } else { p.item }))
+                        .text_color(hsla(p.item))
                         .when(option.disabled, |this| this.opacity(0.5))
                         .when(!option.disabled, |this| {
                             this.cursor_pointer().when(highlighted, |this| {
-                                this.bg(hsla(p.menu_hover))
-                                    .text_color(hsla(if option.selected {
-                                        p.accent
-                                    } else {
-                                        p.foreground
-                                    }))
+                                this.bg(hsla(p.menu_hover)).text_color(hsla(p.foreground))
                             })
                         })
                         .when(!option.disabled, |this| {
@@ -612,6 +664,13 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
                                         .child(option.detail.clone())
                                 })),
                         )
+                        .children(option.selected.then(|| {
+                            svg()
+                                .path(ICON_CHECK)
+                                .size(px(14.0))
+                                .flex_shrink_0()
+                                .text_color(hsla(p.item))
+                        }))
                         .on_click(cx.listener(move |this, _: &ClickEvent, window, cx| {
                             if option.disabled {
                                 return;
@@ -621,64 +680,81 @@ pub(crate) fn quick_access_select_menu<V: 'static>(
                 )
         })
         .collect::<Vec<_>>();
+    let stand_in = matches!(paint, QuickAccessMenuPaint::StandIn(_));
+    let panel = v_flex()
+        .id(id)
+        .p(px(4.0))
+        .gap(px(1.0))
+        .rounded(px(QUICK_ACCESS_RADIUS_CONTROL))
+        .border_1()
+        .border_color(hsla(p.menu_border))
+        .children(select.searchable.then(|| {
+            h_flex()
+                .w_full()
+                .h(px(28.0))
+                .px(px(8.0))
+                .mb(px(4.0))
+                .items_center()
+                .border_b_1()
+                .border_color(hsla(p.menu_border))
+                .text_size(px(QUICK_ACCESS_ITEM_FONT_SIZE))
+                .text_color(hsla(if menu.query.is_empty() {
+                    p.muted
+                } else {
+                    p.foreground
+                }))
+                .child(if menu.query.is_empty() {
+                    select.search_placeholder.clone()
+                } else {
+                    menu.query.clone()
+                })
+        }))
+        .child(
+            v_flex()
+                .id((id, 0usize))
+                .w_full()
+                .min_h_0()
+                .overflow_y_scroll()
+                // The stand-in lays out the same rows, but the scroll position is the hosted menu's.
+                .when(!stand_in, |this| this.track_scroll(&menu.scroll))
+                .gap(px(1.0))
+                .children(rows),
+        );
+    if matches!(paint, QuickAccessMenuPaint::Hosted) {
+        return Some(
+            panel
+                .size_full()
+                .font_family(MODAL_UI_FONT)
+                .bg(hsla(p.hosted_menu_background))
+                .into_any_element(),
+        );
+    }
+    let panel = panel
+        .min_w(px(min_width.max(f32::from(trigger.size.width))))
+        .max_h(max_height);
+    let on_mouse_down_out = cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+        if trigger.contains(&event.position) {
+            return;
+        }
+        on_dismiss(this, window, cx);
+    });
+    let content = match paint {
+        QuickAccessMenuPaint::StandIn(frames) => {
+            quick_access_menu_stand_in(panel.invisible(), id, frames.clone(), on_mouse_down_out, cx)
+        }
+        _ => panel
+            .occlude()
+            .bg(hsla(p.menu_background))
+            .shadow_lg()
+            .on_mouse_down_out(on_mouse_down_out)
+            .into_any_element(),
+    };
     Some(
         deferred(
             anchored()
                 .position(position)
                 .snap_to_window_with_margin(px(8.0))
-                .child(
-                    v_flex()
-                        .id(id)
-                        .occlude()
-                        .min_w(px(min_width.max(f32::from(trigger.size.width))))
-                        .max_h(max_height)
-                        .p(px(4.0))
-                        .gap(px(1.0))
-                        .rounded(px(QUICK_ACCESS_RADIUS_CONTROL))
-                        .border_1()
-                        .border_color(hsla(p.menu_border))
-                        .bg(hsla(p.menu_background))
-                        .shadow_lg()
-                        .on_mouse_down_out(cx.listener(
-                            move |this, event: &MouseDownEvent, window, cx| {
-                                if trigger.contains(&event.position) {
-                                    return;
-                                }
-                                on_dismiss(this, window, cx);
-                            },
-                        ))
-                        .children(select.searchable.then(|| {
-                            h_flex()
-                                .w_full()
-                                .h(px(28.0))
-                                .px(px(8.0))
-                                .mb(px(4.0))
-                                .items_center()
-                                .border_b_1()
-                                .border_color(hsla(p.menu_border))
-                                .text_size(px(QUICK_ACCESS_ITEM_FONT_SIZE))
-                                .text_color(hsla(if menu.query.is_empty() {
-                                    p.muted
-                                } else {
-                                    p.foreground
-                                }))
-                                .child(if menu.query.is_empty() {
-                                    select.search_placeholder.clone()
-                                } else {
-                                    menu.query.clone()
-                                })
-                        }))
-                        .child(
-                            v_flex()
-                                .id((id, 0usize))
-                                .w_full()
-                                .min_h_0()
-                                .overflow_y_scroll()
-                                .track_scroll(&menu.scroll)
-                                .gap(px(1.0))
-                                .children(rows),
-                        ),
-                ),
+                .child(content),
         )
         .with_priority(1)
         .into_any_element(),

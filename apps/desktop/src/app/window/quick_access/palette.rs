@@ -22,6 +22,8 @@ pub(crate) const QUICK_ACCESS_GROUP_HEADING_HEIGHT: f32 = 26.0;
 pub(crate) const QUICK_ACCESS_CONTROL_HEIGHT: f32 = 32.0;
 pub(crate) const QUICK_ACCESS_RADIUS_CONTROL: f32 = 8.0;
 pub(crate) const QUICK_ACCESS_RADIUS_MENU_ITEM: f32 = 6.0;
+/// A row's actions menu and the Actions panel.
+pub(crate) const QUICK_ACCESS_RADIUS_ACTIONS_MENU: f32 = 11.0;
 pub(crate) const QUICK_ACCESS_SEARCH_BAR_HEIGHT: f32 = 54.0;
 pub(crate) const QUICK_ACCESS_SEARCH_FONT_SIZE: f32 = 17.0;
 pub(crate) const QUICK_ACCESS_FILTER_HEIGHT: f32 = 28.0;
@@ -32,6 +34,9 @@ pub(crate) const QUICK_ACCESS_FOOTER_HEIGHT: f32 = 44.0;
 pub(crate) struct QuickAccessPalette {
     /// The child window's own fill; the React surface is transparent over it.
     pub(crate) window: Rgba,
+    /// `window` as an opaque colour, for text drawn on a foreground fill. Equal to `window`
+    /// except under window glass (`frosted`).
+    pub(crate) solid_window: Rgba,
     /// `--settings-raised`: search field, row hover, select triggers.
     pub(crate) raised: Rgba,
     /// `--settings-raised-hover`.
@@ -51,6 +56,9 @@ pub(crate) struct QuickAccessPalette {
     pub(crate) destructive: Rgba,
     /// Portaled menu surfaces (tag filter, project picker, row menus).
     pub(crate) menu_background: Rgba,
+    /// A menu's fill when it draws in a frosted window of its own (`frosted`); `menu_background`
+    /// otherwise.
+    pub(crate) hosted_menu_background: Rgba,
     pub(crate) menu_border: Rgba,
     pub(crate) menu_hover: Rgba,
     /// The footer bar's own tone, its selected tab, and the tab accelerators.
@@ -77,6 +85,7 @@ impl QuickAccessPalette {
             let hairline = modal_rgba(0x000000, 0.14);
             Self {
                 window,
+                solid_window: window,
                 raised: rgb(0xf0f0f0),
                 raised_hover: rgb(0xe5e5e5),
                 hairline,
@@ -88,6 +97,7 @@ impl QuickAccessPalette {
                 accent: rgb(0x262626),
                 destructive: rgb(0xb91c1c),
                 menu_background: rgb(0xffffff),
+                hosted_menu_background: rgb(0xffffff),
                 menu_border: modal_rgba(0x000000, 0.16),
                 menu_hover: rgb(0xe9e9e9),
                 footer: modal_rgba(0x000000, 0.03),
@@ -106,6 +116,7 @@ impl QuickAccessPalette {
             let hairline = modal_rgba(0xffffff, 0.08);
             Self {
                 window,
+                solid_window: window,
                 raised: rgb(0x161616),
                 raised_hover: rgb(0x1d1d1d),
                 hairline,
@@ -116,6 +127,7 @@ impl QuickAccessPalette {
                 accent: rgb(0x86d3f8),
                 destructive: modal.destructive,
                 menu_background: rgb(0x161616),
+                hosted_menu_background: rgb(0x161616),
                 menu_border: modal_rgba(0xffffff, 0.08),
                 menu_hover: rgb(0x232323),
                 footer: modal_rgba(0x000000, 0.18),
@@ -129,6 +141,28 @@ impl QuickAccessPalette {
                 favorite: rgb(0xe3b341),
             }
         }
+    }
+
+    /// Under window glass Quick Access is frosted like the app modals (`ModalPalette::frosted`):
+    /// its window blurs what is behind it, `fill` replaces the window colour, and the raised
+    /// fills become ink washes. Its menus draw in frosted windows of their own on macOS
+    /// (`QuickAccessMenuPaint`), with the app's frosted menu fill and the same soft ink wash on
+    /// their highlighted row as the app's other frosted menus.
+    pub(crate) fn frosted(mut self, light: bool, fill: Rgba) -> Self {
+        let (ink, raised, raised_hover, menu_hover) = if light {
+            (0x000000, 0.05, 0.09, 0.06)
+        } else {
+            (0xffffff, 0.05, 0.08, 0.08)
+        };
+        self.window = fill;
+        self.raised = modal_rgba(ink, raised);
+        self.raised_hover = modal_rgba(ink, raised_hover);
+        self.menu_hover = modal_rgba(ink, menu_hover);
+        self.hosted_menu_background = crate::app::helpers::frosted_menu_fill(
+            crate::app::helpers::titlebar_popup_menu_background(),
+        )
+        .into();
+        self
     }
 
     /// `bg-border/50`: the hairline the Commands list draws between groups.
