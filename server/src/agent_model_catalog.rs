@@ -104,16 +104,20 @@ pub fn catalog_model(agent: &str, value: &str) -> Option<Value> {
 }
 
 /// The catalog's own name for a model the terminal printed with a " (1M context)" suffix, when
-/// that suffix tells no two catalog rows apart: "Opus 5.5 (1M context)" is the one `opus[1m]` row
-/// labelled "Opus 5.5". A model offered in both context sizes keeps its suffix (`None`).
+/// the catalog labels its 1M row with the bare name: "Opus 5.5 (1M context)" is the `opus[1m]` row
+/// labelled "Opus 5.5", even beside its 200K `opus` twin. A 1M model the catalog does not list
+/// under that name keeps its suffix (`None`).
 pub fn long_context_label(agent: &str, name: &str) -> Option<String> {
     let base = name.trim().strip_suffix(" (1M context)")?;
-    let values: Vec<String> = agent_models(&current(), agent)
+    agent_models(&current(), agent)
         .into_iter()
-        .filter(|row| row.get("label").and_then(Value::as_str) == Some(base))
-        .filter_map(|row| row.get("value").and_then(Value::as_str).map(str::to_string))
-        .collect();
-    (!values.is_empty() && values.iter().all(|value| value.ends_with("[1m]")))
+        .any(|row| {
+            row.get("label").and_then(Value::as_str) == Some(base)
+                && row
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .is_some_and(|value| value.ends_with("[1m]"))
+        })
         .then(|| base.to_string())
 }
 

@@ -261,7 +261,7 @@ impl SessionChatTerminalPicker {
     /*
     CDXC:SessionChat 2026-09-26 DECISION:
     User: "no need to say (1M context) for Opus 5.5, just keep it Opus 5.5" on the chat's model switch card.
-    The card names the model the way the model catalog labels it, and a model the catalog offers in both context sizes keeps Claude's suffix.
+    The card names the model the way the model catalog labels its 1M row, so Opus 5.5 stays "Opus 5.5" beside its 200K twin (restored 2026-09-26); a 1M model the catalog does not list under the bare name keeps Claude's suffix.
     Only the card's copy changes: rows are answered by index against a fresh capture, and the /model job matches the raw rows.
     */
     pub fn with_catalog_model_names(mut self) -> Self {

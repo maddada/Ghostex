@@ -108,6 +108,27 @@ pub fn create_model_picker_request(
                 .or_else(|| agent.default_effort.clone()),
         })
         .collect();
+    // CDXC:SessionChat 2026-09-26 WHY:
+    // A session on a hidden context twin (Claude's 200K `opus` beside the `opus[1m]` card) matched
+    // no card, so the picker highlighted the catalog default and an effort-only change asked the
+    // agent to switch to the other context size, which Claude 2.1.283's list cannot do. The twin's
+    // card stands for the session's own size instead.
+    let mut models = models;
+    if let Some(selected) = selected_model.filter(|value| {
+        !models.iter().any(|entry| entry.value == *value)
+            && agent
+                .models
+                .iter()
+                .any(|model| model.value == *value && model.group.is_none())
+    }) {
+        let twin = selected
+            .strip_suffix("[1m]")
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{selected}[1m]"));
+        if let Some(card) = models.iter_mut().find(|entry| entry.value == twin) {
+            card.value = selected.to_string();
+        }
+    }
     // Detection may not have arrived yet. The catalog default is a starting cursor, not a claim
     // about the running agent.
     let catalog_default = agent
