@@ -2698,10 +2698,6 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        cpraildbg(&format!(
-            "rail_mouse_down pos=({:?},{:?}) clicks={}",
-            event.position.x, event.position.y, event.click_count
-        ));
         window.prevent_default();
         cx.stop_propagation();
 
@@ -2775,12 +2771,6 @@ impl GhostexGpuiApp {
         let Some(drag) = self.command_pane.resize_drag else {
             return;
         };
-        cpraildbg(&format!(
-            "drag_move y={:?} dragging={}",
-            event.position.y,
-            event.dragging()
-        ));
-
         if !event.dragging() {
             self.finish_command_pane_resize_drag(cx);
             return;

@@ -261,27 +261,14 @@ export const EXTRA_SETTINGS_TAB_SEARCH_SECTIONS: Record<
           {
             key: 'debuggingMode',
             title: 'Show debug UI controls',
-            subtitle: 'Show debug-only controls, storage statistics, and enabled routine diagnostic logs.',
+            subtitle: 'Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus.',
           },
           {
             key: 'diagnosticLogging',
-            title: 'Diagnostic disk logging scenarios',
+            title: 'Diagnostic logs',
             subtitle:
-              'Choose routine repro log areas while Show debug UI controls is on. Important warnings, errors, and crashes remain captured when it is off.',
-            options: DIAGNOSTIC_LOGGING_SCENARIOS.flatMap((scenario) => [
-              { label: scenario.label, value: scenario.id },
-              ...scenario.logFiles.map((logFile) => ({ label: logFile, value: logFile })),
-            ]),
-          },
-          {
-            key: 'showSessionCommandCopyActions',
-            title: 'Show command copy actions',
-            subtitle: 'Show Copy resume and Copy attach command in session context menus.',
-          },
-          {
-            key: 'showSessionDetailsCopyAction',
-            title: 'Show Copy Details option',
-            subtitle: 'Show Copy Details in session context menus.',
+              'Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.',
+            options: DIAGNOSTIC_LOGGING_SCENARIOS.map((scenario) => ({ label: scenario.label, value: scenario.id })),
           },
         ],
       },

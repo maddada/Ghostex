@@ -578,16 +578,7 @@ pub(crate) fn route_gpui_native_keyboard_event(
                     let _ = this.send_tab_key_to_gpui_engine_terminal(owner, action, shift, cx);
                 }
                 GpuiNativeKeyboardDispatch::CompositedTerminalBulkText { owner, text } => {
-                    let view = this.gpui_engine_terminal_view_for_target(owner);
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        "TEMP.gpui.fluidVoice.bulkTextDispatch",
-                        serde_json::json!({
-                            "targetFound": view.is_some(),
-                            "text": support_logs::temporary_fluid_voice_text_shape(&text),
-                        }),
-                    );
-                    if let Some(view) = view {
+                    if let Some(view) = this.gpui_engine_terminal_view_for_target(owner) {
                         view.update(cx, |view, cx| view.send_text_input(&text, cx));
                     }
                 }

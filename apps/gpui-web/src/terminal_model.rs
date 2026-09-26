@@ -4,10 +4,7 @@ use std::{
     collections::VecDeque,
     path::PathBuf,
     rc::Rc,
-    sync::{
-        Arc, Mutex, OnceLock,
-        atomic::{AtomicU64, Ordering},
-    },
+    sync::{Arc, Mutex},
 };
 
 use wasm_bindgen::{JsCast, closure::Closure};
@@ -21,7 +18,6 @@ use crate::ghostty_vt::{
 
 struct PtyWriteRequest {
     bytes: Vec<u8>,
-    paste_trace_id: Option<u64>,
 }
 
 /// A value that only ever lives on the page's one thread. libghostty's host callbacks are typed `Send` because the desktop calls them from its PTY reader thread; here they run inside `feed`, on the thread that owns the socket.
@@ -157,7 +153,11 @@ impl TerminalModel {
             let data = event.data();
             if let Ok(buffer) = data.clone().dyn_into::<js_sys::ArrayBuffer>() {
                 let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
-                if let Some(terminal) = feed_terminal.lock().expect("terminal lock poisoned").as_mut() {
+                if let Some(terminal) = feed_terminal
+                    .lock()
+                    .expect("terminal lock poisoned")
+                    .as_mut()
+                {
                     terminal.feed(&bytes);
                 }
                 feed_events(TerminalEvent::Wakeup);
@@ -167,7 +167,10 @@ impl TerminalModel {
                 match control["type"].as_str() {
                     Some("exit") => {
                         let code = control["code"].as_i64().map(|code| code as u32);
-                        let status = TerminalExit { code, success: code == Some(0) };
+                        let status = TerminalExit {
+                            code,
+                            success: code == Some(0),
+                        };
                         *feed_exit.lock().expect("terminal exit lock poisoned") = Some(status);
                         feed_events(TerminalEvent::Exited(status));
                     }
@@ -201,7 +204,6 @@ impl TerminalModel {
     }
 
     fn queue_input(&self, request: PtyWriteRequest) -> std::io::Result<()> {
-        let _ = request.paste_trace_id;
         self.link.0.borrow_mut().send(&request.bytes);
         Ok(())
     }
@@ -239,11 +241,6 @@ impl TerminalModel {
 
     /// The desktop retires its emulator when a zmx viewer detaches to free memory; a page's terminal lives as long as its view.
     pub fn release_viewer_emulator(&mut self) {}
-
-    /// There is no local child: the process belongs to the zmx daemon on the session's computer.
-    pub fn diagnostic_child_pid(&self) -> Option<u32> {
-        None
-    }
 
     pub fn exit_status(&self) -> Option<TerminalExit> {
         *self.exit.lock().expect("terminal exit lock poisoned")

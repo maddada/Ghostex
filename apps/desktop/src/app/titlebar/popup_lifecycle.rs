@@ -41,20 +41,6 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let _profile = crate::profiling::span(crate::profiling::Metric::PopupOpen);
-        log_gpui_titlebar_popup_repro(
-            "gpui.titlebarPopup.setOpenRequested",
-            serde_json::json!({
-                "currentKind": self
-                    .titlebar_popup_menu
-                    .as_ref()
-                    .map(|state| state.kind.diagnostic_label()),
-                "hasPopupWindowHandle": self.titlebar_popup_window.is_some(),
-                "kind": kind.diagnostic_label(),
-                "mainWindowActive": window.is_window_active(),
-                "open": open,
-                "triggerBounds": gpui_titlebar_popup_bounds_diagnostic(trigger_bounds),
-            }),
-        );
         if !open {
             self.close_gpui_titlebar_popup(Some(kind), window, cx);
             return;
@@ -68,13 +54,6 @@ impl GhostexGpuiApp {
         }
         self.close_gpui_titlebar_popup(None, window, cx);
         let Some(trigger_bounds) = trigger_bounds else {
-            log_gpui_titlebar_popup_repro(
-                "gpui.titlebarPopup.anchorMissing",
-                serde_json::json!({
-                    "kind": kind.diagnostic_label(),
-                    "mainWindowActive": window.is_window_active(),
-                }),
-            );
             window.request_animation_frame();
             return;
         };
@@ -155,16 +134,6 @@ impl GhostexGpuiApp {
             },
             ..Default::default()
         };
-        log_gpui_titlebar_popup_repro(
-            "gpui.titlebarPopup.openWindowAttempt",
-            serde_json::json!({
-                "focusRequested": !cfg!(any(target_os = "macos", target_os = "windows")),
-                "kind": kind.diagnostic_label(),
-                "mainWindowActive": window.is_window_active(),
-                "popupBounds": gpui_titlebar_popup_bounds_diagnostic(Some(popup_bounds)),
-                "triggerBounds": gpui_titlebar_popup_bounds_diagnostic(Some(trigger_bounds)),
-            }),
-        );
         let popup_window = match cx.open_window(options, {
             let content = content.clone();
             move |popup_window, cx| {
@@ -176,12 +145,12 @@ impl GhostexGpuiApp {
         }) {
             Ok(popup_window) => popup_window,
             Err(error) => {
-                log_gpui_titlebar_popup_repro(
+                support_logs::append(
+                    support_logs::GpuiSupportLog::HostLifecycle,
                     "gpui.titlebarPopup.openWindowError",
                     serde_json::json!({
                         "error": error.to_string(),
                         "kind": kind.diagnostic_label(),
-                        "mainWindowActive": window.is_window_active(),
                     }),
                 );
                 return;
@@ -192,13 +161,6 @@ impl GhostexGpuiApp {
             trigger_bounds,
         });
         self.titlebar_popup_window = Some(popup_window);
-        log_gpui_titlebar_popup_repro(
-            "gpui.titlebarPopup.openWindowSucceeded",
-            serde_json::json!({
-                "kind": kind.diagnostic_label(),
-                "mainWindowActive": window.is_window_active(),
-            }),
-        );
         if kind == GpuiTitlebarPopupKind::Tips {
             self.request_gpui_titlebar_tips_runtime_status(cx);
         }
@@ -228,24 +190,10 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let current_kind = self
-            .titlebar_popup_menu
-            .as_ref()
-            .map(|state| state.kind.diagnostic_label());
         let should_close = self
             .titlebar_popup_menu
             .as_ref()
             .is_some_and(|state| kind.is_none_or(|kind| state.kind == kind));
-        log_gpui_titlebar_popup_repro(
-            "gpui.titlebarPopup.closeRequested",
-            serde_json::json!({
-                "currentKind": current_kind,
-                "hasPopupWindowHandle": self.titlebar_popup_window.is_some(),
-                "mainWindowActive": window.is_window_active(),
-                "requestedKind": kind.map(GpuiTitlebarPopupKind::diagnostic_label),
-                "willClose": should_close,
-            }),
-        );
         if !should_close {
             return;
         }
@@ -286,17 +234,6 @@ impl GhostexGpuiApp {
             .titlebar_popup_menu
             .as_ref()
             .is_some_and(|state| state.kind == kind);
-        log_gpui_titlebar_popup_repro(
-            "gpui.titlebarPopup.windowClearedState",
-            serde_json::json!({
-                "currentKind": self
-                    .titlebar_popup_menu
-                    .as_ref()
-                    .map(|state| state.kind.diagnostic_label()),
-                "kind": kind.diagnostic_label(),
-                "willClear": should_clear,
-            }),
-        );
         if should_clear {
             if matches!(kind, GpuiTitlebarPopupKind::AccountUsage(_)) {
                 self.restore_account_usage_keyboard_focus();

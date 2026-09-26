@@ -67,43 +67,14 @@ pub extern "C" fn GhostexGpuiKeyboardRouteNativeEvent(
             .to_string_lossy()
             .into_owned()
     };
-    let should_probe =
-        keycode == 0 || characters.chars().count() > 1 || shortcut_characters.chars().count() > 1;
-    if should_probe {
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.nativeEventEntry",
-            serde_json::json!({
-                "action": action,
-                "characters": support_logs::temporary_fluid_voice_text_shape(&characters),
-                "shortcutCharacters":
-                    support_logs::temporary_fluid_voice_text_shape(&shortcut_characters),
-                "keycode": keycode,
-                "modifiers": modifiers,
-                "rootViewPresent": !gpui_root_view.is_null(),
-            }),
-        );
-    }
-    let handled = route_gpui_native_keyboard_event(
+    route_gpui_native_keyboard_event(
         gpui_root_view,
         action,
         keycode,
         modifiers,
         &shortcut_characters,
         &characters,
-    );
-    if should_probe {
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.nativeEventResult",
-            serde_json::json!({
-                "action": action,
-                "handled": handled,
-                "keycode": keycode,
-            }),
-        );
-    }
-    handled as _
+    ) as _
 }
 
 #[cfg(target_os = "macos")]
@@ -306,32 +277,10 @@ pub extern "C" fn GhostexGpuiTerminalInsertCommittedText(
     CDXC:Terminal 2026-06-27-03:46:
     AppKit committed IME text crosses into Rust only as borrowed bytes for this synchronous callback. Insert only into the Ghostty surface registered for the exact mounted host view, reject null or empty committed text, and never store, log, persist, or reroute typed text through focused-surface fallback.
     */
-    let target_registered =
-        terminal_ghostty_surface::native_key_target_diagnostic_for_view(native_view).is_some();
     let Some(text) = std::ptr::NonNull::new(text.cast_mut()) else {
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.nativeCommittedText",
-            serde_json::json!({
-                "accepted": false,
-                "reason": "nullText",
-                "targetRegistered": target_registered,
-                "text": support_logs::temporary_fluid_voice_bytes_shape(&[]),
-            }),
-        );
         return 0;
     };
     if len == 0 {
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.nativeCommittedText",
-            serde_json::json!({
-                "accepted": false,
-                "reason": "emptyText",
-                "targetRegistered": target_registered,
-                "text": support_logs::temporary_fluid_voice_bytes_shape(&[]),
-            }),
-        );
         return 0;
     }
     let bytes = unsafe { std::slice::from_raw_parts(text.as_ptr() as *const u8, len) };
@@ -353,15 +302,6 @@ pub extern "C" fn GhostexGpuiTerminalInsertCommittedText(
             },
         )
     });
-    support_logs::append_temporary(
-        support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.gpui.fluidVoice.nativeCommittedText",
-        serde_json::json!({
-            "accepted": accepted,
-            "targetRegistered": target_registered,
-            "text": support_logs::temporary_fluid_voice_bytes_shape(bytes),
-        }),
-    );
     if accepted { 1 } else { 0 }
 }
 
@@ -380,31 +320,11 @@ pub extern "C" fn GhostexGpuiTerminalSetPreeditText(
         &[]
     } else {
         let Some(text) = std::ptr::NonNull::new(text.cast_mut()) else {
-            support_logs::append_temporary(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.gpui.fluidVoice.nativePreeditText",
-                serde_json::json!({
-                    "accepted": false,
-                    "reason": "nullNonEmptyText",
-                    "text": support_logs::temporary_fluid_voice_bytes_shape(&[]),
-                }),
-            );
             return 0;
         };
         unsafe { std::slice::from_raw_parts(text.as_ptr() as *const u8, len) }
     };
-    let target_registered =
-        terminal_ghostty_surface::native_key_target_diagnostic_for_view(native_view).is_some();
     let accepted = terminal_ghostty_surface::set_native_preedit_text_for_view(native_view, bytes);
-    support_logs::append_temporary(
-        support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.gpui.fluidVoice.nativePreeditText",
-        serde_json::json!({
-            "accepted": accepted,
-            "targetRegistered": target_registered,
-            "text": support_logs::temporary_fluid_voice_bytes_shape(bytes),
-        }),
-    );
     if accepted { 1 } else { 0 }
 }
 

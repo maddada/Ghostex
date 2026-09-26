@@ -136,7 +136,9 @@ impl GhostexGpuiApp {
             return;
         }
         // Git, worktree and Handoff / Export menu items (gx_store/git/actions.rs).
-        if self.gx_store_run_sidebar_git(&command, cx) { return; }
+        if self.gx_store_run_sidebar_git(&command, cx) {
+            return;
+        }
         // A row on a REMOTE machine: its sleep, wake, close, fork, flags, snooze and Full Reload
         // are calls down that machine's tunnel, sent through the same function the old runtime's
         // bridge message reaches, and nothing local moves (gx_store/sidebar_remote.rs).
@@ -257,7 +259,7 @@ impl GhostexGpuiApp {
             crate::support_logs::append(
                 crate::support_logs::GpuiSupportLog::SidebarRefresh,
                 "gpui.sidebar.focusRequested",
-                json!({"sessionId": command["sessionId"], "epochMs": crate::support_logs::temporary_epoch_ms()}),
+                json!({"sessionId": command["sessionId"]}),
             );
         }
         // A click on a row of a REMOTE machine, and its Split Right: the store acknowledges the

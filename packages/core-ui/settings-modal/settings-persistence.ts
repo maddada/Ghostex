@@ -228,16 +228,16 @@ export function createSettingsPersistence({
      */
     applySettingsPatch({ showAdvancedSettings: checked });
   };
-  const updateDiagnosticLoggingScenario = (
-    scenarioId: DiagnosticLoggingScenarioId,
+  const updateDiagnosticLoggingScenarios = (
+    scenarioIds: readonly DiagnosticLoggingScenarioId[],
     duration: DiagnosticLoggingDurationValue
   ) => {
+    const state = getDiagnosticLoggingScenarioStateForDuration(duration);
     updateDraft(
       'diagnosticLogging',
-      setDiagnosticLoggingScenario(
-        (pendingSettingsRef.current ?? draft).diagnosticLogging,
-        scenarioId,
-        getDiagnosticLoggingScenarioStateForDuration(duration)
+      scenarioIds.reduce(
+        (diagnosticLogging, scenarioId) => setDiagnosticLoggingScenario(diagnosticLogging, scenarioId, state),
+        (pendingSettingsRef.current ?? draft).diagnosticLogging
       )
     );
   };
@@ -251,7 +251,7 @@ export function createSettingsPersistence({
     closeSettingsModal,
     persistSettingsModalNavigation,
     scheduleSettingsModalNavigationPersist,
-    updateDiagnosticLoggingScenario,
+    updateDiagnosticLoggingScenarios,
     updateDraft,
     updateDraftDebounced,
     updateShowAdvancedSettings,

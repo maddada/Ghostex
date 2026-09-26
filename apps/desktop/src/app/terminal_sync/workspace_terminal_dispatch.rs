@@ -123,15 +123,6 @@ impl GhostexGpuiApp {
         else {
             return;
         };
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionInterrupt.escapeTargetResolved",
-            serde_json::json!({
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-                "shellSessionId": format!("{:?}", shell_session_id),
-            }),
-        );
         self.gx_store_terminal_escape(
             ghostex_gx_core::SessionKey::local(key.project_id, key.session_id),
             cx,
@@ -217,11 +208,6 @@ impl GhostexGpuiApp {
         support_logs::append(
             support_logs::GpuiSupportLog::TerminalFocus,
             "gpui.terminalFocus.terminalEscapeDispatched",
-            serde_json::json!({ "shellSessionId": format!("{:?}", shell_session_id) }),
-        );
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionInterrupt.nativeEscapeRouted",
             serde_json::json!({ "shellSessionId": format!("{:?}", shell_session_id) }),
         );
         self.dispatch_gpui_workspace_terminal_escape_pressed(shell_session_id, cx);

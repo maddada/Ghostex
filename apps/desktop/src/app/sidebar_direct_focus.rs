@@ -104,15 +104,6 @@ impl GhostexGpuiApp {
             return false;
         }
         self.reconcile_preferred_agents_chat_launch_intents(cx);
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.inProcessFocusCompleted",
-            serde_json::json!({
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-            }),
-        );
         true
     }
 
@@ -229,16 +220,6 @@ impl GhostexGpuiApp {
         self.reconcile_agents_pane_surfaces(cx);
         self.update_active_mode_cef_child_visibility(cx);
         self.persist_shell_layout_state();
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.inProcessTabStaged",
-            serde_json::json!({
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-                "mapped": mapped.is_some(),
-            }),
-        );
         cx.notify();
         true
     }

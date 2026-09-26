@@ -21,7 +21,7 @@ impl GhostexGpuiApp {
     ) {
         let key = self.workspace_terminal_key_for_shell_session(session_id);
         let details = serde_json::json!({
-            "atMs": support_logs::temporary_epoch_ms(),
+            "atMs": epoch_ms(),
             "event": event,
             "reason": reason,
             "sessionId": session_id.0,
@@ -78,7 +78,7 @@ impl GhostexGpuiApp {
             support_logs::GpuiSupportLog::SessionChat,
             event,
             serde_json::json!({
-                "atMs": support_logs::temporary_epoch_ms(),
+                "atMs": epoch_ms(),
                 "sessionId": session_id.0,
                 "previous": previous,
                 "current": snapshot,
@@ -86,4 +86,12 @@ impl GhostexGpuiApp {
             }),
         );
     }
+}
+
+/// Wall-clock milliseconds, so the in-memory lifecycle ring can be ordered against logged events after routine logs expired.
+fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since_epoch| since_epoch.as_millis() as u64)
+        .unwrap_or_default()
 }

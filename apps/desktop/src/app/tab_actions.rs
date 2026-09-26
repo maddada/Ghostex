@@ -98,11 +98,6 @@ impl GhostexGpuiApp {
                 );
                 return;
             }
-            support_logs::append_temporary(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.remoteNewTerminal.requestReceived",
-                serde_json::json!({ "source": "agentsWorkspace" }),
-            );
             let Some(target) =
                 self.gpui_remote_gxserver_request_target(remote_project.remote_machine_id.as_str())
             else {

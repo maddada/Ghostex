@@ -245,11 +245,6 @@ impl GhostexGpuiApp {
         intent: GpuiRemoteAttachOpenIntent,
         cx: &mut gpui::Context<Self>,
     ) {
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.remoteNewTerminal.tabMaterializeStarted",
-            serde_json::json!({}),
-        );
         let key = GpuiRemoteAttachSessionKey::from(&reference);
         /*
         SSH plan preparation runs in the background, so by the time it
@@ -500,11 +495,6 @@ impl GhostexGpuiApp {
                 "mode": "createdRunningAttachTab",
                 "sessionId": key.session_id,
             }),
-        );
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.remoteNewTerminal.tabMaterialized",
-            serde_json::json!({}),
         );
         cx.notify();
     }

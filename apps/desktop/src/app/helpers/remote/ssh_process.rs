@@ -171,33 +171,14 @@ pub(crate) fn gpui_remote_ssh_askpass_script(
     let cancel = Arc::new(AtomicBool::new(false));
     let server_cancel = cancel.clone();
     let remote_machine_id = config.remote_machine_id.clone();
-    let askpass_prepared_at = Instant::now();
     let password_server = thread::spawn(move || {
         while !server_cancel.load(Ordering::Acquire) {
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        "TEMP.remoteNewTerminal.askpassRequested",
-                        serde_json::json!({
-                            "durationSincePreparedMs": askpass_prepared_at.elapsed().as_millis() as u64,
-                            "machineId": remote_machine_id.as_str(),
-                        }),
-                    );
-                    let keychain_read_started = Instant::now();
-                    let password_result =
-                        gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str());
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        "TEMP.remoteNewTerminal.keychainPasswordReadCompleted",
-                        serde_json::json!({
-                            "durationMs": keychain_read_started.elapsed().as_millis() as u64,
-                            "machineId": remote_machine_id.as_str(),
-                            "succeeded": password_result.is_ok(),
-                        }),
-                    );
-                    if let Ok(mut password) = password_result {
+                    if let Ok(mut password) =
+                        gpui_read_remote_ssh_password_from_keychain(remote_machine_id.as_str())
+                    {
                         let _ = stream.write_all(password.as_slice());
                         let _ = stream.write_all(b"\n");
                         password.fill(0);

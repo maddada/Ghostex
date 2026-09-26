@@ -181,7 +181,7 @@ impl GhostexGpuiApp {
     ) {
         match serde_json::from_value(update.to_json()) {
             Ok(update) => self.apply_native_quick_access_update(update, cx),
-            Err(error) => crate::support_logs::append_repro(
+            Err(error) => crate::support_logs::append(
                 crate::support_logs::GpuiSupportLog::SidebarRefresh,
                 "gpui.quickAccess.invalidSnapshot",
                 json!({ "error": error.to_string() }),

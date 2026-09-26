@@ -5,7 +5,6 @@
 // Cluster: project-workarea + sidebar bridge events, agents chat/find surfaces
 
 use std::rc::Rc;
-use std::time::Instant;
 
 // RefCell backs cross-platform runtime state (window frame persistence), not
 // just the macOS-only shims that first introduced the import.
@@ -666,44 +665,6 @@ impl GhostexGpuiApp {
         let mapped_pane_id = mapped_shell_session_id.and_then(|shell_session_id| {
             self.agents_workspace.pane_id_for_session(shell_session_id)
         });
-        let mapped_slot_id =
-            mapped_shell_session_id
-                .zip(mapped_pane_id)
-                .map(
-                    |(shell_session_id, pane_id)| AgentsTerminalBodyMountSlotId {
-                        pane_id,
-                        session_id: shell_session_id,
-                    },
-                );
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.focusDecision",
-            serde_json::json!({
-                "alreadyActiveInMappedPane": mapped_shell_session_id.zip(mapped_pane_id).is_some_and(
-                    |(shell_session_id, pane_id)| self
-                        .agents_workspace
-                        .active_session_in_pane(pane_id)
-                        == Some(shell_session_id),
-                ),
-                "attachAlreadyPending": self.local_workspace_attach_pending.contains(&key),
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "liveTerminalOwner": mapped_slot_id.is_some_and(|slot_id| {
-                    self.local_workspace_terminal_has_live_terminal_owner(slot_id)
-                }),
-                "mappedPanePresent": mapped_pane_id.is_some(),
-                "mappedSessionPresent": mapped_shell_session_id.is_some(),
-                "pendingAttachPayload": mapped_slot_id.is_some_and(|slot_id| {
-                    self.local_workspace_terminal_has_pending_attach_payload(slot_id)
-                }),
-                "presentationRunning": mapped_shell_session_id.is_some_and(|shell_session_id| {
-                    self.agents_workspace.session(shell_session_id).is_some_and(|session| {
-                        session.presentation_state == TerminalSessionPresentationState::Running
-                    })
-                }),
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-            }),
-        );
         self.begin_sidebar_focus_border_handoff(cx);
         self.local_workspace_latest_focus_key = Some(key.clone());
         self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
@@ -757,15 +718,6 @@ impl GhostexGpuiApp {
         } else if !message.wake_sleeping
             && self.focus_existing_gpui_local_workspace_terminal(&key, cx)
         {
-            support_logs::append_temporary(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.gpui.sessionSwitchLatency.focusExistingCompleted",
-                serde_json::json!({
-                    "epochMs": support_logs::temporary_epoch_ms(),
-                    "projectId": key.project_id,
-                    "sessionId": key.session_id,
-                }),
-            );
             self.reconcile_preferred_agents_chat_launch_intents(cx);
             return;
         }
@@ -777,15 +729,6 @@ impl GhostexGpuiApp {
         } else {
             mapped_attach_intent
         };
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.attachPlanRequired",
-            serde_json::json!({
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-            }),
-        );
         // A mapped tab with nothing live behind it is re-attached where it is, so it is brought to
         // the focused pane first, as the focus-existing path above does (session_pane_placement.rs).
         if message.placement == GpuiWorkspaceTerminalFocusPlacement::Tab
@@ -1012,7 +955,6 @@ impl GhostexGpuiApp {
             return;
         }
 
-        let attach_started_at = Instant::now();
         let focused_at_request = self.gx_store_focused_session();
         let open_chat_early = placement == GpuiWorkspaceTerminalFocusPlacement::Tab
             && self
@@ -1057,17 +999,6 @@ impl GhostexGpuiApp {
                 .await;
             let _ = this.update(cx, |this, cx| {
                 this.local_workspace_attach_pending.remove(&key);
-                support_logs::append_temporary(
-                    support_logs::GpuiSupportLog::TerminalFocus,
-                    "TEMP.gpui.sessionSwitchLatency.attachPlanCompleted",
-                    serde_json::json!({
-                        "elapsedMs": attach_started_at.elapsed().as_millis() as u64,
-                        "epochMs": support_logs::temporary_epoch_ms(),
-                        "planReady": result.is_ok(),
-                        "projectId": key.project_id,
-                        "sessionId": key.session_id,
-                    }),
-                );
                 // The store's newest selection, not the workspace's focus state copy, which lags
                 // it while a project switch is coalesced (gx_store_selection_names_local_session).
                 let selected = this.gx_store_selection_names_local_session(&key);

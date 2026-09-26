@@ -2497,7 +2497,7 @@ fn enable_debugging_mode_for_test(paths: &crate::paths::GxserverPaths) {
         .expect("create settings dir");
     fs::write(
             settings_path,
-            r#"{"debuggingMode":true,"diagnosticLogging":{"scenarios":{"gxserver.portless":{"enabled":true}},"version":1}}"#,
+            r#"{"debuggingMode":true,"diagnosticLogging":{"scenarios":{"gxserver.requests":{"enabled":true}},"version":1}}"#,
         )
         .expect("write debugging setting");
 }

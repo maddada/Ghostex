@@ -5,7 +5,6 @@ use web_time::Instant;
 struct FocusRequest {
     session_id: String,
     started: Instant,
-    epoch_ms: u64,
     observed_paint: bool,
 }
 
@@ -23,7 +22,6 @@ pub(crate) fn focus_requested(session_id: &str) {
         *pending = enabled().then(|| FocusRequest {
             session_id: session_id.to_owned(),
             started: Instant::now(),
-            epoch_ms: support_logs::temporary_epoch_ms(),
             observed_paint: false,
         });
     });
@@ -47,7 +45,7 @@ pub(super) fn content_frame_painted(
         if !request.observed_paint {
             request.observed_paint = true;
             support_logs::append(support_logs::GpuiSupportLog::SidebarRefresh, "gpui.chat.focusFramePainted", serde_json::json!({
-                "sessionId": session_id, "epochMs": support_logs::temporary_epoch_ms(),
+                "sessionId": session_id,
                 "elapsedMs": request.started.elapsed().as_secs_f64() * 1000.0,
                 "selected": selected, "paneFocused": pane_focused, "contentReady": content_ready, "rows": rows,
             }));
@@ -60,8 +58,6 @@ pub(super) fn content_frame_painted(
                 "gpui.chat.contentFrameReady",
                 serde_json::json!({
                     "sessionId": session_id,
-                    "requestEpochMs": request.epoch_ms,
-                    "epochMs": support_logs::temporary_epoch_ms(),
                     "elapsedMs": request.started.elapsed().as_secs_f64() * 1000.0,
                     "rows": rows,
                     "composerReady": composer_ready,

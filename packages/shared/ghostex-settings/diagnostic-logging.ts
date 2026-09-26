@@ -9,252 +9,67 @@ export type DiagnosticLoggingSettings = {
   scenarios: Partial<Record<DiagnosticLoggingScenarioId, DiagnosticLoggingScenarioState>>;
   version: 1;
 };
-export type DiagnosticLoggingScenarioGroup = 'macOS' | 'GPUI' | 'gxserver';
 export type DiagnosticLoggingScenarioDefinition = {
   description: string;
-  group: DiagnosticLoggingScenarioGroup;
   id: string;
   label: string;
-  logFiles: readonly string[];
 };
+/**
+ * CDXC:Diagnostics 2026-09-26 DECISION:
+ * User: the Debugging page had far too many log switches. Scenarios nothing writes any more are deleted, the rest are merged into one switch per feature area, all switches share one turn-off timer, and rows show no log file names. Desktop performance profiling has no switch: launching with --profile is its opt-in.
+ * Each id is the one an area kept from before the merge, so the Rust writers in apps/desktop/src/support_logs.rs and server/src/logging.rs still read the same strings.
+ */
 export const DIAGNOSTIC_LOGGING_SCENARIOS = [
   {
-    description: 'Per-second native timing aggregates when launched with --profile (30-minute maximum).',
-    group: 'GPUI',
-    id: 'gpui.performance',
-    label: 'Desktop performance profiling',
-    logFiles: ['gpui-performance.jsonl'],
-  },
-  {
     description:
-      'Composer draft saves, send acknowledgements, clears, and restart recovery, with lengths and fingerprints for partial-text restores.',
-    group: 'GPUI',
-    id: 'gpui.sessionChat.drafts',
-    label: 'Chat draft persistence and recovery',
-    logFiles: ['gpui-session-chat-debug.jsonl', 'gxserver.jsonl'],
-  },
-  {
-    description: 'AppKit focus, first responder, key/input routing, and terminal focus repair breadcrumbs.',
-    group: 'macOS',
+      'Terminal focus and keyboard routing, pane tabs, terminal attach and sync (local and remote), and zmx refreshes.',
     id: 'native.terminal.focus',
-    label: 'Terminal focus and input routing',
-    logFiles: ['native-terminal-focus-debug.log', 'gpui-terminal-focus-debug.log'],
+    label: 'Terminals, panes, and keyboard focus',
   },
   {
-    description:
-      'Terminal pane resize, Ghostty surface grid changes, zmx resize refreshes, and reflow timing breadcrumbs.',
-    group: 'macOS',
-    id: 'native.terminal.resize',
-    label: 'Terminal resize and reflow',
-    logFiles: ['native-terminal-focus-debug.log'],
-  },
-  {
-    description: 'Sidebar hydration, gxserver presentation, React refresh, and sidebar lifecycle breadcrumbs.',
-    group: 'macOS',
+    description: 'Sidebar bootstrap and focus, browser and code editor panes, Quick Access, and chat frame readiness.',
     id: 'native.sidebar.refresh',
-    label: 'Sidebar refresh and hydration',
-    logFiles: ['sidebar-refresh-debug.log', 'gpui-sidebar-refresh-debug.log'],
+    label: 'Sidebar, browser, and editor panes',
   },
   {
-    description: 'Sidebar disclosure-state localStorage, hydrate timing, and collapse-state repro breadcrumbs.',
-    group: 'macOS',
-    id: 'native.sidebar.collapse',
-    label: 'Sidebar collapse state',
-    logFiles: ['sidebar-collapse-state-debug.log'],
+    description: 'Chat view state, composer draft saves, sends, clears, and restart recovery (desktop and gxserver).',
+    id: 'gpui.sessionChat.viewState',
+    label: 'Chat',
   },
   {
-    description: 'Pane-tab buttons, resize rails, sidebar divider, and related AppKit geometry diagnostics.',
-    group: 'macOS',
-    id: 'native.pane.tabs',
-    label: 'Pane tabs, resize rails, and sidebar divider',
-    logFiles: ['native-pane-tabs-debug.log'],
+    description: 'App modal host lifecycle, Settings hydration, and modal errors.',
+    id: 'gpui.app.modal',
+    label: 'Modals and Settings',
   },
   {
-    description: 'Pane reorder repro breadcrumbs for tab/split ownership investigations.',
-    group: 'macOS',
-    id: 'native.pane.reorder',
-    label: 'Pane reorder repros',
-    logFiles: ['native-pane-reorder-repro.log'],
-  },
-  {
-    description: 'Browser/editor layering, hit-testing, active pane, and visible-surface ordering diagnostics.',
-    group: 'macOS',
-    id: 'native.layout.layering',
-    label: 'Layout, layering, and hit testing',
-    logFiles: ['native-layout-layering-debug.log'],
-  },
-  {
-    description: 'View switching, route handoff, project-surface wake, and AppKit settle timings.',
-    group: 'macOS',
-    id: 'native.mode.switcher',
-    label: 'View switching and header routing',
-    logFiles: ['native-mode-switcher-debug.log'],
-  },
-  {
-    description: 'Sidebar and header WebKit lifecycle, chrome event-loop stalls, and Resources sampler timing.',
-    group: 'macOS',
-    id: 'native.chrome.responsiveness',
-    label: 'Sidebar and header responsiveness',
-    logFiles: ['native-chrome-responsiveness-debug.log', 'sidebar-refresh-debug.log'],
-  },
-  {
-    description: 'Session-title synchronization, first-prompt rename, and title-generation diagnostics.',
-    group: 'macOS',
-    id: 'native.session.title',
-    label: 'Session titles and auto-rename',
-    logFiles: ['session-title-sync-debug.log'],
-  },
-  {
-    description: 'Agent detection, semantic activity, completion sound, and attention-notification diagnostics.',
-    group: 'macOS',
-    id: 'native.agent.detection',
-    label: 'Agent detection and activity',
-    logFiles: ['agent-detection-debug.log'],
-  },
-  {
-    description: 'Workspace restore, startup layout cache, provider-state refresh, and previous-session diagnostics.',
-    group: 'macOS',
-    id: 'native.workspace.restore',
-    label: 'Workspace restore and startup',
-    logFiles: ['workspace-restore-debug.log'],
-  },
-  {
-    description: 'Workspace dock/rail status indicator diagnostics and titlebar resource projection breadcrumbs.',
-    group: 'macOS',
-    id: 'native.workspace.dock',
-    label: 'Workspace dock indicator',
-    logFiles: ['workspace-dock-indicator-debug.log'],
-  },
-  {
-    description: 'Native host lifecycle, activation, window close, and termination breadcrumbs.',
-    group: 'macOS',
-    id: 'native.host.lifecycle',
-    label: 'Native host lifecycle',
-    logFiles: ['native-host-lifecycle.log', 'gpui-host-lifecycle.log'],
-  },
-  {
-    description:
-      'Menu bar session-status item visibility, click delivery, dropdown ordering, and dismissal diagnostics.',
-    group: 'macOS',
-    id: 'native.menuBar.status',
-    label: 'Menu bar session status dropdown',
-    logFiles: ['native-menu-bar-status-debug.log'],
-  },
-  {
-    description: 'Project board create/start, title generation, Beads, and worktree setup breadcrumbs.',
-    group: 'macOS',
+    description: 'Project board create/start, title generation, Beads, and worktree setup.',
     id: 'native.project.board',
-    label: 'Project board actions',
-    logFiles: ['project-board-debug.log', 'gpui-project-board-debug.log'],
+    label: 'Project board',
   },
   {
-    description: 'Ghostty config startup and managed terminal configuration diagnostics.',
-    group: 'macOS',
-    id: 'native.ghostty.config',
-    label: 'Ghostty config startup',
-    logFiles: ['native-ghostty-config.log'],
+    description: 'Remote gxserver install: approval, SSH setup, package upload, token read, and tunnel.',
+    id: 'native.remote.gxserver.install',
+    label: 'Remote machines',
   },
   {
-    description:
-      'Command-clicked terminal link routing: Ghostty open-url classification, host event delivery, and sidebar Browser-view routing.',
-    group: 'macOS',
-    id: 'native.terminal.links',
-    label: 'Terminal link opening',
-    logFiles: ['terminal-link-open-debug.log'],
+    description: 'Agent detection and working/idle/attention transitions from hooks and terminal titles.',
+    id: 'gxserver.agentActivity',
+    label: 'Agent activity',
   },
   {
-    description: 'Prompt editor window, composer initialization, prewarm, and native child-window diagnostics.',
-    group: 'macOS',
+    description: 'Prompt editor window and composer lifecycle.',
     id: 'native.prompt.editor',
     label: 'Prompt editor',
-    logFiles: ['native-prompt-editor-debug.log'],
   },
   {
-    description:
-      'Remote gxserver install approval, SSH setup phase, package selection, upload, token read, and tunnel diagnostics.',
-    group: 'macOS',
-    id: 'native.remote.gxserver.install',
-    label: 'Remote gxserver install',
-    logFiles: ['remote-gxserver-install-debug.log', 'gpui-remote-gxserver-install-debug.log'],
+    description: 'Desktop app and gxserver startup, activation, window close, and shutdown.',
+    id: 'native.host.lifecycle',
+    label: 'App and server lifecycle',
   },
   {
-    description: 'Native child-window modal lifecycle, Settings host readiness, and app-modal diagnostics.',
-    group: 'macOS',
-    id: 'native.app.modal',
-    label: 'App modals and Settings windows',
-    logFiles: ['app-modal-debug.log', 'app-modal-errors.log'],
-  },
-  {
-    description: 'GPUI sidebar focus ownership and rapid session-bounce diagnostics.',
-    group: 'GPUI',
-    id: 'gpui.sidebar.focus',
-    label: 'GPUI sidebar focus and bouncing',
-    logFiles: ['gpui-sidebar-focus-debug.jsonl'],
-  },
-  {
-    description: 'Shared-sidebar CEF renderer readiness, responsiveness transitions, and termination diagnostics.',
-    group: 'GPUI',
-    id: 'gpui.sidebar.renderer',
-    label: 'GPUI sidebar renderer lifecycle',
-    logFiles: ['gpui-sidebar-renderer-debug.jsonl'],
-  },
-  {
-    description: 'GPUI app-modal host lifecycle, Settings hydration, renderer checkpoints, and modal errors.',
-    group: 'GPUI',
-    id: 'gpui.app.modal',
-    label: 'GPUI app modals and Settings',
-    logFiles: ['gpui-app-modal-debug.jsonl'],
-  },
-  {
-    description:
-      'Session Chat view-state transitions, seed/resync reads, state frames, and loading-flash repro breadcrumbs.',
-    group: 'GPUI',
-    id: 'gpui.sessionChat.viewState',
-    label: 'GPUI session chat view state',
-    logFiles: ['gpui-session-chat-debug.jsonl'],
-  },
-  {
-    description: 'gxserver process startup, shutdown, and daemon lifecycle breadcrumbs.',
-    group: 'gxserver',
-    id: 'gxserver.lifecycle',
-    label: 'Daemon lifecycle',
-    logFiles: ['gxserver.jsonl'],
-  },
-  {
-    description: 'gxserver API request timing and status breadcrumbs.',
-    group: 'gxserver',
+    description: 'gxserver API requests, typed operations, repository cloning, and Portless.',
     id: 'gxserver.requests',
-    label: 'API requests',
-    logFiles: ['gxserver.jsonl'],
-  },
-  {
-    description: 'gxserver typed-operation routing and result breadcrumbs.',
-    group: 'gxserver',
-    id: 'gxserver.typedOperations',
-    label: 'Typed operations',
-    logFiles: ['gxserver.jsonl'],
-  },
-  {
-    description: 'gxserver repository clone lifecycle breadcrumbs.',
-    group: 'gxserver',
-    id: 'gxserver.repositoryClone',
-    label: 'Repository cloning',
-    logFiles: ['gxserver.jsonl'],
-  },
-  {
-    description: 'gxserver Portless state and background synchronization breadcrumbs.',
-    group: 'gxserver',
-    id: 'gxserver.portless',
-    label: 'Portless',
-    logFiles: ['gxserver.jsonl'],
-  },
-  {
-    description:
-      'gxserver agent-activity transitions (hooks, terminal titles, suppression) behind working/idle/attention flips.',
-    group: 'gxserver',
-    id: 'gxserver.agentActivity',
-    label: 'Agent activity transitions',
-    logFiles: ['gxserver.jsonl'],
+    label: 'Server requests',
   },
 ] as const satisfies readonly DiagnosticLoggingScenarioDefinition[];
 

@@ -147,15 +147,6 @@ impl GhostexGpuiApp {
                 shell_session_id,
                 staged_at: Instant::now(),
             });
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.agentLaunchPlaceholderStaged",
-            serde_json::json!({
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "agentId": agent_id,
-                "chat": self.agents_chat_mode_sessions.contains(&shell_session_id),
-            }),
-        );
         cx.notify();
         cx.spawn(async move |this, cx| {
             cx.background_executor()
@@ -219,16 +210,6 @@ impl GhostexGpuiApp {
             self.reconcile_agents_pane_surfaces(cx);
             cx.notify();
         }
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.sessionSwitchLatency.agentLaunchPlaceholderAdopted",
-            serde_json::json!({
-                "epochMs": support_logs::temporary_epoch_ms(),
-                "projectId": key.project_id,
-                "sessionId": key.session_id,
-                "stagedMs": placeholder.staged_at.elapsed().as_millis() as u64,
-            }),
-        );
     }
 
     fn expire_agent_launch_placeholder(

@@ -43,12 +43,12 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, Mutex,
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
@@ -79,16 +79,8 @@ const CLIPBOARD_WRITE_QUEUE_LIMIT: usize = 16;
 /// PTY read buffer size per read call.
 const PTY_READ_BUFFER_LEN: usize = 64 * 1024;
 
-/// Process-local correlation id for temporary paste diagnostics. It connects
-/// the main-thread encode/channel handoff to the background PTY write without
-/// recording clipboard contents.
-static NEXT_PASTE_TRACE_ID: AtomicU64 = AtomicU64::new(1);
-
-static PASTE_DIAGNOSTIC_SINK: OnceLock<TerminalPasteDiagnosticSink> = OnceLock::new();
-
 struct PtyWriteRequest {
     bytes: Vec<u8>,
-    paste_trace_id: Option<u64>,
 }
 
 pub type Rgb = ffi::GhosttyColorRgb;
@@ -125,53 +117,6 @@ pub enum TerminalEvent {
     ClipboardWriteRequested,
     /// Child process exited. Terminal contents stay readable afterwards.
     Exited(TerminalExit),
-}
-
-/// Content-free stages of a clipboard paste moving from VT encoding to the
-/// background PTY writer. The GPUI host may install a sink; standalone model
-/// consumers intentionally run without one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TerminalPasteDiagnostic {
-    Encoded {
-        trace_id: u64,
-        child_pid: Option<u32>,
-        bracketed_paste: bool,
-        source_byte_length: usize,
-        source_contains_line_break: bool,
-        source_contains_non_ascii: bool,
-        encoded_byte_length: usize,
-    },
-    ChannelQueued {
-        trace_id: u64,
-        child_pid: Option<u32>,
-        success: bool,
-        error_kind: Option<std::io::ErrorKind>,
-    },
-    PtyWriteStarted {
-        trace_id: u64,
-        child_pid: Option<u32>,
-        encoded_byte_length: usize,
-    },
-    PtyWriteCompleted {
-        trace_id: u64,
-        child_pid: Option<u32>,
-        duration_micros: u128,
-        stage: &'static str,
-        success: bool,
-        error_kind: Option<std::io::ErrorKind>,
-    },
-}
-
-pub type TerminalPasteDiagnosticSink = Arc<dyn Fn(TerminalPasteDiagnostic) + Send + Sync>;
-
-pub fn install_paste_diagnostic_sink(sink: TerminalPasteDiagnosticSink) {
-    let _ = PASTE_DIAGNOSTIC_SINK.set(sink);
-}
-
-fn emit_paste_diagnostic(diagnostic: TerminalPasteDiagnostic) {
-    if let Some(sink) = PASTE_DIAGNOSTIC_SINK.get() {
-        sink(diagnostic);
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -458,33 +403,12 @@ impl TerminalModel {
         let viewer_detach = Arc::new(Mutex::new(ViewerDetachState::default()));
         let writer_pending_input = Arc::clone(&pending_input);
         let writer_events = Arc::clone(&events);
-        let writer_child_pid = child_pid;
         thread::Builder::new()
             .name("ghostex-terminal-pty-write".into())
             .spawn(move || {
                 while let Ok(Some(request)) = write_rx.recv() {
-                    let started_at = Instant::now();
-                    if let Some(trace_id) = request.paste_trace_id {
-                        emit_paste_diagnostic(TerminalPasteDiagnostic::PtyWriteStarted {
-                            trace_id,
-                            child_pid: writer_child_pid,
-                            encoded_byte_length: request.bytes.len(),
-                        });
-                    }
-
-                    let (stage, result) = match pty_writer.write_all(&request.bytes) {
-                        Ok(()) => ("flush", pty_writer.flush()),
-                        Err(error) => ("write", Err(error)),
-                    };
-                    if let Some(trace_id) = request.paste_trace_id {
-                        emit_paste_diagnostic(TerminalPasteDiagnostic::PtyWriteCompleted {
-                            trace_id,
-                            child_pid: writer_child_pid,
-                            duration_micros: started_at.elapsed().as_micros(),
-                            stage,
-                            success: result.is_ok(),
-                            error_kind: result.as_ref().err().map(std::io::Error::kind),
-                        });
+                    if pty_writer.write_all(&request.bytes).is_ok() {
+                        let _ = pty_writer.flush();
                     }
                     if writer_pending_input.fetch_sub(1, Ordering::AcqRel) == 1 {
                         writer_events(TerminalEvent::Wakeup);
@@ -520,7 +444,6 @@ impl TerminalModel {
                     if reply_tx
                         .send(Some(PtyWriteRequest {
                             bytes: bytes.to_vec(),
-                            paste_trace_id: None,
                         }))
                         .is_err()
                     {
@@ -717,14 +640,7 @@ impl TerminalModel {
         };
         detach.retiring = true;
         self.pending_input.fetch_add(1, Ordering::AcqRel);
-        if self
-            .write_tx
-            .send(Some(PtyWriteRequest {
-                bytes,
-                paste_trace_id: None,
-            }))
-            .is_err()
-        {
+        if self.write_tx.send(Some(PtyWriteRequest { bytes })).is_err() {
             self.pending_input.fetch_sub(1, Ordering::AcqRel);
             detach.nonce = None;
             detach.retiring = false;
@@ -798,7 +714,6 @@ impl TerminalModel {
     pub fn write_input(&self, bytes: &[u8]) -> std::io::Result<()> {
         self.queue_input(PtyWriteRequest {
             bytes: bytes.to_vec(),
-            paste_trace_id: None,
         })
     }
 
@@ -916,27 +831,7 @@ impl TerminalModel {
         let bracketed = self.mode_active(ffi::GHOSTTY_MODE_BRACKETED_PASTE);
         let bytes = ghostty_vt::encode_paste(text, bracketed)
             .map_err(|error| std::io::Error::other(error.to_string()))?;
-        let trace_id = NEXT_PASTE_TRACE_ID.fetch_add(1, Ordering::Relaxed);
-        emit_paste_diagnostic(TerminalPasteDiagnostic::Encoded {
-            trace_id,
-            child_pid: self.child_pid,
-            bracketed_paste: bracketed,
-            source_byte_length: text.len(),
-            source_contains_line_break: text.contains(['\r', '\n']),
-            source_contains_non_ascii: !text.is_ascii(),
-            encoded_byte_length: bytes.len(),
-        });
-        let result = self.queue_input(PtyWriteRequest {
-            bytes,
-            paste_trace_id: Some(trace_id),
-        });
-        emit_paste_diagnostic(TerminalPasteDiagnostic::ChannelQueued {
-            trace_id,
-            child_pid: self.child_pid,
-            success: result.is_ok(),
-            error_kind: result.as_ref().err().map(std::io::Error::kind),
-        });
-        result
+        self.queue_input(PtyWriteRequest { bytes })
     }
 
     /// Report a focus change to the PTY when focus reporting (mode 1004) is
@@ -1136,12 +1031,6 @@ impl TerminalModel {
     /// Grid size in cells as `(cols, rows)`.
     pub fn size(&self) -> (u16, u16) {
         self.size
-    }
-
-    /// Spawned child pid used only to correlate content-free runtime
-    /// diagnostics across the terminal view and PTY writer.
-    pub fn diagnostic_child_pid(&self) -> Option<u32> {
-        self.child_pid
     }
 
     /// Exit status once the child has exited.

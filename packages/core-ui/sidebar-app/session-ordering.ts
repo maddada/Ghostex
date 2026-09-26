@@ -9,7 +9,6 @@ import { getAwakeTerminalAndBrowserCount, getGroupSessionSummary } from '../grou
 import { filterSidebarSessionItems } from '../previous-session-search';
 import { useSidebarStore } from '../sidebar-store';
 import type { SidebarSessionTagFilter } from '../session-tag-ui';
-import type { WebviewApi } from '../webview-api';
 import type { SessionIdsByGroup, SidebarSectionSessionSummary, SidebarSessionsById } from './types';
 
 export function getSidebarSectionSessionSummary(
@@ -79,69 +78,6 @@ export function getSidebarStartupElapsedMs(startedAt: number): number {
 
 export function countSidebarSessions(groups: readonly { sessions: readonly unknown[] }[]): number {
   return groups.reduce((total, group) => total + group.sessions.length, 0);
-}
-
-export function postSidebarAgentIconBoundaryLog(
-  vscode: WebviewApi,
-  event: string,
-  details: Record<string, unknown>
-): void {
-  vscode.postMessage({
-    details,
-    event,
-    scenarioId: 'native.agent.detection',
-    type: 'sidebarDebugLog',
-  });
-}
-
-export function summarizeSidebarAgentIconsFromGroups(
-  groups: readonly {
-    groupId: string;
-    sessions: readonly {
-      agentIcon?: string;
-      sessionId: string;
-      sessionKind?: string;
-    }[];
-  }[]
-) {
-  const sessions = groups.flatMap((group) =>
-    group.sessions.map((session) => ({
-      agentIcon: session.agentIcon,
-      groupId: group.groupId,
-      sessionId: session.sessionId,
-      sessionKind: session.sessionKind,
-    }))
-  );
-
-  return summarizeSidebarAgentIconSessions(sessions);
-}
-
-export function summarizeSidebarAgentIconsFromStore(
-  sessionsById: ReturnType<typeof useSidebarStore.getState>['sessionsById']
-) {
-  return summarizeSidebarAgentIconSessions(
-    Object.values(sessionsById).map((session) => ({
-      agentIcon: session.agentIcon,
-      sessionId: session.sessionId,
-      sessionKind: session.sessionKind,
-    }))
-  );
-}
-
-export function summarizeSidebarAgentIconSessions(
-  sessions: readonly {
-    agentIcon?: string;
-    groupId?: string;
-    sessionId: string;
-    sessionKind?: string;
-  }[]
-) {
-  const agentSessions = sessions.filter((session) => Boolean(session.agentIcon));
-  return {
-    agentIconSessionCount: agentSessions.length,
-    agentSessions: agentSessions.slice(0, 10),
-    sessionCount: sessions.length,
-  };
 }
 
 export function createDisplayedSessionIdsByGroup({

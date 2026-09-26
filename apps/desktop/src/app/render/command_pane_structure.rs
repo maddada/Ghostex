@@ -549,7 +549,6 @@ impl GhostexGpuiApp {
                     );
                 }))
                 .on_mouse_move(cx.listener(|this, _event: &MouseMoveEvent, _window, cx| {
-                    cpraildbg(&format!("rail_hover_move y={:?}", _event.position.y));
                     this.set_command_resize_hovering(
                         CommandPaneResizeHoverTarget::PanelRail,
                         true,

@@ -90,8 +90,8 @@ use crate::ghostty_vt::{
 use crate::support_logs::{self, GpuiDiagnosticScenario, GpuiSupportLog};
 use crate::terminal_model::{
     Rgb, SnapshotCell, SnapshotRow, TerminalConfirmCloseBehavior, TerminalEvent, TerminalEventSink,
-    TerminalExit, TerminalModel, TerminalPasteDiagnostic, TerminalSnapshot, TerminalSpawnConfig,
-    TerminalTextRow, UnderlineStyle as CellUnderline, WheelRoute,
+    TerminalExit, TerminalModel, TerminalSnapshot, TerminalSpawnConfig, TerminalTextRow,
+    UnderlineStyle as CellUnderline, WheelRoute,
 };
 use crate::terminal_scrollbar_reveal::ScrollbarReveal;
 use crate::terminal_wheel;
@@ -131,121 +131,6 @@ const TERMINAL_BUTTON_GAP: f32 = 0.0;
 const TERMINAL_SCROLL_BUTTON_VISIBILITY_THRESHOLD: f32 = 200.0;
 const TERMINAL_SCROLL_BUTTON_MIN_WIDTH: f32 = 80.0;
 const TERMINAL_SCROLL_BUTTON_MIN_HEIGHT: f32 = 96.0;
-
-fn temporary_terminal_control_labels(bytes: &[u8]) -> Vec<&'static str> {
-    let mut controls = Vec::new();
-    if bytes.windows(5).any(|window| window == b"\x1b[27u") {
-        controls.push("kitty-escape");
-    } else if bytes == [0x1b] {
-        controls.push("raw-escape");
-    }
-    for (byte, label) in [
-        (0x03, "ctrl-c"),
-        (0x04, "ctrl-d"),
-        (0x15, "ctrl-u"),
-        (0x19, "ctrl-y"),
-        (0x1a, "ctrl-z"),
-        (0x1c, "ctrl-backslash"),
-    ] {
-        if bytes.contains(&byte) {
-            controls.push(label);
-        }
-    }
-    controls
-}
-
-fn log_temporary_terminal_control_write(model: &TerminalModel, source: &str, bytes: &[u8]) {
-    let controls = temporary_terminal_control_labels(bytes);
-    if controls.is_empty() {
-        return;
-    }
-    crate::support_logs::append_temporary(
-        crate::support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.gpui.sessionInterrupt.controlWrite",
-        serde_json::json!({
-            "byteLength": bytes.len(),
-            "childPid": model.diagnostic_child_pid(),
-            "controls": controls,
-            "source": source,
-        }),
-    );
-}
-
-fn install_terminal_paste_diagnostic_sink() {
-    crate::terminal_model::install_paste_diagnostic_sink(Arc::new(|diagnostic| {
-        let (event, details) = match diagnostic {
-            TerminalPasteDiagnostic::Encoded {
-                trace_id,
-                child_pid,
-                bracketed_paste,
-                source_byte_length,
-                source_contains_line_break,
-                source_contains_non_ascii,
-                encoded_byte_length,
-            } => (
-                "TEMP.gpui.remotePaste.encoded",
-                serde_json::json!({
-                    "bracketedPaste": bracketed_paste,
-                    "childPid": child_pid,
-                    "encodedByteLength": encoded_byte_length,
-                    "sourceByteLength": source_byte_length,
-                    "sourceContainsLineBreak": source_contains_line_break,
-                    "sourceContainsNonAscii": source_contains_non_ascii,
-                    "traceId": trace_id,
-                }),
-            ),
-            TerminalPasteDiagnostic::ChannelQueued {
-                trace_id,
-                child_pid,
-                success,
-                error_kind,
-            } => (
-                "TEMP.gpui.remotePaste.channelQueued",
-                serde_json::json!({
-                    "childPid": child_pid,
-                    "errorKind": error_kind.map(|kind| format!("{kind:?}")),
-                    "success": success,
-                    "traceId": trace_id,
-                }),
-            ),
-            TerminalPasteDiagnostic::PtyWriteStarted {
-                trace_id,
-                child_pid,
-                encoded_byte_length,
-            } => (
-                "TEMP.gpui.remotePaste.ptyWriteStarted",
-                serde_json::json!({
-                    "childPid": child_pid,
-                    "encodedByteLength": encoded_byte_length,
-                    "traceId": trace_id,
-                }),
-            ),
-            TerminalPasteDiagnostic::PtyWriteCompleted {
-                trace_id,
-                child_pid,
-                duration_micros,
-                stage,
-                success,
-                error_kind,
-            } => (
-                "TEMP.gpui.remotePaste.ptyWriteCompleted",
-                serde_json::json!({
-                    "childPid": child_pid,
-                    "durationMicros": duration_micros,
-                    "errorKind": error_kind.map(|kind| format!("{kind:?}")),
-                    "stage": stage,
-                    "success": success,
-                    "traceId": trace_id,
-                }),
-            ),
-        };
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            event,
-            details,
-        );
-    }));
-}
 
 /// Terminal font configuration used for cell metrics and run shaping.
 /// TODO(P1e): sync from the app's terminal settings (shared_settings
@@ -767,7 +652,6 @@ impl TerminalView {
         TerminalEventSink,
         futures::channel::mpsc::UnboundedReceiver<TerminalEvent>,
     ) {
-        install_terminal_paste_diagnostic_sink();
         let (event_tx, event_rx) = futures::channel::mpsc::unbounded::<TerminalEvent>();
         let sink: TerminalEventSink = Arc::new(move |event| {
             let _ = event_tx.unbounded_send(event);
@@ -1570,14 +1454,6 @@ impl TerminalView {
         */
         if self.input_suppressed {
             if keystroke.key == "escape" && !modifiers.modified() {
-                crate::support_logs::append_temporary(
-                    crate::support_logs::GpuiSupportLog::TerminalFocus,
-                    "TEMP.gpui.sessionInterrupt.titleCancelKey",
-                    serde_json::json!({
-                        "childPid": self.model.diagnostic_child_pid(),
-                        "held": event.is_held,
-                    }),
-                );
                 cx.emit(TerminalViewEvent::FirstPromptTitleGenerationCancelRequested);
             }
             cx.stop_propagation();
@@ -1748,23 +1624,6 @@ impl TerminalView {
         };
         let kitty_keyboard_flags = self.model.kitty_keyboard_flags();
         let accepted = self.model.send_key(&input);
-        if keystroke.key == "escape"
-            || (modifiers.control && matches!(keystroke.key.as_str(), "c" | "d" | "z" | "\\"))
-        {
-            crate::support_logs::append_temporary(
-                crate::support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.gpui.sessionInterrupt.physicalKey",
-                serde_json::json!({
-                    "accepted": accepted,
-                    "childPid": self.model.diagnostic_child_pid(),
-                    "control": modifiers.control,
-                    "held": event.is_held,
-                    "key": keystroke.key,
-                    "kittyKeyboardFlags": kitty_keyboard_flags,
-                    "markedTextActive": self.marked_text.is_some(),
-                }),
-            );
-        }
         /*
         CDXC:SessionTitles 2026-07-26:
         The agent-cancel side band reports Escape only when Escape is actually
@@ -1870,14 +1729,6 @@ impl TerminalView {
     /// borrowed platform string is written immediately and never retained
     /// (AppKit reuses IME insert buffers; gpui also copies before this).
     fn commit_ime_text(&mut self, text: &str, cx: &mut Context<Self>) {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedImeCommit",
-            serde_json::json!({
-                "inputSuppressed": self.input_suppressed,
-                "text": crate::support_logs::temporary_fluid_voice_text_shape(text),
-            }),
-        );
         if self.input_suppressed {
             self.marked_text = None;
             self.marked_selection_utf16 = None;
@@ -1897,18 +1748,9 @@ impl TerminalView {
     /// Host-initiated literal text input (prompt sends, rename flows):
     /// bytes go straight to the PTY like typed text.
     pub fn send_text_input(&mut self, text: &str, cx: &mut Context<Self>) {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedLiteralText",
-            serde_json::json!({
-                "inputSuppressed": self.input_suppressed,
-                "text": crate::support_logs::temporary_fluid_voice_text_shape(text),
-            }),
-        );
         if text.is_empty() {
             return;
         }
-        log_temporary_terminal_control_write(&self.model, "host-literal-text", text.as_bytes());
         let _ = self.model.write_input(text.as_bytes());
         self.after_send_input(cx);
     }
@@ -1919,15 +1761,6 @@ impl TerminalView {
     /// only in-memory copy of the text (the chat → terminal draft handoff)
     /// can keep it until the write is confirmed instead of before it.
     pub fn paste_text(&mut self, text: &str, cx: &mut Context<Self>) -> bool {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedPaste",
-            serde_json::json!({
-                "childPid": self.model.diagnostic_child_pid(),
-                "inputSuppressed": self.input_suppressed,
-                "text": crate::support_logs::temporary_fluid_voice_text_shape(text),
-            }),
-        );
         if text.is_empty() {
             return false;
         }
@@ -3237,13 +3070,13 @@ impl EntityInputHandler for TerminalView {
         &mut self,
         range: Range<usize>,
         adjusted_range: &mut Option<Range<usize>>,
-        window: &mut Window,
+        _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<String> {
         // The marked text is the terminal's whole addressable document, so
         // the IME can read the preedit back (it consults this state before
         // consuming editing keys like Backspace mid-composition).
-        let result = self.marked_text.as_ref().and_then(|text| {
+        self.marked_text.as_ref().and_then(|text| {
             let len_utf16 = text.encode_utf16().count();
             let start = range.start.min(len_utf16);
             let end = range.end.clamp(start, len_utf16);
@@ -3257,37 +3090,15 @@ impl EntityInputHandler for TerminalView {
                 text[utf16_offset_to_byte(text, start)..utf16_offset_to_byte(text, end)]
                     .to_string(),
             )
-        });
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedTextServiceQuery",
-            serde_json::json!({
-                "focused": self.focus_handle.is_focused(window),
-                "query": "textForRange",
-                "rangeEnd": range.end,
-                "rangeStart": range.start,
-                "result": if result.is_some() { "markedText" } else { "none" },
-            }),
-        );
-        result
+        })
     }
 
     fn selected_text_range(
         &mut self,
         _ignore_disabled_input: bool,
-        window: &mut Window,
+        _window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<UTF16Selection> {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedTextServiceQuery",
-            serde_json::json!({
-                "focused": self.focus_handle.is_focused(window),
-                "query": "selectedTextRange",
-                "rangeEnd": 0,
-                "rangeStart": 0,
-            }),
-        );
         // The terminal has no editable backing document. During composition
         // the selection is the IME-reported caret inside the marked text;
         // otherwise a token empty range keeps the platform from treating the
@@ -3308,15 +3119,7 @@ impl EntityInputHandler for TerminalView {
             .map(|text| 0..text.encode_utf16().count())
     }
 
-    fn unmark_text(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedUnmarkText",
-            serde_json::json!({
-                "focused": self.focus_handle.is_focused(window),
-                "hadMarkedText": self.marked_text.is_some(),
-            }),
-        );
+    fn unmark_text(&mut self, _window: &mut Window, cx: &mut Context<Self>) {
         self.marked_selection_utf16 = None;
         if self.marked_text.take().is_some() {
             cx.notify();
@@ -3325,44 +3128,22 @@ impl EntityInputHandler for TerminalView {
 
     fn replace_text_in_range(
         &mut self,
-        range: Option<Range<usize>>,
+        _range: Option<Range<usize>>,
         text: &str,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedReplaceText",
-            serde_json::json!({
-                "focused": self.focus_handle.is_focused(window),
-                "rangeEnd": range.as_ref().map(|range| range.end),
-                "rangeStart": range.as_ref().map(|range| range.start),
-                "text": crate::support_logs::temporary_fluid_voice_text_shape(text),
-            }),
-        );
         self.commit_ime_text(text, cx);
     }
 
     fn replace_and_mark_text_in_range(
         &mut self,
-        range: Option<Range<usize>>,
+        _range: Option<Range<usize>>,
         new_text: &str,
         new_selected_range: Option<Range<usize>>,
-        window: &mut Window,
+        _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        crate::support_logs::append_temporary(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.compositedReplaceMarkedText",
-            serde_json::json!({
-                "focused": self.focus_handle.is_focused(window),
-                "rangeEnd": range.as_ref().map(|range| range.end),
-                "rangeStart": range.as_ref().map(|range| range.start),
-                "selectedRangeEnd": new_selected_range.as_ref().map(|range| range.end),
-                "selectedRangeStart": new_selected_range.as_ref().map(|range| range.start),
-                "text": crate::support_logs::temporary_fluid_voice_text_shape(new_text),
-            }),
-        );
         if self.input_suppressed {
             self.marked_selection_utf16 = None;
             if self.marked_text.take().is_some() {

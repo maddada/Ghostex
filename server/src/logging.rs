@@ -52,17 +52,21 @@ pub enum DiagnosticLogScenario {
 }
 
 impl DiagnosticLogScenario {
+    /// The Settings switch that turns this log on. Several variants share one switch since the
+    /// Debugging page merged its log switches into one per feature area; the variant still names
+    /// what is being logged.
+    ///
+    /// SEE-ALSO: `DIAGNOSTIC_LOGGING_SCENARIOS` in packages/shared/ghostex-settings/diagnostic-logging.ts
+    /// lists the ids Settings can turn on.
     pub fn id(self) -> &'static str {
         match self {
-            Self::SessionChatDrafts => "gpui.sessionChat.drafts",
-            Self::AgentActivity => "gxserver.agentActivity",
-            Self::AgentDetection => "native.agent.detection",
-            Self::ApiRequests => "gxserver.requests",
-            Self::Portless => "gxserver.portless",
-            Self::RepositoryClone => "gxserver.repositoryClone",
-            Self::ServerLifecycle => "gxserver.lifecycle",
+            Self::SessionChatDrafts => "gpui.sessionChat.viewState",
+            Self::AgentActivity | Self::AgentDetection => "gxserver.agentActivity",
+            Self::ApiRequests | Self::Portless | Self::RepositoryClone | Self::TypedOperations => {
+                "gxserver.requests"
+            }
+            Self::ServerLifecycle => "native.host.lifecycle",
             Self::TerminalFocus => "native.terminal.focus",
-            Self::TypedOperations => "gxserver.typedOperations",
         }
     }
 }

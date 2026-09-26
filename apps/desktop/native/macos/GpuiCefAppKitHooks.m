@@ -529,26 +529,6 @@ GhostexGpuiEditHistoryMenuTargetShared(void) {
 }
 
 - (void)ghostexGpuiCEFSendEvent:(NSEvent *)event {
-  // CPRAILDBG: temporary diagnostic for the command-pane resize-rail drag
-  // investigation. Remove before handoff.
-  if (event.type == NSEventTypeLeftMouseDown ||
-      event.type == NSEventTypeLeftMouseDragged ||
-      event.type == NSEventTypeLeftMouseUp) {
-    NSWindow *dbgWindow = event.window;
-    NSView *dbgContent = dbgWindow.contentView;
-    NSView *dbgHit = nil;
-    if (dbgContent.superview) {
-      dbgHit = [dbgContent.superview
-          hitTest:[dbgContent.superview convertPoint:event.locationInWindow
-                                            fromView:nil]];
-    }
-    id dbgResponder = dbgWindow.firstResponder;
-    NSLog(@"CPRAILDBG sendEvent type=%lu loc=(%.1f,%.1f) win=%p hit=%s fr=%s",
-          (unsigned long)event.type, event.locationInWindow.x,
-          event.locationInWindow.y, dbgWindow,
-          dbgHit ? object_getClassName(dbgHit) : "nil",
-          dbgResponder ? object_getClassName(dbgResponder) : "nil");
-  }
   /*
    CDXC:Hotkeys 2026-07-04:
    CGEvent-synthesized keyboards (Karabiner's virtual HID, BetterTouchTool,

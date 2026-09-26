@@ -66,27 +66,16 @@ impl Drop for Span {
 /// CDXC:Diagnostics 2026-09-05 DECISION:
 /// User requested profiling enabled with a flag to investigate desktop performance and RAM use.
 /// Aggregation keeps instrumentation disk writes off the UI thread and stops after 30 minutes.
+/// The flag is the only opt-in: the Debugging page has no profiling switch (user decision 2026-09-26).
 pub(crate) fn start() {
     if !std::env::args().any(|arg| arg == "--profile") {
         return;
     }
+    ACTIVE.store(true, Ordering::Relaxed);
     std::thread::spawn(|| {
         let start = Instant::now();
         while start.elapsed() < Duration::from_secs(1800) {
-            let enabled = crate::shared_settings::shared_sidebar_settings_snapshot()
-                .debugging_mode()
-                && crate::support_logs::scenario_id_enabled("gpui.performance");
-            ACTIVE.store(enabled, Ordering::Relaxed);
             std::thread::sleep(Duration::from_secs(1));
-            if !enabled {
-                for c in &COUNTERS {
-                    c.count.store(0, Ordering::Relaxed);
-                    c.micros.store(0, Ordering::Relaxed);
-                    c.max_micros.store(0, Ordering::Relaxed);
-                    c.over_16ms.store(0, Ordering::Relaxed);
-                }
-                continue;
-            }
             let metrics: Vec<_> = COUNTERS
                 .iter()
                 .zip(NAMES)
@@ -100,14 +89,9 @@ pub(crate) fn start() {
                     })
                 })
                 .collect();
-            if enabled {
-                crate::support_logs::append_for_scenario(
-                    crate::support_logs::GpuiSupportLog::Performance,
-                    "gpui.performance",
-                    "gpui.performance.sample",
-                    serde_json::json!({"pid": std::process::id(), "elapsedMs": start.elapsed().as_millis() as u64, "metrics": metrics}),
-                );
-            }
+            crate::support_logs::append_profile_sample(
+                serde_json::json!({"pid": std::process::id(), "elapsedMs": start.elapsed().as_millis() as u64, "metrics": metrics}),
+            );
         }
         ACTIVE.store(false, Ordering::Relaxed);
     });

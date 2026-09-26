@@ -120,7 +120,6 @@ import { createSettingsSidebarTagListItemDragData, getSettingsSidebarTagListItem
 import {
   DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION,
   DIAGNOSTIC_LOGGING_DURATION_OPTIONS,
-  DIAGNOSTIC_LOGGING_GROUPS,
   DiagnosticLoggingDurationValue,
   SettingModificationProps,
 } from './types';
@@ -1780,80 +1779,67 @@ export function DiagnosticLoggingSettingsField({
 }: {
   dependent?: boolean;
   isModified?: boolean;
-  onChange: (scenarioId: DiagnosticLoggingScenarioId, duration: DiagnosticLoggingDurationValue) => void;
+  onChange: (scenarioIds: readonly DiagnosticLoggingScenarioId[], duration: DiagnosticLoggingDurationValue) => void;
   onResetToDefault?: () => void;
   value: DiagnosticLoggingSettings;
 }) {
   const idBase = useId();
+  const enabledScenarioIds = DIAGNOSTIC_LOGGING_SCENARIOS.map((scenario) => scenario.id).filter(
+    (scenarioId) => getDiagnosticLoggingScenarioDuration(value, scenarioId) !== 'off'
+  );
+  const [timer, setTimer] = useState<DiagnosticLoggingDurationValue>(() => {
+    const durations = enabledScenarioIds.map((scenarioId) => getDiagnosticLoggingScenarioDuration(value, scenarioId));
+    return durations.includes('always') ? 'always' : (durations[0] ?? DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION);
+  });
   return (
     <SettingRow
       dependent={dependent}
-      description='Routine logs are off by default and write only when Show debug UI controls and their scenario are enabled. Enable only the repro area you need; important warnings, errors, and crashes remain captured.'
-      htmlFor={`${idBase}-native-terminal-focus`}
+      description='Pick the areas to log while you reproduce an issue. Warnings, errors, and crashes are always captured.'
+      htmlFor={`${idBase}-timer`}
       isModified={isModified}
-      label='Diagnostic disk logging scenarios'
+      label='Diagnostic logs'
       wide
       onResetToDefault={onResetToDefault}
     >
-      <div className='grid gap-4'>
-        {DIAGNOSTIC_LOGGING_GROUPS.map((group) => {
-          const scenarios = DIAGNOSTIC_LOGGING_SCENARIOS.filter((scenario) => scenario.group === group);
+      <div className='grid gap-2'>
+        <div className='flex min-w-0 items-center justify-between gap-3'>
+          <FieldLabel className='text-sm' htmlFor={`${idBase}-timer`}>
+            Turn logs off after
+          </FieldLabel>
+          <SettingsSelect
+            onValueChange={(nextValue) => {
+              const duration = nextValue as DiagnosticLoggingDurationValue;
+              setTimer(duration);
+              if (enabledScenarioIds.length > 0) {
+                onChange(enabledScenarioIds, duration);
+              }
+            }}
+            value={timer}
+          >
+            <SelectTrigger className='h-8 w-36' id={`${idBase}-timer`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SettingsSelectContent>
+              {DIAGNOSTIC_LOGGING_DURATION_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SettingsSelectContent>
+          </SettingsSelect>
+        </div>
+        {DIAGNOSTIC_LOGGING_SCENARIOS.map((scenario) => {
+          const switchId = `${idBase}-${scenario.id.replaceAll('.', '-')}`;
           return (
-            <div className='grid gap-2' key={group}>
-              <div className='text-[13px] text-muted-foreground'>{group === 'macOS' ? 'Native' : group}</div>
-              <div className='grid gap-2'>
-                {scenarios.map((scenario) => {
-                  const scenarioId = scenario.id as DiagnosticLoggingScenarioId;
-                  const duration = getDiagnosticLoggingScenarioDuration(value, scenarioId);
-                  const checked = duration !== 'off';
-                  const switchId = `${idBase}-${scenario.id.replaceAll('.', '-')}`;
-                  return (
-                    <div
-                      className='grid gap-2 border-t border-border/70 pt-2 first:border-t-0 first:pt-0'
-                      key={scenario.id}
-                    >
-                      <div className='flex min-w-0 items-start justify-between gap-3'>
-                        <div className='min-w-0'>
-                          <FieldLabel className='text-sm' htmlFor={switchId}>
-                            {scenario.label}
-                          </FieldLabel>
-                          <div className='mt-0.5 break-words text-[13px] text-muted-foreground'>
-                            {scenario.logFiles.join(', ')}
-                          </div>
-                        </div>
-                        <Switch
-                          checked={checked}
-                          id={switchId}
-                          onCheckedChange={(nextChecked) =>
-                            onChange(scenarioId, nextChecked ? DEFAULT_DIAGNOSTIC_LOGGING_ENABLE_DURATION : 'off')
-                          }
-                        />
-                      </div>
-                      {checked ? (
-                        <SettingsSelect
-                          onValueChange={(nextValue) =>
-                            onChange(scenarioId, nextValue as DiagnosticLoggingDurationValue)
-                          }
-                          value={duration}
-                        >
-                          <SelectTrigger className='h-8 w-full sm:w-36'>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SettingsSelectContent>
-                            {DIAGNOSTIC_LOGGING_DURATION_OPTIONS.filter((option) => option.value !== 'off').map(
-                              (option) => (
-                                <SelectItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </SelectItem>
-                              )
-                            )}
-                          </SettingsSelectContent>
-                        </SettingsSelect>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
+            <div className='flex min-w-0 items-center justify-between gap-3' key={scenario.id}>
+              <FieldLabel className='text-sm' htmlFor={switchId}>
+                {scenario.label}
+              </FieldLabel>
+              <Switch
+                checked={enabledScenarioIds.includes(scenario.id)}
+                id={switchId}
+                onCheckedChange={(nextChecked) => onChange([scenario.id], nextChecked ? timer : 'off')}
+              />
             </div>
           );
         })}

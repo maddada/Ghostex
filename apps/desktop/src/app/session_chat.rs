@@ -316,7 +316,7 @@ impl GhostexGpuiApp {
             if event.starts_with("sessionChat.draft.") {
                 support_logs::append_for_scenario(
                     support_logs::GpuiSupportLog::SessionChat,
-                    "gpui.sessionChat.drafts",
+                    "gpui.sessionChat.viewState",
                     event,
                     serde_json::json!({ "sessionId": format!("{session_id:?}"), "details": details }),
                 );

@@ -28,7 +28,7 @@ export function DebuggingSettingsTab({
   searchEmptyState,
   onChange,
   getModificationProps,
-  onChangeDiagnosticScenario,
+  onChangeDiagnosticScenarios,
   folderStats,
   folderStatsLoading,
   onRequestFolderStats,
@@ -39,7 +39,10 @@ export function DebuggingSettingsTab({
   searchEmptyState?: ReactNode;
   onChange: <K extends keyof ghostexSettings>(key: K, value: ghostexSettings[K]) => void;
   getModificationProps: (key: keyof ghostexSettings) => SettingModificationProps;
-  onChangeDiagnosticScenario: (id: DiagnosticLoggingScenarioId, duration: DiagnosticLoggingDurationValue) => void;
+  onChangeDiagnosticScenarios: (
+    ids: readonly DiagnosticLoggingScenarioId[],
+    duration: DiagnosticLoggingDurationValue
+  ) => void;
   folderStats?: SidebarGhostexFolderStatsMessage;
   folderStatsLoading: boolean;
   onRequestFolderStats?: () => void;
@@ -52,48 +55,24 @@ export function DebuggingSettingsTab({
         <SettingsSection title='Debugging'>
           <ToggleField
             checked={settings.debuggingMode}
-            description='Show debug-only controls, load storage statistics, and allow enabled routine diagnostic logs. Important warnings, errors, and crashes remain captured when off.'
+            description='Show diagnostic logs, storage statistics, and Copy Resume and Copy Attach in session menus. Warnings, errors, and crashes are always captured.'
             label='Show debug UI controls'
             {...getModificationProps('debuggingMode')}
             onChange={(checked) => onChange('debuggingMode', checked)}
           />
-          {settings.debuggingMode ? (
-            <>
-              {visible('controls', 'diagnosticLogging') ? (
-                <DiagnosticLoggingSettingsField
-                  dependent
-                  isModified={
-                    !areDiagnosticLoggingSettingsEqual(
-                      settings.diagnosticLogging,
-                      DEFAULT_ghostex_SETTINGS.diagnosticLogging
-                    )
-                  }
-                  onChange={onChangeDiagnosticScenario}
-                  onResetToDefault={() => onChange('diagnosticLogging', DEFAULT_ghostex_SETTINGS.diagnosticLogging)}
-                  value={settings.diagnosticLogging}
-                />
-              ) : null}
-              {visible('controls', 'showSessionCommandCopyActions') ? (
-                <ToggleField
-                  checked={settings.showSessionCommandCopyActions}
-                  description='Show Copy resume and Copy attach command in session context menus.'
-                  dependent
-                  label='Show command copy actions'
-                  {...getModificationProps('showSessionCommandCopyActions')}
-                  onChange={(checked) => onChange('showSessionCommandCopyActions', checked)}
-                />
-              ) : null}
-              {visible('controls', 'showSessionDetailsCopyAction') ? (
-                <ToggleField
-                  checked={settings.showSessionDetailsCopyAction}
-                  description='Show Copy Details in session context menus.'
-                  dependent
-                  label='Show Copy Details option'
-                  {...getModificationProps('showSessionDetailsCopyAction')}
-                  onChange={(checked) => onChange('showSessionDetailsCopyAction', checked)}
-                />
-              ) : null}
-            </>
+          {settings.debuggingMode && visible('controls', 'diagnosticLogging') ? (
+            <DiagnosticLoggingSettingsField
+              dependent
+              isModified={
+                !areDiagnosticLoggingSettingsEqual(
+                  settings.diagnosticLogging,
+                  DEFAULT_ghostex_SETTINGS.diagnosticLogging
+                )
+              }
+              onChange={onChangeDiagnosticScenarios}
+              onResetToDefault={() => onChange('diagnosticLogging', DEFAULT_ghostex_SETTINGS.diagnosticLogging)}
+              value={settings.diagnosticLogging}
+            />
           ) : null}
         </SettingsSection>
         {settings.debuggingMode ? (

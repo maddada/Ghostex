@@ -753,29 +753,6 @@ pub(crate) fn command_pane_panel_pin_label(mode: CommandPaneMode) -> &'static st
     }
 }
 
-// CPRAILDBG: temporary diagnostic logging for the command-pane resize-rail
-// drag investigation. Remove before handoff.
-pub(crate) fn cpraildbg(message: &str) {
-    if !shared_settings::shared_sidebar_settings_snapshot().debugging_mode()
-        || !support_logs::scenario_id_enabled("native.pane.tabs")
-    {
-        return;
-    }
-    use std::io::Write as _;
-    let Ok(mut file) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("/tmp/cpraildbg.log")
-    else {
-        return;
-    };
-    let millis = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0);
-    let _ = writeln!(file, "[{millis}] {message}");
-}
-
 /*
 CDXC:CommandPane 2026-06-22-17:20:
 Command-pane tab chrome is focus-invariant: command group focus and shell focus may drive keyboard ownership and group borders, but per-tab brightness derives only from semantic command status and active membership inside the command tab group. CommandPaneModel.focused_group and shell focus are intentionally excluded.

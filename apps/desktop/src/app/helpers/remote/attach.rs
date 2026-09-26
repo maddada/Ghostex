@@ -4,7 +4,7 @@
 // and remote workspace terminal creation. See
 // docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crate::app::helpers::*;
 use crate::*;
@@ -74,7 +74,6 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
     } else {
         "/api/attachSessionMetadata"
     };
-    let attach_rpc_started = Instant::now();
     let mut params = serde_json::json!({
         "projectId": reference.project_id.as_str(),
         "sessionId": reference.session_id.as_str(),
@@ -83,14 +82,6 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
         params["promptEditor"] = serde_json::json!("code-server");
     }
     let result = gpui_remote_gxserver_rpc_result(target, path, &params, Duration::from_secs(15))?;
-    support_logs::append_temporary(
-        support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.remoteNewTerminal.attachRpcCompleted",
-        serde_json::json!({
-            "durationMs": attach_rpc_started.elapsed().as_millis() as u64,
-            "operation": if wake_session { "wake" } else { "metadata" },
-        }),
-    );
     gpui_remote_attach_terminal_plan_from_result(
         config,
         target,
@@ -171,7 +162,6 @@ pub(crate) fn gpui_create_remote_project_workspace_terminal(
     ),
     String,
 > {
-    let create_started = Instant::now();
     /*
     CDXC:RemoteMachines 2026-08-20:
     Ctrl+G in a remote pane can only reach that machine's code-server prompt
@@ -213,13 +203,6 @@ pub(crate) fn gpui_create_remote_project_workspace_terminal(
         });
     }
     let result = parse_gpui_gxserver_rpc_result(&body)?;
-    support_logs::append_temporary(
-        support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.remoteNewTerminal.createRpcCompleted",
-        serde_json::json!({
-            "durationMs": create_started.elapsed().as_millis() as u64,
-        }),
-    );
     let session = result
         .get("session")
         .and_then(serde_json::Value::as_object)
@@ -241,17 +224,8 @@ pub(crate) fn gpui_create_remote_project_workspace_terminal(
         project_id,
         session_id,
     };
-    let plan_started = Instant::now();
     let plan =
         gpui_remote_attach_terminal_plan_from_result(config, target, &reference, &result, true)?;
-    support_logs::append_temporary(
-        support_logs::GpuiSupportLog::TerminalFocus,
-        "TEMP.remoteNewTerminal.planCompleted",
-        serde_json::json!({
-            "durationMs": plan_started.elapsed().as_millis() as u64,
-            "totalDurationMs": create_started.elapsed().as_millis() as u64,
-        }),
-    );
     Ok((reference, plan))
 }
 

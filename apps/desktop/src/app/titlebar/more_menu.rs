@@ -261,51 +261,24 @@ impl GhostexGpuiApp {
             })
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    log_gpui_titlebar_popup_mouse_down(
-                        GpuiTitlebarPopupKind::More,
-                        "left",
-                        "togglePopup",
-                        open,
-                        this.titlebar_more_button_bounds.get(),
-                        event,
-                        window,
-                    );
                     this.toggle_gpui_titlebar_more_menu(window, cx);
                 }),
             )
             .on_mouse_down(
                 MouseButton::Right,
-                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                cx.listener(move |this, _: &MouseDownEvent, window, cx| {
                     window.prevent_default();
                     cx.stop_propagation();
-                    log_gpui_titlebar_popup_mouse_down(
-                        GpuiTitlebarPopupKind::More,
-                        "right",
-                        "togglePopup",
-                        open,
-                        this.titlebar_more_button_bounds.get(),
-                        event,
-                        window,
-                    );
                     this.toggle_gpui_titlebar_more_menu(window, cx);
                 }),
             )
             .on_prepaint(move |bounds, window, _cx| {
-                let previous = button_bounds.get();
-                let first_capture = previous.is_none();
-                let moved = previous != Some(bounds);
+                let moved = button_bounds.get() != Some(bounds);
                 button_bounds.set(Some(bounds));
-                if first_capture || moved {
-                    log_gpui_titlebar_popup_anchor(
-                        GpuiTitlebarPopupKind::More,
-                        bounds,
-                        first_capture,
-                        moved,
-                        window,
-                    );
+                if moved {
                     window.request_animation_frame();
                 }
             })

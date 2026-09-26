@@ -4,7 +4,6 @@ use crate::app::terminal_sync::GpuiTerminalViewerRecipe;
 // modules; pure move, no logic changes. Cluster: GPUI-engine terminal reconciliation (agents + command), startup spawn, and engine terminal view/agent action event handling.
 
 use std::sync::atomic::Ordering;
-use std::time::Instant;
 
 use gpui::AppContext as _;
 
@@ -648,7 +647,6 @@ impl GhostexGpuiApp {
         );
         let font = terminal_gpui_engine::gpui_engine_terminal_font_config(&engine_config);
         let (sink, event_rx) = terminal_element::TerminalView::event_channel();
-        let spawn_started = Instant::now();
         let argument_utf16_length = spawn_config
             .args
             .iter()
@@ -672,13 +670,6 @@ impl GhostexGpuiApp {
                 return None;
             }
         };
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.remoteNewTerminal.engineProcessSpawned",
-            serde_json::json!({
-                "durationMs": spawn_started.elapsed().as_millis() as u64,
-            }),
-        );
         model.set_option_as_alt(engine_config.option_as_alt);
         if let Some(colors) = &engine_config.colors {
             model
@@ -790,17 +781,6 @@ impl GhostexGpuiApp {
         };
         match event {
             TerminalViewEvent::TitleChanged(title) => {
-                if title == TEMP_REMOTE_LOCAL_READY_TITLE || title == TEMP_REMOTE_SSH_READY_TITLE {
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        if title == TEMP_REMOTE_LOCAL_READY_TITLE {
-                            "TEMP.remoteNewTerminal.localWrapperReady"
-                        } else {
-                            "TEMP.remoteNewTerminal.remoteCommandReady"
-                        },
-                        serde_json::json!({ "engine": "gpui" }),
-                    );
-                }
                 osc_states.entry(runtime_session_id).or_default().title = if title.is_empty() {
                     None
                 } else {
@@ -868,25 +848,11 @@ impl GhostexGpuiApp {
             }
             TerminalViewEvent::EscapePressed => {
                 if let Some(shell_session_id) = agents_shell_session_id {
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        "TEMP.gpui.sessionInterrupt.compositedEscapeRouted",
-                        serde_json::json!({
-                            "shellSessionId": format!("{:?}", shell_session_id),
-                        }),
-                    );
                     self.dispatch_gpui_workspace_terminal_escape_pressed(shell_session_id, cx);
                 }
             }
             TerminalViewEvent::FirstPromptTitleGenerationCancelRequested => {
                 if let Some(shell_session_id) = agents_shell_session_id {
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        "TEMP.gpui.sessionInterrupt.titleCancelRouted",
-                        serde_json::json!({
-                            "shellSessionId": format!("{:?}", shell_session_id),
-                        }),
-                    );
                     self.dispatch_gpui_workspace_first_prompt_title_generation_cancel(
                         shell_session_id,
                         cx,

@@ -38,14 +38,6 @@ impl GhostexGpuiApp {
         Direct GPUI terminal paste uses the same runtime-only previewable-image setting as macOS before targeting the focused mounted Ghostty surface. Disabled keeps explicit-string-only behavior; enabled converts only validated image file references or raw image bytes into Markdown before any terminal insertion.
         */
         let Some(item) = cx.read_from_clipboard() else {
-            support_logs::append_temporary(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.gpui.fluidVoice.clipboardPaste",
-                serde_json::json!({
-                    "accepted": false,
-                    "reason": "clipboardUnavailable",
-                }),
-            );
             return false;
         };
         let paste_previewable_images_enabled =
@@ -60,27 +52,10 @@ impl GhostexGpuiApp {
             paste_previewable_images_enabled,
             self.focused_terminal_is_factory_droid(),
         ) else {
-            support_logs::append_temporary(
-                support_logs::GpuiSupportLog::TerminalFocus,
-                "TEMP.gpui.fluidVoice.clipboardPaste",
-                serde_json::json!({
-                    "accepted": false,
-                    "reason": "clipboardHadNoAcceptedText",
-                }),
-            );
             return false;
         };
 
-        let accepted = self.paste_text_into_focused_terminal_surface(&text, cx);
-        support_logs::append_temporary(
-            support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.fluidVoice.clipboardPaste",
-            serde_json::json!({
-                "accepted": accepted,
-                "text": support_logs::temporary_fluid_voice_text_shape(&text),
-            }),
-        );
-        accepted
+        self.paste_text_into_focused_terminal_surface(&text, cx)
     }
 
     pub(crate) fn paste_image_or_send_control_v(&mut self, cx: &mut gpui::Context<Self>) -> bool {

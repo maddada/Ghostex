@@ -79,7 +79,7 @@ pub(crate) fn gpui_cef_html_entry_url(env_var: &str, entry_file_name: &str) -> R
     Packaged Windows and Linux builds stage every first-party CEF entry in
     dist/sidebar beside the executable. Resolve that directory before the
     compile-time checkout path so an installed Ghostex never loads modal-host,
-    titlebar-host, Kanban, Manage, or Chat artifacts from the source tree that
+    Kanban, Manage, or Chat artifacts from the source tree that
     happened to build the binary.
     */
     #[cfg(any(target_os = "windows", target_os = "linux"))]
@@ -128,17 +128,6 @@ pub(crate) fn apply_gpui_terminal_runtime_action_events(
                 runtime_state_changed = true;
             }
             GhosttyRuntimeActionEvent::SetTitle { title } => {
-                if title == TEMP_REMOTE_LOCAL_READY_TITLE || title == TEMP_REMOTE_SSH_READY_TITLE {
-                    support_logs::append_temporary(
-                        support_logs::GpuiSupportLog::TerminalFocus,
-                        if title == TEMP_REMOTE_LOCAL_READY_TITLE {
-                            "TEMP.remoteNewTerminal.localWrapperReady"
-                        } else {
-                            "TEMP.remoteNewTerminal.remoteCommandReady"
-                        },
-                        serde_json::json!({ "engine": "ghostty" }),
-                    );
-                }
                 osc_states.entry(runtime_session_id).or_default().title = Some(title);
                 runtime_state_changed = true;
             }
