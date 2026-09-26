@@ -141,13 +141,11 @@ impl ChatOptionMenuPanel {
                         item.chat_cursor_pointer()
                             .hover(|style| style.bg(appearance.border))
                     })
-                    .tooltip(move |window, cx| {
-                        gpui_component::tooltip::Tooltip::new(if disabled {
-                            reason.clone()
-                        } else {
-                            "Compact context".to_owned()
+                    // CDXC:SessionChat 2026-09-26 DECISION: User: a button whose static text already says what the tooltip would say gets no tooltip; only the disabled button keeps one, to say why.
+                    .when(disabled, |item| {
+                        item.tooltip(move |window, cx| {
+                            gpui_component::tooltip::Tooltip::new(reason.clone()).build(window, cx)
                         })
-                        .build(window, cx)
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         if !disabled {

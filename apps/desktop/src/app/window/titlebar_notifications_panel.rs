@@ -273,7 +273,7 @@ impl GpuiTitlebarReadingPanel {
     }
     /// CDXC:Notifications 2026-09-13 DECISION:
     /// User: keep the Notifications panel in native GPUI and match the Tips header buttons with full-height, equal-width, unfilled actions separated by thin borders, with an icon beside each label.
-    /// User: call the jump action "Next unread" and show each action's configured hotkey in its tooltip when one exists.
+    /// User: call the jump action "Next unread" and show each action's configured hotkey in its tooltip when one exists. 2026-09-26: an action without a hotkey shows no tooltip, because it would only repeat the label.
     /// User: do not show the notification count next to the dropdown title.
     fn render_notifications_header(
         &self,
@@ -372,13 +372,16 @@ impl GpuiTitlebarReadingPanel {
             .whitespace_nowrap()
             .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
             .font_weight(FontWeight::NORMAL)
-            .tooltip(move |window, cx| {
-                let tooltip = match hotkey_action.and_then(crate::gpui_configured_hotkey_label) {
-                    Some(shortcut) if !shortcut.is_empty() => format!("{label} ({shortcut})"),
-                    _ => label.to_string(),
-                };
-                Tooltip::new(tooltip).build(window, cx)
-            })
+            .when_some(
+                hotkey_action
+                    .and_then(crate::gpui_configured_hotkey_label)
+                    .filter(|shortcut| !shortcut.is_empty()),
+                |this, shortcut| {
+                    this.tooltip(move |window, cx| {
+                        Tooltip::new(format!("{label} ({shortcut})")).build(window, cx)
+                    })
+                },
+            )
             .when(enabled, |this| {
                 this.text_color(chrome_ink().opacity(0.78))
                     .cursor_pointer()

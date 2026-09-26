@@ -609,7 +609,7 @@ impl RemoteSitesPanel {
                 .child(h_flex().flex_shrink_0().w(px(200.0)).gap(px(8.0))
                     .child(resource_metric(86.0).id(format!("status-{key}"))
                         .child(status_dot(color)).child(status)
-                        .tooltip(move |window, cx| Tooltip::new(status_detail).build(window, cx)))
+                        .when(status != status_detail, |this| this.tooltip(move |window, cx| Tooltip::new(status_detail).build(window, cx))))
                     .child(resource_metric(106.0).id(format!("evidence-{key}"))
                         .child(evidence)
                         .tooltip(move |window, cx| Tooltip::new(detail.clone()).build(window, cx)))))
