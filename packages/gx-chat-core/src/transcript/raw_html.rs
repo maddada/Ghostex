@@ -64,6 +64,36 @@ fn collect(node: &Node, spans: &mut Vec<(usize, usize)>) {
     }
 }
 
+/// One HTML node's source rewritten so it parses as the same visible text.
+///
+/// The `<` stays raw and the character after it becomes a character reference, which is what
+/// stops it opening a tag. `&lt;` looks equivalent but is not: a GFM autolink literal runs until
+/// whitespace or a raw `<`, so `https://example.com&lt;/a>` linked (and printed) the whole run.
+/// Addresses inside the tag lose their autolink start for the same reason, so `href="https://…"`
+/// cannot run on into the next escaped tag and a tag's attribute never becomes a live link.
+fn as_literal_text(html: &str) -> String {
+    let mut out = String::with_capacity(html.len() + 16);
+    let mut chars = html.char_indices().peekable();
+    while let Some((at, ch)) = chars.next() {
+        match ch {
+            '<' => {
+                out.push('<');
+                if let Some(&(_, next)) = chars.peek() {
+                    if next.is_ascii_alphabetic() || matches!(next, '/' | '!' | '?') {
+                        out.push_str(&format!("&#{};", next as u32));
+                        chars.next();
+                    }
+                }
+            }
+            ':' if html[at + 1..].starts_with("//") => out.push_str("&#58;"),
+            '.' if html[..at].to_ascii_lowercase().ends_with("www") => out.push_str("&#46;"),
+            '@' => out.push_str("&#64;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 /// `markdown` with every raw HTML node that is not plain formatting turned into literal text.
 /// Code spans and fences are untouched because their `<` never parses as HTML. Idempotent.
 pub fn escape_raw_html(markdown: &str) -> String {
@@ -85,7 +115,7 @@ pub fn escape_raw_html(markdown: &str) -> String {
             continue;
         }
         result.push_str(&markdown[cursor..start]);
-        result.push_str(&markdown[start..end].replace('<', "&lt;"));
+        result.push_str(&as_literal_text(&markdown[start..end]));
         cursor = end;
     }
     result.push_str(&markdown[cursor..]);
