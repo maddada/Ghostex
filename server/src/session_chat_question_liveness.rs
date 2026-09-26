@@ -95,6 +95,48 @@ fn without_question_gutter(line: &str) -> &str {
     line.strip_prefix('│').unwrap_or(line)
 }
 
+/// Leading characters of a question's text (whitespace removed) that pick its tab.
+const HEADING_MATCH_CHARS: usize = 40;
+
+/// CDXC:AgentScreenDetection 2026-09-26 DECISION: User: "how about we just compare starting x num of chars", choosing to match the question on screen by its first 40 characters and to look further only when two questions start the same. Claude may draw the rest of a long question differently from the text it was given (it clips past 2000 characters with "…" and replaces odd characters), and that must not stop the answer; a shared start is broken by the longest run the heading shares with each question, and a tie there reads as "not placed" rather than a guess, because keys sent to the wrong tab answer the wrong question.
+fn claude_question_tab_for_heading(
+    questions: &[SessionChatQuestion],
+    heading: &str,
+) -> Option<usize> {
+    let texts: Vec<String> = questions
+        .iter()
+        .map(|question| without_whitespace(&question.question))
+        .collect();
+    let starts_like_heading = |text: &str| {
+        text.chars()
+            .take(HEADING_MATCH_CHARS)
+            .eq(heading.chars().take(HEADING_MATCH_CHARS))
+    };
+    let candidates: Vec<usize> = (!heading.is_empty())
+        .then(|| {
+            (0..texts.len())
+                .filter(|index| starts_like_heading(&texts[*index]))
+                .collect()
+        })
+        .unwrap_or_default();
+    if let [only] = candidates.as_slice() {
+        return Some(*only);
+    }
+    let shared = |index: usize| {
+        texts[index]
+            .chars()
+            .zip(heading.chars())
+            .take_while(|(text, shown)| text == shown)
+            .count()
+    };
+    let longest = candidates.iter().map(|index| shared(*index)).max()?;
+    let mut best = candidates
+        .into_iter()
+        .filter(|index| shared(*index) == longest);
+    let first = best.next()?;
+    best.next().is_none().then_some(first)
+}
+
 /// Reads the selector's current tab and highlighted row from a screen capture.
 /// `None` when the capture shows no AskUserQuestion selector for these
 /// questions, or its highlight cannot be placed.
@@ -121,16 +163,7 @@ pub fn claude_question_selector_position(
         // A lone chip: the dialog asks one question.
         (questions.len() == 1).then_some(0)?
     } else {
-        // Wrapping only splits the question at spaces; clipping keeps a prefix.
-        let texts: Vec<String> = questions
-            .iter()
-            .map(|question| without_whitespace(&question.question))
-            .collect();
-        texts.iter().position(|text| *text == heading).or_else(|| {
-            (!heading.is_empty())
-                .then(|| texts.iter().position(|text| text.starts_with(&heading)))
-                .flatten()
-        })?
+        claude_question_tab_for_heading(questions, &heading)?
     };
     let highlight = below[heading_start + heading_len..]
         .iter()
