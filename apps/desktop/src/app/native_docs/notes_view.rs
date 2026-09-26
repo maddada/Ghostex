@@ -10,7 +10,7 @@ use gpui::{
     MouseButton, ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _,
     Styled as _, Window, anchored, deferred, div, point, px,
 };
-use gpui_component::input::Input;
+use gpui_component::input::Textarea;
 
 use super::annotations::{DocsAnnotationType, DocsQuickLabelId, annotation_review_counts};
 use super::files_list::{header_icon, header_tile};
@@ -744,7 +744,7 @@ impl GhostexGpuiApp {
                     .border_color(p.border_strong)
                     .text_size(px(12.0))
                     .p(px(8.0))
-                    .child(Input::new(&input).appearance(false).h_full()),
+                    .child(Textarea::new(&input).appearance(false).h_full()),
             )
             .child(
                 div()

@@ -8,7 +8,7 @@ use gpui::{
     AnyWindowHandle, AppContext as _, Bounds, ClipboardItem, Context, Entity, Hsla, Pixels,
     Subscription, Window, rgb,
 };
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{InputEvent, TextareaState};
 use serde_json::json;
 
 use super::annotations::{
@@ -57,7 +57,7 @@ pub(crate) struct DocsComposer {
 /// The composer's text field and the window it was made in. A text field starts its caret, and
 /// notices focus, only in that window, so the composer's frosted window makes one of its own.
 pub(crate) struct DocsComposerInput {
-    pub(crate) state: Entity<InputState>,
+    pub(crate) state: Entity<TextareaState>,
     window: AnyWindowHandle,
     _subscription: Subscription,
 }
@@ -270,7 +270,7 @@ impl GhostexGpuiApp {
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) -> Option<Entity<InputState>> {
+    ) -> Option<Entity<TextareaState>> {
         let composer = self.native_docs.composer.as_mut()?;
         let here = window.window_handle();
         if let Some(input) = composer.input.as_ref().filter(|input| input.window == here) {
@@ -282,8 +282,7 @@ impl GhostexGpuiApp {
         );
         let placeholder = composer.placeholder;
         let state = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line(true)
+            TextareaState::new(window, cx)
                 .placeholder(placeholder)
                 .default_value(text)
         });

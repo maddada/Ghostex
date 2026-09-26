@@ -1,34 +1,38 @@
 use super::state::NativeChatView;
 use base64::Engine as _;
-use gpui::{ClipboardEntry, Context, Focusable as _, Window};
+use gpui::{App, ClipboardEntry, ClipboardItem, Context, Entity, WeakEntity, Window};
+use gpui_component::input::TextareaState;
 use serde_json::json;
 
 impl NativeChatView {
-    pub(super) fn paste_attachments(
+    /// The `on_paste` hook of the composer (`answer: None`) and of the async question answer
+    /// field (its key and state): pasted images and copied files become attachments, anything
+    /// else falls through to the field as text.
+    ///
+    /// CDXC:Clipboard 2026-09-26 WHY: the paste is taken in the field's own `on_paste` hook, not by capturing the `Paste` action on the chat root, because in the browser a paste reaches the focused field as a DOM event carrying the clipboard item (GPUI's `InputHandler::paste`) and never dispatches the action. GPUI Kit offers that item to the same hook, deferred until after the field's own update, so the hook serves the desktop Cmd+V and the web paste alike and must not rely on running inside action dispatch.
+    pub(super) fn paste_handler(
+        chat: WeakEntity<Self>,
+        answer: Option<(String, Entity<TextareaState>)>,
+    ) -> impl Fn(&ClipboardItem, &mut Window, &mut App) -> bool + 'static {
+        move |clipboard, window, cx| {
+            chat.update(cx, |chat, cx| {
+                chat.paste_attachments(clipboard, answer.clone(), window, cx)
+            })
+            .unwrap_or(false)
+        }
+    }
+
+    /// Returns whether the paste was taken; `false` lets the field insert the text.
+    fn paste_attachments(
         &mut self,
-        _: &gpui_component::input::Paste,
+        clipboard: &ClipboardItem,
+        answer: Option<(String, Entity<TextareaState>)>,
         window: &mut Window,
         cx: &mut Context<Self>,
-    ) {
-        let answer = self
-            .async_answer_input
-            .as_ref()
-            .filter(|(_, input)| input.read(cx).focus_handle(cx).is_focused(window))
-            .cloned();
-        if !self.composer_ready
-            || (answer.is_none()
-                && !self
-                    .input
-                    .as_ref()
-                    .is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window)))
-        {
-            cx.propagate();
-            return;
+    ) -> bool {
+        if !self.composer_ready {
+            return false;
         }
-        let Some(clipboard) = cx.read_from_clipboard() else {
-            cx.propagate();
-            return;
-        };
         let images = clipboard
             .entries
             .iter()
@@ -48,15 +52,13 @@ impl NativeChatView {
             .map(|path| path.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         if images.is_empty() && external_paths.is_empty() {
-            cx.propagate();
-            return;
+            return false;
         }
-        cx.stop_propagation();
         if answer.is_some()
             && (self.snapshot["asyncQuestions"]["submitting"] == true
                 || self.snapshot["asyncQuestions"]["loading"] == true)
         {
-            return;
+            return true;
         }
         let selection = answer.as_ref().map(|(_, input)| {
             let state = input.read(cx);
@@ -77,7 +79,7 @@ impl NativeChatView {
         } else {
             if images.is_empty() {
                 self.invoke(json!({"type":"attachPaths","paths":external_paths}), cx);
-                return;
+                return true;
             }
             self.invoke(json!({"type":"attachmentsStarted"}), cx);
         }
@@ -126,5 +128,6 @@ impl NativeChatView {
             });
         })
         .detach();
+        true
     }
 }

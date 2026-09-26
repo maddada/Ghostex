@@ -162,7 +162,7 @@ impl Render for SaveMarkdownWindow {
             .child(gpui_component::text::TextView::markdown(
                 "save-markdown-description",
                 "Save this final response in the project Docs folder. Its full path will be copied after saving.",
-            ).style(description_style).text_size(px(14.0)).line_height(px(20.0)).text_color(p.muted));
+            ).selectable(false).style(description_style).text_size(px(14.0)).line_height(px(20.0)).text_color(p.muted));
         let folder = div()
             .flex()
             .flex_col()

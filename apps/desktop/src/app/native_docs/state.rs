@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use gpui::{Entity, FocusHandle, ScrollHandle, Subscription, Task};
-use gpui_component::input::InputState;
+use gpui_component::input::{EditorState, InputState};
 
 /// The project a Docs view belongs to. A change of any part reloads the files from scratch.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -151,7 +151,7 @@ pub(crate) struct DocsDocument {
     /// An image file's picture, once read.
     pub(crate) image: Option<std::sync::Arc<gpui::Image>>,
     /// Plain text and HTML source: the code editor.
-    pub(crate) editor: Option<Entity<InputState>>,
+    pub(crate) editor: Option<Entity<EditorState>>,
     /// Markdown: the live editor.
     pub(crate) live: Option<Entity<zorite_editor::EditorState>>,
     pub(crate) _live_subscription: Option<Subscription>,

@@ -67,8 +67,8 @@ similar = "2"
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit", "x11", "wayland", "runtime_shaders"] }
 # CDXC:SessionChat 2026-09-18 WHY: every tree-sitter grammar in gpui-component sits behind an off-by-default feature, and `TextView` silently renders an unhighlighted fence when the language cannot be resolved. Without this the native transcript shows plain grey code while the React one colours the same fence through Shiki, so the feature list is part of chat parity, not an optional extra.
-gpui-component = { path = "../../.dependencies/gpui-component/crates/ui", features = ["tree-sitter-languages"] }
-gpui-component-assets = { path = "../../.dependencies/gpui-component/crates/assets" }
+gpui-component = { path = "../../.dependencies/gpui-component/crates/component", features = ["tree-sitter-languages"] }
+gpui-component-assets = { package = "gpui-kit-assets", path = "../../.dependencies/gpui-component/crates/assets" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 # CDXC:SessionTitles 2026-09-15 WHY: the native Rename Session dialog ports `normalizeSessionRenameTitle` (NFKC + a Unicode-class glyph filter); both crates were already in the graph through gpui and url, so this is a direct-dependency promotion, not a new download.
 icu_normalizer = "2"
@@ -137,6 +137,7 @@ gpui_macros = { path = "../../.dependencies/zed/crates/gpui_macros" }
 gpui_platform = { path = "../../.dependencies/zed/crates/gpui_platform" }
 gpui_shared_string = { path = "../../.dependencies/zed/crates/gpui_shared_string" }
 gpui_util = { path = "../../.dependencies/zed/crates/gpui_util" }
+sum_tree = { path = "../../.dependencies/zed/crates/sum_tree" }
 
 [patch.crates-io]
 blob-decoder = { path = "../../.dependencies/blob-decoder" }

@@ -54,7 +54,7 @@ function prepareCleanCheckout({ revision, source, url }) {
 }
 
 function verifyContract(checkout, revision) {
-  const librarySource = readFileSync(join(checkout, 'crates/ui/src/tooltip.rs'), 'utf8');
+  const librarySource = readFileSync(join(checkout, 'crates/base/src/tooltip.rs'), 'utf8');
   const applicationSources = rustSourcesUnder(join(repoRoot, 'apps/desktop/src'));
   const { available, missing } = missingManagedTooltipPlacements(librarySource, applicationSources);
 
@@ -71,7 +71,7 @@ function verifyContract(checkout, revision) {
     );
   }
 
-  const popupMenuSource = readFileSync(join(checkout, 'crates/ui/src/menu/popup_menu.rs'), 'utf8');
+  const popupMenuSource = readFileSync(join(checkout, 'crates/component/src/menu/popup_menu.rs'), 'utf8');
   const requiredPopupMenuMethods = ['items_padding_bottom', 'scrollbar_show', 'scrollbar_thickness'];
   const popupMenuContract = missingRequiredRustMethods(popupMenuSource, requiredPopupMenuMethods);
   if (popupMenuContract.missing.length > 0) {

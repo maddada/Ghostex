@@ -18,7 +18,7 @@
 use gpui::px;
 use gpui_component::Side;
 use gpui_component::menu::{PopupMenu, PopupMenuAppearance};
-use gpui_component::scroll::ScrollbarShow;
+use gpui_component::scroll::ScrollbarMode;
 
 use crate::app::actions::*;
 use crate::app::consts::*;
@@ -56,7 +56,7 @@ pub(crate) fn titlebar_popup_menu_with_scroll_behavior(
         .scrollable(scrollable);
     if scrollable {
         menu.scrollbar_thickness(px(TITLEBAR_DROPDOWN_SCROLLBAR_WIDTH))
-            .scrollbar_show(ScrollbarShow::Hover)
+            .scrollbar_show(ScrollbarMode::Hover)
     } else {
         menu
     }

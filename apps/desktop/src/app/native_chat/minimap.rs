@@ -317,7 +317,7 @@ fn minimap_preview_card(
     let font_size = px(SPEC.preview_font_size * p.scale);
     let mut style = super::markdown_style::text_style(p);
     style.is_dark = !p.light;
-    style.highlight_theme = Some(super::markdown_style::highlight_theme(p.light));
+    style.highlight_theme = super::markdown_style::highlight_theme(p.light);
     style.paragraph_gap = rems(row / 16.0);
     style.heading_base_font_size = font_size;
     style = style.heading_font_size(|_, base| base);
@@ -329,6 +329,7 @@ fn minimap_preview_card(
     let body = |id: &'static str, text: &SharedString| {
         TextView::markdown((id, index), text.clone())
             .min_w_0()
+            .selectable(false)
             .style(style.clone())
             .text_size(font_size)
             .line_height(px(row))

@@ -271,14 +271,7 @@ impl AutomationDialog {
             .child(self.render_execution(window, cx))
             .child(self.field(
                 "Prompt",
-                modal_text_area(
-                    &self.palette,
-                    self.input(DialogField::Prompt),
-                    Some(120.0),
-                    false,
-                    window,
-                    cx,
-                ),
+                modal_text_area(&self.palette, &self.prompt, Some(120.0), false, window, cx),
             ))
             .child(self.render_enabled(cx))
             .children(

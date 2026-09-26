@@ -519,7 +519,7 @@ impl GhostexGpuiApp {
             focus_handle.focus(window, cx);
             surface.update(cx, |surface, _| surface.focus());
         } else {
-            window.blur();
+            window.blur(cx);
         }
     }
 
@@ -577,7 +577,7 @@ impl GhostexGpuiApp {
         if let Some(view) = self.gpui_engine_terminal_view_for_target(target)
             && view.read(cx).focus_handle(cx).is_focused(window)
         {
-            window.blur();
+            window.blur(cx);
         }
         support_logs::append(
             support_logs::GpuiSupportLog::TerminalFocus,

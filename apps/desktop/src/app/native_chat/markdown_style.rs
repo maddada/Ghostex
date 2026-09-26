@@ -104,9 +104,12 @@ pub(super) fn text_style(p: &ChatAppearance) -> TextViewStyle {
     // 5px thumb in the app's scrollbar colours, under the table rather than over its last row.
     style.table_scrollbar = Some(px(super::scrollbar::THICKNESS * p.scale));
     // The React transcript drew a table as rules, not as a grid: no frame
-    // around it, no rule between columns, a full-strength rule under the header
-    // and a lighter one under every body row.
-    style.table_track = StyleRefinement::default().border(px(0.0)).rounded(px(0.0));
+    // around it, no fill behind it or its header, no rule between columns, a
+    // full-strength rule under the header and a lighter one under every body row.
+    style.table_track = StyleRefinement::default()
+        .border(px(0.0))
+        .rounded(px(0.0))
+        .bg(gpui::transparent_black());
     style.table_cell = StyleRefinement::default()
         .border_r(px(0.0))
         .px(px(12.0 * p.scale))
@@ -115,6 +118,7 @@ pub(super) fn text_style(p: &ChatAppearance) -> TextViewStyle {
         .border_b(px(1.0))
         .border_color(p.border.opacity(0.6));
     style.table_head_row = StyleRefinement::default()
+        .bg(gpui::transparent_black())
         .border_b(px(1.0))
         .border_color(p.border);
     style.table_head_cell = StyleRefinement::default()
@@ -137,7 +141,7 @@ pub(super) fn text_style(p: &ChatAppearance) -> TextViewStyle {
             .max(0.0)
             * p.scale))
         .pb(px(VISUAL.paragraph_gap * p.scale));
-    style.inline_code = Some(inline_code(p));
+    style.inline_code_style = Some(inline_code(p));
     style.prose_swatch = Some(prose_swatch(p));
     style
 }

@@ -12,7 +12,7 @@ use super::palette::KanbanPalette;
 use super::state::{KanbanFormMode, KanbanTicketForm};
 use super::text::{format_short_date, parse_comment};
 use super::widgets::{
-    KanbanButtonKind, LANE_RADIUS, choice_pill, kanban_button, section_title, text_field,
+    KanbanButtonKind, LANE_RADIUS, choice_pill, kanban_button, section_title, text_area, text_field,
 };
 use crate::GhostexGpuiApp;
 use crate::app::helpers::titlebar_svg_icon;
@@ -118,7 +118,7 @@ impl GhostexGpuiApp {
             .when(!selected.is_empty(), |this| {
                 this.child(div().flex().flex_wrap().gap(px(6.0)).children(selected))
             })
-            .child(text_field(&form.label_input, None, p, window, cx))
+            .child(text_field(&form.label_input, p, window, cx))
             .when(!suggested.is_empty(), |this| {
                 this.child(div().flex().flex_wrap().gap(px(6.0)).children(suggested))
             })
@@ -274,15 +274,11 @@ impl GhostexGpuiApp {
                     .flex_col()
                     .gap(px(16.0))
                     .p(px(16.0))
-                    .child(field(
-                        "Title",
-                        p,
-                        text_field(&form.title, None, p, window, cx),
-                    ))
+                    .child(field("Title", p, text_field(&form.title, p, window, cx)))
                     .child(field(
                         "Prompt",
                         p,
-                        text_field(&form.description, Some(168.0), p, window, cx),
+                        text_area(&form.description, 168.0, p, window, cx),
                     ))
                     .when(editing, |this| {
                         this.child(field(
@@ -344,7 +340,7 @@ impl GhostexGpuiApp {
                                 .flex_col()
                                 .gap(px(10.0))
                                 .child(self.render_native_kanban_comments(form, p))
-                                .child(text_field(&form.comment, Some(84.0), p, window, cx)),
+                                .child(text_area(&form.comment, 84.0, p, window, cx)),
                         ))
                     }),
             );

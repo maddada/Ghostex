@@ -19,7 +19,7 @@
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{AnyElement, IntoElement as _, ParentElement as _, Styled as _, div, px, size};
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 
 /// Unscaled track and thumb width, the value in session-chat-scrollbar.css.
 pub(super) const THICKNESS: f32 = 5.0;
@@ -60,7 +60,7 @@ impl NativeChatView {
         let mut bar = Scrollbar::vertical(&self.list)
             .id("chat-transcript-scrollbar")
             .thickness(px(THICKNESS * p.scale))
-            .scrollbar_show(ScrollbarShow::Scrolling)
+            .mode(ScrollbarMode::Scrolling)
             .shown_by_host_scroll(self.transcript_scrolled_at);
         if measured {
             let list = self.list.clone();

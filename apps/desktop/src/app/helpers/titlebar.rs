@@ -1448,7 +1448,7 @@ pub(crate) fn apply_gpui_component_theme(cx: &mut App) {
     gpui_component::tooltip::set_frosted_tooltip_alpha(frosted_menu_alpha());
     theme.radius = px(2.0);
     theme.scrollbar = gpui::transparent_black();
-    theme.scrollbar_show = gpui_component::scroll::ScrollbarShow::Hover;
+    theme.scrollbar_mode = gpui_component::scroll::ScrollbarMode::Hover;
     // CDXC:DesignSystem 2026-09-16 SEE-ALSO:
     // Exact app scrollbar colors are shared with packages/components/ui/scrollbar-theme.css.
     let thumb: Hsla = gpui::rgb(if titlebar_uses_light_theme() {

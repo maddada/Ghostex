@@ -6,7 +6,7 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _,
     Window, div, px,
 };
-use gpui_component::input::Input;
+use gpui_component::input::Textarea;
 use serde_json::{Value, json};
 
 impl NativeChatView {
@@ -501,7 +501,8 @@ impl NativeChatView {
                         }),
                     )
                     .child(
-                        Input::new(&input)
+                        Textarea::new(&input)
+                            .on_paste(Self::paste_handler(cx.entity().downgrade(), None))
                             .placeholder_color(p.muted.opacity(0.6))
                             .appearance(false)
                             .bordered(false)
@@ -510,7 +511,7 @@ impl NativeChatView {
                             // while the draft scrolls and fades out afterwards
                             // (packages/components/ui/app-scrollbars.ts, session-chat-lexical/input.css).
                             .scrollbar_thickness(px(5.0 * s))
-                            .scrollbar_show(gpui_component::scroll::ScrollbarShow::Scrolling)
+                            .scrollbar_show(gpui_component::scroll::ScrollbarMode::Scrolling)
                             .w_full()
                             .p_0()
                             .text_size(px(14.0 * s))

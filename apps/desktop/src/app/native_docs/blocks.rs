@@ -349,7 +349,7 @@ fn highlight(
     let rope = gpui_component::Rope::from(text);
     highlighter.update(None, &rope, None);
     let theme = crate::app::native_chat::markdown_style::highlight_theme(light);
-    let styles = highlighter.styles(&(0..text.len()), &theme);
+    let styles = highlighter.styles(&(0..text.len()), &*theme);
     let mut state = cache.borrow_mut();
     if state.code.len() > 512 {
         state.code.clear();

@@ -11,7 +11,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 gpui = { git = "https://github.com/zed-industries/zed" }
 gpui_platform = { git = "https://github.com/zed-industries/zed" }
-gpui-component = { path = "../../.dependencies/gpui-component/crates/ui", default-features = false }
+gpui-component = { path = "../../.dependencies/gpui-component/crates/component", default-features = false }
 gpui-component-assets = { path = "component-assets" }
 rust-embed = { version = "8.7.2", features = ["debug-embed", "include-exclude"] }
 ghostex-gx-core = { path = "../../packages/gx-core" }
@@ -68,6 +68,7 @@ gpui_shared_string = { path = "../../.dependencies/zed/crates/gpui_shared_string
 gpui_util = { path = "../../.dependencies/zed/crates/gpui_util" }
 gpui_web = { path = "../../.dependencies/zed/crates/gpui_web" }
 gpui_wgpu = { path = "../../.dependencies/zed/crates/gpui_wgpu" }
+sum_tree = { path = "../../.dependencies/zed/crates/sum_tree" }
 
 [patch.crates-io]
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }

@@ -2,7 +2,7 @@ use super::{data::*, style::*};
 use crate::app::titlebar::account_usage::popup_account;
 use crate::*;
 use gpui::img;
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 use serde_json::Value;
 use std::{
     collections::{HashMap, HashSet},
@@ -484,7 +484,7 @@ impl Render for AccountUsagePanel {
             .child(
                 Scrollbar::vertical(&self.scroll)
                     .thickness(px(5.))
-                    .scrollbar_show(ScrollbarShow::Hover),
+                    .mode(ScrollbarMode::Hover),
             )
             .child(
                 gpui::canvas(

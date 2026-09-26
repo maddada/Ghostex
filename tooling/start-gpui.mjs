@@ -762,7 +762,7 @@ function ensureLocalReferenceCheckouts() {
   });
   ensureReferenceCheckout({
     name: 'gpui-component',
-    requiredRelativePath: path.join('crates', 'ui', 'Cargo.toml'),
+    requiredRelativePath: path.join('crates', 'component', 'Cargo.toml'),
   });
 }
 

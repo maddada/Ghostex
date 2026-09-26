@@ -220,7 +220,7 @@ impl GhostexGpuiApp {
                                     .flex()
                                     .items_center()
                                     .gap(px(8.0))
-                                    .child(div().flex_1().child(text_field(&form.name, None, p, window, cx)))
+                                    .child(div().flex_1().child(text_field(&form.name, p, window, cx)))
                                     .child(
                                         kanban_button(
                                             "kanban-column-add",

@@ -2,7 +2,7 @@ use super::runtime_worker::{ChatRuntimeOutput, ChatRuntimeWorker};
 use crate::app::{helpers::*, model::*};
 use futures::StreamExt as _;
 use gpui::{AppContext as _, Context, Entity, EventEmitter, Focusable as _, Subscription, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState, TextareaState};
 use serde_json::{Value, json};
 use std::{
     collections::{HashMap, HashSet},
@@ -46,7 +46,7 @@ pub(crate) struct NativeChatView {
     /// The open subagent transcript's items, projected and spliced on their own channel.
     pub(crate) subagent_items: Arc<Vec<Value>>,
     pub(crate) error: Option<String>,
-    pub(crate) input: Option<Entity<InputState>>,
+    pub(crate) input: Option<Entity<TextareaState>>,
     input_subscription: Option<Subscription>,
     input_observer: Option<Subscription>,
     pub(super) suggestions: super::suggestions::SuggestionWindowState,
@@ -122,14 +122,14 @@ pub(crate) struct NativeChatView {
     pub(super) composer_image_hover: Option<String>,
     /// Image the caret last sat against, so a caret move repaints the thumbnails only when it matters.
     pub(super) composer_caret_image: Option<String>,
-    pub(super) async_answer_input: Option<(String, Entity<InputState>)>,
+    pub(super) async_answer_input: Option<(String, Entity<TextareaState>)>,
     pub(super) async_answer_subscription: Option<Subscription>,
     pub(super) async_answer_echo: super::async_questions::AsyncAnswerEcho,
-    pub(crate) answer_input: Option<(String, Entity<InputState>)>,
+    pub(crate) answer_input: Option<(String, Entity<TextareaState>)>,
     pub(crate) answer_subscription: Option<Subscription>,
     pub(super) terminal_dialog_input: Option<super::terminal_dialog::TerminalDialogInput>,
     pub(super) terminal_dialog_key_focus: gpui::FocusHandle,
-    pub(crate) note_input: Option<Entity<InputState>>,
+    pub(crate) note_input: Option<Entity<TextareaState>>,
     pub(crate) note_subscription: Option<Subscription>,
     /// Transcript search (Cmd+F): the field, and the navigation it last scrolled to.
     pub(super) search_input: Option<Entity<InputState>>,
@@ -386,8 +386,7 @@ impl NativeChatView {
         if self.input.is_none() {
             let draft = self.draft.clone();
             let input = cx.new(|cx| {
-                InputState::new(window, cx)
-                    .multi_line(true)
+                TextareaState::new(window, cx)
                     .submit_on_enter(true)
                     .auto_grow(3, 7)
                     .default_value(draft)

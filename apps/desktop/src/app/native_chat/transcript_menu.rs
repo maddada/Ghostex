@@ -2,7 +2,6 @@
 
 use super::state::NativeChatView;
 use gpui::{Context, MouseDownEvent, Pixels, Point, Window};
-use gpui_component::WindowExt as _;
 use serde_json::{Value, json};
 use std::time::Duration;
 
@@ -28,7 +27,9 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        let selection = window.selected_text(cx).trim().to_owned();
+        let selection = gpui_component::TextSelection::selected_text(window, cx)
+            .trim()
+            .to_owned();
         // The composer hides behind a question card (composer.rs), which is when Add to Chat is disabled.
         let question_active = self.snapshot["questionCard"]["visible"] == true
             && self.snapshot["prompt"]["kind"] == "question";

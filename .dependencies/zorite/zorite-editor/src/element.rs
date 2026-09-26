@@ -1968,7 +1968,8 @@ impl Element for EditorElement {
                     size(img_w, img_h),
                 );
                 let _ = window.paint_image(
-img_bounds,
+                    img_bounds,
+                    img_bounds,
                     Corners::default(),
                     w.img.clone(),
                     0,
@@ -2093,7 +2094,8 @@ img_bounds,
                         inline_math_rects.push((im.source.clone(), im.latex.clone(), b));
                         if editing_inline.as_ref() != Some(&im.source) {
                             let _ = window.paint_image(
-b,
+                                b,
+                                b,
                                 Corners::default(),
                                 im.img.clone(),
                                 0,

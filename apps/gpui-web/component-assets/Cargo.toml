@@ -4,7 +4,7 @@ version = "0.0.0"
 edition = "2024"
 publish = false
 
-# CDXC:WebGpui 2026-09-22 WHY: upstream's `gpui-component-assets` turns into an HTTP icon downloader on wasm (a struct with an endpoint, first paint of every icon fails and retries), while the desktop's `assets.rs` names it as the unit struct it is on native. This stand-in keeps the native shape in the browser by embedding the same icon folder, so `assets.rs` compiles unchanged and icons draw on the first frame.
+# CDXC:WebGpui 2026-09-22 WHY: upstream's `gpui-kit-assets` (the desktop depends on it under the name `gpui-component-assets`) turns into an HTTP icon downloader on wasm (a struct with an endpoint, first paint of every icon fails and retries), while the desktop's `assets.rs` names it as the unit struct it is on native. This stand-in keeps the native shape in the browser by embedding the same icon folder, so `assets.rs` compiles unchanged and icons draw on the first frame.
 [dependencies]
 anyhow = "1"
 gpui = { git = "https://github.com/zed-industries/zed" }

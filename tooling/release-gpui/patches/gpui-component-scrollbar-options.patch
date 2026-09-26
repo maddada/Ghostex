@@ -1,51 +1,193 @@
-diff --git a/crates/ui/src/menu/popup_menu.rs b/crates/ui/src/menu/popup_menu.rs
-index 2c8d998..29194e9 100644
---- a/crates/ui/src/menu/popup_menu.rs
-+++ b/crates/ui/src/menu/popup_menu.rs
-@@ -1,7 +1,7 @@
+diff --git a/crates/base/src/scrollbar.rs b/crates/base/src/scrollbar.rs
+index 456addb4..dc31009e 100644
+--- a/crates/base/src/scrollbar.rs
++++ b/crates/base/src/scrollbar.rs
+@@ -926,6 +926,19 @@ impl Scrollbar {
+         self
+     }
+ 
++    /// Set the scrollbar track and thumb thickness.
++    ///
++    /// Custom thicknesses use the full track width without the default inset,
++    /// and a fully rounded thumb, in every state.
++    pub fn thickness(self, thickness: impl Into<Pixels>) -> Self {
++        let thickness = thickness.into();
++        self.styles(|styles| {
++            styles
++                .track(|track| track.width(thickness))
++                .thumb(|thumb| thumb.width(thickness).inset(px(0.)).radius(thickness / 2.))
++        })
++    }
++
+     /// Set maximum frames per second for scrolling by drag. Default is 120 FPS.
+     ///
+     /// If you have very high CPU usage, consider reducing this value to improve performance.
+diff --git a/crates/component/src/menu/menu_item.rs b/crates/component/src/menu/menu_item.rs
+index 8d9bfb88..53afd62b 100644
+--- a/crates/component/src/menu/menu_item.rs
++++ b/crates/component/src/menu/menu_item.rs
+@@ -15,6 +15,7 @@ pub(crate) struct MenuItemElement {
+     style: StyleRefinement,
+     disabled: bool,
+     selected: bool,
++    highlight_colors: Option<(gpui::Hsla, gpui::Hsla)>,
+     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
+     on_hover: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
+     children: SmallVec<[AnyElement; 2]>,
+@@ -31,12 +32,23 @@ impl MenuItemElement {
+             style: StyleRefinement::default(),
+             disabled: false,
+             selected: false,
++            highlight_colors: None,
+             on_click: None,
+             on_hover: None,
+             children: SmallVec::new(),
+         }
+     }
+ 
++    /// Set the background and text colors of a hovered or selected row.
++    pub(crate) fn highlight_colors(
++        mut self,
++        background: gpui::Hsla,
++        foreground: gpui::Hsla,
++    ) -> Self {
++        self.highlight_colors = Some((background, foreground));
++        self
++    }
++
+     /// Set ListItem as the selected item style.
+     pub(crate) fn selected(mut self, selected: bool) -> Self {
+         self.selected = selected;
+@@ -93,6 +105,9 @@ impl ParentElement for MenuItemElement {
+ 
+ impl RenderOnce for MenuItemElement {
+     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
++        let (highlight_background, highlight_foreground) = self
++            .highlight_colors
++            .unwrap_or((*cx.theme().tokens.accent, cx.theme().accent_foreground));
+         h_flex()
+             .id(self.id)
+             .test_support()
+@@ -114,12 +129,12 @@ impl RenderOnce for MenuItemElement {
+             })
+             .when(!self.disabled, |this| {
+                 this.group_hover(self.group_name, |this| {
+-                    this.bg(cx.theme().tokens.accent)
+-                        .text_color(cx.theme().accent_foreground)
++                    this.bg(highlight_background)
++                        .text_color(highlight_foreground)
+                 })
+                 .when(self.selected, |this| {
+-                    this.bg(cx.theme().tokens.accent)
+-                        .text_color(cx.theme().accent_foreground)
++                    this.bg(highlight_background)
++                        .text_color(highlight_foreground)
+                 })
+                 .when_some(self.on_click, |this, on_click| {
+                     this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+diff --git a/crates/component/src/menu/mod.rs b/crates/component/src/menu/mod.rs
+index 3152a15c..f43ac676 100644
+--- a/crates/component/src/menu/mod.rs
++++ b/crates/component/src/menu/mod.rs
+@@ -9,7 +9,7 @@ mod popup_menu;
+ pub use app_menu_bar::AppMenuBar;
+ pub use context_menu::{ContextMenu, ContextMenuExt, ContextMenuState};
+ pub use dropdown_menu::DropdownMenu;
+-pub use popup_menu::{PopupMenu, PopupMenuItem};
++pub use popup_menu::{PopupMenu, PopupMenuAppearance, PopupMenuItem};
+ 
+ pub(crate) fn init(cx: &mut App) {
+     app_menu_bar::init(cx);
+diff --git a/crates/component/src/menu/popup_menu.rs b/crates/component/src/menu/popup_menu.rs
+index 5fd80ed4..e82e33a6 100644
+--- a/crates/component/src/menu/popup_menu.rs
++++ b/crates/component/src/menu/popup_menu.rs
+@@ -2,7 +2,8 @@ use crate::ThemeStyled as _;
  use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
  use crate::actions::{SelectLeft, SelectRight};
  use crate::menu::menu_item::MenuItemElement;
 -use crate::scroll::ScrollableElement;
-+use crate::scroll::{ScrollableElement, Scrollbar, ScrollbarShow};
++use crate::scroll::{ScrollableElement, Scrollbar, ScrollbarMode};
++use crate::styled::popover_shadow;
  use crate::{ActiveTheme, ElementExt, Icon, IconName, Sizable as _, h_flex, v_flex};
- use crate::{Side, Size, StyledExt, kbd::Kbd};
+ use crate::{Side, Size, kbd::Kbd};
  use gpui::{
-@@ -288,6 +288,7 @@ pub struct PopupMenu {
+@@ -279,6 +280,28 @@ impl PopupMenuItem {
+     }
+ }
+ 
++/// Menu-specific geometry and colors, independent of other themed controls.
++///
++/// Lets a host give its menus their own panel radius, padding, row size and
++/// colors without changing the theme every other control reads.
++#[derive(Clone, Copy)]
++pub struct PopupMenuAppearance {
++    /// Draw the popover shadow. Without it the panel edge is a 1px `border`
++    /// inside the panel, so a menu hosted in a window of its own size is not
++    /// cut off at the window edge.
++    pub shadow: bool,
++    pub panel_radius: Pixels,
++    pub item_radius: Pixels,
++    pub padding: Pixels,
++    pub item_padding_x: Pixels,
++    pub item_height: Pixels,
++    pub separator_margin: Pixels,
++    pub background: gpui::Hsla,
++    pub foreground: gpui::Hsla,
++    pub border: gpui::Hsla,
++    pub hover: gpui::Hsla,
++}
++
+ pub struct PopupMenu {
+     pub(crate) focus_handle: FocusHandle,
+     pub(crate) menu_items: Vec<PopupMenuItem>,
+@@ -297,6 +320,8 @@ pub struct PopupMenu {
      min_width: Option<Pixels>,
      max_width: Option<Pixels>,
      max_height: Option<Pixels>,
 +    items_padding_bottom: Option<Pixels>,
++    appearance: Option<PopupMenuAppearance>,
      bounds: Bounds<Pixels>,
      size: Size,
      check_side: Side,
-@@ -295,6 +296,8 @@ pub struct PopupMenu {
+@@ -304,6 +329,8 @@ pub struct PopupMenu {
      /// The parent menu of this menu, if this is a submenu
      parent_menu: Option<WeakEntity<Self>>,
      scrollable: bool,
-+    scrollbar_show: Option<ScrollbarShow>,
++    scrollbar_show: Option<ScrollbarMode>,
 +    scrollbar_thickness: Option<Pixels>,
      external_link_icon: bool,
      scroll_handle: ScrollHandle,
      // This will update on render
-@@ -327,6 +330,7 @@ impl PopupMenu {
+@@ -343,9 +370,13 @@ impl PopupMenu {
              min_width: None,
              max_width: None,
              max_height: None,
 +            items_padding_bottom: None,
++            appearance: None,
              check_side: Side::Left,
              bounds: Bounds::default(),
              scrollable: false,
-@@ -336,6 +340,8 @@ impl PopupMenu {
-             submenu_anchor: (Anchor::TopLeft, Pixels::ZERO),
-             priority: 1,
-             _subscriptions: vec![],
 +            scrollbar_show: None,
 +            scrollbar_thickness: None,
-         }
+             scroll_handle: ScrollHandle::default(),
+             external_link_icon: true,
+             size: Size::default(),
+@@ -363,6 +394,13 @@ impl PopupMenu {
+         cx.new(|cx| f(Self::new(cx), window, cx))
      }
  
-@@ -391,6 +397,12 @@ impl PopupMenu {
++    /// Give this menu (and the submenus it builds afterwards) its own geometry
++    /// and colors instead of the theme's.
++    pub fn appearance(mut self, appearance: PopupMenuAppearance) -> Self {
++        self.appearance = Some(appearance);
++        self
++    }
++
+     /// Set the focus handle of Entity to handle actions.
+     ///
+     /// When the menu is dismissed or before an action is triggered, the focus will be returned to this handle.
+@@ -443,12 +481,30 @@ impl PopupMenu {
          self
      }
  
@@ -56,19 +198,18 @@ index 2c8d998..29194e9 100644
 +    }
 +
      /// Set the menu to be scrollable to show vertical scrollbar.
-     ///
-     /// NOTE: If this is true, the sub-menus will cannot be support.
-@@ -399,6 +411,18 @@ impl PopupMenu {
+     pub fn scrollable(mut self, scrollable: bool) -> Self {
+         self.scrollable = scrollable;
          self
      }
  
-+    /// Set how the menu scrollbar is revealed.
-+    pub fn scrollbar_show(mut self, scrollbar_show: ScrollbarShow) -> Self {
-+        self.scrollbar_show = Some(scrollbar_show);
++    /// Set how the scrollable menu's scrollbar is revealed.
++    pub fn scrollbar_show(mut self, mode: ScrollbarMode) -> Self {
++        self.scrollbar_show = Some(mode);
 +        self
 +    }
 +
-+    /// Set the menu scrollbar track and thumb thickness.
++    /// Set the scrollable menu's scrollbar track and thumb thickness.
 +    pub fn scrollbar_thickness(mut self, thickness: impl Into<Pixels>) -> Self {
 +        self.scrollbar_thickness = Some(thickness.into());
 +        self
@@ -77,272 +218,116 @@ index 2c8d998..29194e9 100644
      /// Set the side to show check icon, default is `Side::Left`.
      pub fn check_side(mut self, side: Side) -> Self {
          self.check_side = side;
-@@ -1332,6 +1356,15 @@ impl Render for PopupMenu {
+@@ -713,9 +769,13 @@ impl PopupMenu {
+         let submenu = PopupMenu::build(window, cx, f);
+         let parent_menu = cx.entity().downgrade();
+         let parent_priority = self.priority;
++        let appearance = self.appearance;
+         submenu.update(cx, |view, _| {
+             view.parent_menu = Some(parent_menu);
+             view.priority = parent_priority + 1;
++            if let Some(appearance) = appearance {
++                view.appearance = Some(appearance);
++            }
+         });
+ 
+         self.menu_items.push(
+@@ -1222,6 +1282,9 @@ impl PopupMenu {
+             Size::Small => (px(20.), options.radius.half()),
+             _ => (px(26.), options.radius),
+         };
++        let item_height = self
++            .appearance
++            .map_or(item_height, |style| style.item_height);
+ 
+         let this = MenuItemElement::new(ix, &group_name)
+             .relative()
+@@ -1229,6 +1292,11 @@ impl PopupMenu {
+             .py_0()
+             .px(INNER_PADDING)
+             .rounded(radius)
++            .when_some(self.appearance, |this, style| {
++                this.px(style.item_padding_x)
++                    .highlight_colors(style.hover, style.foreground)
++                    .text_color(style.foreground)
++            })
+             .items_center()
+             .selected(selected)
+             .on_hover(cx.listener(move |this, hovered, _, cx| {
+@@ -1251,6 +1319,12 @@ impl PopupMenu {
+                 .mx_neg_1()
+                 .border_b(px(2.))
+                 .border_color(cx.theme().border)
++                .when_some(self.appearance, |this, style| {
++                    this.mx(px(4.0))
++                        .my(style.separator_margin)
++                        .border_b(px(1.0))
++                        .border_color(style.border)
++                })
+                 .disabled(true),
+             PopupMenuItem::Label(label) => this.disabled(true).cursor_default().child(
+                 h_flex()
+@@ -1457,8 +1531,12 @@ impl Render for PopupMenu {
+         let options = RenderOptions {
+             has_left_icon,
              check_side: self.check_side,
-             radius: cx.theme().radius.min(px(8.)),
+-            radius: cx.theme().radius.min(px(8.)),
++            radius: self
++                .appearance
++                .map_or(cx.theme().radius.min(px(8.)), |style| style.item_radius),
          };
 +        let custom_scrollbar = self.scrollable
 +            && (self.scrollbar_show.is_some() || self.scrollbar_thickness.is_some());
-+        let mut scrollbar = Scrollbar::vertical(&self.scroll_handle);
-+        if let Some(show) = self.scrollbar_show {
-+            scrollbar = scrollbar.scrollbar_show(show);
-+        }
-+        if let Some(thickness) = self.scrollbar_thickness {
-+            scrollbar = scrollbar.thickness(thickness);
-+        }
  
          v_flex()
              .id("popup-menu")
-@@ -1353,6 +1386,7 @@ impl Render for PopupMenu {
+@@ -1475,12 +1553,26 @@ impl Render for PopupMenu {
+             .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
+             .popover_style(cx)
+             .text_color(cx.theme().popover_foreground)
++            .when_some(self.appearance, |this, style| {
++                this.rounded(style.panel_radius)
++                    .bg(style.background)
++                    .text_color(style.foreground)
++                    .map(|this| {
++                        if style.shadow {
++                            this.shadow(popover_shadow(style.border, 1.))
++                        } else {
++                            this.shadow_none().border_1().border_color(style.border)
++                        }
++                    })
++            })
+             .relative()
+             .occlude()
+             .child(
                  v_flex()
                      .id("items")
                      .p_1()
++                    .when_some(self.appearance, |this, style| this.p(style.padding))
 +                    .when_some(self.items_padding_bottom, |this, padding| this.pb(padding))
                      .gap_y_0p5()
                      .min_w(rems(8.))
                      .when_some(self.min_width, |this, min_width| this.min_w(min_width))
-@@ -1372,10 +1406,21 @@ impl Render for PopupMenu {
+@@ -1500,9 +1592,21 @@ impl Render for PopupMenu {
                      )
                      .on_prepaint(move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds)),
              )
 -            .when(self.scrollable, |this| {
 +            .when(self.scrollable && !custom_scrollbar, |this| {
-                 // TODO: When the menu is limited by `overflow_y_scroll`, the sub-menu will cannot be displayed.
                  this.vertical_scrollbar(&self.scroll_handle)
              })
 +            .when(custom_scrollbar, |this| {
 +                this.child(
-+                    div()
-+                        .absolute()
-+                        .top_0()
-+                        .right_0()
-+                        .bottom_0()
-+                        .left_0()
-+                        .child(scrollbar),
++                    div().absolute().inset_0().child(
++                        Scrollbar::vertical(&self.scroll_handle)
++                            .viewport_from_layout()
++                            .when_some(self.scrollbar_show, |this, mode| this.mode(mode))
++                            .when_some(self.scrollbar_thickness, |this, thickness| {
++                                this.thickness(thickness)
++                            }),
++                    ),
 +                )
 +            })
      }
  }
- 
-diff --git a/crates/ui/src/scroll/scrollbar.rs b/crates/ui/src/scroll/scrollbar.rs
-index 2a3ba3d..5b1afd1 100644
---- a/crates/ui/src/scroll/scrollbar.rs
-+++ b/crates/ui/src/scroll/scrollbar.rs
-@@ -307,6 +307,7 @@ pub struct Scrollbar {
-     pub(crate) id: ElementId,
-     axis: ScrollbarAxis,
-     scrollbar_show: Option<ScrollbarShow>,
-+    thickness: Option<Pixels>,
-     scroll_handle: Rc<dyn ScrollbarHandle>,
-     scroll_size: Option<Size<Pixels>>,
-     /// Maximum frames per second for scrolling by drag. Default is 120 FPS.
-@@ -327,6 +328,7 @@ impl Scrollbar {
-             id: ElementId::CodeLocation(*caller),
-             axis: ScrollbarAxis::Both,
-             scrollbar_show: None,
-+            thickness: None,
-             scroll_handle: Rc::new(scroll_handle.clone()),
-             max_fps: 120,
-             scroll_size: None,
-@@ -359,6 +361,14 @@ impl Scrollbar {
-         self
-     }
- 
-+    /// Set the scrollbar track and thumb thickness.
-+    ///
-+    /// Custom thicknesses use the full track width without the default inset.
-+    pub fn thickness(mut self, thickness: impl Into<Pixels>) -> Self {
-+        self.thickness = Some(thickness.into());
-+        self
-+    }
-+
-     /// Set a special scroll size of the content area, default is None.
-     ///
-     /// Default will sync the `content_size` from `scroll_handle`.
-@@ -388,45 +398,61 @@ impl Scrollbar {
-         WIDTH
-     }
- 
--    fn style_for_active(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+    fn geometry(&self, width: Pixels, inset: Pixels, radius: Pixels) -> (Pixels, Pixels, Pixels) {
-+        self.thickness.map_or((width, inset, radius), |thickness| {
-+            (thickness, px(0.), thickness / 2.)
-+        })
-+    }
-+
-+    fn style_for_active(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+        let (width, inset, radius) =
-+            self.geometry(THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS);
-         (
-             cx.theme().tokens.scrollbar_thumb_hover.into(),
-             cx.theme().scrollbar,
-             cx.theme().border,
--            THUMB_ACTIVE_WIDTH,
--            THUMB_ACTIVE_INSET,
--            THUMB_ACTIVE_RADIUS,
-+            width,
-+            inset,
-+            radius,
-         )
-     }
- 
--    fn style_for_hovered_thumb(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+    fn style_for_hovered_thumb(
-+        &self,
-+        cx: &App,
-+    ) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+        let (width, inset, radius) =
-+            self.geometry(THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS);
-         (
-             cx.theme().tokens.scrollbar_thumb_hover.into(),
-             cx.theme().scrollbar,
-             cx.theme().border,
--            THUMB_ACTIVE_WIDTH,
--            THUMB_ACTIVE_INSET,
--            THUMB_ACTIVE_RADIUS,
-+            width,
-+            inset,
-+            radius,
-         )
-     }
- 
--    fn style_for_hovered_bar(cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+    fn style_for_hovered_bar(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-+        let (width, inset, radius) =
-+            self.geometry(THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS);
-         (
-             cx.theme().tokens.scrollbar_thumb.into(),
-             cx.theme().scrollbar,
-             gpui::transparent_black(),
--            THUMB_ACTIVE_WIDTH,
--            THUMB_ACTIVE_INSET,
--            THUMB_ACTIVE_RADIUS,
-+            width,
-+            inset,
-+            radius,
-         )
-     }
- 
-     fn style_for_normal(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-         let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
--        let (width, inset, radius) = match scrollbar_show {
-+        let geometry = match scrollbar_show {
-             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
-             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
-         };
-+        let (width, inset, radius) = self.geometry(geometry.0, geometry.1, geometry.2);
- 
-         (
-             cx.theme().tokens.scrollbar_thumb.into(),
-@@ -440,10 +466,11 @@ impl Scrollbar {
- 
-     fn style_for_idle(&self, cx: &App) -> (Background, Hsla, Hsla, Pixels, Pixels, Pixels) {
-         let scrollbar_show = self.scrollbar_show.unwrap_or(cx.theme().scrollbar_show);
--        let (width, inset, radius) = match scrollbar_show {
-+        let geometry = match scrollbar_show {
-             ScrollbarShow::Scrolling => (THUMB_WIDTH, THUMB_INSET, THUMB_RADIUS),
-             _ => (THUMB_ACTIVE_WIDTH, THUMB_ACTIVE_INSET, THUMB_ACTIVE_RADIUS),
-         };
-+        let (width, inset, radius) = self.geometry(geometry.0, geometry.1, geometry.2);
- 
-         (
-             gpui::transparent_black().into(),
-@@ -538,6 +565,7 @@ impl Element for Scrollbar {
- 
-         let mut states = vec![];
-         let mut has_both = self.axis.is_both();
-+        let width = self.thickness.unwrap_or(WIDTH);
-         let scroll_size = self
-             .scroll_size
-             .unwrap_or(self.scroll_handle.content_size());
-@@ -560,7 +588,7 @@ impl Element for Scrollbar {
- 
-             // The horizontal scrollbar is set avoid overlapping with the vertical scrollbar, if the vertical scrollbar is visible.
-             let margin_end = if has_both && !is_vertical {
--                WIDTH
-+                width
-             } else {
-                 px(0.)
-             };
-@@ -579,23 +607,23 @@ impl Element for Scrollbar {
- 
-             let bounds = Bounds {
-                 origin: if is_vertical {
--                    point(hitbox.origin.x + hitbox.size.width - WIDTH, hitbox.origin.y)
-+                    point(hitbox.origin.x + hitbox.size.width - width, hitbox.origin.y)
-                 } else {
-                     point(
-                         hitbox.origin.x,
--                        hitbox.origin.y + hitbox.size.height - WIDTH,
-+                        hitbox.origin.y + hitbox.size.height - width,
-                     )
-                 },
-                 size: gpui::Size {
-                     width: if is_vertical {
--                        WIDTH
-+                        width
-                     } else {
-                         hitbox.size.width
-                     },
-                     height: if is_vertical {
-                         hitbox.size.height
-                     } else {
--                        WIDTH
-+                        width
-                     },
-                 },
-             };
-@@ -609,20 +637,20 @@ impl Element for Scrollbar {
- 
-             let (thumb_bg, bar_bg, bar_border, thumb_width, inset, radius) =
-                 if state.get().dragged_axis == Some(axis) {
--                    Self::style_for_active(cx)
-+                    self.style_for_active(cx)
-                 } else if is_hover_to_show && (is_hovered_on_bar || is_hovered_on_thumb) {
-                     if is_hovered_on_thumb {
--                        Self::style_for_hovered_thumb(cx)
-+                        self.style_for_hovered_thumb(cx)
-                     } else {
--                        Self::style_for_hovered_bar(cx)
-+                        self.style_for_hovered_bar(cx)
-                     }
-                 } else if is_offset_changed {
-                     self.style_for_normal(cx)
-                 } else if is_always_to_show {
-                     if is_hovered_on_thumb {
--                        Self::style_for_hovered_thumb(cx)
-+                        self.style_for_hovered_thumb(cx)
-                     } else {
--                        Self::style_for_hovered_bar(cx)
-+                        self.style_for_hovered_bar(cx)
-                     }
-                 } else {
-                     let mut idle_state = self.style_for_idle(cx);
-@@ -632,9 +660,9 @@ impl Element for Scrollbar {
-                         if is_hovered_on_bar {
-                             state.set(state.get().with_last_scroll_time(Some(Instant::now())));
-                             idle_state = if is_hovered_on_thumb {
--                                Self::style_for_hovered_thumb(cx)
-+                                self.style_for_hovered_thumb(cx)
-                             } else {
--                                Self::style_for_hovered_bar(cx)
-+                                self.style_for_hovered_bar(cx)
-                             };
-                         } else if elapsed < FADE_OUT_DELAY {
-                             idle_state.0 = cx.theme().tokens.scrollbar_thumb.into();
-@@ -674,13 +702,13 @@ impl Element for Scrollbar {
-                 Bounds::from_anchor_and_size(
-                     Anchor::TopRight,
-                     bounds.top_right() + point(-inset, inset + thumb_start),
--                    size(WIDTH, thumb_length),
-+                    size(width, thumb_length),
-                 )
-             } else {
-                 Bounds::from_anchor_and_size(
-                     Anchor::BottomLeft,
-                     bounds.bottom_left() + point(inset + thumb_start, -inset),
--                    size(thumb_length, WIDTH),
-+                    size(thumb_length, width),
-                 )
-             };
  

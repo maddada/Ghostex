@@ -10,7 +10,7 @@ use gpui::{
     AnyElement, App, Bounds, ElementId, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, SharedString, Stateful, Styled as _, Window, div, px,
 };
-use gpui_component::input::{Input, InputState};
+use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_component::{Sizable as _, Size as ComponentSize};
 
 use super::palette::KanbanPalette;
@@ -105,15 +105,65 @@ pub(crate) fn choice_pill(
         .child(label)
 }
 
-/// A bordered text input (or text area when `height` is given) on the board's control fill.
+/// A bordered single-line text input on the board's control fill.
 pub(crate) fn text_field(
     state: &Entity<InputState>,
-    height: Option<f32>,
     p: &KanbanPalette,
     window: &Window,
     cx: &App,
 ) -> AnyElement {
     let focused = state.read(cx).focus_handle(cx).is_focused(window);
+    field_frame(
+        focused,
+        None,
+        p,
+        Input::new(state)
+            .with_size(ComponentSize::Small)
+            .appearance(false)
+            .bordered(false)
+            .focus_bordered(false)
+            .w_full()
+            .px(px(0.0))
+            .py(px(0.0))
+            .text_size(px(13.0))
+            .text_color(p.foreground),
+    )
+}
+
+/// A bordered text area `height` tall on the board's control fill.
+pub(crate) fn text_area(
+    state: &Entity<TextareaState>,
+    height: f32,
+    p: &KanbanPalette,
+    window: &Window,
+    cx: &App,
+) -> AnyElement {
+    let focused = state.read(cx).focus_handle(cx).is_focused(window);
+    field_frame(
+        focused,
+        Some(height),
+        p,
+        Textarea::new(state)
+            .with_size(ComponentSize::Small)
+            .appearance(false)
+            .bordered(false)
+            .focus_bordered(false)
+            .w_full()
+            .h_full()
+            .px(px(0.0))
+            .py(px(0.0))
+            .text_size(px(13.0))
+            .text_color(p.foreground),
+    )
+}
+
+/// The frame [`text_field`] and [`text_area`] share: control height, or `height` for a text area.
+fn field_frame(
+    focused: bool,
+    height: Option<f32>,
+    p: &KanbanPalette,
+    field: impl IntoElement,
+) -> AnyElement {
     div()
         .w_full()
         .min_w_0()
@@ -128,21 +178,7 @@ pub(crate) fn text_field(
         .border_1()
         .border_color(if focused { p.border_strong } else { p.border })
         .bg(p.control)
-        .child(
-            div().flex_1().min_w_0().h_full().child(
-                Input::new(state)
-                    .with_size(ComponentSize::Small)
-                    .appearance(false)
-                    .bordered(false)
-                    .focus_bordered(false)
-                    .w_full()
-                    .when(height.is_some(), |this| this.h_full())
-                    .px(px(0.0))
-                    .py(px(0.0))
-                    .text_size(px(13.0))
-                    .text_color(p.foreground),
-            ),
-        )
+        .child(div().flex_1().min_w_0().h_full().child(field))
         .into_any_element()
 }
 

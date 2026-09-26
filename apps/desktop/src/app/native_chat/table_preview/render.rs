@@ -5,7 +5,7 @@ use gpui::{
     ClipboardItem, Context, InteractiveElement as _, IntoElement, ParentElement as _, Render,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::scroll::{Scrollbar, ScrollbarShow};
+use gpui_component::scroll::{Scrollbar, ScrollbarMode};
 use gpui_component::text::TextView;
 use serde_json::json;
 
@@ -32,7 +32,7 @@ impl Render for TablePreviewWindow {
         }
         let mut style = super::super::markdown_style::text_style(&p);
         style.is_dark = !p.light;
-        style.highlight_theme = Some(super::super::markdown_style::highlight_theme(p.light));
+        style.highlight_theme = super::super::markdown_style::highlight_theme(p.light);
         // Room is what the preview is for: every cell wraps inside a column as wide as the
         // component allows, and the table only scrolls sideways when the window is still too narrow.
         style.table_cell_max_width = Some(px(480.0 * s));
@@ -41,10 +41,14 @@ impl Render for TablePreviewWindow {
         let table = TextView::markdown("chat-table-preview", source.clone())
             .min_w_0()
             .max_w(gpui::relative(1.0))
-            .on_link_click(move |href, modifiers, _, cx| {
+            .on_link_click(move |href, event, _, cx| {
+                // Only a primary click opens a link; the preview has no link menu.
+                if !event.standard_click() {
+                    return;
+                }
                 let _ = link_chat.update(cx, |chat, cx| {
                     chat.invoke(
-                        json!({"type":"openMarkdownLink","href":href,"external":modifiers.shift}),
+                        json!({"type":"openMarkdownLink","href":href,"external":event.modifiers().shift}),
                         cx,
                     )
                 });
@@ -151,7 +155,7 @@ impl Render for TablePreviewWindow {
                     Scrollbar::vertical(&self.scroll)
                         .id("chat-table-preview-scrollbar")
                         .thickness(px(super::super::scrollbar::THICKNESS * s))
-                        .scrollbar_show(ScrollbarShow::Scrolling),
+                        .mode(ScrollbarMode::Scrolling),
                 ),
             )
     }

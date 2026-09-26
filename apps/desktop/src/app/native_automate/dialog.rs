@@ -12,7 +12,7 @@ use crate::app::window::{ModalPalette, ModalScrollFit, ModalSelect, ModalSelectK
 use gpui::{
     AppContext as _, Context, Entity, FocusHandle, KeyDownEvent, Subscription, WeakEntity, Window,
 };
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState, TextareaState};
 
 pub(crate) struct AutomationDialogConfig {
     pub(crate) palette: ModalPalette,
@@ -70,7 +70,8 @@ impl DialogSelect {
     }
 }
 
-/// One text field of the form and the draft string it writes.
+/// One single-line text field of the form and the draft string it writes. The prompt is the
+/// form's one text area, [`AutomationDialog::prompt`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DialogField {
     Name,
@@ -80,11 +81,10 @@ pub(crate) enum DialogField {
     Cron,
     SetupCommand,
     ExpiresAt,
-    Prompt,
 }
 
 impl DialogField {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 7] = [
         Self::Name,
         Self::ScheduleTime,
         Self::TimerAmount,
@@ -92,7 +92,6 @@ impl DialogField {
         Self::Cron,
         Self::SetupCommand,
         Self::ExpiresAt,
-        Self::Prompt,
     ];
 
     fn slot(self, draft: &mut AutomationDraft) -> &mut String {
@@ -104,7 +103,6 @@ impl DialogField {
             Self::Cron => &mut draft.cron_expression,
             Self::SetupCommand => &mut draft.setup_command,
             Self::ExpiresAt => &mut draft.expires_at,
-            Self::Prompt => &mut draft.prompt,
         }
     }
 
@@ -128,6 +126,8 @@ pub(crate) struct AutomationDialog {
     pub(crate) sessions: Vec<AutomationSessionOption>,
     pub(crate) draft: AutomationDraft,
     pub(crate) inputs: Vec<(DialogField, Entity<InputState>)>,
+    /// The Prompt text area, which writes `draft.prompt`.
+    pub(crate) prompt: Entity<TextareaState>,
     pub(crate) selects: Vec<ModalSelect>,
     pub(crate) saving: bool,
     pub(crate) error: Option<String>,
@@ -150,7 +150,6 @@ impl AutomationDialog {
             let value = field.slot(&mut draft).clone();
             let input = cx.new(|cx| {
                 InputState::new(window, cx)
-                    .multi_line(field == DialogField::Prompt)
                     .placeholder(field.placeholder())
                     .default_value(value)
             });
@@ -167,6 +166,19 @@ impl AutomationDialog {
             ));
             inputs.push((field, input));
         }
+        let prompt =
+            cx.new(|cx| TextareaState::new(window, cx).default_value(config.draft.prompt.clone()));
+        subscriptions.push(cx.subscribe_in(
+            &prompt,
+            window,
+            |this: &mut Self, input, event: &InputEvent, _window, cx| {
+                if matches!(event, InputEvent::Change) {
+                    this.draft.prompt = input.read(cx).value().to_string();
+                    this.error = None;
+                    cx.notify();
+                }
+            },
+        ));
         if let Some((_, name)) = inputs.first() {
             name.update(cx, |input, cx| input.focus(window, cx));
         }
@@ -179,6 +191,7 @@ impl AutomationDialog {
             sessions: config.sessions,
             draft: config.draft,
             inputs,
+            prompt,
             selects: DialogSelect::ALL
                 .iter()
                 .map(|_| ModalSelect::new())

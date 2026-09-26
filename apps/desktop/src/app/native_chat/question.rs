@@ -5,7 +5,7 @@ use gpui::{
     AnyElement, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::json;
 
 impl NativeChatView {
@@ -123,8 +123,7 @@ impl NativeChatView {
                 .is_none_or(|(previous, _)| previous != &key)
             {
                 let input = cx.new(|cx| {
-                    InputState::new(window, cx)
-                        .multi_line(true)
+                    TextareaState::new(window, cx)
                         .submit_on_enter(true)
                         .auto_grow(1, 4)
                         .placeholder("Write a custom answer…")
@@ -139,7 +138,7 @@ impl NativeChatView {
                 self.answer_input = Some((key, input));
             }
             actions.push(
-                Input::new(&self.answer_input.as_ref().unwrap().1)
+                Textarea::new(&self.answer_input.as_ref().unwrap().1)
                     .aria_label("Your answer")
                     .disabled(self.snapshot["questionCard"]["busy"] == true)
                     .placeholder_color(p.muted.opacity(0.6))

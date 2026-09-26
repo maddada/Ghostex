@@ -23,15 +23,16 @@ fn typed_text(keystroke: &gpui::Keystroke) -> Option<&str> {
     Some(text)
 }
 
-/// Focuses `field` and dispatches `keystroke` again on the next turn, so the field's own bindings
-/// and key listeners handle it exactly as if it had been focused when the key was pressed.
+/// Focuses the text field whose focus handle is `field` and dispatches `keystroke` again on the
+/// next turn, so the field's own bindings and key listeners handle it exactly as if it had been
+/// focused when the key was pressed.
 fn focus_and_replay(
-    field: &gpui::Entity<gpui_component::input::InputState>,
+    field: &gpui::FocusHandle,
     keystroke: &gpui::Keystroke,
     window: &mut Window,
     cx: &mut Context<NativeChatView>,
 ) {
-    field.read(cx).focus_handle(cx).focus(window, cx);
+    field.focus(window, cx);
     let replay = keystroke.clone();
     window.defer(cx, move |window, cx| {
         REPLAYING.with(|flag| flag.set(true));
@@ -431,7 +432,7 @@ impl NativeChatView {
         if !intent.is_some_and(|intent| intent.is_object()) {
             return false;
         }
-        focus_and_replay(&input, keystroke, window, cx);
+        focus_and_replay(&input.read(cx).focus_handle(cx), keystroke, window, cx);
         true
     }
 
@@ -472,7 +473,7 @@ impl NativeChatView {
         if !navigation && !edit_chord {
             return false;
         }
-        focus_and_replay(field, keystroke, window, cx);
+        focus_and_replay(&field.read(cx).focus_handle(cx), keystroke, window, cx);
         true
     }
 
@@ -486,16 +487,17 @@ impl NativeChatView {
     pub(crate) fn chat_text_field_focused(&self, window: &Window, cx: &gpui::App) -> bool {
         self.input
             .iter()
-            .chain(self.search_input.iter())
             .chain(self.note_input.iter())
             .chain(self.answer_input.iter().map(|(_, input)| input))
             .chain(self.async_answer_input.iter().map(|(_, input)| input))
+            .map(|input| input.focus_handle(cx))
+            .chain(self.search_input.iter().map(|input| input.focus_handle(cx)))
             .chain(
                 self.terminal_dialog_input
                     .iter()
-                    .map(|dialog| &dialog.input),
+                    .map(|dialog| dialog.field.focus_handle(cx)),
             )
-            .any(|input| input.read(cx).focus_handle(cx).is_focused(window))
+            .any(|focus| focus.is_focused(window))
             || self.terminal_dialog_key_focus.is_focused(window)
     }
 }

@@ -1,8 +1,8 @@
 diff --git a/crates/gpui_windows/src/window.rs b/crates/gpui_windows/src/window.rs
-index 49a935bafe..4a2de94e3c 100644
+index 73f56d7a54..59f844d0e3 100644
 --- a/crates/gpui_windows/src/window.rs
 +++ b/crates/gpui_windows/src/window.rs
-@@ -445,6 +445,12 @@ impl WindowsWindow {
+@@ -472,6 +472,12 @@ impl WindowsWindow {
          } else {
              None
          };
@@ -15,12 +15,12 @@ index 49a935bafe..4a2de94e3c 100644
          let hide_title_bar = params
              .titlebar
              .as_ref()
-@@ -460,7 +466,11 @@ impl WindowsWindow {
+@@ -487,7 +493,11 @@ impl WindowsWindow {
          );
  
          let (mut dwexstyle, dwstyle) = if params.kind == WindowKind::PopUp {
--            (WS_EX_TOOLWINDOW, WINDOW_STYLE(0x0))
-+            let mut dwexstyle = WS_EX_TOOLWINDOW;
+-            (WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WINDOW_STYLE(0x0))
++            let mut dwexstyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
 +            if !params.focus {
 +                dwexstyle |= WS_EX_NOACTIVATE;
 +            }
@@ -28,7 +28,7 @@ index 49a935bafe..4a2de94e3c 100644
          } else {
              let mut dwstyle = WS_SYSMENU;
  
-@@ -525,7 +535,7 @@ impl WindowsWindow {
+@@ -553,7 +563,7 @@ impl WindowsWindow {
                  CW_USEDEFAULT,
                  CW_USEDEFAULT,
                  CW_USEDEFAULT,
@@ -37,21 +37,3 @@ index 49a935bafe..4a2de94e3c 100644
                  None,
                  Some(hinstance.into()),
                  Some(&context as *const _ as *const _),
-@@ -542,13 +552,16 @@ impl WindowsWindow {
-         set_non_rude_hwnd(hwnd, true);
-         configure_dwm_dark_mode(hwnd, appearance);
-         this.state.border_offset.update(hwnd)?;
--        let placement = retrieve_window_placement(
-+        let mut placement = retrieve_window_placement(
-             hwnd,
-             display,
-             params.bounds,
-             this.state.scale_factor.get(),
-             &this.state.border_offset,
-         )?;
-+        if params.kind == WindowKind::PopUp && !params.focus {
-+            placement.showCmd = SW_SHOWNOACTIVATE.0 as u32;
-+        }
-         if params.show {
-             unsafe { SetWindowPlacement(hwnd, &placement)? };
-         } else {

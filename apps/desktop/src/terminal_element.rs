@@ -3232,7 +3232,14 @@ impl TerminalElement {
             background_image_bounds(bounds, image.size(0), settings.fit, window.scale_factor());
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
             window
-                .paint_image(image_bounds, Corners::default(), image, 0, false)
+                .paint_image(
+                    image_bounds,
+                    image_bounds,
+                    Corners::default(),
+                    image,
+                    0,
+                    false,
+                )
                 .ok();
         });
 

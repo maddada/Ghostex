@@ -11,7 +11,7 @@ use gpui::{
     IntoElement, KeyDownEvent, ParentElement as _, Render, Styled as _, Subscription, Window, div,
     px,
 };
-use gpui_component::input::{Enter, Escape, InputEvent, InputState};
+use gpui_component::input::{Enter, Escape, InputEvent, TextareaState};
 use gpui_component::{h_flex, v_flex};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -163,7 +163,7 @@ pub(crate) struct GpuiRenameSessionModalWindow {
     default_prompt_agent_id: Option<String>,
     initial_title: String,
     can_generate_from_history: bool,
-    input: Entity<InputState>,
+    input: Entity<TextareaState>,
     /// Mirror of the editor's text, refreshed on every change.
     title: String,
     selected_agent_id: Option<String>,
@@ -191,11 +191,8 @@ impl GpuiRenameSessionModalWindow {
             saved_agent_id.as_deref(),
             config.default_prompt_agent_id.as_deref(),
         );
-        let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line(true)
-                .default_value(config.initial_title.clone())
-        });
+        let input =
+            cx.new(|cx| TextareaState::new(window, cx).default_value(config.initial_title.clone()));
         let change_subscription = cx.subscribe_in(
             &input,
             window,

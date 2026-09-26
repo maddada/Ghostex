@@ -10,7 +10,7 @@ use gpui::{
     IntoElement, KeyDownEvent, ParentElement as _, Render, Styled as _, Subscription, Window, div,
     px,
 };
-use gpui_component::input::{Enter, Escape, InputEvent, InputState};
+use gpui_component::input::{Enter, Escape, InputEvent, TextareaState};
 use gpui_component::v_flex;
 use std::rc::Rc;
 
@@ -61,7 +61,7 @@ pub(crate) struct GpuiSessionNoteModalWindow {
     session_title: Option<String>,
     /// A note existed when the dialog opened, so saving an empty field clears it.
     has_existing_note: bool,
-    input: Entity<InputState>,
+    input: Entity<TextareaState>,
     /// Mirror of the editor's text, refreshed on every change.
     note: String,
     fit: ModalFit,
@@ -77,8 +77,7 @@ impl GpuiSessionNoteModalWindow {
         cx: &mut Context<Self>,
     ) -> Self {
         let input = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line(true)
+            TextareaState::new(window, cx)
                 .placeholder(PLACEHOLDER)
                 .default_value(config.initial_note.clone())
         });

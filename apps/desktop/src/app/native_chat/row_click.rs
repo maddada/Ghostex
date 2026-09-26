@@ -11,7 +11,6 @@
 //! second question for every row that turns its own text into a trigger.
 
 use gpui::{App, ClickEvent, Window};
-use gpui_component::WindowExt as _;
 
 /// How far the pointer may travel between press and release and still read as a
 /// click rather than a drag across the row's text. A selection that ends on
@@ -30,5 +29,7 @@ pub(super) fn acts_on_row(event: &ClickEvent, window: &mut Window, cx: &mut App)
             return false;
         }
     }
-    window.selected_text(cx).trim().is_empty()
+    gpui_component::TextSelection::selected_text(window, cx)
+        .trim()
+        .is_empty()
 }

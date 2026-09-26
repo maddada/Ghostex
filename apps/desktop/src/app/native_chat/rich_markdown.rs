@@ -391,7 +391,7 @@ impl NativeChatView {
         let header_appearance = p.clone();
         let mut style = super::markdown_style::text_style(p);
         style.is_dark = !p.light;
-        style.highlight_theme = Some(super::markdown_style::highlight_theme(p.light));
+        style.highlight_theme = super::markdown_style::highlight_theme(p.light);
         // React's `--chat-table-cell-max`, min(24rem, 60cqw): one long cell cannot claim the
         // whole row, and a narrow pane lowers the cap so a wide table usually just fits.
         let pane_width = f32::from(self.bounds.get().size.width);
@@ -424,10 +424,14 @@ impl NativeChatView {
                     .get(&(href.to_owned(), label.to_owned()))
                     .cloned()
             })
-            .on_link_click(move |href, modifiers, _, cx| {
+            .on_link_click(move |href, event, _, cx| {
+                // Only a primary click opens a link; a right press opens the link menu below.
+                if !event.standard_click() {
+                    return;
+                }
                 let _ = chat.update(cx, |chat, cx| {
                     chat.invoke(
-                        json!({"type":"openMarkdownLink","href":href,"external":modifiers.shift}),
+                        json!({"type":"openMarkdownLink","href":href,"external":event.modifiers().shift}),
                         cx,
                     )
                 });

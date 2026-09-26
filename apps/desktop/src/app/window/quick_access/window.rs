@@ -33,7 +33,7 @@ use gpui::{
     ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Window,
     div, point, px, svg,
 };
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState, TextareaState};
 use gpui_component::v_flex;
 use serde_json::json;
 use std::rc::Rc;
@@ -57,7 +57,7 @@ pub(crate) struct GpuiQuickAccessWindow {
     tag_menu: QuickAccessMenuState,
     editor_project_menu: QuickAccessMenuState,
     editor_tag_menu: QuickAccessMenuState,
-    pub(crate) editor_input: Option<Entity<InputState>>,
+    pub(crate) editor_input: Option<Entity<TextareaState>>,
     /// Where the next menu the controller sends belongs. Kept after a choice because
     /// an item may answer with a submenu (Tag…) that opens in the same place.
     pub(super) menu_request: Option<QuickAccessMenuRequest>,
@@ -212,8 +212,7 @@ impl GpuiQuickAccessWindow {
             (Some(editor), false) => {
                 let content = editor.content.clone();
                 let input = cx.new(|cx| {
-                    InputState::new(window, cx)
-                        .multi_line(true)
+                    TextareaState::new(window, cx)
                         .placeholder("Write a prompt you want to save...")
                         .default_value(content)
                 });

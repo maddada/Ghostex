@@ -13,7 +13,7 @@ use gpui::{
     MouseDownEvent, ParentElement as _, Rgba, SharedString, StatefulInteractiveElement as _,
     Styled as _, anchored, deferred, div, px, svg,
 };
-use gpui_component::input::{Input, InputState};
+use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
 use serde_json::json;
 
@@ -22,7 +22,7 @@ use serde_json::json;
 pub(crate) fn quick_access_prompt_editor<V: 'static>(
     p: &QuickAccessPalette,
     editor: &QuickAccessPromptEditor,
-    input: Option<&Entity<InputState>>,
+    input: Option<&Entity<TextareaState>>,
     project_menu: &QuickAccessMenuState,
     tag_menu: &QuickAccessMenuState,
     cx: &mut Context<V>,
@@ -141,7 +141,7 @@ where
                 .when(saving, |this| this.opacity(0.6))
                 .children(input.map(|input| {
                     div().size_full().child(
-                        Input::new(input)
+                        Textarea::new(input)
                             .with_size(ComponentSize::Small)
                             .appearance(false)
                             .bordered(false)

@@ -169,7 +169,7 @@ impl NativeChatView {
             }
         }
         if key.key == "enter" && !key.modifiers.shift {
-            let focused = |input: &gpui::Entity<gpui_component::input::InputState>| {
+            let focused = |input: &gpui::Entity<gpui_component::input::TextareaState>| {
                 input.read(cx).focus_handle(cx).is_focused(window)
             };
             let command = if this

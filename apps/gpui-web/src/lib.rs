@@ -80,6 +80,32 @@ fn gpui_platform_window_icon() -> Option<Arc<image::RgbaImage>> {
     None
 }
 
+/// The faces `gpui_web` used to bundle: IBM Plex Sans (the UI font) and
+/// Lilex (the fallback for a monospace family the browser does not have, such
+/// as the chat's `Menlo` inline code).
+///
+/// CDXC:WebGpui 2026-09-26 WHY: upstream `gpui_web` stopped bundling IBM Plex Sans and Lilex (zed `ef075910c9`, applications provide their fonts) but still names IBM Plex Sans as the system UI font and `.ZedMono` (Lilex) as the first fallback, so without these faces no font resolves and the first text layout panics the page, and inline code falls back to the sans face. The faces come from the Zed checkout's own assets, the files the platform used to bundle.
+fn platform_fonts() -> Vec<Cow<'static, [u8]>> {
+    macro_rules! zed_font {
+        ($path:literal) => {
+            include_bytes!(concat!("../../../.dependencies/zed/assets/fonts/", $path)).as_slice()
+        };
+    }
+    [
+        zed_font!("ibm-plex-sans/IBMPlexSans-Regular.ttf"),
+        zed_font!("ibm-plex-sans/IBMPlexSans-Italic.ttf"),
+        zed_font!("ibm-plex-sans/IBMPlexSans-SemiBold.ttf"),
+        zed_font!("ibm-plex-sans/IBMPlexSans-SemiBoldItalic.ttf"),
+        zed_font!("lilex/Lilex-Regular.ttf"),
+        zed_font!("lilex/Lilex-Bold.ttf"),
+        zed_font!("lilex/Lilex-Italic.ttf"),
+        zed_font!("lilex/Lilex-BoldItalic.ttf"),
+    ]
+    .into_iter()
+    .map(Cow::Borrowed)
+    .collect()
+}
+
 #[wasm_bindgen]
 pub fn run() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
@@ -122,6 +148,9 @@ pub fn run() -> Result<(), JsValue> {
         cx.text_system()
             .add_fonts(vec![emoji_font, mono_font])
             .expect("Failed to load fonts");
+        cx.text_system()
+            .add_fonts(platform_fonts())
+            .expect("Failed to load the platform fonts");
         cx.global_mut::<Theme>().mono_font_family = "JetBrains Mono".into();
 
         cx.open_window(WindowOptions::default(), |window, cx| {

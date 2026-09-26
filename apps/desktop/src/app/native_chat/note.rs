@@ -4,7 +4,7 @@ use gpui::{
     AnyElement, AppContext as _, Context, Focusable as _, InteractiveElement as _, IntoElement,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, div, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::json;
 
 impl NativeChatView {
@@ -25,8 +25,7 @@ impl NativeChatView {
             .to_owned();
         if self.note_input.is_none() {
             let input = cx.new(|cx| {
-                InputState::new(window, cx)
-                    .multi_line(true)
+                TextareaState::new(window, cx)
                     .auto_grow(3, 8)
                     .placeholder("What’s next in this thread…")
                     .default_value(value.clone())
@@ -115,7 +114,7 @@ impl NativeChatView {
                         ),
                 )
                 .child(
-                    Input::new(&input)
+                    Textarea::new(&input)
                         .appearance(false)
                         .bordered(false)
                         .text_size(px(13.0 * s)),

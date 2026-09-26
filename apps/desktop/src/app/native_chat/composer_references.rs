@@ -15,7 +15,7 @@ const COMPOSER_FONT_PX: f32 = 14.0;
 /// CDXC:SessionChat 2026-09-18 SEE-ALSO:
 /// The rules live in `packages/gx-chat-core/src/composer/reference_pills.rs` and reach this
 /// file through `nativeChat.composerReferences`; the input side is
-/// `.dependencies/gpui-component/crates/ui/src/input/inline_replacement.rs`.
+/// `.dependencies/gpui-component/crates/base/src/input/base/inline_replacement.rs`.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct ComposerReference {
     /// Byte range of `[label](path)` inside the draft.

@@ -18,7 +18,7 @@ use gpui::{
     StatefulInteractiveElement as _, Styled as _, Transformation, Window, anchored, deferred, div,
     point, px, radians, rgb, size, svg,
 };
-use gpui_component::input::{Input, InputState};
+use gpui_component::input::{Input, InputState, Textarea, TextareaState};
 use gpui_component::{Sizable as _, Size as ComponentSize, h_flex, v_flex};
 use std::cell::Cell;
 use std::rc::Rc;
@@ -791,11 +791,10 @@ pub(crate) fn modal_text_input(
 
 /// The shadcn textarea skin: the input skin with 12px vertical padding.
 /// `min_height` is the React `min-height`; `None` makes the editor fill the
-/// remaining column height (the fixed-frame editors). The `InputState` must be
-/// created with `multi_line(true)`.
+/// remaining column height (the fixed-frame editors).
 pub(crate) fn modal_text_area(
     p: &ModalPalette,
-    state: &gpui::Entity<InputState>,
+    state: &gpui::Entity<TextareaState>,
     min_height: Option<f32>,
     disabled: bool,
     window: &Window,
@@ -822,7 +821,7 @@ pub(crate) fn modal_text_area(
                 .min_w_0()
                 .when(min_height.is_none(), |this| this.flex_1().min_h_0())
                 .child(
-                    Input::new(state)
+                    Textarea::new(state)
                         .with_size(ComponentSize::Small)
                         .appearance(false)
                         .bordered(false)
@@ -1726,12 +1725,12 @@ pub(crate) fn modal_select_trigger_skinned<V: 'static>(
 }
 
 /// [`modal_text_area`] with a [`ModalFieldSkin`]. The box keeps `min_height`
-/// and grows with the editor, so create the `InputState` with
-/// `.multi_line(true).auto_grow(min_rows, max_rows)` to cap the growth the way
-/// the React `max-height` does.
+/// and grows with the editor, so create the `TextareaState` with
+/// `.auto_grow(min_rows, max_rows)` to cap the growth the way the React
+/// `max-height` does.
 pub(crate) fn modal_text_area_skinned(
     p: &ModalPalette,
-    state: &gpui::Entity<InputState>,
+    state: &gpui::Entity<TextareaState>,
     skin: ModalFieldSkin,
     min_height: f32,
     disabled: bool,
@@ -1758,7 +1757,7 @@ pub(crate) fn modal_text_area_skinned(
         .when(disabled, |this| this.opacity(0.5))
         .child(
             div().w_full().min_w_0().child(
-                Input::new(state)
+                Textarea::new(state)
                     .with_size(ComponentSize::Small)
                     .appearance(false)
                     .bordered(false)

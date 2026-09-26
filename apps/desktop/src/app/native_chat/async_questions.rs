@@ -7,7 +7,7 @@ use gpui::{
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
     rgb, svg,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{InputEvent, Textarea, TextareaState};
 use serde_json::json;
 use std::time::Duration;
 
@@ -181,8 +181,7 @@ impl NativeChatView {
             .is_none_or(|(previous, _)| previous != &key)
         {
             let input = cx.new(|cx| {
-                InputState::new(window, cx)
-                    .multi_line(true)
+                TextareaState::new(window, cx)
                     .submit_on_enter(true)
                     .auto_grow(1, 5)
                     .placeholder(if options.is_some_and(|options| !options.is_empty()) {
@@ -299,7 +298,11 @@ impl NativeChatView {
                     }
                 }))
                 .child(
-                    Input::new(&input)
+                    Textarea::new(&input)
+                        .on_paste(Self::paste_handler(
+                            cx.entity().downgrade(),
+                            self.async_answer_input.clone(),
+                        ))
                         .aria_label("Your answer")
                         .appearance(false)
                         .bordered(false)

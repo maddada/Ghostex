@@ -1,6 +1,6 @@
 use super::{appearance::ChatAppearance, composer_references, state::NativeChatView};
 use gpui::{Context, Entity, MouseDownEvent, Window};
-use gpui_component::input::InputState;
+use gpui_component::input::TextareaState;
 use serde_json::{Value, json};
 use std::{ops::Range, time::Duration};
 
@@ -10,7 +10,7 @@ impl NativeChatView {
     pub(super) fn finish_answer_attachments(
         &mut self,
         key: String,
-        input: Entity<InputState>,
+        input: Entity<TextareaState>,
         (original, start, end): (String, usize, usize),
         paths: Vec<Value>,
         error: Option<String>,
@@ -49,7 +49,7 @@ impl NativeChatView {
     fn apply_answer_edit(
         &mut self,
         key: &str,
-        input: &Entity<InputState>,
+        input: &Entity<TextareaState>,
         result: Value,
         window: &mut Window,
         cx: &mut Context<Self>,

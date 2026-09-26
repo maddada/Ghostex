@@ -1,8 +1,8 @@
 diff --git a/crates/gpui_windows/src/platform.rs b/crates/gpui_windows/src/platform.rs
-index 9ba94563a4..e008518070 100644
+index 348aaa3f23..966a1b29e5 100644
 --- a/crates/gpui_windows/src/platform.rs
 +++ b/crates/gpui_windows/src/platform.rs
-@@ -349,6 +349,15 @@ fn translate_accelerator(msg: &MSG) -> Option<()> {
+@@ -415,6 +415,15 @@ fn translate_accelerator(msg: &MSG) -> Option<()> {
          return None;
      }
  

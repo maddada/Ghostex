@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use gpui::{Bounds, Entity, FocusHandle, Pixels, Subscription, Task};
-use gpui_component::input::InputState;
+use gpui_component::input::{InputState, TextareaState};
 
 use super::filters::{KanbanCardView, KanbanViewPreferences};
 use super::model::{BeadsIssue, BoardColumn, BoardTicket, KanbanConversationState};
@@ -78,8 +78,8 @@ pub(crate) struct KanbanTicketForm {
     /// The ticket as last loaded, for the read-only parts (ids, comments, assignee).
     pub(crate) ticket: Option<BoardTicket>,
     pub(crate) title: Entity<InputState>,
-    pub(crate) description: Entity<InputState>,
-    pub(crate) comment: Entity<InputState>,
+    pub(crate) description: Entity<TextareaState>,
+    pub(crate) comment: Entity<TextareaState>,
     pub(crate) label_input: Entity<InputState>,
     pub(crate) status: String,
     pub(crate) priority: String,

@@ -1,7 +1,7 @@
 //! Open documents: reading a file into its editor, tracking unsaved changes, saving and closing.
 
 use gpui::{AppContext as _, Context, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{EditorState, InputEvent};
 use serde_json::json;
 
 use super::state::{DocsDocument, DocsDocumentLoad, DocsFileKind};
@@ -179,9 +179,13 @@ impl GhostexGpuiApp {
                 continue;
             }
             let editor = cx.new(|cx| {
-                InputState::new(window, cx)
-                    .code_editor(language)
+                EditorState::new(window, cx)
+                    .language(language)
                     .line_number(false)
+                    // GPUI Kit's editor closes brackets and indents structurally by default; the
+                    // Docs text view keeps typing literal, with Enter copying the line's indent.
+                    .auto_close(false)
+                    .smart_indent(false)
                     .soft_wrap(DocsFileKind::for_path(&path) == DocsFileKind::Markdown)
                     // The formatting bar floats over the bottom lines; let them scroll out from under it.
                     .scroll_beyond_last_line(Some(4))

@@ -1,7 +1,7 @@
 //! Opening and editing the side panel: New ticket, Edit ticket and Board columns.
 
 use gpui::{AppContext as _, Context, Entity, Subscription, Window};
-use gpui_component::input::{InputEvent, InputState};
+use gpui_component::input::{InputEvent, InputState, TextareaState};
 
 use super::beads::show_issue;
 use super::model::{estimate_to_tshirt, priority_select_value};
@@ -13,13 +13,11 @@ impl GhostexGpuiApp {
         &mut self,
         placeholder: &str,
         value: &str,
-        multi_line: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> (Entity<InputState>, Subscription) {
         let input = cx.new(|cx| {
             InputState::new(window, cx)
-                .multi_line(multi_line)
                 .placeholder(placeholder.to_string())
                 .default_value(value.to_string())
         });
@@ -33,6 +31,31 @@ impl GhostexGpuiApp {
                     this.native_kanban_input_enter(input, window, cx);
                 }
                 InputEvent::Blur => {}
+            },
+        );
+        (input, subscription)
+    }
+
+    /// A text area of the side panel; unlike a single-line field, its Enter is a newline.
+    fn native_kanban_text_area(
+        &mut self,
+        placeholder: &str,
+        value: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> (Entity<TextareaState>, Subscription) {
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .placeholder(placeholder.to_string())
+                .default_value(value.to_string())
+        });
+        let subscription = cx.subscribe_in(
+            &input,
+            window,
+            |this: &mut Self, _, event: &InputEvent, _, cx| match event {
+                InputEvent::Focus => this.native_kanban_input_focused(),
+                InputEvent::Change => this.native_kanban_notify(cx),
+                InputEvent::PressEnter { .. } | InputEvent::Blur => {}
             },
         );
         (input, subscription)
@@ -77,18 +100,17 @@ impl GhostexGpuiApp {
             "Title"
         };
         let (title, title_subscription) =
-            self.native_kanban_input(title_placeholder, &title_value, false, window, cx);
-        let (description, description_subscription) = self.native_kanban_input(
+            self.native_kanban_input(title_placeholder, &title_value, window, cx);
+        let (description, description_subscription) = self.native_kanban_text_area(
             "Write the full prompt for this ticket.",
             &description_value,
-            true,
             window,
             cx,
         );
         let (comment, comment_subscription) =
-            self.native_kanban_input("Add a note for the team.", "", true, window, cx);
+            self.native_kanban_text_area("Add a note for the team.", "", window, cx);
         let (label_input, label_subscription) =
-            self.native_kanban_input("Add a label and press Enter", "", false, window, cx);
+            self.native_kanban_input("Add a label and press Enter", "", window, cx);
         KanbanTicketForm {
             priority: priority_select_value(issue.and_then(|issue| issue.priority)).to_string(),
             tshirt: estimate_to_tshirt(issue.and_then(|issue| issue.estimate)),
@@ -178,8 +200,7 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (name, subscription) =
-            self.native_kanban_input("New column name", "", false, window, cx);
+        let (name, subscription) = self.native_kanban_input("New column name", "", window, cx);
         self.native_kanban.panel = Some(KanbanPanel::Columns(KanbanColumnsForm {
             name,
             busy: false,

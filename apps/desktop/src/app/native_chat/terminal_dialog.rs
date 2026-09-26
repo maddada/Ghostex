@@ -1,21 +1,62 @@
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::{
-    AnyElement, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
-    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
-    px,
+    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable as _,
+    InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px,
 };
-use gpui_component::input::{Input, InputEvent, InputState};
+use gpui_component::input::{Input, InputEvent, InputState, Textarea, TextareaState};
 use serde_json::{Value, json};
 
 pub(super) struct TerminalDialogInput {
     identity: String,
     server_value: String,
-    pub(super) input: Entity<InputState>,
+    pub(super) field: TerminalDialogField,
     _subscription: Subscription,
 }
 
+/// The dialog's text field: one line, or a growing box when the dialog asks for multiline input.
+pub(super) enum TerminalDialogField {
+    Line(Entity<InputState>),
+    Lines(Entity<TextareaState>),
+}
+
+impl TerminalDialogField {
+    fn value(&self, cx: &App) -> SharedString {
+        match self {
+            Self::Line(input) => input.read(cx).value(),
+            Self::Lines(input) => input.read(cx).value(),
+        }
+    }
+
+    pub(super) fn focus_handle(&self, cx: &App) -> FocusHandle {
+        match self {
+            Self::Line(input) => input.focus_handle(cx),
+            Self::Lines(input) => input.focus_handle(cx),
+        }
+    }
+
+    fn set_value(&self, value: String, window: &mut Window, cx: &mut App) {
+        match self {
+            Self::Line(input) => input.update(cx, |input, cx| input.set_value(value, window, cx)),
+            Self::Lines(input) => input.update(cx, |input, cx| input.set_value(value, window, cx)),
+        }
+    }
+}
+
 impl NativeChatView {
+    fn terminal_dialog_input_event<T>(
+        &mut self,
+        _: &Entity<T>,
+        event: &InputEvent,
+        _: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
+            self.submit_terminal_dialog(cx);
+        }
+    }
+
     pub(super) fn submit_terminal_dialog(&mut self, cx: &mut Context<Self>) {
         let dialog = &self.snapshot["terminalNotice"]["dialog"];
         let Some(input) = &self.terminal_dialog_input else {
@@ -25,7 +66,7 @@ impl NativeChatView {
             json!({"type":"answer","answer":{
                 "kind":"terminalDialog", "dialogId":dialog["id"],
                 "dialogAction":if dialog["input"] == "search" { "text" } else { "submit" },
-                "text":input.input.read(cx).value().to_string(),
+                "text":input.field.value(cx).to_string(),
             }}),
             cx,
         );
@@ -108,42 +149,53 @@ impl NativeChatView {
                 } else {
                     "Enter text…"
                 };
-                let input = cx.new(|cx| {
-                    InputState::new(window, cx)
-                        .multi_line(multiline)
-                        .submit_on_enter(true)
-                        .auto_grow(if multiline { 2 } else { 1 }, if multiline { 6 } else { 1 })
-                        .validate(move |value, _| value.encode_utf16().count() <= limit)
-                        .placeholder(placeholder)
-                        .default_value(server_value.clone())
-                });
-                let subscription =
-                    cx.subscribe_in(&input, window, |this, _, event: &InputEvent, _, cx| {
-                        if matches!(event, InputEvent::PressEnter { shift: false, .. }) {
-                            this.submit_terminal_dialog(cx);
-                        }
+                let (field, subscription) = if multiline {
+                    let input = cx.new(|cx| {
+                        TextareaState::new(window, cx)
+                            .submit_on_enter(true)
+                            .auto_grow(2, 6)
+                            .validate(move |value, _| value.encode_utf16().count() <= limit)
+                            .placeholder(placeholder)
+                            .default_value(server_value.clone())
                     });
+                    let subscription =
+                        cx.subscribe_in(&input, window, Self::terminal_dialog_input_event);
+                    (TerminalDialogField::Lines(input), subscription)
+                } else {
+                    let input = cx.new(|cx| {
+                        InputState::new(window, cx)
+                            .validate(move |value, _| value.encode_utf16().count() <= limit)
+                            .placeholder(placeholder)
+                            .default_value(server_value.clone())
+                    });
+                    let subscription =
+                        cx.subscribe_in(&input, window, Self::terminal_dialog_input_event);
+                    (TerminalDialogField::Line(input), subscription)
+                };
                 self.terminal_dialog_input = Some(TerminalDialogInput {
                     identity,
                     server_value: server_value.clone(),
-                    input,
+                    field,
                     _subscription: subscription,
                 });
             }
             let state = self.terminal_dialog_input.as_mut().unwrap();
             if state.server_value != server_value {
                 state.server_value = server_value.clone();
-                state
-                    .input
-                    .update(cx, |input, cx| input.set_value(server_value, window, cx));
+                state.field.set_value(server_value, window, cx);
             }
-            body.push(
-                Input::new(&state.input)
+            body.push(match &state.field {
+                TerminalDialogField::Line(input) => Input::new(input)
                     .disabled(busy)
                     .w_full()
                     .text_size(px(14.0 * p.scale))
                     .into_any_element(),
-            );
+                TerminalDialogField::Lines(input) => Textarea::new(input)
+                    .disabled(busy)
+                    .w_full()
+                    .text_size(px(14.0 * p.scale))
+                    .into_any_element(),
+            });
             actions.push(
                 div()
                     .id("terminal-dialog-submit")

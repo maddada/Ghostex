@@ -12,7 +12,7 @@ use gpui::{
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render,
     StatefulInteractiveElement as _, Styled as _, Subscription, Window, div, px, rgb,
 };
-use gpui_component::input::{InputEvent, InputState, Paste};
+use gpui_component::input::{InputEvent, InputState, Paste, TextareaState};
 use gpui_component::{h_flex, v_flex};
 use std::hash::{BuildHasher as _, Hasher as _};
 use std::rc::Rc;
@@ -279,7 +279,7 @@ pub(crate) struct GpuiCreateWorktreeModalWindow {
     is_loading_worktrees: bool,
     image_count: usize,
     request_id: String,
-    prompt: gpui::Entity<InputState>,
+    prompt: gpui::Entity<TextareaState>,
     existing_select: ModalSelect,
     existing_filter: gpui::Entity<InputState>,
     branch_select: ModalSelect,
@@ -300,8 +300,7 @@ impl GpuiCreateWorktreeModalWindow {
         let selected_agent_id =
             resolve_initial_agent_id(&config.agents, config.default_agent_id.as_deref());
         let prompt = cx.new(|cx| {
-            InputState::new(window, cx)
-                .multi_line(true)
+            TextareaState::new(window, cx)
                 .auto_grow(1, TEXTAREA_MAX_ROWS)
                 // Plain Enter submits (`handleKeyDown`), Shift+Enter is the editor's newline.
                 .submit_on_enter(true)
