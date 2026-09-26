@@ -27,6 +27,7 @@ mod session_chat_rpc;
 mod session_chat_transcript;
 mod session_parking;
 pub mod sessions;
+mod sessions_brief;
 pub mod settings;
 mod settings_hotkeys;
 pub mod skills;

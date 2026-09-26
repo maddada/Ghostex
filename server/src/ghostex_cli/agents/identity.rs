@@ -65,7 +65,7 @@ pub(super) fn caller() -> CliResult<Value> {
     Ok(caller)
 }
 
-pub(super) fn resolve_names(rows: &mut [Value], flags: &Flags) {
+pub(crate) fn resolve_names(rows: &mut [Value], flags: &Flags) {
     if let Ok(hud) = rpc::call_gxserver_rpc("/api/readSidebarHud", &json!({}), flags) {
         if let Some(agents) = hud["agents"].as_array() {
             for row in rows {

@@ -9,7 +9,7 @@ use crate::ghostex_cli::rpc::{
     call_gxserver_rpc, gxserver_root, project_id_from_global_ref, CliError, CliResult,
     GXSERVER_PRODUCT,
 };
-use crate::ghostex_cli::{actions, selector, set_exit_code};
+use crate::ghostex_cli::{actions, selector, sessions_brief, set_exit_code};
 
 /*
 CDXC:Cli 2026-07-13:
@@ -166,7 +166,11 @@ pub fn sessions_command(args: &[String]) -> CliResult<()> {
     }
     let result = fetch_session_list_result(flags, true)?;
     if flags.truthy("json") {
-        print_json(&result);
+        if flags.truthy("full") {
+            print_json(&result);
+        } else {
+            print_json(&sessions_brief::brief_session_list(&result, flags));
+        }
         return Ok(());
     }
     let empty = Vec::new();

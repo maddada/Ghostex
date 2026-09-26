@@ -114,7 +114,7 @@ pub fn usage() -> String {
             "Connect a new Claude account, or reconnect a selected cswap account",
         ),
         format_help_command(
-            "sessions | s | ls [--ungrouped|-u] [--json] [--mobile-summary]",
+            "sessions | s | ls [--ungrouped|-u] [--json [--full]] [--mobile-summary]",
             "List running terminal sessions",
         ),
         format_help_command(
@@ -581,6 +581,8 @@ Sessions:
   Projects and sessions follow the macOS sidebar order, including the active Last Active sort mode.
   Each project prints its path once as the section header, then compact session rows without field labels.
   --ungrouped/-u prints one flat list and prefixes each row with the project name.
+  --json prints each session's agent, title, global ref, agent session id, zmx name, project and status;
+  add --full for every field Ghostex keeps about each session and project.
 
 Attach:
   attach/resume uses the stored tmux, zmx, or zellij provider session when present.

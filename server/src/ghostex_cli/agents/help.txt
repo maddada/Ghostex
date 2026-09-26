@@ -61,24 +61,27 @@ SENDER HEADER
   <message body>
 
 DELIVERY
-  Default       Submit normally. A busy agent may receive the message at
-                its next supported input boundary, such as a tool call.
+  Default       Submit normally. Use it for every message, whether the agent
+                is idle, busy, or asleep. A busy agent receives it at its next
+                supported input boundary, such as a tool call. A sleeping
+                session is woken and gets the message as soon as its agent is
+                ready (wakingRecipient in the result).
   --interrupt   Request interruption, then submit through the input-readiness
                 checks instead of waiting for that boundary. Active tools
                 may not stop immediately. Pending input sends are cancelled.
-  --queue       Hold in Ghostex until the current turn finishes and input is
-                ready. A sleeping session keeps the message until it wakes.
-                A queued message waits as long as the turn does, so one sent
-                to an agent that works for hours sits unread for hours with
-                nothing to show the sender. Prefer the default, which reaches
-                a busy agent at its next input boundary, and keep --queue for
-                the case it is meant for: you have read an agent's final
-                message and want its next task waiting when it wakes.
+                A sleeping session has nothing to interrupt; it is woken and
+                the message is sent as with the default.
+  --queue       Only when the user asks for it, or when you have read an
+                agent's final message and want its next task waiting for its
+                next stop. The message is held in Ghostex until the current
+                turn finishes and input is ready, and a sleeping session keeps
+                it without being woken. It waits as long as the turn does, so
+                one sent to an agent that works for hours sits unread for
+                hours with nothing to show the sender. Never use --queue just
+                because the agent is busy or asleep; the default handles both.
                 If it cannot be delivered, it stays in the recipient's queue
                 marked Not delivered and a note is queued back to you.
 
-  Default and interrupt sends require a running session. Wake it first with
-  ghostex wake <session-ref>, or use --queue. Sending never wakes it implicitly.
   Enter submits. send already submits; do not append another Enter.
   Escape interrupts. To interrupt without sending a message, use:
     ghostex interrupt-session-chat <session-ref>
@@ -101,9 +104,9 @@ READ ANOTHER THREAD (past or present)
   ghostex read-session-chat <session> --all --role user --format text
   ghostex read-session-chat <session> --since 2026-09-21 --last 10 --format text
 
-  <session> can be any id from the sidebar's Copy Details block (Session ID,
-  Routing ID, Agent Session ID, the zmx name in Persistence), a global ref,
-  or the title. Sleeping sessions work too; reading never wakes them.
+  <session> can be any id from the sidebar's Copy Details block (Global Ref,
+  Agent Session ID, the zmx name) or the title. Sleeping sessions work too;
+  reading never wakes them.
   --all walks the thread back to its first turn: prompts and final replies,
   with each turn's tool work collapsed. --grep implies --all and matches any
   of the |-separated words, case-insensitive. --context n adds the n rows

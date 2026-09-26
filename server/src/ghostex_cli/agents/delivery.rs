@@ -8,6 +8,9 @@ use crate::ghostex_cli::{
 };
 use serde_json::{json, Value};
 
+/// CDXC:Cli 2026-09-26 DECISION:
+/// User: messages between agents "shouldn't be added to the queue and stuck there, they should be just sent as normal, except if the agent intentionally queues". A default or interrupt send to a sleeping recipient goes to `/api/sendSessionChatMessage` like Enter in chat, which wakes the session and types the message once its agent is ready (SessionChat 2026-09-25 decision); only `--queue` holds a message for the recipient's next stop.
+/// WHY: the old refusal for a sleeping recipient told the sender to use `--queue`, and agents kept reaching for `--queue` afterwards, even for running recipients, so their messages waited behind whole turns.
 pub(super) fn send(args: &Arguments) -> CliResult<Value> {
     let body = match &args.body_file {
         Some(path) => std::fs::read_to_string(path).map_err(|error| {
@@ -35,11 +38,11 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
             "The recipient is not an agent session. Run ghostex agents list --all.".into(),
         ));
     }
-    if args.delivery != Delivery::Queue && text(&recipient, "lifecycleState") != "running" {
-        return Err(CliError::Other(format!("Session {} is not running. Use ghostex wake {} first, or --queue to hold the message until it is awake and ready.", text(&recipient, "globalRef"), text(&recipient, "globalRef"))));
-    }
+    // A sleeping recipient has nothing to interrupt; the send itself wakes it.
+    let waking =
+        args.delivery != Delivery::Queue && text(&recipient, "lifecycleState") != "running";
     let mut payload = json!({"globalRef": recipient["globalRef"], "projectId": recipient["projectId"], "sessionId": recipient["sessionId"]});
-    let interrupted = args.delivery == Delivery::Interrupt;
+    let interrupted = args.delivery == Delivery::Interrupt && !waking;
     if interrupted {
         call_gxserver_rpc("/api/interruptSessionChat", &payload, &flags)?;
     }
@@ -50,14 +53,20 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "/api/sendSessionChatMessage"
     };
     let result = call_gxserver_rpc(endpoint, &payload, &flags).map_err(|error| {
+        let next_step = if waking {
+            format!("The recipient was asleep: run ghostex wake {} and send again once it is running, after inspecting its chat.", text(&recipient, "globalRef"))
+        } else {
+            "Inspect chat and queue before retrying.".to_string()
+        };
         CliError::Other(format!(
-            "{}{} Inspect chat and queue before retrying.",
+            "{}{} {}",
             if interrupted {
                 "Interruption was requested, but message delivery failed or is uncertain: "
             } else {
                 "Message delivery failed or is uncertain: "
             },
-            error
+            error,
+            next_step
         ))
     })?;
     Ok(json!({
@@ -65,6 +74,7 @@ pub(super) fn send(args: &Arguments) -> CliResult<Value> {
         "status": if args.delivery == Delivery::Queue { "queued" } else { "accepted" },
         "mode": match args.delivery { Delivery::Normal => "normal", Delivery::Interrupt => "interrupt", Delivery::Queue => "queue" },
         "interruptRequested": interrupted,
+        "wakingRecipient": waking,
         "sender": identity::summary(&sender),
         "recipient": identity::summary(&recipient),
         "receipt": receipt(&result),

@@ -624,7 +624,8 @@ is a blocking condition, not a note. Read-only inspection: this never messages,
 interrupts, sleeps, or focuses another session.
 */
 async function checkConcurrentSessions(options) {
-  const result = await runCommand('ghostex sessions --json', { timeoutMs: 30_000 });
+  // --full: the short default leaves out activity and sessionId, which this check reads.
+  const result = await runCommand('ghostex sessions --json --full', { timeoutMs: 30_000 });
   if (result.code !== 0) {
     return warn('ghostex CLI unavailable; confirm no other agent is working in this worktree before dispatching.');
   }

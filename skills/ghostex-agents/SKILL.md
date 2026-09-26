@@ -38,6 +38,16 @@ exists. If a verb in this skill is missing from the help on this machine, the
 installed Ghostex is older than the verb: tell the user to update instead of
 guessing a replacement.
 
+## A pasted Copy Details block
+
+When the user pastes a block that starts with `Ghostex Session` (from the
+sidebar's Copy Details), it describes another session: its agent, title,
+Global Ref, Agent Session ID, zmx name, and the project and path it works in.
+Use the Global Ref for every send, read, wait, and close, and treat the path
+as that agent's working folder when you agree on file ownership. The block
+does not say whether the session is running or busy: check
+`ghostex agents list --all --json` before you send.
+
 ## Core workflow
 
 1. **Know where you are.** Resolve your own session and project from the CLI
@@ -54,13 +64,17 @@ guessing a replacement.
    file and point the agent at it; keep the message itself short.
 4. **Record the global reference** from the create result and use it for every
    later send, read, wait, and close. Titles and short ids can be ambiguous.
-5. **Send with the default delivery.** It reaches a busy agent at its next
-   input boundary. Use `--interrupt` only for an urgent correction, and
-   `--queue` only when the user asks for it or when the point is to leave the
-   next task waiting: read the agent's final message first, then queue. A
-   queued message waits as long as the current turn does, so one sent to an
-   agent that works for hours sits unread for hours and the sender sees
-   nothing but "queued".
+5. **Send with the default delivery, every time.** It reaches a busy agent at
+   its next input boundary and wakes a sleeping one. A busy or sleeping
+   recipient is never a reason to add `--queue`; replies, acknowledgements,
+   and progress notes all go out with the default. Use `--interrupt` only for
+   an urgent correction, and `--queue` only when the user asks for it or when
+   the point is to leave the next task waiting: read the agent's final message
+   first, then queue. A queued message waits as long as the current turn does,
+   so one sent to an agent that works for hours sits unread for hours and the
+   sender sees nothing but "queued". If an older Ghostex refuses a send because
+   the session is not running, run `ghostex wake <ref>` and send it again with
+   the default once the session is running; do not switch to `--queue`.
 6. **Confirm delivery.** Accepted or queued does not mean read. Read the
    session chat (or the queue) after sending before you assume the agent is
    working on it, and before you ever send the same message again.
@@ -83,9 +97,10 @@ the CLI, not the agent's raw transcript file: the CLI works for every agent
 type, keeps the thread in order, and marks harness-injected rows.
 
 1. **Pick the reference.** Pass whatever the user pasted: a sidebar Copy Details
-   block gives a Global Ref (`S…:P…:G…`), which is best, plus a Session ID,
-   Routing ID, Agent Session ID and a zmx name in Persistence, and all of them
-   work. A title works when it is unique. If two sessions match, the error
+   block gives a Global Ref (`S…:P…:G…`), which is best, plus an Agent Session
+   ID and a zmx name; older releases also list a Session ID and Routing ID.
+   All of them work. A
+   title works when it is unique. If two sessions match, the error
    lists their global refs; pick one. Sleeping sessions read fine, and reading
    never wakes them.
 2. **Search first, then read.** Look for the topic, with one row of context so
@@ -98,6 +113,7 @@ type, keeps the thread in order, and marks harness-injected rows.
    `--grep` is case-insensitive, `|` separates alternatives, and it searches
    the whole thread. Matched rows say `match` in their header; the rows around
    them are context. Add `--role user` to match only what the user typed.
+
 3. **Read the whole thread when the search is not enough.**
    `--all --format text` prints every turn as prompt plus final reply, with the
    tool work collapsed into one note. `--all --role user --format text` lists
@@ -105,8 +121,8 @@ type, keeps the thread in order, and marks harness-injected rows.
    and decided. Output is large for long threads: trim it with `--last <n>`
    (the newest n rows) or `--since <local date or time>` instead of printing
    everything. Text output is in local time with the UTC offset in its header,
-   so convert before comparing with UTC times such as Copy Details' Last
-   Active. Add `--history-mode detail` only when you need every tool call.
+   so convert before comparing it with UTC timestamps from other output.
+   Add `--history-mode detail` only when you need every tool call.
    `ghostex read-session-chat --help` lists every flag.
 4. **Check the thread's own records.** Long threads usually keep a plan or
    progress file (`docs/<date>/<topic>/PLAN.md`, `PROGRESS.md`) that the
@@ -120,6 +136,22 @@ from 2026-09-24 or later. On an older one `read-session-chat` prints the newest
 rows only: page back with `--history-mode turns --before-offset <beforeOffset
 from the previous result>` until `hasMore` is false, and pass the global ref
 from `ghostex sessions --json` as the session.
+
+## Rename a session, including your own
+
+When the user asks for a better name for a thread, pick a title under 60
+characters that names the work, then apply it. Your own session's global ref is
+in `$GHOSTEX_GLOBAL_SESSION_REF`.
+
+```bash
+ghostex rename-session "$GHOSTEX_GLOBAL_SESSION_REF" "<title>"   # sidebar title
+ghostex rename-command "$GHOSTEX_GLOBAL_SESSION_REF" "<title>"   # the agent's own /rename
+```
+
+Renaming your own session while you are still working is safe: it only changes
+the name and does not interrupt your turn, so do it right away instead of
+asking the user to do it. The same commands rename any other session by its
+reference.
 
 ## Habits that keep runs reliable
 
