@@ -211,7 +211,6 @@ pub(crate) fn gpui_os_integration_path_is_script(path: &Path) -> bool {
         .is_some_and(|extension| matches!(extension.as_str(), "command" | "tool" | "sh"))
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_expand_tilde_path(value: &str) -> PathBuf {
     if value == "~" {
         return home_dir();
@@ -238,7 +237,6 @@ pub(crate) fn gpui_os_integration_resolved_terminal_cwd(cwd: Option<String>) -> 
     }
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_project_root_for_path(path: &Path) -> Option<PathBuf> {
     let path = gpui_os_integration_expand_tilde_path(path.to_string_lossy().as_ref());
     let metadata = std::fs::metadata(&path).ok()?;
@@ -250,7 +248,6 @@ pub(crate) fn gpui_os_integration_project_root_for_path(path: &Path) -> Option<P
     Some(gpui_os_integration_git_root_for_path(&base).unwrap_or(base))
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_git_root_for_path(path: &Path) -> Option<PathBuf> {
     let mut current = Some(path.to_path_buf());
     while let Some(dir) = current {
