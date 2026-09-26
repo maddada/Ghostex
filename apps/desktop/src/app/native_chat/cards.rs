@@ -28,6 +28,9 @@ pub(super) fn status_card_press_header(
     let radius = px((12.0 * s - 1.0).max(0.0));
     let hover = card_hover_fill(p);
     header
+        // The card's stretch widens the header over its negative margins; a caller's 100% width
+        // would stop the fill one padding short of the right border.
+        .w_auto()
         .mx(px(-pad_x))
         .mt(px(-pad_y))
         .px(px(pad_x))

@@ -48,12 +48,18 @@ impl NativeChatView {
             .id("terminal-tool-header")
             .flex()
             .items_start()
-            .w_full()
             .min_w_0()
             .gap(px(8.0 * s))
             .when(expandable, |this| {
                 this.chat_cursor_pointer().on_click(
-                    cx.listener(|view, _, _, cx| view.toggle_disclosure(EXPANDED_KEY, cx)),
+                    // Above the composer, not in the transcript: no header anchor, the transcript keeps
+                    // following its tail while the card grows.
+                    cx.listener(|view, _, _, cx| {
+                        if !view.expanded.remove(EXPANDED_KEY) {
+                            view.expanded.insert(EXPANDED_KEY.to_string());
+                        }
+                        cx.notify();
+                    }),
                 )
             })
             .child(lead(
