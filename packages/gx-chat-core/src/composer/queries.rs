@@ -44,7 +44,7 @@ pub fn composer_references(text: &str) -> Vec<ComposerReferenceRow> {
             start: reference.start,
             end: reference.end,
             kind: reference.kind,
-            pill: reference_pill_text(&reference.label, reference.kind),
+            pill: reference_pill_text(&reference.label, &reference.path, reference.kind),
             label: reference.label,
             path: reference.path,
         })
