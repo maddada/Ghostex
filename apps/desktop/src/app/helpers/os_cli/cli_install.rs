@@ -83,6 +83,33 @@ pub(crate) fn gpui_repair_ghostex_cli_commands() -> Result<String, String> {
     let path_entries = gpui_cli_path_entries();
     let common_dirs = gpui_common_cli_install_dirs();
     let install_dirs = gpui_cli_install_dirs(&path_entries, &common_dirs, &cli_dir);
+    #[cfg(target_os = "macos")]
+    let install_dirs = gpui_unique_paths(
+        [gpui_home_dir().join(".local/bin")]
+            .into_iter()
+            .chain(install_dirs),
+    );
+
+    // SSH clients use this stable per-user path even when Homebrew owns the
+    // public command in /opt/homebrew/bin outside the remote login shell's PATH.
+    #[cfg(target_os = "macos")]
+    {
+        let mobile_result = gpui_install_ghostex_cli_command(
+            "ghostex",
+            &cli_binary_path,
+            &cli_dir,
+            &[gpui_home_dir().join(".local/bin")],
+        );
+        if !mobile_result.installed() {
+            return match mobile_result {
+                GpuiCliCommandInstallResult::Blocked { existing_path } => Err(format!(
+                    "A ghostex command that does not belong to Ghostex already exists at {}. Remove or rename it, then link the CLI again. No unrelated command was overwritten.",
+                    gpui_path_string(&existing_path)
+                )),
+                _ => Err("Ghostex could not write the ghostex command into ~/.local/bin. Check that the directory is writable, then link the CLI again.".to_string()),
+            };
+        }
+    }
 
     let ghostex_result =
         gpui_install_ghostex_cli_command("ghostex", &cli_binary_path, &cli_dir, &install_dirs);
@@ -144,6 +171,13 @@ pub(crate) fn gpui_auto_install_ghostex_cli_wrappers() {
     let path_entries = gpui_cli_path_entries();
     let common_dirs = gpui_common_cli_install_dirs();
 
+    #[cfg(target_os = "macos")]
+    let mobile_cli = gpui_home_dir().join(".local/bin/ghostex");
+    #[cfg(target_os = "macos")]
+    let mut needs_install = !gpui_path_exists_or_is_symlink(&mobile_cli)
+        || gpui_is_broken_symlink(&mobile_cli)
+        || !gpui_is_ghostex_owned_command_path("ghostex", &mobile_cli, &cli_dir);
+    #[cfg(not(target_os = "macos"))]
     let mut needs_install = false;
     'commands: for command in ["ghostex", "gx"] {
         let mut command_exists = false;
@@ -159,10 +193,11 @@ pub(crate) fn gpui_auto_install_ghostex_cli_wrappers() {
             if !gpui_is_ghostex_owned_command_path(command, &candidate, &cli_dir) {
                 continue;
             }
-            let is_current = gpui_is_regular_file(&candidate)
-                && fs::read_to_string(&candidate)
-                    .map(|content| content == wrapper)
-                    .unwrap_or(false);
+            let is_current = gpui_is_homebrew_ghostex_command_path(&candidate, command)
+                || (gpui_is_regular_file(&candidate)
+                    && fs::read_to_string(&candidate)
+                        .map(|content| content == wrapper)
+                        .unwrap_or(false));
             if !is_current {
                 needs_install = true;
                 break 'commands;
@@ -277,6 +312,9 @@ pub(crate) fn gpui_install_ghostex_cli_command(
             // Non-executable foreign junk cannot shadow a wrapper; leave it
             // alone and keep looking for a directory Ghostex can use.
             continue;
+        }
+        if exists && gpui_is_homebrew_ghostex_command_path(&link_path, command) {
+            return GpuiCliCommandInstallResult::Current;
         }
         if !gpui_prepare_cli_install_directory(directory) {
             continue;
@@ -452,6 +490,39 @@ pub(crate) fn gpui_directory_accepts_temporary_write(directory: &Path) -> bool {
     }
 }
 
+// A per-user symlink to a verified Homebrew wrapper is already a usable command.
+// Preserve it and the cask's own symlink when the app refreshes its wrappers.
+fn gpui_is_homebrew_ghostex_command_path(path: &Path, command: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        if fs::symlink_metadata(path)
+            .map(|metadata| !metadata.file_type().is_symlink())
+            .unwrap_or(true)
+        {
+            return false;
+        }
+        let Ok(target) = fs::canonicalize(path) else {
+            return false;
+        };
+        let target = target.to_string_lossy();
+        (target == format!("/opt/homebrew/bin/{command}")
+            || target == format!("/usr/local/bin/{command}")
+            || (target.contains("/Caskroom/ghostex/")
+                && target.ends_with(&format!("/.homebrew-command-wrappers/{command}"))))
+            && fs::metadata(path)
+                .map(|metadata| metadata.len() <= 128 * 1024)
+                .unwrap_or(false)
+            && fs::read_to_string(path)
+                .map(|content| gpui_marked_ghostex_wrapper_content(&content))
+                .unwrap_or(false)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (path, command);
+        false
+    }
+}
+
 pub(crate) fn gpui_can_replace_existing_ghostex_command(
     command: &str,
     path: &Path,
@@ -465,7 +536,9 @@ pub(crate) fn gpui_is_ghostex_owned_command_path(
     path: &Path,
     cli_dir: &Path,
 ) -> bool {
-    if gpui_file_contains_ghostex_cli_wrapper_marker(path) {
+    if gpui_file_contains_ghostex_cli_wrapper_marker(path)
+        || gpui_is_homebrew_ghostex_command_path(path, command)
+    {
         return true;
     }
     let realpath = gpui_realpath_or_self(path);
