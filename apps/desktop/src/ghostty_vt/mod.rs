@@ -34,11 +34,13 @@ the lifetimes below enforce at compile time.
 pub mod ffi;
 
 mod host_callbacks;
+mod images;
 mod input_encoders;
 mod render_state;
 mod terminal;
 
 pub use host_callbacks::*;
+pub use images::VtImagePlacement;
 pub use input_encoders::*;
 pub use render_state::*;
 pub use terminal::*;

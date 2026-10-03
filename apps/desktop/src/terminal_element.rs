@@ -96,6 +96,10 @@ use crate::terminal_model::{
 use crate::terminal_scrollbar_reveal::ScrollbarReveal;
 use crate::terminal_wheel;
 
+#[path = "terminal_element/kitty_images.rs"]
+mod kitty_images;
+use kitty_images::{TerminalImageLayer, paint_terminal_images};
+
 gpui::actions!(
     ghostex_terminal,
     [TerminalContextMenuCopy, TerminalContextMenuPaste]
@@ -466,6 +470,8 @@ enum TerminalScrollEdge {
 /// Prepaint output consumed by paint; positions are grid coordinates
 /// converted to pixels against the element origin at paint time.
 pub struct TerminalLayout {
+    images: Vec<(crate::ghostty_vt::VtImagePlacement, Arc<RenderImage>)>,
+    cell_size_px: (u32, u32),
     metrics: CellMetrics,
     background: Hsla,
     rows: Vec<Arc<RowLayout>>,
@@ -481,6 +487,8 @@ impl TerminalLayout {
     /// A layout that paints only the pane background: no cells, cursor or overlays.
     fn background_only(metrics: CellMetrics, background: Hsla) -> Self {
         Self {
+            images: Vec::new(),
+            cell_size_px: (1, 1),
             metrics,
             background,
             rows: Vec::new(),
@@ -539,6 +547,7 @@ pub struct TerminalView {
     /// Settings/config-derived size restored by the focused-surface reset shortcut.
     configured_font_size: Pixels,
     frame: Option<TerminalSnapshot>,
+    image_cache: HashMap<u64, Arc<RenderImage>>,
     row_cache: Vec<Option<Arc<RowLayout>>>,
     cached_metrics: Option<CellMetrics>,
     exit: Option<TerminalExit>,
@@ -680,6 +689,8 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) -> Self {
         let configured_font_size = font.size;
+        cx.on_release(|view, cx| kitty_images::release_image_cache(&mut view.image_cache, cx))
+            .detach();
         cx.spawn(async move |this, cx| {
             while let Some(event) = event_rx.next().await {
                 let Ok(()) = this.update(cx, |view, cx| view.handle_event(event, cx)) else {
@@ -722,6 +733,7 @@ impl TerminalView {
             font,
             configured_font_size,
             frame: None,
+            image_cache: HashMap::new(),
             row_cache: Vec::new(),
             cached_metrics: None,
             exit: None,
@@ -778,7 +790,8 @@ impl TerminalView {
     }
 
     /// Release rendering memory after native routing moves this viewer to retirement.
-    pub(crate) fn release_viewer_emulator(&mut self) {
+    pub(crate) fn release_viewer_emulator(&mut self, cx: &mut App) {
+        kitty_images::release_image_cache(&mut self.image_cache, cx);
         self.viewer_retired = true;
         self.input_suppressed = true;
         self.focused = false;
@@ -2650,10 +2663,14 @@ impl TerminalView {
             false
         };
         let grid_changed = !self.zmx_grid_claim_held && !held && (cols, rows) != self.model.size();
+        let pixels_changed = !self.zmx_grid_claim_held
+            && !held
+            && (cell_width_px, cell_height_px) != self.model.cell_size_px();
+        let needs_resize = grid_changed || pixels_changed;
         // A displayed zmx viewer holds its frame across a resize-and-claim
-        // (`zmx_reflow_hold`): the local reflow below is overwritten by the
-        // daemon's post-claim refresh and the TUI's redraw moments later, and
-        // painting all three is the flicker.
+        // (`zmx_reflow_hold`) until the daemon's grid, refresh and TUI redraw
+        // settle. Ordered viewers apply reflow at the daemon's record; legacy
+        // viewers still reflow immediately in model.resize below.
         let hold_reflow = grid_changed && self.zmx_visibility_claims_enabled;
         let hold_blank = match &self.zmx_reflow_hold {
             Some(hold) => hold.blank,
@@ -2661,11 +2678,11 @@ impl TerminalView {
                 Some((frame.cols, frame.rows.len() as u16)) != self.displayed_grid
             }),
         };
-        if self.frame.is_none() || grid_changed {
-            // Resize reflows the vt grid synchronously, so take the fresh
-            // frame now instead of waiting for the SIGWINCH redraw wakeup.
-            // Best-effort: the PTY side can only fail once the child is
-            // gone, and the vt grid (which rendering reads) resizes first.
+        if self.frame.is_none() || needs_resize {
+            // Resize updates the slot and PTY immediately. A negotiated zmx
+            // viewer applies its VT resize on the reader's ordered record;
+            // other viewers reflow synchronously. Read the available frame
+            // when this resize does not need the existing settle hold.
             if !self.zmx_grid_claim_held {
                 let _ = self.model.resize(cols, rows, cell_width_px, cell_height_px);
             }
@@ -2680,7 +2697,7 @@ impl TerminalView {
         }
         self.displayed_grid = Some(self.model.size());
         if (self.pending_zmx_visible_announce && !held)
-            || (self.zmx_visibility_claims_enabled && grid_changed)
+            || (self.zmx_visibility_claims_enabled && needs_resize)
         {
             // The grid above is the real one for this displayed slot, so the
             // visibility claim carries it (CDXC:Terminal
@@ -2719,7 +2736,11 @@ impl TerminalView {
             }
         }
 
+        let images = kitty_images::layout_images(&mut self.image_cache, frame, window, cx);
+
         TerminalLayout {
+            images,
+            cell_size_px: frame.cell_size_px,
             metrics,
             background: rgb_to_hsla(frame.background),
             rows: self
@@ -3571,6 +3592,12 @@ impl TerminalElement {
         ));
         self.paint_background_image(bounds, layout.background, window, cx);
         window.with_content_mask(Some(ContentMask { bounds }), |window| {
+            paint_terminal_images(
+                layout,
+                bounds.origin,
+                TerminalImageLayer::BelowBackground,
+                window,
+            );
             for (row, layout_row) in layout.rows.iter().enumerate() {
                 for span in &layout_row.bg_spans {
                     window.paint_quad(fill(
@@ -3580,6 +3607,7 @@ impl TerminalElement {
                 }
             }
 
+            paint_terminal_images(layout, bounds.origin, TerminalImageLayer::BelowText, window);
             for (row, span) in &layout.selection_spans {
                 window.paint_quad(fill(span_bounds(*row, span.col, span.len), span.color));
             }
@@ -3620,6 +3648,7 @@ impl TerminalElement {
                 }
             }
 
+            paint_terminal_images(layout, bounds.origin, TerminalImageLayer::AboveText, window);
             if let Some((row, span)) = &layout.link_underline {
                 // Hover underline for the link under the pointer, painted
                 // over the glyphs like overlines so it reads on any cell bg.
@@ -4181,6 +4210,13 @@ fn build_row_layout(
             VtCellWide::Narrow | VtCellWide::Wide => {}
         }
         if cell_is_blank(cell) {
+            continue;
+        }
+        // Native Kitty placeholders identify image fragments; their codepoints
+        // and diacritics are consumed by Ghostty's image resolver. The browser
+        // core has no image support, so preserve its existing text behavior.
+        #[cfg(not(target_family = "wasm"))]
+        if cell.base == '\u{10eeee}' {
             continue;
         }
         if cell.width == VtCellWide::Narrow
@@ -4968,7 +5004,10 @@ fn layout_cursor(
 
     // Block cursors invert the glyph they cover so it stays readable.
     let overlay = match (shape, cell) {
-        (TerminalCursorShape::Block, Some(cell)) if !cell_is_blank(cell) => {
+        (TerminalCursorShape::Block, Some(cell))
+            if !cell_is_blank(cell)
+                && (cfg!(target_family = "wasm") || cell.base != '\u{10eeee}') =>
+        {
             let mut text = String::new();
             text.push(cell.base);
             if let Some(combining) = &cell.combining {

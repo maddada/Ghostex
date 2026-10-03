@@ -85,6 +85,26 @@ then regenerate that patch). After a sync always:
   through Ghostty's own `renderer/shadertoy.zig` pipeline (uniform prefix,
   glslang, SPIRV-Cross) and returns the MSL for Ghostex terminal shaders. The
   result is freed with `ghostty_string_free`.
+- **0009-lib-vt-virtual-image-placements** — exposes resolved viewport
+  Unicode-placeholder runs through `ghostty_kitty_graphics_virtual_placements`.
+  Reuses Ghostty's placeholder iterator and aspect-fit calculation, preserving
+  fractional source coverage for enlarged images. The native integer helper
+  retains its original result. The C result contains owned geometry and image
+  IDs, with no borrowed pins. The
+  native GPUI terminal renderer uses this API. Ghostty currently disables
+  Kitty graphics on the freestanding browser target, so the shared web
+  renderer builds with an empty image state. Relative placements whose
+  parent is virtual are not included.
+- **0010-lib-vt-image-resource-limits** — adds per-terminal maximum image
+  dimension and decoded pixel-count options. Oversized declared raw dimensions
+  are rejected before buffering; PNG output is checked before retention. The
+  core's inherited transmission/decompression ceiling remains 400 MiB, while
+  the host decoder rejects encoded PNG input above 16 MiB after buffering. Limits survive RIS
+  and screen changes; standalone Ghostty keeps its existing defaults. The
+  native GPUI bridge sets 4096 per side and 4 Mi pixels (16 MiB RGBA8). Its
+  PNG decoder separately allows 32 MiB of decode working allocation for
+  16-bit source pixels before conversion to RGBA8. These are
+  application resource limits, not a query of the GPU's texture capacity.
 
 ## Rebased in the 2026-09-27 sync
 

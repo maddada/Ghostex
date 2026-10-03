@@ -1703,6 +1703,26 @@ typedef enum GHOSTTY_ENUM_TYPED {
    * Input type: GhosttyTerminalRenderHoldFn
    */
   GHOSTTY_TERMINAL_OPT_RENDER_HOLD = 41,
+  /**
+   * Maximum width or height of newly transmitted Kitty images. Applies to
+   * direct pixels and decoded PNGs. Existing images and in-progress loads
+   * are unaffected. Preserved across RIS and screen switches.
+   *
+   * Must be positive and no greater than the built-in default of 10000.
+   * A NULL value pointer restores that default.
+   * Input type: uint32_t*
+   */
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_DIMENSION = 42,
+  /**
+   * Maximum decoded pixel count of newly transmitted Kitty images,
+   * independent of the source pixel format. Preserved across RIS and
+   * screen switches. Existing images and in-progress loads are unaffected.
+   *
+   * Must be positive and no greater than the built-in default of 100000000.
+   * A NULL value pointer restores that default.
+   * Input type: uint64_t*
+   */
+  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_PIXELS = 43,
   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
 } GhosttyTerminalOption;
 

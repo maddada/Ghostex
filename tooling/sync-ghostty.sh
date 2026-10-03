@@ -37,6 +37,12 @@ patch_files() {
 	0008-embed-custom-shader-msl-api)
 		echo "src/apprt/embedded.zig"
 		;;
+	0009-lib-vt-virtual-image-placements)
+		echo "include/ghostty/vt/kitty_graphics.h src/lib_vt.zig src/terminal/c/main.zig src/terminal/c/kitty_graphics.zig src/terminal/kitty/graphics_unicode.zig"
+		;;
+	0010-lib-vt-image-resource-limits)
+		echo "include/ghostty/vt/terminal.h src/terminal/c/terminal.zig src/terminal/kitty/graphics_image.zig"
+		;;
 	*)
 		echo "unknown patch: $1" >&2
 		return 1
@@ -52,6 +58,8 @@ PATCH_NAMES=(
 	0006-mouse-cmd-click-encode-and-mod-dedupe
 	0007-teardown-deadlock-hardening
 	0008-embed-custom-shader-msl-api
+	0009-lib-vt-virtual-image-placements
+	0010-lib-vt-image-resource-limits
 )
 
 pinned_commit() {

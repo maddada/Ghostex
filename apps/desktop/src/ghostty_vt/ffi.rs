@@ -16,6 +16,88 @@ pub type GhosttyTerminal = *mut c_void;
 pub type GhosttyRenderState = *mut c_void;
 pub type GhosttyRenderStateRowIterator = *mut c_void;
 pub type GhosttyRenderStateRowCells = *mut c_void;
+pub type GhosttyKittyGraphics = *mut c_void;
+pub type GhosttyKittyGraphicsImage = *const c_void;
+pub type GhosttyKittyGraphicsPlacementIterator = *mut c_void;
+pub const GHOSTTY_TERMINAL_DATA_KITTY_GRAPHICS: GhosttyTerminalData = 30;
+pub const GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_DIMENSION: GhosttyTerminalOption = 42;
+pub const GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_PIXELS: GhosttyTerminalOption = 43;
+pub const GHOSTTY_SYS_OPT_DECODE_PNG: c_int = 1;
+pub const GHOSTTY_KITTY_GRAPHICS_DATA_PLACEMENT_ITERATOR: c_int = 1;
+pub const GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IMAGE_ID: c_int = 1;
+pub const GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL: c_int = 3;
+pub const GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_X_OFFSET: c_int = 4;
+pub const GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Y_OFFSET: c_int = 5;
+pub const GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Z: c_int = 12;
+pub const GHOSTTY_KITTY_IMAGE_DATA_WIDTH: c_int = 3;
+pub const GHOSTTY_KITTY_IMAGE_DATA_HEIGHT: c_int = 4;
+pub const GHOSTTY_KITTY_IMAGE_DATA_FORMAT: c_int = 5;
+pub const GHOSTTY_KITTY_IMAGE_DATA_DATA_PTR: c_int = 7;
+pub const GHOSTTY_KITTY_IMAGE_DATA_DATA_LEN: c_int = 8;
+pub const GHOSTTY_KITTY_IMAGE_DATA_GENERATION: c_int = 9;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_RGB: c_int = 0;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_RGBA: c_int = 1;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_GRAY_ALPHA: c_int = 3;
+pub const GHOSTTY_KITTY_IMAGE_FORMAT_GRAY: c_int = 4;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GhosttyKittyGraphicsPlacementRenderInfo {
+    pub size: usize,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+    pub grid_cols: u32,
+    pub grid_rows: u32,
+    pub viewport_col: i32,
+    pub viewport_row: i32,
+    pub viewport_visible: bool,
+    pub source_x: u32,
+    pub source_y: u32,
+    pub source_width: u32,
+    pub source_height: u32,
+}
+
+impl Default for GhosttyKittyGraphicsPlacementRenderInfo {
+    fn default() -> Self {
+        // All-zero scalar fields are valid; size initializes the sized ABI.
+        let mut value: Self = unsafe { std::mem::zeroed() };
+        value.size = std::mem::size_of::<Self>();
+        value
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GhosttyKittyGraphicsVirtualPlacement {
+    pub size: usize,
+    pub image_id: u32,
+    pub viewport_col: u16,
+    pub viewport_row: u16,
+    pub offset_x: u32,
+    pub offset_y: u32,
+    pub dest_width: u32,
+    pub dest_height: u32,
+    pub source_x: f64,
+    pub source_y: f64,
+    pub source_width: f64,
+    pub source_height: f64,
+}
+
+impl Default for GhosttyKittyGraphicsVirtualPlacement {
+    fn default() -> Self {
+        let mut value: Self = unsafe { std::mem::zeroed() };
+        value.size = std::mem::size_of::<Self>();
+        value
+    }
+}
+
+#[repr(C)]
+pub struct GhosttySysImage {
+    pub width: u32,
+    pub height: u32,
+    pub data: *mut u8,
+    pub data_len: usize,
+}
 
 /// Opaque cell value (`GhosttyCell` in screen.h).
 pub type GhosttyCell = u64;
@@ -667,6 +749,49 @@ impl GhosttyRenderStateColors {
 }
 
 unsafe extern "C" {
+    pub fn ghostty_sys_set(option: c_int, value: *const c_void) -> GhosttyResult;
+    pub fn ghostty_alloc(allocator: *const c_void, len: usize) -> *mut u8;
+    pub fn ghostty_kitty_graphics_get(
+        graphics: GhosttyKittyGraphics,
+        data: c_int,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_image(
+        graphics: GhosttyKittyGraphics,
+        image_id: u32,
+    ) -> GhosttyKittyGraphicsImage;
+    pub fn ghostty_kitty_graphics_image_get(
+        image: GhosttyKittyGraphicsImage,
+        data: c_int,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_placement_iterator_new(
+        allocator: *const c_void,
+        out: *mut GhosttyKittyGraphicsPlacementIterator,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_placement_iterator_free(
+        iterator: GhosttyKittyGraphicsPlacementIterator,
+    );
+    pub fn ghostty_kitty_graphics_placement_next(
+        iterator: GhosttyKittyGraphicsPlacementIterator,
+    ) -> bool;
+    pub fn ghostty_kitty_graphics_placement_get(
+        iterator: GhosttyKittyGraphicsPlacementIterator,
+        data: c_int,
+        out: *mut c_void,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_placement_render_info(
+        iterator: GhosttyKittyGraphicsPlacementIterator,
+        image: GhosttyKittyGraphicsImage,
+        terminal: GhosttyTerminal,
+        out: *mut GhosttyKittyGraphicsPlacementRenderInfo,
+    ) -> GhosttyResult;
+    pub fn ghostty_kitty_graphics_virtual_placements(
+        terminal: GhosttyTerminal,
+        out: *mut GhosttyKittyGraphicsVirtualPlacement,
+        capacity: usize,
+        out_len: *mut usize,
+    ) -> GhosttyResult;
     pub fn ghostty_color_palette_default(out: *mut GhosttyColorRgb);
     pub fn ghostty_terminal_new(
         allocator: *const c_void,

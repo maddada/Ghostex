@@ -127,7 +127,22 @@ pub const Placement = struct {
         PlacementMissingPlacement,
     };
 
-    /// Take this virtual placement and convert it to a render placement.
+    /// Geometry for renderers that map a cropped image by an affine transform.
+    /// A fragment can cover less than one source pixel when an image is enlarged.
+    /// Keep that coverage until sampling instead of rounding it to zero.
+    pub const PreciseRenderPlacement = struct {
+        top_left: terminal.Pin,
+        offset_x: u32 = 0,
+        offset_y: u32 = 0,
+        source_x: f64 = 0,
+        source_y: f64 = 0,
+        source_width: f64 = 0,
+        source_height: f64 = 0,
+        dest_width: u32 = 0,
+        dest_height: u32 = 0,
+    };
+
+    /// Native renderer compatibility: retain its existing integer geometry.
     pub fn renderPlacement(
         self: *const Placement,
         storage: *const ImageStorage,
@@ -135,6 +150,28 @@ pub const Placement = struct {
         cell_width: u32,
         cell_height: u32,
     ) Error!RenderPlacement {
+        const p = try self.renderPlacementPrecise(storage, img, cell_width, cell_height);
+        return .{
+            .top_left = p.top_left,
+            .offset_x = p.offset_x,
+            .offset_y = p.offset_y,
+            .source_x = @intFromFloat(@round(p.source_x)),
+            .source_y = @intFromFloat(@round(p.source_y)),
+            .source_width = @intFromFloat(@round(p.source_width)),
+            .source_height = @intFromFloat(@round(p.source_height)),
+            .dest_width = p.dest_width,
+            .dest_height = p.dest_height,
+        };
+    }
+
+    /// Take this virtual placement and preserve its fractional source coverage.
+    pub fn renderPlacementPrecise(
+        self: *const Placement,
+        storage: *const ImageStorage,
+        img: *const Image,
+        cell_width: u32,
+        cell_height: u32,
+    ) Error!PreciseRenderPlacement {
         // In this function, there is a variable naming convention to try
         // to make it slightly less confusing. The prefix will tell you what
         // coordinate/size space a variable lives in:
@@ -341,10 +378,10 @@ pub const Placement = struct {
             .top_left = self.pin,
             .offset_x = @intFromFloat(@round(p_dest.x_offset)),
             .offset_y = @intFromFloat(@round(p_dest.y_offset)),
-            .source_x = @intFromFloat(@round(img_scale_source.x)),
-            .source_y = @intFromFloat(@round(img_scale_source.y)),
-            .source_width = @intFromFloat(@round(img_scale_source.width)),
-            .source_height = @intFromFloat(@round(img_scale_source.height)),
+            .source_x = img_scale_source.x,
+            .source_y = img_scale_source.y,
+            .source_width = img_scale_source.width,
+            .source_height = img_scale_source.height,
             .dest_width = @intFromFloat(@round(p_dest.width)),
             .dest_height = @intFromFloat(@round(p_dest.height)),
         };

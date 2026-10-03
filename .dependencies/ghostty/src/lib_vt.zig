@@ -400,6 +400,7 @@ comptime {
             @export(&c.kitty_graphics_placement_viewport_pos, .{ .name = "ghostty_kitty_graphics_placement_viewport_pos" });
             @export(&c.kitty_graphics_placement_source_rect, .{ .name = "ghostty_kitty_graphics_placement_source_rect" });
             @export(&c.kitty_graphics_placement_render_info, .{ .name = "ghostty_kitty_graphics_placement_render_info" });
+            @export(&c.kitty_graphics_virtual_placements, .{ .name = "ghostty_kitty_graphics_virtual_placements" });
         }
         if (features.grid_introspection) {
             @export(&c.grid_ref_cell, .{ .name = "ghostty_grid_ref_cell" });

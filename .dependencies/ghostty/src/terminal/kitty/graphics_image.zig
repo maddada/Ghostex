@@ -16,7 +16,7 @@ const LimitedAllocator = @import("../../datastruct/main.zig").LimitedAllocator;
 const log = std.log.scoped(.kitty_gfx);
 
 /// Maximum width or height of an image. Taken directly from Kitty.
-const max_dimension = 10000;
+const default_max_dimension = 10000;
 
 /// Maximum size in bytes, taken from Kitty.
 const max_size = 400 * 1024 * 1024; // 400MB
@@ -55,6 +55,10 @@ pub const LoadingImage = struct {
     /// temporary directory transmission is disabled).
     temporary_directory: ?[]const u8,
 
+    /// Resource limits captured when the first chunk was received.
+    max_dimension: u32 = default_max_dimension,
+    max_pixels: u64 = default_max_dimension * default_max_dimension,
+
     pub const FrameContext = struct {
         /// The frame parameters from the initial a=f command. Chunked
         /// continuations only contribute payload bytes; all parameters
@@ -85,6 +89,11 @@ pub const LoadingImage = struct {
             disabled: void,
         },
         shared_memory: bool,
+
+        /// Maximum width/height and decoded pixel count. Defaults preserve
+        /// the standalone terminal's limits; embedders may lower them.
+        max_dimension: u32 = default_max_dimension,
+        max_pixels: u64 = default_max_dimension * default_max_dimension,
 
         /// Enables all filesystem-related image transmission mediums. `path`
         /// is the temporary directory to expect files in when files are
@@ -121,6 +130,16 @@ pub const LoadingImage = struct {
         // Validated here rather than while parsing so the response can
         // carry the image id, matching Kitty's initialize_load_data.
         if (t.format_unknown) return error.UnsupportedFormat;
+        // Preserve standalone Ghostty's completion-time validation. A host
+        // that lowers the defaults can refuse oversized raw loads up front.
+        if ((limits.max_dimension < default_max_dimension or
+            limits.max_pixels < default_max_dimension * default_max_dimension) and
+            t.format != .png and
+            (t.width > limits.max_dimension or t.height > limits.max_dimension or
+                @as(u64, t.width) * t.height > limits.max_pixels))
+        {
+            return error.DimensionsTooLarge;
+        }
         var result: LoadingImage = .{
             .image = .{
                 .id = t.image_id,
@@ -143,6 +162,8 @@ pub const LoadingImage = struct {
                 .enabled => |d| d.directory,
                 .disabled => null,
             },
+            .max_dimension = limits.max_dimension,
+            .max_pixels = limits.max_pixels,
         };
 
         // Special case for the direct medium, we just add the chunk directly.
@@ -295,8 +316,8 @@ pub const LoadingImage = struct {
             // Validate before multiplying because protocol dimensions are
             // u32 values and may otherwise overflow in safe builds.
             .gray, .gray_alpha, .rgb, .rgba => size: {
-                if (self.image.width > max_dimension or
-                    self.image.height > max_dimension)
+                if (self.image.width > self.max_dimension or
+                    self.image.height > self.max_dimension)
                 {
                     return error.DimensionsTooLarge;
                 }
@@ -564,7 +585,11 @@ pub const LoadingImage = struct {
 
         // Validate our dimensions.
         if (img.width == 0 or img.height == 0) return error.DimensionsRequired;
-        if (img.width > max_dimension or img.height > max_dimension) return error.DimensionsTooLarge;
+        if (img.width > self.max_dimension or img.height > self.max_dimension or
+            @as(u64, img.width) * img.height > self.max_pixels)
+        {
+            return error.DimensionsTooLarge;
+        }
 
         // Data length must be what we expect.
         const bpp = command.Transmission.formatBpp(img.format);
@@ -673,6 +698,13 @@ pub const LoadingImage = struct {
                 return error.OutOfMemory,
         };
         defer decode_alloc.free(result.data);
+
+        // Reject before copying decoder output into retained image storage.
+        if (result.width > self.max_dimension or result.height > self.max_dimension or
+            @as(u64, result.width) * result.height > self.max_pixels)
+        {
+            return error.DimensionsTooLarge;
+        }
 
         if (result.data.len > max_size) {
             log.warn("png image too large size={} max_size={}", .{ result.data.len, max_size });
@@ -1048,7 +1080,7 @@ test "image load with image too wide" {
     var cmd: command.Command = .{
         .control = .{ .transmit = .{
             .format = .rgb,
-            .width = max_dimension + 1,
+            .width = default_max_dimension + 1,
             .height = 1,
             .image_id = 31,
         } },
@@ -1068,7 +1100,7 @@ test "image load with image too tall" {
     var cmd: command.Command = .{
         .control = .{ .transmit = .{
             .format = .rgb,
-            .height = max_dimension + 1,
+            .height = default_max_dimension + 1,
             .width = 1,
             .image_id = 31,
         } },
