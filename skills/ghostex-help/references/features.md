@@ -1233,8 +1233,10 @@ macOS; Linux and Intel Mac runtime validation is outstanding. Some image formats
 and identity modes still need an app redraw after reopening. Windows session
 restoration and browser terminal images are not supported. Sixel and iTerm2
 graphics are not supported. Images are limited to 4096 pixels per side and
-4,194,304 pixels each. Large batches of visible artwork in one terminal may
-be omitted until some images leave the screen and free space.
+4,194,304 pixels each, within a shared 10 MB image-storage limit per screen.
+An image larger than that storage limit is rejected; adding more images can
+evict the oldest ones. Large batches of visible artwork in one terminal may
+also be omitted until some images leave the screen and free space.
 
 Terminals follow the app theme by default. The Theme page in Settings holds
 Appearance, and its Advanced part holds Chat theme and Terminal theme.
