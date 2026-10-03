@@ -5004,7 +5004,10 @@ fn layout_cursor(
 
     // Block cursors invert the glyph they cover so it stays readable.
     let overlay = match (shape, cell) {
-        (TerminalCursorShape::Block, Some(cell)) if !cell_is_blank(cell) => {
+        (TerminalCursorShape::Block, Some(cell))
+            if !cell_is_blank(cell)
+                && (cfg!(target_family = "wasm") || cell.base != '\u{10eeee}') =>
+        {
             let mut text = String::new();
             text.push(cell.base);
             if let Some(combining) = &cell.combining {

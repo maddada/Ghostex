@@ -8,6 +8,12 @@ use std::{
     sync::Arc,
 };
 
+// Bound this view's BGRA uploads separately from Ghostty's retained pixels.
+// Count the replicated border too; retain visible cached generations and
+// omit new uploads over either limit until space is freed offscreen.
+const MAX_IMAGE_CACHE_BYTES: usize = 64 * 1024 * 1024;
+const MAX_IMAGE_CACHE_ENTRIES: usize = 256;
+
 pub(super) fn release_image_cache(cache: &mut HashMap<u64, Arc<RenderImage>>, cx: &mut App) {
     if cache.is_empty() {
         return;
@@ -36,10 +42,25 @@ pub(super) fn layout_images(
         cx.drop_image(Arc::clone(image), Some(window));
         false
     });
+    let mut cache_bytes: usize = cache
+        .values()
+        .filter_map(|image| image.as_bytes(0))
+        .map(|pixels| pixels.len())
+        .sum();
     frame
         .images
         .iter()
-        .map(|placement| {
+        .filter_map(|placement| {
+            if !cache.contains_key(&placement.image.generation) {
+                let source = &placement.image;
+                let bytes = (source.width as usize + 2) * (source.height as usize + 2) * 4;
+                if cache.len() >= MAX_IMAGE_CACHE_ENTRIES
+                    || bytes > MAX_IMAGE_CACHE_BYTES.saturating_sub(cache_bytes)
+                {
+                    return None;
+                }
+                cache_bytes += bytes;
+            }
             let image = cache.entry(placement.image.generation).or_insert_with(|| {
                 // A duplicated one-pixel border gives linear filtering the
                 // same edge clamp as Ghostty's standalone image textures.
@@ -56,7 +77,7 @@ pub(super) fn layout_images(
                     });
                 Arc::new(RenderImage::new(vec![Frame::new(pixels)]))
             });
-            (placement.clone(), Arc::clone(image))
+            Some((placement.clone(), Arc::clone(image)))
         })
         .collect()
 }
