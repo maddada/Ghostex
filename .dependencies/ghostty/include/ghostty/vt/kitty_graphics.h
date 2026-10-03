@@ -862,6 +862,54 @@ GHOSTTY_API GhosttyResult ghostty_kitty_graphics_placement_render_info(
     GhosttyTerminal terminal,
     GhosttyKittyGraphicsPlacementRenderInfo* out_info);
 
+/**
+ * A resolved Unicode-placeholder run in the current viewport.
+ *
+ * Initialize every output slot with GHOSTTY_INIT_SIZED before use.
+ * Destination offsets and dimensions are device pixels; source coordinates and dimensions
+ * are source-image pixels, retaining fractional coverage when enlarged.
+ * These runs use Ghostty's below-text layer (z = -1), matching its native renderer.
+ *
+ * @ingroup kitty_graphics
+ */
+typedef struct {
+    size_t size;
+    uint32_t image_id;
+    uint16_t viewport_col;
+    uint16_t viewport_row;
+    uint32_t offset_x;
+    uint32_t offset_y;
+    uint32_t dest_width;
+    uint32_t dest_height;
+    double source_x;
+    double source_y;
+    double source_width;
+    double source_height;
+} GhosttyKittyGraphicsVirtualPlacement;
+
+/**
+ * Resolve visible Unicode-placeholder runs with the terminal's own
+ * image-ID decoding, run inheritance, placement lookup, and crop math.
+ *
+ * No pointers into the terminal are returned. Image pixels can be queried
+ * separately by image_id while the terminal remains unmodified.
+ *
+ * out may be NULL when capacity is zero. out_len reports the required
+ * number of slots; OUT_OF_SPACE means the first capacity entries were
+ * written and the caller can retry with a larger initialized buffer.
+ * Zero cell pixel dimensions yield an empty list. Relative placements
+ * whose parent is virtual are not included.
+ *
+ * @return GHOSTTY_SUCCESS, GHOSTTY_OUT_OF_SPACE, GHOSTTY_INVALID_VALUE,
+ *         or GHOSTTY_NO_VALUE when Kitty graphics is disabled at build time.
+ * @ingroup kitty_graphics
+ */
+GHOSTTY_API GhosttyResult ghostty_kitty_graphics_virtual_placements(
+    GhosttyTerminal terminal,
+    GhosttyKittyGraphicsVirtualPlacement* out,
+    size_t capacity,
+    size_t* out_len);
+
 /** @} */
 
 #ifdef __cplusplus

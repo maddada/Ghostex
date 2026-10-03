@@ -626,7 +626,7 @@ impl GhostexGpuiApp {
         if ready {
             Self::detach_gpui_terminal_view(view, cx);
         } else {
-            view.update(cx, |view, _| view.release_viewer_emulator());
+            view.update(cx, |view, cx| view.release_viewer_emulator(cx));
             let observation = cx.observe(&view, |_, _, cx| cx.notify());
             self.retiring_gpui_terminal_viewers.insert(
                 owner,

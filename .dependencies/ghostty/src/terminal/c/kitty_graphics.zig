@@ -585,6 +585,73 @@ pub fn placement_render_info(
     return .success;
 }
 
+/// C: GhosttyKittyGraphicsVirtualPlacement
+pub const VirtualPlacement = extern struct {
+    size: usize = @sizeOf(VirtualPlacement),
+    image_id: u32 = 0,
+    viewport_col: u16 = 0,
+    viewport_row: u16 = 0,
+    offset_x: u32 = 0,
+    offset_y: u32 = 0,
+    dest_width: u32 = 0,
+    dest_height: u32 = 0,
+    source_x: f64 = 0,
+    source_y: f64 = 0,
+    source_width: f64 = 0,
+    source_height: f64 = 0,
+};
+
+/// Resolve viewport placeholder runs using the terminal's own ID, run,
+/// placement-target, and aspect-fit logic. No borrowed pins escape the call.
+pub fn virtual_placements(
+    terminal_: terminal_c.Terminal,
+    out: ?[*]VirtualPlacement,
+    capacity: usize,
+    out_len: ?*usize,
+) callconv(lib.calling_conv) Result {
+    if (comptime !build_options.kitty_graphics) return .no_value;
+    const wrapper = terminal_ orelse return .invalid_value;
+    const len = out_len orelse return .invalid_value;
+    len.* = 0;
+    if (capacity > 0 and out == null) return .invalid_value;
+    const t = wrapper.terminal;
+    const cell_width = t.width_px / t.cols;
+    const cell_height = t.height_px / t.rows;
+    // The renderer may ask before its first pixel-size update. The shared
+    // virtual-placement helper divides by these sizes for implicit grids.
+    if (cell_width == 0 or cell_height == 0) return .success;
+    const storage = &t.screens.active.kitty_images;
+    const top = t.screens.active.pages.getTopLeft(.viewport);
+    const bottom = t.screens.active.pages.getBottomRight(.viewport) orelse return .success;
+    var iter = @import("../kitty/graphics_unicode.zig").placementIterator(top, bottom);
+    while (iter.next()) |p| {
+        const img = storage.imageById(p.image_id) orelse continue;
+        if (img.data.isPending() or img.width == 0 or img.height == 0) continue;
+        const rp = p.renderPlacementPrecise(storage, &img, cell_width, cell_height) catch continue;
+        if (rp.dest_width == 0 or rp.dest_height == 0) continue;
+        const vp = t.screens.active.pages.pointFromPin(.viewport, rp.top_left) orelse continue;
+        if (len.* < capacity) {
+            const slot = &out.?[len.*];
+            if (slot.size < @sizeOf(VirtualPlacement)) return .invalid_value;
+            slot.* = .{
+                .image_id = p.image_id,
+                .viewport_col = vp.viewport.x,
+                .viewport_row = @intCast(vp.viewport.y),
+                .offset_x = rp.offset_x,
+                .offset_y = rp.offset_y,
+                .dest_width = rp.dest_width,
+                .dest_height = rp.dest_height,
+                .source_x = rp.source_x,
+                .source_y = rp.source_y,
+                .source_width = rp.source_width,
+                .source_height = rp.source_height,
+            };
+        }
+        len.* += 1;
+    }
+    return if (len.* > capacity) .out_of_space else .success;
+}
+
 /// Compute viewport-relative position of a placement.
 ///
 /// Converts the placement's internal pin to viewport-relative column

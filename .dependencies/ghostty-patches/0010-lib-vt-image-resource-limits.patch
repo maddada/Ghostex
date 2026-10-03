@@ -1,0 +1,194 @@
+--- a/include/ghostty/vt/terminal.h
++++ b/include/ghostty/vt/terminal.h
+@@ -1703,6 +1703,26 @@
+    * Input type: GhosttyTerminalRenderHoldFn
+    */
+   GHOSTTY_TERMINAL_OPT_RENDER_HOLD = 41,
++  /**
++   * Maximum width or height of newly transmitted Kitty images. Applies to
++   * direct pixels and decoded PNGs. Existing images and in-progress loads
++   * are unaffected. Preserved across RIS and screen switches.
++   *
++   * Must be positive and no greater than the built-in default of 10000.
++   * A NULL value pointer restores that default.
++   * Input type: uint32_t*
++   */
++  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_DIMENSION = 42,
++  /**
++   * Maximum decoded pixel count of newly transmitted Kitty images,
++   * independent of the source pixel format. Preserved across RIS and
++   * screen switches. Existing images and in-progress loads are unaffected.
++   *
++   * Must be positive and no greater than the built-in default of 100000000.
++   * A NULL value pointer restores that default.
++   * Input type: uint64_t*
++   */
++  GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MAX_PIXELS = 43,
+   GHOSTTY_TERMINAL_OPT_MAX_VALUE = GHOSTTY_ENUM_MAX_VALUE,
+ } GhosttyTerminalOption;
+ 
+--- a/src/terminal/c/terminal.zig
++++ b/src/terminal/c/terminal.zig
+@@ -14,6 +14,7 @@
+ const apc = @import("../apc.zig");
+ const kitty = @import("../kitty/key.zig");
+ const kitty_gfx_c = @import("kitty_graphics.zig");
++const LoadingImage = @import("../kitty/graphics_image.zig").LoadingImage;
+ const modes = @import("../modes.zig");
+ const point = @import("../point.zig");
+ const size = @import("../size.zig");
+@@ -1187,6 +1188,8 @@
+     clipboard_write_max_bytes = 39,
+     resize_pull_scrollback = 40,
+     render_hold = 41,
++    kitty_image_max_dimension = 42,
++    kitty_image_max_pixels = 43,
+ 
+     /// Input type expected for setting the option.
+     pub fn InType(comptime self: Option) type {
+@@ -1211,6 +1214,8 @@
+             .color_foreground, .color_background, .color_cursor => ?*const color.RGB.C,
+             .color_palette => ?*const color.PaletteC,
+             .kitty_image_storage_limit => ?*const u64,
++            .kitty_image_max_dimension => ?*const u32,
++            .kitty_image_max_pixels => ?*const u64,
+             .kitty_image_medium_file,
+             .kitty_image_medium_shared_mem,
+             .glyph_protocol,
+@@ -1345,6 +1350,20 @@
+                 const screen = entry.value.*;
+                 screen.kitty_images.setLimit(screen.io, screen.alloc, screen, limit);
+             }
++        },
++        .kitty_image_max_dimension => {
++            if (comptime !build_options.kitty_graphics) return .success;
++            const val = if (value) |v| v.* else LoadingImage.Limits.direct.max_dimension;
++            if (val == 0 or val > LoadingImage.Limits.direct.max_dimension) return .invalid_value;
++            var it = wrapper.terminal.screens.all.iterator();
++            while (it.next()) |entry| entry.value.*.kitty_images.image_limits.max_dimension = val;
++        },
++        .kitty_image_max_pixels => {
++            if (comptime !build_options.kitty_graphics) return .success;
++            const val = if (value) |v| v.* else LoadingImage.Limits.direct.max_pixels;
++            if (val == 0 or val > LoadingImage.Limits.direct.max_pixels) return .invalid_value;
++            var it = wrapper.terminal.screens.all.iterator();
++            while (it.next()) |entry| entry.value.*.kitty_images.image_limits.max_pixels = val;
+         },
+         .kitty_image_medium_file,
+         .kitty_image_medium_shared_mem,
+--- a/src/terminal/kitty/graphics_image.zig
++++ b/src/terminal/kitty/graphics_image.zig
+@@ -16,7 +16,7 @@
+ const log = std.log.scoped(.kitty_gfx);
+ 
+ /// Maximum width or height of an image. Taken directly from Kitty.
+-const max_dimension = 10000;
++const default_max_dimension = 10000;
+ 
+ /// Maximum size in bytes, taken from Kitty.
+ const max_size = 400 * 1024 * 1024; // 400MB
+@@ -54,6 +54,10 @@
+     /// The temporary directory for file transmission (null means that
+     /// temporary directory transmission is disabled).
+     temporary_directory: ?[]const u8,
++
++    /// Resource limits captured when the first chunk was received.
++    max_dimension: u32 = default_max_dimension,
++    max_pixels: u64 = default_max_dimension * default_max_dimension,
+ 
+     pub const FrameContext = struct {
+         /// The frame parameters from the initial a=f command. Chunked
+@@ -86,6 +90,11 @@
+         },
+         shared_memory: bool,
+ 
++        /// Maximum width/height and decoded pixel count. Defaults preserve
++        /// the standalone terminal's limits; embedders may lower them.
++        max_dimension: u32 = default_max_dimension,
++        max_pixels: u64 = default_max_dimension * default_max_dimension,
++
+         /// Enables all filesystem-related image transmission mediums. `path`
+         /// is the temporary directory to expect files in when files are
+         /// transmitted using said medium.
+@@ -121,6 +130,16 @@
+         // Validated here rather than while parsing so the response can
+         // carry the image id, matching Kitty's initialize_load_data.
+         if (t.format_unknown) return error.UnsupportedFormat;
++        // Preserve standalone Ghostty's completion-time validation. A host
++        // that lowers the defaults can refuse oversized raw loads up front.
++        if ((limits.max_dimension < default_max_dimension or
++            limits.max_pixels < default_max_dimension * default_max_dimension) and
++            t.format != .png and
++            (t.width > limits.max_dimension or t.height > limits.max_dimension or
++                @as(u64, t.width) * t.height > limits.max_pixels))
++        {
++            return error.DimensionsTooLarge;
++        }
+         var result: LoadingImage = .{
+             .image = .{
+                 .id = t.image_id,
+@@ -143,6 +162,8 @@
+                 .enabled => |d| d.directory,
+                 .disabled => null,
+             },
++            .max_dimension = limits.max_dimension,
++            .max_pixels = limits.max_pixels,
+         };
+ 
+         // Special case for the direct medium, we just add the chunk directly.
+@@ -295,8 +316,8 @@
+             // Validate before multiplying because protocol dimensions are
+             // u32 values and may otherwise overflow in safe builds.
+             .gray, .gray_alpha, .rgb, .rgba => size: {
+-                if (self.image.width > max_dimension or
+-                    self.image.height > max_dimension)
++                if (self.image.width > self.max_dimension or
++                    self.image.height > self.max_dimension)
+                 {
+                     return error.DimensionsTooLarge;
+                 }
+@@ -564,7 +585,11 @@
+ 
+         // Validate our dimensions.
+         if (img.width == 0 or img.height == 0) return error.DimensionsRequired;
+-        if (img.width > max_dimension or img.height > max_dimension) return error.DimensionsTooLarge;
++        if (img.width > self.max_dimension or img.height > self.max_dimension or
++            @as(u64, img.width) * img.height > self.max_pixels)
++        {
++            return error.DimensionsTooLarge;
++        }
+ 
+         // Data length must be what we expect.
+         const bpp = command.Transmission.formatBpp(img.format);
+@@ -674,6 +699,13 @@
+         };
+         defer decode_alloc.free(result.data);
+ 
++        // Reject before copying decoder output into retained image storage.
++        if (result.width > self.max_dimension or result.height > self.max_dimension or
++            @as(u64, result.width) * result.height > self.max_pixels)
++        {
++            return error.DimensionsTooLarge;
++        }
++
+         if (result.data.len > max_size) {
+             log.warn("png image too large size={} max_size={}", .{ result.data.len, max_size });
+             return error.InvalidData;
+@@ -1048,7 +1080,7 @@
+     var cmd: command.Command = .{
+         .control = .{ .transmit = .{
+             .format = .rgb,
+-            .width = max_dimension + 1,
++            .width = default_max_dimension + 1,
+             .height = 1,
+             .image_id = 31,
+         } },
+@@ -1068,7 +1100,7 @@
+     var cmd: command.Command = .{
+         .control = .{ .transmit = .{
+             .format = .rgb,
+-            .height = max_dimension + 1,
++            .height = default_max_dimension + 1,
+             .width = 1,
+             .image_id = 31,
+         } },

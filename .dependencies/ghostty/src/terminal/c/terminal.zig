@@ -14,6 +14,7 @@ const PageList = @import("../PageList.zig");
 const apc = @import("../apc.zig");
 const kitty = @import("../kitty/key.zig");
 const kitty_gfx_c = @import("kitty_graphics.zig");
+const LoadingImage = @import("../kitty/graphics_image.zig").LoadingImage;
 const modes = @import("../modes.zig");
 const point = @import("../point.zig");
 const size = @import("../size.zig");
@@ -1187,6 +1188,8 @@ pub const Option = enum(c_int) {
     clipboard_write_max_bytes = 39,
     resize_pull_scrollback = 40,
     render_hold = 41,
+    kitty_image_max_dimension = 42,
+    kitty_image_max_pixels = 43,
 
     /// Input type expected for setting the option.
     pub fn InType(comptime self: Option) type {
@@ -1211,6 +1214,8 @@ pub const Option = enum(c_int) {
             .color_foreground, .color_background, .color_cursor => ?*const color.RGB.C,
             .color_palette => ?*const color.PaletteC,
             .kitty_image_storage_limit => ?*const u64,
+            .kitty_image_max_dimension => ?*const u32,
+            .kitty_image_max_pixels => ?*const u64,
             .kitty_image_medium_file,
             .kitty_image_medium_shared_mem,
             .glyph_protocol,
@@ -1345,6 +1350,20 @@ fn setTyped(
                 const screen = entry.value.*;
                 screen.kitty_images.setLimit(screen.io, screen.alloc, screen, limit);
             }
+        },
+        .kitty_image_max_dimension => {
+            if (comptime !build_options.kitty_graphics) return .success;
+            const val = if (value) |v| v.* else LoadingImage.Limits.direct.max_dimension;
+            if (val == 0 or val > LoadingImage.Limits.direct.max_dimension) return .invalid_value;
+            var it = wrapper.terminal.screens.all.iterator();
+            while (it.next()) |entry| entry.value.*.kitty_images.image_limits.max_dimension = val;
+        },
+        .kitty_image_max_pixels => {
+            if (comptime !build_options.kitty_graphics) return .success;
+            const val = if (value) |v| v.* else LoadingImage.Limits.direct.max_pixels;
+            if (val == 0 or val > LoadingImage.Limits.direct.max_pixels) return .invalid_value;
+            var it = wrapper.terminal.screens.all.iterator();
+            while (it.next()) |entry| entry.value.*.kitty_images.image_limits.max_pixels = val;
         },
         .kitty_image_medium_file,
         .kitty_image_medium_shared_mem,

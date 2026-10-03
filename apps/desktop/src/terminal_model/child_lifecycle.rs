@@ -80,6 +80,21 @@ impl TerminalChild {
         self.detached
     }
 
+    /// A reader that cannot apply an ordered state transition retires only
+    /// its own attach process. Share the reaping lock so a reused PID cannot
+    /// be targeted after the child has exited.
+    pub(crate) fn kill_handle(&self) -> impl FnMut() -> io::Result<()> + Send + 'static {
+        let reaped = Arc::clone(&self.reaped);
+        let mut killer = self.killer.clone_killer();
+        move || {
+            let reaped = reaped.lock().expect("terminal child lock poisoned");
+            if *reaped {
+                return Ok(());
+            }
+            killer.kill()
+        }
+    }
+
     pub(crate) fn kill(&mut self) -> io::Result<()> {
         let reaped = self.reaped.lock().expect("terminal child lock poisoned");
         if *reaped {

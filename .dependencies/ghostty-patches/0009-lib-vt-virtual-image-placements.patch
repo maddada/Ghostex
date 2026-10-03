@@ -1,0 +1,223 @@
+--- a/include/ghostty/vt/kitty_graphics.h
++++ b/include/ghostty/vt/kitty_graphics.h
+@@ -862,6 +862,54 @@
+     GhosttyTerminal terminal,
+     GhosttyKittyGraphicsPlacementRenderInfo* out_info);
+ 
++/**
++ * A resolved Unicode-placeholder run in the current viewport.
++ *
++ * Initialize every output slot with GHOSTTY_INIT_SIZED before use.
++ * Destination offsets and dimensions are device pixels; source coordinates and dimensions
++ * are source-image pixels, retaining fractional coverage when enlarged.
++ * These runs use Ghostty's below-text layer (z = -1), matching its native renderer.
++ *
++ * @ingroup kitty_graphics
++ */
++typedef struct {
++    size_t size;
++    uint32_t image_id;
++    uint16_t viewport_col;
++    uint16_t viewport_row;
++    uint32_t offset_x;
++    uint32_t offset_y;
++    uint32_t dest_width;
++    uint32_t dest_height;
++    double source_x;
++    double source_y;
++    double source_width;
++    double source_height;
++} GhosttyKittyGraphicsVirtualPlacement;
++
++/**
++ * Resolve visible Unicode-placeholder runs with the terminal's own
++ * image-ID decoding, run inheritance, placement lookup, and crop math.
++ *
++ * No pointers into the terminal are returned. Image pixels can be queried
++ * separately by image_id while the terminal remains unmodified.
++ *
++ * out may be NULL when capacity is zero. out_len reports the required
++ * number of slots; OUT_OF_SPACE means the first capacity entries were
++ * written and the caller can retry with a larger initialized buffer.
++ * Zero cell pixel dimensions yield an empty list. Relative placements
++ * whose parent is virtual are not included.
++ *
++ * @return GHOSTTY_SUCCESS, GHOSTTY_OUT_OF_SPACE, GHOSTTY_INVALID_VALUE,
++ *         or GHOSTTY_NO_VALUE when Kitty graphics is disabled at build time.
++ * @ingroup kitty_graphics
++ */
++GHOSTTY_API GhosttyResult ghostty_kitty_graphics_virtual_placements(
++    GhosttyTerminal terminal,
++    GhosttyKittyGraphicsVirtualPlacement* out,
++    size_t capacity,
++    size_t* out_len);
++
+ /** @} */
+ 
+ #ifdef __cplusplus
+--- a/src/lib_vt.zig
++++ b/src/lib_vt.zig
+@@ -400,6 +400,7 @@
+             @export(&c.kitty_graphics_placement_viewport_pos, .{ .name = "ghostty_kitty_graphics_placement_viewport_pos" });
+             @export(&c.kitty_graphics_placement_source_rect, .{ .name = "ghostty_kitty_graphics_placement_source_rect" });
+             @export(&c.kitty_graphics_placement_render_info, .{ .name = "ghostty_kitty_graphics_placement_render_info" });
++            @export(&c.kitty_graphics_virtual_placements, .{ .name = "ghostty_kitty_graphics_virtual_placements" });
+         }
+         if (features.grid_introspection) {
+             @export(&c.grid_ref_cell, .{ .name = "ghostty_grid_ref_cell" });
+--- a/src/terminal/c/main.zig
++++ b/src/terminal/c/main.zig
+@@ -28,6 +28,7 @@
+ pub const kitty_graphics_placement_viewport_pos = kitty_graphics.placement_viewport_pos;
+ pub const kitty_graphics_placement_source_rect = kitty_graphics.placement_source_rect;
+ pub const kitty_graphics_placement_render_info = kitty_graphics.placement_render_info;
++pub const kitty_graphics_virtual_placements = kitty_graphics.virtual_placements;
+ pub const types = @import("types.zig");
+ pub const modes = @import("modes.zig");
+ pub const osc = @import("osc.zig");
+--- a/src/terminal/c/kitty_graphics.zig
++++ b/src/terminal/c/kitty_graphics.zig
+@@ -583,6 +583,73 @@
+     out.source_height = source.height;
+ 
+     return .success;
++}
++
++/// C: GhosttyKittyGraphicsVirtualPlacement
++pub const VirtualPlacement = extern struct {
++    size: usize = @sizeOf(VirtualPlacement),
++    image_id: u32 = 0,
++    viewport_col: u16 = 0,
++    viewport_row: u16 = 0,
++    offset_x: u32 = 0,
++    offset_y: u32 = 0,
++    dest_width: u32 = 0,
++    dest_height: u32 = 0,
++    source_x: f64 = 0,
++    source_y: f64 = 0,
++    source_width: f64 = 0,
++    source_height: f64 = 0,
++};
++
++/// Resolve viewport placeholder runs using the terminal's own ID, run,
++/// placement-target, and aspect-fit logic. No borrowed pins escape the call.
++pub fn virtual_placements(
++    terminal_: terminal_c.Terminal,
++    out: ?[*]VirtualPlacement,
++    capacity: usize,
++    out_len: ?*usize,
++) callconv(lib.calling_conv) Result {
++    if (comptime !build_options.kitty_graphics) return .no_value;
++    const wrapper = terminal_ orelse return .invalid_value;
++    const len = out_len orelse return .invalid_value;
++    len.* = 0;
++    if (capacity > 0 and out == null) return .invalid_value;
++    const t = wrapper.terminal;
++    const cell_width = t.width_px / t.cols;
++    const cell_height = t.height_px / t.rows;
++    // The renderer may ask before its first pixel-size update. The shared
++    // virtual-placement helper divides by these sizes for implicit grids.
++    if (cell_width == 0 or cell_height == 0) return .success;
++    const storage = &t.screens.active.kitty_images;
++    const top = t.screens.active.pages.getTopLeft(.viewport);
++    const bottom = t.screens.active.pages.getBottomRight(.viewport) orelse return .success;
++    var iter = @import("../kitty/graphics_unicode.zig").placementIterator(top, bottom);
++    while (iter.next()) |p| {
++        const img = storage.imageById(p.image_id) orelse continue;
++        if (img.data.isPending() or img.width == 0 or img.height == 0) continue;
++        const rp = p.renderPlacementPrecise(storage, &img, cell_width, cell_height) catch continue;
++        if (rp.dest_width == 0 or rp.dest_height == 0) continue;
++        const vp = t.screens.active.pages.pointFromPin(.viewport, rp.top_left) orelse continue;
++        if (len.* < capacity) {
++            const slot = &out.?[len.*];
++            if (slot.size < @sizeOf(VirtualPlacement)) return .invalid_value;
++            slot.* = .{
++                .image_id = p.image_id,
++                .viewport_col = vp.viewport.x,
++                .viewport_row = @intCast(vp.viewport.y),
++                .offset_x = rp.offset_x,
++                .offset_y = rp.offset_y,
++                .dest_width = rp.dest_width,
++                .dest_height = rp.dest_height,
++                .source_x = rp.source_x,
++                .source_y = rp.source_y,
++                .source_width = rp.source_width,
++                .source_height = rp.source_height,
++            };
++        }
++        len.* += 1;
++    }
++    return if (len.* > capacity) .out_of_space else .success;
+ }
+ 
+ /// Compute viewport-relative position of a placement.
+--- a/src/terminal/kitty/graphics_unicode.zig
++++ b/src/terminal/kitty/graphics_unicode.zig
+@@ -127,7 +127,22 @@
+         PlacementMissingPlacement,
+     };
+ 
+-    /// Take this virtual placement and convert it to a render placement.
++    /// Geometry for renderers that map a cropped image by an affine transform.
++    /// A fragment can cover less than one source pixel when an image is enlarged.
++    /// Keep that coverage until sampling instead of rounding it to zero.
++    pub const PreciseRenderPlacement = struct {
++        top_left: terminal.Pin,
++        offset_x: u32 = 0,
++        offset_y: u32 = 0,
++        source_x: f64 = 0,
++        source_y: f64 = 0,
++        source_width: f64 = 0,
++        source_height: f64 = 0,
++        dest_width: u32 = 0,
++        dest_height: u32 = 0,
++    };
++
++    /// Native renderer compatibility: retain its existing integer geometry.
+     pub fn renderPlacement(
+         self: *const Placement,
+         storage: *const ImageStorage,
+@@ -135,6 +150,28 @@
+         cell_width: u32,
+         cell_height: u32,
+     ) Error!RenderPlacement {
++        const p = try self.renderPlacementPrecise(storage, img, cell_width, cell_height);
++        return .{
++            .top_left = p.top_left,
++            .offset_x = p.offset_x,
++            .offset_y = p.offset_y,
++            .source_x = @intFromFloat(@round(p.source_x)),
++            .source_y = @intFromFloat(@round(p.source_y)),
++            .source_width = @intFromFloat(@round(p.source_width)),
++            .source_height = @intFromFloat(@round(p.source_height)),
++            .dest_width = p.dest_width,
++            .dest_height = p.dest_height,
++        };
++    }
++
++    /// Take this virtual placement and preserve its fractional source coverage.
++    pub fn renderPlacementPrecise(
++        self: *const Placement,
++        storage: *const ImageStorage,
++        img: *const Image,
++        cell_width: u32,
++        cell_height: u32,
++    ) Error!PreciseRenderPlacement {
+         // In this function, there is a variable naming convention to try
+         // to make it slightly less confusing. The prefix will tell you what
+         // coordinate/size space a variable lives in:
+@@ -341,10 +378,10 @@
+             .top_left = self.pin,
+             .offset_x = @intFromFloat(@round(p_dest.x_offset)),
+             .offset_y = @intFromFloat(@round(p_dest.y_offset)),
+-            .source_x = @intFromFloat(@round(img_scale_source.x)),
+-            .source_y = @intFromFloat(@round(img_scale_source.y)),
+-            .source_width = @intFromFloat(@round(img_scale_source.width)),
+-            .source_height = @intFromFloat(@round(img_scale_source.height)),
++            .source_x = img_scale_source.x,
++            .source_y = img_scale_source.y,
++            .source_width = img_scale_source.width,
++            .source_height = img_scale_source.height,
+             .dest_width = @intFromFloat(@round(p_dest.width)),
+             .dest_height = @intFromFloat(@round(p_dest.height)),
+         };

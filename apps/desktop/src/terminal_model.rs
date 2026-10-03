@@ -24,10 +24,10 @@ channel senders are gone):
 - child-wait: reaps the child and delivers Exited exactly once. Exited and
   the final Wakeup race by nature; consumers must accept either order.
 
-Locking: the VtTerminal mutex is only ever held for feed/resize and for
-VtRenderState::update inside snapshot(). Row/cell readback happens after
-update outside the terminal lock, per the ghostty_vt contract. PTY writes
-never run on the caller's thread: write_input and the write_pty auto-replies
+Locking: the VtTerminal mutex is held for feed/resize and for
+VtRenderState::update plus image copy-out inside snapshot(). Row/cell
+readback happens afterwards outside that lock, per the ghostty_vt contract.
+PTY writes never run on the caller's thread: write_input and the write_pty auto-replies
 both queue payloads onto the pty-write channel, so no lock is held across a
 blocking write and ordering is the channel's arrival order (matching the
 serialization the old writer mutex provided).
@@ -60,6 +60,9 @@ use child_lifecycle::TerminalChild;
 mod viewer_detach;
 pub(crate) use viewer_detach::ViewerDetachPreparation;
 use viewer_detach::{ViewerDetachParser, ViewerDetachState};
+#[path = "terminal_model/viewer_grid.rs"]
+mod viewer_grid;
+use viewer_grid::{ViewerGrid, ViewerGridChunk, ViewerGridParser, ViewerGridState};
 
 use crate::ghostty_vt::{
     self, VtCellWide, VtClearScreen, VtDirty, VtError, VtHostCallbacks, VtKeyEncoder, VtKeyInput,
@@ -271,6 +274,10 @@ impl SnapshotRow {
 /// previous snapshot; the paint path never touches the terminal lock.
 #[derive(Clone, Debug)]
 pub struct TerminalSnapshot {
+    /// Owned image generations and resolved placements from this viewport.
+    pub images: Vec<ghostty_vt::VtImagePlacement>,
+    /// Integer pixel geometry used by Ghostty when resolving placements.
+    pub cell_size_px: (u32, u32),
     pub cols: u16,
     /// Viewport rows, top to bottom. Length equals the row count.
     pub rows: Vec<SnapshotRow>,
@@ -329,6 +336,7 @@ pub struct TerminalModel {
     wakeup_tx: mpsc::Sender<Option<()>>,
     pending_input: Arc<AtomicU64>,
     viewer_detach: Arc<Mutex<ViewerDetachState>>,
+    viewer_grid: Arc<Mutex<ViewerGridState>>,
     event_sink: Arc<Mutex<Option<TerminalEventSink>>>,
     master: Box<dyn MasterPty + Send>,
     child: TerminalChild,
@@ -372,7 +380,41 @@ impl TerminalModel {
             config.cell_height_px,
         ))?;
 
+        #[cfg(unix)]
+        let grid_nonce = if config
+            .env
+            .iter()
+            .any(|(key, value)| key == "GHOSTEX_ZMX_GRID_SYNC" && value == "1")
+        {
+            let mut random = [0u8; 16];
+            if unsafe { libc::getentropy(random.as_mut_ptr().cast(), random.len()) } != 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            Some(
+                random
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            )
+        } else {
+            None
+        };
+        #[cfg(not(unix))]
+        let grid_nonce: Option<String> = None;
+        let viewer_grid = Arc::new(Mutex::new(ViewerGridState {
+            desired: Some(ViewerGrid {
+                cols: config.cols,
+                rows: config.rows,
+                cell_width: config.cell_width_px,
+                cell_height: config.cell_height_px,
+            }),
+            ..Default::default()
+        }));
         let mut command = CommandBuilder::new(&config.program);
+        command.env_remove("GHOSTEX_ZMX_GRID_NONCE");
+        if let Some(nonce) = &grid_nonce {
+            command.env("GHOSTEX_ZMX_GRID_NONCE", nonce);
+        }
         crate::terminal_environment::remove_session_identity_from_terminal_command_builder(
             &mut command,
         );
@@ -381,7 +423,9 @@ impl TerminalModel {
             command.cwd(cwd);
         }
         for (key, value) in &config.env {
-            command.env(key, value);
+            if key != "GHOSTEX_ZMX_GRID_SYNC" && key != "GHOSTEX_ZMX_GRID_NONCE" {
+                command.env(key, value);
+            }
         }
         crate::terminal_environment::apply_color_capable_terminal_command_builder(&mut command);
 
@@ -390,6 +434,10 @@ impl TerminalModel {
         drop(pair.slave);
 
         let child_pid = child.process_id();
+        let child_events = Arc::clone(&events);
+        let child = TerminalChild::spawn(child, move |status| {
+            child_events(TerminalEvent::Exited(status))
+        })?;
         let mut reader = pair.master.try_clone_reader()?;
         let mut pty_writer = pair.master.take_writer()?;
 
@@ -419,6 +467,12 @@ impl TerminalModel {
             })?;
 
         let mut vt = VtTerminal::new(config.cols, config.rows, config.max_scrollback)?;
+        vt.resize(
+            config.cols,
+            config.rows,
+            config.cell_width_px,
+            config.cell_height_px,
+        )?;
         let clipboard_writes: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
         {
             // Terminal → host hooks. write_pty fires inside feed() on the
@@ -495,12 +549,15 @@ impl TerminalModel {
             let terminal = Arc::clone(&terminal);
             let pending = Arc::clone(&pending);
             let reader_viewer_detach = Arc::clone(&viewer_detach);
+            let reader_viewer_grid = Arc::clone(&viewer_grid);
+            let mut resize_failure_kill = child.kill_handle();
             let reader_events = Arc::clone(&events);
             thread::Builder::new()
                 .name("ghostex-terminal-pty-read".into())
                 .spawn(move || {
                     let mut buffer = vec![0u8; PTY_READ_BUFFER_LEN];
                     let mut detach_parser = ViewerDetachParser::default();
+                    let mut grid_parser = grid_nonce.as_deref().map(ViewerGridParser::new);
                     loop {
                         match reader.read(&mut buffer) {
                             // EOF, or EIO once the child side is gone.
@@ -521,7 +578,42 @@ impl TerminalModel {
                                     let Some(terminal) = terminal.as_mut() else {
                                         continue;
                                     };
-                                    terminal.feed(&buffer[..len]);
+                                    if let Some(parser) = grid_parser.as_mut() {
+                                        let result = parser.feed(&buffer[..len], |chunk| {
+                                            match chunk {
+                                                ViewerGridChunk::Bytes(bytes) => {
+                                                    terminal.feed(bytes)
+                                                }
+                                                ViewerGridChunk::Grid(grid) => {
+                                                    let mut state = reader_viewer_grid
+                                                        .lock()
+                                                        .expect("terminal grid lock poisoned");
+                                                    let target = grid.or(state.desired);
+                                                    if state.grid != grid {
+                                                        if let Some(target) = target {
+                                                            terminal.resize(
+                                                                target.cols,
+                                                                target.rows,
+                                                                target.cell_width,
+                                                                target.cell_height,
+                                                            )?;
+                                                        }
+                                                        state.grid = grid;
+                                                    }
+                                                }
+                                            }
+                                            Ok::<_, VtError>(())
+                                        });
+                                        if let Err(error) = result {
+                                            eprintln!(
+                                                "Ghostex ordered terminal resize failed: {error}"
+                                            );
+                                            let _ = resize_failure_kill();
+                                            break;
+                                        }
+                                    } else {
+                                        terminal.feed(&buffer[..len]);
+                                    }
                                 }
                                 if pending
                                     .compare_exchange(
@@ -537,14 +629,21 @@ impl TerminalModel {
                             }
                         }
                     }
+                    if let Some(parser) = grid_parser.as_mut() {
+                        if let Some(terminal) =
+                            terminal.lock().expect("terminal lock poisoned").as_mut()
+                        {
+                            let _ = parser.finish(|bytes| {
+                                terminal.feed(bytes);
+                                Ok::<_, VtError>(())
+                            });
+                        }
+                    }
                     // Deliver the final pending wakeup, then stop even while
                     // the exited model stays available for readback.
                     let _ = wakeup_tx.send(None);
                 })?;
         }
-
-        let child =
-            TerminalChild::spawn(child, move |status| events(TerminalEvent::Exited(status)))?;
 
         Ok(Self {
             terminal,
@@ -553,6 +652,7 @@ impl TerminalModel {
             wakeup_tx: model_wakeup_tx,
             pending_input,
             viewer_detach,
+            viewer_grid,
             event_sink,
             master: pair.master,
             child,
@@ -1009,12 +1109,29 @@ impl TerminalModel {
         if (cols, rows) == self.size && (cell_width_px, cell_height_px) == self.cell_size_px {
             return Ok(());
         }
-        self.terminal
-            .lock()
-            .expect("terminal lock poisoned")
-            .as_mut()
-            .ok_or_else(|| anyhow::anyhow!("terminal viewer retired"))?
-            .resize(cols, rows, cell_width_px, cell_height_px)?;
+        {
+            let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
+            let terminal = terminal
+                .as_mut()
+                .ok_or_else(|| anyhow::anyhow!("terminal viewer retired"))?;
+            let mut state = self
+                .viewer_grid
+                .lock()
+                .expect("terminal grid lock poisoned");
+            state.desired = Some(ViewerGrid {
+                cols,
+                rows,
+                cell_width: cell_width_px,
+                cell_height: cell_height_px,
+            });
+            // Once the daemon advertises ordered grids, old-grid output must
+            // finish parsing before the replica reflows. The PTY still gets
+            // the slot size immediately, and existing visibility claims are
+            // unchanged. Older daemons retain the immediate local resize.
+            if state.grid.is_none() {
+                terminal.resize(cols, rows, cell_width_px, cell_height_px)?;
+            }
+        }
         self.master
             .resize(pty_size(cols, rows, cell_width_px, cell_height_px))?;
         self.size = (cols, rows);
@@ -1028,6 +1145,11 @@ impl TerminalModel {
     pub fn resize_grid(&mut self, cols: u16, rows: u16) -> anyhow::Result<()> {
         let (cell_width_px, cell_height_px) = self.cell_size_px;
         self.resize(cols, rows, cell_width_px, cell_height_px)
+    }
+
+    /// Device-pixel cell metrics last requested by the host layout.
+    pub fn cell_size_px(&self) -> (u32, u32) {
+        self.cell_size_px
     }
 
     /// Grid size in cells as `(cols, rows)`.
@@ -1156,14 +1278,15 @@ impl TerminalModel {
         result
     }
 
-    /// Take an owned frame snapshot. Holds the terminal lock only for the
-    /// render-state update; row/cell copy-out and dirty clearing run outside
+    /// Take an owned frame snapshot. Holds the terminal lock for the
+    /// render-state update and image copy-out; unchanged image generations
+    /// reuse owned pixels. Row/cell copy-out and dirty clearing run outside
     /// it. Consumes both dirty layers per the ghostty_vt contract.
     pub fn snapshot(&mut self) -> Result<TerminalSnapshot, VtError> {
         let render_state = self.render_state.as_mut().ok_or(VtError {
             code: ffi::GHOSTTY_INVALID_VALUE,
         })?;
-        let (scrollbar, alternate_screen) = {
+        let (scrollbar, alternate_screen, images, cell_size_px) = {
             let mut terminal = self.terminal.lock().expect("terminal lock poisoned");
             let terminal = terminal.as_mut().ok_or(VtError {
                 code: ffi::GHOSTTY_INVALID_VALUE,
@@ -1172,6 +1295,19 @@ impl TerminalModel {
             (
                 terminal.scrollbar()?,
                 terminal.alternate_screen_active().unwrap_or(false),
+                terminal.image_placements()?,
+                {
+                    let cell_size_px = self.cell_size_px;
+                    #[cfg(not(target_arch = "wasm32"))]
+                    let cell_size_px = self
+                        .viewer_grid
+                        .lock()
+                        .expect("terminal grid lock poisoned")
+                        .grid
+                        .map(|grid| (grid.cell_width, grid.cell_height))
+                        .unwrap_or(cell_size_px);
+                    cell_size_px
+                },
             )
         };
 
@@ -1237,6 +1373,8 @@ impl TerminalModel {
         render_state.clear_dirty()?;
 
         Ok(TerminalSnapshot {
+            images,
+            cell_size_px,
             cols,
             rows: snapshot_rows,
             dirty,

@@ -28,6 +28,7 @@ pub const kitty_graphics_placement_grid_size = kitty_graphics.placement_grid_siz
 pub const kitty_graphics_placement_viewport_pos = kitty_graphics.placement_viewport_pos;
 pub const kitty_graphics_placement_source_rect = kitty_graphics.placement_source_rect;
 pub const kitty_graphics_placement_render_info = kitty_graphics.placement_render_info;
+pub const kitty_graphics_virtual_placements = kitty_graphics.virtual_placements;
 pub const types = @import("types.zig");
 pub const modes = @import("modes.zig");
 pub const osc = @import("osc.zig");

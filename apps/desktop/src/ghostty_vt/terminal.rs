@@ -74,6 +74,7 @@ pub struct VtTerminal {
     ///
     /// [`set_host_callbacks`]: Self::set_host_callbacks
     host_callbacks: *mut VtHostCallbacks,
+    images: super::images::VtImageState,
 }
 
 // SAFETY: libghostty-vt terminal state has no thread affinity (no TLS, no
@@ -83,6 +84,7 @@ unsafe impl Send for VtTerminal {}
 
 impl VtTerminal {
     pub fn new(cols: u16, rows: u16, max_scrollback: usize) -> Result<Self, VtError> {
+        let images = super::images::VtImageState::new()?;
         let mut raw: ffi::GhosttyTerminal = std::ptr::null_mut();
         check(unsafe { ffi::ghostty_terminal_new(std::ptr::null(), &mut raw, cols, rows) })?;
         // Upstream replaced the creation-time max_scrollback option with a
@@ -96,14 +98,22 @@ impl VtTerminal {
                 std::ptr::from_ref(&max_scrollback).cast(),
             )
         });
-        if let Err(err) = scrollback_result {
+        if let Err(err) =
+            scrollback_result.and_then(|()| super::images::VtImageState::configure(raw))
+        {
             unsafe { ffi::ghostty_terminal_free(raw) };
             return Err(err);
         }
         Ok(Self {
             raw,
             host_callbacks: std::ptr::null_mut(),
+            images,
         })
+    }
+
+    /// Copy active-screen image state while exclusive terminal access is held.
+    pub fn image_placements(&mut self) -> Result<Vec<VtImagePlacement>, VtError> {
+        self.images.snapshot(self.raw)
     }
 
     /// Install terminal → host hooks. Hooks fire synchronously inside

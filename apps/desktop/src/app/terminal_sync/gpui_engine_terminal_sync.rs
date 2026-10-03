@@ -667,12 +667,27 @@ impl GhostexGpuiApp {
             env_vars: env_vars.clone(),
             wait_after_command,
         };
+        let uses_zmx_visibility_claims = matches!(
+            target,
+            GpuiEngineTerminalEventTarget::Agents(session_id)
+                if self.agents_gpui_engine_terminal_is_zmx_client(session_id)
+        );
         let spawn_config = terminal_gpui_engine::gpui_engine_terminal_spawn_config(
             working_directory,
             command,
             env_vars,
             engine_config.scrollback_limit_bytes,
         );
+        #[cfg(unix)]
+        let spawn_config = {
+            let mut spawn_config = spawn_config;
+            if uses_zmx_visibility_claims {
+                spawn_config
+                    .env
+                    .push(("GHOSTEX_ZMX_GRID_SYNC".into(), "1".into()));
+            }
+            spawn_config
+        };
         let font = terminal_gpui_engine::gpui_engine_terminal_font_config(&engine_config);
         let (sink, event_rx) = terminal_element::TerminalView::event_channel();
         let argument_utf16_length = spawn_config
@@ -712,11 +727,6 @@ impl GhostexGpuiApp {
         let view_settings = engine_config.view.clone();
         let confirm_close_behavior =
             terminal_gpui_engine::gpui_engine_confirm_close_behavior(&engine_config);
-        let uses_zmx_visibility_claims = matches!(
-            target,
-            GpuiEngineTerminalEventTarget::Agents(session_id)
-                if self.agents_gpui_engine_terminal_is_zmx_client(session_id)
-        );
         let view = cx.new(|cx| {
             let mut view = terminal_element::TerminalView::from_model(
                 model,
