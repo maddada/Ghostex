@@ -484,6 +484,9 @@ typedef struct {
   uint32_t source_width;
   /** Resolved source rectangle height in pixels. */
   uint32_t source_height;
+  /** Offsets clamped to cell size minus one, or zero for unknown cell sizes. */
+  uint32_t offset_x;
+  uint32_t offset_y;
 } GhosttyKittyGraphicsPlacementRenderInfo;
 
 /**
@@ -863,20 +866,21 @@ GHOSTTY_API GhosttyResult ghostty_kitty_graphics_placement_render_info(
     GhosttyKittyGraphicsPlacementRenderInfo* out_info);
 
 /**
- * A resolved Unicode-placeholder run in the current viewport.
+ * A resolved Unicode-placeholder run or its ordinary relative descendant.
  *
  * Initialize every output slot with GHOSTTY_INIT_SIZED before use.
  * Destination offsets and dimensions are device pixels; source coordinates and dimensions
  * are source-image pixels, retaining fractional coverage when enlarged.
- * These runs use Ghostty's below-text layer (z = -1), matching its native renderer.
+ * Placeholder runs use z = -1; relative descendants retain their own layer.
  *
  * @ingroup kitty_graphics
  */
 typedef struct {
     size_t size;
     uint32_t image_id;
-    uint16_t viewport_col;
-    uint16_t viewport_row;
+    /** Signed viewport coordinates; descendants may be partially off-screen. */
+    int32_t viewport_col;
+    int32_t viewport_row;
     uint32_t offset_x;
     uint32_t offset_y;
     uint32_t dest_width;
@@ -885,6 +889,7 @@ typedef struct {
     double source_y;
     double source_width;
     double source_height;
+    int32_t z;
 } GhosttyKittyGraphicsVirtualPlacement;
 
 /**
@@ -897,11 +902,12 @@ typedef struct {
  * out may be NULL when capacity is zero. out_len reports the required
  * number of slots; OUT_OF_SPACE means the first capacity entries were
  * written and the caller can retry with a larger initialized buffer.
- * Zero cell pixel dimensions yield an empty list. Relative placements
- * whose parent is virtual are not included.
+ * Zero cell pixel dimensions yield an empty list. Relative descendants
+ * use the minimum visible placeholder coordinates of their root placement;
+ * roots without visible placeholders yield no descendants.
  *
  * @return GHOSTTY_SUCCESS, GHOSTTY_OUT_OF_SPACE, GHOSTTY_INVALID_VALUE,
- *         or GHOSTTY_NO_VALUE when Kitty graphics is disabled at build time.
+ *         GHOSTTY_OUT_OF_MEMORY, or GHOSTTY_NO_VALUE when Kitty graphics is disabled.
  * @ingroup kitty_graphics
  */
 GHOSTTY_API GhosttyResult ghostty_kitty_graphics_virtual_placements(

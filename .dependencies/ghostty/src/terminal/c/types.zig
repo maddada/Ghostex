@@ -193,6 +193,7 @@ const type_decls = [_]TypeDecl{
     .initStruct("GhosttyFormatterTerminalOptions", formatter.TerminalOptions),
     .initStruct("GhosttyGridRef", grid_ref.CGridRef),
     .initStruct("GhosttyKittyGraphicsPlacementRenderInfo", kitty_graphics.PlacementRenderInfo),
+    .initStruct("GhosttyKittyGraphicsVirtualPlacement", kitty_graphics.VirtualPlacement),
     .initStruct("GhosttyMimeReader", io.MimeReader),
     .initStruct("GhosttyMouseEncoderSize", mouse_encode.Size),
     .initStruct("GhosttyMousePosition", mouse_event.Position),

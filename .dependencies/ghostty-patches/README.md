@@ -93,13 +93,14 @@ then regenerate that patch). After a sync always:
   IDs, with no borrowed pins. The
   native GPUI terminal renderer uses this API. Ghostty currently disables
   Kitty graphics on the freestanding browser target, so the shared web
-  renderer builds with an empty image state. Relative placements whose
-  parent is virtual are not included.
+  renderer builds with an empty image state. Ordinary relative descendants
+  of virtual placements resolve from the root’s minimum visible placeholder
+  coordinates, using Ghostty’s parent-chain and current-cell geometry rules.
 - **0010-lib-vt-image-resource-limits** — adds per-terminal maximum image
   dimension and decoded pixel-count options. Oversized declared raw dimensions
   are rejected before buffering; PNG output is checked before retention. The
   core's inherited transmission/decompression ceiling remains 400 MiB, while
-  the host decoder rejects encoded PNG input above 16 MiB after buffering. Limits survive RIS
+  the host decoder rejects encoded PNG input above 40 MiB after buffering. Limits survive RIS
   and screen changes; standalone Ghostty keeps its existing defaults. The
   native GPUI bridge sets 4096 per side and 4 Mi pixels (16 MiB RGBA8). Its
   PNG decoder separately allows 32 MiB of decode working allocation for

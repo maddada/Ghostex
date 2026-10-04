@@ -55,6 +55,8 @@ pub struct GhosttyKittyGraphicsPlacementRenderInfo {
     pub source_y: u32,
     pub source_width: u32,
     pub source_height: u32,
+    pub offset_x: u32,
+    pub offset_y: u32,
 }
 
 impl Default for GhosttyKittyGraphicsPlacementRenderInfo {
@@ -71,8 +73,8 @@ impl Default for GhosttyKittyGraphicsPlacementRenderInfo {
 pub struct GhosttyKittyGraphicsVirtualPlacement {
     pub size: usize,
     pub image_id: u32,
-    pub viewport_col: u16,
-    pub viewport_row: u16,
+    pub viewport_col: i32,
+    pub viewport_row: i32,
     pub offset_x: u32,
     pub offset_y: u32,
     pub dest_width: u32,
@@ -81,6 +83,7 @@ pub struct GhosttyKittyGraphicsVirtualPlacement {
     pub source_y: f64,
     pub source_width: f64,
     pub source_height: f64,
+    pub z: i32,
 }
 
 impl Default for GhosttyKittyGraphicsVirtualPlacement {

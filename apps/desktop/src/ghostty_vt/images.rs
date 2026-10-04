@@ -18,6 +18,10 @@ const MAX_IMAGE_PIXELS: u64 = (MAX_IMAGE_BYTES / 4) as u64;
 // A 16-bit RGBA PNG needs twice the final RGBA8 pixel storage during decode.
 #[cfg(not(target_family = "wasm"))]
 const MAX_PNG_DECODE_BYTES: u64 = (MAX_IMAGE_BYTES * 2) as u64;
+// Allow RGBA16 plus filter, fixed-Huffman and chunk overhead. Bound input
+// separately; dimensions, decoded pixels, and source storage still apply.
+#[cfg(not(target_family = "wasm"))]
+const MAX_PNG_ENCODED_BYTES: usize = MAX_IMAGE_BYTES * 5 / 2;
 
 // Bound the renderer's owned RGBA copies independently of Ghostty's source
 // storage and GPUI uploads. Frames already handed out may keep their Arcs alive.
@@ -145,8 +149,6 @@ impl VtImageState {
             let mut id = 0u32;
             let mut virtual_ = false;
             let mut z = 0i32;
-            let mut offset_x = 0u32;
-            let mut offset_y = 0u32;
             for (key, out) in [
                 (
                     ffi::GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IMAGE_ID,
@@ -155,14 +157,6 @@ impl VtImageState {
                 (
                     ffi::GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_IS_VIRTUAL,
                     (&mut virtual_ as *mut bool).cast(),
-                ),
-                (
-                    ffi::GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_X_OFFSET,
-                    (&mut offset_x as *mut u32).cast(),
-                ),
-                (
-                    ffi::GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Y_OFFSET,
-                    (&mut offset_y as *mut u32).cast(),
                 ),
                 (
                     ffi::GHOSTTY_KITTY_GRAPHICS_PLACEMENT_DATA_Z,
@@ -197,8 +191,8 @@ impl VtImageState {
                 image_id: id,
                 col: info.viewport_col,
                 row: info.viewport_row,
-                offset_x,
-                offset_y,
+                offset_x: info.offset_x,
+                offset_y: info.offset_y,
                 width: info.pixel_width,
                 height: info.pixel_height,
                 source_x: info.source_x.into(),
@@ -230,8 +224,8 @@ impl VtImageState {
                 let p = self.virtual_buffer[index];
                 placements.push(ResolvedPlacement {
                     image_id: p.image_id,
-                    col: p.viewport_col.into(),
-                    row: p.viewport_row.into(),
+                    col: p.viewport_col,
+                    row: p.viewport_row,
                     offset_x: p.offset_x,
                     offset_y: p.offset_y,
                     width: p.dest_width,
@@ -240,7 +234,7 @@ impl VtImageState {
                     source_y: p.source_y,
                     source_width: p.source_width,
                     source_height: p.source_height,
-                    z: -1,
+                    z: p.z,
                 });
             }
         }
@@ -430,7 +424,7 @@ unsafe extern "C" fn decode_png(
     len: usize,
     out: *mut ffi::GhosttySysImage,
 ) -> bool {
-    if data.is_null() || out.is_null() || len > MAX_IMAGE_BYTES {
+    if data.is_null() || out.is_null() || len > MAX_PNG_ENCODED_BYTES {
         return false;
     }
     let bytes = unsafe { std::slice::from_raw_parts(data, len) };

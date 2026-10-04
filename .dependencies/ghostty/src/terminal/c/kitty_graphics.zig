@@ -544,6 +544,8 @@ pub const PlacementRenderInfo = extern struct {
     source_y: u32 = 0,
     source_width: u32 = 0,
     source_height: u32 = 0,
+    offset_x: u32 = 0,
+    offset_y: u32 = 0,
 };
 
 pub fn placement_render_info(
@@ -582,6 +584,11 @@ pub fn placement_render_info(
     out.source_width = source.width;
     out.source_height = source.height;
 
+    // Resolve offsets with the same current cell geometry as pixelSize.
+    const offset = p.cellOffset(wrapper.terminal);
+    out.offset_x = offset.x;
+    out.offset_y = offset.y;
+
     return .success;
 }
 
@@ -589,8 +596,8 @@ pub fn placement_render_info(
 pub const VirtualPlacement = extern struct {
     size: usize = @sizeOf(VirtualPlacement),
     image_id: u32 = 0,
-    viewport_col: u16 = 0,
-    viewport_row: u16 = 0,
+    viewport_col: i32 = 0,
+    viewport_row: i32 = 0,
     offset_x: u32 = 0,
     offset_y: u32 = 0,
     dest_width: u32 = 0,
@@ -599,10 +606,11 @@ pub const VirtualPlacement = extern struct {
     source_y: f64 = 0,
     source_width: f64 = 0,
     source_height: f64 = 0,
+    z: i32 = -1,
 };
 
-/// Resolve viewport placeholder runs using the terminal's own ID, run,
-/// placement-target, and aspect-fit logic. No borrowed pins escape the call.
+/// Resolve viewport placeholder runs and their ordinary relative descendants
+/// using the terminal's own target and parent-chain logic. No pins escape.
 pub fn virtual_placements(
     terminal_: terminal_c.Terminal,
     out: ?[*]VirtualPlacement,
@@ -621,35 +629,120 @@ pub fn virtual_placements(
     // virtual-placement helper divides by these sizes for implicit grids.
     if (cell_width == 0 or cell_height == 0) return .success;
     const storage = &t.screens.active.kitty_images;
+    // Match the native renderer's virtual-root rule: relative descendants
+    // start at the minimum visible placeholder coordinates of their root.
+    // Track only roots referenced by relative placements, avoiding an allocation
+    // for ordinary placeholder-only output.
+    const Origin = struct { x: u32, y: u32 };
+    var origins: std.AutoHashMapUnmanaged(
+        kitty_storage.ImageStorage.PlacementKey,
+        ?Origin,
+    ) = .empty;
+    const alloc = t.screens.active.alloc;
+    defer origins.deinit(alloc);
+    var placement_iter = storage.placements.iterator();
+    while (placement_iter.next()) |entry| {
+        const rel = switch (entry.value_ptr.location) {
+            .relative => |rel| rel,
+            else => continue,
+        };
+        const chain = storage.resolveChain(rel) orelse continue;
+        if (chain.root.location != .virtual) continue;
+        origins.put(alloc, chain.root_key, null) catch return .out_of_memory;
+    }
     const top = t.screens.active.pages.getTopLeft(.viewport);
     const bottom = t.screens.active.pages.getBottomRight(.viewport) orelse return .success;
     var iter = @import("../kitty/graphics_unicode.zig").placementIterator(top, bottom);
     while (iter.next()) |p| {
+        // Origin resolution is independent of whether this fragment draws.
+        if (origins.count() != 0) {
+            if (storage.placeholderTarget(p.image_id, p.placement_id)) |target| {
+                if (origins.getPtr(target.key)) |slot| {
+                    if (t.screens.active.pages.pointFromPin(.viewport, p.pin)) |vp| {
+                        if (slot.*) |*origin| {
+                            origin.x = @min(origin.x, vp.viewport.x);
+                            origin.y = @min(origin.y, vp.viewport.y);
+                        } else {
+                            slot.* = .{ .x = vp.viewport.x, .y = vp.viewport.y };
+                        }
+                    }
+                }
+            }
+        }
         const img = storage.imageById(p.image_id) orelse continue;
         if (img.data.isPending() or img.width == 0 or img.height == 0) continue;
         const rp = p.renderPlacementPrecise(storage, &img, cell_width, cell_height) catch continue;
         if (rp.dest_width == 0 or rp.dest_height == 0) continue;
         const vp = t.screens.active.pages.pointFromPin(.viewport, rp.top_left) orelse continue;
-        if (len.* < capacity) {
-            const slot = &out.?[len.*];
-            if (slot.size < @sizeOf(VirtualPlacement)) return .invalid_value;
-            slot.* = .{
-                .image_id = p.image_id,
-                .viewport_col = vp.viewport.x,
-                .viewport_row = @intCast(vp.viewport.y),
-                .offset_x = rp.offset_x,
-                .offset_y = rp.offset_y,
-                .dest_width = rp.dest_width,
-                .dest_height = rp.dest_height,
-                .source_x = rp.source_x,
-                .source_y = rp.source_y,
-                .source_width = rp.source_width,
-                .source_height = rp.source_height,
-            };
-        }
-        len.* += 1;
+        const result = appendVirtualPlacement(out, capacity, len, .{
+            .image_id = p.image_id,
+            .viewport_col = vp.viewport.x,
+            .viewport_row = @intCast(vp.viewport.y),
+            .offset_x = rp.offset_x,
+            .offset_y = rp.offset_y,
+            .dest_width = rp.dest_width,
+            .dest_height = rp.dest_height,
+            .source_x = rp.source_x,
+            .source_y = rp.source_y,
+            .source_width = rp.source_width,
+            .source_height = rp.source_height,
+        });
+        if (result != .success) return result;
+    }
+    placement_iter = storage.placements.iterator();
+    while (placement_iter.next()) |entry| {
+        const p = entry.value_ptr;
+        const rel = switch (p.location) {
+            .relative => |rel| rel,
+            else => continue,
+        };
+        const chain = storage.resolveChain(rel) orelse continue;
+        if (chain.root.location != .virtual) continue;
+        const origin = (origins.get(chain.root_key) orelse continue) orelse continue;
+        const image = storage.imageById(entry.key_ptr.image_id) orelse continue;
+        if (image.data.isPending()) continue;
+        const grid = p.gridSize(image, t);
+        if (grid.cols == 0 or grid.rows == 0) continue;
+        const x = @as(i64, origin.x) + chain.horizontal_offset;
+        const y = @as(i64, origin.y) + chain.vertical_offset;
+        if (x >= t.cols or x + grid.cols <= 0 or
+            y >= t.rows or y + grid.rows <= 0) continue;
+        const pixels = p.pixelSize(image, t);
+        if (pixels.width == 0 or pixels.height == 0) continue;
+        const source = p.sourceRect(image);
+        const offset = p.cellOffset(t);
+        const result = appendVirtualPlacement(out, capacity, len, .{
+            .image_id = entry.key_ptr.image_id,
+            .viewport_col = std.math.cast(i32, x) orelse continue,
+            .viewport_row = std.math.cast(i32, y) orelse continue,
+            .offset_x = offset.x,
+            .offset_y = offset.y,
+            .dest_width = pixels.width,
+            .dest_height = pixels.height,
+            .source_x = @floatFromInt(source.x),
+            .source_y = @floatFromInt(source.y),
+            .source_width = @floatFromInt(source.width),
+            .source_height = @floatFromInt(source.height),
+            .z = p.z,
+        });
+        if (result != .success) return result;
     }
     return if (len.* > capacity) .out_of_space else .success;
+}
+
+fn appendVirtualPlacement(
+    out: ?[*]VirtualPlacement,
+    capacity: usize,
+    len: *usize,
+    placement: VirtualPlacement,
+) Result {
+    if (len.* < capacity) {
+        const slot = &out.?[len.*];
+        if (slot.size < @sizeOf(VirtualPlacement)) return .invalid_value;
+        slot.* = placement;
+    }
+    len.* += 1;
+    return .success;
 }
 
 /// Compute viewport-relative position of a placement.
