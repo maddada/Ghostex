@@ -1,3 +1,5 @@
+// CDXC:Zmx 2026-10-04 SEE-ALSO: zmx src/loop.zig::clientLoop emits these
+// nonce-scoped APC records with four fixed-width hex fields and an ESC\ terminator.
 /// The attach process translates ordered GridSync IPC into fixed-length,
 /// nonce-scoped records. Strip them before the VT parser: a daemon resize
 /// can happen between bytes of UTF-8, CSI or a Kitty transmission.
@@ -54,10 +56,24 @@ impl ViewerGridParser {
         accept: &mut impl FnMut(ViewerGridChunk<'_>) -> Result<(), E>,
     ) -> Result<(), E> {
         while !bytes.is_empty() {
-            if let Some(start) = bytes
-                .windows(self.prefix.len())
-                .position(|part| part == self.prefix)
-            {
+            // Old daemons emit no records. Skip ordinary output with one
+            // byte search, comparing the nonce-scoped prefix only at ESC.
+            let mut search = bytes;
+            let mut start = None;
+            let mut tail = 0;
+            while let Some(offset) = search.iter().position(|byte| *byte == 0x1b) {
+                search = &search[offset..];
+                if search.starts_with(&self.prefix) {
+                    start = Some(bytes.len() - search.len());
+                    break;
+                }
+                if self.prefix.starts_with(search) {
+                    tail = search.len();
+                    break;
+                }
+                search = &search[1..];
+            }
+            if let Some(start) = start {
                 if start != 0 {
                     accept(ViewerGridChunk::Bytes(&bytes[..start]))?;
                 }
@@ -79,13 +95,6 @@ impl ViewerGridParser {
             }
             // Retain only a possible prefix suffix. All other bytes, including
             // unknown APC and C1 bytes, reach Ghostty without reinterpretation.
-            let mut tail = 0;
-            for length in (1..self.prefix.len().min(bytes.len() + 1)).rev() {
-                if self.prefix.starts_with(&bytes[bytes.len() - length..]) {
-                    tail = length;
-                    break;
-                }
-            }
             accept(ViewerGridChunk::Bytes(&bytes[..bytes.len() - tail]))?;
             self.pending.extend_from_slice(&bytes[bytes.len() - tail..]);
             break;

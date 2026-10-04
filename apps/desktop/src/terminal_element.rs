@@ -2701,7 +2701,9 @@ impl TerminalView {
         {
             // The grid above is the real one for this displayed slot, so the
             // visibility claim carries it (CDXC:Terminal
-            // 2026-09-03).
+            // 2026-09-03). Pixel-only changes also claim: the daemon needs the
+            // current cell metrics to align image anchors and placeholder crops
+            // even when rows and columns stay the same.
             self.pending_zmx_visible_announce = false;
             let (cols, rows) = self.model.size();
             let _ = self.model.write_input(

@@ -19,6 +19,13 @@ const MAX_IMAGE_PIXELS: u64 = (MAX_IMAGE_BYTES / 4) as u64;
 #[cfg(not(target_family = "wasm"))]
 const MAX_PNG_DECODE_BYTES: u64 = (MAX_IMAGE_BYTES * 2) as u64;
 
+// Bound the renderer's owned RGBA copies independently of Ghostty's source
+// storage and GPUI uploads. Frames already handed out may keep their Arcs alive.
+#[cfg(not(target_family = "wasm"))]
+const MAX_OWNED_IMAGE_BYTES: usize = 64 * 1024 * 1024;
+#[cfg(not(target_family = "wasm"))]
+const MAX_OWNED_IMAGES: usize = 256;
+
 /// Owned pixels from one image generation. The parser can replace or delete
 /// its storage without invalidating a frame already handed to the renderer.
 #[derive(Debug)]
@@ -46,6 +53,24 @@ pub struct VtImagePlacement {
     pub source_width: f64,
     pub source_height: f64,
     pub z: i32,
+}
+
+// Collect visible geometry before copying pixels, so offscreen and replaced
+// generations free budget without evicting unchanged visible images.
+#[cfg(not(target_family = "wasm"))]
+struct ResolvedPlacement {
+    image_id: u32,
+    col: i32,
+    row: i32,
+    offset_x: u32,
+    offset_y: u32,
+    width: u32,
+    height: u32,
+    source_x: f64,
+    source_y: f64,
+    source_width: f64,
+    source_height: f64,
+    z: i32,
 }
 
 /// The iterator is owned; its borrowed entries are consumed only while the
@@ -108,7 +133,6 @@ impl VtImageState {
             )
         })?;
         let mut placements = Vec::new();
-        let mut used = HashSet::new();
         let mut has_virtual = false;
         check(unsafe {
             ffi::ghostty_kitty_graphics_get(
@@ -169,23 +193,20 @@ impl VtImageState {
             if !info.viewport_visible || info.pixel_width == 0 || info.pixel_height == 0 {
                 continue;
             }
-            if let Some(image) = self.image(graphics, id)? {
-                used.insert(id);
-                placements.push(VtImagePlacement {
-                    image,
-                    col: info.viewport_col,
-                    row: info.viewport_row,
-                    offset_x,
-                    offset_y,
-                    width: info.pixel_width,
-                    height: info.pixel_height,
-                    source_x: info.source_x.into(),
-                    source_y: info.source_y.into(),
-                    source_width: info.source_width.into(),
-                    source_height: info.source_height.into(),
-                    z,
-                });
-            }
+            placements.push(ResolvedPlacement {
+                image_id: id,
+                col: info.viewport_col,
+                row: info.viewport_row,
+                offset_x,
+                offset_y,
+                width: info.pixel_width,
+                height: info.pixel_height,
+                source_x: info.source_x.into(),
+                source_y: info.source_y.into(),
+                source_width: info.source_width.into(),
+                source_height: info.source_height.into(),
+                z,
+            });
         }
         if has_virtual {
             let mut len = 0;
@@ -207,29 +228,68 @@ impl VtImageState {
             }
             for index in 0..len {
                 let p = self.virtual_buffer[index];
-                if let Some(image) = self.image(graphics, p.image_id)? {
-                    used.insert(p.image_id);
-                    placements.push(VtImagePlacement {
-                        image,
-                        col: p.viewport_col.into(),
-                        row: p.viewport_row.into(),
-                        offset_x: p.offset_x,
-                        offset_y: p.offset_y,
-                        width: p.dest_width,
-                        height: p.dest_height,
-                        source_x: p.source_x,
-                        source_y: p.source_y,
-                        source_width: p.source_width,
-                        source_height: p.source_height,
-                        z: -1,
-                    });
-                }
+                placements.push(ResolvedPlacement {
+                    image_id: p.image_id,
+                    col: p.viewport_col.into(),
+                    row: p.viewport_row.into(),
+                    offset_x: p.offset_x,
+                    offset_y: p.offset_y,
+                    width: p.dest_width,
+                    height: p.dest_height,
+                    source_x: p.source_x,
+                    source_y: p.source_y,
+                    source_width: p.source_width,
+                    source_height: p.source_height,
+                    z: -1,
+                });
             }
         }
+        let used: HashSet<_> = placements.iter().map(|p| p.image_id).collect();
         self.images.retain(|id, _| used.contains(id));
+        let mut stale = Vec::new();
+        for (&id, image) in &self.images {
+            let handle = unsafe { ffi::ghostty_kitty_graphics_image(graphics, id) };
+            if handle.is_null() {
+                stale.push(id);
+                continue;
+            }
+            let mut generation = 0u64;
+            check(unsafe {
+                ffi::ghostty_kitty_graphics_image_get(
+                    handle,
+                    ffi::GHOSTTY_KITTY_IMAGE_DATA_GENERATION,
+                    (&mut generation as *mut u64).cast(),
+                )
+            })?;
+            if image.generation != generation {
+                stale.push(id);
+            }
+        }
+        for id in stale {
+            self.images.remove(&id);
+        }
+        let mut output = Vec::with_capacity(placements.len());
+        for p in placements {
+            if let Some(image) = self.image(graphics, p.image_id)? {
+                output.push(VtImagePlacement {
+                    image,
+                    col: p.col,
+                    row: p.row,
+                    offset_x: p.offset_x,
+                    offset_y: p.offset_y,
+                    width: p.width,
+                    height: p.height,
+                    source_x: p.source_x,
+                    source_y: p.source_y,
+                    source_width: p.source_width,
+                    source_height: p.source_height,
+                    z: p.z,
+                });
+            }
+        }
         // Match Ghostty's tie-breaker for equal z values.
-        placements.sort_by_key(|p| (p.z, p.image.id));
-        Ok(placements)
+        output.sort_by_key(|p| (p.z, p.image.id));
+        Ok(output)
     }
 
     fn image(
@@ -310,11 +370,20 @@ impl VtImageState {
         if len != width as usize * height as usize * channels {
             return Ok(None);
         }
+        let rgba_len = width as usize * height as usize * 4;
+        let owned_bytes: usize = self.images.values().map(|image| image.rgba.len()).sum();
+        if self.images.len() >= MAX_OWNED_IMAGES
+            || rgba_len > MAX_OWNED_IMAGE_BYTES.saturating_sub(owned_bytes)
+        {
+            // Leave native storage intact. A later snapshot retries when
+            // offscreen or replaced images release owned-copy budget.
+            return Ok(None);
+        }
         let bytes = unsafe { std::slice::from_raw_parts(data, len) };
         let rgba = if channels == 4 {
             bytes.to_vec()
         } else {
-            let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
+            let mut rgba = Vec::with_capacity(rgba_len);
             for p in bytes.chunks_exact(channels) {
                 match format {
                     ffi::GHOSTTY_KITTY_IMAGE_FORMAT_RGB => {

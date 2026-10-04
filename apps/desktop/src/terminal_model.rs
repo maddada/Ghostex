@@ -330,6 +330,7 @@ pub fn zmx_client_hidden_sequence(rows: u16, cols: u16) -> String {
 pub struct TerminalModel {
     terminal: Arc<Mutex<Option<VtTerminal>>>,
     render_state: Option<VtRenderState>,
+    image_error_logged: bool,
     /// Feeds the pty-write thread; sends never block, the thread owns the
     /// PTY write half and performs the actual (possibly blocking) writes.
     write_tx: mpsc::Sender<Option<PtyWriteRequest>>,
@@ -648,6 +649,7 @@ impl TerminalModel {
         Ok(Self {
             terminal,
             render_state: Some(VtRenderState::new()?),
+            image_error_logged: false,
             write_tx,
             wakeup_tx: model_wakeup_tx,
             pending_input,
@@ -1295,7 +1297,7 @@ impl TerminalModel {
             (
                 terminal.scrollbar()?,
                 terminal.alternate_screen_active().unwrap_or(false),
-                terminal.image_placements()?,
+                terminal.image_placements(),
                 {
                     let cell_size_px = self.cell_size_px;
                     #[cfg(not(target_arch = "wasm32"))]
@@ -1309,6 +1311,22 @@ impl TerminalModel {
                     cell_size_px
                 },
             )
+        };
+
+        // Image failures must not discard text updates. Log once per streak
+        // after releasing the VT lock so stderr cannot stall the input pump.
+        let images = match images {
+            Ok(images) => {
+                self.image_error_logged = false;
+                images
+            }
+            Err(error) => {
+                if !self.image_error_logged {
+                    eprintln!("ghostex: Kitty image snapshot failed: {error}");
+                    self.image_error_logged = true;
+                }
+                Vec::new()
+            }
         };
 
         let (cols, rows) = render_state.size()?;

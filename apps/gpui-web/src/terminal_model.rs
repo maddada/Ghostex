@@ -65,6 +65,7 @@ pub struct TerminalAttachConfig {
 pub struct TerminalModel {
     terminal: Arc<Mutex<Option<VtTerminal>>>,
     render_state: Option<VtRenderState>,
+    image_error_logged: bool,
     link: Arc<PageLocal<Rc<RefCell<Link>>>>,
     /// Always `None`: the process belongs to the zmx daemon on the session's computer. The lifted paste path reads it for its diagnostics.
     child_pid: Option<u32>,
@@ -192,6 +193,7 @@ impl TerminalModel {
         Ok(Self {
             terminal,
             render_state: Some(VtRenderState::new()?),
+            image_error_logged: false,
             link,
             child_pid: None,
             size: (config.cols, config.rows),
