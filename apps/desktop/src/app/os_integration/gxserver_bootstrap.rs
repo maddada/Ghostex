@@ -268,12 +268,13 @@ impl GhostexGpuiApp {
                 windows_terminal_backend::resolve_current(),
                 Ok(windows_terminal_backend::ResolvedWindowsTerminalBackend::Wsl { .. })
             ) {
+                let message = format!(
+                    "gxserver started inside WSL2, but its health check from Windows failed: {detail}. Check the server status and WSL localhost connectivity, then retry."
+                );
                 if windows_first_run_setup_active {
                     let _ = this.update(cx, |this, cx| {
-                        this.windows_first_run_setup_state = GpuiWindowsFirstRunSetupState::Failed(
-                            "Ghostex started its terminal engine, but Windows could not connect to it. Check that WSL localhost forwarding is enabled, then try again."
-                                .to_string(),
-                        );
+                        this.windows_first_run_setup_state =
+                            GpuiWindowsFirstRunSetupState::Failed(message);
                         cx.notify();
                     });
                     return;
@@ -282,7 +283,7 @@ impl GhostexGpuiApp {
                     this.show_gpui_gxserver_bootstrap_toast(
                         "error",
                         "WSL gxserver unavailable",
-                        "gxserver started inside WSL2, but Windows could not reach it through localhost:58744. Check that WSL localhost forwarding is enabled, then retry.",
+                        &message,
                         true,
                         cx,
                     );

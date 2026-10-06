@@ -360,6 +360,33 @@ pub(super) fn run_wsl_capture(distribution: &str, script: &str) -> Option<String
         .then(|| decode_windows_command_output(&output.stdout))
 }
 
+pub(super) fn run_wsl_checked(distribution: &str, script: &str) -> Result<(), String> {
+    let output = hidden_command("wsl.exe")
+        .args([
+            "--distribution",
+            distribution,
+            "--exec",
+            "sh",
+            "-lc",
+            script,
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not run wsl.exe: {error}"))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = decode_windows_command_output(&output.stderr);
+    let detail = stderr.trim().chars().take(4096).collect::<String>();
+    if detail.is_empty() {
+        Err(format!("wsl.exe {}", output.status))
+    } else {
+        Err(format!("wsl.exe {}: {detail}", output.status))
+    }
+}
+
 pub(super) fn spawn_gxserver_owner(
     distribution: &str,
     runtime_file: &str,

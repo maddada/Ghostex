@@ -292,9 +292,11 @@ pub(in crate::windows_terminal_backend) fn prepare_gxserver(
         "set -eu; gxserver={}; test -x \"$gxserver\"; \"$gxserver\" start --json >/dev/null",
         posix_single_quote(&gxserver_path),
     );
-    if !run_wsl_status(distribution, &start_script) {
-        return Err("gxserver could not start inside the selected WSL2 distribution.".into());
-    }
+    // CDXC:ServerDaemon 2026-10-06 WHY:
+    // Discarding startup stderr hid health-probe timeouts behind a generic WSL failure, while the unavailable cached token made Chat View look like an authentication problem.
+    run_wsl_checked(distribution, &start_script).map_err(|error| {
+        format!("gxserver could not start in WSL distribution '{distribution}': {error}")
+    })?;
     progress(WindowsWslSetupPhase::Connecting);
     let token_file = paths.state_path("gxserver/auth/token");
     let token = run_wsl_capture(
