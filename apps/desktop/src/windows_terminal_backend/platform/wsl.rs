@@ -5,7 +5,7 @@ use std::{
     env,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, Output, Stdio},
 };
 
 use std::os::windows::process::CommandExt as _;
@@ -361,6 +361,15 @@ pub(super) fn run_wsl_capture(distribution: &str, script: &str) -> Option<String
 }
 
 pub(super) fn run_wsl_checked(distribution: &str, script: &str) -> Result<(), String> {
+    run_wsl_output(distribution, script, Stdio::null()).map(|_| ())
+}
+
+pub(super) fn run_wsl_capture_checked(distribution: &str, script: &str) -> Result<String, String> {
+    run_wsl_output(distribution, script, Stdio::piped())
+        .map(|output| decode_windows_command_output(&output.stdout))
+}
+
+fn run_wsl_output(distribution: &str, script: &str, stdout: Stdio) -> Result<Output, String> {
     let output = hidden_command("wsl.exe")
         .args([
             "--distribution",
@@ -371,12 +380,12 @@ pub(super) fn run_wsl_checked(distribution: &str, script: &str) -> Result<(), St
             script,
         ])
         .stdin(Stdio::null())
-        .stdout(Stdio::null())
+        .stdout(stdout)
         .stderr(Stdio::piped())
         .output()
         .map_err(|error| format!("Could not run wsl.exe: {error}"))?;
     if output.status.success() {
-        return Ok(());
+        return Ok(output);
     }
     let stderr = decode_windows_command_output(&output.stderr);
     let detail = stderr.trim().chars().take(4096).collect::<String>();

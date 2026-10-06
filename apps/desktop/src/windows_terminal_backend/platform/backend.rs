@@ -299,15 +299,17 @@ pub(in crate::windows_terminal_backend) fn prepare_gxserver(
     })?;
     progress(WindowsWslSetupPhase::Connecting);
     let token_file = paths.state_path("gxserver/auth/token");
-    let token = run_wsl_capture(
+    let token_output = run_wsl_capture_checked(
         distribution,
         &format!(
             "set -eu; token_file={}; test -f \"$token_file\"; cat \"$token_file\"",
             posix_single_quote(&token_file),
         ),
     )
-    .and_then(|value| validated_auth_token(&value))
-    .ok_or_else(|| {
+    .map_err(|error| {
+        format!("gxserver started in WSL, but its authentication token could not be read: {error}")
+    })?;
+    let token = validated_auth_token(&token_output).ok_or_else(|| {
         "gxserver started in WSL, but its authentication token is unavailable.".to_string()
     })?;
     let runtime_file = paths.state_path("gxserver/runtime/server.json");
