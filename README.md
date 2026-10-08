@@ -1,4 +1,4 @@
-<h1 align="center">
+﻿<h1 align="center">
   <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" valign="middle" /></a> Ghostex
 </h1>
 
@@ -19,7 +19,7 @@
   Chat with several agents side by side, review their work as they go, and keep steering from your phone.
 </p>
 
-<h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a></h3>
+<h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a> &nbsp;·&nbsp; <a href="https://cdn.angles.video/videos/213c9683-d490-4177-80da-51d04c8c521b.mp4">Watch the 30s demo</a></h3>
 
 <p align="center">
   <a href="media/readme/gx-hero-dark.jpg"><picture><source media="(prefers-color-scheme: dark)" srcset="media/readme/gx-hero-dark.gif" /><img src="media/readme/gx-hero-light.gif" alt="Ghostex with see-through glass over a moving meadow: projects and agent sessions in the sidebar, a chat in the middle and the view picker on the right" width="960" /></picture></a>
