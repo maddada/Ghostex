@@ -196,6 +196,7 @@ wrap_browser_process_handler! {
             profile on first launch.
             */
             CEF_CONTEXT_INITIALIZED.store(true, Ordering::Release);
+            browser_context_ready("default");
         }
 
         fn on_before_child_process_launch(&self, command_line: Option<&mut CommandLine>) {

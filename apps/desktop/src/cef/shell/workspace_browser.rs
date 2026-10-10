@@ -44,10 +44,15 @@ thread_local! {
 }
 
 wrap_request_context_handler! {
-    struct WorkspaceContextHandler { init: Rc<ContextInit>, }
+    struct WorkspaceContextHandler { init: Rc<ContextInit>, profile: String, }
     impl RequestContextHandler {
         fn on_request_context_initialized(&self, context: Option<&mut RequestContext>) {
-            self.init.finish(context.is_some());
+            let ready = context.is_some();
+            self.init.finish(ready);
+            // Waiters only wake on a later turn, so this runs before any browser opens on it.
+            if ready {
+                super::browser_context_ready(&self.profile);
+            }
         }
     }
 }
@@ -129,7 +134,7 @@ fn create_workspace_context(profile: &str) -> Result<Rc<ContextInit>> {
     }
     std::fs::create_dir_all(&dir).context("failed to create workspace browser profile")?;
     let init = Rc::new(ContextInit::default());
-    let mut handler = WorkspaceContextHandler::new(init.clone());
+    let mut handler = WorkspaceContextHandler::new(init.clone(), profile.to_string());
     let settings = cef::RequestContextSettings {
         cache_path: CefString::from(dir.to_string_lossy().as_ref()),
         persist_session_cookies: 1,

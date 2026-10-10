@@ -47,6 +47,36 @@ pub(crate) fn clear_workspace_browser_signins(workspace_id: &str) -> Result<(), 
     cef::clear_workspace_browser_profile(&profile).map_err(|error| error.to_string())
 }
 
+/// Starts a workspace profile's context with no page on it, for work that needs only the context
+/// (Settings' Forget all answers), and resolves true once it is ready. False for other profiles,
+/// when it fails or takes too long, and when the CEF runtime is not running: that stays deferred
+/// until a web view needs it (CDXC:CefRuntime 2026-09-19).
+pub(crate) fn start_workspace_browser_context(
+    profile: &str,
+    cx: &App,
+) -> impl std::future::Future<Output = bool> + 'static {
+    let state = (cef::cef_profile_is_workspace(profile) && cef::context_initialized())
+        .then(|| cef::prepare_workspace_browser_context(profile).ok())
+        .flatten();
+    let timer = cx
+        .background_executor()
+        .timer(WORKSPACE_BROWSER_CONTEXT_WAIT);
+    async move {
+        let receiver = match state {
+            Some(WorkspaceBrowserContextState::Ready) => return true,
+            Some(WorkspaceBrowserContextState::Pending(receiver)) => receiver,
+            _ => return false,
+        };
+        let timer = timer.fuse();
+        let mut receiver = receiver.fuse();
+        futures::pin_mut!(timer);
+        futures::select! {
+            result = receiver => result.unwrap_or(false),
+            _ = timer => false,
+        }
+    }
+}
+
 impl GhostexGpuiApp {
     /// The CEF profile a Browser tab or website view opens with in this window.
     pub(crate) fn browser_tab_cef_profile(&self, profile_id: BrowserProfileId) -> String {

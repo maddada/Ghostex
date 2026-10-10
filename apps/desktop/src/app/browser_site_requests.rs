@@ -33,6 +33,7 @@ pub(crate) fn register_browser_site_request_handler(cx: &App) {
             .spawn(async move |cx| answer_browser_site_request(request, cx).await)
             .detach();
     }));
+    crate::cef::set_browser_context_ready_handler(Rc::new(forget_pending_site_answers));
 }
 
 async fn answer_browser_site_request(request: BrowserSiteRequest, cx: &mut AsyncApp) {
@@ -197,22 +198,33 @@ fn browser_site_answers_path() -> std::path::PathBuf {
     crate::ghostex_state_root().join("gpui-browser-site-answers.json")
 }
 
-fn read_browser_site_answers() -> BTreeMap<String, BTreeSet<String>> {
+#[derive(Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BrowserSiteAnswers {
+    /// The sites with a kept answer, by profile key (`browser_site_answers_profile`).
+    #[serde(default)]
+    local_network: BTreeMap<String, BTreeSet<String>>,
+    /// Profiles whose answers Forget all answers could not reach yet; forgotten when the
+    /// profile's browser context starts (`forget_pending_site_answers`).
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pending_forget: BTreeSet<String>,
+}
+
+fn read_browser_site_answers() -> BrowserSiteAnswers {
     std::fs::read_to_string(browser_site_answers_path())
         .ok()
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-        .and_then(|value| value.get("localNetwork").cloned())
-        .and_then(|value| serde_json::from_value(value).ok())
+        .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default()
 }
 
-fn write_browser_site_answers(answers: &BTreeMap<String, BTreeSet<String>>) {
+fn write_browser_site_answers(answers: &BrowserSiteAnswers) {
     let path = browser_site_answers_path();
     if let Some(parent) = path.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let text = serde_json::json!({ "localNetwork": answers }).to_string();
-    let _ = std::fs::write(path, text);
+    if let Ok(text) = serde_json::to_string(answers) {
+        let _ = std::fs::write(path, text);
+    }
 }
 
 /// The key a browser profile's answers are kept under: app pages (extension views, modals) share
@@ -234,6 +246,7 @@ fn remember_browser_site_answer(profile: &str, origin: &str) {
     };
     let mut answers = read_browser_site_answers();
     if answers
+        .local_network
         .entry(profile)
         .or_default()
         .insert(origin.to_string())
@@ -242,31 +255,86 @@ fn remember_browser_site_answer(profile: &str, origin: &str) {
     }
 }
 
+pub(crate) enum ForgetSiteAnswers {
+    /// This many sites were forgotten and will ask again.
+    Forgotten(usize),
+    /// This many sites are forgotten when the profile's browser context starts.
+    Pending(usize),
+}
+
 /// Forgets every site's Allow or Don't Allow in a browser profile, so each site asks again.
-/// Returns how many sites were forgotten.
-pub(crate) fn forget_browser_site_answers(profile: &str) -> Result<usize, String> {
+///
+/// CDXC:Browser 2026-10-10 WHY:
+/// A workspace's browser context only starts with its first page, and the CEF runtime only with
+/// the first web view, so in a fresh window Forget all answers reached no context and dropped the
+/// request: linear.app stayed answered and never asked again (live test on Windows). An answer
+/// that cannot be forgotten now stays listed and its profile is marked to forget when its context
+/// starts, before any page opens on it; the site leaves the list only once Chromium forgot it.
+pub(crate) fn forget_browser_site_answers(profile: &str) -> ForgetSiteAnswers {
     let Some(profile) = browser_site_answers_profile(profile) else {
-        return Ok(0);
+        return ForgetSiteAnswers::Forgotten(0);
     };
     let mut answers = read_browser_site_answers();
-    let Some(origins) = answers.remove(&profile) else {
-        return Ok(0);
-    };
-    let mut kept = BTreeSet::new();
-    for origin in &origins {
-        if !crate::cef::forget_local_network_access_answer(&profile, origin) {
-            kept.insert(origin.clone());
-        }
-    }
-    let forgotten = origins.len() - kept.len();
-    if !kept.is_empty() {
-        answers.insert(profile, kept);
-    }
+    let outcome = forget_profile_site_answers(&mut answers, &profile);
     write_browser_site_answers(&answers);
-    if forgotten == 0 && !origins.is_empty() {
-        return Err("This workspace's Browser isn't ready yet. Try again in a moment.".into());
+    outcome
+}
+
+/// True while a Forget all answers for `profile` waits for its browser context to start.
+pub(crate) fn browser_site_answers_forget_pending(profile: &str) -> bool {
+    browser_site_answers_profile(profile).is_some_and(|profile| {
+        read_browser_site_answers()
+            .pending_forget
+            .contains(&profile)
+    })
+}
+
+/// Runs when a browser context starts (`cef::set_browser_context_ready_handler`).
+fn forget_pending_site_answers(profile: &str) {
+    let Some(profile) = browser_site_answers_profile(profile) else {
+        return;
+    };
+    let mut answers = read_browser_site_answers();
+    if answers.pending_forget.contains(&profile) {
+        forget_profile_site_answers(&mut answers, &profile);
+        write_browser_site_answers(&answers);
     }
-    Ok(forgotten)
+}
+
+impl crate::GhostexGpuiApp {
+    pub(crate) fn toast_forgot_site_answers(&mut self, count: usize, cx: &mut gpui::Context<Self>) {
+        let sites = if count == 1 {
+            "1 site".to_string()
+        } else {
+            format!("{count} sites")
+        };
+        self.dispatch_gpui_workspace_action_toast(
+            "success",
+            "Answers forgotten",
+            &format!("Forgot answers for {sites}."),
+            cx,
+        );
+    }
+}
+
+fn forget_profile_site_answers(
+    answers: &mut BrowserSiteAnswers,
+    profile: &str,
+) -> ForgetSiteAnswers {
+    let origins = answers.local_network.remove(profile).unwrap_or_default();
+    let kept = origins
+        .iter()
+        .filter(|origin| !crate::cef::forget_local_network_access_answer(profile, origin))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    if kept.is_empty() {
+        answers.pending_forget.remove(profile);
+        return ForgetSiteAnswers::Forgotten(origins.len());
+    }
+    let pending = kept.len();
+    answers.local_network.insert(profile.to_string(), kept);
+    answers.pending_forget.insert(profile.to_string());
+    ForgetSiteAnswers::Pending(pending)
 }
 
 /// `acme.okta.com` from `https://acme.okta.com` (Local Network Access hands over `https://linear.app/`).

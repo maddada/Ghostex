@@ -225,25 +225,44 @@ impl GhostexGpuiApp {
                     .and_then(serde_json::Value::as_str);
                 let profile =
                     crate::app::workspace_browser::workspace_browser_profile(workspace_id);
-                match crate::app::browser_site_requests::forget_browser_site_answers(&profile) {
-                    Ok(0) => self.dispatch_gpui_workspace_action_toast(
+                use crate::app::browser_site_requests::{
+                    ForgetSiteAnswers, browser_site_answers_forget_pending,
+                    forget_browser_site_answers,
+                };
+                match forget_browser_site_answers(&profile) {
+                    ForgetSiteAnswers::Forgotten(0) => self.dispatch_gpui_workspace_action_toast(
                         "success",
                         "Nothing to forget",
                         "No site in this workspace's Browser has an answer kept.",
                         cx,
                     ),
-                    Ok(_) => self.dispatch_gpui_workspace_action_toast(
-                        "success",
-                        "Answers forgotten",
-                        "Sites in this workspace's Browser will ask again.",
-                        cx,
-                    ),
-                    Err(error) => self.dispatch_gpui_workspace_action_toast(
-                        "error",
-                        "Couldn't forget answers",
-                        &error,
-                        cx,
-                    ),
+                    ForgetSiteAnswers::Forgotten(count) => {
+                        self.toast_forgot_site_answers(count, cx)
+                    }
+                    // The context's start forgets them before anything else uses it.
+                    ForgetSiteAnswers::Pending(count) => {
+                        let started =
+                            crate::app::workspace_browser::start_workspace_browser_context(
+                                &profile, cx,
+                            );
+                        cx.spawn(async move |this, cx| {
+                            let forgotten =
+                                started.await && !browser_site_answers_forget_pending(&profile);
+                            let _ = this.update(cx, |app, cx| {
+                                if forgotten {
+                                    app.toast_forgot_site_answers(count, cx);
+                                } else {
+                                    app.dispatch_gpui_workspace_action_toast(
+                                        "info",
+                                        "Forget all answers",
+                                        "Will apply when this workspace's browser starts.",
+                                        cx,
+                                    );
+                                }
+                            });
+                        })
+                        .detach();
+                    }
                 }
             }
             "postponePortlessSetupPrompt" | "cancelPortlessSetupPrompt" => {

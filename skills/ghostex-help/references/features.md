@@ -256,7 +256,8 @@ view from the strip.
   bar, one at a time; they never block the window, so you can keep working or close it.
   The × (or Escape) means "not now" and remembers nothing, and a question goes away by
   itself when its page moves on or its tab closes. Settings > Workspaces > Site
-  permissions > Forget all answers lets every site ask again. If the sign-in gave up
+  permissions > Forget all answers lets every site ask again (if that workspace's Browser
+  hasn't opened a page yet, it applies when it does). If the sign-in gave up
   while the question was open, try it again.
 - **Linear and Jira**: open either view from the **+** menu. Paste the workspace,
   project, team, or board URL you want as its home. Ghostex identifies the workspace

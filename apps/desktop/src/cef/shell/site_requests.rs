@@ -171,7 +171,7 @@ fn set_local_network_access_setting(
 
 /// Clears a site's Allow or Don't Allow in a browser profile, and the count of times it was
 /// waved away, so the site asks again. False when the profile's browser context could not be
-/// reached.
+/// reached (the CEF runtime or a workspace's context has not started yet), and nothing changed.
 ///
 /// CDXC:Browser 2026-10-10 WHY: Chromium counts every "not now" (the × or Escape) and after three
 /// stops asking for a while on its own (`permission_autoblocking_data`, `dismiss_count: 3` for
@@ -344,6 +344,27 @@ pub(crate) fn dispatch_browser_site_request(request: BrowserSiteRequest) {
     let handler = BROWSER_SITE_REQUEST_HANDLER.with(|slot| slot.borrow().clone());
     if let Some(handler) = handler {
         handler(request);
+    }
+}
+
+pub type BrowserContextReadyHandler = StdRc<dyn Fn(&str)>;
+
+thread_local! {
+    static BROWSER_CONTEXT_READY_HANDLER: RefCell<Option<BrowserContextReadyHandler>> =
+        const { RefCell::new(None) };
+}
+
+/// The app registers this once. It runs on the CEF UI thread with the CEF profile whose request
+/// context just became usable: `"default"` for the global one (the Default Browser profile and
+/// app pages) and `workspace-<id>` for a workspace's, before any browser opens on it.
+pub fn set_browser_context_ready_handler(handler: BrowserContextReadyHandler) {
+    BROWSER_CONTEXT_READY_HANDLER.with(|slot| *slot.borrow_mut() = Some(handler));
+}
+
+pub(crate) fn browser_context_ready(profile: &str) {
+    let handler = BROWSER_CONTEXT_READY_HANDLER.with(|slot| slot.borrow().clone());
+    if let Some(handler) = handler {
+        handler(profile);
     }
 }
 
