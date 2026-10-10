@@ -445,8 +445,8 @@ pub fn usage() -> String {
             "Turn work mode on or off for a project (default: the current folder), or save the Linear API key from stdin",
         ),
         format_help_command(
-            "work-mode create-ticket --title t [--description d] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--pr 412] [--agent id] [--model m] [--effort e]",
-            "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent",
+            "work-mode create-ticket --title t [--description d] [--team-id id] [--linear-project-id id] [--no-assign] [--start] | start <SPX-1245|#218|PR link> [--pr 412] [--agent id] [--model m] [--effort e] [--cloud [--provider claude-code] [--prompt-file path]]",
+            "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
         ),
         format_help_command(
             "work-mode tracker [linear|github] [--workspace name|id | --project-id id | --path path]",

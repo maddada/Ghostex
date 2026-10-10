@@ -16,7 +16,7 @@ use crate::logging::{GxserverLogInput, LogLevel};
 use crate::platform::process::background_command;
 use crate::server::AppState;
 
-use super::cloud_runner::run_with_stdin;
+use crate::cloud_runner::run_with_stdin;
 use super::connections::TeamConnection;
 use super::convex_http::ConvexCallKind;
 use super::operations::member_call;

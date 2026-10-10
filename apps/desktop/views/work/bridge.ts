@@ -1,4 +1,4 @@
-import type { WorkItemRef } from "./types";
+import type { CurrentSession, WorkItemRef } from "./types";
 
 type GhostexGpuiWorkApi = {
   postProjectBoardRequest?: (payload: string) => boolean;
@@ -16,6 +16,7 @@ type WorkResponse = {
 const RESPONSE_EVENT = "ghostex-work-response";
 const OPEN_EVENT = "ghostex-work-open";
 const REFRESH_EVENT = "ghostex-work-refresh";
+const CURRENT_SESSION_EVENT = "ghostex-work-current-session";
 const BRIDGE_RETRY_MS = 25;
 /** CEF installs the bridge right after the page's first load; past this the page is not in the app. */
 const BRIDGE_WAIT_MS = 10_000;
@@ -110,4 +111,16 @@ export function onWorkOpen(listener: (ref: WorkItemRef) => void): () => void {
   };
   window.addEventListener(OPEN_EVENT, handler);
   return () => window.removeEventListener(OPEN_EVENT, handler);
+}
+
+/** The window selected another session, or the selected one's title or links changed. */
+export function onCurrentSession(
+  listener: (session: CurrentSession | null) => void,
+): () => void {
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<CurrentSession | null>).detail;
+    listener(detail && typeof detail === "object" ? detail : null);
+  };
+  window.addEventListener(CURRENT_SESSION_EVENT, handler);
+  return () => window.removeEventListener(CURRENT_SESSION_EVENT, handler);
 }

@@ -1,7 +1,6 @@
 import {
   IconArrowLeft,
   IconBox,
-  IconChevronDown,
   IconCircleCheck,
   IconCircleDashed,
   IconCircleDot,
@@ -14,11 +13,11 @@ import {
   IconMessage,
   IconMessages,
   IconPaperclip,
-  IconPlus,
   IconRefresh,
   IconVideo,
 } from "@tabler/icons-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { CloudSessionRows } from "./cloud-sessions";
 import {
   Avatar,
   Button,
@@ -36,26 +35,40 @@ import { ClampedText, LinkifiedText, MediaPlayer } from "./rich-text";
 import { SlackThreadCards } from "./slack-threads";
 import { TeamFlowTracker } from "./team-flow";
 import { TeamSessionRows } from "./team-sessions";
+import {
+  CloudTaskBox,
+  StartActions,
+  linkOffer,
+  type StartChatChoice,
+} from "./start-actions";
 import type {
+  CloudDraft,
+  CloudProvider,
+  CurrentSession,
   PullRequestDetails,
   WorkAgent,
   WorkComment,
   WorkItem,
   WorkItemDetails,
   WorkItemSession,
-  WorkProject,
 } from "./types";
+
+export type { StartChatChoice } from "./start-actions";
+
+/** The Start in cloud box's state, kept by the page (work.tsx). */
+export interface CloudBoxState {
+  provider: CloudProvider;
+  draft: CloudDraft | null;
+  loading: boolean;
+  error: string | null;
+  starting: boolean;
+}
 
 const KIND_LABEL: Record<WorkItem["kind"], string> = {
   linearIssue: "Linear issue",
   githubIssue: "GitHub issue",
   pullRequest: "Pull request",
 };
-
-export interface StartChatChoice {
-  agentId?: string;
-  projectId: string;
-}
 
 export function TicketDetailsView({
   details,
@@ -66,11 +79,19 @@ export function TicketDetailsView({
   starting,
   startError,
   now,
+  currentSession,
+  linking,
+  cloudBox,
   onBack,
   onRefresh,
   onOpenChat,
   onStartChat,
   onOpenUrl,
+  onLinkCurrentSession,
+  onPickCloud,
+  onStartCloud,
+  onCancelCloud,
+  onOpenCloudInTerminal,
 }: {
   details: WorkItemDetails | null;
   /** The list's row, drawn while the details load. */
@@ -81,11 +102,19 @@ export function TicketDetailsView({
   starting: boolean;
   startError: string | null;
   now: number;
+  currentSession: CurrentSession | null;
+  linking: boolean;
+  cloudBox: CloudBoxState | null;
   onBack: () => void;
   onRefresh: () => void;
   onOpenChat: (session: WorkItemSession) => void;
   onStartChat: (choice: StartChatChoice) => void;
   onOpenUrl: (url: string) => void;
+  onLinkCurrentSession: (session: CurrentSession, item: WorkItem) => void;
+  onPickCloud: (provider: CloudProvider) => void;
+  onStartCloud: (prompt: string) => void;
+  onCancelCloud: () => void;
+  onOpenCloudInTerminal: (sessionUrl: string, item: WorkItem) => void;
 }) {
   const item = details?.item ?? fallbackItem;
   const linear = details?.linear ?? null;
@@ -93,7 +122,10 @@ export function TicketDetailsView({
   const pullRequest = details?.pullRequest ?? null;
   const sessions = item?.sessions ?? [];
   const teamSessions = details?.team?.sessions ?? [];
-  const conversationCount = sessions.length + teamSessions.length;
+  const cloudSessions = details?.cloudSessions ?? [];
+  const conversationCount =
+    sessions.length + cloudSessions.length + teamSessions.length;
+  const link = item ? linkOffer(item, currentSession) : null;
   const ticketUrl = linear?.url ?? githubIssue?.url ?? item?.url;
   const projects = details?.projects ?? [];
   const projectName =
@@ -224,14 +256,24 @@ export function TicketDetailsView({
 
       {item ? (
         <div className="w-detail-actions">
-          <PrimaryAction
+          <StartActions
             item={item}
             projects={projects}
             agents={agents}
+            providers={details?.cloudProviders ?? []}
             starting={starting}
+            cloudStarting={cloudBox?.starting ?? false}
+            link={link}
+            linking={linking}
             onOpenChat={onOpenChat}
             onStartChat={onStartChat}
             onOpenUrl={onOpenUrl}
+            onLink={() =>
+              link?.session && !link.disabledReason
+                ? onLinkCurrentSession(link.session, item)
+                : undefined
+            }
+            onPickCloud={onPickCloud}
           />
           {ticketUrl && item.kind !== "pullRequest" ? (
             <Button onClick={() => onOpenUrl(ticketUrl)}>
@@ -252,6 +294,18 @@ export function TicketDetailsView({
               : "Not in your sidebar"}
           </span>
         </div>
+      ) : null}
+
+      {cloudBox ? (
+        <CloudTaskBox
+          provider={cloudBox.provider}
+          draft={cloudBox.draft}
+          loading={cloudBox.loading}
+          error={cloudBox.error}
+          starting={cloudBox.starting}
+          onStart={onStartCloud}
+          onCancel={onCancelCloud}
+        />
       ) : null}
 
       {startError ? (
@@ -409,11 +463,20 @@ export function TicketDetailsView({
                 </div>
               ))
             : null}
+          {cloudSessions.length > 0 ? (
+            <CloudSessionRows
+              sessions={cloudSessions}
+              now={now}
+              onOpenUrl={onOpenUrl}
+              onOpenInTerminal={(url) => onOpenCloudInTerminal(url, item)}
+            />
+          ) : null}
           {teamSessions.length > 0 ? (
             <TeamSessionRows
               sessions={teamSessions}
               now={now}
               onOpenUrl={onOpenUrl}
+              onOpenInTerminal={(url) => onOpenCloudInTerminal(url, item)}
             />
           ) : null}
           {conversationCount === 0 ? (
@@ -628,170 +691,5 @@ function PullRequestCard({
         ) : null}
       </div>
     </Card>
-  );
-}
-
-/**
- * CDXC:WorkMode 2026-10-09 DECISION:
- * User: the ticket's one button is "Open chat" when one of your sessions links it (it selects that
- * session in the sidebar and shows it in the chat column, nothing else moves), otherwise "Start
- * chat" with an arrow menu for the agent, which starts a session in a new worktree on the ticket's
- * branch, linked to it, and sends nothing. The repo comes from the ticket; Ghostex asks only when
- * it cannot tell.
- */
-function PrimaryAction({
-  item,
-  projects,
-  agents,
-  starting,
-  onOpenChat,
-  onStartChat,
-  onOpenUrl,
-}: {
-  item: WorkItem;
-  projects: WorkProject[];
-  agents: WorkAgent[];
-  starting: boolean;
-  onOpenChat: (session: WorkItemSession) => void;
-  onStartChat: (choice: StartChatChoice) => void;
-  onOpenUrl: (url: string) => void;
-}) {
-  const defaultAgent =
-    agents.find((agent) => agent.primary)?.id ?? agents[0]?.id;
-  const [agentId, setAgentId] = useState<string | undefined>(defaultAgent);
-  const [projectId, setProjectId] = useState<string | undefined>(
-    item.projectId,
-  );
-  useEffect(
-    () => setAgentId((current) => current ?? defaultAgent),
-    [defaultAgent],
-  );
-  useEffect(() => setProjectId(item.projectId), [item.projectId]);
-
-  const session =
-    item.sessions.find((candidate) => candidate.working) ?? item.sessions[0];
-  if (session) {
-    return (
-      <Button
-        variant="primary"
-        className="open-chat-btn"
-        onClick={() => onOpenChat(session)}
-      >
-        <IconMessage size={14} />
-        Open chat
-      </Button>
-    );
-  }
-  if (item.kind === "pullRequest") {
-    return item.url ? (
-      <Button variant="primary" onClick={() => onOpenUrl(item.url ?? "")}>
-        <IconExternalLink size={14} />
-        Open on GitHub
-      </Button>
-    ) : null;
-  }
-  const project = projects.find(
-    (candidate) => candidate.projectId === projectId,
-  );
-  const agent = agents.find((candidate) => candidate.id === agentId);
-  return (
-    <Dropdown
-      className="start-chat-split"
-      trigger={(open, toggle) => (
-        <span className="w-split">
-          <Button
-            variant="primary"
-            className="start-chat-btn"
-            disabled={starting}
-            onClick={() =>
-              projectId ? onStartChat({ agentId, projectId }) : toggle()
-            }
-            title={projectId ? undefined : "Pick the project to work in"}
-          >
-            {starting ? <Spinner /> : <IconPlus size={14} />}
-            {starting ? "Starting…" : "Start chat"}
-          </Button>
-          <Button
-            variant="primary"
-            className={cx("start-chat-options", open && "is-open")}
-            disabled={starting}
-            onClick={toggle}
-            title="Agent and project"
-          >
-            <IconChevronDown size={14} />
-          </Button>
-        </span>
-      )}
-    >
-      {(close) => (
-        <div className="w-start-menu start-chat-menu">
-          {agents.length > 0 ? (
-            <div className="w-menu-title">Start chat with</div>
-          ) : null}
-          {agents.map((candidate) => (
-            <MenuItem
-              key={candidate.id}
-              checked={candidate.id === agentId}
-              onSelect={() => setAgentId(candidate.id)}
-            >
-              {candidate.iconDataUrl ? (
-                <img
-                  className="w-agent-icon"
-                  src={candidate.iconDataUrl}
-                  alt=""
-                />
-              ) : null}
-              {candidate.name ?? candidate.id}
-              {candidate.primary ? (
-                <span className="w-menu-hint">default</span>
-              ) : null}
-            </MenuItem>
-          ))}
-          <div className="w-menu-sep" />
-          <div className="w-menu-title">In</div>
-          {projects.map((candidate) => (
-            <MenuItem
-              key={candidate.projectId}
-              checked={candidate.projectId === projectId}
-              onSelect={() => setProjectId(candidate.projectId)}
-            >
-              <IconFolder size={13} />
-              {candidate.name}
-              {candidate.projectId === item.projectId ? (
-                <span className="w-menu-hint">from the ticket</span>
-              ) : null}
-            </MenuItem>
-          ))}
-          <div className="w-menu-sep" />
-          <div className="w-menu-note">
-            {item.branchName ? (
-              <>
-                Branch <span className="w-mono">{item.branchName}</span> in a
-                new worktree.{" "}
-              </>
-            ) : (
-              "A new worktree on the ticket’s branch. "
-            )}
-            Starts {agent?.name ?? "the agent"}
-            {project ? ` in ${project.name}` : ""} and links the session to{" "}
-            {item.id}. Nothing is sent.
-          </div>
-          <div className="w-menu-actions">
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={!projectId || starting}
-              onClick={() => {
-                if (!projectId) return;
-                close();
-                onStartChat({ agentId, projectId });
-              }}
-            >
-              Start chat
-            </Button>
-          </div>
-        </div>
-      )}
-    </Dropdown>
   );
 }

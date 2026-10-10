@@ -447,10 +447,38 @@ pub(crate) fn read_work_item(
                 .collect()
         })
         .unwrap_or_default();
-    let team = team.map(|team| team_for_page(team, &local_sessions));
+    // Cloud sessions started here on the ticket (cloud_work.rs), by its team key and a PR's own.
+    let mut cloud_keys: Vec<String> = team_ticket
+        .as_ref()
+        .map(|(_, ticket)| ticket.clone())
+        .into_iter()
+        .collect();
+    if let Some((repo, number)) = pull_request
+        .as_ref()
+        .and_then(|pr| pr.get("url").and_then(Value::as_str))
+        .and_then(pull_request_url_parts)
+    {
+        cloud_keys.push(format!("{}#{number}", repo.to_ascii_lowercase()));
+    }
+    let mut cloud_sessions: Vec<Value> = Vec::new();
+    for key in &cloud_keys {
+        for record in cloud_sessions_for_ticket(paths, key) {
+            if !cloud_sessions
+                .iter()
+                .any(|known| known.get("sessionUrl") == record.get("sessionUrl"))
+            {
+                cloud_sessions.push(record);
+            }
+        }
+    }
+    let cloud_urls: Vec<&str> = cloud_sessions
+        .iter()
+        .filter_map(|record| record.get("sessionUrl").and_then(Value::as_str))
+        .collect();
+    let team = team.map(|team| team_for_page(team, &local_sessions, &cloud_urls));
     let mut facts = team_flow_facts(
         ticket_ref,
-        local_sessions.len(),
+        local_sessions.len() + cloud_sessions.len(),
         linear.as_ref(),
         github_issue.as_ref(),
         pull_request.as_ref(),
@@ -489,9 +517,41 @@ pub(crate) fn read_work_item(
         "links": links,
         "teamFlow": { "source": source, "steps": evaluate_team_flow(&steps, &facts) },
         "team": team,
+        "cloudSessions": cloud_sessions,
+        "cloudProviders": cloud_providers_wire(),
         "projects": list.get("projects").cloned().unwrap_or(Value::Array(Vec::new())),
         "errors": errors,
     })
+}
+
+/// A ticket's own record through the details cache (what the page just read): the Linear issue,
+/// the GitHub issue or the PR, for a cloud session's task (cloud_work.rs).
+pub(crate) fn work_ticket_detail(
+    linear_api_key: Option<&str>,
+    cwd: &str,
+    ticket: &WorkTicket,
+) -> Result<Value, String> {
+    match ticket {
+        WorkTicket::Linear(identifier) => {
+            let api_key = linear_api_key.ok_or_else(|| {
+                "Set a Linear API key first (Settings, or ghostex work-mode linear-key)."
+                    .to_string()
+            })?;
+            cached_detail(
+                format!("linear:{}:{identifier}", linear_key_fingerprint(api_key)),
+                false,
+                || fetch_linear_issue_detail(api_key, identifier),
+            )
+        }
+        WorkTicket::Github(number) => cached_detail(format!("issue:{cwd}#{number}"), false, || {
+            fetch_github_issue_detail(cwd, *number)
+        }),
+        WorkTicket::PullRequest(selector) => {
+            cached_detail(format!("pr:{cwd}:{selector}"), false, || {
+                fetch_pull_request_detail(cwd, selector)
+            })
+        }
+    }
 }
 
 /// `SPX-1245` or `#218`, as the team flow's ticket step names it.

@@ -252,10 +252,12 @@ export default defineSchema({
     ticket: v.string(),
     /** Whose Ghostex runs it; absent while the requester's Slack user is not linked to a member. */
     memberId: v.optional(v.id("members")),
-    slackUserId: v.string(),
+    /** The Slack requester; absent for a session started from the Work page (`workCloudSessions.ts`) by a member with no Slack user. */
+    slackUserId: v.optional(v.string()),
     runPlace: v.union(v.literal("cloud"), v.literal("local")),
     status: v.union(v.literal("starting"), v.literal("running"), v.literal("failed"), v.literal("cancelled")),
-    commandId: v.id("commands"),
+    /** The Slack command that started it; absent for a session started from the Work page. */
+    commandId: v.optional(v.id("commands")),
     projectId: v.optional(v.string()),
     sessionId: v.optional(v.string()),
     sessionUrl: v.optional(v.string()),

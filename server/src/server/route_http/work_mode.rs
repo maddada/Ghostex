@@ -7,8 +7,9 @@ use serde_json::{json, Map, Value};
 use crate::domain::DomainStateError;
 use crate::protocol::rpc_success;
 use crate::work_mode::{
-    linear_api_key_summary, merge_work_links, resolve_work_mode_project, set_project_work_mode,
-    store_linear_api_key, verify_linear_api_key, write_work_links, LinearKeyScope,
+    expand_added_work_links, linear_api_key_summary, merge_work_links, resolve_work_mode_project,
+    set_project_work_mode, store_linear_api_key, verify_linear_api_key, write_work_links,
+    LinearKeyScope,
 };
 
 use super::super::work_mode_sync::{publish_project_work_mode_change, spawn_work_mode_refresh};
@@ -75,7 +76,14 @@ pub(super) async fn route_work_mode_http(
                         .get("runtimeSettings")
                         .and_then(|settings| settings.get("workLinks"))
                         .and_then(Value::as_object);
-                    let links = merge_work_links(existing, params)?;
+                    // `add…` keys (the Work page's Link to current session) join the session's
+                    // effective links and answer with the request that takes them back.
+                    let project = repository.get_project(&project_id)?.unwrap_or(Value::Null);
+                    let added = expand_added_work_links(&project, &session, existing, params)?;
+                    let links = merge_work_links(
+                        existing,
+                        added.as_ref().map_or(params, |added| &added.request),
+                    )?;
                     write_work_links(db, &project_id, &session_id, &links)?;
                     schedule_presentation_session_delta(
                         &state,
@@ -88,6 +96,7 @@ pub(super) async fn route_work_mode_http(
                         "projectId": project_id,
                         "sessionId": session_id,
                         "workLinks": Value::Object(links),
+                        "undo": added.map(|added| Value::Object(added.undo)),
                     }))
                 },
             );

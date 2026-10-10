@@ -28,4 +28,7 @@ impl GhostexGpuiApp {
 
     /// There is no Work page here to refresh after the Create Linear Ticket dialog.
     pub(crate) fn work_view_ticket_created(&mut self, _cx: &mut Context<Self>) {}
+
+    /// There is no Work page here to tell which session is current.
+    pub(crate) fn work_view_sync_current_session(&mut self, _cx: &mut Context<Self>) {}
 }

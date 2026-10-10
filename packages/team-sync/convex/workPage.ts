@@ -177,7 +177,7 @@ async function loadTicketDetails(ctx: QueryCtx, args: { memberToken: string; tic
       const member = await ctx.db.get(row.memberId);
       if (member) memberNames.set(row.memberId, member.name);
     }
-    if (!row.memberId) userIds.add(row.slackUserId);
+    if (!row.memberId && row.slackUserId) userIds.add(row.slackUserId);
     sessions.push({
       id: row._id,
       memberId: row.memberId ?? null,
@@ -287,7 +287,7 @@ export const ticketDetails = action({
       })),
       sessions: data.sessions.map((session) => ({
         ...session,
-        memberName: session.memberName ?? users[session.slackUserId] ?? null,
+        memberName: session.memberName ?? (session.slackUserId ? users[session.slackUserId] : undefined) ?? null,
       })),
     };
   },

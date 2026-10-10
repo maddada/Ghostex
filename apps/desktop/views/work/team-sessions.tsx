@@ -1,5 +1,6 @@
 import { IconCloud, IconDeviceDesktop } from "@tabler/icons-react";
-import { Button, LiveDot } from "./components";
+import { CloudSessionButtons } from "./cloud-sessions";
+import { LiveDot } from "./components";
 import { relativeTime } from "./format";
 import type { TeamSession } from "./types";
 
@@ -23,10 +24,12 @@ export function TeamSessionRows({
   sessions,
   now,
   onOpenUrl,
+  onOpenInTerminal,
 }: {
   sessions: TeamSession[];
   now: number;
   onOpenUrl: (url: string) => void;
+  onOpenInTerminal: (url: string) => void;
 }) {
   return (
     <>
@@ -77,13 +80,11 @@ export function TeamSessionRows({
             <div className="w-convo-right">
               {live ? <LiveDot /> : null}
               {session.runPlace === "cloud" && session.sessionUrl ? (
-                <Button
-                  size="sm"
-                  className="open-in-claude"
-                  onClick={() => onOpenUrl(session.sessionUrl ?? "")}
-                >
-                  Open in Claude
-                </Button>
+                <CloudSessionButtons
+                  sessionUrl={session.sessionUrl}
+                  onOpenUrl={onOpenUrl}
+                  onOpenInTerminal={onOpenInTerminal}
+                />
               ) : null}
             </div>
           </div>

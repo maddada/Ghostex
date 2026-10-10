@@ -182,7 +182,7 @@ export type QueuedWork =
  * Step 4's decision, made in one transaction so two requests for a ticket never start two sessions: the ticket's session exists → a `message` command to the Ghostex that runs it; none → a `start` command to the requester's Ghostex and the ticket's session row.
  *
  * CDXC:TeamSync 2026-10-09 DECISION:
- * User: one working session per ticket; "the session exists → send it your message", none → start it in the cloud or locally. A command waits in Convex while its Ghostex is off and starts when it is back. A cloud session gets the message too: the Ghostex that started it sends it through its cloud runner (server/src/team_sync/cloud_runner.rs), since only that requester's Claude login can reach it.
+ * User: one working session per ticket; "the session exists → send it your message", none → start it in the cloud or locally. A command waits in Convex while its Ghostex is off and starts when it is back. A cloud session gets the message too: the Ghostex that started it sends it through its cloud runner (server/src/cloud_runner.rs), since only that requester's Claude login can reach it.
  */
 export const queueTicketWork = internalMutation({
   args: {

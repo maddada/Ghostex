@@ -4,7 +4,7 @@
 //! - `start`: one working session per ticket. A session here already linked to the ticket gets
 //!   the request; otherwise `local` starts a session in a worktree on the ticket's branch
 //!   (`startWorkOnTicket`) and sends it the prompt, and `cloud` starts one through the cloud
-//!   runner (cloud_runner.rs).
+//!   runner (server/src/cloud_runner.rs).
 //! - `message`: the ticket's session exists; send it the request (a cloud session through the
 //!   cloud runner).
 //! - A GitHub ticket that is a pull request starts on the PR's head branch, linked to the PR.
@@ -32,15 +32,12 @@ use crate::work_mode::{
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 use crate::worktree_sessions::read_worktree_session_marker;
 
-use super::cloud_runner::{cloud_runner, CloudStartRequest};
 use super::commands::CommandOutcome;
 use super::connections::TeamConnection;
 use super::slack_requirements::summarize_requirements_in_background;
+use crate::cloud_runner::{cloud_runner, CloudStartRequest, MAX_CLOUD_PROMPT_CHARS};
 
 const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
-/// Claude Code's `--cloud` takes the prompt as one command-line argument; Windows caps a command
-/// line at 32k characters.
-const MAX_CLOUD_PROMPT_CHARS: usize = 12_000;
 
 fn text<'a>(value: &'a Value, pointer: &str) -> Option<&'a str> {
     value

@@ -1,4 +1,4 @@
-//! The terminal an account login runs in: Settings reads its screen as plain text, and the login gets the replies to the terminal queries it waits on. The Slack cloud runner's `claude --cloud` start (team_sync/cloud_runner.rs) runs in one too.
+//! The terminal an account login runs in: Settings reads its screen as plain text, and the login gets the replies to the terminal queries it waits on. The Slack cloud runner's `claude --cloud` start (server/src/cloud_runner.rs) runs in one too.
 
 use std::io::Write;
 

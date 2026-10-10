@@ -50,6 +50,8 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
                 .get(1)
                 .map(String::as_str)
                 .or_else(|| flags.string_value("pr"))
+                // `start --cloud SPX-1245`: the parser gave the ticket to the flag.
+                .or_else(|| flags.string_value("cloud"))
                 .ok_or_else(|| {
                     CliError::Other("Pass the ticket: ghostex work-mode start SPX-1245 (or #218, or --pr 412).".to_string())
                 })?;
@@ -184,7 +186,9 @@ fn create_ticket(rest: &[String], flags: &super::args::Flags) -> CliResult<()> {
 
 /// Starts an agent on a ticket (`SPX-1245`, `#218` / `218` for a GitHub issue, `pr:412` or a PR
 /// link for a pull request) in a worktree on the ticket's branch, linked to it, with nothing sent
-/// to the agent.
+/// to the agent. With `--cloud [--provider claude-code] [--prompt-file path]` it starts a cloud
+/// session on the ticket's branch instead (`/api/startCloudWork`, the Work page's Start in cloud),
+/// whose task is the file's text or the one Ghostex drafts from the ticket.
 fn start_work(ticket: &str, flags: &super::args::Flags) -> CliResult<Value> {
     let mut params = project_selector(flags);
     let ticket = ticket.trim();
@@ -196,6 +200,23 @@ fn start_work(ticket: &str, flags: &super::args::Flags) -> CliResult<Value> {
         params.insert("githubIssue".to_string(), json!(number));
     } else {
         params.insert("linearIssue".to_string(), json!(ticket));
+    }
+    if flags.truthy("cloud") {
+        params.insert(
+            "provider".to_string(),
+            json!(flags.string_value("provider").unwrap_or("claude-code")),
+        );
+        if let Some(path) = flags.string_value("promptFile") {
+            let text = std::fs::read_to_string(path)
+                .map_err(|error| CliError::Other(format!("Could not read {path}: {error}")))?;
+            params.insert("prompt".to_string(), json!(text));
+        }
+        // The cloud start alone may take up to three minutes (crate::cloud_runner).
+        return rpc::call_gxserver_rpc(
+            "/api/startCloudWork",
+            &Value::Object(params),
+            &with_default_timeout(flags, "240000"),
+        );
     }
     for (flag, key) in [
         ("agent", "agentId"),

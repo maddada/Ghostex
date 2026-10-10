@@ -17,6 +17,7 @@
 //! (`/api/startWorkOnTicket`), apps/gpui-web/src/app/web_host/work_view.rs (the browser's answer).
 
 mod bridge;
+mod current_session;
 mod host;
 
 pub(crate) use host::WorkViewState;

@@ -1,4 +1,11 @@
-//! Where a Slack request's `cloud` session runs.
+//! Where a cloud session runs: a Slack request's `cloud` session (team_sync/slack_request.rs) and
+//! the Work page's "Start in cloud" (work_mode/cloud_work.rs). Outside `team_sync` because a
+//! Personal workspace with work mode starts cloud sessions too, with no team.
+//!
+//! CDXC:WorkMode 2026-10-10 DECISION:
+//! User: "i want to add start in cloud which is a dropdown the shows claude code there pls (we'll
+//! add more soon)". `CLOUD_PROVIDERS` is that dropdown's list: a new cloud is one entry there with
+//! its runner, and the Work page and `ghostex work-mode start --cloud` pick it up.
 //!
 //! CDXC:TeamSync 2026-10-09 DECISION:
 //! User: "cloud" means Claude Code on the web for now, but the cloud runner must stay swappable so
@@ -26,6 +33,9 @@ use serde_json::Value;
 use crate::accounts::setup_terminal::{LoginTerminal, COLS, ROWS};
 use crate::platform::process::background_command;
 
+/// Claude Code's `--cloud` takes the prompt as one command-line argument; Windows caps a command
+/// line at 32k characters.
+pub(crate) const MAX_CLOUD_PROMPT_CHARS: usize = 12_000;
 /// How long a start may take before it counts as failed.
 const START_TIMEOUT: Duration = Duration::from_secs(180);
 /// After the session URL appears, how long the CLI gets to finish on its own.
@@ -55,10 +65,45 @@ pub(crate) trait CloudRunner {
     fn send(&self, session_url: &str, text: &str) -> Result<(), String>;
 }
 
+/// A cloud the "Start in cloud" menu offers.
+pub(crate) struct CloudProvider {
+    /// Stable id the page and the CLI send (`claude-code`).
+    pub(crate) id: &'static str,
+    /// The menu row's words.
+    pub(crate) name: &'static str,
+    /// The agent whose icon the menu row shows.
+    pub(crate) agent_id: &'static str,
+    runner: fn(&Path) -> Box<dyn CloudRunner + Send + Sync>,
+}
+
+impl CloudProvider {
+    pub(crate) fn runner(&self, home_dir: &Path) -> Box<dyn CloudRunner + Send + Sync> {
+        (self.runner)(home_dir)
+    }
+
+    pub(crate) fn wire(&self) -> Value {
+        serde_json::json!({ "id": self.id, "name": self.name, "agentId": self.agent_id })
+    }
+}
+
+pub(crate) const CLOUD_PROVIDERS: &[CloudProvider] = &[CloudProvider {
+    id: "claude-code",
+    name: "Claude Code",
+    agent_id: "claude",
+    runner: |home_dir| {
+        Box::new(ClaudeCodeOnTheWeb {
+            home_dir: home_dir.to_path_buf(),
+        })
+    },
+}];
+
+pub(crate) fn cloud_provider(id: &str) -> Option<&'static CloudProvider> {
+    CLOUD_PROVIDERS.iter().find(|provider| provider.id == id)
+}
+
+/// The cloud a Slack request's `cloud` session runs in.
 pub(crate) fn cloud_runner(home_dir: &Path) -> Box<dyn CloudRunner + Send + Sync> {
-    Box::new(ClaudeCodeOnTheWeb {
-        home_dir: home_dir.to_path_buf(),
-    })
+    CLOUD_PROVIDERS[0].runner(home_dir)
 }
 
 /// Claude Code on the web through the requester's own `claude` CLI and login, which is why the
@@ -202,7 +247,7 @@ impl CloudRunner for ClaudeCodeOnTheWeb {
 }
 
 /// Runs a command with `input` on stdin and returns its stdout, killing it after `timeout`.
-pub(super) fn run_with_stdin(
+pub(crate) fn run_with_stdin(
     mut command: std::process::Command,
     input: &str,
     timeout: Duration,

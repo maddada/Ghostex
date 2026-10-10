@@ -3,7 +3,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
 /** Bumped when Ghostex needs a newer copy of these functions; `teams:info` reports it. */
-export const FUNCTIONS_VERSION = 4;
+export const FUNCTIONS_VERSION = 5;
 
 const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 

@@ -15,6 +15,8 @@ pub(crate) struct WorkViewState {
     /// A ticket a chip asked to open, held until the page says it opened it (`work.ackOpen`), so a
     /// page that is still loading gets it with its `work.ready` answer.
     pub(crate) pending_open: Option<Value>,
+    /// The current session the page was last told about (current_session.rs).
+    pub(crate) current_session_sent: Option<Value>,
 }
 
 impl GhostexGpuiApp {

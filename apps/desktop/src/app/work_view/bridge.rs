@@ -17,6 +17,10 @@ const WORK_LIST_TIMEOUT: Duration = Duration::from_secs(20);
 const WORK_ITEM_TIMEOUT: Duration = Duration::from_secs(30);
 /// Starting work creates a worktree and starts the agent.
 const START_WORK_TIMEOUT: Duration = Duration::from_secs(90);
+/// Drafting a cloud task reads the ticket, the team instructions and `git ls-remote`.
+const DRAFT_CLOUD_TIMEOUT: Duration = Duration::from_secs(45);
+/// A cloud start takes 5 to 30 seconds and the runner gives up after 180 (server/src/cloud_runner.rs).
+const START_CLOUD_TIMEOUT: Duration = Duration::from_secs(200);
 
 fn text(request: &Value, key: &str) -> Option<String> {
     request
@@ -66,10 +70,13 @@ impl GhostexGpuiApp {
                             .map(|group| work_view_launcher_agents(&group.header_actions))
                     })
                     .unwrap_or_default();
+                let current_session = self.work_view_current_session();
+                self.work_view.current_session_sent = Some(current_session.clone());
                 let answer = json!({
                     "projectIds": project_ids,
                     "agents": agents,
                     "pendingOpen": self.work_view.pending_open.clone(),
+                    "currentSession": current_session,
                 });
                 self.answer_work_view_request(&request_id, Ok(answer), cx);
             }
@@ -122,6 +129,72 @@ impl GhostexGpuiApp {
                 );
             }
             "work.startChat" => self.start_work_view_chat(request_id, &request, cx),
+            // Start in cloud: the task the box opens with, then the start (crate::cloud_runner).
+            "work.draftCloud" | "work.startCloud" => {
+                let mut params = Map::new();
+                ticket_params(&request, &mut params);
+                params.remove("agentId");
+                let start = action == "work.startCloud";
+                if start {
+                    for key in ["provider", "prompt"] {
+                        if let Some(value) = text(&request, key) {
+                            params.insert(key.to_string(), json!(value));
+                        }
+                    }
+                }
+                let (path, timeout) = if start {
+                    ("/api/startCloudWork", START_CLOUD_TIMEOUT)
+                } else {
+                    ("/api/draftCloudWork", DRAFT_CLOUD_TIMEOUT)
+                };
+                self.work_view_rpc(request_id, path, Value::Object(params), timeout, cx);
+            }
+            // Link to current session (current_session.rs): adds the ticket to the session's
+            // links, and Undo sends back exactly what the add answered with.
+            "work.linkCurrentSession" | "work.undoLink" => {
+                let params = match (text(&request, "projectId"), text(&request, "sessionId")) {
+                    (Some(project_id), Some(session_id)) => {
+                        let mut params = Map::new();
+                        params.insert("projectId".to_string(), json!(project_id));
+                        params.insert("sessionId".to_string(), json!(session_id));
+                        if action == "work.undoLink" {
+                            let undo = request.get("undo").and_then(Value::as_object);
+                            for key in ["linearIssues", "githubIssues", "pullRequest"] {
+                                if let Some(value) = undo.and_then(|undo| undo.get(key)) {
+                                    params.insert(key.to_string(), value.clone());
+                                }
+                            }
+                        } else if let Some(issue) =
+                            request.get("linearIssue").filter(|value| !value.is_null())
+                        {
+                            params.insert("addLinearIssues".to_string(), json!([issue]));
+                        } else if let Some(issue) =
+                            request.get("githubIssue").filter(|value| !value.is_null())
+                        {
+                            params.insert("addGithubIssues".to_string(), json!([issue]));
+                        } else if let Some(pr) =
+                            request.get("pullRequest").filter(|value| !value.is_null())
+                        {
+                            params.insert("addPullRequest".to_string(), pr.clone());
+                        }
+                        Ok(params)
+                    }
+                    _ => Err("Pick a session in the sidebar first.".to_string()),
+                };
+                match params {
+                    Ok(params) => self.work_view_rpc(
+                        request_id,
+                        "/api/setSessionWorkLinks",
+                        Value::Object(params),
+                        WORK_LIST_TIMEOUT,
+                        cx,
+                    ),
+                    Err(error) => self.answer_work_view_request(&request_id, Err(error), cx),
+                }
+            }
+            "work.openCloudInTerminal" => {
+                self.open_cloud_session_in_terminal(request_id, &request, cx)
+            }
             // CDXC:WorkMode 2026-10-09 DECISION:
             // User: the GitHub Projects scope notice is "a closable notice on the page that appears once"; closing it is remembered by gxserver, so it stays closed in every window.
             "work.dismissNotice" => {
@@ -243,6 +316,82 @@ impl GhostexGpuiApp {
                         );
                     }
                 }
+                this.answer_work_view_request(&request_id, result, cx);
+            });
+        })
+        .detach();
+    }
+
+    /// Open in terminal for a cloud session: a new terminal session in the ticket's project runs
+    /// `claude --cloud <url>`, which attaches to the running cloud session, and the window
+    /// selects it.
+    ///
+    /// CDXC:WorkMode 2026-10-10 DECISION:
+    /// User: a cloud session's row in the Conversations card gets "Open in terminal" next to "Open
+    /// in Claude": a new Ghostex terminal session in the ticket's project running `claude --cloud
+    /// <session url>` (Claude Code 2.1.296: "attach to an existing one by session ID or
+    /// claude.ai/code URL"), titled after the ticket, and selected.
+    ///
+    /// CDXC:WorkMode 2026-10-10 WHY:
+    /// Attaching is gated per account by Claude: on the account this was built with, 2.1.296
+    /// answers "Attaching to an existing cloud session is not enabled for your account." for a URL
+    /// or a session id, and the terminal session shows that line. It is Claude's switch, not a
+    /// Ghostex fault, so the button stays and the terminal says why.
+    fn open_cloud_session_in_terminal(
+        &mut self,
+        request_id: String,
+        request: &Value,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        // The CLI prints `…/session_…?from=cli&m=0`; the query is only tracking, and a bare `&`
+        // would end the command in a shell, so the terminal gets the session's own URL.
+        let url = text(request, "sessionUrl")
+            .map(|url| url.split(['?', '#']).next().unwrap_or_default().to_string())
+            .filter(|url| {
+                url.starts_with("https://claude.ai/code/")
+                    && url.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || "-_./:".contains(character)
+                    })
+            });
+        let (Some(url), Some(project_id)) = (url, text(request, "projectId")) else {
+            self.answer_work_view_request(
+                &request_id,
+                Err("Only a Claude Code cloud session's link opens in a terminal.".to_string()),
+                cx,
+            );
+            return;
+        };
+        let title =
+            text(request, "title").unwrap_or_else(|| "Claude Code in the cloud".to_string());
+        let params = ghostex_gx_core::os_integration_command_params(
+            &format!("claude --cloud {url}"),
+            &project_id,
+            &title,
+        );
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let result = background
+                .spawn(async move {
+                    gpui_gxserver_rpc_result("/api/createAgentSession", &params, START_WORK_TIMEOUT)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                let result = result.and_then(|answer| {
+                    let (created_project, session_id) =
+                        ghostex_gx_core::created_session(&answer, Some(&project_id)).ok_or_else(
+                            || "Ghostex did not say which session it made.".to_string(),
+                        )?;
+                    let created_project = created_project.unwrap_or_else(|| project_id.clone());
+                    // Like Start chat: the Work view stays, and the session shows its terminal.
+                    this.gx_store_focus_created_session(
+                        &created_project,
+                        &session_id,
+                        true,
+                        Some("terminal"),
+                        cx,
+                    );
+                    Ok(json!({ "projectId": created_project, "sessionId": session_id }))
+                });
                 this.answer_work_view_request(&request_id, result, cx);
             });
         })

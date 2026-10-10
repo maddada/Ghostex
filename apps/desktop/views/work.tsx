@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   installFixtureAnswers,
   isFixtureMode,
+  onCurrentSession,
   onWorkOpen,
   onWorkRefresh,
   workRequest,
@@ -13,8 +14,18 @@ import {
   storeGroupBy,
   type WorkGroupBy,
 } from "./work/grouping";
-import { TicketDetailsView, type StartChatChoice } from "./work/ticket-details";
+import {
+  TicketDetailsView,
+  type CloudBoxState,
+  type StartChatChoice,
+} from "./work/ticket-details";
+import { WorkToast, type WorkToastState } from "./work/toast";
 import type {
+  CloudDraft,
+  CloudProvider,
+  CloudStartResult,
+  CurrentSession,
+  LinkResult,
   StartWorkResult,
   WorkAgent,
   WorkItem,
@@ -33,6 +44,8 @@ import "./work/work.css";
 
 /** The list re-reads itself this often while the page is on screen. */
 const AUTO_REFRESH_MS = 90_000;
+/** A cloud start takes 5 to 30 seconds; the app gives up after 200 (work_view/bridge.rs). */
+const CLOUD_START_TIMEOUT_MS = 210_000;
 /** While gxserver says it is still fetching, ask again after this long, a few times. */
 const REFRESHING_RETRY_MS = 4_000;
 const REFRESHING_RETRIES = 5;
@@ -63,6 +76,13 @@ function WorkApp() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [newTicketError, setNewTicketError] = useState<string | null>(null);
+  const [currentSession, setCurrentSession] = useState<CurrentSession | null>(
+    null,
+  );
+  const [linking, setLinking] = useState(false);
+  const [cloudBox, setCloudBox] = useState<CloudBoxState | null>(null);
+  const [toast, setToast] = useState<WorkToastState | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
   const [now, setNow] = useState(() => Date.now());
   const listRequest = useRef(0);
   const detailsRequest = useRef(0);
@@ -116,6 +136,7 @@ function WorkApp() {
     (ref: WorkItemRef, item: WorkItem | null) => {
       setDetails(null);
       setStartError(null);
+      setCloudBox(null);
       setRoute({ view: "details", ref, item });
       loadDetails(ref, false);
       document.querySelector(".w-scroll")?.scrollTo({ top: 0 });
@@ -132,7 +153,7 @@ function WorkApp() {
         list?.items.find(
           (item) =>
             refKey(itemRef(item)) === key ||
-            item.pullRequest?.url === ref.pullRequest,
+            (!!ref.pullRequest && item.pullRequest?.url === ref.pullRequest),
         ) ?? null;
       openRef(
         row
@@ -150,6 +171,7 @@ function WorkApp() {
       .then((ready) => {
         if (cancelled) return;
         setAgents(ready.agents ?? []);
+        setCurrentSession(ready.currentSession ?? null);
         if (ready.pendingOpen) openFromChip(ready.pendingOpen);
       })
       .catch(() => undefined);
@@ -162,6 +184,8 @@ function WorkApp() {
   }, []);
 
   useEffect(() => onWorkOpen(openFromChip), [openFromChip]);
+
+  useEffect(() => onCurrentSession(setCurrentSession), []);
 
   // A ticket made in the app's dialog (New ticket below, or a project's "…" menu) is new to Linear,
   // so the list skips gxserver's cache.
@@ -252,6 +276,141 @@ function WorkApp() {
       .finally(() => setStarting(false));
   };
 
+  const refreshDetails = () => {
+    if (route.view !== "details") return;
+    loadDetails(route.ref, true);
+    loadList(false);
+  };
+
+  // Link to current session: the ticket joins the session's links (gxserver keeps the others),
+  // and Undo sends back exactly what the link answered with (server/src/work_mode/link_add.rs).
+  const linkCurrentSession = (session: CurrentSession, item: WorkItem) => {
+    const target = {
+      projectId: session.projectId,
+      sessionId: session.sessionId,
+    };
+    setLinking(true);
+    workRequest<LinkResult>("work.linkCurrentSession", {
+      ...target,
+      linearIssue: item.kind === "linearIssue" ? item.linearIssue : undefined,
+      githubIssue: item.kind === "githubIssue" ? item.githubIssue : undefined,
+      pullRequest:
+        item.kind === "pullRequest"
+          ? (item.pullRequest?.url ?? item.pullRequest?.number)
+          : undefined,
+    })
+      .then((result) => {
+        refreshDetails();
+        const undo = result.undo;
+        setToast({
+          id: Date.now(),
+          text: `Linked ${item.id} to ‘${session.title}’`,
+          action:
+            undo && Object.keys(undo).length > 0
+              ? {
+                  label: "Undo",
+                  run: () => {
+                    setToast(null);
+                    workRequest("work.undoLink", { ...target, undo })
+                      .then(refreshDetails)
+                      .catch((error: unknown) =>
+                        setToast({
+                          id: Date.now(),
+                          text: errorText(error),
+                          tone: "error",
+                        }),
+                      );
+                  },
+                }
+              : undefined,
+        });
+      })
+      .catch((error: unknown) =>
+        setToast({ id: Date.now(), text: errorText(error), tone: "error" }),
+      )
+      .finally(() => setLinking(false));
+  };
+
+  // Start in cloud: gxserver drafts the task from the ticket, the box shows it for editing, and
+  // Start runs the cloud start (server/src/work_mode/cloud_work.rs).
+  const ticketParams = () =>
+    route.view === "details"
+      ? {
+          projectId: details?.item?.projectId ?? route.ref.projectId,
+          linearIssue: route.ref.linearIssue,
+          githubIssue: route.ref.githubIssue,
+          pullRequest: route.ref.pullRequest,
+        }
+      : null;
+
+  const pickCloud = (provider: CloudProvider) => {
+    const params = ticketParams();
+    if (!params) return;
+    setCloudBox({
+      provider,
+      draft: null,
+      loading: true,
+      error: null,
+      starting: false,
+    });
+    workRequest<CloudDraft>("work.draftCloud", params)
+      .then((draft) =>
+        setCloudBox((box) =>
+          box?.provider.id === provider.id
+            ? { ...box, draft, loading: false }
+            : box,
+        ),
+      )
+      .catch((error: unknown) =>
+        setCloudBox((box) =>
+          box?.provider.id === provider.id
+            ? { ...box, loading: false, error: errorText(error) }
+            : box,
+        ),
+      );
+  };
+
+  const startCloud = (prompt: string) => {
+    const params = ticketParams();
+    if (!params || !cloudBox) return;
+    const provider = cloudBox.provider;
+    setCloudBox({ ...cloudBox, starting: true, error: null });
+    workRequest<CloudStartResult>(
+      "work.startCloud",
+      { ...params, provider: provider.id, prompt },
+      CLOUD_START_TIMEOUT_MS,
+    )
+      .then((result) => {
+        setCloudBox(null);
+        openUrl(result.sessionUrl);
+        refreshDetails();
+        setToast({
+          id: Date.now(),
+          text: [
+            `${provider.name} started in the cloud on ${result.branch}`,
+            ...result.warnings,
+          ].join(". "),
+          tone: result.warnings.length > 0 ? "warning" : undefined,
+        });
+      })
+      .catch((error: unknown) =>
+        setCloudBox((box) =>
+          box ? { ...box, starting: false, error: errorText(error) } : box,
+        ),
+      );
+  };
+
+  const openCloudInTerminal = (sessionUrl: string, item: WorkItem) => {
+    const projectId = item.projectId ?? details?.projects[0]?.projectId;
+    void workRequest("work.openCloudInTerminal", {
+      projectId,
+      sessionUrl,
+      title: `${item.id} · ${item.title}`.slice(0, 60),
+    }).catch((error: unknown) =>
+      setToast({ id: Date.now(), text: errorText(error), tone: "error" }),
+    );
+  };
+
   return (
     <div className="w-scroll">
       {route.view === "list" ? (
@@ -292,6 +451,9 @@ function WorkApp() {
           starting={starting}
           startError={startError}
           now={now}
+          currentSession={currentSession}
+          linking={linking}
+          cloudBox={cloudBox}
           onBack={() => {
             setRoute({ view: "list" });
             loadList(false);
@@ -300,8 +462,14 @@ function WorkApp() {
           onOpenChat={openChat}
           onStartChat={startChat}
           onOpenUrl={openUrl}
+          onLinkCurrentSession={linkCurrentSession}
+          onPickCloud={pickCloud}
+          onStartCloud={startCloud}
+          onCancelCloud={() => setCloudBox(null)}
+          onOpenCloudInTerminal={openCloudInTerminal}
         />
       )}
+      <WorkToast toast={toast} onClose={closeToast} />
     </div>
   );
 }

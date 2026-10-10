@@ -4,6 +4,9 @@
  * only in that mode.
  */
 import type {
+  CloudDraft,
+  CloudSessionRecord,
+  CurrentSession,
   WorkItem,
   WorkItemDetails,
   WorkList,
@@ -418,6 +421,38 @@ const fixtureTracker = () =>
     ? "github"
     : "linear";
 
+const fixtureParam = (name: string) =>
+  new URLSearchParams(location.search).get(name);
+
+/**
+ * The window's selected session: `?current=none` (nothing selected), `remote` (another
+ * computer's), `pr` (a session already linked to another PR); otherwise a local work-mode session.
+ */
+function fixtureCurrentSession(): CurrentSession | null {
+  const mode = fixtureParam("current");
+  if (mode === "none") return null;
+  return {
+    projectId: "p-shortpoint",
+    sessionId: "s-copy-link",
+    title: "copy-link",
+    projectName: "shortpoint",
+    agentName: "Claude",
+    remote: mode === "remote",
+    machineName: mode === "remote" ? "studio-mac" : null,
+    workMode: true,
+    links: {
+      pullRequest:
+        mode === "pr"
+          ? { number: 6584, url: pullUrl("shortpoint/shortpoint", 6584) }
+          : null,
+      linearIssues: [],
+      githubIssues: [],
+    },
+  };
+}
+
+let currentSession = fixtureCurrentSession();
+
 const READY: WorkReady = {
   projectIds: ["p-shortpoint", "p-website"],
   agents: [
@@ -425,7 +460,49 @@ const READY: WorkReady = {
     { id: "codex", name: "Codex", primary: false },
   ],
   pendingOpen: null,
+  currentSession,
 };
+
+/** What the host sends when the selected session's links change (work_view/current_session.rs). */
+function pushCurrentSession(next: CurrentSession | null) {
+  currentSession = next;
+  window.dispatchEvent(
+    new CustomEvent("ghostex-work-current-session", { detail: next }),
+  );
+}
+
+const CLOUD_SESSIONS: Record<string, CloudSessionRecord[]> = {
+  "SPX-1234": [
+    {
+      sessionUrl: "https://claude.ai/code/session_01FixtureCloudRun",
+      provider: "claude-code",
+      providerName: "Claude Code",
+      runner: "claude-code-web",
+      ticket: "SPX-1234",
+      ticketLabel: "SPX-1234",
+      projectId: "p-shortpoint",
+      branch: "yahia/spx-1234-live-mode-table",
+      startedAt: Date.now() - 42 * 60_000,
+    },
+  ],
+};
+
+function cloudDraft(params: Record<string, unknown>): CloudDraft {
+  const id = String(params.linearIssue ?? `#${params.githubIssue ?? ""}`);
+  const item = ITEMS.find((candidate) => candidate.id === id) ?? ITEMS[0];
+  const branch = item?.branchName ?? "yahia/spx-1245-copy-link";
+  return {
+    prompt: `Work on ${id}: ${item?.title ?? ""}\n${linearUrl(id)}\n\nPeople want to copy a share link without opening the share dialog. Add “Copy link” to the share menu, and show a short “Link copied” toast.\n\nCreate the branch \`${branch}\` from the default branch, work on it, and open a pull request from it that names ${id} in its title or description, so Linear links it to the ticket.\n\n## Team instructions\nRecord a before/after video for QC and post the PR link in the working thread.\n`,
+    branch,
+    branchOnRemote: false,
+    ticket: id,
+    label: id,
+    projectId: "p-shortpoint",
+    team: true,
+    maxChars: 12000,
+    warnings: [],
+  };
+}
 
 function details(item: WorkItem): WorkItemDetails {
   const isLinear = item.kind === "linearIssue";
@@ -654,6 +731,10 @@ function details(item: WorkItem): WorkItemDetails {
             ],
     },
     team: item.id === "SPX-1234" ? TEAM_SPX_1234 : null,
+    cloudSessions: CLOUD_SESSIONS[item.id] ?? [],
+    cloudProviders: [
+      { id: "claude-code", name: "Claude Code", agentId: "claude" },
+    ],
     projects: LIST.projects,
     errors: [],
   };
@@ -858,6 +939,76 @@ export async function answerFromFixtures(
       ).workFixtureOpenedUrls ??= []);
       opened.push(params.url);
       return { opened: true };
+    }
+    case "work.draftCloud":
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      return cloudDraft(params);
+    case "work.startCloud": {
+      // `?cloudStart=hold` keeps it on "Starting…" for the screenshot; `?cloudError=1` fails it.
+      if (fixtureParam("cloudStart") === "hold")
+        await new Promise(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (fixtureParam("cloudError") === "1")
+        throw new Error(
+          "Claude Code did not start a cloud session (exit 1): Not logged in · Please run /login",
+        );
+      const id = String(params.linearIssue ?? "SPX-1245");
+      const record: CloudSessionRecord = {
+        sessionUrl: "https://claude.ai/code/session_01FixtureNewRun",
+        provider: "claude-code",
+        providerName: "Claude Code",
+        ticket: id,
+        branch: cloudDraft(params).branch,
+        startedAt: Date.now(),
+      };
+      CLOUD_SESSIONS[id] = [record, ...(CLOUD_SESSIONS[id] ?? [])];
+      return {
+        sessionUrl: record.sessionUrl,
+        provider: "claude-code",
+        branch: record.branch,
+        onBranch: false,
+        ticket: id,
+        projectId: "p-shortpoint",
+        teamRecorded: true,
+        warnings: [],
+      };
+    }
+    case "work.linkCurrentSession": {
+      if (!currentSession)
+        throw new Error("Pick a session in the sidebar first.");
+      const linearIssue = params.linearIssue as string | undefined;
+      const githubIssue = params.githubIssue as number | undefined;
+      pushCurrentSession({
+        ...currentSession,
+        links: {
+          ...currentSession.links,
+          linearIssues: linearIssue
+            ? [...currentSession.links.linearIssues, linearIssue]
+            : currentSession.links.linearIssues,
+          githubIssues: githubIssue
+            ? [...currentSession.links.githubIssues, githubIssue]
+            : currentSession.links.githubIssues,
+        },
+      });
+      return {
+        projectId: currentSession.projectId,
+        sessionId: currentSession.sessionId,
+        undo: linearIssue
+          ? { linearIssues: null }
+          : githubIssue
+            ? { githubIssues: null }
+            : { pullRequest: null },
+      };
+    }
+    case "work.undoLink":
+      pushCurrentSession(fixtureCurrentSession());
+      return { ok: true };
+    case "work.openCloudInTerminal": {
+      const opened = ((
+        window as { workFixtureTerminals?: unknown[] }
+      ).workFixtureTerminals ??= []);
+      opened.push(params);
+      return { projectId: params.projectId, sessionId: "s-cloud-terminal" };
     }
     case "work.startChat":
       return {

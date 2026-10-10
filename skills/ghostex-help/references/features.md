@@ -116,7 +116,7 @@ Working thread is ticked once the ticket has one (click the step to open it), an
 Validation once the request shows up in a watch-only channel or a session posted
 the final result. **Conversations** also lists the sessions your teammates (and
 you, in the cloud or on another computer) run on the ticket, with **Open in
-Claude** for a cloud session; watching a teammate's conversation is not available
+Claude** and **Open in terminal** for a cloud session; watching a teammate's conversation is not available
 yet. Without a team, as in a Personal workspace, these stay as they are. To
 change the steps, open Settings > Workspaces and use
 the workspace's **Team-flow steps**: reorder, rename or remove steps, add one with
@@ -125,7 +125,23 @@ the rule that marks it done (for example "The pull request has a label" with
 default flow. In a workspace connected to a team the steps are the team's, shared
 by every teammate, and only the team's owners can change them. **Open chat** shows the session linked to the ticket;
 **Start chat** starts one in a new worktree on the ticket's branch, linked to it,
-and sends nothing; its arrow picks the agent and the project. **New ticket** at
+and sends nothing. Its arrow opens a menu: Start chat (where you also pick the
+agent and the project), **Link to current session**, which adds the ticket to the
+links of the session you have selected in the sidebar without removing its other
+links (a toast offers **Undo**; it is greyed out with the reason when no session is
+selected, the session is on another computer, or, for a pull request, the session
+already has a different PR), and **Start in cloud**. **Start in cloud** (also its
+own button next to Start chat) lists the clouds Ghostex can start in, Claude Code
+for now: pick one and a box shows the task Ghostex wrote from the ticket (its ID,
+title, link, a short part of its description, the branch to work on with a pull
+request linked to the ticket, and your team's instructions in a team workspace).
+Edit it and click **Start**; the session runs on the ticket's branch (or creates
+it when GitHub does not have it yet), opens in the app's browser and shows under
+**Conversations** as yours, with **Open in Claude** and **Open in terminal**
+(which attaches to it in a new terminal session with `claude --cloud <link>`). It
+uses your own `claude` login, so sign in to Claude Code first, and the project
+needs a GitHub remote. From a terminal: `ghostex work-mode start SPX-1245 --cloud
+[--prompt-file task.md]`. **New ticket** at
 the top creates a Linear ticket or a GitHub issue (see Create Linear Ticket
 under Git and worktrees) and the list picks it up right away. The Work view is
 part of the desktop app; the web version opens a chip's link instead.
@@ -2327,7 +2343,9 @@ you type the first message. To start on a ticket that already exists, run
 `<your GitHub name>/218-<title>`, or a PR link or `--pr 412` for a pull request,
 which works on the PR's own branch and links the session to the PR and the issues
 it closes); a second session on the same ticket joins the first one's worktree and
-branch. `ghostex work-mode create-ticket --title "…"
+branch. Add `--cloud` to start a Claude Code cloud session on the ticket's branch
+instead (with the task from `--prompt-file`, or the one Ghostex writes from the
+ticket); it prints the session's link. `ghostex work-mode create-ticket --title "…"
 --start` does both from a terminal (a GitHub issue in a GitHub workspace). New session in a work-mode project still
 starts on main with no worktree.
 

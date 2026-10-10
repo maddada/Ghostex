@@ -295,6 +295,10 @@ export interface WorkItemDetails {
   links: { title: string; subtitle?: string | null; url: string }[];
   teamFlow: { source: string; steps: TeamFlowStepState[] };
   team?: WorkTeamDetails | null;
+  /** Cloud sessions this computer started on the ticket, newest first. */
+  cloudSessions?: CloudSessionRecord[];
+  /** The clouds the Start in cloud menus offer. */
+  cloudProviders?: CloudProvider[];
   projects: WorkProject[];
   errors: string[];
 }
@@ -311,6 +315,7 @@ export interface WorkReady {
   projectIds: string[];
   agents: WorkAgent[];
   pendingOpen?: WorkItemRef | null;
+  currentSession?: CurrentSession | null;
 }
 
 /** `/api/startWorkOnTicket` (server/src/work_mode/start_work.rs). */
@@ -319,4 +324,75 @@ export interface StartWorkResult {
   sessionId: string;
   branch?: string;
   worktreePath?: string;
+}
+
+/** A cloud the Start in cloud menus offer (server/src/cloud_runner.rs `CLOUD_PROVIDERS`). */
+export interface CloudProvider {
+  id: string;
+  name: string;
+  /** The agent whose launcher icon the row shows. */
+  agentId: string;
+}
+
+/** A cloud session this computer started on the ticket (server/src/work_mode/cloud_work.rs). */
+export interface CloudSessionRecord {
+  sessionUrl: string;
+  provider: string;
+  providerName?: string | null;
+  runner?: string | null;
+  ticket: string;
+  ticketLabel?: string | null;
+  projectId?: string | null;
+  branch?: string | null;
+  /** Milliseconds since the epoch. */
+  startedAt: number;
+}
+
+/** `/api/draftCloudWork`: the task the box opens with. */
+export interface CloudDraft {
+  prompt: string;
+  branch: string;
+  branchOnRemote: boolean;
+  ticket: string;
+  label: string;
+  projectId: string;
+  team: boolean;
+  maxChars: number;
+  warnings: string[];
+}
+
+/** `/api/startCloudWork`. */
+export interface CloudStartResult {
+  sessionUrl: string;
+  provider: string;
+  branch: string;
+  onBranch: boolean;
+  ticket: string;
+  projectId: string;
+  teamRecorded: boolean;
+  warnings: string[];
+}
+
+/** The session the window hosting the page has selected (apps/desktop/src/app/work_view/current_session.rs). */
+export interface CurrentSession {
+  projectId: string;
+  sessionId: string;
+  title: string;
+  projectName?: string | null;
+  agentName?: string | null;
+  remote: boolean;
+  machineName?: string | null;
+  workMode: boolean;
+  links: {
+    pullRequest?: { number: number; url?: string | null } | null;
+    linearIssues: string[];
+    githubIssues: number[];
+  };
+}
+
+/** `/api/setSessionWorkLinks` with an `add…` key: `undo` takes exactly the add back. */
+export interface LinkResult {
+  projectId: string;
+  sessionId: string;
+  undo?: Record<string, unknown> | null;
 }

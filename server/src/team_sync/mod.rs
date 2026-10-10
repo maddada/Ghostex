@@ -2,7 +2,7 @@
 //! stored connection, invite links, one-shot calls, the live command subscription, and the deploy
 //! the CLI runs for the person setting it up.
 
-mod cloud_runner;
+mod cloud_sessions;
 mod commands;
 mod connections;
 mod convex_http;
@@ -18,6 +18,7 @@ mod slack_request;
 mod slack_requirements;
 mod work_page;
 
+pub(crate) use cloud_sessions::{record_team_cloud_session, TeamCloudSession};
 pub(crate) use deploy::{deploy_team_functions, DeployOptions};
 pub(crate) use flow_steps::*;
 pub(crate) use invite_link::site_url;

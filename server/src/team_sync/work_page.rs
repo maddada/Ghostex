@@ -54,7 +54,7 @@ fn number(value: &Value, pointer: &str) -> u64 {
 }
 
 /// The text a failed call shows; an older deployment lacks these functions.
-fn team_error(connection: &TeamConnection, error: String) -> String {
+pub(super) fn team_error(connection: &TeamConnection, error: String) -> String {
     let team = connection.team_name.as_deref().unwrap_or("the team");
     if error.contains("Could not find public function") {
         format!("Team {team}: its Convex functions are older than this Ghostex. Run `ghostex team deploy` to update them.")
@@ -239,6 +239,15 @@ pub(crate) fn apply_team_ticket_summaries(
     }
 }
 
+/// Drops what is cached for one ticket, so the next read shows a change this computer just made.
+pub(super) fn forget_team_ticket(workspace_id: &str, ticket: &str) {
+    let key = (workspace_id.to_string(), ticket.to_string());
+    if let Ok(mut cache) = cache().lock() {
+        cache.summaries.remove(&key);
+        cache.details.remove(&key);
+    }
+}
+
 /// One ticket's team data: `None` when the workspace has no team connection.
 pub(crate) fn read_team_ticket(
     paths: &GxserverPaths,
@@ -315,15 +324,24 @@ fn add_message_media(details: &mut Value) {
 }
 
 /// The team data the details page draws: the threads as Convex sent them, and only the team
-/// sessions the ticket's local rows do not already show (a session on this computer is listed
-/// once, as yours).
-pub(crate) fn team_for_page(mut team: Value, local_session_ids: &[&str]) -> Value {
+/// sessions the ticket's local rows do not already show (a session on this computer, or a cloud
+/// session this computer started, is listed once, as yours).
+pub(crate) fn team_for_page(
+    mut team: Value,
+    local_session_ids: &[&str],
+    local_cloud_urls: &[&str],
+) -> Value {
     if let Some(sessions) = team.get_mut("sessions").and_then(Value::as_array_mut) {
         sessions.retain(|session| {
-            !session
+            let local = session
                 .get("sessionId")
                 .and_then(Value::as_str)
-                .is_some_and(|id| local_session_ids.contains(&id))
+                .is_some_and(|id| local_session_ids.contains(&id));
+            let cloud = session
+                .get("sessionUrl")
+                .and_then(Value::as_str)
+                .is_some_and(|url| local_cloud_urls.contains(&url));
+            !local && !cloud
         });
     }
     team["connected"] = json!(true);

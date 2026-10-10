@@ -31,6 +31,7 @@ import type * as slackThreads from "../slackThreads.js";
 import type * as teamFlow from "../teamFlow.js";
 import type * as teamFlowSteps from "../teamFlowSteps.js";
 import type * as teams from "../teams.js";
+import type * as workCloudSessions from "../workCloudSessions.js";
 import type * as workPage from "../workPage.js";
 
 import type {
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   teamFlow: typeof teamFlow;
   teamFlowSteps: typeof teamFlowSteps;
   teams: typeof teams;
+  workCloudSessions: typeof workCloudSessions;
   workPage: typeof workPage;
 }>;
 

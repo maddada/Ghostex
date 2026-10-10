@@ -119,6 +119,7 @@ impl GhostexGpuiApp {
         let work_view_was_available = self.work_view_available();
         self.native_sidebar.snapshot = Some(snapshot);
         self.leave_work_view_if_unavailable(work_view_was_available, cx);
+        self.work_view_sync_current_session(cx);
         cx.notify();
     }
 }

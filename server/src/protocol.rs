@@ -753,6 +753,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
         "/api/updateTeamFlow" => full_local(path),
         /*
+        CDXC:WorkMode 2026-10-10 WHY:
+        A cloud session starts with this computer's own `claude` login and Git remote, and its
+        link is recorded on this computer, so only this computer's clients may draft or start one.
+        */
+        "/api/draftCloudWork" | "/api/startCloudWork" => full_local(path),
+        /*
         CDXC:Workspaces 2026-10-09 WHY:
         Workspaces belong to the daemon that owns the projects, exactly like its Spaces, so a
         remote gxserver section reads and edits its own; the document carries only bounded ids,
