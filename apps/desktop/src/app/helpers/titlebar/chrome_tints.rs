@@ -98,7 +98,7 @@ pub(crate) fn clamp_sidebar_titlebar_background_darkness_percent(value: f64) -> 
     if !value.is_finite() {
         return DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT;
     }
-    (value + 0.5).floor().clamp(
+    ((value * 2.0 + 0.5).floor() / 2.0).clamp(
         MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
         MAX_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT,
     )
@@ -196,7 +196,7 @@ pub(crate) fn clamp_sidebar_titlebar_light_background_lightness_percent(value: f
     if !value.is_finite() {
         return DEFAULT_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT;
     }
-    (value + 0.5).floor().clamp(
+    ((value * 2.0 + 0.5).floor() / 2.0).clamp(
         MIN_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT,
         MAX_CUSTOM_SIDEBAR_TITLEBAR_LIGHT_BACKGROUND_LIGHTNESS_PERCENT,
     )
@@ -317,7 +317,7 @@ pub(crate) fn custom_dark_chrome_controls(
 /// CDXC:Theming 2026-09-23 SEE-ALSO:
 /// Mirror of `readThemeContrastPoints` / `SIDEBAR_CONTRAST_KEY` / `WORK_AREA_CONTRAST_KEY` in
 /// packages/shared/ghostex-settings/titlebar-color.ts (deleted 2026-10-01): `themeSidebarContrast` and
-/// `themeWorkAreaContrast` are contrast points (-12 to 4) added to a preset theme's contrast. When
+/// `themeWorkAreaContrast` are contrast points (-12 to 4, in half points) added to a preset theme's contrast. When
 /// either is missing, the retired five-step `themeContrast` (-2 to 2) carries over as -8, -4, 0, 2 or
 /// 4 points for both.
 fn theme_contrast_points(object: &serde_json::Map<String, serde_json::Value>, key: &str) -> f64 {
@@ -326,7 +326,7 @@ fn theme_contrast_points(object: &serde_json::Map<String, serde_json::Value>, ke
         .and_then(serde_json::Value::as_f64)
         .filter(|value| value.is_finite())
     {
-        return points.round().clamp(-12.0, 4.0);
+        return ((points * 2.0).round() / 2.0).clamp(-12.0, 4.0);
     }
     let step = object
         .get("themeContrast")

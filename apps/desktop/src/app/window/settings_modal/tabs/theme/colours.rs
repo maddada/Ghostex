@@ -21,10 +21,10 @@ const DEFAULT_DARK_BACKGROUND: &str = "#0b0b0b";
 const CONTRAST_MIN_POINTS: f64 = -12.0;
 const CONTRAST_MAX_POINTS: f64 = 4.0;
 
-/// `COLOURFULNESS_CHOICES`: Subtle +4, Soft 0 (the shipped default), Balanced -4, Rich -8, Vivid -12.
+/// `COLOURFULNESS_CHOICES`: the named points Subtle +4, Soft 0 (the shipped default), Balanced -4, Rich -8, Vivid -12.
 ///
-/// CDXC:Theming 2026-09-25 DECISION:
-/// User: "I don't like the low, medium, high contrast. I feel this doesn't represent what's happening to the colors, so you can say more. You can switch it between more colorful and less colorful". Background contrast becomes Colourfulness, five steps from Subtle to Vivid; each step sets the sidebar and work area contrast together, and More colour options can set the two areas apart.
+/// CDXC:Theming 2026-10-10 DECISION:
+/// User asked to make the Colourfulness sliders more granular and picked 33 positions: half-point steps from Subtle (+4) to Vivid (-12), with the five names still sitting exactly at their points and the label beside the slider showing the nearest name. This supersedes the five steps of 2026-09-25 (User: "You can switch it between more colorful and less colorful"); Colourfulness still sets the sidebar and work area contrast together, and More colour options can set the two areas apart.
 pub(super) const COLOURFULNESS: [(&str, f64); 5] = [
     ("Subtle", 4.0),
     ("Soft", 0.0),
@@ -32,6 +32,28 @@ pub(super) const COLOURFULNESS: [(&str, f64); 5] = [
     ("Rich", -8.0),
     ("Vivid", -12.0),
 ];
+
+/// The contrast points between two neighbouring Colourfulness positions.
+const COLOURFULNESS_STEP_POINTS: f64 = 0.5;
+/// The last Colourfulness position: 0 is Subtle (+4), 32 is Vivid (-12).
+pub(super) const COLOURFULNESS_LAST_POSITION: usize = 32;
+
+/// The contrast points one Colourfulness position sets.
+pub(super) fn colourfulness_points(position: usize) -> f64 {
+    CONTRAST_MAX_POINTS
+        - position.min(COLOURFULNESS_LAST_POSITION) as f64 * COLOURFULNESS_STEP_POINTS
+}
+
+/// The name of the named point nearest to `points` (Subtle, Soft, Balanced, Rich or Vivid).
+pub(super) fn colourfulness_name(points: f64) -> &'static str {
+    let mut best = 0;
+    for (index, (_, value)) in COLOURFULNESS.iter().enumerate() {
+        if (value - points).abs() < (COLOURFULNESS[best].1 - points).abs() {
+            best = index;
+        }
+    }
+    COLOURFULNESS[best].0
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub(super) struct Rgb(pub(super) [f64; 3]);
@@ -129,7 +151,7 @@ pub(super) fn clamp_darkness(value: f64) -> f64 {
     if !value.is_finite() {
         return 96.0;
     }
-    value.round().clamp(MIN_DARKNESS, MAX_DARKNESS)
+    round_half(value).clamp(MIN_DARKNESS, MAX_DARKNESS)
 }
 
 /// `clampSidebarTitlebarLightBackgroundLightnessPercent`.
@@ -137,13 +159,16 @@ pub(super) fn clamp_lightness(value: f64) -> f64 {
     if !value.is_finite() {
         return 96.0;
     }
-    value.round().clamp(MIN_LIGHTNESS, MAX_LIGHTNESS)
+    round_half(value).clamp(MIN_LIGHTNESS, MAX_LIGHTNESS)
+}
+
+/// Rounds to the nearest half, the finest Colourfulness step.
+fn round_half(value: f64) -> f64 {
+    (value * 2.0).round() / 2.0
 }
 
 fn clamp_contrast(value: f64) -> f64 {
-    value
-        .round()
-        .clamp(CONTRAST_MIN_POINTS, CONTRAST_MAX_POINTS)
+    round_half(value).clamp(CONTRAST_MIN_POINTS, CONTRAST_MAX_POINTS)
 }
 
 /// `getSidebarTitlebarBackgroundForDarkness`.
@@ -319,9 +344,8 @@ pub(super) fn preset_label(dark: bool, preset: &str) -> String {
         .unwrap_or_else(|| preset.to_string())
 }
 
-/// `presetChromeAtStep`: a preset's chrome at one Colourfulness step.
-fn preset_chrome_at_step(dark: bool, preset: &str, step: usize) -> Rgb {
-    let points = COLOURFULNESS[step.min(4)].1;
+/// `presetChromeAtStep`: a preset's chrome at some Colourfulness contrast points.
+fn preset_chrome_at_points(dark: bool, preset: &str, points: f64) -> Rgb {
     let (percent, tint) = preset_controls(dark, preset).unwrap_or((96.0, DEFAULT_TINT.to_string()));
     if dark {
         dark_chrome(clamp_darkness(percent + clamp_contrast(points)), &tint)
@@ -369,21 +393,25 @@ fn neutral_accent(preset: &str, dark: bool) -> Option<Rgb> {
 ///
 /// CDXC:Theming 2026-09-25 DECISION:
 /// User: "please make them look like just gradient squares that look beautiful for each of the colors", then "the gradient colors look way better in light mode. Can we do something simpler like those ones in dark mode also" and "Make the color boxes (the squares) smaller". Each theme colour is a small gradient square: a lighter, more colourful top-left fading to the theme's own chrome, with a soft glow of the theme's accent, following the current Colourfulness step.
-pub(super) fn swatch_paint(dark: bool, preset: &str, step: usize) -> SwatchPaint {
+///
+/// `position` is a Colourfulness position; `step` runs 0 (Subtle) to 4 (Vivid) through the in-between positions, so the five named points paint exactly as the five steps did.
+pub(super) fn swatch_paint(dark: bool, preset: &str, position: usize) -> SwatchPaint {
+    let points = colourfulness_points(position);
+    let step = (CONTRAST_MAX_POINTS - points) / 4.0;
     let tint = preset_controls(dark, preset)
         .map(|(_, tint)| tint)
         .unwrap_or_else(|| DEFAULT_TINT.to_string());
     let accent = neutral_accent(preset, dark).unwrap_or_else(|| accent_for_tint(&tint, !dark));
-    let top_chrome = preset_chrome_at_step(dark, preset, (step + 2).min(4));
+    let top_chrome = preset_chrome_at_points(dark, preset, (points - 8.0).max(CONTRAST_MIN_POINTS));
     let top = if dark {
-        mix(top_chrome, accent, 0.34 + step as f64 * 0.03)
+        mix(top_chrome, accent, 0.34 + step * 0.03)
     } else {
         top_chrome
     };
     let base = if dark {
-        mix(preset_chrome_at_step(dark, preset, step), accent, 0.1)
+        mix(preset_chrome_at_points(dark, preset, points), accent, 0.1)
     } else {
-        preset_chrome_at_step(dark, preset, step)
+        preset_chrome_at_points(dark, preset, points)
     };
     // `alphaHex`: the alpha as a byte, as the CSS colour carried it.
     let alpha = |value: f64| (value.clamp(0.0, 1.0) * 255.0).round() / 255.0;
@@ -391,8 +419,8 @@ pub(super) fn swatch_paint(dark: bool, preset: &str, step: usize) -> SwatchPaint
         top,
         base,
         accent,
-        glow: alpha(0.26 + step as f64 * 0.07),
-        rim: alpha(0.1 + step as f64 * 0.03),
+        glow: alpha(0.26 + step * 0.07),
+        rim: alpha(0.1 + step * 0.03),
     }
 }
 
@@ -487,23 +515,24 @@ pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb,
     )
 }
 
-/// `colourfulnessStepForPoints`.
+/// `colourfulnessStepForPoints`: the Colourfulness position that sets exactly `points`, if any.
 pub(super) fn colourfulness_step_for_points(points: f64) -> Option<usize> {
-    COLOURFULNESS.iter().position(|(_, value)| *value == points)
+    let position = (CONTRAST_MAX_POINTS - points) / COLOURFULNESS_STEP_POINTS;
+    (position.fract() == 0.0 && (0.0..=COLOURFULNESS_LAST_POSITION as f64).contains(&position))
+        .then_some(position as usize)
 }
 
-/// `colourfulnessDisplayStep`.
+/// `colourfulnessDisplayStep`: the Colourfulness position nearest to `points`.
 pub(super) fn colourfulness_display_step(points: f64) -> usize {
-    let mut best = 0;
-    for (index, (_, value)) in COLOURFULNESS.iter().enumerate() {
-        if (value - points).abs() < (COLOURFULNESS[best].1 - points).abs() {
-            best = index;
-        }
+    if !points.is_finite() {
+        return colourfulness_display_step(0.0);
     }
-    best
+    ((CONTRAST_MAX_POINTS - points) / COLOURFULNESS_STEP_POINTS)
+        .round()
+        .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize
 }
 
-/// `colourfulnessStepIndex`: the one step both areas share, or `None` once they are apart.
+/// `colourfulnessStepIndex`: the one position both areas share, or `None` once they are apart.
 pub(super) fn colourfulness_step_index(values: &SettingsValues) -> Option<usize> {
     let sidebar = values.f64("themeSidebarContrast");
     if sidebar != values.f64("themeWorkAreaContrast") {
@@ -522,8 +551,8 @@ pub(super) fn js_number(value: f64) -> Value {
 }
 
 /// `colourfulnessPatch(step)`: both contrasts, and the Custom colours' contrast moved in step.
-pub(super) fn colourfulness_patch(step: usize) -> Map<String, Value> {
-    let points = COLOURFULNESS[step.min(4)].1;
+pub(super) fn colourfulness_patch(position: usize) -> Map<String, Value> {
+    let points = colourfulness_points(position);
     let catalog = settings_catalog();
     let dark_default = catalog.number(
         module::SETTINGS,

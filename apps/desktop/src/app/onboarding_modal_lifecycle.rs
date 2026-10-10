@@ -10,7 +10,9 @@
 //! produced, so first run no longer needs CEF at all.
 //! SEE-ALSO: apps/desktop/src/app/window/onboarding/ (the window), apps/desktop/src/app/modals/modal_window.rs (`open_gpui_first_launch_setup_with_sidebar_state`, `complete_first_launch_setup`), apps/desktop/src/app/os_integration/first_run_onboarding.rs (the first-run pass), apps/desktop/src/app/native_app_modal_lifecycle.rs (the shared window path).
 use crate::app::helpers::*;
-use crate::app::window::onboarding::model::js_number;
+use crate::app::window::onboarding::model::{
+    COLOURFULNESS_LAST_POSITION, colourfulness_points, js_number,
+};
 use crate::app::window::onboarding::{
     AgentCliRequest, CatalogAgent, FinishTarget, GpuiOnboardingWindow, InitialPanel,
     ONBOARDING_MODAL_HEIGHT, ONBOARDING_MODAL_WIDTH, OnboardingCommand, OnboardingConfig,
@@ -53,17 +55,22 @@ pub(crate) fn gpui_onboarding_settings() -> OnboardingSettings {
 /// The look card's colour squares and Colourfulness patches, from the same theme math the window
 /// paints its chrome with (`presetChromeAtStep`, `colourfulnessPatch` in theme-simple-controls.tsx (deleted 2026-10-01)).
 fn gpui_onboarding_theme_table() -> ThemeTable {
-    let points = [4.0, 0.0, -4.0, -8.0, -12.0];
+    let points: Vec<f64> = (0..=COLOURFULNESS_LAST_POSITION)
+        .map(colourfulness_points)
+        .collect();
     let dark = DARK_THEME_PRESET_CONTROLS
         .iter()
         .map(|(value, darkness, tint)| ThemeSwatchPreset {
             value: value.to_string(),
-            chrome: points.map(|points| {
-                sidebar_titlebar_background_for_darkness(
-                    clamp_sidebar_titlebar_background_darkness_percent(darkness + points),
-                    *tint,
-                )
-            }),
+            chrome: points
+                .iter()
+                .map(|points| {
+                    sidebar_titlebar_background_for_darkness(
+                        clamp_sidebar_titlebar_background_darkness_percent(darkness + points),
+                        *tint,
+                    )
+                })
+                .collect(),
             accent: accent_color_for_tint(*tint, false),
         })
         .collect();
@@ -71,12 +78,17 @@ fn gpui_onboarding_theme_table() -> ThemeTable {
         .iter()
         .map(|(value, lightness, tint)| ThemeSwatchPreset {
             value: value.to_string(),
-            chrome: points.map(|points| {
-                sidebar_titlebar_light_background_for_lightness(
-                    clamp_sidebar_titlebar_light_background_lightness_percent(lightness + points),
-                    *tint,
-                )
-            }),
+            chrome: points
+                .iter()
+                .map(|points| {
+                    sidebar_titlebar_light_background_for_lightness(
+                        clamp_sidebar_titlebar_light_background_lightness_percent(
+                            lightness + points,
+                        ),
+                        *tint,
+                    )
+                })
+                .collect(),
             accent: accent_color_for_tint(*tint, true),
         })
         .collect();

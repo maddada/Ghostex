@@ -2625,8 +2625,9 @@ squares with Dark mode and Light mode tabs (Graphite, the default, Black in dark
 mode or White in light mode, Slate, Midnight, a deep navy, Blue, Indigo, Teal,
 Green, Forest, Olive, Amber, Orange, Red, Rose, Pink and Purple; picking a colour
 gives the other mode the same colour until you pick one there yourself); and
-Colourfulness, five steps from Subtle to Vivid (Soft is the default) that set how
-much of the colour shows in the sidebar and work area at once, with a small
+Colourfulness, a fine-grained slider from Subtle to Vivid (Soft is the default;
+the name of the nearest of Subtle, Soft, Balanced, Rich and Vivid shows beside it)
+that sets how much of the colour shows in the sidebar and work area at once, with a small
 sidebar and work area preview. More colour options can set the sidebar and work
 area colourfulness separately, turn on a custom colour for dark or light mode
 (its tint and depth, 85 to 100 for dark and 60 to 100 for light), and show the

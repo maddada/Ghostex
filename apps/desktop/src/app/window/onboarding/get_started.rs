@@ -4,9 +4,10 @@
 use super::GpuiOnboardingWindow;
 use super::interact;
 use super::model::{
-    COLOURFULNESS, OnboardingSettings, ThemeSwatchPreset, colourfulness_display_step,
-    colourfulness_step, default_agent_id, installed_agents, matching_preset, theme_preset_label,
-    transparency_strength, transparency_strength_patch,
+    COLOURFULNESS_LAST_POSITION, OnboardingSettings, ThemeSwatchPreset, colourfulness_display_step,
+    colourfulness_name, colourfulness_points, colourfulness_step, default_agent_id,
+    installed_agents, matching_preset, theme_preset_label, transparency_strength,
+    transparency_strength_patch,
 };
 use super::primitives::*;
 use super::stage::*;
@@ -104,23 +105,38 @@ fn mix_hex(from: u32, to: u32, amount: f32) -> [f32; 3] {
 /// One theme colour square (`swatchStyle`): a linear gradient from a lighter top-left to the
 /// theme's chrome, two soft accent glows, and the square's sheen, drawn into a bitmap because GPUI
 /// has no radial gradients.
-fn swatch_image(dark: bool, preset: &ThemeSwatchPreset, step: usize) -> Option<Arc<RenderImage>> {
+///
+/// `position` is a Colourfulness position; `step` runs 0 (Subtle) to 4 (Vivid) through the
+/// in-between positions, so the five named points paint exactly as the five steps did.
+fn swatch_image(
+    dark: bool,
+    preset: &ThemeSwatchPreset,
+    position: usize,
+) -> Option<Arc<RenderImage>> {
     let size = 48u32;
     let accent = neutral_accent(&preset.value, dark).unwrap_or(preset.accent);
-    let top_chrome = preset.chrome[(step + 2).min(4)];
+    let chrome_at = |position: usize| {
+        preset
+            .chrome
+            .get(position.min(COLOURFULNESS_LAST_POSITION))
+            .copied()
+            .unwrap_or(0)
+    };
+    let step = position as f32 / 8.0;
+    let top_chrome = chrome_at(position + 16);
     let top = if dark {
-        mix_hex(top_chrome, accent, 0.34 + step as f32 * 0.03)
+        mix_hex(top_chrome, accent, 0.34 + step * 0.03)
     } else {
         channels(top_chrome)
     };
     let base = if dark {
-        mix_hex(preset.chrome[step], accent, 0.1)
+        mix_hex(chrome_at(position), accent, 0.1)
     } else {
-        channels(preset.chrome[step])
+        channels(chrome_at(position))
     };
     let accent_rgb = channels(accent);
-    let glow = ((0.26 + step as f32 * 0.07) * 255.0).round() / 255.0;
-    let rim = ((0.1 + step as f32 * 0.03) * 255.0).round() / 255.0;
+    let glow = ((0.26 + step * 0.07) * 255.0).round() / 255.0;
+    let rim = ((0.1 + step * 0.03) * 255.0).round() / 255.0;
     let (sin150, cos150) = (150f32.to_radians().sin(), 150f32.to_radians().cos());
     let (sin160, cos160) = (160f32.to_radians().sin(), 160f32.to_radians().cos());
     let mut bgra = vec![0u8; (size * size * 4) as usize];
@@ -329,7 +345,7 @@ impl GpuiOnboardingWindow {
     fn set_slider(&mut self, slider: &'static str, value: f64, cx: &mut Context<Self>) {
         match slider {
             "colourfulness" => {
-                let index = (value.round() as usize).min(COLOURFULNESS.len() - 1);
+                let index = (value.round().max(0.0) as usize).min(COLOURFULNESS_LAST_POSITION);
                 if colourfulness_step(&self.settings) == Some(index) {
                     return;
                 }
@@ -365,8 +381,11 @@ impl GpuiOnboardingWindow {
         let delta = if right { 1.0 } else { -1.0 };
         match slider {
             "colourfulness" => {
-                let current = colourfulness_step(&self.settings).unwrap_or(2) as f64;
-                self.set_slider(slider, (current + delta).clamp(0.0, 4.0), cx);
+                let current = colourfulness_step(&self.settings)
+                    .unwrap_or(COLOURFULNESS_LAST_POSITION / 2)
+                    as f64;
+                let last = COLOURFULNESS_LAST_POSITION as f64;
+                self.set_slider(slider, (current + delta).clamp(0.0, last), cx);
             }
             _ => {
                 let current = transparency_strength(&self.settings).1;
@@ -956,9 +975,10 @@ impl GpuiOnboardingWindow {
             })
             .collect::<Vec<_>>();
         let readout = theme_preset_label(dark_scheme, &selected_preset);
-        let colourfulness_value = colourfulness.map_or(2.0, |step| step as f64);
+        let colourfulness_value =
+            colourfulness.map_or(COLOURFULNESS_LAST_POSITION / 2, |step| step) as f64;
         let colourfulness_text = colourfulness.map_or("Custom".to_string(), |step| {
-            COLOURFULNESS[step].0.to_string()
+            colourfulness_name(colourfulness_points(step)).to_string()
         });
         let transparency_text = if !transparency_on {
             "Off".to_string()
@@ -973,10 +993,10 @@ impl GpuiOnboardingWindow {
             "colourfulness",
             "Colourfulness",
             None,
-            colourfulness_value / 4.0,
+            colourfulness_value / COLOURFULNESS_LAST_POSITION as f64,
             &colourfulness_text,
             false,
-            (0.0, 4.0),
+            (0.0, COLOURFULNESS_LAST_POSITION as f64),
             cx,
         );
         let transparency_toggle = self

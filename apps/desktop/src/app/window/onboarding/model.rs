@@ -278,7 +278,7 @@ fn read_number(object: &Map<String, Value>, key: &str) -> Option<f64> {
 /// `readThemeContrastPoints`.
 pub(crate) fn theme_contrast_points(object: &Map<String, Value>, key: &str) -> f64 {
     if let Some(points) = read_number(object, key) {
-        return points.round().clamp(-12.0, 4.0);
+        return ((points * 2.0).round() / 2.0).clamp(-12.0, 4.0);
     }
     match read_number(object, "themeContrast")
         .map_or(0, |value| (value.round() as i64).clamp(-2, 2))
@@ -609,12 +609,13 @@ pub(crate) fn cli_catalog() -> Vec<CliCatalogEntry> {
 #[derive(Clone, Debug)]
 pub(crate) struct ThemeSwatchPreset {
     pub(crate) value: String,
-    pub(crate) chrome: [u32; 5],
+    /// The chrome at each Colourfulness position (`COLOURFULNESS_LAST_POSITION + 1` entries).
+    pub(crate) chrome: Vec<u32>,
     pub(crate) accent: u32,
 }
 
 /// The chrome colours the look card draws its squares from, and the settings patch each
-/// Colourfulness step writes. Built by the host from the same theme math the window paints with.
+/// Colourfulness position writes. Built by the host from the same theme math the window paints with.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ThemeTable {
     pub(crate) dark: Vec<ThemeSwatchPreset>,
@@ -622,7 +623,8 @@ pub(crate) struct ThemeTable {
     pub(crate) colourfulness_patches: Vec<Map<String, Value>>,
 }
 
-/// `COLOURFULNESS_CHOICES`.
+/// `COLOURFULNESS_CHOICES`: the named points; the slider moves in half points between them
+/// (CDXC:Theming in apps/desktop/src/app/window/settings_modal/tabs/theme/colours.rs).
 pub(crate) const COLOURFULNESS: [(&str, f64); 5] = [
     ("Subtle", 4.0),
     ("Soft", 0.0),
@@ -631,25 +633,43 @@ pub(crate) const COLOURFULNESS: [(&str, f64); 5] = [
     ("Vivid", -12.0),
 ];
 
-/// `colourfulnessStepIndex`: the one step both areas share, or `None` once they are set apart or between steps.
-pub(crate) fn colourfulness_step(settings: &OnboardingSettings) -> Option<usize> {
-    if settings.sidebar_contrast != settings.work_area_contrast {
-        return None;
-    }
-    COLOURFULNESS
-        .iter()
-        .position(|(_, points)| *points == settings.sidebar_contrast)
+/// The last Colourfulness position: 0 is Subtle (+4), 32 is Vivid (-12), half a point apart.
+pub(crate) const COLOURFULNESS_LAST_POSITION: usize = 32;
+
+/// The contrast points one Colourfulness position sets.
+pub(crate) fn colourfulness_points(position: usize) -> f64 {
+    4.0 - position.min(COLOURFULNESS_LAST_POSITION) as f64 * 0.5
 }
 
-/// `colourfulnessDisplayStep`.
-pub(crate) fn colourfulness_display_step(points: f64) -> usize {
+/// The name of the named point nearest to `points`.
+pub(crate) fn colourfulness_name(points: f64) -> &'static str {
     let mut best = 0;
     for (index, (_, value)) in COLOURFULNESS.iter().enumerate() {
         if (value - points).abs() < (COLOURFULNESS[best].1 - points).abs() {
             best = index;
         }
     }
-    best
+    COLOURFULNESS[best].0
+}
+
+/// `colourfulnessStepIndex`: the one position both areas share, or `None` once they are set apart or between positions.
+pub(crate) fn colourfulness_step(settings: &OnboardingSettings) -> Option<usize> {
+    if settings.sidebar_contrast != settings.work_area_contrast {
+        return None;
+    }
+    let position = (4.0 - settings.sidebar_contrast) / 0.5;
+    (position.fract() == 0.0 && (0.0..=COLOURFULNESS_LAST_POSITION as f64).contains(&position))
+        .then_some(position as usize)
+}
+
+/// `colourfulnessDisplayStep`: the Colourfulness position nearest to `points`.
+pub(crate) fn colourfulness_display_step(points: f64) -> usize {
+    if !points.is_finite() {
+        return colourfulness_display_step(0.0);
+    }
+    ((4.0 - points) / 0.5)
+        .round()
+        .clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize
 }
 
 const TRANSPARENCY_WORK_AREA_GAP: f64 = 7.0;

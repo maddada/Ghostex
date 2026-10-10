@@ -9,7 +9,7 @@ use super::super::super::fields::{
 };
 use super::super::super::palette::SettingsPalette;
 use super::ThemeTab;
-use super::colours::{COLOURFULNESS, Rgb};
+use super::colours::{COLOURFULNESS_LAST_POSITION, Rgb, colourfulness_name, colourfulness_points};
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, BoxShadow, ClickEvent, Context, InteractiveElement as _, IntoElement, ObjectFit,
@@ -248,7 +248,7 @@ pub(super) fn swatch(
         .into_any_element()
 }
 
-/// `ColourfulnessSlider`: Subtle, the five-step track, Vivid, and the step's name.
+/// `ColourfulnessSlider`: Subtle, the half-point track, Vivid, and the nearest named point.
 pub(super) fn colourfulness_slider(
     page: &mut ThemeTab,
     p: &SettingsPalette,
@@ -273,7 +273,7 @@ pub(super) fn colourfulness_slider(
         SliderBinding {
             key,
             min: 0.0,
-            max: (COLOURFULNESS.len() - 1) as f64,
+            max: COLOURFULNESS_LAST_POSITION as f64,
             step: 1.0,
         },
         step as f64,
@@ -298,7 +298,7 @@ pub(super) fn colourfulness_slider(
                 .text_size(px(13.0))
                 .line_height(px(18.57))
                 .text_color(hsla(p.muted))
-                .child(COLOURFULNESS[step.min(4)].0),
+                .child(colourfulness_name(colourfulness_points(step))),
         )
         .into_any_element()
 }

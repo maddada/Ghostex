@@ -25,8 +25,9 @@ use super::super::palette::SettingsPalette;
 use super::super::rail::{rail_pages, render_no_matches};
 use super::super::store::{SettingsStore, SettingsStoreEvent, SettingsValues};
 use colours::{
-    COLOURFULNESS, colourfulness_display_step, colourfulness_patch, colourfulness_step_index,
-    js_number, paired_preset, preset_label, preset_options, preview_colours, swatch_paint,
+    COLOURFULNESS_LAST_POSITION, colourfulness_display_step, colourfulness_patch,
+    colourfulness_points, colourfulness_step_index, js_number, paired_preset, preset_label,
+    preset_options, preview_colours, swatch_paint,
 };
 use controls::{
     colourfulness_preview, colourfulness_slider, more_options_button, scheme_tabs, swatch,
@@ -418,7 +419,9 @@ impl ThemeTab {
                     Some(step) => {
                         let saver: SliderSaver = Rc::new(
                             |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
-                                let step = value.round().clamp(0.0, 4.0) as usize;
+                                let step =
+                                    value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64)
+                                        as usize;
                                 store.update(cx, |store, cx| {
                                     if colourfulness_step_index(&store.values()) != Some(step) {
                                         store.apply_patch(
@@ -639,7 +642,9 @@ impl ThemeTab {
             let step = colourfulness_display_step(values.f64(key));
             let saver: SliderSaver = Rc::new(
                 move |store: &Entity<SettingsStore>, value, _commit, cx: &mut App| {
-                    let points = COLOURFULNESS[value.round().clamp(0.0, 4.0) as usize].1;
+                    let points = colourfulness_points(
+                        value.round().clamp(0.0, COLOURFULNESS_LAST_POSITION as f64) as usize,
+                    );
                     store.update(cx, |store, cx| {
                         if store.values().f64(key) != points {
                             store.update_setting(key, js_number(points), cx);

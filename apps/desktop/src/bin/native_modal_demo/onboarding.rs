@@ -14,6 +14,7 @@
 //! install connects after 0.9s, CLI installs finish a few seconds after they start, Computer Use
 //! asks for permission after 1.8s, and closing the flow quits the demo. `GHOSTEX_ONBOARDING_DEMO_SIZE=WxH`
 //! opens the window at another size.
+use super::onboarding::model::{COLOURFULNESS_LAST_POSITION, colourfulness_points};
 use super::onboarding::*;
 use gpui::{App, AppContext as _, Entity, WindowHandle};
 use gpui_component::Root;
@@ -97,8 +98,12 @@ fn theme_table() -> ThemeTable {
                                 .and_then(Value::as_str)
                                 .unwrap_or("gray")
                                 .to_string(),
-                            chrome: [0, 1, 2, 3, 4]
-                                .map(|index| chrome.get(index).copied().unwrap_or(0)),
+                            // The fixture holds the five named points; in-between positions show the nearest.
+                            chrome: (0..=COLOURFULNESS_LAST_POSITION)
+                                .map(|position| {
+                                    chrome.get((position + 4) / 8).copied().unwrap_or(0)
+                                })
+                                .collect(),
                             accent: item.get("accent").map(hex).unwrap_or(0),
                         }
                     })
@@ -113,9 +118,18 @@ fn theme_table() -> ThemeTable {
             .get("patches")
             .and_then(Value::as_array)
             .map(|patches| {
-                patches
+                let named: Vec<_> = patches
                     .iter()
                     .filter_map(|patch| patch.as_object().cloned())
+                    .collect();
+                (0..=COLOURFULNESS_LAST_POSITION)
+                    .filter_map(|position| {
+                        let mut patch = named.get((position + 4) / 8)?.clone();
+                        let points = json!(colourfulness_points(position));
+                        patch.insert("themeSidebarContrast".into(), points.clone());
+                        patch.insert("themeWorkAreaContrast".into(), points);
+                        Some(patch)
+                    })
                     .collect()
             })
             .unwrap_or_default(),
