@@ -180,17 +180,34 @@ async fn answer_work_cleanup(
     let mut removed_worktree = false;
     let mut kept_dirty_worktree = false;
     let mut warnings: Vec<Value> = Vec::new();
+    // CDXC:WorkMode 2026-10-10 WHY: The agent still running in the worktree holds it as its
+    // working folder, and Windows will not delete a folder in use: `git worktree remove` emptied
+    // the checkout, failed on the folder itself, and that error ended the answer before the session
+    // was parked, so Clean up left an empty folder, a running session and the offer. The session is
+    // put to sleep before its worktree goes (it cannot run on in a deleted folder anyway), and a
+    // removal that still fails is a warning: the session is parked either way.
+    let mut slept = false;
     if answer == "cleanUp" {
         if let Some(worktree_path) = worktree_path {
+            sleep_work_cleanup_session(state, &project_id, &session_id).await;
+            slept = true;
             let mut remove_params = Map::new();
             remove_params.insert("projectId".to_string(), json!(project_id));
             remove_params.insert("worktreePath".to_string(), json!(worktree_path));
-            let removed = remove_session_worktree(state, &remove_params).await?;
-            removed_worktree = removed.get("removed").and_then(Value::as_bool) == Some(true);
-            kept_dirty_worktree =
-                !removed_worktree && removed.get("dirty").and_then(Value::as_bool) == Some(true);
-            if let Some(more) = removed.get("warnings").and_then(Value::as_array) {
-                warnings.extend(more.iter().cloned());
+            match remove_session_worktree(state, &remove_params).await {
+                Ok(removed) => {
+                    removed_worktree =
+                        removed.get("removed").and_then(Value::as_bool) == Some(true);
+                    kept_dirty_worktree = !removed_worktree
+                        && removed.get("dirty").and_then(Value::as_bool) == Some(true);
+                    if let Some(more) = removed.get("warnings").and_then(Value::as_array) {
+                        warnings.extend(more.iter().cloned());
+                    }
+                }
+                Err(error) => warnings.push(json!(format!(
+                    "The worktree could not be removed: {}",
+                    worktree_error_text(&error)
+                ))),
             }
         }
     }
@@ -216,21 +233,8 @@ async fn answer_work_cleanup(
         )?;
         schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id)?;
     }
-    if parked && sleep_session_when_parking(state) {
-        let sleeper = state.clone();
-        let (sleep_project_id, sleep_session_id) = (project_id.clone(), session_id.clone());
-        let _ = tokio::task::spawn_blocking(move || {
-            let mut params = Map::new();
-            params.insert("projectId".to_string(), json!(sleep_project_id));
-            params.insert("sessionId".to_string(), json!(sleep_session_id));
-            dispatch_zmx_lifecycle_http_blocking(
-                &sleeper,
-                "/api/sleepSession".to_string(),
-                "work-cleanup".to_string(),
-                params,
-            )
-        })
-        .await;
+    if parked && !slept && sleep_session_when_parking(state) {
+        sleep_work_cleanup_session(state, &project_id, &session_id).await;
     }
     Ok(json!({
         "answered": true,
@@ -239,6 +243,33 @@ async fn answer_work_cleanup(
         "keptDirtyWorktree": kept_dirty_worktree,
         "warnings": warnings,
     }))
+}
+
+async fn sleep_work_cleanup_session(state: &Arc<AppState>, project_id: &str, session_id: &str) {
+    let sleeper = state.clone();
+    let (sleep_project_id, sleep_session_id) = (project_id.to_string(), session_id.to_string());
+    let _ = tokio::task::spawn_blocking(move || {
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(sleep_project_id));
+        params.insert("sessionId".to_string(), json!(sleep_session_id));
+        dispatch_zmx_lifecycle_http_blocking(
+            &sleeper,
+            "/api/sleepSession".to_string(),
+            "work-cleanup".to_string(),
+            params,
+        )
+    })
+    .await;
+}
+
+fn worktree_error_text(error: &ProjectWorktreeOperationError) -> String {
+    match error {
+        ProjectWorktreeOperationError::Domain(error) => error.message.clone(),
+        ProjectWorktreeOperationError::Typed(error) => error.message.clone(),
+        ProjectWorktreeOperationError::ProjectPath(_) => {
+            "the folder could not be read.".to_string()
+        }
+    }
 }
 
 /// The "Sleep session when parking" setting, which the sidebar's Park action honours too.

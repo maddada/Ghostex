@@ -3,7 +3,7 @@
 //! Fetched only by `refresh_work_feeds`, which the route runs on a blocking worker with a time
 //! limit; the list itself is built from these caches, so it never waits on the network.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -319,21 +319,52 @@ pub(crate) fn refresh_work_feeds(
 
 const LINEAR_LIST_FIELDS: &str = "identifier title url updatedAt branchName state { name type } assignee { name displayName avatarUrl isMe } team { key } project { name url } cycle { name number } labels(first: 10) { nodes { name } } attachments(first: 10) { nodes { url } }";
 
+/// The viewer's open issues, then the open issues of the teams the work-mode sessions link to,
+/// each with its own `LINEAR_LIST_LIMIT`, merged without repeats.
+///
+/// CDXC:WorkMode 2026-10-10 WHY: One query for "assigned to me OR in these teams" capped at 100 and
+/// sorted by update time let a busy team's issues push the viewer's own out of the list: once a
+/// session linked a ShortPoint ticket, the team's 95 newer issues left 5 of the user's 43 under
+/// "Assigned to me". The two asks are separate requests, so the user's own tickets are always all
+/// there.
 fn fetch_linear_feed(request: &LinearFeedRequest) -> Result<LinearFeed, String> {
-    let team_keys: Vec<&String> = request.team_keys.iter().collect();
-    let query = format!(
-        "query WorkList($teamKeys: [String!], $first: Int) {{ issues(first: $first, orderBy: updatedAt, filter: {{ state: {{ type: {{ nin: [\"completed\", \"canceled\"] }} }}, or: [{{ assignee: {{ isMe: {{ eq: true }} }} }}, {{ team: {{ key: {{ in: $teamKeys }} }} }}] }}) {{ nodes {{ {LINEAR_LIST_FIELDS} }} }} }}"
-    );
-    let body = linear_graphql(
-        &request.api_key,
-        &query,
-        json!({ "teamKeys": team_keys, "first": LINEAR_LIST_LIMIT }),
+    const OPEN: &str = "state: { type: { nin: [\"completed\", \"canceled\"] } }";
+    // GraphQL refuses a declared variable the query does not use, so each ask declares its own.
+    let fetch = |declared: &str,
+                 filter: &str,
+                 variables: Value|
+     -> Result<Vec<LinearListIssue>, String> {
+        let query = format!(
+            "query WorkList({declared}) {{ issues(first: $first, orderBy: updatedAt, filter: {{ {OPEN}, {filter} }}) {{ nodes {{ {LINEAR_LIST_FIELDS} }} }} }}"
+        );
+        let body = linear_graphql(&request.api_key, &query, variables)?;
+        Ok(body
+            .pointer("/data/issues/nodes")
+            .and_then(Value::as_array)
+            .map(|nodes| nodes.iter().filter_map(parse_linear_list_issue).collect())
+            .unwrap_or_default())
+    };
+    let mut issues = fetch(
+        "$first: Int",
+        "assignee: { isMe: { eq: true } }",
+        json!({ "first": LINEAR_LIST_LIMIT }),
     )?;
-    let issues = body
-        .pointer("/data/issues/nodes")
-        .and_then(Value::as_array)
-        .map(|nodes| nodes.iter().filter_map(parse_linear_list_issue).collect())
-        .unwrap_or_default();
+    if !request.team_keys.is_empty() {
+        let team_keys: Vec<&String> = request.team_keys.iter().collect();
+        let mut seen: HashSet<String> = issues
+            .iter()
+            .map(|issue| issue.identifier.clone())
+            .collect();
+        for issue in fetch(
+            "$teamKeys: [String!], $first: Int",
+            "team: { key: { in: $teamKeys } }",
+            json!({ "teamKeys": team_keys, "first": LINEAR_LIST_LIMIT }),
+        )? {
+            if seen.insert(issue.identifier.clone()) {
+                issues.push(issue);
+            }
+        }
+    }
     Ok(LinearFeed { issues })
 }
 

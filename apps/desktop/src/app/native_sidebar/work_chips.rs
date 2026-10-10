@@ -256,6 +256,16 @@ impl GhostexGpuiApp {
         if chips.is_empty() {
             return None;
         }
+        // While the merged-PR offer waits, its two answers must fit: on a sidebar-width card the
+        // PR chip, its checks icon, Clean up and Keep already fill the line, and the row clips its
+        // overflow, which cut Keep in half and hid the ticket chips behind it. The other chips
+        // come back once the offer is answered.
+        if work.offer_cleanup {
+            chips.retain(|chip| matches!(chip.key, "pr" | "cleanup" | "keep"));
+            if let Some(pr) = chips.iter_mut().find(|chip| chip.key == "pr") {
+                pr.trailing = None;
+            }
+        }
         let show_tooltips = self.native_sidebar.pointer_inside
             && self.native_sidebar.menu.is_none()
             && !cx.has_active_drag();
