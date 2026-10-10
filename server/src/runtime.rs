@@ -239,15 +239,41 @@ pub fn create_stopped_status(metadata: Option<RuntimeMetadata>) -> StatusRespons
 }
 
 pub fn is_process_running(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
     #[cfg(unix)]
     {
-        let result = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        let Ok(pid) = libc::pid_t::try_from(pid) else {
+            return false;
+        };
+        let result = unsafe { libc::kill(pid, 0) };
         if result == 0 {
             return true;
         }
         std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::{
+            Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED, STILL_ACTIVE},
+            System::Threading::{
+                GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+            },
+        };
+        unsafe {
+            let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if process.is_null() {
+                return GetLastError() == ERROR_ACCESS_DENIED;
+            }
+            let mut code = 0;
+            let read = GetExitCodeProcess(process, &mut code);
+            CloseHandle(process);
+            // If the query fails, keep startup conservative rather than risking a duplicate.
+            read == 0 || code == STILL_ACTIVE as u32
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = pid;
         false
@@ -257,6 +283,12 @@ pub fn is_process_running(pid: u32) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_process_is_alive_and_pid_zero_is_not() {
+        assert!(is_process_running(std::process::id()));
+        assert!(!is_process_running(0));
+    }
 
     #[test]
     fn missing_package_identity_uses_rust_source_identity() {

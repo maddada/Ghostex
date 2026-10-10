@@ -267,7 +267,9 @@ if ($OnDemandComponents) {
     $CefComponentStage = Join-Path $ComponentRoot "cef-windows-$ReleaseArch-stage"
     $CefComponentAsset = Join-Path $ComponentAssetDir "cef-$CefComponentVersion-windows-$ReleaseArch.tar.gz"
     New-Item -ItemType Directory -Force -Path $ComponentAssetDir | Out-Null
-    '{"components":{}}' | Set-Content -Encoding UTF8 $ComponentManifest
+    # CDXC:Build 2026-10-06 WHY: Windows PowerShell 5.1's UTF8 writer adds a BOM,
+    # which the Node component sealer rejects. Match the other JSON writers here.
+    [IO.File]::WriteAllText($ComponentManifest, '{"components":{}}' + "`n", [Text.UTF8Encoding]::new($false))
     if (Test-Path $CefComponentStage) { Remove-Item -Recurse -Force $CefComponentStage }
     New-Item -ItemType Directory -Force -Path $CefComponentStage | Out-Null
     foreach ($sourceRoot in @($CefRelease.FullName, $CefResources) | Select-Object -Unique) {

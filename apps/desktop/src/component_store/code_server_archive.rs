@@ -4,6 +4,7 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 use flate2::read::GzDecoder;
@@ -30,6 +31,10 @@ pub(crate) struct VerifiedCodeServerArchive {
     pub platform: String,
     pub sha256: String,
 }
+
+/// CDXC:CodeEditor 2026-10-07 WHY:
+/// Availability and WSL command preparation repeatedly validate the same archive. Rehash its current bytes and check the sidecar on every call, then reuse the last successful contract validation instead of decompressing it again.
+static VERIFIED_CODE_SERVER_ARCHIVE: Mutex<Option<VerifiedCodeServerArchive>> = Mutex::new(None);
 
 fn code_server_archive_contract() -> Result<CodeServerArchiveContract, String> {
     let value = serde_json::from_str::<serde_json::Value>(CODE_SERVER_ARCHIVE_CONTRACT_JSON)
@@ -316,6 +321,19 @@ pub(crate) fn verify_code_server_archive(
         ));
     }
 
+    let verified = VerifiedCodeServerArchive {
+        component_version: component_version.to_string(),
+        platform: platform.to_string(),
+        sha256: actual_sha256,
+    };
+    if VERIFIED_CODE_SERVER_ARCHIVE
+        .lock()
+        .ok()
+        .is_some_and(|cached| cached.as_ref() == Some(&verified))
+    {
+        return Ok(verified);
+    }
+
     preflight_code_server_tar_metadata(archive_path)?;
 
     let contract = code_server_archive_contract()?;
@@ -460,11 +478,10 @@ pub(crate) fn verify_code_server_archive(
             contract.readiness_signal
         ));
     }
-    Ok(VerifiedCodeServerArchive {
-        component_version: component_version.to_string(),
-        platform: platform.to_string(),
-        sha256: actual_sha256,
-    })
+    if let Ok(mut cached) = VERIFIED_CODE_SERVER_ARCHIVE.lock() {
+        *cached = Some(verified.clone());
+    }
+    Ok(verified)
 }
 
 pub(crate) fn verify_installed_windows_code_server_component(

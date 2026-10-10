@@ -277,6 +277,11 @@ pub(crate) const SOURCE_CODE_SERVER_LOADING_PLACEHOLDER_DELAY: Duration = Durati
 
 pub(crate) const SOURCE_CODE_SERVER_STARTUP_TIMEOUT: Duration = Duration::from_secs(7);
 
+/// CDXC:CodeEditor 2026-10-07 WHY:
+/// Cold WSL process startup can exceed the native editor's seven-second budget even after archive preparation is excluded, leaving a healthy editor behind a failed Code view.
+#[cfg(target_os = "windows")]
+pub(crate) const SOURCE_CODE_SERVER_WSL_STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+
 pub(crate) const SOURCE_CODE_SERVER_PORT_BUSY_WAIT_INTERVAL: Duration = Duration::from_secs(2);
 
 pub(crate) const SOURCE_CODE_SERVER_HEALTH_POLL_INTERVAL: Duration = Duration::from_millis(200);

@@ -168,6 +168,9 @@ pub(crate) fn source_code_server_spawn_runtime(
         SOURCE_CODE_SERVER_EDITOR_HOST,
         source_code_server_editor_port()
     );
+    // CDXC:CodeEditor 2026-10-07 WHY:
+    // Preparing the WSL command verifies and may install the editor archive, which can outlast the readiness budget before the server is spawned. Preserve the caller's remaining budget across preparation, as remote editor startup does.
+    let readiness_timeout = startup_deadline.saturating_duration_since(Instant::now());
     let mut command = windows_terminal_backend::source_code_server_command(
         &target.project_path,
         SOURCE_CODE_SERVER_DEFAULT_NODE_MAJOR,
@@ -185,7 +188,7 @@ pub(crate) fn source_code_server_spawn_runtime(
         .spawn()
         .map_err(|_| "failed to start Source runtime in WSL".to_string())?;
     let readiness = source_code_server_wait_until_responsive(
-        startup_deadline.saturating_duration_since(Instant::now()),
+        readiness_timeout.saturating_sub(started_at.elapsed()),
     );
     Ok(SourceCodeServerRuntimeStartOutput {
         child,

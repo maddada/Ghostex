@@ -9,6 +9,8 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use serde_json::{Map, Value};
 
+mod startup;
+
 use crate::{
     agent_hooks::{repair_installed_agent_hook_paths, run_notify_hook, run_statusline_hook},
     agent_skills::{install_agent_skills, read_agent_skill_status},
@@ -186,10 +188,26 @@ fn print_endpoint() -> Result<()> {
 }
 
 pub async fn get_gxserver_status(_build_identity: &str, _version: &str) -> Result<StatusResponse> {
+    probe_gxserver_status(800)
+}
+
+fn probe_gxserver_status(timeout_ms: u64) -> Result<StatusResponse> {
     let paths = get_gxserver_paths(None);
     let metadata = read_runtime_metadata(&paths)?;
     let auth = read_gxserver_auth_token(&paths)?;
-    if let Some(health) = fetch_server_health(auth.as_ref().map(|auth| auth.token.as_str()), 800)? {
+    let health =
+        match fetch_server_health(auth.as_ref().map(|auth| auth.token.as_str()), timeout_ms) {
+            Err(error)
+                if startup::health_timed_out(&error)
+                    && metadata
+                        .as_ref()
+                        .is_some_and(|metadata| is_process_running(metadata.pid)) =>
+            {
+                None
+            }
+            result => result?,
+        };
+    if let Some(health) = health {
         return Ok(create_running_status(health, metadata));
     }
     if let Some(metadata) = metadata.clone() {
@@ -233,7 +251,12 @@ async fn start_gxserver_background(build_identity: &str, version: &str) -> Resul
             ) && runs_in_background_session(status));
         same_build
     };
-    let before = get_gxserver_status(build_identity, version).await?;
+    let before = startup::wait_for_live_unreachable(
+        get_gxserver_status(build_identity, version).await?,
+        Duration::from_secs(5),
+        probe_gxserver_status,
+    )
+    .await?;
     if before.state == "running" {
         if reusable(&before) {
             return Ok(before);
@@ -241,14 +264,20 @@ async fn start_gxserver_background(build_identity: &str, version: &str) -> Resul
         let paths = get_gxserver_paths(None);
         let auth = read_gxserver_auth_token(&paths)?;
         let _ = request_server_stop(auth.as_ref().map(|auth| auth.token.as_str()), 2_000)?;
+        let previous_pid = before
+            .health
+            .as_ref()
+            .map(|health| health.pid)
+            .or_else(|| before.metadata.as_ref().map(|metadata| metadata.pid));
+        let previous_alive = || previous_pid.is_some_and(is_process_running);
         let stopped = wait_for_status(
             build_identity,
             version,
             Duration::from_millis(5_000),
-            |status| status.state != "running",
+            |status| status.state != "running" && !previous_alive(),
         )
         .await?;
-        if stopped.state == "running" {
+        if stopped.state == "running" || previous_alive() {
             if reusable(&stopped) {
                 return Ok(stopped);
             }
@@ -260,6 +289,15 @@ async fn start_gxserver_background(build_identity: &str, version: &str) -> Resul
                 state: "stopping".to_string(),
                 ..before
             });
+        }
+    }
+
+    if let Some(metadata) = read_runtime_metadata(&get_gxserver_paths(None))? {
+        if is_process_running(metadata.pid) {
+            return Err(anyhow!(
+                "gxserver pid {} is still running. Wait for its control plane to stop before starting another server.",
+                metadata.pid
+            ));
         }
     }
 

@@ -167,8 +167,19 @@ impl GhostexGpuiApp {
                 .spawn(async move {
                     match source_code_server_runtime_availability(&target) {
                         SourceCodeServerRuntimeAvailability::Available => {
-                            let startup_deadline =
-                                Instant::now() + SOURCE_CODE_SERVER_STARTUP_TIMEOUT;
+                            let startup_timeout = SOURCE_CODE_SERVER_STARTUP_TIMEOUT;
+                            #[cfg(target_os = "windows")]
+                            let startup_timeout = if matches!(
+                                target.endpoint,
+                                SourceCodeServerRuntimeEndpoint::Local
+                            ) && windows_terminal_backend::current_preference()
+                                != windows_terminal_backend::WindowsTerminalBackendPreference::PowerShell
+                            {
+                                SOURCE_CODE_SERVER_WSL_STARTUP_TIMEOUT
+                            } else {
+                                startup_timeout
+                            };
+                            let startup_deadline = Instant::now() + startup_timeout;
                             Ok(source_code_server_start_runtime_for_target(
                                 target,
                                 settings,

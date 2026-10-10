@@ -5,7 +5,7 @@ use std::{
     env,
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, Output, Stdio},
 };
 
 use super::*;
@@ -355,6 +355,42 @@ pub(super) fn run_wsl_capture(distribution: &str, script: &str) -> Option<String
         .status
         .success()
         .then(|| decode_windows_command_output(&output.stdout))
+}
+
+pub(super) fn run_wsl_checked(distribution: &str, script: &str) -> Result<(), String> {
+    run_wsl_output(distribution, script, Stdio::null()).map(|_| ())
+}
+
+pub(super) fn run_wsl_capture_checked(distribution: &str, script: &str) -> Result<String, String> {
+    run_wsl_output(distribution, script, Stdio::piped())
+        .map(|output| decode_windows_command_output(&output.stdout))
+}
+
+fn run_wsl_output(distribution: &str, script: &str, stdout: Stdio) -> Result<Output, String> {
+    let output = hidden_command("wsl.exe")
+        .args([
+            "--distribution",
+            distribution,
+            "--exec",
+            "sh",
+            "-lc",
+            script,
+        ])
+        .stdin(Stdio::null())
+        .stdout(stdout)
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|error| format!("Could not run wsl.exe: {error}"))?;
+    if output.status.success() {
+        return Ok(output);
+    }
+    let stderr = decode_windows_command_output(&output.stderr);
+    let detail = stderr.trim().chars().take(4096).collect::<String>();
+    if detail.is_empty() {
+        Err(format!("wsl.exe {}", output.status))
+    } else {
+        Err(format!("wsl.exe {}: {detail}", output.status))
+    }
 }
 
 pub(super) fn spawn_gxserver_owner(
