@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 10.19.0 - 2026-10-10
+
+**Ghostex 10.19.0 is out.** A new Skills menu shows Ghostex's skills in the chat and terminal, the Work page gets two-line rows, Group by and a one-row filter bar, each workspace window keeps to its own sessions, browser sign-ins in workspaces stay saved, and Colourfulness gets finer steps.
+
+### 💬 Chat and terminal
+- **Skills in the ⋯ menus:** the chat's More actions and the terminal's ⋯ menu list the Ghostex skills the session's agent has installed; pick one to put it in the chat box or type it into the agent, and Configure / Install more opens Settings > Integrations > Agent skills.
+- **Branches moved into More actions:** the floating "This conversation has N branches" button is gone; Branches at the top of the Chat section opens the same list.
+- **Agents' HTML pages open in a floating window over the chat.**
+- **A send waits out a busy agent** instead of retyping into it.
+
+### 🧩 Workspaces and Work Mode
+- **Two-line Work rows** keep every part in the same place, the ticket ID, PR number, repo and project names open their pages, and the owner comes first.
+- **Group by** sorts the Work list by status, repo, project, assignee, type, pull request or last update, with folding headers.
+- **One-row filter bar:** All / issues / PRs and Assigned to me on the left, Filter and View menus on the right, and the page's menus stay inside the page.
+- **A window shows only its own workspace's sessions,** and opening a session of another workspace goes to the window showing it.
+- **The workspace tile is a split button:** one click switches workspace, the chevron opens the menu.
+- **A workspace's browser keeps its sign-ins** after Ghostex closes (sign in once more after updating).
+- **A PR's details find its ticket** whichever chip opened them, plus fixes from live testing.
+
+### 🌐 Browser
+- **Links open in the empty New Tab** instead of leaving it beside the page, everywhere the app opens a link in its browser.
+- **Links that open another app never leave an error page;** a tab opened only for that link closes once you answer.
+
+### 🎨 Theme and views
+- **Colourfulness moves in half steps** (33 positions) from Subtle to Vivid, showing the nearest name, and the Custom colour's depth sliders follow.
+- **Files, Kanban, Automate and extension views say "Loading sessions…"** while Ghostex starts, instead of "unavailable".
+- **The Files view's comment box takes typing on macOS** with transparency on.
+
+### 📱 Phone
+- **The Spaces bar shows its Space buttons again,** the workspace tile is a split button, and the sessions list starts at the screen's edge.
+- **Skills** is in the chat's More actions and the terminal menu, and the chat's Branches item replaces the floating button.
+- **The unused Sidebar projects opacity setting is gone** from Advanced.
+
 ## 10.18.0 - 2026-10-10
 
 **Ghostex 10.18.0 is out.** Coordinators are now called Orchestrators, failed sends fix themselves, the phone app stops crashing and reaches your Windows computer again, and Windows hooks, cloning and helper windows behave.
