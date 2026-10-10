@@ -148,7 +148,10 @@ export function Dropdown({
       if (!root.current?.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      // Back to the trigger, so the keyboard carries on from where the menu opened.
+      root.current?.querySelector<HTMLButtonElement>("button")?.focus();
     };
     window.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKey);

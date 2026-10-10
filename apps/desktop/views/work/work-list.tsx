@@ -1,14 +1,10 @@
 import {
   IconAlertTriangle,
-  IconArrowsSort,
   IconBox,
   IconChevronDown,
-  IconCircleDot,
   IconCopy,
   IconFolder,
-  IconGitPullRequest,
   IconHash,
-  IconLayoutList,
   IconLayoutSidebar,
   IconPlus,
   IconRefresh,
@@ -20,16 +16,14 @@ import {
   Avatar,
   Button,
   ChecksIcon,
-  Dropdown,
   LiveDot,
-  MenuItem,
   PullRequestChip,
   Spinner,
   StatusGlyph,
-  Toggle,
   cx,
 } from "./components";
-import { GROUP_BY_OPTIONS, groupWorkItems, type WorkGroupBy } from "./grouping";
+import { WorkFilterBar } from "./filter-bar";
+import { groupWorkItems, type WorkGroupBy } from "./grouping";
 import {
   relativeTime,
   STATUS_FILTERS,
@@ -40,6 +34,7 @@ import type {
   WorkItem,
   WorkItemLink,
   WorkList as WorkListData,
+  WorkProject,
   WorkTracker,
 } from "./types";
 
@@ -120,18 +115,6 @@ export function filterWorkItems(
   });
 }
 
-function activeFilterCount(filters: WorkFilters): number {
-  let count = 0;
-  if (filters.assignedToMe) count += 1;
-  if (!filters.linearIssues || !filters.githubIssues || !filters.pullRequests)
-    count += 1;
-  if (filters.status !== "open") count += 1;
-  if (filters.projectId) count += 1;
-  if (filters.trackerProject) count += 1;
-  if (filters.inSidebar) count += 1;
-  return count;
-}
-
 export function WorkListView({
   data,
   loading,
@@ -210,21 +193,12 @@ export function WorkListView({
   const projects = data?.projects ?? [];
   const set = (patch: Partial<WorkFilters>) =>
     onFiltersChange({ ...filters, ...patch });
-  const projectLabel =
-    projects.find((project) => project.projectId === filters.projectId)?.name ??
-    "All repos";
   const workspaceLabel =
     projects.length === 1
       ? (projects[0]?.name ?? "")
       : projects.length > 1
         ? `${projects.length} projects`
         : "";
-  const groupByLabel =
-    GROUP_BY_OPTIONS.find((option) => option.value === groupBy)?.label ??
-    "None";
-  const statusLabel =
-    STATUS_FILTERS.find((option) => option.value === filters.status)?.label ??
-    "Open";
 
   return (
     <div className="w-page work-list-page">
@@ -288,224 +262,22 @@ export function WorkListView({
         </Button>
       </div>
 
-      <div className="w-toggles work-filters">
-        <Toggle
-          className="filter-assigned-to-me"
-          pressed={filters.assignedToMe}
-          onPressedChange={(assignedToMe) => set({ assignedToMe })}
-        >
-          <Avatar name="Me" size={15} />
-          Assigned to me
-        </Toggle>
-        {tracker === "linear" ? (
-          <Toggle
-            className="filter-linear"
-            pressed={filters.linearIssues}
-            onPressedChange={(linearIssues) => set({ linearIssues })}
-          >
-            <IconCircleDot size={13} className="c-linear" />
-            Linear issues
-          </Toggle>
-        ) : (
-          <Toggle
-            className="filter-gh-issues"
-            pressed={filters.githubIssues}
-            onPressedChange={(githubIssues) => set({ githubIssues })}
-          >
-            <IconCircleDot size={13} className="c-open" />
-            GitHub issues
-          </Toggle>
-        )}
-        <Toggle
-          className="filter-prs"
-          pressed={filters.pullRequests}
-          onPressedChange={(pullRequests) => set({ pullRequests })}
-        >
-          <IconGitPullRequest size={13} className="c-open" />
-          PRs
-        </Toggle>
-        <Dropdown
-          className="filter-status"
-          trigger={(open, toggle) => (
-            <button
-              type="button"
-              className={cx("w-toggle", "is-on", open && "is-focus")}
-              onClick={toggle}
-            >
-              {statusLabel}
-              <IconChevronDown size={12} />
-            </button>
-          )}
-        >
-          {(close) =>
-            STATUS_FILTERS.map((option) => (
-              <MenuItem
-                key={option.value}
-                checked={filters.status === option.value}
-                onSelect={() => {
-                  set({ status: option.value });
-                  close();
-                }}
-              >
-                {option.label}
-              </MenuItem>
-            ))
-          }
-        </Dropdown>
-        <Dropdown
-          className="filter-project"
-          trigger={(open, toggle) => (
-            <button
-              type="button"
-              className={cx(
-                "w-toggle",
-                filters.projectId && "is-on",
-                open && "is-focus",
-              )}
-              onClick={toggle}
-            >
-              <IconFolder size={13} />
-              {projectLabel}
-              <IconChevronDown size={12} />
-            </button>
-          )}
-        >
-          {(close) => (
-            <>
-              <MenuItem
-                checked={!filters.projectId}
-                onSelect={() => {
-                  set({ projectId: "" });
-                  close();
-                }}
-              >
-                All repos
-              </MenuItem>
-              {projects.map((project) => (
-                <MenuItem
-                  key={project.projectId}
-                  checked={filters.projectId === project.projectId}
-                  onSelect={() => {
-                    set({ projectId: project.projectId });
-                    close();
-                  }}
-                >
-                  {project.name}
-                  {project.repo ? (
-                    <span className="w-menu-hint">{project.repo}</span>
-                  ) : null}
-                </MenuItem>
-              ))}
-            </>
-          )}
-        </Dropdown>
-        <Dropdown
-          className="filter-tracker-project"
-          trigger={(open, toggle) => (
-            <button
-              type="button"
-              className={cx(
-                "w-toggle",
-                filters.trackerProject && "is-on",
-                open && "is-focus",
-              )}
-              onClick={toggle}
-            >
-              <IconBox
-                size={13}
-                className={tracker === "linear" ? "c-linear" : undefined}
-              />
-              {filters.trackerProject || "All projects"}
-              <IconChevronDown size={12} />
-            </button>
-          )}
-        >
-          {(close) => (
-            <>
-              <MenuItem
-                checked={!filters.trackerProject}
-                onSelect={() => {
-                  set({ trackerProject: "" });
-                  close();
-                }}
-              >
-                All projects
-              </MenuItem>
-              {trackerProjects.map((name) => (
-                <MenuItem
-                  key={name}
-                  checked={filters.trackerProject === name}
-                  onSelect={() => {
-                    set({ trackerProject: name });
-                    close();
-                  }}
-                >
-                  {name}
-                </MenuItem>
-              ))}
-            </>
-          )}
-        </Dropdown>
-        <Toggle
-          className="filter-in-sidebar"
-          pressed={filters.inSidebar}
-          onPressedChange={(inSidebar) => set({ inSidebar })}
-        >
-          <IconLayoutSidebar size={13} />
-          In my sidebar
-        </Toggle>
-        <Dropdown
-          className="filter-group-by"
-          trigger={(open, toggle) => (
-            <button
-              type="button"
-              className={cx(
-                "w-toggle",
-                groupBy !== "none" && "is-on",
-                open && "is-focus",
-              )}
-              onClick={toggle}
-            >
-              <IconLayoutList size={13} />
-              {groupBy === "none" ? "Group by" : `Group: ${groupByLabel}`}
-              <IconChevronDown size={12} />
-            </button>
-          )}
-        >
-          {(close) =>
-            GROUP_BY_OPTIONS.map((option) => (
-              <MenuItem
-                key={option.value}
-                checked={groupBy === option.value}
-                onSelect={() => {
-                  onGroupByChange(option.value);
-                  close();
-                }}
-              >
-                {option.label}
-              </MenuItem>
-            ))
-          }
-        </Dropdown>
-      </div>
+      <WorkFilterBar
+        filters={filters}
+        onFiltersChange={onFiltersChange}
+        tracker={tracker}
+        projects={projects}
+        trackerProjects={trackerProjects}
+        groupBy={groupBy}
+        onGroupByChange={onGroupByChange}
+      />
 
       <Notices data={data} error={error} />
       <GithubProjectsNotice data={data} onDismiss={onDismissNotice} />
 
       <div className="w-list-meta">
-        <span>
-          {listSummary(
-            data,
-            visible.length,
-            activeFilterCount(filters),
-            loading,
-            now,
-          )}
-        </span>
-        <span className="w-spacer" />
-        <span className="w-sort">
-          <IconArrowsSort size={12} />
-          Recently updated
+        <span className="w-list-summary">
+          {listSummary(data, visible.length, filters, projects, loading, now)}
         </span>
       </div>
 
@@ -582,20 +354,32 @@ export function WorkListView({
   );
 }
 
+/** "8 in review · ghostex · in my sidebar · updated 2m ago": the count in the chosen state, then the Filter menu's other filters by name (the type and "Assigned to me" show on the bar). */
 function listSummary(
   data: WorkListData | null,
   count: number,
-  filtersOn: number,
+  filters: WorkFilters,
+  projects: WorkProject[],
   loading: boolean,
   now: number,
 ): string {
   if (!data) return loading ? "Loading your work…" : "";
+  const state = (
+    STATUS_FILTERS.find((option) => option.value === filters.status)?.label ??
+    "Open"
+  ).toLowerCase();
+  const named = [
+    filters.projectId
+      ? (projects.find((project) => project.projectId === filters.projectId)
+          ?.name ?? "")
+      : "",
+    filters.trackerProject,
+    filters.inSidebar ? "in my sidebar" : "",
+  ].filter(Boolean);
   const updated = data.refreshing
     ? "updating…"
     : `updated ${relativeTime(data.generatedAt, now) || "now"}`;
-  const filtered =
-    filtersOn > 0 ? ` · ${filtersOn} filter${filtersOn === 1 ? "" : "s"}` : "";
-  return `${count} open${filtered} · ${updated}`;
+  return [`${count} ${state}`, ...named, updated].join(" · ");
 }
 
 function Notices({

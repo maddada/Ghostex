@@ -83,15 +83,17 @@ tracker is), Personal ones too (see Work mode under Git and
 worktrees). Like work mode, it is part of Workspaces, which you turn on in
 Settings > Extensions (Features). Open it with the briefcase at the top of the sidebar, which shows
 while the window has a work-mode project, or from **Open a view**. It is one list,
-newest change first, and it opens with **Assigned to me** on; the filters next to
-it pick the tickets or PRs, the status, the repo, the project (a Linear
-project, or a GitHub Project in a GitHub workspace), and **In my sidebar** (work
-one of your sessions is linked to). In a GitHub workspace where `gh` cannot read
+newest change first, and it opens with **Assigned to me** on (**Mine** on a narrow
+panel). Under the search box, **All | Linear issues (or GitHub issues) | PRs**
+picks what the list shows. **Filter** on the right (a number shows how many are
+set) holds the state, the repo, the project (a Linear project, or a GitHub
+Project in a GitHub workspace) and **Only in my sidebar** (work one of your
+sessions is linked to). In a GitHub workspace where `gh` cannot read
 GitHub Projects yet, a notice shows the command to run (`gh auth refresh -s
 read:project`) with **Copy**; close it and it stays closed. A PR that
 belongs to a ticket shows on the ticket's row; a PR with no ticket gets its own
 row marked **No ticket**. A green dot means one of your sessions is working on it
-right now. **Group by** sorts the list into groups by Status, Repo, Project,
+right now. **View**, next to Filter, holds the sort order and **Group by**, which sorts the list into groups by Status, Repo, Project,
 Assignee, Type (tickets, issues, PRs without a ticket), Pull request (no PR,
 draft, checks failing or pending, ready, merged) or Updated (today, yesterday,
 this week, older); click a group's header to fold it, and the list remembers
