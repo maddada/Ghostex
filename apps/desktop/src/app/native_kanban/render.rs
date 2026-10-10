@@ -2,11 +2,14 @@
 
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, AnyView, Context, InteractiveElement as _, IntoElement, MouseButton,
+    AnyElement, AnyView, Context, DragMoveEvent, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Window, div,
     px,
 };
+use gpui_component::scroll::Scrollbar;
 
+use super::board_scroll::kanban_scrollbar;
+use super::card::KanbanCardDrag;
 use super::lane::{LANE_GAP, lane_row_min_width, lanes_in_view};
 use super::palette::KanbanPalette;
 use super::state::KanbanPanel;
@@ -35,6 +38,7 @@ impl GhostexGpuiApp {
         let name_changed = self.native_kanban.display_name != project.display_name;
         if name_changed {
             self.native_kanban.display_name = project.display_name.clone();
+            self.native_kanban_sync_window_title(cx);
         }
         let appearance_changed = self.native_kanban.appearance_signature != Some(signature);
         if appearance_changed {
@@ -55,6 +59,13 @@ impl GhostexGpuiApp {
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {
+                        if this.native_kanban_in_own_window(window) {
+                            // The board is that window's only surface: no shell focus to route.
+                            if let Some(focus) = this.native_kanban.focus.clone() {
+                                window.focus(&focus, cx);
+                            }
+                            return;
+                        }
                         this.focus_project_editor_surface(TitlebarMode::Kanban, window, cx);
                     }),
                 )
@@ -92,21 +103,37 @@ impl GhostexGpuiApp {
         // past it with nothing to scroll to.
         let row_min_width = lane_row_min_width(lane_count);
         div()
-            .id("native-kanban-lanes")
+            .relative()
             .size_full()
-            .overflow_x_scroll()
-            // A vertical wheel over a lane scrolls its cards, not the board sideways.
-            .restrict_scroll_to_axis()
-            .track_scroll(&scroll)
             .child(
                 div()
-                    .flex()
-                    .h_full()
-                    .w_full()
-                    .min_w(px(row_min_width))
-                    .gap(px(LANE_GAP))
-                    .children(lanes),
+                    .id("native-kanban-lanes")
+                    .size_full()
+                    .overflow_x_scroll()
+                    // A vertical wheel over a lane scrolls its cards, not the board sideways.
+                    .restrict_scroll_to_axis()
+                    .track_scroll(&scroll)
+                    // A card dragged to the board's edge scrolls it towards the lanes off screen.
+                    .on_drag_move(cx.listener(
+                        |this, event: &DragMoveEvent<KanbanCardDrag>, _, cx| {
+                            this.native_kanban_drag_autoscroll(
+                                event.event.position,
+                                event.bounds,
+                                cx,
+                            );
+                        },
+                    ))
+                    .child(
+                        div()
+                            .flex()
+                            .h_full()
+                            .w_full()
+                            .min_w(px(row_min_width))
+                            .gap(px(LANE_GAP))
+                            .children(lanes),
+                    ),
             )
+            .child(kanban_scrollbar(Scrollbar::horizontal(&scroll), &p))
             .into_any_element()
     }
 

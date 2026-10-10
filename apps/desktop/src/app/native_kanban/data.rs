@@ -82,6 +82,10 @@ impl GhostexGpuiApp {
                     _ => {}
                 },
             );
+            if !self.native_kanban.search_query.is_empty() {
+                let query = self.native_kanban.search_query.clone();
+                search.update(cx, |input, cx| input.set_value(query, window, cx));
+            }
             self.native_kanban.search = Some(search);
             self.native_kanban.search_subscription = Some(subscription);
         }
@@ -136,11 +140,11 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn native_kanban_visible(&self) -> bool {
-        self.active_mode == TitlebarMode::Kanban
+        let in_panel = self.active_mode == TitlebarMode::Kanban
             && self
                 .project_editor_shell
-                .is_mode_awake(TitlebarMode::Kanban)
-            && self.native_kanban.project.is_some()
+                .is_mode_awake(TitlebarMode::Kanban);
+        (in_panel || self.native_kanban.detached.is_some()) && self.native_kanban.project.is_some()
     }
 
     /// Runs `work` with the current bridge context on the background executor and hands its

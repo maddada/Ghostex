@@ -184,6 +184,9 @@ impl GhostexGpuiApp {
             crate::app::helpers::set_docs_drawer_glass_window(None);
             close_owned_window(drawer.window.into(), cx);
         }
+        if let Some(board) = self.native_kanban_take_detached_window() {
+            close_owned_window(board, cx);
+        }
     }
 
     /// Starts closing this window's remote Action sessions on their machines. Returns the closes

@@ -9,7 +9,9 @@ use gpui::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ListAlignment, ListState,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, div, list, px,
 };
+use gpui_component::scroll::Scrollbar;
 
+use super::board_scroll::kanban_scrollbar;
 use super::card::KanbanCardDrag;
 use super::model::{BoardColumn, MAX_VISIBLE_TICKETS_PER_LANE};
 use super::palette::KanbanPalette;
@@ -286,8 +288,11 @@ impl GhostexGpuiApp {
         let state =
             self.native_kanban_lane_list(lane_key, visible + usize::from(hidden > 0), measure_key);
         let indices: Rc<[usize]> = indices[..visible].into();
+        let scrollbar = kanban_scrollbar(Scrollbar::vertical(&state), p).id(ElementId::Name(
+            format!("kanban-lane-scrollbar-{lane_key}").into(),
+        ));
         let p = p.clone();
-        list(
+        let cards = list(
             state,
             cx.processor(move |this, index: usize, _window, cx| {
                 let row = div().px(px(10.0)).pb(px(CARD_GAP));
@@ -313,12 +318,18 @@ impl GhostexGpuiApp {
                 .into_any_element()
             }),
         )
-        .flex_1()
-        .min_h_0()
-        .w_full()
+        .size_full()
         .pt(px(2.0))
-        .pb(px(10.0 - CARD_GAP))
-        .into_any_element()
+        .pb(px(10.0 - CARD_GAP));
+        // The bar runs in the cards' side gutter, over the padding of the rows.
+        div()
+            .relative()
+            .flex_1()
+            .min_h_0()
+            .w_full()
+            .child(cards)
+            .child(scrollbar)
+            .into_any_element()
     }
 
     /// The lane's list state, brought up to `count` items. Measured card heights are dropped when

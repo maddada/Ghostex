@@ -14,11 +14,29 @@ impl GhostexGpuiApp {
     /// the control says so rather than opening an empty window.
     /// CDXC:Docs 2026-10-01 DECISION:
     /// User chose option 3A: Files is drawn natively and has no page of its own, so its Open Externally pops out the open HTML, Markdown or Excalidraw file through gxserver's file link (`native_docs/open_externally.rs`) instead of staying disabled; its embed page is never handed out, because it only works inside Ghostex.
+    /// CDXC:ProjectBoard 2026-10-10 WHY:
+    /// Kanban has no page to hand out (its React page is gone, CDXC:ProjectBoard 2026-09-30 in
+    /// native_kanban/render.rs), so its pop-out opens the native board in a window of Ghostex's own
+    /// instead (native_kanban/window.rs), and the same control brings it back while it is out.
     pub(crate) fn view_can_pop_out(&self, mode: TitlebarMode) -> bool {
-        if mode == TitlebarMode::Manage {
-            return self.native_docs_external_file().is_some();
+        match mode {
+            TitlebarMode::Manage => self.native_docs_external_file().is_some(),
+            TitlebarMode::Kanban => self.native_kanban_can_open_window(),
+            _ => self.view_pop_out_url(mode).is_some(),
         }
-        self.view_pop_out_url(mode).is_some()
+    }
+
+    /// What the pop-out control is called for `mode`: Kanban moves between the panel and a window
+    /// of Ghostex's own, the rest leave for the browser or another app.
+    pub(crate) fn view_pop_out_label(&self, mode: TitlebarMode, menu: bool) -> &'static str {
+        match (mode, self.native_kanban_detached(), menu) {
+            (TitlebarMode::Kanban, true, false) => "Bring Back to Panel",
+            (TitlebarMode::Kanban, true, true) => "Bring back to panel",
+            (TitlebarMode::Kanban, false, false) => "Open in New Window",
+            (TitlebarMode::Kanban, false, true) => "Open in new window",
+            (_, _, false) => "Open Externally",
+            (_, _, true) => "Open externally",
+        }
     }
 
     fn view_pop_out_url(&self, mode: TitlebarMode) -> Option<String> {
@@ -42,6 +60,14 @@ impl GhostexGpuiApp {
         if mode == TitlebarMode::Manage {
             if let Some(path) = self.native_docs_external_file() {
                 self.native_docs_open_externally(&path, None, cx);
+            }
+            return;
+        }
+        if mode == TitlebarMode::Kanban {
+            if self.native_kanban_detached() {
+                self.native_kanban_bring_back(cx);
+            } else {
+                self.native_kanban_open_window(cx);
             }
             return;
         }
