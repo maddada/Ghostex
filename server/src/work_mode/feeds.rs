@@ -86,6 +86,9 @@ pub(crate) struct GithubListPullRequest {
 pub(crate) struct GithubListProject {
     pub(crate) title: String,
     pub(crate) status: Option<String>,
+    /// The project's page. `gh`'s `projectItems` carry no URL, so `fetch_github_feed` fills it
+    /// from the repo owner's project list (`project_urls_by_title`).
+    pub(crate) url: Option<String>,
 }
 
 /// `projectItems` of `gh issue list` / `gh pr list` → the first project.
@@ -104,6 +107,7 @@ fn first_project_item(value: &Value) -> Option<GithubListProject> {
                     .map(str::trim)
                     .filter(|name| !name.is_empty())
                     .map(str::to_string),
+                url: None,
             })
         })
 }
@@ -488,7 +492,7 @@ fn fetch_github_feed(cwd: &str) -> Result<GithubFeed, String> {
             ))
         }
     })?;
-    let pull_requests: Vec<GithubListPullRequest> =
+    let mut pull_requests: Vec<GithubListPullRequest> =
         serde_json::from_str::<Value>(pull_requests.trim())
             .ok()
             .and_then(|value| value.as_array().cloned())
@@ -496,7 +500,7 @@ fn fetch_github_feed(cwd: &str) -> Result<GithubFeed, String> {
             .iter()
             .filter_map(parse_github_list_pull_request)
             .collect();
-    let issues = run_gh_full(
+    let mut issues: Vec<GithubListIssue> = run_gh_full(
         Some(cwd),
         &[
             "issue",
@@ -538,11 +542,38 @@ fn fetch_github_feed(cwd: &str) -> Result<GithubFeed, String> {
         })
     })
     .collect();
+    let has_projects = pull_requests.iter().any(|pr| pr.project.is_some())
+        || issues.iter().any(|issue| issue.project.is_some());
+    if let Some(owner) = repo
+        .as_deref()
+        .and_then(|repo| repo.split_once('/'))
+        .map(|(owner, _)| owner)
+        .filter(|_| has_projects)
+    {
+        let urls = project_urls_by_title(owner);
+        let projects = pull_requests
+            .iter_mut()
+            .filter_map(|pr| pr.project.as_mut())
+            .chain(issues.iter_mut().filter_map(|issue| issue.project.as_mut()));
+        for project in projects {
+            project.url = urls.get(&project.title).cloned();
+        }
+    }
     Ok(GithubFeed {
         repo,
         pull_requests,
         issues,
     })
+}
+
+/// The open GitHub Projects of `owner` by title, for the Work page's project links. A project
+/// owned by someone else (a user's project holding an org's issue) stays without a link.
+fn project_urls_by_title(owner: &str) -> HashMap<String, String> {
+    list_github_projects(owner)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|project| Some((project.title?, project.url?)))
+        .collect()
 }
 
 fn parse_github_list_pull_request(value: &Value) -> Option<GithubListPullRequest> {

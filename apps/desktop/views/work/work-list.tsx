@@ -191,6 +191,17 @@ export function WorkListView({
     [items, tracker],
   );
   const projects = data?.projects ?? [];
+  const repoUrls = useMemo(
+    () =>
+      new Map(
+        (data?.projects ?? []).flatMap((project) =>
+          project.repo
+            ? [[project.projectId, `https://github.com/${project.repo}`]]
+            : [],
+        ),
+      ),
+    [data?.projects],
+  );
   const set = (patch: Partial<WorkFilters>) =>
     onFiltersChange({ ...filters, ...patch });
   const workspaceLabel =
@@ -300,6 +311,9 @@ export function WorkListView({
               key={item.key}
               item={item}
               now={now}
+              repoUrl={
+                item.projectId ? repoUrls.get(item.projectId) : undefined
+              }
               onOpen={onOpen}
               onOpenUrl={onOpenUrl}
             />
@@ -339,6 +353,11 @@ export function WorkListView({
                         key={item.key}
                         item={item}
                         now={now}
+                        repoUrl={
+                          item.projectId
+                            ? repoUrls.get(item.projectId)
+                            : undefined
+                        }
                         onOpen={onOpen}
                         onOpenUrl={onOpenUrl}
                       />
@@ -525,11 +544,14 @@ function RowLink({
   url,
   className,
   children,
+  label = "Open in browser",
   onOpenUrl,
 }: {
   url: string | undefined;
   className: string;
   children: ReactNode;
+  /** The tooltip's first line; the URL follows on the second. */
+  label?: string;
   onOpenUrl: (url: string) => void;
 }) {
   if (!url) return <span className={className}>{children}</span>;
@@ -537,7 +559,7 @@ function RowLink({
     <button
       type="button"
       className={cx(className, "w-link")}
-      title={`Open in browser
+      title={`${label}
 ${url}`}
       onClick={(event) => {
         event.stopPropagation();
@@ -555,16 +577,22 @@ ${url}`}
 
 /**
  * CDXC:WorkMode 2026-10-10 DECISION:
- * User: "Please let's do B, two lines with fixed slots but put the project one to be the most right between those ones so it has space and isn't forced to truncate needlessly". Line 1 is status, ID (fixed width), title, time; line 2 starts under the ID with fixed slots (repo, PR with checks, owner, Slack threads, In sidebar) and the Linear/GitHub project last, taking the rest. An empty slot keeps its width with a faint placeholder; a narrow list drops the Slack slot first, then the repo slot (work.css container queries).
+ * User: "Please let's do B, two lines with fixed slots but put the project one to be the most right between those ones so it has space and isn't forced to truncate needlessly", then (2026-10-10) "swap this so the image of the assignee is shown on the very left". Line 1 is status, ID (fixed width), title, time; line 2 starts under the ID with fixed slots (owner avatar, repo, PR with checks, Slack threads, In sidebar) and the Linear/GitHub project last, taking the rest. An empty slot keeps its width with a faint placeholder; a narrow list drops the Slack slot first, then the repo slot (work.css container queries); the owner always stays.
+ *
+ * CDXC:WorkMode 2026-10-10 DECISION:
+ * User: "i want to be able to click on the name of the linear project to jump to it. and i want to be able to click on the name of the repo to open it's tab in github". The project name opens the Linear project's (or GitHub Project's) page and the repo name opens `https://github.com/<owner>/<repo>`, through the same `work.openUrl` as the ID links; "No repo yet" and a project without a URL stay plain text.
  */
 function WorkRow({
   item,
   now,
+  repoUrl,
   onOpen,
   onOpenUrl,
 }: {
   item: WorkItem;
   now: number;
+  /** The item's repo on GitHub, from its project's `repo`. */
+  repoUrl: string | undefined;
   onOpen: (item: WorkItem) => void;
   onOpenUrl: (url: string) => void;
 }) {
@@ -599,14 +627,42 @@ function WorkRow({
       <span className="w-row-title">{item.title}</span>
       <span className="w-time">{relativeTime(item.updatedAt, now)}</span>
       <div className="w-l2">
+        <span
+          className="w-slot w-slot-owner work-slot-owner"
+          title={
+            item.assignee
+              ? item.assignee.isMe
+                ? "Assigned to you"
+                : `Assigned to ${item.assignee.name}`
+              : "Unassigned"
+          }
+        >
+          {item.assignee ? (
+            <Avatar
+              name={item.assignee.name}
+              url={item.assignee.avatarUrl}
+              size={18}
+            />
+          ) : (
+            <span className="w-avatar-empty" />
+          )}
+        </span>
         <span className="w-slot w-slot-repo work-slot-repo">
           {item.projectName ? (
-            <>
+            <RowLink
+              url={repoUrl}
+              className="w-slot-link work-row-repo"
+              label="Open the repo on GitHub"
+              onOpenUrl={onOpenUrl}
+            >
               <IconFolder size={12} />
-              <span className="w-slot-text" title={item.projectName}>
+              <span
+                className="w-slot-text"
+                title={repoUrl ? undefined : item.projectName}
+              >
                 {item.projectName}
               </span>
-            </>
+            </RowLink>
           ) : (
             <span className="w-placeholder">
               {item.kind === "linearIssue" ? "No repo yet" : "No repo"}
@@ -654,26 +710,6 @@ function WorkRow({
             <span className="w-placeholder">No PR</span>
           )}
         </span>
-        <span
-          className="w-slot w-slot-owner work-slot-owner"
-          title={
-            item.assignee
-              ? item.assignee.isMe
-                ? "Assigned to you"
-                : `Assigned to ${item.assignee.name}`
-              : "Unassigned"
-          }
-        >
-          {item.assignee ? (
-            <Avatar
-              name={item.assignee.name}
-              url={item.assignee.avatarUrl}
-              size={18}
-            />
-          ) : (
-            <span className="w-avatar-empty" />
-          )}
-        </span>
         <span className="w-slot w-slot-slack work-slot-slack">
           {item.slackThreadCount ? (
             <span
@@ -698,15 +734,27 @@ function WorkRow({
         </span>
         <span className="w-slot w-slot-project work-slot-project">
           {project ? (
-            <>
+            <RowLink
+              url={project.url}
+              className="w-slot-link work-row-project"
+              label={
+                item.linearProject
+                  ? "Open the Linear project"
+                  : "Open the GitHub Project"
+              }
+              onOpenUrl={onOpenUrl}
+            >
               <IconBox
                 size={12}
                 className={item.linearProject ? "c-linear" : undefined}
               />
-              <span className="w-slot-text" title={project.name}>
+              <span
+                className="w-slot-text"
+                title={project.url ? undefined : project.name}
+              >
                 {project.name}
               </span>
-            </>
+            </RowLink>
           ) : (
             <span className="w-placeholder">No project</span>
           )}

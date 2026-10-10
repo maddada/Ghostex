@@ -759,6 +759,33 @@ a:hover {
   flex-shrink: 0;
 }
 
+/* A row's repo and project names open the repo on GitHub and the project's page. */
+.w-slot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+
+.w-slot-link > svg {
+  flex-shrink: 0;
+  color: var(--w-text-3);
+}
+
+.w-slot-link > svg.c-linear {
+  color: var(--w-linear);
+}
+
+/* The slot clips its overflow, so the focus ring sits inside the link. */
+.w-slot-link.w-link:focus-visible {
+  box-shadow: inset 0 0 0 1px var(--w-accent);
+}
+
 /* ---------- grouped list ---------- */
 .w-groups {
   display: flex;

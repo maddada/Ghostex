@@ -589,7 +589,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
                 linear_project: None,
                 github_project: issue.project.as_ref().map(|project| WorkItemLink {
                     name: project.title.clone(),
-                    url: None,
+                    url: project.url.clone(),
                 }),
                 cycle: None,
                 labels: issue.labels.clone(),
@@ -640,7 +640,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
             })
             .map(|project| WorkItemLink {
                 name: project.title.clone(),
-                url: None,
+                url: project.url.clone(),
             });
         let head = pull_request.head_branch.as_deref().unwrap_or_default();
         let mut tickets: Vec<String> = Vec::new();

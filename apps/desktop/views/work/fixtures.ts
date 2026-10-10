@@ -26,6 +26,14 @@ const linearUrl = (identifier: string) =>
   `https://linear.app/shortpoint/issue/${identifier}`;
 const pullUrl = (repo: string, number: number) =>
   `https://github.com/${repo}/pull/${number}`;
+const linearProject = (name: string, slugId: string) => ({
+  name,
+  url: `https://linear.app/shortpoint/project/${name.toLowerCase().replace(/\s+/gu, "-")}-${slugId}`,
+});
+const githubProject = (name: string, number: number) => ({
+  name,
+  url: `https://github.com/orgs/acme/projects/${number}`,
+});
 
 const session = (title: string, working = false) => ({
   projectId: "p-shortpoint",
@@ -58,7 +66,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "progress", name: "In Progress" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "EasyPass" },
+    linearProject: linearProject("EasyPass", "8f2c1a9e04b7"),
     assignee: { name: "Sami", isMe: false },
     pullRequest: {
       number: 6555,
@@ -80,7 +88,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "progress", name: "In Progress" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "Table element" },
+    linearProject: linearProject("Table element", "3d91e6b2c5a0"),
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
     pullRequest: {
@@ -104,7 +112,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "review", name: "In Review" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "EasyPass" },
+    linearProject: linearProject("EasyPass", "8f2c1a9e04b7"),
     cycle: "Sprint 20",
     labels: ["Bug"],
     assignee: { name: "Yahia", isMe: true },
@@ -131,7 +139,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "review", name: "In Review" },
     projectId: "p-website",
     projectName: "shortpoint-website",
-    linearProject: { name: "Website sign-up" },
+    linearProject: linearProject("Website sign-up", "b07e4f1d9a23"),
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
     pullRequest: {
@@ -177,7 +185,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "review", name: "QA" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "EasyPass" },
+    linearProject: linearProject("EasyPass", "8f2c1a9e04b7"),
     assignee: { name: "Lina", isMe: false },
     pullRequest: {
       number: 6544,
@@ -214,7 +222,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "todo", name: "Todo" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "EasyPass" },
+    linearProject: linearProject("EasyPass", "8f2c1a9e04b7"),
     cycle: "Sprint 20",
     labels: ["Feature"],
     assignee: { name: "Yahia", isMe: true },
@@ -234,7 +242,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "review", name: "QA" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
-    linearProject: { name: "Table element" },
+    linearProject: linearProject("Table element", "3d91e6b2c5a0"),
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
     pullRequest: {
@@ -256,7 +264,7 @@ const ITEMS: WorkItem[] = [
     status: { group: "progress", name: "In Progress" },
     projectId: "p-website",
     projectName: "shortpoint-website",
-    linearProject: { name: "Website sign-up" },
+    linearProject: linearProject("Website sign-up", "b07e4f1d9a23"),
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
     pullRequest: {
@@ -276,7 +284,7 @@ const ITEMS: WorkItem[] = [
     title: "Triage: EasyPass emails land in spam for Outlook users",
     updatedAt: minutesAgo(60 * 30),
     status: { group: "backlog", name: "Triage" },
-    linearProject: { name: "EasyPass" },
+    linearProject: linearProject("EasyPass", "8f2c1a9e04b7"),
     linearIssue: "SPX-1252",
   },
 ];
@@ -317,7 +325,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     status: { group: "progress", name: "In progress" },
     projectId: "p-web",
     projectName: "web",
-    githubProject: { name: "Q4 Launch" },
+    githubProject: githubProject("Q4 Launch", 3),
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
     pullRequest: {
@@ -340,7 +348,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     status: { group: "todo", name: "Todo" },
     projectId: "p-web",
     projectName: "web",
-    githubProject: { name: "Q4 Launch" },
+    githubProject: githubProject("Q4 Launch", 3),
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
     githubIssue: 224,
@@ -356,7 +364,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     status: { group: "review", name: "In review" },
     projectId: "p-api",
     projectName: "api",
-    githubProject: { name: "Platform" },
+    githubProject: githubProject("Platform", 5),
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
     githubIssue: 88,

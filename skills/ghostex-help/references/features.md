@@ -97,8 +97,11 @@ right now. **View**, next to Filter, holds the sort order and **Group by**, whic
 Assignee, Type (tickets, issues, PRs without a ticket), Pull request (no PR,
 draft, checks failing or pending, ready, merged) or Updated (today, yesterday,
 this week, older); click a group's header to fold it, and the list remembers
-your choice (None keeps one list). Click a row's ticket ID or PR number to open
-that page in the app's browser. Click anywhere else on a row, or a ticket or PR chip on a session card, to see its
+your choice (None keeps one list). Each row's second line starts with the
+owner's picture, then the repo, the PR, and the Linear project (or GitHub
+Project) last. Click a row's ticket ID, PR number, repo name or project name to
+open that page (the ticket, the PR, the repo on GitHub, the project) in the
+app's browser. Click anywhere else on a row, or a ticket or PR chip on a session card, to see its
 details: the ticket and its latest comments, the PR with each check by name and
 its reviews, videos (Loom, YouTube and video files play right there), the
 sessions linked to it, and where it is in your team's flow (Ticket, Working
