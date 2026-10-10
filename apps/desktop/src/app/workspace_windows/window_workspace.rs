@@ -63,6 +63,20 @@ pub(crate) fn saved_window_workspace_id(slot: u32) -> Option<String> {
         .filter(|id| !id.trim().is_empty())
 }
 
+/// The workspaces the slot's window showed before its current one, newest first.
+fn saved_recent_window_workspace_ids(slot: u32) -> Vec<String> {
+    read_window_workspace_state(slot)
+        .get("recentWorkspaceIds")
+        .and_then(Value::as_array)
+        .map(|ids| {
+            ids.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The sessions (sidebar session ids) the slot's window last had open in `workspace_id`, newest
 /// first.
 fn remembered_workspace_sessions(slot: u32, workspace_id: &str) -> Vec<String> {
@@ -111,8 +125,11 @@ pub(super) fn discard_window_workspace(slot: u32) {
 impl GhostexGpuiApp {
     /// Called once the window's app exists: the workspace it starts on.
     pub(crate) fn restore_window_workspace(&mut self, start: &WorkspaceWindowStart) {
-        let workspace_id = match start {
-            WorkspaceWindowStart::Restore { slot, .. } => saved_window_workspace_id(*slot),
+        let (workspace_id, recent_workspace_ids) = match start {
+            WorkspaceWindowStart::Restore { slot, .. } => (
+                saved_window_workspace_id(*slot),
+                saved_recent_window_workspace_ids(*slot),
+            ),
             WorkspaceWindowStart::New {
                 workspace_id,
                 active_project_id,
@@ -121,14 +138,14 @@ impl GhostexGpuiApp {
                 // A window opened on another workspace than the one it came from starts the way
                 // switching to it does, once its list is built (workspace_landing.rs).
                 self.window_workspace_landing.pending = active_project_id.is_none();
-                workspace_id.clone()
+                (workspace_id.clone(), Vec::new())
             }
         };
-        self.gx_store_init_window_workspace(workspace_id);
+        self.gx_store_init_window_workspace(workspace_id, recent_workspace_ids);
         self.persist_window_workspace_id();
     }
 
-    /// Saves the window's workspace with its slot.
+    /// Saves the window's workspace, and the ones it showed before, with its slot.
     pub(crate) fn persist_window_workspace_id(&self) {
         let slot = self.workspace_window_slot;
         let mut state = read_window_workspace_state(slot);
@@ -139,6 +156,12 @@ impl GhostexGpuiApp {
             None => {
                 state.remove("workspaceId");
             }
+        }
+        let recent = self.gx_store_window_recent_workspace_ids();
+        if recent.is_empty() {
+            state.remove("recentWorkspaceIds");
+        } else {
+            state.insert("recentWorkspaceIds".to_string(), json!(recent));
         }
         write_window_workspace_state(slot, &state);
     }

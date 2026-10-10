@@ -13,11 +13,16 @@ use serde_json::{Value, json};
 use super::rpc::gxserver_rpc_result_task;
 use crate::GhostexGpuiApp;
 
+/// How many workspaces a window remembers having shown, newest first.
+const MAX_RECENT_WINDOW_WORKSPACES: usize = 8;
+
 /// What the workspace tile draws.
 pub(crate) struct WorkspaceTile {
     pub(crate) name: String,
     pub(crate) letter: String,
     pub(crate) color: String,
+    /// The workspace a click on the letter switches to; `None` with a single workspace.
+    pub(crate) switch_to: Option<(String, String)>,
 }
 
 impl GhostexGpuiApp {
@@ -141,13 +146,26 @@ impl GhostexGpuiApp {
             .get(state.resolve(window_workspace_id.as_deref()))
     }
 
-    /// Sets the window's workspace before its first list is built.
-    pub(crate) fn gx_store_init_window_workspace(&mut self, workspace_id: Option<String>) {
-        self.gx_store
+    /// Sets the window's workspace, and the ones it showed before (newest first), before its
+    /// first list is built.
+    pub(crate) fn gx_store_init_window_workspace(
+        &mut self,
+        workspace_id: Option<String>,
+        recent_workspace_ids: Vec<String>,
+    ) {
+        let host = &mut self.gx_store.sidebar_list.last_inputs.host;
+        host.window_workspace_id = workspace_id;
+        host.window_recent_workspace_ids = recent_workspace_ids;
+    }
+
+    /// The workspaces this window showed before the current one, newest first.
+    pub(crate) fn gx_store_window_recent_workspace_ids(&self) -> &[String] {
+        &self
+            .gx_store
             .sidebar_list
             .last_inputs
             .host
-            .window_workspace_id = workspace_id;
+            .window_recent_workspace_ids
     }
 
     /// Switches this window to another workspace: the list is rebuilt on it and the choice is
@@ -160,11 +178,18 @@ impl GhostexGpuiApp {
         if self.gx_store_window_workspace_id() == workspace_id {
             return;
         }
-        self.gx_store
-            .sidebar_list
-            .last_inputs
-            .host
-            .window_workspace_id = workspace_id;
+        let outgoing = self.gx_store_resolved_window_workspace_id();
+        let incoming = self
+            .gx_store_workspaces_state()
+            .map(|state| state.resolve(workspace_id.as_deref()).to_string());
+        let host = &mut self.gx_store.sidebar_list.last_inputs.host;
+        if let Some(outgoing) = outgoing.filter(|outgoing| Some(outgoing) != incoming.as_ref()) {
+            let recent = &mut host.window_recent_workspace_ids;
+            recent.retain(|id| *id != outgoing && Some(id) != incoming.as_ref());
+            recent.insert(0, outgoing);
+            recent.truncate(MAX_RECENT_WINDOW_WORKSPACES);
+        }
+        host.window_workspace_id = workspace_id;
         self.persist_window_workspace_id();
         self.gx_store_sidebar_state_changed(cx);
         cx.notify();
@@ -174,11 +199,33 @@ impl GhostexGpuiApp {
     pub(crate) fn gx_store_workspace_tile(&self) -> Option<WorkspaceTile> {
         let state = self.gx_store_workspaces_state()?;
         let workspace = self.gx_store_window_workspace()?;
+        let switch_to = ghostex_gx_core::workspace_switch_target(
+            state,
+            &workspace.workspace_id,
+            self.gx_store_window_recent_workspace_ids(),
+        )
+        .map(|target| (target.workspace_id.clone(), target.name.clone()));
         Some(WorkspaceTile {
             name: workspace.name.clone(),
             letter: workspace.letter.clone(),
             color: workspace.color.clone(),
+            switch_to,
         })
+    }
+
+    /// Shows `workspace_id` from this window: another window that already shows it comes forward,
+    /// else this window switches to it.
+    pub(crate) fn gx_store_select_workspace(
+        &mut self,
+        workspace_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.gx_store_resolved_window_workspace_id().as_deref() == Some(&workspace_id) {
+            return;
+        }
+        if !self.focus_window_showing_workspace(&workspace_id, cx) {
+            self.switch_window_workspace(workspace_id, cx);
+        }
     }
 
     /// The tile's menu, as the sidebar menu JSON. Built when it opens, because its new-window
@@ -208,14 +255,8 @@ impl GhostexGpuiApp {
         };
         match command.get("type").and_then(Value::as_str) {
             Some("selectWorkspace") => {
-                let Some(workspace_id) = text("workspaceId") else {
-                    return true;
-                };
-                if self.gx_store_resolved_window_workspace_id().as_deref() == Some(&workspace_id) {
-                    return true;
-                }
-                if !self.focus_window_showing_workspace(&workspace_id, cx) {
-                    self.switch_window_workspace(workspace_id, cx);
+                if let Some(workspace_id) = text("workspaceId") {
+                    self.gx_store_select_workspace(workspace_id, cx);
                 }
                 true
             }

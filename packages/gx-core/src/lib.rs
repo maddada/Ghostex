@@ -182,6 +182,7 @@ pub use crate::sidebar_menu::{
     hover_strip, menu_to_json, project_header_actions, HeaderCommand, HoverAction, HoverStrip,
     LauncherAgent, MenuCommand, MenuGroup, MenuHost, MenuItem, MenuOpenTarget, MenuSecondary,
     MenuSplit, SessionActions, SidebarMenus, machine_workspace_menu, workspace_menu,
+    workspace_switch_target,
 };
 pub use crate::sidebar_ui::{
     collapse_into_storage, collapse_state_from_storage, hidden_items_from_storage,

@@ -49,4 +49,4 @@ pub use item::{menu_to_json, MenuItem, MenuSecondary, MenuSplit};
 pub use menus::SidebarMenus;
 pub(crate) use run_in_box::{run_in_box_agents_page, run_in_box_locations_page};
 pub use session::SessionActions;
-pub use workspace::{machine_workspace_menu, workspace_menu};
+pub use workspace::{machine_workspace_menu, workspace_menu, workspace_switch_target};

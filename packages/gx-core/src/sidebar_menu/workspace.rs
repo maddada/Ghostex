@@ -9,7 +9,7 @@
 //! that one is clicked then we open that in a new window". This supersedes the "Open <name> in a
 //! new window" row.
 
-use ghostex_gx_protocol::SidebarWorkspacesState;
+use ghostex_gx_protocol::{SidebarWorkspace, SidebarWorkspacesState};
 use serde_json::json;
 
 use super::commands::MenuCommand;
@@ -62,6 +62,34 @@ pub fn workspace_menu(
         MenuCommand::host(json!({ "type": "newWorkspace" })),
     ));
     menu
+}
+
+/// Where the workspace tile's one click goes from `current`: with two workspaces the other one;
+/// with more, the one this window showed most recently before (`recent`, newest first), else the
+/// next one in order. `None` with a single workspace.
+///
+/// CDXC:Workspaces 2026-10-10 DECISION:
+/// User: "i want 1 click to switch workspaces between work and personal one in my case (but still have access to the dropdown we have now basically) ... when i click the left side of the split button then it toggles betwen the available workspaces right side shows the dropdown we have now". With three or more workspaces the click goes back to the one the window used last. The split button's look is in the desktop's `native_sidebar/workspace_tile.rs`.
+pub fn workspace_switch_target<'a>(
+    state: &'a SidebarWorkspacesState,
+    current: &str,
+    recent: &[String],
+) -> Option<&'a SidebarWorkspace> {
+    if let Some(workspace) = recent
+        .iter()
+        .filter(|id| id.as_str() != current)
+        .find_map(|id| state.workspaces.get(id))
+    {
+        return Some(workspace);
+    }
+    let ordered: Vec<&SidebarWorkspace> = state.ordered().collect();
+    let position = ordered
+        .iter()
+        .position(|workspace| workspace.workspace_id == current);
+    let start = position.map_or(0, |index| index + 1);
+    (0..ordered.len())
+        .map(|offset| ordered[(start + offset) % ordered.len()])
+        .find(|workspace| workspace.workspace_id != current)
 }
 
 /// "Move to workspace ▸" for a project in `project_workspace_id`: every other workspace, then

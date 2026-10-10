@@ -523,6 +523,9 @@ pub struct SidebarHostInputs {
     /// The workspace this window shows on this computer (saved with the window). `None` = the
     /// default workspace. Remote machines' sections are not filtered by workspace.
     pub window_workspace_id: Option<String>,
+    /// The workspaces this window showed before the current one, newest first (saved with the
+    /// window). The workspace tile's one-click switch goes back to the first that still exists.
+    pub window_recent_workspace_ids: Vec<String>,
 }
 
 impl SidebarHostInputs {

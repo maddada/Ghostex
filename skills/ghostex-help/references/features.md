@@ -384,11 +384,14 @@ connections are kept and come back when you turn it on (`workspacesHidden`).
 Each workspace has its own projects, Spaces,
 Linear API key, Claude account and Browser sign-ins (cookies), and a window
 shows one workspace at a time. Every install starts with one workspace,
-Personal, holding all your projects and Spaces. The workspace button is the
-letter tile at the left end of the Space row (with Spaces off, it shows in that
-row once you have a second workspace). Click it to switch this window to
-another workspace (if another window already shows it, that window comes
-forward instead), to open Workspace settings, or to make a New workspace. A
+Personal, holding all your projects and Spaces. The workspace button sits at
+the left end of the Space row (with Spaces off, it shows in that row once you
+have a second workspace): the workspace's letter with a small arrow beside it.
+Click the letter to switch this window to your other workspace in one click
+(with more than two, it goes back to the one this window showed last; hover it
+to see where it goes). If another window already shows that workspace, that
+window comes forward instead. Click the arrow for the workspace menu: pick any
+workspace, open Workspace settings, or make a New workspace. In the menu, a
 workspace that no window shows yet has a new-window button at the right end of
 its row, which opens it in a new window. Switching reopens the session this window
 last had open in that workspace (or its first project with no session, or
