@@ -1,5 +1,5 @@
-//! The small blurred windows that carry the chat's rare floating controls (the scroll-to-bottom
-//! pill and the fork switcher) while the main window is glass.
+//! The small blurred window that carries the chat's rare floating control (the scroll-to-bottom
+//! pill) while the main window is glass.
 //!
 //! CDXC:SessionChat 2026-09-23 WHY:
 //! GPUI cannot blur behind an element inside a window, only behind a whole window, so each of these
@@ -13,7 +13,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, Pixels, Render, StatefulInteractiveElement as _, Styled as _, Subscription,
-    WeakEntity, Window, WindowBounds, WindowOptions, div, point, px, svg,
+    WeakEntity, Window, WindowBounds, WindowOptions, div, point, px,
 };
 use gpui_component::{Root, tooltip::ManagedTooltipPlacement};
 use std::{cell::Cell, rc::Rc, time::Duration};
@@ -22,25 +22,22 @@ use std::{cell::Cell, rc::Rc, time::Duration};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::app::native_chat) enum FrostedOverlay {
     ScrollBottom,
-    ForkBranches,
 }
 
 impl FrostedOverlay {
-    const ALL: [FrostedOverlay; 2] = [FrostedOverlay::ScrollBottom, FrostedOverlay::ForkBranches];
+    const ALL: [FrostedOverlay; 1] = [FrostedOverlay::ScrollBottom];
 }
 
 /// The windows of every floating control, one each.
 #[derive(Default)]
 pub(in crate::app::native_chat) struct FrostedOverlayWindows {
     scroll_bottom: FrostedOverlayWindowState,
-    fork_branches: FrostedOverlayWindowState,
 }
 
 impl FrostedOverlayWindows {
     fn state(&mut self, overlay: FrostedOverlay) -> &mut FrostedOverlayWindowState {
         match overlay {
             FrostedOverlay::ScrollBottom => &mut self.scroll_bottom,
-            FrostedOverlay::ForkBranches => &mut self.fork_branches,
         }
     }
 
@@ -51,7 +48,6 @@ impl FrostedOverlayWindows {
     ) -> Rc<Cell<Option<Bounds<Pixels>>>> {
         match overlay {
             FrostedOverlay::ScrollBottom => self.scroll_bottom.measured.clone(),
-            FrostedOverlay::ForkBranches => self.fork_branches.measured.clone(),
         }
     }
 }
@@ -72,10 +68,6 @@ struct FrostedOverlayView {
     overlay: FrostedOverlay,
     /// Bumped on every hover change, so a delayed tooltip only shows for the hover that asked.
     tooltip_epoch: Rc<Cell<u64>>,
-    /// Whether the pointer is over the control.
-    hovered: Rc<Cell<bool>>,
-    /// The window alpha last handed to `set_overlay_window_alpha`.
-    alpha: Cell<f32>,
     _observe: Subscription,
     _release: Subscription,
 }
@@ -115,13 +107,11 @@ impl NativeChatView {
 
     /// Whether something else sits over the pane, so a control's own window (which would float
     /// above all of it) stays down: a chat popup window, the account-switch card or the subagent
-    /// viewer. The fork switcher's own menu opens below it and does not count.
-    pub(super) fn frosted_overlay_covered(&self, overlay: FrostedOverlay) -> bool {
-        let own_menu = overlay == FrostedOverlay::ForkBranches
-            && self.chat_menu_is_open(super::fork_branches::FORK_BRANCHES_TRIGGER);
+    /// viewer.
+    pub(super) fn frosted_overlay_covered(&self, _overlay: FrostedOverlay) -> bool {
         self.pane_hidden
             || self.pane_windows_open()
-            || (self.option_menu.is_some() && !own_menu)
+            || self.option_menu.is_some()
             || self.suggestions.is_open()
             || self.snapshot["accountSwitchCard"].is_object()
             || self.snapshot["subagent"].is_object()
@@ -163,8 +153,7 @@ fn apply_frosted_overlay(
     overlay: FrostedOverlay,
     cx: &mut gpui::App,
 ) {
-    let (wanted, handle, parent, main, scale) = chat.update(cx, |chat, cx| {
-        let scale = ChatAppearance::current(&chat.snapshot).scale;
+    let (wanted, handle, parent, main) = chat.update(cx, |chat, cx| {
         let parent = chat.child_window_parent(cx);
         let state = chat.frosted_overlays.state(overlay);
         (
@@ -172,7 +161,6 @@ fn apply_frosted_overlay(
             state.handle.take(),
             parent,
             chat.main_window,
-            scale,
         )
     });
     // An open control follows its pane in place instead of being closed and reopened.
@@ -183,12 +171,6 @@ fn apply_frosted_overlay(
         return;
     }
     if let Some(handle) = handle {
-        // The fork switcher's tooltip is drawn in the chat's window; it goes with its control.
-        if overlay == FrostedOverlay::ForkBranches
-            && let Some(main) = main
-        {
-            let _ = main.update(cx, |_, window, cx| Root::hide_tooltip(window, cx));
-        }
         /*
         CDXC:SessionChat 2026-09-24 WHY:
         The handle was taken out of the chat's state above, so a window not moved in place has to
@@ -215,7 +197,6 @@ fn apply_frosted_overlay(
     };
     let radius = match overlay {
         FrostedOverlay::ScrollBottom => frame.size.height / 2.0,
-        FrostedOverlay::ForkBranches => px(super::fork_branches::BADGE_RADIUS * scale),
     };
     let display_id = owner.display_for(Bounds::new(origin + frame.origin, frame.size), cx);
     let result = cx.open_window(
@@ -242,18 +223,10 @@ fn apply_frosted_overlay(
             move |window, cx| {
                 window.set_background_corner_radius(radius);
                 attach_overlay_window(window, parent);
-                // The fork switcher's window opens at rest, so it never shows a full-strength frame first.
-                let alpha = match overlay {
-                    FrostedOverlay::ScrollBottom => 1.0,
-                    FrostedOverlay::ForkBranches => super::fork_branches::RESTING_OPACITY,
-                };
-                set_overlay_window_alpha(window, alpha);
                 let view = cx.new(|cx| FrostedOverlayView {
                     chat: chat.downgrade(),
                     overlay,
                     tooltip_epoch: Rc::default(),
-                    hovered: Rc::default(),
-                    alpha: Cell::new(alpha),
                     _observe: cx.observe(&chat, |_, _, cx| cx.notify()),
                     // A chat torn down with its control up takes the control with it.
                     _release: cx.observe_release_in(&chat, window, |_, _, window, _| {
@@ -295,7 +268,7 @@ fn finish(
 }
 
 impl Render for FrostedOverlayView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let Some(chat) = self.chat.upgrade() else {
             return div().into_any_element();
         };
@@ -312,29 +285,6 @@ impl Render for FrostedOverlayView {
                     scroll_bottom_pill(self.chat.clone(), &p, hover, self.tooltip_epoch.clone())
                 }
             },
-            FrostedOverlay::ForkBranches => {
-                let lifted = self.hovered.get()
-                    || chat
-                        .read(cx)
-                        .chat_menu_is_open(super::fork_branches::FORK_BRANCHES_TRIGGER);
-                let opacity = if lifted {
-                    1.0
-                } else {
-                    super::fork_branches::RESTING_OPACITY
-                };
-                if self.alpha.replace(opacity) != opacity {
-                    set_overlay_window_alpha(window, opacity);
-                }
-                fork_branches_badge(
-                    chat,
-                    &p,
-                    hover,
-                    opacity,
-                    self.tooltip_epoch.clone(),
-                    self.hovered.clone(),
-                    cx,
-                )
-            }
         }
     }
 }
@@ -431,109 +381,6 @@ fn scroll_bottom_pill(
                     return;
                 };
                 activate_main_window(main, cx);
-            });
-        })
-        .into_any_element()
-}
-
-/// The fork switcher's frosted twin of `render_fork_branch_badge`: the same icon and count, and a
-/// click that opens the same menu under the badge's place in the pane. `opacity` is the switcher's
-/// current strength, drawn by the badge itself only where its window cannot fade as a whole.
-fn fork_branches_badge(
-    chat: gpui::Entity<NativeChatView>,
-    p: &ChatAppearance,
-    hover: gpui::Hsla,
-    opacity: f32,
-    tooltip_epoch: Rc<Cell<u64>>,
-    hovered_state: Rc<Cell<bool>>,
-    cx: &mut Context<FrostedOverlayView>,
-) -> AnyElement {
-    let (count, tooltip, menu_open) = {
-        let view = chat.read(cx);
-        let branches = &view.snapshot["forkBranches"];
-        (
-            branches["count"].as_u64().unwrap_or_default(),
-            branches["tooltip"].as_str().unwrap_or_default().to_owned(),
-            view.chat_menu_is_open(super::fork_branches::FORK_BRANCHES_TRIGGER),
-        )
-    };
-    let s = p.scale;
-    let hover_chat = chat.downgrade();
-    let click_chat = chat.downgrade();
-    div()
-        .id("chat-fork-branches-window")
-        .role(gpui::Role::Button)
-        .aria_label(tooltip.clone())
-        .chat_cursor_pointer()
-        .size_full()
-        .px(px(6.0 * s))
-        .flex()
-        .items_center()
-        .gap(px(4.0 * s))
-        .rounded(px(super::fork_branches::BADGE_RADIUS * s))
-        .border_1()
-        .border_color(p.composer_border)
-        .bg(if menu_open {
-            hover
-        } else {
-            p.composer_background
-        })
-        .hover(move |style| style.bg(hover))
-        .when(!WINDOW_ALPHA, |this| this.opacity(opacity))
-        .font_family(p.font.clone())
-        .text_size(px(11.0 * s))
-        .text_color(p.muted)
-        .whitespace_nowrap()
-        .child(
-            svg()
-                .path("titlebar/git-branch.svg")
-                .size(px(14.0 * s))
-                .flex_shrink_0()
-                .text_color(p.muted),
-        )
-        .child(count.to_string())
-        .on_hover(move |hovered, window, cx| {
-            hovered_state.set(*hovered);
-            window.refresh();
-            let tooltip = tooltip.clone();
-            overlay_hover_tooltip(
-                hover_chat.clone(),
-                FrostedOverlay::ForkBranches,
-                *hovered,
-                &tooltip_epoch,
-                super::fork_branches::TOOLTIP_PLACEMENT,
-                Rc::new(move |window, cx| {
-                    super::fork_branches::fork_branches_tooltip(tooltip.clone(), window, cx)
-                }),
-                window,
-                cx,
-            );
-        })
-        .on_click(move |_, _, cx| {
-            let chat = click_chat.clone();
-            cx.defer(move |cx| {
-                let Some(chat) = chat.upgrade() else {
-                    return;
-                };
-                let (main, anchor) = {
-                    let view = chat.read(cx);
-                    (
-                        view.main_window,
-                        view.frosted_overlays
-                            .measured(FrostedOverlay::ForkBranches)
-                            .get(),
-                    )
-                };
-                let (Some(main), Some(anchor)) = (main, anchor) else {
-                    return;
-                };
-                let _ = main.update(cx, |_, window, cx| {
-                    Root::hide_tooltip(window, cx);
-                    chat.update(cx, |chat, cx| {
-                        chat.open_fork_branches_menu(anchor, window, cx)
-                    });
-                });
-                activate_main_window(Some(main), cx);
             });
         })
         .into_any_element()
@@ -647,25 +494,3 @@ fn attach_overlay_window(window: &mut Window, parent: *mut std::ffi::c_void) {
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn attach_overlay_window(_: &mut Window, _: *mut std::ffi::c_void) {}
-
-/// Whether `set_overlay_window_alpha` can fade a control's window; elsewhere the fork switcher dims
-/// its own badge and the blur behind it stays at full strength.
-const WINDOW_ALPHA: bool = cfg!(target_os = "macos");
-
-/// Fades the control's whole window. The blur is the window's own backdrop, which an element's
-/// opacity cannot reach.
-#[cfg(target_os = "macos")]
-fn set_overlay_window_alpha(window: &mut Window, alpha: f32) {
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    unsafe extern "C" {
-        fn GhostexGpuiSetChildWindowAlpha(view: *mut std::ffi::c_void, alpha: f64);
-    }
-    if let Ok(handle) = HasWindowHandle::window_handle(window)
-        && let RawWindowHandle::AppKit(handle) = handle.as_raw()
-    {
-        unsafe { GhostexGpuiSetChildWindowAlpha(handle.ns_view.as_ptr(), f64::from(alpha)) };
-    }
-}
-
-#[cfg(not(target_os = "macos"))]
-fn set_overlay_window_alpha(_: &mut Window, _: f32) {}

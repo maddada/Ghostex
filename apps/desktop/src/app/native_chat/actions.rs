@@ -125,6 +125,7 @@ impl NativeChatView {
             rows.push(json!({"separator":true}));
         }
         rows.push(json!({"heading":true,"label":"Chat"}));
+        rows.extend(self.fork_branches_row());
         rows.push(self.view_modes_row(&appearance));
         // Side chat: the core offers it only for agents that take `/btw` (composer/side_chat.rs).
         if let Some(prefix) = self.snapshot["sideChat"].as_str() {

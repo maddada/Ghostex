@@ -117,8 +117,8 @@ impl Render for NativeChatView {
         CDXC:SessionChat 2026-09-18 WHY:
         React's maximized composer is a fixed overlay across the whole chat pane, so nothing of the
         conversation is left around it. The native one is a pane-sized child window over a
-        translucent scrim, which leaves this pane painting underneath it: the transcript's rails,
-        minimap and fork button showed through the margins. While it is up, the pane behind renders
+        translucent scrim, which leaves this pane painting underneath it: the transcript's rails and
+        minimap showed through the margins. While it is up, the pane behind renders
         its background only.
         */
         let maximized = self.maximized_window.is_some();
@@ -130,11 +130,6 @@ impl Render for NativeChatView {
             None
         } else {
             self.render_search_bar(&p, window, cx)
-        };
-        let fork_branch_badge = if covered {
-            None
-        } else {
-            self.render_fork_branch_badge(&p, glass, cx)
         };
         let state = self.snapshot.clone();
         let error = self.error.clone();
@@ -148,14 +143,6 @@ impl Render for NativeChatView {
         );
         let transcript = self.render_transcript_host(window, cx);
         let rows = self.list.item_count();
-        /*
-        CDXC:SessionFork 2026-09-21 WHY:
-        The fork button is placed against the conversation's own region, the transcript or the
-        empty-session welcome that replaces it, rather than against the pane: anchored to the pane
-        it would have covered the search bar and the "load earlier turns" row while those are up,
-        and anchored to the transcript alone a forked session with no rows yet would have lost its
-        switcher entirely.
-        */
         let body = if covered {
             None
         } else {
@@ -173,7 +160,6 @@ impl Render for NativeChatView {
                     .min_h_0()
                     .w_full()
                     .child(content)
-                    .children(fork_branch_badge)
                     .into_any_element(),
             )
         };
