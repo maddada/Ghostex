@@ -22,6 +22,10 @@ use gpui::{
 use gpui_component::Root;
 
 use crate::GhostexGpuiApp;
+#[cfg(target_os = "macos")]
+use crate::app::consts::{WINDOW_CONTROLS_LEADING_RESERVE, WORKAREA_HEADER_HEIGHT};
+#[cfg(target_os = "macos")]
+use crate::app::helpers::titlebar_project_text_color;
 use crate::app::helpers::{
     CHROME_LIGHT_APPEARANCE, chrome_ink, glass_clear, set_detached_board_glass_window,
     sync_detached_board_window_glass, titlebar_svg_icon, window_glass_background_appearance,
@@ -29,6 +33,8 @@ use crate::app::helpers::{
 };
 use crate::app::model::TitlebarMode;
 use crate::app::render::sleeping_card::{view_card_button, view_card_frame};
+#[cfg(target_os = "macos")]
+use crate::app::render::window_drag_region::window_drag_region;
 
 /// The board's window never shrinks past this; the lanes scroll sideways inside it.
 const DETACHED_BOARD_MIN_WIDTH: f32 = 640.0;
@@ -118,11 +124,15 @@ impl GhostexGpuiApp {
                 self.main_window_bounds,
             ))),
             display_id: self.main_window_display_id,
+            // The Ghostex titlebar on macOS: see `render_native_kanban_window_header`.
             titlebar: Some(TitlebarOptions {
                 title: Some(title.clone().into()),
-                appears_transparent: false,
-                traffic_light_position: None,
+                appears_transparent: cfg!(target_os = "macos"),
+                traffic_light_position: cfg!(target_os = "macos")
+                    .then(|| gpui::point(px(11.0), px(11.5))),
             }),
+            #[cfg(target_os = "macos")]
+            app_owns_titlebar_drag: true,
             // The board takes part in window glass as it does in the panel (window_glass.rs).
             window_background: window_glass_background_appearance(),
             window_min_size: Some(size(
@@ -240,10 +250,44 @@ impl GhostexGpuiApp {
             .size_full()
             .min_w_0()
             .min_h_0()
+            .flex()
+            .flex_col()
             // The workspace column's tint over the glass, the board's own background in the panel.
             .bg(workspace_column_background())
-            .child(body)
+            .children(self.render_native_kanban_window_header())
+            .child(div().flex_1().min_h_0().min_w_0().child(body))
             .into_any_element()
+    }
+
+    /// The row the window's transparent titlebar leaves to the app on macOS: the traffic lights'
+    /// room on the left, the window's title in the middle, and a drag of it moves the window as
+    /// the work area header does.
+    ///
+    /// CDXC:ProjectBoard 2026-10-10 DECISION:
+    /// User: the board's window keeps the same titlebar as the Ghostex window. So on macOS it takes the workspace windows' transparent titlebar, their traffic-light spot and app-owned titlebar drag (workspace_windows/open.rs), and this header row draws the title. Windows and Linux keep the system titlebar: the workspace windows' caption buttons are drawn by the work area header, which this window does not have.
+    #[cfg(target_os = "macos")]
+    fn render_native_kanban_window_header(&self) -> Option<AnyElement> {
+        Some(
+            window_drag_region(div())
+                .h(px(WORKAREA_HEADER_HEIGHT))
+                .w_full()
+                .flex_shrink_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                // The same reserve on both sides keeps the title centred in the window.
+                .px(px(WINDOW_CONTROLS_LEADING_RESERVE))
+                .text_size(px(13.5))
+                .font_weight(FontWeight::SEMIBOLD)
+                .text_color(titlebar_project_text_color())
+                .child(div().truncate().child(self.native_kanban_window_title()))
+                .into_any_element(),
+        )
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn render_native_kanban_window_header(&self) -> Option<AnyElement> {
+        None
     }
 
     /// The panel's card while the board is in its own window, in the sleeping card's style.
