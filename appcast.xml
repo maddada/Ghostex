@@ -8,6 +8,51 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>10.19.0</title>
+            <pubDate>Sat, 10 Oct 2026 04:53:53 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.19.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>101900</sparkle:version>
+            <sparkle:shortVersionString>10.19.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.19.0
+
+## 10.19.0 - 2026-10-10
+
+**Ghostex 10.19.0 is out.** A new Skills menu shows Ghostex's skills in the chat and terminal, the Work page gets two-line rows, Group by and a one-row filter bar, each workspace window keeps to its own sessions, browser sign-ins in workspaces stay saved, and Colourfulness gets finer steps.
+
+### 💬 Chat and terminal
+- **Skills in the ⋯ menus:** the chat's More actions and the terminal's ⋯ menu list the Ghostex skills the session's agent has installed; pick one to put it in the chat box or type it into the agent, and Configure / Install more opens Settings > Integrations > Agent skills.
+- **Branches moved into More actions:** the floating "This conversation has N branches" button is gone; Branches at the top of the Chat section opens the same list.
+- **Agents' HTML pages open in a floating window over the chat.**
+- **A send waits out a busy agent** instead of retyping into it.
+
+### 🧩 Workspaces and Work Mode
+- **Two-line Work rows** keep every part in the same place, the ticket ID, PR number, repo and project names open their pages, and the owner comes first.
+- **Group by** sorts the Work list by status, repo, project, assignee, type, pull request or last update, with folding headers.
+- **One-row filter bar:** All / issues / PRs and Assigned to me on the left, Filter and View menus on the right, and the page's menus stay inside the page.
+- **A window shows only its own workspace's sessions,** and opening a session of another workspace goes to the window showing it.
+- **The workspace tile is a split button:** one click switches workspace, the chevron opens the menu.
+- **A workspace's browser keeps its sign-ins** after Ghostex closes (sign in once more after updating).
+- **A PR's details find its ticket** whichever chip opened them, plus fixes from live testing.
+
+### 🌐 Browser
+- **Links open in the empty New Tab** instead of leaving it beside the page, everywhere the app opens a link in its browser.
+- **Links that open another app never leave an error page;** a tab opened only for that link closes once you answer.
+
+### 🎨 Theme and views
+- **Colourfulness moves in half steps** (33 positions) from Subtle to Vivid, showing the nearest name, and the Custom colour's depth sliders follow.
+- **Files, Kanban, Automate and extension views say "Loading sessions…"** while Ghostex starts, instead of "unavailable".
+- **The Files view's comment box takes typing on macOS** with transparency on.
+
+### 📱 Phone
+- **The Spaces bar shows its Space buttons again,** the workspace tile is a split button, and the sessions list starts at the screen's edge.
+- **Skills** is in the chat's More actions and the terminal menu, and the chat's Branches item replaces the floating button.
+- **The unused Sidebar projects opacity setting is gone** from Advanced.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.19.0/ghostex-10.19.0-arm64.dmg" length="120129611" type="application/octet-stream" sparkle:edSignature="DLxrS5hteHFQNn2vby74ClifGG65c6U67zeM5dTTRvXuxLawTqif4eck9C/gpbBoiRPT1k0KPj22waen2QYgAw=="/>
+        </item>
+        <item>
             <title>10.18.0</title>
             <pubDate>Fri, 09 Oct 2026 23:04:43 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.18.0</sparkle:fullReleaseNotesLink>
@@ -221,73 +266,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.15.0/ghostex-10.15.0-arm64.dmg" length="115989052" type="application/octet-stream" sparkle:edSignature="4P6Hukdbb0fWSoviKR3P/iAQQg4ZFFE5SbL5OGSryHERqzyAMOtpgy+rU1GqEF4Tg+X6VZlMGOiaQhfIfOr5BA=="/>
         </item>
         <item>
-            <title>10.14.0</title>
-            <pubDate>Wed, 07 Oct 2026 02:22:12 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.14.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>101400</sparkle:version>
-            <sparkle:shortVersionString>10.14.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.14.0
-
-## 10.14.0 - 2026-10-07
-
-**Ghostex 10.14.0 is out.** Agents can show charts and pages right in the chat, Cursor and ZCode work properly on Windows, Settings > Agents gets a simple switch per agent, coordinators show one tidy list of threads, and the phone opens file links and attaches pictures reliably.
-
-### 🤖 Agents
-- **Settings > Agents has a switch on every agent.** Turn agents on or off instead of deleting them; agents you used but turned off stay dimmed in place, and agents you never used wait under More agents, where one click turns one on and offers its install. Add custom agent is the last row, and a single line with Fix all lists only real problems.
-- **Cursor works end to end on Windows:** sign-in, its plan approval and mode-switch choices as chat cards, model switching from the chat, questions answered from the chat, and Stop that really stops it.
-- **A ZCode session that exits shows a red card with Restart ZCode and Open terminal,** and opens in Chat View even when its hooks never connected, thanks to @Ni7e.
-- **Pi starts with the model and thinking level you pick, gets its own status line, and resumes by its session ID;** OMP and Amp get the same turn handling on Windows.
-- **Windows: agent CLIs installed through npm or mise (ZCode, Codex, Gemini, Copilot) no longer show as not installed** or fail their version check.
-
-### 💬 Chat
-- **Agents can show charts, tables, stat tiles and short layouts in the chat, and open small HTML pages as cards,** on the computer, the web and the phone. Ask for it with `$ghostex-visuals`; install the skill in Settings > Integrations.
-- **An answered question no longer flashes back as answerable** before the answer appears.
-- **The `# Changelog
-
-, `/` and `@` menus scroll and follow the pointer without lag,** even with a long chat.
-- **Links to Windows paths such as `C:\Users\you\.claude\…` open the right file.**
-- **A message sent to a session that hasn't started yet starts it,** instead of waiting forever.
-
-### 🧭 Coordinators
-- **The Threads panel is one simple list:** working threads first, then the three most recent, and "N more" shows every thread, closed ones included, each still one tap away. A thread stuck on a permission only you can give says Needs your approval.
-- **Under an expanded coordinator the sidebar shows threads working or active in the last 2 hours,** with an "N older threads" row for the rest.
-- **Hovering a coordinator turns its crown into the fold chevron.**
-
-### 🗂️ Sidebar and Spaces
-- **Go to Space 1–9 hotkeys:** Cmd+Option+Shift+1–9 on macOS, Ctrl+Alt+Shift+1–9 on Windows and Linux, following the order of your Space row.
-- **Spaces follow the machine you're looking at:** a remote computer shows its own Spaces when it has them turned on.
-- **Dragging projects works everywhere:** above the first project, over another project's sessions and threads, and the dragged project stays under the pointer. The project chevron is now part of its header button.
-
-### 👥 Accounts
-- **Auto-redeem uses a banked reset 5 minutes before it expires.** Using one as soon as you hit a usage limit in its last 24 hours is a separate switch, off by default.
-
-### 📱 On the phone
-- **Tapping a link to a file on your computer opens it:** HTML pages, Markdown, text and code, and pictures.
-- **Android: attaching a picture no longer fails with "open failed".**
-- **Charts and tables from agents, and the simpler coordinator Threads list, show on the phone too.**
-
-### 🪟 Windows
-- **Thin overlay scrollbars in the Files view, browser tabs, the Code view and extension views.**
-- **Shutting down Windows no longer shows an error dialog for every session.**
-- **The setup intro video plays inside the app.**
-- **The Windows app can install Ghostex on Linux remote machines,** which used to show Machine unsupported.
-- **Status line commands no longer leave hundreds of stray processes running.**
-
-### 🧩 Extensions and integrations
-- **Cloud Boxes is now a built-in extension on macOS and Linux, off by default.** Turn it on in Settings > Extensions; your boxes and logins are kept.
-- **Installing Computer Use or Browser Use also installs the Cua Driver skill.**
-
-### 🩹 Fixes and polish
-- **macOS: `brew upgrade` no longer fails and uninstalls Ghostex;** Ghostex now leaves Homebrew's `ghostex` link alone and repairs it (#203).
-- **Starting a new session no longer closes a session you were using** (#204).
-- **Windows: opening Settings while it's already open no longer closes it.**
-- **The titlebar Update button is rounded.**
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.14.0/ghostex-10.14.0-arm64.dmg" length="115191408" type="application/octet-stream" sparkle:edSignature="vLlCw4fxdH1RS6G8+jMGxGniAzHKiJ3D8SJma7hB0ym0LNsMZZ+yuNfZMX/HSfV4M11YBaoUV2rM+JYv1SO0Bg=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -299,6 +277,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: J6JC1IcYwORPsF0ZDg3VgeA7obZ8mCaZMUYWOA06b2NXUuTWlSPHrE50RZ9YllRRUOmPyqdS2LVY2ae/P2GGDA==
-length: 23724
+edSignature: Cri+7Kq7Z4ugraKDBb8LZ/nnHfvnSlbgmSGkSx7OPh0oGnAdMnzESFBDNXg7htnIkRWz4+1r/cNKhaEd/Y2dDQ==
+length: 21984
 -->
