@@ -50,7 +50,8 @@ impl GhostexGpuiApp {
 
     /// A notification banner or a menu bar session row, which reaches the lead: the window that
     /// already shows the session (`row_id`, the sidebar row id) takes it, the one last active
-    /// first, else this window. `activate` focuses the session in the window chosen.
+    /// first, else this window, whose focus then goes on to the window that shows the session's
+    /// workspace (session_routing.rs). `activate` focuses the session in the window chosen.
     pub(crate) fn activate_session_in_its_window(
         &mut self,
         row_id: &str,

@@ -117,6 +117,8 @@ pub struct GhostexGpuiApp {
     /// Set while this window closes with another workspace window still open, so nothing starts
     /// again in it (app/workspace_windows/).
     pub(crate) workspace_window_closing: bool,
+    /// What this window still owes the workspace it shows (app/workspace_windows/workspace_landing.rs).
+    pub(crate) window_workspace_landing: crate::app::workspace_windows::WindowWorkspaceLanding,
     pub(crate) project_editor_shell: ProjectEditorShellModel,
     pub(crate) project_editor_auto_sleep_epochs: ProjectEditorAutoSleepEpochs,
     pub(crate) project_editor_auto_sleep_policy: ProjectEditorAutoSleepPolicySnapshot,

@@ -54,92 +54,25 @@ impl GhostexGpuiApp {
                                     project_id,
                                     session_id,
                                 } => {
-                                    /*
-                                    CDXC:Sessions 2026-07-11:
-                                    macOS restores a previous terminal by creating its
-                                    replacement row and then running the normal attach
-                                    sequence. A focus-only dispatch lets the presentation
-                                    reconciler create a placeholder, but does not provide
-                                    that placeholder with gxserver's resume/attach payload,
-                                    leaving an empty shell. Start the same local attach path
-                                    directly here, using the currently focused Agents pane
-                                    as the restore placement target.
-                                    */
-                                    // The restored session opens in its agent's Default Agent View
-                                    // (`CDXC:SessionChat 2026-09-30 DECISION` in session_chat_launch.rs).
-                                    this.arm_default_view_chat_launch_intent(
-                                        GpuiWorkspaceTerminalSessionKey::Local(
-                                            GpuiLocalWorkspaceSessionKey {
-                                                project_id: project_id.clone(),
-                                                session_id: session_id.clone(),
+                                    match gpui_combined_presentation_session_focus_id(
+                                        &project_id,
+                                        &session_id,
+                                    ) {
+                                        // In the window that shows the session's workspace
+                                        // (workspace_windows/session_routing.rs).
+                                        Some(focus_id) => this.run_in_session_window(
+                                            &focus_id,
+                                            cx,
+                                            move |app, cx| {
+                                                app.restore_local_previous_session(
+                                                    project_id, session_id, cx,
+                                                )
                                             },
                                         ),
-                                    );
-                                    if let Some(focus_id) =
-                                        gpui_combined_presentation_session_focus_id(
-                                            &project_id,
-                                            &session_id,
-                                        )
-                                    {
-                                        let _ = this
-                                            .dispatch_gpui_command_palette_session_focus(
-                                                &focus_id,
-                                                cx,
-                                            );
+                                        None => this.restore_local_previous_session(
+                                            project_id, session_id, cx,
+                                        ),
                                     }
-                                    let key = GpuiLocalWorkspaceSessionKey {
-                                        project_id,
-                                        session_id,
-                                    };
-                                    this.local_workspace_latest_focus_key = Some(key.clone());
-                                    this.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
-                                    let requested_pane_id = this.agents_workspace.focused_pane;
-                                    if this.focus_existing_gpui_local_workspace_terminal(&key, cx) {
-                                        return;
-                                    }
-                                    let attach_intent = this.local_workspace_attach_intent_for_key(&key);
-                                    if !this.local_workspace_attach_pending.insert(key.clone()) {
-                                        return;
-                                    }
-                                    let background = cx.background_executor().clone();
-                                    cx.spawn(async move |this, cx| {
-                                        let prepare_key = key.clone();
-                                        let result = background
-                                            .spawn(async move {
-                                                gpui_prepare_local_workspace_attach_terminal_plan(
-                                                    &prepare_key,
-                                                    attach_intent,
-                                                )
-                                            })
-                                            .await;
-                                        let _ = this.update(cx, |this, cx| {
-                                            this.local_workspace_attach_pending.remove(&key);
-                                            if this.local_workspace_latest_focus_key.as_ref()
-                                                != Some(&key)
-                                            {
-                                                return;
-                                            }
-                                            match result {
-                                                Ok(plan) => {
-                                                    let _ = this
-                                                        .open_gpui_local_workspace_terminal(
-                                                            key,
-                                                            plan,
-                                                            requested_pane_id,
-                                                            false,
-                                                            cx,
-                                                        );
-                                                }
-                                                Err(message) => this.dispatch_gpui_app_modal_toast(
-                                                    "warning",
-                                                    "Session restore unavailable",
-                                                    message.as_str(),
-                                                    cx,
-                                                ),
-                                            }
-                                        });
-                                    })
-                                    .detach();
                                 }
                                 GpuiPreviousSessionRestoreResult::Remote {
                                     remote_machine_id,
@@ -216,5 +149,86 @@ impl GhostexGpuiApp {
             }
             _ => {}
         }
+    }
+
+    /// Restores one of this computer's previous sessions in this window: its row, then the
+    /// normal attach sequence.
+    fn restore_local_previous_session(
+        &mut self,
+        project_id: String,
+        session_id: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        /*
+        CDXC:Sessions 2026-07-11:
+        macOS restores a previous terminal by creating its
+        replacement row and then running the normal attach
+        sequence. A focus-only dispatch lets the presentation
+        reconciler create a placeholder, but does not provide
+        that placeholder with gxserver's resume/attach payload,
+        leaving an empty shell. Start the same local attach path
+        directly here, using the currently focused Agents pane
+        as the restore placement target.
+        */
+        // The restored session opens in its agent's Default Agent View
+        // (`CDXC:SessionChat 2026-09-30 DECISION` in session_chat_launch.rs).
+        self.arm_default_view_chat_launch_intent(GpuiWorkspaceTerminalSessionKey::Local(
+            GpuiLocalWorkspaceSessionKey {
+                project_id: project_id.clone(),
+                session_id: session_id.clone(),
+            },
+        ));
+        if let Some(focus_id) =
+            gpui_combined_presentation_session_focus_id(&project_id, &session_id)
+        {
+            let _ = self.dispatch_gpui_command_palette_session_focus(&focus_id, cx);
+        }
+        let key = GpuiLocalWorkspaceSessionKey {
+            project_id,
+            session_id,
+        };
+        self.local_workspace_latest_focus_key = Some(key.clone());
+        self.refresh_sidebar_gxserver_bootstrap_if_changed(cx);
+        let requested_pane_id = self.agents_workspace.focused_pane;
+        if self.focus_existing_gpui_local_workspace_terminal(&key, cx) {
+            return;
+        }
+        let attach_intent = self.local_workspace_attach_intent_for_key(&key);
+        if !self.local_workspace_attach_pending.insert(key.clone()) {
+            return;
+        }
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let prepare_key = key.clone();
+            let result = background
+                .spawn(async move {
+                    gpui_prepare_local_workspace_attach_terminal_plan(&prepare_key, attach_intent)
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| {
+                this.local_workspace_attach_pending.remove(&key);
+                if this.local_workspace_latest_focus_key.as_ref() != Some(&key) {
+                    return;
+                }
+                match result {
+                    Ok(plan) => {
+                        let _ = this.open_gpui_local_workspace_terminal(
+                            key,
+                            plan,
+                            requested_pane_id,
+                            false,
+                            cx,
+                        );
+                    }
+                    Err(message) => this.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Session restore unavailable",
+                        message.as_str(),
+                        cx,
+                    ),
+                }
+            });
+        })
+        .detach();
     }
 }

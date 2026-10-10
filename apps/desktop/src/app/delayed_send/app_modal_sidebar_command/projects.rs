@@ -75,9 +75,12 @@ impl GhostexGpuiApp {
                     .map(str::to_string)
                 {
                     if self.dispatch_gpui_command_palette_session_focus(&session_id, cx) {
-                        // Dismiss Quick Access before giving the floating sessions pane focus.
+                        // Dismiss Quick Access before giving the floating sessions pane focus, in
+                        // the window the focus went to (workspace_windows/session_routing.rs).
                         self.close_gpui_quick_access_window(cx);
-                        self.reveal_floating_sessions(cx);
+                        self.run_in_session_window(&session_id, cx, |app, cx| {
+                            app.reveal_floating_sessions(cx)
+                        });
                     }
                 }
             }

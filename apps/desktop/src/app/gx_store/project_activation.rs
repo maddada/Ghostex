@@ -50,6 +50,17 @@ impl GhostexGpuiApp {
         let Some(project) = ProjectKey::parse_workspace_project_id(project_id.trim()) else {
             return false;
         };
+        // A project of another workspace opens in the window that shows it
+        // (workspace_windows/session_routing.rs); with none, the focus below switches this one.
+        if project.machine.is_local()
+            && let Some(app) = self.other_window_for_local_project(&project.project_id, cx)
+        {
+            let project_id = project_id.trim().to_string();
+            cx.defer(move |cx| {
+                let _ = app.update(cx, |app, cx| app.gx_store_activate_project(&project_id, cx));
+            });
+            return true;
+        }
         let host = &mut self.gx_store.project_activation;
         host.counters.requests += 1;
         host.generation += 1;
@@ -122,14 +133,20 @@ impl GhostexGpuiApp {
             }
             ProjectActivation::Empty => {
                 self.gx_store.project_activation.counters.created += 1;
-                self.gx_store_focus_intent(
-                    Intent::FocusProject {
-                        project: project.clone(),
-                    },
-                    cx,
-                );
-                self.gx_store_publish_workspace_focus(cx);
                 let group_id = project.to_sidebar_group_id();
+                if project.machine.is_local() {
+                    // The project's group focus, which also switches this window to the
+                    // project's workspace when it shows another one.
+                    self.gx_store_focus_group_row(&group_id, cx);
+                } else {
+                    self.gx_store_focus_intent(
+                        Intent::FocusProject {
+                            project: project.clone(),
+                        },
+                        cx,
+                    );
+                    self.gx_store_publish_workspace_focus(cx);
+                }
                 let agent_id = self.git_default_prompt_agent_id(None);
                 if self.gx_store_preferred_interface(&agent_id) == "chat" {
                     self.gx_store_request_agent_launch(&agent_id, Some(&group_id), None, cx);

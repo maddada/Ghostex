@@ -1,7 +1,9 @@
 //! Focusing a session or a group, performed by the store: a sidebar row click (after its
 //! in-process reaction), the session walk's steps into another project, a held key's landing
 //! row, a Space restore, Back and Forward, the status item and the pet, a menu bar session row, a
-//! Quick Access or palette jump, a notification, an App Shot and `ghostex focus`.
+//! Quick Access or palette jump, a notification, an App Shot and `ghostex focus`. A session or
+//! group of a project in another workspace opens in the window that shows that workspace
+//! (workspace_windows/session_routing.rs).
 //!
 //! CDXC:FocusRouting 2026-09-25 WHY:
 //! Every one of these used to end in the app runtime's `focusSession` or `focusGroup`, which moved
@@ -36,6 +38,7 @@ use crate::app::model::{
     GpuiSidebarWorkspaceTerminalFocusMessage,
     gpui_click_to_wake_sleeping_sessions_from_shared_settings,
 };
+use crate::app::workspace_windows::ProjectWindowRoute;
 use crate::shared_settings;
 
 /// `projectLastSession` in `packages/client-storage/catalog.ts`: a `disk` store (indexeddb
@@ -136,7 +139,21 @@ impl GhostexGpuiApp {
             }
             return true;
         }
-        self.gx_store_focus_local_session(session, options, cx);
+        match self.route_local_project_to_its_window(&session.project_id, cx) {
+            ProjectWindowRoute::Here => self.gx_store_focus_local_session(session, options, cx),
+            ProjectWindowRoute::Switched => {
+                self.gx_store_focus_local_session(session, options, cx);
+                self.settle_routed_window_workspace(cx);
+            }
+            ProjectWindowRoute::Other(app) => {
+                let row_id = row_id.to_string();
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.gx_store_focus_session_row(&row_id, options, cx)
+                    });
+                });
+            }
+        }
         true
     }
 
@@ -282,8 +299,30 @@ impl GhostexGpuiApp {
                 return false;
             }
         };
+        let local_project_id = match &intent {
+            Intent::FocusProject { project } | Intent::FocusSubgroup { project, .. }
+                if project.machine.is_local() =>
+            {
+                Some(project.project_id.clone())
+            }
+            _ => None,
+        };
+        let route = match local_project_id {
+            Some(project_id) => self.route_local_project_to_its_window(&project_id, cx),
+            None => ProjectWindowRoute::Here,
+        };
+        if let ProjectWindowRoute::Other(app) = route {
+            let group_id = group_id.trim().to_string();
+            cx.defer(move |cx| {
+                let _ = app.update(cx, |app, cx| app.gx_store_focus_group_row(&group_id, cx));
+            });
+            return true;
+        }
         self.gx_store_focus_intent(intent, cx);
         self.gx_store_publish_workspace_focus(cx);
+        if matches!(route, ProjectWindowRoute::Switched) {
+            self.settle_routed_window_workspace(cx);
+        }
         true
     }
 

@@ -189,6 +189,7 @@ impl GhostexGpuiApp {
                 lead_window_term: Self::initial_lead_window_term(lead),
                 workspace_window_slot,
                 workspace_window_closing: false,
+                window_workspace_landing: Default::default(),
                 project_editor_shell: shell_layout_state.project_editor_shell,
                 project_editor_auto_sleep_epochs: ProjectEditorAutoSleepEpochs::default(),
                 project_editor_auto_sleep_policy,

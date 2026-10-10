@@ -545,6 +545,7 @@ impl GhostexGpuiApp {
         // (`take_followed_session`), so every other path through here pays one comparison.
         self.gx_store_follow_active_session_space(cx);
         self.gx_store_leave_machine_outside_window_workspace(cx);
+        self.keep_window_inside_workspace(cx);
         self.navigation_history_sidebar_changed(cx);
         // Every so often the same inputs are also built from scratch and the two lists compared:
         // this port's own cache invalidation, which has no second list to lean on since the page

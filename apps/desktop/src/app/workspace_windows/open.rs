@@ -141,7 +141,9 @@ pub(crate) fn open_new_workspace_window_from(
     open_new_workspace_window_on(source, workspace_id, cx);
 }
 
-/// A New Window on `workspace_id` (`None` = the default workspace), cascaded from `source`.
+/// A New Window on `workspace_id` (`None` = the default workspace), cascaded from `source`. It
+/// starts on `source`'s project only when it shows the same workspace; on another one it starts
+/// the way switching to that workspace does (workspace_landing.rs).
 pub(crate) fn open_new_workspace_window_on(
     source: Option<(gpui::AnyWindowHandle, gpui::WeakEntity<GhostexGpuiApp>)>,
     workspace_id: Option<String>,
@@ -153,10 +155,14 @@ pub(crate) fn open_new_workspace_window_on(
                 .update(cx, |_, window, cx| {
                     let frame = gpui_window_frame_state_from_window(window, cx);
                     let project = app.upgrade().and_then(|app| {
-                        app.read(cx)
-                            .sidebar_gxserver_presentation_focus_state
-                            .active_project_id
-                            .clone()
+                        let app = app.read(cx);
+                        app.shows_same_workspace_as(workspace_id.as_deref())
+                            .then(|| {
+                                app.sidebar_gxserver_presentation_focus_state
+                                    .active_project_id
+                                    .clone()
+                            })
+                            .flatten()
                     });
                     (frame, project)
                 })

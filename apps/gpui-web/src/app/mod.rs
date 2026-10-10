@@ -49,3 +49,4 @@ pub(crate) mod titlebar;
 pub(crate) mod web_app;
 pub(crate) mod web_host;
 pub(crate) mod window;
+pub(crate) mod workspace_windows;

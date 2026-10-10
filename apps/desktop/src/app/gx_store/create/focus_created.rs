@@ -26,6 +26,7 @@ use crate::app::model::{
     GpuiLocalWorkspaceSessionKey, GpuiPreferredAgentInterface,
     GpuiSidebarWorkspaceTerminalFocusMessage,
 };
+use crate::app::workspace_windows::ProjectWindowRoute;
 
 /// How long a created session's attach is treated as the create's own. An attach plan answers in
 /// well under a second; a wake of a slow provider can take several.
@@ -53,6 +54,29 @@ impl GhostexGpuiApp {
         if project_id.is_empty() || session_id.is_empty() {
             return;
         }
+        // A session created in a project of another workspace (a `ghostex` create, the Work page's
+        // Start chat) opens in the window that shows that workspace, or switches this one to it
+        // (workspace_windows/session_routing.rs).
+        let switched = match self.route_local_project_to_its_window(project_id, cx) {
+            ProjectWindowRoute::Here => false,
+            ProjectWindowRoute::Switched => true,
+            ProjectWindowRoute::Other(app) => {
+                let (project_id, session_id) = (project_id.to_string(), session_id.to_string());
+                let preferred_interface = preferred_interface.map(str::to_string);
+                cx.defer(move |cx| {
+                    let _ = app.update(cx, |app, cx| {
+                        app.gx_store_focus_created_session(
+                            &project_id,
+                            &session_id,
+                            keep_view,
+                            preferred_interface.as_deref(),
+                            cx,
+                        )
+                    });
+                });
+                return;
+            }
+        };
         let message = GpuiSidebarWorkspaceTerminalFocusMessage {
             force_remount: false,
             placement_target_session_id: None,
@@ -84,6 +108,9 @@ impl GhostexGpuiApp {
             self.arm_created_session_chat_launch_intent(key);
         }
         self.focus_local_workspace_terminal_from_message(&message, cx);
+        if switched {
+            self.settle_routed_window_workspace(cx);
+        }
     }
 
     /// The created session's project takes the workspace and the store's focus takes the session

@@ -53,7 +53,11 @@ impl GhostexGpuiApp {
                 let sidebar_session_id =
                     gpui_combined_presentation_session_id(&project_id, &session_id);
                 if self.dispatch_gpui_command_palette_session_focus(&sidebar_session_id, cx) {
-                    self.reveal_sidebar_session(&sidebar_session_id, cx);
+                    // In the window the focus went to (workspace_windows/session_routing.rs).
+                    let row_id = sidebar_session_id.clone();
+                    self.run_in_session_window(&sidebar_session_id, cx, move |app, cx| {
+                        app.reveal_sidebar_session(&row_id, cx)
+                    });
                 } else {
                     self.dispatch_gpui_app_modal_toast(
                         "warning",

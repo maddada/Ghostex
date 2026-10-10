@@ -103,7 +103,11 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         if self.dispatch_gpui_command_palette_session_focus(sidebar_session_id, cx) {
-            self.reveal_sidebar_session(sidebar_session_id, cx);
+            // In the window the focus went to (workspace_windows/session_routing.rs).
+            let row_id = sidebar_session_id.to_string();
+            self.run_in_session_window(sidebar_session_id, cx, move |app, cx| {
+                app.reveal_sidebar_session(&row_id, cx)
+            });
         } else {
             self.report_session_chat_fork_branch_failure(cx);
         }

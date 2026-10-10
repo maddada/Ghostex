@@ -113,7 +113,16 @@ impl GhostexGpuiApp {
     pub(crate) fn restore_window_workspace(&mut self, start: &WorkspaceWindowStart) {
         let workspace_id = match start {
             WorkspaceWindowStart::Restore { slot, .. } => saved_window_workspace_id(*slot),
-            WorkspaceWindowStart::New { workspace_id, .. } => workspace_id.clone(),
+            WorkspaceWindowStart::New {
+                workspace_id,
+                active_project_id,
+                ..
+            } => {
+                // A window opened on another workspace than the one it came from starts the way
+                // switching to it does, once its list is built (workspace_landing.rs).
+                self.window_workspace_landing.pending = active_project_id.is_none();
+                workspace_id.clone()
+            }
         };
         self.gx_store_init_window_workspace(workspace_id);
         self.persist_window_workspace_id();
@@ -154,6 +163,18 @@ impl GhostexGpuiApp {
         workspace_id: String,
         cx: &mut gpui::Context<Self>,
     ) {
+        self.enter_window_workspace(&workspace_id, cx);
+        self.land_on_window_workspace(&workspace_id, cx);
+    }
+
+    /// The first half of a switch: remembers the session this window has open under the workspace
+    /// it leaves and shows `workspace_id`, without choosing what to show there. A focus routed here
+    /// from outside the workspace (session_routing.rs) chooses that itself.
+    pub(super) fn enter_window_workspace(
+        &mut self,
+        workspace_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
         let slot = self.workspace_window_slot;
         if let (Some(outgoing), Some(focused)) = (
             self.gx_store_resolved_window_workspace_id(),
@@ -166,8 +187,18 @@ impl GhostexGpuiApp {
         ) {
             remember_workspace_session(slot, &outgoing, &focused);
         }
-        self.gx_store_set_window_workspace(Some(workspace_id.clone()), cx);
-        let recent = remembered_workspace_sessions(slot, &workspace_id);
+        self.gx_store_set_window_workspace(Some(workspace_id.to_string()), cx);
+    }
+
+    /// Shows what the window last had open in `workspace_id`, the workspace it now shows: the
+    /// switch's restore, also run when a window opens on a workspace and whenever the window finds
+    /// itself showing a project outside it (workspace_landing.rs).
+    pub(super) fn land_on_window_workspace(
+        &mut self,
+        workspace_id: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let recent = remembered_workspace_sessions(self.workspace_window_slot, workspace_id);
         let view = self.gx_store.sidebar_list.view();
         let plan = plan_workspace_switch_restore(view, &recent).or_else(|| {
             view.groups.first().map(|group| SpaceSwitchFocus::Group {
@@ -202,7 +233,7 @@ impl GhostexGpuiApp {
     /// Puts to sleep the views of every project of this computer that the window's workspace does
     /// not hold: the open views of the project on screen, if it is one of them, and the browser
     /// pages and held-awake view the others keep while parked.
-    fn sleep_views_outside_window_workspace(&mut self, cx: &mut gpui::Context<Self>) {
+    pub(super) fn sleep_views_outside_window_workspace(&mut self, cx: &mut gpui::Context<Self>) {
         let mut project_ids: Vec<String> = self
             .project_view_states_by_project
             .keys()
@@ -254,6 +285,19 @@ impl GhostexGpuiApp {
         workspace_id: &str,
         cx: &mut gpui::Context<Self>,
     ) -> Option<gpui::WeakEntity<GhostexGpuiApp>> {
+        let (handle, app) = self.find_other_window_showing_workspace(workspace_id, cx)?;
+        cx.defer(move |cx: &mut App| {
+            let _ = handle.update(cx, |_, window, _| window.activate_window());
+        });
+        Some(app)
+    }
+
+    /// Another window that shows `workspace_id`, left where it is.
+    pub(super) fn find_other_window_showing_workspace(
+        &self,
+        workspace_id: &str,
+        cx: &gpui::Context<Self>,
+    ) -> Option<(gpui::AnyWindowHandle, gpui::WeakEntity<GhostexGpuiApp>)> {
         let own = cx.entity_id();
         let windows: Vec<(gpui::AnyWindowHandle, gpui::WeakEntity<GhostexGpuiApp>)> =
             WORKSPACE_WINDOWS.with(|windows| {
@@ -272,11 +316,7 @@ impl GhostexGpuiApp {
                     == Some(workspace_id)
             })
         });
-        let (handle, app) = target?;
-        cx.defer(move |cx: &mut App| {
-            let _ = handle.update(cx, |_, window, _| window.activate_window());
-        });
-        Some(app)
+        target
     }
 
     /// A new window on `workspace_id`, cascaded from this one.
