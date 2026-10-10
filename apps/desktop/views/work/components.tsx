@@ -302,16 +302,22 @@ export function ChecksIcon({
   return null;
 }
 
-/** `#6538` with its state and checks, as on a session card. */
+/** `#6538` with its state and checks, as on a session card. `title: null` leaves the tooltip to a wrapping link. */
 export function PullRequestChip({
   pullRequest,
+  title,
 }: {
   pullRequest: WorkItemPullRequest;
+  title?: string | null;
 }) {
   return (
     <span
       className="w-chip"
-      title={`PR #${pullRequest.number} · ${pullRequest.state}`}
+      title={
+        title === null
+          ? undefined
+          : (title ?? `PR #${pullRequest.number} · ${pullRequest.state}`)
+      }
     >
       <PullRequestIcon state={pullRequest.state} size={13} />#
       {pullRequest.number}

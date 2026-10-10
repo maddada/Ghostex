@@ -8,6 +8,11 @@ import {
   workRequest,
 } from "./work/bridge";
 import { itemRef, refKey } from "./work/format";
+import {
+  readStoredGroupBy,
+  storeGroupBy,
+  type WorkGroupBy,
+} from "./work/grouping";
 import { TicketDetailsView, type StartChatChoice } from "./work/ticket-details";
 import type {
   StartWorkResult,
@@ -47,6 +52,10 @@ function WorkApp() {
   const [listError, setListError] = useState<string | null>(null);
   // Kept in memory: the page lives as long as its view tab, so filters survive switching views.
   const [filters, setFilters] = useState<WorkFilters>(DEFAULT_WORK_FILTERS);
+  const [groupBy, setGroupBy] = useState<WorkGroupBy>(readStoredGroupBy);
+  const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [route, setRoute] = useState<Route>({ view: "list" });
   const [details, setDetails] = useState<WorkItemDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
@@ -257,6 +266,20 @@ function WorkApp() {
           onNewTicket={newTicket}
           newTicketError={newTicketError}
           onDismissNotice={dismissNotice}
+          groupBy={groupBy}
+          onGroupByChange={(next) => {
+            setGroupBy(next);
+            storeGroupBy(next);
+          }}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={(groupId) =>
+            setCollapsedGroups((current) => {
+              const next = new Set(current);
+              if (!next.delete(groupId)) next.add(groupId);
+              return next;
+            })
+          }
+          onOpenUrl={openUrl}
           now={now}
         />
       ) : (

@@ -550,6 +550,13 @@ export const storageCatalog = Object.freeze({
     textCodec,
     { ...collection, external: true, maxEntries: 500, maxEntryBytes: 64 * KiB, maxBytes: 256 * KiB }
   ),
+  workGroupBy: define(
+    'workGroupBy',
+    'Work list grouping',
+    desktop + 'views/work/grouping.ts',
+    'ghostex.work.groupBy',
+    enumCodec(['none', 'status', 'repo', 'project', 'assignee', 'type', 'pullRequest', 'updated'])
+  ),
 } as const);
 
 export type StoreId = keyof typeof storageCatalog;

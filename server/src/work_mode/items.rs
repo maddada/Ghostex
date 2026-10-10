@@ -1,9 +1,12 @@
 //! The Work page's list (`/api/listWorkItems`): one flat row per piece of work across the
 //! work-mode projects a window shows, with the sessions on this computer that link it.
 //!
-//! CDXC:WorkMode 2026-10-09 DECISION:
-//! User: the Work list is one flat list with no grouping, sorted by recently updated, with
-//! filters on top and "Assigned to me" on when it opens. A PR linked to a ticket folds into that
+//! CDXC:WorkMode 2026-10-10 DECISION:
+//! User: the Work list is sorted by recently updated, with filters on top and "Assigned to me"
+//! on when it opens. It is one flat list by default; grouping is an option the page applies on
+//! top ("i also want you to please add dropdown that lets me group the list items by different
+//! ways that are useful", supersedes the 2026-10-09 "no grouping"; the groups live in
+//! apps/desktop/views/work/grouping.ts). A PR linked to a ticket folds into that
 //! ticket's row; a PR with no ticket is its own row with a "No ticket" warning. Personal
 //! work-mode projects get the Work list too, showing only their issues and PRs.
 

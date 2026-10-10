@@ -525,12 +525,15 @@ a:hover {
   border-radius: 12px;
   background: var(--w-panel);
   overflow: hidden;
+  /* The row slots drop by the list's own width, which the side panel sets (WorkRow). */
+  container-type: inline-size;
 }
 
+/* Two lines with fixed columns: status, ID (as wide as the longest ID), title, time. */
 .w-row {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 5px 10px;
+  grid-template-columns: 16px var(--w-id-w, 72px) minmax(0, 1fr) 30px;
+  gap: 6px 10px;
   padding: 10px 14px;
   align-items: center;
   cursor: default;
@@ -556,22 +559,106 @@ a:hover {
   justify-content: center;
 }
 
-.w-l1 {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-}
-
 .w-id {
   font-family: var(--w-mono);
   font-size: 11.5px;
   color: var(--w-text-2);
   white-space: nowrap;
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .w-id.is-strong {
   color: var(--w-text);
+}
+
+/* A row's ticket ID and PR number open their page in the browser (work-list.tsx RowLink). */
+.w-link {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 4px;
+  outline: none;
+}
+
+.w-link:hover,
+.w-link:focus-visible {
+  color: var(--w-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.w-link:hover .w-chip,
+.w-link:focus-visible .w-chip {
+  color: var(--w-accent);
+}
+
+.w-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--w-accent);
+}
+
+.w-chip-link {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+/* ---------- grouped list ---------- */
+.w-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.w-group-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--w-text-2);
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+}
+
+.w-group-head:hover {
+  color: var(--w-text);
+}
+
+.w-group-head:focus-visible {
+  box-shadow: 0 0 0 1px var(--w-accent);
+}
+
+.w-group-chevron {
+  color: var(--w-text-3);
+  transition: transform 120ms ease;
+}
+
+.w-group.is-collapsed .w-group-head {
+  margin-bottom: 0;
+}
+
+.w-group.is-collapsed .w-group-chevron {
+  transform: rotate(-90deg);
+}
+
+.w-group-count {
+  font-weight: 500;
+  color: var(--w-text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .w-row-title {
@@ -586,10 +673,12 @@ a:hover {
   font-size: 11.5px;
   color: var(--w-text-3);
   white-space: nowrap;
+  text-align: right;
 }
 
+/* Line 2 starts under the ID: fixed slots, then the project taking what is left. */
 .w-l2 {
-  grid-column: 2 / 4;
+  grid-column: 2 / 5;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -598,6 +687,95 @@ a:hover {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+
+.w-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.w-slot svg {
+  flex-shrink: 0;
+}
+
+.w-slot > svg {
+  color: var(--w-text-3);
+}
+
+.w-slot > svg.c-linear {
+  color: var(--w-linear);
+}
+
+.w-slot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.w-slot-repo {
+  width: 132px;
+}
+
+.w-slot-pr {
+  width: 108px;
+}
+
+.w-slot-owner {
+  width: 18px;
+}
+
+.w-slot-slack {
+  display: none;
+  width: 34px;
+}
+
+.has-slack .w-slot-slack {
+  display: inline-flex;
+}
+
+.w-slot-mine {
+  width: 14px;
+  justify-content: center;
+}
+
+.w-slot-project {
+  flex: 1 1 0;
+}
+
+.w-placeholder {
+  color: var(--w-text-3);
+  opacity: 0.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.w-avatar-empty {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px dashed var(--w-text-3);
+  opacity: 0.6;
+}
+
+.w-row-checks {
+  display: inline-flex;
+}
+
+/* A narrow list drops the Slack slot first, then the repo; the project always stays last. */
+@container (max-width: 532px) {
+  .has-slack .w-slot-slack {
+    display: none;
+  }
+}
+
+@container (max-width: 488px) {
+  .w-slot-repo {
+    display: none;
+  }
 }
 
 .w-meta,
@@ -726,6 +904,9 @@ a:hover {
   background: var(--w-muted-bg);
 }
 
+.w-row.is-skeleton {
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+}
 .w-row.is-skeleton .w-skel--glyph {
   width: 13px;
   height: 13px;

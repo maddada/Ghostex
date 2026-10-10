@@ -91,7 +91,12 @@ GitHub Projects yet, a notice shows the command to run (`gh auth refresh -s
 read:project`) with **Copy**; close it and it stays closed. A PR that
 belongs to a ticket shows on the ticket's row; a PR with no ticket gets its own
 row marked **No ticket**. A green dot means one of your sessions is working on it
-right now. Click a row, or a ticket or PR chip on a session card, to see its
+right now. **Group by** sorts the list into groups by Status, Repo, Project,
+Assignee, Type (tickets, issues, PRs without a ticket), Pull request (no PR,
+draft, checks failing or pending, ready, merged) or Updated (today, yesterday,
+this week, older); click a group's header to fold it, and the list remembers
+your choice (None keeps one list). Click a row's ticket ID or PR number to open
+that page in the app's browser. Click anywhere else on a row, or a ticket or PR chip on a session card, to see its
 details: the ticket and its latest comments, the PR with each check by name and
 its reviews, videos (Loom, YouTube and video files play right there), the
 sessions linked to it, and where it is in your team's flow (Ticket, Working

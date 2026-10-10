@@ -14,6 +14,19 @@ import type {
 const minutesAgo = (minutes: number) =>
   new Date(Date.now() - minutes * 60_000).toISOString();
 
+/** Yesterday at 15:00 local time, so the Updated grouping always has a Yesterday group. */
+const yesterdayAfternoon = () => {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  date.setHours(15, 0, 0, 0);
+  return date.toISOString();
+};
+
+const linearUrl = (identifier: string) =>
+  `https://linear.app/shortpoint/issue/${identifier}`;
+const pullUrl = (repo: string, number: number) =>
+  `https://github.com/${repo}/pull/${number}`;
+
 const session = (title: string, working = false) => ({
   projectId: "p-shortpoint",
   sessionId: `s-${title}`,
@@ -39,6 +52,7 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1250",
     kind: "linearIssue",
     id: "SPX-1250",
+    url: linearUrl("SPX-1250"),
     title: "EasyPass share dialog ignores dark theme",
     updatedAt: minutesAgo(0),
     status: { group: "progress", name: "In Progress" },
@@ -46,7 +60,12 @@ const ITEMS: WorkItem[] = [
     projectName: "shortpoint",
     linearProject: { name: "EasyPass" },
     assignee: { name: "Sami", isMe: false },
-    pullRequest: { number: 6555, state: "draft", checks: "pending" },
+    pullRequest: {
+      number: 6555,
+      state: "draft",
+      checks: "pending",
+      url: pullUrl("shortpoint/shortpoint", 6555),
+    },
     linearIssue: "SPX-1250",
     slackThreadCount: 1,
   },
@@ -55,6 +74,7 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1241",
     kind: "linearIssue",
     id: "SPX-1241",
+    url: linearUrl("SPX-1241"),
     title: "Table element loses column widths after paste",
     updatedAt: minutesAgo(1),
     status: { group: "progress", name: "In Progress" },
@@ -63,7 +83,12 @@ const ITEMS: WorkItem[] = [
     linearProject: { name: "Table element" },
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
-    pullRequest: { number: 6551, state: "draft", checks: "pending" },
+    pullRequest: {
+      number: 6551,
+      state: "draft",
+      checks: "pending",
+      url: pullUrl("shortpoint/shortpoint", 6551),
+    },
     sessions: [session("table-paste-widths", true)],
     linearIssue: "SPX-1241",
     slackThreadCount: 3,
@@ -73,6 +98,7 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1234",
     kind: "linearIssue",
     id: "SPX-1234",
+    url: linearUrl("SPX-1234"),
     title: "EasyPass Live mode disappears when a table is on the page",
     updatedAt: minutesAgo(12),
     status: { group: "review", name: "In Review" },
@@ -99,6 +125,7 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1238",
     kind: "linearIssue",
     id: "SPX-1238",
+    url: linearUrl("SPX-1238"),
     title: "Sign-up form accepts emails without a domain ending",
     updatedAt: minutesAgo(25),
     status: { group: "review", name: "In Review" },
@@ -107,7 +134,12 @@ const ITEMS: WorkItem[] = [
     linearProject: { name: "Website sign-up" },
     assignee: { name: "Yahia", isMe: true },
     assignedToMe: true,
-    pullRequest: { number: 212, state: "open", checks: "failing" },
+    pullRequest: {
+      number: 212,
+      state: "open",
+      checks: "failing",
+      url: pullUrl("shortpoint/shortpoint-website", 212),
+    },
     sessions: [{ ...session("signup-email-domain"), projectId: "p-website" }],
     linearIssue: "SPX-1238",
     slackThreadCount: 1,
@@ -117,6 +149,7 @@ const ITEMS: WorkItem[] = [
     key: "pr:shortpoint/shortpoint#6552",
     kind: "pullRequest",
     id: "#6552",
+    url: pullUrl("shortpoint/shortpoint", 6552),
     title: "Speed up table render tests",
     updatedAt: minutesAgo(120),
     status: { group: "open", name: "Open" },
@@ -124,7 +157,12 @@ const ITEMS: WorkItem[] = [
     projectName: "shortpoint",
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
-    pullRequest: { number: 6552, state: "open", checks: "passing" },
+    pullRequest: {
+      number: 6552,
+      state: "open",
+      checks: "passing",
+      url: pullUrl("shortpoint/shortpoint", 6552),
+    },
     noTicket: true,
     pullRequestRef: "https://github.com/shortpoint/shortpoint/pull/6552",
   },
@@ -133,6 +171,7 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1239",
     kind: "linearIssue",
     id: "SPX-1239",
+    url: linearUrl("SPX-1239"),
     title: "EasyPass token refresh fails after 24 hours",
     updatedAt: minutesAgo(180),
     status: { group: "review", name: "QA" },
@@ -140,7 +179,12 @@ const ITEMS: WorkItem[] = [
     projectName: "shortpoint",
     linearProject: { name: "EasyPass" },
     assignee: { name: "Lina", isMe: false },
-    pullRequest: { number: 6544, state: "open", checks: "passing" },
+    pullRequest: {
+      number: 6544,
+      state: "open",
+      checks: "passing",
+      url: pullUrl("shortpoint/shortpoint", 6544),
+    },
     linearIssue: "SPX-1239",
     slackThreadCount: 2,
   },
@@ -149,6 +193,7 @@ const ITEMS: WorkItem[] = [
     key: "issue:shortpoint/shortpoint-website#218",
     kind: "githubIssue",
     id: "#218",
+    url: "https://github.com/shortpoint/shortpoint-website/issues/218",
     title: "Sign-up page: Arabic text overflows the plan cards",
     updatedAt: minutesAgo(240),
     status: { group: "todo", name: "Open" },
@@ -163,8 +208,9 @@ const ITEMS: WorkItem[] = [
     key: "linear:SPX-1245",
     kind: "linearIssue",
     id: "SPX-1245",
+    url: linearUrl("SPX-1245"),
     title: "Add “Copy link” to the EasyPass share menu",
-    updatedAt: minutesAgo(60 * 26),
+    updatedAt: yesterdayAfternoon(),
     status: { group: "todo", name: "Todo" },
     projectId: "p-shortpoint",
     projectName: "shortpoint",
@@ -176,6 +222,62 @@ const ITEMS: WorkItem[] = [
     branchName: "yahia/spx-1245-copy-link",
     linearIssue: "SPX-1245",
     slackThreadCount: 1,
+  },
+  {
+    ...base,
+    key: "linear:SPX-1236",
+    kind: "linearIssue",
+    id: "SPX-1236",
+    url: linearUrl("SPX-1236"),
+    title: "Image alt text is lost when an element is duplicated",
+    updatedAt: minutesAgo(60 * 24 * 3),
+    status: { group: "review", name: "QA" },
+    projectId: "p-shortpoint",
+    projectName: "shortpoint",
+    linearProject: { name: "Table element" },
+    assignee: { name: "Yahia", isMe: true },
+    assignedToMe: true,
+    pullRequest: {
+      number: 6530,
+      state: "merged",
+      checks: "passing",
+      url: pullUrl("shortpoint/shortpoint", 6530),
+    },
+    linearIssue: "SPX-1236",
+  },
+  {
+    ...base,
+    key: "linear:SPX-1247",
+    kind: "linearIssue",
+    id: "SPX-1247",
+    url: linearUrl("SPX-1247"),
+    title: "Pricing page FAQ skips the last answer with the keyboard",
+    updatedAt: minutesAgo(60 * 24 * 10),
+    status: { group: "progress", name: "In Progress" },
+    projectId: "p-website",
+    projectName: "shortpoint-website",
+    linearProject: { name: "Website sign-up" },
+    assignee: { name: "Yahia", isMe: true },
+    assignedToMe: true,
+    pullRequest: {
+      number: 219,
+      state: "open",
+      checks: "pending",
+      url: pullUrl("shortpoint/shortpoint-website", 219),
+    },
+    linearIssue: "SPX-1247",
+  },
+  {
+    ...base,
+    key: "linear:SPX-1252",
+    kind: "linearIssue",
+    id: "SPX-1252",
+    url: linearUrl("SPX-1252"),
+    title: "Triage: EasyPass emails land in spam for Outlook users",
+    updatedAt: minutesAgo(60 * 30),
+    status: { group: "backlog", name: "Triage" },
+    linearProject: { name: "EasyPass" },
+    linearIssue: "SPX-1252",
   },
 ];
 
@@ -209,6 +311,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     key: "issue:acme/web#218",
     kind: "githubIssue",
     id: "#218",
+    url: "https://github.com/acme/web/issues/218",
     title: "Arabic plan cards overflow on narrow screens",
     updatedAt: minutesAgo(2),
     status: { group: "progress", name: "In progress" },
@@ -217,7 +320,12 @@ const GITHUB_ITEMS: WorkItem[] = [
     githubProject: { name: "Q4 Launch" },
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
-    pullRequest: { number: 231, state: "open", checks: "passing" },
+    pullRequest: {
+      number: 231,
+      state: "open",
+      checks: "passing",
+      url: pullUrl("acme/web", 231),
+    },
     githubIssue: 218,
     sessions: [session("arabic-plan-cards", true)],
   },
@@ -226,6 +334,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     key: "issue:acme/web#224",
     kind: "githubIssue",
     id: "#224",
+    url: "https://github.com/acme/web/issues/224",
     title: "Copy link in the share menu",
     updatedAt: minutesAgo(40),
     status: { group: "todo", name: "Todo" },
@@ -241,6 +350,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     key: "issue:acme/api#88",
     kind: "githubIssue",
     id: "#88",
+    url: "https://github.com/acme/api/issues/88",
     title: "Rate-limit the export endpoint",
     updatedAt: minutesAgo(180),
     status: { group: "review", name: "In review" },
@@ -256,6 +366,7 @@ const GITHUB_ITEMS: WorkItem[] = [
     key: "pr:acme/api#91",
     kind: "pullRequest",
     id: "#91",
+    url: pullUrl("acme/api", 91),
     title: "Bump the SDK",
     updatedAt: minutesAgo(300),
     status: { group: "open", name: "Open" },
@@ -263,7 +374,12 @@ const GITHUB_ITEMS: WorkItem[] = [
     projectName: "api",
     assignee: { name: "yahia", isMe: true },
     assignedToMe: true,
-    pullRequest: { number: 91, state: "open", checks: "pending" },
+    pullRequest: {
+      number: 91,
+      state: "open",
+      checks: "pending",
+      url: pullUrl("acme/api", 91),
+    },
     noTicket: true,
     pullRequestRef: "91",
   },
@@ -727,6 +843,14 @@ export async function answerFromFixtures(
     }
     case "work.createTicket":
       return { opened: true };
+    case "work.openUrl": {
+      // Kept on the window so a headless check can see which links a click opened.
+      const opened = ((
+        window as { workFixtureOpenedUrls?: unknown[] }
+      ).workFixtureOpenedUrls ??= []);
+      opened.push(params.url);
+      return { opened: true };
+    }
     case "work.startChat":
       return {
         projectId: params.projectId,

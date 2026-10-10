@@ -319,6 +319,7 @@ pub const CATALOG: &[CatalogStore] = &[
         Session,
     ),
     store("agentationModes", "agentation-", true, Local),
+    store("workGroupBy", "ghostex.work.groupBy", false, Local),
 ];
 
 /// `definitionForKey`: the first definition that owns `key`.
