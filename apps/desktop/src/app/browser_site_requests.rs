@@ -1,49 +1,34 @@
 //! Answers what a web page asks of the computer (`cef/shell/site_requests.rs`): opening another app
 //! through its link, and connecting to apps on this computer or devices on the local network. Each
-//! is a native prompt in the window in front, the way Chrome asks.
+//! is a question at the top of the page that asked (`element/cef_surface_site_prompt.rs`), the way
+//! Chrome asks, and never blocks the window.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use futures::channel::oneshot;
 use futures::future::{Either, select};
-use gpui::{AnyWindowHandle, App, AsyncApp, PromptLevel};
+use gpui::{App, AsyncApp, WeakEntity};
 
 use crate::BrowserProfileId;
+use crate::app::element::{CefSurface, SitePromptContent, SitePromptIcon, cef_surface_for_browser};
 
 use crate::cef::{BrowserExternalAppRequest, BrowserLocalNetworkAccessRequest, BrowserSiteRequest};
 
-/// A page that asks again this soon after the user said Cancel is not asked, so a page retrying in
-/// a loop cannot hold the window behind a prompt; a deliberate second click still asks.
+/// A page that asks again this soon after the user said Don't Open or not now is not asked, so a
+/// page retrying in a loop cannot keep putting the question back; a deliberate second click still
+/// asks.
 const DECLINED_EXTERNAL_APP_QUIET_PERIOD: Duration = Duration::from_millis(1500);
 
 thread_local! {
-    /// GPUI prompts do not stack: while one of these is up, further requests are let go.
-    static SITE_PROMPT_OPEN: Cell<bool> = const { Cell::new(false) };
     static DECLINED_EXTERNAL_APPS: RefCell<HashMap<String, Instant>> = RefCell::new(HashMap::new());
-}
-
-/// Held from the moment a request is taken up until it is answered, including the app lookup.
-struct SitePromptTurn;
-
-impl SitePromptTurn {
-    fn take() -> Option<Self> {
-        (!SITE_PROMPT_OPEN.replace(true)).then_some(Self)
-    }
-}
-
-impl Drop for SitePromptTurn {
-    fn drop(&mut self) {
-        SITE_PROMPT_OPEN.set(false);
-    }
 }
 
 pub(crate) fn register_browser_site_request_handler(cx: &App) {
     let async_cx = cx.to_async();
     crate::cef::set_browser_site_request_handler(Rc::new(move |request| {
-        // CEF calls this from inside its message pump; the prompt opens on the app's next turn.
+        // CEF calls this from inside its message pump; the question opens on the app's next turn.
         async_cx
             .spawn(async move |cx| answer_browser_site_request(request, cx).await)
             .detach();
@@ -64,9 +49,9 @@ async fn answer_browser_site_request(request: BrowserSiteRequest, cx: &mut Async
 /// CDXC:Browser 2026-10-03 WHY:
 /// A link only another app opens (Okta Verify's `com-okta-authenticator:`, Zoom, Teams, `mailto:`)
 /// asks first, naming the app, as Chrome does; a link no installed app handles is dropped, since
-/// the OS would only show an error. Chrome's "always allow" checkbox is left out: GPUI prompts have
-/// only buttons, and Ghostex has no site-settings page to take it back.
-async fn answer_external_app_request(request: BrowserExternalAppRequest, cx: &mut AsyncApp) {
+/// the OS would only show an error. Chrome's "always allow" checkbox is left out: Ghostex has no
+/// site-settings page to take it back.
+async fn answer_external_app_request(mut request: BrowserExternalAppRequest, cx: &mut AsyncApp) {
     let declined_key = format!("{}|{}", request.origin, request.scheme);
     let recently_declined = DECLINED_EXTERNAL_APPS.with(|declined| {
         declined
@@ -77,7 +62,7 @@ async fn answer_external_app_request(request: BrowserExternalAppRequest, cx: &mu
     if recently_declined {
         return;
     }
-    let Some(_turn) = SitePromptTurn::take() else {
+    let Some(surface) = cef_surface_for_browser(request.browser_id()) else {
         return;
     };
     let (url, scheme) = (request.url.clone(), request.scheme.clone());
@@ -89,27 +74,42 @@ async fn answer_external_app_request(request: BrowserExternalAppRequest, cx: &mu
         return;
     };
     let site = site_label(&request.origin);
-    let (message, detail, open_label) = match app_name {
+    let (message, open_label) = match app_name {
         Some(app) => (
-            format!("Open {app}?"),
             format!("{site} wants to open {app}."),
             format!("Open {app}"),
         ),
         None => (
-            "Open this link in another app?".to_string(),
-            format!("{site} wants to open a {}: link.", request.scheme),
+            format!(
+                "{site} wants to open a {}: link in another app.",
+                request.scheme
+            ),
             "Open".to_string(),
         ),
     };
-    let choice = ask(&message, &detail, &[open_label.as_str(), "Cancel"], cx).await;
-    if choice == Some(0) {
-        cx.update(|cx| cx.open_url(&request.url));
-    } else {
-        DECLINED_EXTERNAL_APPS.with(|declined| {
+    let page_gone = request.page_gone();
+    let answer = ask_on_page(
+        &surface,
+        SitePromptContent {
+            key: format!("app|{declined_key}"),
+            icon: SitePromptIcon::ExternalApp,
+            message,
+            detail: None,
+            allow_label: open_label,
+            deny_label: "Don't Open".to_string(),
+        },
+        page_gone,
+        cx,
+    )
+    .await;
+    match answer {
+        Some(Some(true)) => cx.update(|cx| cx.open_url(&request.url)),
+        Some(_) => DECLINED_EXTERNAL_APPS.with(|declined| {
             let mut declined = declined.borrow_mut();
             declined.retain(|_, at| at.elapsed() < DECLINED_EXTERNAL_APP_QUIET_PERIOD);
             declined.insert(declined_key, Instant::now());
-        });
+        }),
+        None => {}
     }
 }
 
@@ -120,13 +120,13 @@ async fn answer_external_app_request(request: BrowserExternalAppRequest, cx: &mu
 /// sending its page there. Allow and Don't Allow are both kept for the site in that browser
 /// profile, as Chrome does, so Don't Allow keeps Linear on its web page; Settings > Workspaces
 /// forgets them (`forget_browser_site_answers`). Supersedes 2026-10-03, when Don't Allow only
-/// dismissed because there was no way to undo a block. The question is taken down unanswered when
-/// its page goes away, so it never outlives its tab.
+/// dismissed because there was no way to undo a block. The × is "not now" and keeps nothing, and
+/// the question is taken down unanswered when its page goes away, so it never outlives its tab.
 async fn answer_local_network_access_request(
     mut request: BrowserLocalNetworkAccessRequest,
     cx: &mut AsyncApp,
 ) {
-    let Some(_turn) = SitePromptTurn::take() else {
+    let Some(surface) = cef_surface_for_browser(request.browser_id()) else {
         return;
     };
     let site = site_label(request.origin());
@@ -142,40 +142,49 @@ async fn answer_local_network_access_request(
         )
     };
     let page_gone = request.page_gone();
-    let Some(answer) = open_prompt(&message, detail, &["Allow", "Don't Allow"], cx) else {
+    let answer = ask_on_page(
+        &surface,
+        SitePromptContent {
+            key: format!("network|{}", request.origin()),
+            icon: SitePromptIcon::LocalNetwork,
+            message,
+            detail: Some(detail.to_string()),
+            allow_label: "Allow".to_string(),
+            deny_label: "Don't Allow".to_string(),
+        },
+        page_gone,
+        cx,
+    )
+    .await;
+    // Dropping the request unanswered answers the page "not now".
+    let Some(Some(allow)) = answer else {
         return;
-    };
-    let allow = match select(answer, std::pin::pin!(page_gone)).await {
-        Either::Left((Ok(choice), _)) => choice == 0,
-        // Dropping the unanswered prompt takes it down (GPUI closes a Windows dialog whose answer
-        // nobody waits for); dropping the request answers the page "not now".
-        Either::Left((Err(_), _)) | Either::Right(_) => return,
     };
     remember_browser_site_answer(request.profile(), request.origin());
     request.answer(allow);
 }
 
-/// Asks in the window in front (an extension modal or panel is a window of its own). None when
-/// there was no window or it closed before the user answered.
-async fn ask(message: &str, detail: &str, answers: &[&str], cx: &mut AsyncApp) -> Option<usize> {
-    open_prompt(message, detail, answers, cx)?.await.ok()
-}
-
-fn open_prompt(
-    message: &str,
-    detail: &str,
-    answers: &[&str],
+/// Shows a question on the page that asked and waits for it. None when it was not shown (the page
+/// has the same question up already, or is gone) or its page went away; `Some(None)` for "not
+/// now" (the ×, Escape, or the page's surface dropped with its tab or window); `Some(Some(_))` for
+/// Allow or Don't Allow.
+async fn ask_on_page(
+    surface: &WeakEntity<CefSurface>,
+    content: SitePromptContent,
+    page_gone: impl std::future::Future<Output = ()>,
     cx: &mut AsyncApp,
-) -> Option<oneshot::Receiver<usize>> {
-    let window: Option<AnyWindowHandle> = cx.update(|cx| {
-        cx.active_window()
-            .or_else(|| cx.windows().into_iter().next())
-    });
-    window?
-        .update(cx, |_, window, cx| {
-            window.prompt(PromptLevel::Info, message, Some(detail), answers, cx)
-        })
+) -> Option<Option<bool>> {
+    let (prompt_id, answer) = surface
+        .update(cx, |surface, cx| surface.push_site_prompt(content, cx))
         .ok()
+        .flatten()?;
+    match select(answer, std::pin::pin!(page_gone)).await {
+        Either::Left((answer, _)) => Some(answer.ok()),
+        Either::Right(_) => {
+            let _ = surface.update(cx, |surface, cx| surface.remove_site_prompt(prompt_id, cx));
+            None
+        }
+    }
 }
 
 /// Sites that have an Allow or Don't Allow kept in a disk-backed browser profile, by CEF profile,

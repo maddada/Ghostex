@@ -478,7 +478,7 @@ wrap_life_span_handler! {
             let Some(browser) = browser else {
                 return;
             };
-            local_network_prompts_browser_closed(browser.identifier());
+            site_prompts_browser_closed(browser.identifier());
             let Some(host) = browser.host() else {
                 return;
             };
@@ -695,9 +695,13 @@ wrap_permission_handler! {
                             requested_permissions & local_network_current != 0,
                             requested_permissions & local_network_deprecated != 0,
                         ),
-                        prompt_id,
+                        browser_id,
                         callback: Some(callback.clone()),
-                        page_gone: Some(register_local_network_prompt(prompt_id, browser_id)),
+                        page_watch: SitePromptPageWatch::register(
+                            browser_id,
+                            Some(prompt_id),
+                            None,
+                        ),
                     },
                 ));
                 return 1;

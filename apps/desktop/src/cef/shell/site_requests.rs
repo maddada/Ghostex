@@ -28,9 +28,42 @@ pub struct BrowserExternalAppRequest {
     pub scheme: String,
     /// The asking page's `scheme://host[:port]`, empty when it is not an http(s) page.
     pub origin: String,
+    /// The asking browser (`CefSurface::browser_identifier`), whose page shows the question.
+    browser_id: i32,
     /// Closes the Browser tab that was opened only for this link; runs once the request is done
     /// with (answered, skipped or not shown), so it never outlives the prompt.
     close_link_only_tab: Option<BrowserPageMetadataHandler>,
+    page_watch: SitePromptPageWatch,
+}
+
+impl BrowserExternalAppRequest {
+    fn new(
+        url: String,
+        scheme: String,
+        origin: String,
+        browser_id: i32,
+        close_link_only_tab: Option<BrowserPageMetadataHandler>,
+    ) -> Self {
+        let page_watch = SitePromptPageWatch::register(browser_id, None, Some(origin.clone()));
+        Self {
+            url,
+            scheme,
+            origin,
+            browser_id,
+            close_link_only_tab,
+            page_watch,
+        }
+    }
+
+    pub fn browser_id(&self) -> i32 {
+        self.browser_id
+    }
+
+    /// Resolves when the asking page is gone (its browser closed, or its main frame left the
+    /// asking site), so the app can take its question down; never resolves otherwise.
+    pub fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
+        self.page_watch.page_gone()
+    }
 }
 
 impl Drop for BrowserExternalAppRequest {
@@ -50,9 +83,9 @@ pub struct BrowserLocalNetworkAccessRequest {
     pub(crate) profile: String,
     /// The Chromium content settings this prompt is for (loopback and/or local network).
     pub(crate) content_types: Vec<ContentSettingTypes>,
-    pub(crate) prompt_id: u64,
+    pub(crate) browser_id: i32,
     pub(crate) callback: Option<PermissionPromptCallback>,
-    pub(crate) page_gone: Option<futures::channel::oneshot::Receiver<()>>,
+    pub(crate) page_watch: SitePromptPageWatch,
 }
 
 impl BrowserLocalNetworkAccessRequest {
@@ -69,19 +102,14 @@ impl BrowserLocalNetworkAccessRequest {
         self.local_network
     }
 
+    pub fn browser_id(&self) -> i32 {
+        self.browser_id
+    }
+
     /// Resolves when the asking page is gone (its tab or browser closed, or it navigated away),
     /// so the app can take its question down; never resolves otherwise.
     pub fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
-        let page_gone = self.page_gone.take();
-        async move {
-            let gone = match page_gone {
-                Some(page_gone) => page_gone.await.is_ok(),
-                None => false,
-            };
-            if !gone {
-                futures::future::pending::<()>().await;
-            }
-        }
+        self.page_watch.page_gone()
     }
 
     /// Allow or Don't Allow, kept for the site in this browser profile as Chrome does, so the
@@ -110,7 +138,6 @@ impl BrowserLocalNetworkAccessRequest {
 
 impl Drop for BrowserLocalNetworkAccessRequest {
     fn drop(&mut self) {
-        PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| pending.borrow_mut().remove(&self.prompt_id));
         if let Some(callback) = self.callback.take() {
             callback.cont(PermissionRequestResult::DISMISS);
         }
@@ -172,52 +199,115 @@ pub(crate) fn local_network_access_content_types(
     content_types
 }
 
+struct PendingSitePrompt {
+    browser_id: i32,
+    /// Chromium's id for a Local Network Access prompt, which Chromium dismisses itself.
+    chromium_prompt_id: Option<u64>,
+    /// An app-link question ends when its page's main frame leaves this origin.
+    page_origin: Option<String>,
+    page_gone: futures::channel::oneshot::Sender<()>,
+}
+
 thread_local! {
-    /// Open Local Network Access prompts by Chromium prompt id: the asking browser's id and the
-    /// signal that takes the app's question down when the page goes away.
-    static PENDING_LOCAL_NETWORK_PROMPTS: RefCell<HashMap<u64, (i32, futures::channel::oneshot::Sender<()>)>> =
+    /// Questions the app is showing for a page, by `SitePromptPageWatch` id: the signal that takes
+    /// the app's question down when the page goes away.
+    static PENDING_SITE_PROMPTS: RefCell<HashMap<u64, PendingSitePrompt>> =
         RefCell::new(HashMap::new());
+    static NEXT_SITE_PROMPT_ID: Cell<u64> = const { Cell::new(1) };
 }
 
 /// CDXC:Browser 2026-10-10 WHY:
 /// The app's "Allow … to connect to apps on this computer?" question outlived its tab (Linear's
-/// tab closed under it in the live test) and, being a modal dialog, kept the window from closing.
-/// Chromium dismisses the prompt when the page navigates or closes (`on_dismiss_permission_prompt`)
-/// and a closing browser ends every prompt it raised, so the app's question follows its page.
-pub(crate) fn register_local_network_prompt(
-    prompt_id: u64,
-    browser_id: i32,
-) -> futures::channel::oneshot::Receiver<()> {
-    let (sender, receiver) = futures::channel::oneshot::channel();
-    PENDING_LOCAL_NETWORK_PROMPTS
-        .with(|pending| pending.borrow_mut().insert(prompt_id, (browser_id, sender)));
-    receiver
+/// tab closed under it in the live test). Chromium dismisses a permission prompt when the page
+/// navigates or closes (`on_dismiss_permission_prompt`), a closing browser ends every question it
+/// raised, and an app-link question ends when its page leaves the asking site, so the app's
+/// question follows its page. Dropping the watch (the request answered or let go) unregisters it.
+pub(crate) struct SitePromptPageWatch {
+    id: u64,
+    page_gone: Option<futures::channel::oneshot::Receiver<()>>,
+}
+
+impl SitePromptPageWatch {
+    /// Runs on the CEF UI thread, which owns the registry.
+    pub(crate) fn register(
+        browser_id: i32,
+        chromium_prompt_id: Option<u64>,
+        page_origin: Option<String>,
+    ) -> Self {
+        let id = NEXT_SITE_PROMPT_ID.with(|next| next.replace(next.get() + 1));
+        let (sender, receiver) = futures::channel::oneshot::channel();
+        PENDING_SITE_PROMPTS.with(|pending| {
+            pending.borrow_mut().insert(
+                id,
+                PendingSitePrompt {
+                    browser_id,
+                    chromium_prompt_id,
+                    page_origin,
+                    page_gone: sender,
+                },
+            )
+        });
+        Self {
+            id,
+            page_gone: Some(receiver),
+        }
+    }
+
+    fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
+        let page_gone = self.page_gone.take();
+        async move {
+            let gone = match page_gone {
+                Some(page_gone) => page_gone.await.is_ok(),
+                None => false,
+            };
+            if !gone {
+                futures::future::pending::<()>().await;
+            }
+        }
+    }
+}
+
+impl Drop for SitePromptPageWatch {
+    fn drop(&mut self) {
+        PENDING_SITE_PROMPTS.with(|pending| pending.borrow_mut().remove(&self.id));
+    }
+}
+
+/// Ends the app's questions whose page matches, telling each that its page is gone.
+fn end_site_prompts(matches: impl Fn(&PendingSitePrompt) -> bool) {
+    let ended = PENDING_SITE_PROMPTS.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        let ids = pending
+            .iter()
+            .filter(|(_, prompt)| matches(prompt))
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>();
+        ids.into_iter()
+            .filter_map(|id| pending.remove(&id))
+            .collect::<Vec<_>>()
+    });
+    for prompt in ended {
+        let _ = prompt.page_gone.send(());
+    }
 }
 
 pub(crate) fn local_network_prompt_dismissed(prompt_id: u64) {
-    let entry =
-        PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| pending.borrow_mut().remove(&prompt_id));
-    if let Some((_, sender)) = entry {
-        let _ = sender.send(());
-    }
+    end_site_prompts(|prompt| prompt.chromium_prompt_id == Some(prompt_id));
 }
 
-pub(crate) fn local_network_prompts_browser_closed(browser_id: i32) {
-    let senders = PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| {
-        let mut pending = pending.borrow_mut();
-        let prompt_ids = pending
-            .iter()
-            .filter(|(_, (id, _))| *id == browser_id)
-            .map(|(prompt_id, _)| *prompt_id)
-            .collect::<Vec<_>>();
-        prompt_ids
-            .into_iter()
-            .filter_map(|prompt_id| pending.remove(&prompt_id))
-            .collect::<Vec<_>>()
+pub(crate) fn site_prompts_browser_closed(browser_id: i32) {
+    end_site_prompts(|prompt| prompt.browser_id == browser_id);
+}
+
+/// A main-frame navigation to `origin` ends the browser's app-link questions from another site.
+fn site_prompts_page_navigated(browser_id: i32, origin: &str) {
+    end_site_prompts(|prompt| {
+        prompt.browser_id == browser_id
+            && prompt
+                .page_origin
+                .as_deref()
+                .is_some_and(|asked_from| asked_from != origin)
     });
-    for (_, sender) in senders {
-        let _ = sender.send(());
-    }
 }
 
 pub type BrowserSiteRequestHandler = StdRc<dyn Fn(BrowserSiteRequest)>;
@@ -323,13 +413,12 @@ pub(crate) fn dispatch_external_app_popup(
     let Some(scheme) = external_app_link_scheme(&url) else {
         return false;
     };
+    let browser_id = browser
+        .as_deref()
+        .map(|browser| browser.identifier())
+        .unwrap_or_default();
     dispatch_browser_site_request(BrowserSiteRequest::OpenExternalApp(
-        BrowserExternalAppRequest {
-            url,
-            scheme,
-            origin: browser_page_origin(browser),
-            close_link_only_tab: None,
-        },
+        BrowserExternalAppRequest::new(url, scheme, browser_page_origin(browser), browser_id, None),
     ));
     true
 }
@@ -351,23 +440,29 @@ pub(crate) fn cancel_external_app_navigation(
     let url = request
         .map(|request| CefString::from(&request.url()).to_string())
         .unwrap_or_default();
+    let is_main_frame = frame.is_none_or(|frame| frame.is_main() != 0);
+    let browser_id = browser
+        .as_deref()
+        .map(|browser| browser.identifier())
+        .unwrap_or_default();
     let Some(scheme) = external_app_link_scheme(&url) else {
+        if is_main_frame {
+            site_prompts_page_navigated(browser_id, &web_page_origin(&url));
+        }
         return false;
     };
-    let is_main_frame = frame.is_none_or(|frame| frame.is_main() != 0);
-    let committed_page = browser
-        .as_deref()
-        .is_some_and(browser_committed_a_page);
+    let committed_page = browser.as_deref().is_some_and(browser_committed_a_page);
     let close_link_only_tab = page_metadata_handler
         .filter(|_| is_main_frame && !committed_page)
         .cloned();
     dispatch_browser_site_request(BrowserSiteRequest::OpenExternalApp(
-        BrowserExternalAppRequest {
+        BrowserExternalAppRequest::new(
             url,
             scheme,
-            origin: browser_page_origin(browser),
+            browser_page_origin(browser),
+            browser_id,
             close_link_only_tab,
-        },
+        ),
     ));
     true
 }
@@ -391,17 +486,19 @@ wrap_task! {
         url: String,
         scheme: String,
         origin: String,
+        browser_id: i32,
     }
 
     impl Task {
         fn execute(&self) {
             dispatch_browser_site_request(BrowserSiteRequest::OpenExternalApp(
-                BrowserExternalAppRequest {
-                    url: self.url.clone(),
-                    scheme: self.scheme.clone(),
-                    origin: self.origin.clone(),
-                    close_link_only_tab: None,
-                },
+                BrowserExternalAppRequest::new(
+                    self.url.clone(),
+                    self.scheme.clone(),
+                    self.origin.clone(),
+                    self.browser_id,
+                    None,
+                ),
             ));
         }
     }
@@ -440,8 +537,16 @@ wrap_resource_request_handler! {
                 return;
             };
             // This runs on CEF's IO thread; the app's handler lives on the UI thread.
-            let mut task =
-                GhostexDispatchExternalAppRequest::new(url, scheme, browser_page_origin(browser));
+            let browser_id = browser
+                .as_deref()
+                .map(|browser| browser.identifier())
+                .unwrap_or_default();
+            let mut task = GhostexDispatchExternalAppRequest::new(
+                url,
+                scheme,
+                browser_page_origin(browser),
+                browser_id,
+            );
             post_task(ThreadId::UI, Some(&mut task));
         }
     }

@@ -103,6 +103,16 @@ pub struct BrowserExternalAppRequest {
     pub origin: String,
 }
 
+impl BrowserExternalAppRequest {
+    pub fn browser_id(&self) -> i32 {
+        0
+    }
+
+    pub fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
+        std::future::pending()
+    }
+}
+
 pub struct BrowserLocalNetworkAccessRequest {
     origin: String,
     local_network: bool,
@@ -110,6 +120,10 @@ pub struct BrowserLocalNetworkAccessRequest {
 }
 
 impl BrowserLocalNetworkAccessRequest {
+    pub fn browser_id(&self) -> i32 {
+        0
+    }
+
     pub fn origin(&self) -> &str {
         &self.origin
     }

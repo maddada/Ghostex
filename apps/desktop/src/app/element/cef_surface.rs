@@ -5,6 +5,10 @@
 use crate::app::render::workarea_header::workarea_header_bottom_y;
 use crate::*;
 
+#[path = "cef_surface_site_prompt.rs"]
+mod site_prompt;
+pub(crate) use site_prompt::{SitePromptContent, SitePromptIcon, cef_surface_for_browser};
+
 pub(crate) struct CefSurface {
     background: Hsla,
     browser: Rc<CefBrowser>,
@@ -14,6 +18,8 @@ pub(crate) struct CefSurface {
     /// When the page last went off screen, for the idle sweep (`app/web_page_sleep.rs`).
     hidden_since: Option<std::time::Instant>,
     workarea_theme: Option<(bool, u32, u32, bool)>,
+    /// What the page asked of the computer, waiting for an answer (`site_prompt`).
+    site_prompts: site_prompt::SitePromptQueue,
 }
 
 impl CefSurface {
@@ -129,6 +135,13 @@ impl CefSurface {
                     .detach();
             }));
         }
+        let browser_id = browser.identifier();
+        site_prompt::register_site_prompt_surface(browser_id, cx.weak_entity());
+        let entity_id = cx.entity_id();
+        cx.on_release(move |_, _| {
+            site_prompt::unregister_site_prompt_surface(browser_id, entity_id)
+        })
+        .detach();
         Self {
             background,
             browser,
@@ -137,6 +150,7 @@ impl CefSurface {
             visible,
             hidden_since: (!visible).then(std::time::Instant::now),
             workarea_theme: None,
+            site_prompts: site_prompt::SitePromptQueue::new(cx),
         }
     }
 
@@ -372,12 +386,16 @@ impl Render for CefSurface {
         let browser = self.browser.clone();
         let focus_handle = self.focus_handle.clone();
         let id = self.id.clone();
+        let site_prompt_row = self.render_site_prompt_row(window, cx);
 
-        div()
+        let page = div()
             .id(id)
             .key_context(CEF_KEY_CONTEXT)
             .track_focus(&focus_handle)
-            .size_full()
+            .when(site_prompt_row.is_none(), |page| page.size_full())
+            .when(site_prompt_row.is_some(), |page| {
+                page.w_full().flex_1().min_h_0()
+            })
             .bg(if self.id == "gpui-sidebar" {
                 titlebar_background()
             } else if self.id.starts_with("ghostex-gpui-session-chat-renderer-") {
@@ -409,7 +427,18 @@ impl Render for CefSurface {
                 self.id.clone(),
                 window,
                 cx,
-            ))
+            ));
+        // A page's question sits above the page, which shrinks to make room (`site_prompt`).
+        match site_prompt_row {
+            Some(row) => div()
+                .size_full()
+                .flex()
+                .flex_col()
+                .child(row)
+                .child(page)
+                .into_any_element(),
+            None => page.into_any_element(),
+        }
     }
 }
 

@@ -738,7 +738,7 @@ impl Drop for CefBrowser {
     fn drop(&mut self) {
         self.app_initiated_close.set(true);
         forget_page_keep_awake_probe(self.identifier());
-        local_network_prompts_browser_closed(self.identifier());
+        site_prompts_browser_closed(self.identifier());
         #[cfg(target_os = "macos")]
         if let Some(view) = self.native_view() {
             platform::dispose_sidebar_hover_reveal(view);

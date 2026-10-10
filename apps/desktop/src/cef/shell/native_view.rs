@@ -66,10 +66,17 @@ impl CefBrowser {
                 .with(|handlers| handlers.borrow_mut().insert(native_view as usize, handler));
         }
     }
+}
 
+impl CefBrowser {
+    /// True while the page has the keyboard (its native view or a child of it is focused).
     pub(crate) fn owns_native_focus(&self) -> bool {
-        self.native_view()
-            .is_some_and(platform::native_view_owns_first_responder)
+        let browser = self.browser.borrow();
+        browser.host().is_some_and(|host| {
+            platform::native_view_owns_first_responder(platform::native_view_ptr(
+                host.window_handle(),
+            ))
+        })
     }
 }
 
