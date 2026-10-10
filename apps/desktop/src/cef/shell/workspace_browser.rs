@@ -65,11 +65,13 @@ pub(crate) fn cef_profile_is_workspace(profile: &str) -> bool {
     profile.starts_with(WORKSPACE_PROFILE_PREFIX)
 }
 
+/// CDXC:Browser 2026-10-10 WHY:
+/// The folder must be a direct child of the root cache path (`<root cache>/workspace-<id>`, beside Chromium's own `Default`). CEF's Chrome runtime opens a disk profile only when `cache_path.DirName() == root_cache_path`; any deeper path (the first version used `<root cache>/profiles/<profile>`) logs "Cannot create profile at path" and silently gets an off-the-record profile, so every workspace sign-in was lost when the app closed.
 fn workspace_profile_cache_dir(profile: &str) -> Result<PathBuf> {
     let segment = super::cef_profile_cache_segment(profile)
         .filter(|segment| cef_profile_is_workspace(segment))
         .with_context(|| format!("invalid workspace browser profile id {profile:?}"))?;
-    Ok(super::cef_root_cache_path()?.join("profiles").join(segment))
+    Ok(super::cef_root_cache_path()?.join(segment))
 }
 
 fn clear_pending_marker(dir: &std::path::Path) -> PathBuf {
@@ -77,7 +79,7 @@ fn clear_pending_marker(dir: &std::path::Path) -> PathBuf {
 }
 
 /// CDXC:Browser 2026-10-09 WHY:
-/// A workspace's sign-ins must survive restarts, so its context is disk-backed under `<root cache>/profiles/<profile>`. CEF initializes a new disk-backed context asynchronously and `CreateBrowserSync` returns null until it is ready (the 2026-07-09 startup race that kept generated profiles in memory), so the context is created with a handler and no browser is created on it until `on_request_context_initialized` fires; callers get a receiver that resolves at that moment. There is no memory-context fallback: a failed context leaves the tab unloaded and reports the error.
+/// A workspace's sign-ins must survive restarts, so its context is disk-backed under `<root cache>/<profile>` (see `workspace_profile_cache_dir`). CEF initializes a new disk-backed context asynchronously and `CreateBrowserSync` returns null until it is ready (the 2026-07-09 startup race that kept generated profiles in memory), so the context is created with a handler and no browser is created on it until `on_request_context_initialized` fires; callers get a receiver that resolves at that moment. There is no memory-context fallback: a failed context leaves the tab unloaded and reports the error.
 pub(crate) fn prepare_workspace_browser_context(
     profile: &str,
 ) -> Result<WorkspaceBrowserContextState> {
