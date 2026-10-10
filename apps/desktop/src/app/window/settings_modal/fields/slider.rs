@@ -50,6 +50,21 @@ pub(crate) fn format_slider_number(value: f64, step: f64) -> String {
     format!("{:.*}", step_decimals(step), value)
 }
 
+/// The Custom colour depth sliders move in half steps but show whole depths without a trailing
+/// `.0` (96, 95.5); other half-step sliders such as the terminal font size keep it (13.0).
+const WHOLE_NUMBERS_WITHOUT_DECIMALS: &[&str] = &[
+    "customSidebarTitlebarBackgroundDarknessPercent",
+    "customSidebarTitlebarLightBackgroundLightnessPercent",
+];
+
+/// `formatSliderNumber` for one field's number box.
+fn format_field_number(key: &str, value: f64, step: f64) -> String {
+    if WHOLE_NUMBERS_WITHOUT_DECIMALS.contains(&key) && value.fract() == 0.0 {
+        return format!("{}", value as i64);
+    }
+    format_slider_number(value, step)
+}
+
 /// The slider and number box of one field.
 pub(crate) struct SliderFieldState {
     pub(crate) slider: Entity<SliderState>,
@@ -130,7 +145,11 @@ impl FieldStates {
                     .default_value(value as f32)
             });
             let input = cx.new(|cx| {
-                InputState::new(window, cx).default_value(format_slider_number(value, binding.step))
+                InputState::new(window, cx).default_value(format_field_number(
+                    binding.key,
+                    value,
+                    binding.step,
+                ))
             });
             let key = binding.key;
             let (min, max, step) = (binding.min, binding.max, binding.step);
@@ -147,7 +166,7 @@ impl FieldStates {
                         state.shown = snapped;
                         let input = state.input.clone();
                         input.update(cx, |input, cx| {
-                            input.set_value(format_slider_number(snapped, step), window, cx);
+                            input.set_value(format_field_number(key, snapped, step), window, cx);
                         });
                     }
                     save_value(page, key, snapped, commit, cx);
@@ -206,7 +225,7 @@ impl FieldStates {
                             });
                         }
                         input.update(cx, |input, cx| {
-                            input.set_value(format_slider_number(committed, step), window, cx);
+                            input.set_value(format_field_number(key, committed, step), window, cx);
                         });
                         save_value(page, key, committed, true, cx);
                     }
@@ -246,7 +265,7 @@ impl FieldStates {
             let focused = input.read(cx).focus_handle(cx).is_focused(window);
             if !focused {
                 input.update(cx, |input, cx| {
-                    input.set_value(format_slider_number(value, step), window, cx);
+                    input.set_value(format_field_number(&id, value, step), window, cx);
                 });
             }
         }

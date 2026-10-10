@@ -836,7 +836,8 @@ impl ThemeTab {
                     key: depth_key,
                     min,
                     max,
-                    step: 1.0,
+                    // Half steps, so the box shows the exact depth Colourfulness writes (95.5).
+                    step: 0.5,
                 },
                 values.f64(depth_key),
                 window,
