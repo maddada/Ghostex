@@ -186,6 +186,12 @@ pub(crate) struct NativeKanbanState {
     pub(crate) lane_lists: HashMap<String, KanbanLaneList>,
     /// The lanes' sideways scroll; lanes scrolled out of view skip their cards.
     pub(crate) lanes_scroll: ScrollHandle,
+    /// While a card is dragged near the board's left or right edge: how far the board scrolls per
+    /// frame (negative towards the left) and the task that applies it (`board_scroll.rs`).
+    pub(crate) drag_autoscroll_step: f32,
+    pub(crate) drag_autoscroll: Option<Task<()>>,
+    /// The board's own window while Open in New Window has it out of the panel (`window.rs`).
+    pub(crate) detached: Option<super::window::KanbanDetachedWindow>,
 }
 
 impl NativeKanbanState {
@@ -204,6 +210,8 @@ impl NativeKanbanState {
         let board_view = self.board_view.take();
         let palette = self.palette.take();
         let appearance_signature = self.appearance_signature;
+        // The board's window stays open across a project switch and shows the new board.
+        let detached = self.detached.take();
         *self = Self {
             project: Some(project),
             generation,
@@ -219,6 +227,7 @@ impl NativeKanbanState {
             board_view,
             palette,
             appearance_signature,
+            detached,
             ..Self::default()
         };
     }

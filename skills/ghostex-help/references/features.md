@@ -150,7 +150,8 @@ Right-click a view tab to choose where that view appears and what happens to it.
 **Reload** refreshes the clicked view, **Sleep** unloads it while keeping its tab (Code also stops its editor
 server; choose **Wake** or click the tab to bring it back, and Resources can stop
 Code too without closing Ghostex), and **Open externally** opens its page in its
-own window. **Configure ▸** holds what a view can change about itself: **Modify
+own window (for Kanban it reads **Open in new window** and moves the board to a
+Ghostex window of its own; see Project board). **Configure ▸** holds what a view can change about itself: **Modify
 home URL** for a website view, and **Command output** and **Configure view** for
 your own project views (Configure view opens that view's editor in Settings >
 Extensions and focuses its name field). **Show in ▸** holds **This Project** and
@@ -1904,6 +1905,15 @@ start-work <bead-id>`); the session is linked to the card and the card shows
   `bd comment`, move to test or review, and `bd close`.
 - Ask an orchestrator agent to "work the high-priority beads on the board" to
   have it pick cards and spawn workers.
+- When the columns do not fit, the board scrolls sideways: swipe on a trackpad,
+  Shift+wheel on a mouse, or drag the bar under the lanes (each lane has its
+  own bar for its cards). Dragging a card to the board's left or right edge
+  scrolls it to the lanes off screen.
+- **Open in New Window** (the pop-out control at the top right of the view, or
+  the tab's right-click menu) moves the board to a window of its own, for a
+  second monitor; the panel shows a card with **Bring Back**, and closing the
+  window brings the board back too. The window follows the project you switch
+  to, and after a restart the board is in the panel again.
 
 Related settings: Settings > Projects (beads directory and display key),
 `globalBeadsDirectory`, `globalBeadsDisplayKey`.

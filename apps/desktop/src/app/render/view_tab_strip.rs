@@ -563,6 +563,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let enabled = self.view_can_pop_out(active_mode);
+        let label = self.view_pop_out_label(active_mode, false);
         Self::render_view_tab_strip_icon_button(
             "ghostex-gpui-view-tab-pop-out",
             TITLEBAR_ICON_EXTERNAL_LINK,
@@ -584,7 +585,7 @@ impl GhostexGpuiApp {
             move |window, cx| {
                 titlebar_tooltip(
                     if enabled {
-                        "Open Externally"
+                        label
                     } else if active_mode == TitlebarMode::Manage {
                         "Open an HTML, Markdown or drawing file to pop it out"
                     } else {

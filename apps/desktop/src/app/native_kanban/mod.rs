@@ -3,6 +3,7 @@
 
 pub(crate) mod actions;
 pub(crate) mod beads;
+pub(crate) mod board_scroll;
 pub(crate) mod card;
 pub(crate) mod columns;
 pub(crate) mod conversation;
@@ -23,3 +24,4 @@ pub(crate) mod text;
 pub(crate) mod toolbar;
 pub(crate) mod view;
 pub(crate) mod widgets;
+pub(crate) mod window;

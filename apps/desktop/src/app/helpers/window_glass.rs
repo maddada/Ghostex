@@ -452,7 +452,28 @@ pub(crate) fn window_glass_active_for(window: Option<gpui::AnyWindowHandle>) -> 
                 || crate::app::workspace_windows::is_workspace_window(window.window_id())
                 || id == FLOATING_REVEAL_WINDOW_ID.load(Ordering::Relaxed)
                 || id == DOCS_DRAWER_WINDOW_ID.load(Ordering::Relaxed)
+                || detached_board_glass_window(id)
         })
+}
+
+/// The Project board's own windows (app/native_kanban/window.rs), one per workspace window at
+/// most, which draw the board on glass as the panel does.
+static DETACHED_BOARD_WINDOW_IDS: std::sync::Mutex<Vec<u64>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) fn set_detached_board_glass_window(window: gpui::WindowId, glass: bool) {
+    let id = window.as_u64();
+    if let Ok(mut ids) = DETACHED_BOARD_WINDOW_IDS.lock() {
+        ids.retain(|known| *known != id);
+        if glass {
+            ids.push(id);
+        }
+    }
+}
+
+fn detached_board_glass_window(id: u64) -> bool {
+    DETACHED_BOARD_WINDOW_IDS
+        .lock()
+        .is_ok_and(|ids| ids.contains(&id))
 }
 
 /// The Docs view's floating files list, which draws in a window of its own the same way.
@@ -540,43 +561,9 @@ impl GhostexGpuiApp {
         {
             *size = Some(window.viewport_size());
         }
-        let wanted = window_glass_background_appearance();
-        window.set_background_wallpaper_follows_screen(
-            WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed),
-        );
-        let image = window_glass_custom_image();
-        let video = window_glass_video();
-        let live = window_glass_live::window_glass_live();
-        // Custom image or Live with nothing chosen for this appearance is the live blur.
-        let wallpaper = window_glass_uses_backdrop(&image, &video.0, &live);
-        let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
-            (false, _) => 1,
-            (true, false) => 2,
-            (true, true) => 3,
-        };
-        let wanted_glass = AppliedWindowGlass {
-            code,
-            blur: WINDOW_GLASS_BLUR_RADIUS.load(Ordering::Relaxed),
-            image: image.clone(),
-            video: video.clone(),
-            live: live.clone(),
-        };
-        let previous_glass = APPLIED_WINDOW_GLASS.lock().ok().and_then(|mut applied| {
-            applied.get_or_insert_with(Default::default).insert(
-                window.window_handle().window_id().as_u64(),
-                wanted_glass.clone(),
-            )
-        });
-        if previous_glass.as_ref() == Some(&wanted_glass) {
+        let Some((previous, code)) = apply_workspace_window_glass(window) else {
             return;
-        }
-        let previous = previous_glass.map_or(0, |glass| glass.code);
-        window.set_background_blur_style(window_glass_blur_radius(), false);
-        window.set_background_live(live);
-        window.set_background_video(video.0, video.1);
-        window.set_background_wallpaper_image(image);
-        window.set_background_wallpaper(wallpaper && wanted == WindowBackgroundAppearance::Blurred);
-        window.set_background_appearance(wanted);
+        };
         // Switching between the two blurs leaves the glass on, so terminals keep their config.
         if previous != 0 && (previous == 1) != (code == 1) {
             cx.defer_in(window, |this, _window, cx| {
@@ -584,6 +571,58 @@ impl GhostexGpuiApp {
             });
         }
     }
+}
+
+/// Gives `window` the backdrop a workspace window has (opaque, the live blur or the picture, as
+/// the settings say) when it differs from what the window last took. The previous and the new
+/// blur code (1 opaque, 2 live blur, 3 picture; 0 for a window that had none), `None` when nothing
+/// changed.
+fn apply_workspace_window_glass(window: &Window) -> Option<(u8, u8)> {
+    let wanted = window_glass_background_appearance();
+    window.set_background_wallpaper_follows_screen(
+        WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed),
+    );
+    let image = window_glass_custom_image();
+    let video = window_glass_video();
+    let live = window_glass_live::window_glass_live();
+    // Custom image or Live with nothing chosen for this appearance is the live blur.
+    let wallpaper = window_glass_uses_backdrop(&image, &video.0, &live);
+    let code = match (wanted == WindowBackgroundAppearance::Blurred, wallpaper) {
+        (false, _) => 1,
+        (true, false) => 2,
+        (true, true) => 3,
+    };
+    let wanted_glass = AppliedWindowGlass {
+        code,
+        blur: WINDOW_GLASS_BLUR_RADIUS.load(Ordering::Relaxed),
+        image: image.clone(),
+        video: video.clone(),
+        live: live.clone(),
+    };
+    let previous_glass = APPLIED_WINDOW_GLASS.lock().ok().and_then(|mut applied| {
+        applied.get_or_insert_with(Default::default).insert(
+            window.window_handle().window_id().as_u64(),
+            wanted_glass.clone(),
+        )
+    });
+    if previous_glass.as_ref() == Some(&wanted_glass) {
+        return None;
+    }
+    let previous = previous_glass.map_or(0, |glass| glass.code);
+    window.set_background_blur_style(window_glass_blur_radius(), false);
+    window.set_background_live(live);
+    window.set_background_video(video.0, video.1);
+    window.set_background_wallpaper_image(image);
+    window.set_background_wallpaper(wallpaper && wanted == WindowBackgroundAppearance::Blurred);
+    window.set_background_appearance(wanted);
+    Some((previous, code))
+}
+
+/// The Project board's own window (app/native_kanban/window.rs) takes the workspace windows'
+/// backdrop, so the board looks there as it does in the panel. Called from its every render;
+/// nothing is applied while the settings are unchanged.
+pub(crate) fn sync_detached_board_window_glass(window: &Window) {
+    let _ = apply_workspace_window_glass(window);
 }
 
 /// Fill coverage of a menu or popover window under glass; its own window blurs what is behind it.
