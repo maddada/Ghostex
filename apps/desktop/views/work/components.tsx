@@ -8,7 +8,7 @@ import {
   IconGitPullRequestDraft,
   IconLoader2,
 } from "@tabler/icons-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { initials, personHue } from "./format";
 import type {
   WorkChecksState,
@@ -128,7 +128,20 @@ export function Dropdown({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  // A menu wider than the room right of its trigger (the last filter on a narrow panel)
+  // slides left until it fits inside the page, keeping an 8px gutter.
+  useLayoutEffect(() => {
+    if (!open || !menu.current) {
+      setShift(0);
+      return;
+    }
+    const rect = menu.current.getBoundingClientRect();
+    const overflow = rect.right - (document.documentElement.clientWidth - 8);
+    setShift(overflow > 0 ? Math.min(overflow, Math.max(0, rect.left - 8)) : 0);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const onPointer = (event: PointerEvent) => {
@@ -149,7 +162,9 @@ export function Dropdown({
       {trigger(open, () => setOpen((value) => !value))}
       {open ? (
         <div
+          ref={menu}
           className={cx("w-menu", align === "end" && "w-menu--end")}
+          style={shift ? { transform: `translateX(-${shift}px)` } : undefined}
           role="menu"
         >
           {children(() => setOpen(false))}

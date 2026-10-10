@@ -352,7 +352,7 @@ a:hover {
   left: 0;
   z-index: 20;
   min-width: 200px;
-  max-width: 340px;
+  max-width: min(340px, calc(100vw - 16px));
   max-height: 360px;
   overflow-y: auto;
   padding: 4px;
