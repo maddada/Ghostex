@@ -7,9 +7,8 @@
 use std::rc::Rc;
 
 use gpui::{
-    AnyElement, AppContext as _, Bounds, Context, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, Render, Styled as _, Subscription, WeakEntity, Window,
-    WindowBounds, WindowOptions, div, px,
+    AnyElement, AppContext as _, Bounds, Context, IntoElement, Pixels, Render, Styled as _,
+    Subscription, WeakEntity, Window, WindowBounds, WindowOptions, div, px,
 };
 use gpui_component::Root;
 
@@ -50,8 +49,8 @@ struct DocsComposerWindowView {
 }
 
 impl DocsComposerWindowView {
-    /// CDXC:Docs 2026-09-27 WHY:
-    /// User: "I cant type in the Add a comment modal" of the Docs view under glass. The field used to be focused once, a frame after it was made, so a window that became key only later (or again, after a click elsewhere) held no focused field and dropped every key. The window focuses its field each time it becomes the key window, the way the native dialogs focus theirs.
+    /// CDXC:Docs 2026-10-10 WHY:
+    /// User: "I cant type in the Add a comment modal" of the Docs view under glass. The window focuses its field each time it becomes the key window, the way the native dialogs focus theirs, so a window that becomes key again after a click elsewhere types into the field. The keys themselves were lost on macOS because making the window borderless took first responder from its GPUI view (`GhostexGpuiMakeWindowBorderless`, native/macos/GpuiChatDialogWindow.m); supersedes the 2026-09-27 note, which blamed the missing refocus alone.
     fn focus_field(&self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(app) = self.app.upgrade() else {
             return;
@@ -70,25 +69,9 @@ impl Render for DocsComposerWindowView {
         let Some(app) = self.app.upgrade() else {
             return div().into_any_element();
         };
-        let panel = app.update(cx, |app, cx| {
+        app.update(cx, |app, cx| {
             app.render_native_docs_composer_window(window, cx)
-        });
-        div()
-            .size_full()
-            .capture_key_down(|event: &gpui::KeyDownEvent, window, cx| {
-                let key = &event.keystroke.key;
-                crate::support_logs::append(
-                    crate::support_logs::GpuiSupportLog::TerminalFocus,
-                    "TEMP.gpui.docsComposer.keyDown",
-                    serde_json::json!({
-                        "key": if key.chars().count() == 1 { "char" } else { key.as_str() },
-                        "windowActive": window.is_window_active(),
-                        "somethingFocused": window.focused(cx).is_some(),
-                    }),
-                );
-            })
-            .child(panel)
-            .into_any_element()
+        })
     }
 }
 
@@ -296,11 +279,6 @@ fn apply_composer_window(app: gpui::Entity<GhostexGpuiApp>, cx: &mut gpui::App) 
                 _activation: cx.observe_window_activation(
                     window,
                     |view: &mut DocsComposerWindowView, window, cx| {
-                        crate::support_logs::append(
-                            crate::support_logs::GpuiSupportLog::TerminalFocus,
-                            "TEMP.gpui.docsComposer.windowActivation",
-                            serde_json::json!({ "active": window.is_window_active() }),
-                        );
                         if window.is_window_active() {
                             view.focus_field(window, cx);
                         }

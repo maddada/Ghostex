@@ -3,6 +3,26 @@
 extern void *CGSMainConnectionID(void);
 extern int32_t CGSSetWindowBackgroundBlurRadius(void *, NSInteger, int64_t);
 
+// CDXC:FocusRouting 2026-10-10 WHY:
+// Changing a window's style mask makes AppKit swap its frame view, which takes first responder and
+// key status away from the GPUI view (GPUI's simple-fullscreen code restores both for the same
+// reason). A GPUI view never takes first responder back from a click, so a window made borderless
+// while it was already on screen and key dropped every typed key: the Files view's comment box
+// under window glass on macOS showed a focused field that no key reached. The New Thread picker
+// escaped it only because it is made borderless while still hidden. The window keeps the responder
+// and key status it had.
+static void GhostexGpuiMakeWindowBorderless(NSWindow *window) {
+  NSResponder *responder = window.firstResponder;
+  BOOL wasKey = window.isKeyWindow;
+  window.styleMask = NSWindowStyleMaskBorderless;
+  if (responder != nil && window.firstResponder != responder) {
+    [window makeFirstResponder:responder];
+  }
+  if (wasKey && !window.isKeyWindow) {
+    [window makeKeyWindow];
+  }
+}
+
 // CDXC:SessionChat 2026-09-18 WHY:
 // The system blur material is much stronger than the chat dialog's eight-point CSS backdrop blur.
 // Use the same WindowServer blur API as GPUI, with the chat radius and without a material tint.
@@ -10,7 +30,7 @@ void GhostexGpuiPrepareChatDialogWindow(void *nativeView) {
   NSView *view = (__bridge NSView *)nativeView;
   NSWindow *window = view.window;
   if (!window) return;
-  window.styleMask = NSWindowStyleMaskBorderless;
+  GhostexGpuiMakeWindowBorderless(window);
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;
@@ -27,7 +47,7 @@ void GhostexGpuiStripPopupWindowFrame(void *nativeView) {
   NSView *view = (__bridge NSView *)nativeView;
   NSWindow *window = view.window;
   if (!window) return;
-  window.styleMask = NSWindowStyleMaskBorderless;
+  GhostexGpuiMakeWindowBorderless(window);
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   window.hasShadow = NO;

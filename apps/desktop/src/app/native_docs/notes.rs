@@ -301,32 +301,16 @@ impl GhostexGpuiApp {
                 .placeholder(placeholder)
                 .default_value(text)
         });
-        crate::support_logs::append(
-            crate::support_logs::GpuiSupportLog::TerminalFocus,
-            "TEMP.gpui.docsComposer.inputCreated",
-            json!({
-                "window": here.window_id().as_u64(),
-                "windowActive": window.is_window_active(),
-                "replacesInputFromOtherWindow": composer.input.is_some(),
-            }),
-        );
         let subscription = cx.subscribe_in(
             &state,
             window,
-            |this: &mut Self, _input, event: &InputEvent, window, cx| match event {
-                InputEvent::PressEnter {
+            |this: &mut Self, _input, event: &InputEvent, window, cx| {
+                if let InputEvent::PressEnter {
                     secondary: true, ..
-                } => this.native_docs_commit_composer(window, cx),
-                InputEvent::Focus | InputEvent::Blur => crate::support_logs::append(
-                    crate::support_logs::GpuiSupportLog::TerminalFocus,
-                    "TEMP.gpui.docsComposer.inputFocus",
-                    json!({
-                        "focused": matches!(event, InputEvent::Focus),
-                        "window": window.window_handle().window_id().as_u64(),
-                        "windowActive": window.is_window_active(),
-                    }),
-                ),
-                _ => {}
+                } = event
+                {
+                    this.native_docs_commit_composer(window, cx);
+                }
             },
         );
         let focus = state.clone();
