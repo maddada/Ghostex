@@ -13,6 +13,16 @@ BUILD_NUMBER="$(release_gpui_build_number "$VERSION")"
 MOBILE_ROOT="$REPO_ROOT/apps/mobile/app"
 BUNDLE_ID="com.maddada.ghostex.ios"
 TEAM_ID="KTKP595G3B"
+# true stops after the archive and its Info.plist checks: a compile and signing check that
+# uploads nothing, so it never uses up the version's build number at App Store Connect.
+ARCHIVE_ONLY="${GHOSTEX_IOS_ARCHIVE_ONLY:-false}"
+case "$ARCHIVE_ONLY" in
+true | false) ;;
+*)
+	echo "GHOSTEX_IOS_ARCHIVE_ONLY must be true or false, got $ARCHIVE_ONLY" >&2
+	exit 1
+	;;
+esac
 
 release_gpui_require_command bun
 release_gpui_require_command pod
@@ -76,6 +86,11 @@ INFO_PLIST="$ARCHIVE_PATH/Products/Applications/Ghostex.app/Info.plist"
 [[ "$(plutil -extract CFBundleIdentifier raw "$INFO_PLIST")" == "$BUNDLE_ID" ]]
 [[ "$(plutil -extract CFBundleShortVersionString raw "$INFO_PLIST")" == "$VERSION" ]]
 [[ "$(plutil -extract CFBundleVersion raw "$INFO_PLIST")" == "$BUILD_NUMBER" ]]
+
+if [[ "$ARCHIVE_ONLY" == true ]]; then
+	echo "Archived Ghostex $VERSION ($BUILD_NUMBER); archive-only run, nothing was uploaded."
+	exit 0
+fi
 
 xcodebuild -exportArchive \
 	-archivePath "$ARCHIVE_PATH" \

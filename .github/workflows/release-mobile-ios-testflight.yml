@@ -8,6 +8,11 @@ on:
         required: true
         default: 2.6.1
         type: string
+      archive_only:
+        description: Stop after xcodebuild archive (compile and sign check; nothing is uploaded, no build number is used)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -87,8 +92,11 @@ jobs:
           echo "GHOSTEX_ASC_KEY_ID=$ASC_KEY_ID" >> "$GITHUB_ENV"
           echo "GHOSTEX_ASC_ISSUER_ID=$ASC_ISSUER_ID" >> "$GITHUB_ENV"
       - name: Build and upload TestFlight release
+        env:
+          GHOSTEX_IOS_ARCHIVE_ONLY: ${{ inputs.archive_only }}
         run: tooling/release-mobile/ios-testflight.sh "${{ inputs.version }}"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: ${{ !inputs.archive_only }}
         with:
           name: ghostex-mobile-${{ inputs.version }}-ios-testflight
           path: build/release-gpui/${{ inputs.version }}/ios-testflight/
