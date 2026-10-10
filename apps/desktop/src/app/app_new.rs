@@ -303,6 +303,7 @@ impl GhostexGpuiApp {
                 agents_terminal_action_bar_account_submenu_open: false,
                 terminal_dictation: None,
                 agents_terminal_action_bar_account_page: None,
+                agents_terminal_action_bar_skills: None,
                 agents_terminal_action_bar_menu_measure: Default::default(),
                 agents_chat_auto_switch_observed_sessions: HashMap::new(),
                 pending_agents_chat_launch_intents: HashSet::new(),

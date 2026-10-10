@@ -110,6 +110,9 @@ pub struct Document {
     pub host_actions: Vec<HostAction>,
     /// The Side chat prefix (`/btw `) when the agent takes side questions, else null. Family d.
     pub side_chat: Option<String>,
+    /// The More actions menu's Skills submenu: the Ghostex skills the agent has installed. Family d.
+    #[serde(default)]
+    pub ghostex_skills: Vec<crate::composer::ghostex_skills::GhostexSkill>,
 
     // ---- questions and notices -------------------------------------------
     pub question_card: QuestionCard,

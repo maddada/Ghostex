@@ -21,6 +21,7 @@ pub(crate) use dictation::TerminalDictation;
 mod menu_width;
 mod model_pill;
 mod palette;
+mod skills_flyout;
 
 use palette::*;
 
@@ -144,6 +145,7 @@ const TERMINAL_AGENT_BAR_DICTATE_ICON: &str = "titlebar/microphone.svg";
 const TERMINAL_AGENT_BAR_STOP_DICTATING_ICON: &str = "titlebar/player-stop.svg";
 const TERMINAL_AGENT_BAR_EXPORT_TRANSCRIPT_ICON: &str = "titlebar/file-export.svg";
 const TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON: &str = "titlebar/user-circle.svg";
+const TERMINAL_AGENT_BAR_SKILLS_ICON: &str = "titlebar/sparkles.svg";
 const TERMINAL_AGENT_BAR_SUBMENU_CHEVRON_ICON: &str = "titlebar/chevron-right.svg";
 /// The Switch Account flyout: bottom-aligned with the menu (its row sits near the window's bottom,
 /// so a flyout hung from the row would run off it), slightly wider for agent names. It opens to
@@ -200,6 +202,8 @@ pub(crate) enum TerminalAgentBarAction {
     /// Rust store with the agent id (gx_store/terminal_lifecycle/runtime_actions.rs). Hidden when the session has no
     /// compatible account.
     SwitchAccount,
+    /// Opens the Skills flyout (`skills_flyout.rs`).
+    Skills,
     ExportTranscript,
 }
 
@@ -223,6 +227,7 @@ impl TerminalAgentBarAction {
             Self::Fork => "fork",
             Self::FullReload => "full-reload",
             Self::SwitchAccount => "switch-account",
+            Self::Skills => "skills",
             Self::ExportTranscript => "export-transcript",
         }
     }
@@ -251,6 +256,7 @@ impl TerminalAgentBarAction {
             Self::Fork => ("Fork Session", "forkSession"),
             Self::FullReload => ("Full Reload", "reloadSession"),
             Self::SwitchAccount => ("Switch Account", ""),
+            Self::Skills => ("Skills", ""),
             Self::ExportTranscript => ("Handoff / Export", "exportTranscript"),
         }
     }
@@ -274,8 +280,14 @@ impl TerminalAgentBarAction {
             Self::Fork => TERMINAL_AGENT_BAR_FORK_ICON,
             Self::FullReload => TERMINAL_AGENT_BAR_FULL_RELOAD_ICON,
             Self::SwitchAccount => TERMINAL_AGENT_BAR_SWITCH_ACCOUNT_ICON,
+            Self::Skills => TERMINAL_AGENT_BAR_SKILLS_ICON,
             Self::ExportTranscript => TERMINAL_AGENT_BAR_EXPORT_TRANSCRIPT_ICON,
         }
+    }
+
+    /// A row that opens a flyout beside the menu instead of acting, drawn with a chevron.
+    fn opens_flyout(self) -> bool {
+        matches!(self, Self::SwitchAccount | Self::Skills)
     }
 
     fn icon_size(self) -> f32 {
@@ -307,6 +319,7 @@ impl TerminalAgentBarAction {
             | Self::Dictate
             | Self::PromptEditor
             | Self::SwitchAccount
+            | Self::Skills
             | Self::VerboseMode => None,
         }
     }
@@ -336,6 +349,8 @@ const TERMINAL_AGENT_BAR_MENU_ROWS: &[Option<TerminalAgentBarAction>] = &[
     Some(TerminalAgentBarAction::FullReload),
     Some(TerminalAgentBarAction::SwitchAccount),
     None,
+    // Second from the bottom, as in the chat's More actions menu.
+    Some(TerminalAgentBarAction::Skills),
     Some(TerminalAgentBarAction::ExportTranscript),
 ];
 
@@ -806,6 +821,25 @@ impl GhostexGpuiApp {
             }
         }
 
+        if let Some(rows) = self.agents_terminal_action_bar_skills.as_deref() {
+            let (painted_menu, window_width) = menu_bounds.get();
+            let opens_left = painted_menu.size.width > px(0.0)
+                && painted_menu.right()
+                    + px(
+                        TERMINAL_AGENT_BAR_ACCOUNT_SUBMENU_GAP + skills_flyout::SKILLS_FLYOUT_WIDTH
+                    )
+                    > window_width - px(TERMINAL_AGENT_BAR_FLYOUT_WINDOW_MARGIN);
+            menu = menu.child(self.render_terminal_agent_bar_skills_flyout(
+                surface,
+                session_id,
+                menu_width,
+                opens_left,
+                rows,
+                suffix,
+                flyout_bounds,
+                cx,
+            ));
+        }
         menu.into_any_element()
     }
 
@@ -844,12 +878,14 @@ impl GhostexGpuiApp {
                 .then_some(session_id);
         self.agents_terminal_action_bar_account_submenu_open = false;
         self.agents_terminal_action_bar_account_page = None;
+        self.agents_terminal_action_bar_skills = None;
         cx.notify();
     }
 
     pub(crate) fn close_terminal_agent_action_bar_menu(&mut self, cx: &mut gpui::Context<Self>) {
         self.agents_terminal_action_bar_account_submenu_open = false;
         self.agents_terminal_action_bar_account_page = None;
+        self.agents_terminal_action_bar_skills = None;
         if self
             .agents_terminal_action_bar_menu_session
             .take()
@@ -990,12 +1026,17 @@ impl GhostexGpuiApp {
             self.toggle_terminal_agent_action_bar_menu(session_id, cx);
             return;
         }
+        if action == TerminalAgentBarAction::Skills {
+            self.toggle_terminal_agent_bar_skills(session_id, cx);
+            return;
+        }
         // The Switch Account row only opens its flyout; the menu stays up so
         // the account rows have somewhere to be.
         if action == TerminalAgentBarAction::SwitchAccount {
             let open = !self.agents_terminal_action_bar_account_submenu_open;
             self.agents_terminal_action_bar_account_submenu_open = open;
             self.agents_terminal_action_bar_account_page = None;
+            self.agents_terminal_action_bar_skills = None;
             if open && let Some(target) = self.terminal_agent_bar_account_target(session_id) {
                 self.open_terminal_agent_bar_account_page(target, cx);
             }
@@ -1254,7 +1295,7 @@ impl GhostexGpuiApp {
                         .child(shortcut),
                 )
             })
-            .when(action == TerminalAgentBarAction::SwitchAccount, |this| {
+            .when(action.opens_flyout(), |this| {
                 // Submenu affordance; points left because that is where the
                 // flyout opens.
                 this.child(terminal_agent_bar_icon(

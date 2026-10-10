@@ -186,7 +186,12 @@ pub(super) fn measure_rows(
                 .unwrap_or(0.0);
             let content_width =
                 (width - m.chrome() - m.row_x * 2.0 - accessory - icon - detail).max(1.0) * scale;
-            let description_height = if let Some(description) = row["description"].as_str() {
+            let description_height = if row["description"].is_string() && !heading {
+                // A row's subtitle is one truncated 16px line under a 2px gap (`render.rs`). Its
+                // shaped text is one wrapped line whose height counts every wrap, so a subtitle
+                // longer than the row (the Skills list's) measured several lines too tall.
+                16.0 + 2.0
+            } else if let Some(description) = row["description"].as_str() {
                 let run = TextRun {
                     len: description.len(),
                     font: font.clone(),

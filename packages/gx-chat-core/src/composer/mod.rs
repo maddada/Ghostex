@@ -7,6 +7,7 @@
 pub mod actions;
 pub mod document;
 pub mod draft_sync;
+pub mod ghostex_skills;
 pub mod history;
 pub mod host_actions;
 pub mod json;

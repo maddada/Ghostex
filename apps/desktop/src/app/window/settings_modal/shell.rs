@@ -137,14 +137,11 @@ impl GpuiSettingsModalWindow {
             .extend(super::super::popup_dismissal::close_app_modal_on_click_away(window, cx));
         let active = shell.store.read(cx).active_tab();
         shell.ensure_tab_view(active, window, cx);
-        // A deep link to a General section lands on it.
-        if let Some(section) = shell.store.read(cx).request().initial_section.clone()
-            && active == SettingsTabId::General
-        {
+        // A deep link to a section (General's, or Integrations' Agent skills from the ⋯ menus'
+        // Skills > Configure / Install more) lands on it.
+        if let Some(section) = shell.store.read(cx).request().initial_section.clone() {
             let store = shell.store.clone();
-            store.update(cx, |store, cx| {
-                store.scroll_to_section(SettingsTabId::General, &section, cx)
-            });
+            store.update(cx, |store, cx| store.scroll_to_section(active, &section, cx));
         }
         shell
     }

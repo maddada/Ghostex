@@ -95,6 +95,28 @@ impl NativeChatView {
         json!({"label":"View","iconPath":"titlebar/eye.svg","detail":detail,"openOnHover":false,"children":modes})
     }
 
+    /// The Skills submenu: the Ghostex skills the agent has installed, each putting its pill in the
+    /// chat box, then Configure / Install more (Settings > Integrations > Agent skills).
+    fn skills_row(&self) -> Value {
+        let mut skills: Vec<Value> = self.snapshot["ghostexSkills"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|skill| {
+                json!({
+                    "label":skill["name"],"description":skill["description"],
+                    "command":{"type":"insertSkill","name":skill["name"]},
+                })
+            })
+            .collect();
+        if skills.is_empty() {
+            skills.push(json!({"label":"No Ghostex skills installed","disabled":true}));
+        }
+        skills.push(json!({"separator":true}));
+        skills.push(json!({"label":"Configure / Install more","iconPath":"titlebar/settings.svg","command":{"type":"openSkillsSettings"}}));
+        json!({"label":"Skills","iconPath":"titlebar/sparkles.svg","openOnHover":false,"children":skills})
+    }
+
     pub(crate) fn show_actions(
         &mut self,
         position: gpui::Point<gpui::Pixels>,
@@ -217,6 +239,8 @@ impl NativeChatView {
             rows.push(json!({"separator":true}));
             rows.extend(other.into_iter().map(|action| host_row(action)));
         }
+        // Second from the bottom (gx-chat-core `composer/ghostex_skills.rs`).
+        rows.insert(rows.len().saturating_sub(1), self.skills_row());
         self.show_chat_menu(
             rows,
             gpui::Bounds::new(position, gpui::size(gpui::px(0.0), gpui::px(0.0))),
@@ -270,6 +294,22 @@ impl NativeChatView {
             cx.emit(super::state::NativeChatEvent::Host(
                 json!({"type":"open","modal":"settings","initialTab":"accounts"}),
             ));
+        } else if action.command["type"] == "openSkillsSettings" {
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type":"open","modal":"settings","initialTab":"integrations","initialSection":"agentSkills",
+            })));
+        } else if action.command["type"] == "insertSkill" {
+            let selection = self
+                .input
+                .as_ref()
+                .map(|input| input.read(cx).selected_range())
+                .unwrap_or(self.draft.len()..self.draft.len());
+            let start = self.draft[..selection.start].encode_utf16().count();
+            let end = self.draft[..selection.end].encode_utf16().count();
+            self.invoke(
+                json!({"type":"insertSkill","name":action.command["name"],"text":self.draft,"start":start,"end":end}),
+                cx,
+            );
         } else if action.command["type"] == "copyText" {
             // Copy Path, Copy URL and the transcript's Copy, with the feedback every other chat copy gives.
             if let Some(text) = action.command["text"].as_str() {

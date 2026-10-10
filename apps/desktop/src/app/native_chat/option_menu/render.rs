@@ -61,6 +61,9 @@ impl ChatOptionMenuPanel {
                     } else if children.iter().any(|row| row["dot"].is_string()) {
                         // The branches list: a title, its time and a lifecycle dot per row.
                         288.0
+                    } else if children.iter().any(|row| row["description"].is_string()) {
+                        // Rows with a one-line subtitle (the Skills list): room for its first words.
+                        320.0
                     } else {
                         256.0
                     },

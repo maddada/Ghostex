@@ -10,11 +10,13 @@ use std::{
 
 use serde_json::{json, Value};
 
+use crate::agent_skills::GHOSTEX_AGENT_SKILL_NAMES;
 use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 use crate::protocol::rpc_success;
 use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
 use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::session_chat_skill_invocation::skill_invocation;
 use crate::session_chat_skill_variants::{
     collapse_session_chat_skill_variants, read_claude_installed_plugin_roots,
 };
@@ -135,9 +137,9 @@ pub fn read_session_chat_skills(
     let skills = collapse_session_chat_skill_variants(skills, &installed_plugin_roots);
 
     json!({
-        "agentId": agent_id,
         "generatedAt": chrono::Utc::now().to_rfc3339(),
-        "skills": skills.into_iter().map(skill_to_value).collect::<Vec<_>>(),
+        "skills": skills.into_iter().map(|skill| skill_to_value(skill, &agent_id)).collect::<Vec<_>>(),
+        "agentId": agent_id,
     })
 }
 
@@ -218,7 +220,7 @@ fn read_grok_session_chat_skills(paths: &GxserverPaths, project_path: Option<&Pa
     json!({
         "agentId": "grok",
         "generatedAt": chrono::Utc::now().to_rfc3339(),
-        "skills": skills.into_iter().map(skill_to_value).collect::<Vec<_>>(),
+        "skills": skills.into_iter().map(|skill| skill_to_value(skill, "grok")).collect::<Vec<_>>(),
     })
 }
 
@@ -473,7 +475,7 @@ fn is_ignored_directory(name: &str) -> bool {
     )
 }
 
-fn skill_to_value(skill: SessionChatSkill) -> Value {
+fn skill_to_value(skill: SessionChatSkill, agent_id: &str) -> Value {
     let mut value = json!({
         "directoryPath": skill.directory_path.to_string_lossy(),
         "name": skill.name,
@@ -483,7 +485,37 @@ fn skill_to_value(skill: SessionChatSkill) -> Value {
     if let Some(variant_label) = skill.variant_label {
         value["variantLabel"] = Value::String(variant_label);
     }
+    if GHOSTEX_AGENT_SKILL_NAMES.contains(&skill.name.as_str()) {
+        value["ghostex"] = Value::Bool(true);
+        value["invocation"] = Value::String(skill_invocation(Some(agent_id), &skill.name));
+        if let Some(description) = ghostex_skill_description(&skill.name) {
+            value["description"] = Value::String(description);
+        }
+    }
     value
+}
+
+/// A bundled Ghostex skill's customer description, from the catalog Settings > Integrations shows.
+///
+/// CDXC:AgentSkills 2026-10-10 WHY:
+/// The ⋯ menus' Skills submenu (chat and terminal, desktop and phone) lists the Ghostex skills the session's agent has installed, so the marker rides the per-session read the `$` picker already makes: the real install set (`GHOSTEX_AGENT_SKILL_NAMES`) and no list copied into a client. `invocation` is how the agent's own input runs the skill, which is what the terminal menus type. The SKILL.md description is written for agents ("Use this skill when…"), so the menu's detail line takes the Settings catalog's customer copy.
+/// SEE-ALSO: packages/gx-chat-core/src/composer/ghostex_skills.rs, apps/desktop/src/app/render/terminal_agent_action_bar/skills_flyout.rs, apps/mobile/app/src/chat/native/composer/menus.ts.
+fn ghostex_skill_description(skill_name: &str) -> Option<String> {
+    use ghostex_settings_catalog::modules::{exports, module};
+    let (_, skills) = exports(
+        module::AGENT_SKILLS,
+        ghostex_settings_catalog::Platform::current(),
+    )
+    .into_iter()
+    .find(|(name, _)| *name == "VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS")?;
+    skills
+        .to_value()
+        .as_array()?
+        .iter()
+        .find(|skill| skill.get("skillName").and_then(Value::as_str) == Some(skill_name))?
+        .get("description")?
+        .as_str()
+        .map(str::to_string)
 }
 
 #[cfg(test)]

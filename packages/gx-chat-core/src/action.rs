@@ -123,6 +123,7 @@ action_kinds! {
     InsertAttachments => "insertAttachments",
     RemoveAttachment => "removeAttachment",
     ToggleSideChat => "toggleSideChat",
+    InsertSkill => "insertSkill",
     LoadImage => "loadImage",
 
     // Sending.

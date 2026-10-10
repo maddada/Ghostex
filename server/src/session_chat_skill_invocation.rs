@@ -15,6 +15,16 @@ fn invokes_skills_with_slash(agent: Option<&str>) -> bool {
     )
 }
 
+/// How the agent's own input runs a skill: `/name` for Claude, `$name` for every other agent.
+pub(crate) fn skill_invocation(agent: Option<&str>, name: &str) -> String {
+    let sigil = if invokes_skills_with_slash(agent) {
+        '/'
+    } else {
+        '$'
+    };
+    format!("{sigil}{name}")
+}
+
 /// The text the agent's terminal receives for a chat message: for Claude, every
 /// `[$name](…/SKILL.md)` or `[/name](…/SKILL.md)` link becomes `/name`.
 pub(crate) fn agent_skill_text<'a>(agent: Option<&str>, text: &'a str) -> Cow<'a, str> {

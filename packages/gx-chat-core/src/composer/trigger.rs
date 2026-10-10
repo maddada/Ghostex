@@ -43,6 +43,15 @@ pub struct Skill {
     pub skill_file_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variant_label: Option<String>,
+    /// One of Ghostex's bundled skills (gxserver marks them).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub ghostex: bool,
+    /// The customer description of a Ghostex skill.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// How the agent's own input runs a Ghostex skill (`/name` or `$name`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invocation: Option<String>,
 }
 
 /// The token under the caret, or `None` when it is not a mention.

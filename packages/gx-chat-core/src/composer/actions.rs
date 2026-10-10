@@ -99,6 +99,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::AttachPaths => attach_paths(state, action),
         ActionKind::AttachmentsFinished => attachments_finished(state, action),
         ActionKind::InsertAttachments => insert_attachments(action),
+        ActionKind::InsertSkill => crate::composer::ghostex_skills::insert_skill(state, action),
         ActionKind::ToggleSideChat => {
             let content = crate::composer::side_chat::toggle_side_chat(text_param(action));
             let caret = content.encode_utf16().count();

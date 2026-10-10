@@ -820,6 +820,12 @@ Type `@` in the chat box to mention a project file and `$` to pick one of the
 agent's skills. A picked skill shows as a pill in the way that agent invokes
 skills: `/skill-name` for Claude Code, which Claude receives as its slash
 command, and `$skill-name` for Codex.
+Skills, second from the bottom of the chat's More actions menu and of the ⋯ menu
+under a terminal view (on the computer and the phone), lists the Ghostex skills
+the session's agent has installed: in the chat a skill goes into the chat box as
+that pill, and in the terminal it is typed into the agent's input; neither sends
+it. Its last row, Configure / Install more, opens Settings > Integrations > Agent
+skills (the phone says to install them there on the computer).
 Use the paperclip to attach images, files, or folders. On Linux, choose
 **Images or files…** or **Folders…** before selecting items in the system picker;
 the terminal's attachment action offers the same choices.

@@ -65,7 +65,7 @@ impl GhostexGpuiApp {
                 .map_or(0.0, |shortcut| {
                     ROW_GAP + text_width(&shortcut, TERMINAL_AGENT_BAR_MENU_SHORTCUT_SIZE)
                 });
-                let chevron = if *action == TerminalAgentBarAction::SwitchAccount {
+                let chevron = if action.opens_flyout() {
                     ROW_GAP + SUBMENU_CHEVRON_SIZE
                 } else {
                     0.0
