@@ -325,15 +325,33 @@ fn render_chip(
         })
         .aria_label(chip.tooltip.clone())
         .flex()
-        .flex_shrink_0()
+        // An answer chip (Clean up, Keep) keeps its full width; the others give way first and end
+        // in an ellipsis, so a narrow card never cuts an answer or a label off mid-letter.
+        .when(chip.action.is_some(), |chip| chip.flex_shrink_0())
+        .when(chip.action.is_none(), |chip| chip.min_w_0().overflow_hidden())
         .items_center()
         .gap(px(3.0 * scale))
         .text_size(px(11.5 * scale))
         .text_color(muted)
-        .child(titlebar_svg_icon(chip.icon, 12.0 * scale, chip.icon_color))
-        .child(div().whitespace_nowrap().child(chip.label))
+        .child(
+            div()
+                .flex_shrink_0()
+                .child(titlebar_svg_icon(chip.icon, 12.0 * scale, chip.icon_color)),
+        )
+        .child(
+            div()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .child(chip.label),
+        )
         .when_some(chip.trailing, |chip, (icon, color)| {
-            chip.child(titlebar_svg_icon(icon, 12.0 * scale, color))
+            chip.child(
+                div()
+                    .flex_shrink_0()
+                    .child(titlebar_svg_icon(icon, 12.0 * scale, color)),
+            )
         })
         .when_some(click, |chip, click| {
             chip.cursor_pointer()
