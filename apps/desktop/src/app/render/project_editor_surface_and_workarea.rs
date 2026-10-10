@@ -383,10 +383,28 @@ impl GhostexGpuiApp {
     ) -> AnyElement {
         let ProjectEditorPlaceholderSignature {
             mode,
-            title,
-            message,
+            mut title,
+            mut message,
             actions,
         } = signature;
+        /*
+        CDXC:Sidebar 2026-10-10 DECISION:
+        User: while Ghostex starts and the sidebar says "Loading sessions…", Files (and Kanban, Automate and extension views) must say it is waiting for the sessions instead of the dead-end "unavailable for the current project context". Same words as the sidebar's card, driven by the sidebar's own signal (this computer's presentation has not loaded); once loaded, a view with really no project keeps its "unavailable" text. No timer, no fallback.
+        */
+        if title.is_none()
+            && actions.is_empty()
+            && mode.placeholder_is_unavailable_notice()
+            && message == mode.placeholder_message()
+            && !self
+                .gx_store
+                .core
+                .presentation()
+                .machine(&ghostex_gx_core::MachineId::Local)
+                .is_some_and(|machine| machine.loaded().is_some())
+        {
+            title = Some(ghostex_gx_core::SESSIONS_LOADING_TITLE.to_string());
+            message = ghostex_gx_core::SESSIONS_LOADING_DETAIL.to_string();
+        }
         let has_title = title.is_some();
         let project_view = matches!(mode, TitlebarMode::Extension(id) if gpui_custom_view(id).is_some_and(|v| v.definition.get("source").is_some()));
         let has_actions = !actions.is_empty();

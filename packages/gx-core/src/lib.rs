@@ -199,7 +199,7 @@ pub use crate::sidebar_view::{
     reveal_plan, session_is_snoozed, session_slot_plan, space_for_focused_row,
     space_landing_project_ids, ArmedAction, BrowserTabInput, CloseAfterDoneInput, Collection,
     CollectionView, CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput,
-    DAEMON_RETRY_INTERVAL_MS,
+    DAEMON_RETRY_INTERVAL_MS, SESSIONS_LOADING_DETAIL, SESSIONS_LOADING_TITLE,
     DelayedSendView, DropLanding, DropWrites, EmptyState, RowNesting, ThreadTally, TreeDropTarget,
     FocusedRowSpace, GroupCore, GroupSummary, GroupView, LabelDeadline, MachineNotice, MachineSummary,
     MachineTabInput, MachineTabView, OrderItem, OrderKind, ProjectContextView, ProjectDiffStats,

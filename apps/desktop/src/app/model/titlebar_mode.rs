@@ -232,6 +232,17 @@ impl TitlebarMode {
     }
 }
 
+impl TitlebarMode {
+    /// Whether `placeholder_message` is an "unavailable for the current project context" notice,
+    /// which gives way to the sessions-loading card while the sessions have not loaded.
+    pub(crate) fn placeholder_is_unavailable_notice(self) -> bool {
+        matches!(
+            self,
+            Self::Kanban | Self::Automate | Self::Manage | Self::Extension(_)
+        )
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TitlebarModeSwitcherItem {
     pub(crate) mode: TitlebarMode,

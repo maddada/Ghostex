@@ -12,6 +12,12 @@ use super::inputs::UnavailableState;
 /// SEE-ALSO: packages/gx-client/src/config.rs (`RECONNECT_LADDER_MS`), packages/gx-chat-core/src/session/constants.rs (`UNREACHABLE_RETRY_DELAY_MS`), packages/gx-chat-client/src/wire.rs (`RECONNECT_DELAYS_MS`), apps/gpui-web/src/app/gx_store/host.rs.
 pub const DAEMON_RETRY_INTERVAL_MS: u64 = 2_000;
 
+/// The sidebar's headline and detail while this computer's sessions have not loaded. The native
+/// views that need a project (Files, Kanban, Automate, extension views) say the same words in
+/// place of "unavailable" until the sessions arrive.
+pub const SESSIONS_LOADING_TITLE: &str = "Loading sessions\u{2026}";
+pub const SESSIONS_LOADING_DETAIL: &str = "They\u{2019}ll appear in a moment.";
+
 /// How long a first connection may take before the skeleton gives way to "Loading sessions…".
 /// A cold start on Windows can take this long without anything being wrong.
 const CONNECTING_AFTER_MS: u64 = 10_000;
@@ -50,10 +56,7 @@ impl DaemonWait {
     pub(crate) fn copy(self) -> (&'static str, &'static str) {
         match self {
             Self::Skeleton => ("", ""),
-            Self::Connecting => (
-                "Loading sessions\u{2026}",
-                "They\u{2019}ll appear in a moment.",
-            ),
+            Self::Connecting => (SESSIONS_LOADING_TITLE, SESSIONS_LOADING_DETAIL),
             Self::StillWaiting => (
                 "Sessions are taking longer than usual to load.",
                 "If this keeps happening, restart Ghostex.",
