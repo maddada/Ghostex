@@ -156,12 +156,16 @@ async fn answer_local_network_access_request(
         cx,
     )
     .await;
-    // Dropping the request unanswered answers the page "not now".
-    let Some(Some(allow)) = answer else {
-        return;
-    };
-    remember_browser_site_answer(request.profile(), request.origin());
-    request.answer(allow);
+    // Dropping the request unanswered answers the page "not now". Chromium still counts it toward
+    // blocking the site by itself, so the site is listed for Forget all answers either way.
+    match answer {
+        Some(Some(allow)) => {
+            remember_browser_site_answer(request.profile(), request.origin());
+            request.answer(allow);
+        }
+        Some(None) => remember_browser_site_answer(request.profile(), request.origin()),
+        None => {}
+    }
 }
 
 /// Shows a question on the page that asked and waits for it. None when it was not shown (the page

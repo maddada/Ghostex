@@ -169,15 +169,33 @@ fn set_local_network_access_setting(
     true
 }
 
-/// Clears a site's Allow or Don't Allow in a browser profile, so the site asks again. False when
-/// the profile's browser context could not be reached.
+/// Clears a site's Allow or Don't Allow in a browser profile, and the count of times it was
+/// waved away, so the site asks again. False when the profile's browser context could not be
+/// reached.
+///
+/// CDXC:Browser 2026-10-10 WHY: Chromium counts every "not now" (the × or Escape) and after three
+/// stops asking for a while on its own (`permission_autoblocking_data`, `dismiss_count: 3` for
+/// linear.app in the live test), which left the page blocked with no question and no stored answer
+/// for Forget all answers to clear. Forgetting a site also drops that count.
 pub fn forget_local_network_access_answer(profile: &str, origin: &str) -> bool {
-    set_local_network_access_setting(
+    let forgotten = set_local_network_access_setting(
         profile,
         origin,
         &LOCAL_NETWORK_ACCESS_CONTENT_TYPES,
         ContentSettingValues::DEFAULT,
-    )
+    );
+    if forgotten {
+        if let Ok(context) = cef_request_context_for_profile(profile) {
+            let origin = CefString::from(origin);
+            context.set_website_setting(
+                Some(&origin),
+                Some(&origin),
+                ContentSettingTypes::PERMISSION_AUTOBLOCKER_DATA,
+                None,
+            );
+        }
+    }
+    forgotten
 }
 
 /// The Chromium content settings a Local Network Access prompt asks about.
