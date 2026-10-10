@@ -342,6 +342,7 @@ impl ProjectsTab {
             switch_control(
                 p,
                 "project-work-mode",
+                "Work mode",
                 enabled,
                 !rpc || self.work.saving_switch.contains(&project_id),
                 (!rpc).then(|| "Ghostex's background service is not reachable.".into()),

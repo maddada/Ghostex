@@ -263,6 +263,7 @@ impl AccountsTab {
                 switch_control(
                     p,
                     SharedString::from(format!("accounts-{provider}-auto-redeem-switch")),
+                    "Auto-redeem expiring resets",
                     on,
                     false,
                     None,
@@ -283,6 +284,7 @@ impl AccountsTab {
                 switch_control(
                     p,
                     SharedString::from(format!("accounts-{provider}-auto-redeem-at-limit-switch")),
+                    "Also use it when I hit a limit",
                     at_limit,
                     !on,
                     (!on).then(|| SharedString::from("Turn on Auto-redeem expiring resets first.")),
@@ -803,6 +805,7 @@ impl AccountsTab {
             switch_control(
                 p,
                 SharedString::from(format!("accounts-{provider}-policy-enabled-switch")),
+                "Continue automatically",
                 enabled,
                 busy,
                 None,
@@ -892,6 +895,7 @@ impl AccountsTab {
             switch_control(
                 p,
                 SharedString::from(format!("accounts-{provider}-policy-retry-switch")),
+                "Recover from temporary errors",
                 policy["retryErrors"].as_bool() == Some(true),
                 inactive,
                 Some(reason),
@@ -1061,6 +1065,7 @@ impl AccountsTab {
                         switch_control(
                             p,
                             SharedString::from(format!("accounts-{provider}-setup-consent-switch")),
+                            format!("Share conversations between my {label} accounts"),
                             draft.consent,
                             false,
                             None,

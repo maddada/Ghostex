@@ -218,6 +218,34 @@ impl GhostexGpuiApp {
                     }
                 }
             }
+            // The Workspaces settings page's "Forget all answers" (browser_site_requests.rs).
+            "forgetWorkspaceBrowserSiteAnswers" => {
+                let workspace_id = command
+                    .get("workspaceId")
+                    .and_then(serde_json::Value::as_str);
+                let profile =
+                    crate::app::workspace_browser::workspace_browser_profile(workspace_id);
+                match crate::app::browser_site_requests::forget_browser_site_answers(&profile) {
+                    Ok(0) => self.dispatch_gpui_workspace_action_toast(
+                        "success",
+                        "Nothing to forget",
+                        "No site in this workspace's Browser has an answer kept.",
+                        cx,
+                    ),
+                    Ok(_) => self.dispatch_gpui_workspace_action_toast(
+                        "success",
+                        "Answers forgotten",
+                        "Sites in this workspace's Browser will ask again.",
+                        cx,
+                    ),
+                    Err(error) => self.dispatch_gpui_workspace_action_toast(
+                        "error",
+                        "Couldn't forget answers",
+                        &error,
+                        cx,
+                    ),
+                }
+            }
             "postponePortlessSetupPrompt" | "cancelPortlessSetupPrompt" => {
                 self.handle_gpui_app_modal_settings_command(command_type, command, cx);
             }

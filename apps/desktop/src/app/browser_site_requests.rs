@@ -3,11 +3,15 @@
 //! is a native prompt in the window in front, the way Chrome asks.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use futures::channel::oneshot;
+use futures::future::{Either, select};
 use gpui::{AnyWindowHandle, App, AsyncApp, PromptLevel};
+
+use crate::BrowserProfileId;
 
 use crate::cef::{BrowserExternalAppRequest, BrowserLocalNetworkAccessRequest, BrowserSiteRequest};
 
@@ -109,13 +113,17 @@ async fn answer_external_app_request(request: BrowserExternalAppRequest, cx: &mu
     }
 }
 
-/// CDXC:Browser 2026-10-03 WHY:
+/// CDXC:Browser 2026-10-10 WHY:
 /// Chromium's Local Network Access asks before a public page reaches 127.0.0.1 or the local
 /// network; sign-in pages use it to reach a desktop authenticator (Okta FastPass probes Okta
-/// Verify's server on 127.0.0.1). Allow is stored by Chromium in the browser profile, so a site
-/// asks once; Don't Allow only dismisses, so the site can ask again next time.
+/// Verify's server on 127.0.0.1), and linear.app uses it to look for the Linear desktop app before
+/// sending its page there. Allow and Don't Allow are both kept for the site in that browser
+/// profile, as Chrome does, so Don't Allow keeps Linear on its web page; Settings > Workspaces
+/// forgets them (`forget_browser_site_answers`). Supersedes 2026-10-03, when Don't Allow only
+/// dismissed because there was no way to undo a block. The question is taken down unanswered when
+/// its page goes away, so it never outlives its tab.
 async fn answer_local_network_access_request(
-    request: BrowserLocalNetworkAccessRequest,
+    mut request: BrowserLocalNetworkAccessRequest,
     cx: &mut AsyncApp,
 ) {
     let Some(_turn) = SitePromptTurn::take() else {
@@ -133,24 +141,119 @@ async fn answer_local_network_access_request(
             "Sign-in pages use this to reach an authenticator app such as Okta Verify. Only allow sites you trust.",
         )
     };
-    if ask(&message, detail, &["Allow", "Don't Allow"], cx).await == Some(0) {
-        request.allow();
-    }
+    let page_gone = request.page_gone();
+    let Some(answer) = open_prompt(&message, detail, &["Allow", "Don't Allow"], cx) else {
+        return;
+    };
+    let allow = match select(answer, std::pin::pin!(page_gone)).await {
+        Either::Left((Ok(choice), _)) => choice == 0,
+        // Dropping the unanswered prompt takes it down (GPUI closes a Windows dialog whose answer
+        // nobody waits for); dropping the request answers the page "not now".
+        Either::Left((Err(_), _)) | Either::Right(_) => return,
+    };
+    remember_browser_site_answer(request.profile(), request.origin());
+    request.answer(allow);
 }
 
 /// Asks in the window in front (an extension modal or panel is a window of its own). None when
 /// there was no window or it closed before the user answered.
 async fn ask(message: &str, detail: &str, answers: &[&str], cx: &mut AsyncApp) -> Option<usize> {
+    open_prompt(message, detail, answers, cx)?.await.ok()
+}
+
+fn open_prompt(
+    message: &str,
+    detail: &str,
+    answers: &[&str],
+    cx: &mut AsyncApp,
+) -> Option<oneshot::Receiver<usize>> {
     let window: Option<AnyWindowHandle> = cx.update(|cx| {
         cx.active_window()
             .or_else(|| cx.windows().into_iter().next())
     });
-    let answer = window?
+    window?
         .update(cx, |_, window, cx| {
             window.prompt(PromptLevel::Info, message, Some(detail), answers, cx)
         })
-        .ok()?;
-    answer.await.ok()
+        .ok()
+}
+
+/// Sites that have an Allow or Don't Allow kept in a disk-backed browser profile, by CEF profile,
+/// so Settings can forget them: Chromium has no way to list them.
+fn browser_site_answers_path() -> std::path::PathBuf {
+    crate::ghostex_state_root().join("gpui-browser-site-answers.json")
+}
+
+fn read_browser_site_answers() -> BTreeMap<String, BTreeSet<String>> {
+    std::fs::read_to_string(browser_site_answers_path())
+        .ok()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .and_then(|value| value.get("localNetwork").cloned())
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default()
+}
+
+fn write_browser_site_answers(answers: &BTreeMap<String, BTreeSet<String>>) {
+    let path = browser_site_answers_path();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let text = serde_json::json!({ "localNetwork": answers }).to_string();
+    let _ = std::fs::write(path, text);
+}
+
+/// The key a browser profile's answers are kept under: app pages (extension views, modals) share
+/// the Default profile's browser context. None for memory-backed profiles, whose answers end with
+/// the app.
+fn browser_site_answers_profile(profile: &str) -> Option<String> {
+    let segment = crate::cef::cef_profile_cache_segment(profile)?;
+    if crate::cef::cef_profile_is_workspace(segment) {
+        return Some(segment.to_string());
+    }
+    let default_profile = BrowserProfileId::default_profile().cef_profile_string();
+    (segment == default_profile || crate::cef::cef_profile_is_app_ui(segment))
+        .then_some(default_profile)
+}
+
+fn remember_browser_site_answer(profile: &str, origin: &str) {
+    let Some(profile) = browser_site_answers_profile(profile) else {
+        return;
+    };
+    let mut answers = read_browser_site_answers();
+    if answers
+        .entry(profile)
+        .or_default()
+        .insert(origin.to_string())
+    {
+        write_browser_site_answers(&answers);
+    }
+}
+
+/// Forgets every site's Allow or Don't Allow in a browser profile, so each site asks again.
+/// Returns how many sites were forgotten.
+pub(crate) fn forget_browser_site_answers(profile: &str) -> Result<usize, String> {
+    let Some(profile) = browser_site_answers_profile(profile) else {
+        return Ok(0);
+    };
+    let mut answers = read_browser_site_answers();
+    let Some(origins) = answers.remove(&profile) else {
+        return Ok(0);
+    };
+    let mut kept = BTreeSet::new();
+    for origin in &origins {
+        if !crate::cef::forget_local_network_access_answer(&profile, origin) {
+            kept.insert(origin.clone());
+        }
+    }
+    let forgotten = origins.len() - kept.len();
+    if !kept.is_empty() {
+        answers.insert(profile, kept);
+    }
+    write_browser_site_answers(&answers);
+    if forgotten == 0 && !origins.is_empty() {
+        return Err("This workspace's Browser isn't ready yet. Try again in a moment.".into());
+    }
+    Ok(forgotten)
 }
 
 /// `acme.okta.com` from `https://acme.okta.com` (Local Network Access hands over `https://linear.app/`).

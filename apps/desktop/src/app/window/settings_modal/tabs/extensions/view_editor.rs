@@ -422,6 +422,7 @@ impl ExtensionsTab {
             switch_control(
                 p,
                 "view-editor-enabled-switch",
+                "Enabled",
                 view.enabled(),
                 false,
                 None,

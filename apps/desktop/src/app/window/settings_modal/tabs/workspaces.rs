@@ -554,6 +554,35 @@ impl WorkspacesTab {
             ));
         }
 
+        // Site permissions (CDXC:Browser 2026-10-10 in app/browser_site_requests.rs).
+        let target = (!is_default).then(|| workspace_id.clone());
+        rows.push(setting_row(
+            p,
+            format!("workspace-site-answers-{workspace_id}"),
+            RowSpec::new("Site permissions").description(
+                "Your Allow and Don't Allow answers to sites in this workspace's Browser, such as letting linear.app connect to apps on this computer. Forget them so each site asks again.",
+            ),
+            None,
+            settings_button(
+                p,
+                SharedString::from(format!("workspace-site-answers-button-{workspace_id}")),
+                "Forget all answers",
+                None,
+                ButtonVariant::Outline,
+                false,
+                None,
+                move |page: &mut Self, _window, cx| {
+                    post_store_message(
+                        &page.store,
+                        json!({ "type": "forgetWorkspaceBrowserSiteAnswers", "workspaceId": target }),
+                        cx,
+                    );
+                },
+                cx,
+            ),
+            cx,
+        ));
+
         // Delete.
         if !is_default {
             let confirming = self.confirm_delete.as_deref() == Some(workspace_id.as_str());

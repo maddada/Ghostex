@@ -475,7 +475,11 @@ wrap_life_span_handler! {
             unregister_native_view_browser is idempotent, so the Drop path
             may run it again for app-initiated closes.
             */
-            let Some(host) = browser.and_then(|browser| browser.host()) else {
+            let Some(browser) = browser else {
+                return;
+            };
+            local_network_prompts_browser_closed(browser.identifier());
+            let Some(host) = browser.host() else {
                 return;
             };
             let native_view = platform::native_view_ptr(host.window_handle());
@@ -610,6 +614,8 @@ wrap_permission_handler! {
     pub(crate) struct GhostexGpuiPermissionHandler {
         trusted_clipboard_origin: Option<String>,
         media_access_handler: Option<BrowserMediaAccessHandler>,
+        // The browser's CEF profile, where a Local Network Access answer is kept.
+        profile: String,
     }
 
     impl PermissionHandler {
@@ -658,8 +664,8 @@ wrap_permission_handler! {
 
         fn on_show_permission_prompt(
             &self,
-            _browser: Option<&mut cef::Browser>,
-            _prompt_id: u64,
+            browser: Option<&mut cef::Browser>,
+            prompt_id: u64,
             requesting_origin: Option<&CefString>,
             requested_permissions: u32,
             callback: Option<&mut PermissionPromptCallback>,
@@ -668,19 +674,30 @@ wrap_permission_handler! {
             // Local Network Access (CDXC:Browser 2026-10-03 in site_requests.rs): asked in the app
             // when the prompt is for nothing else.
             let loopback_network = PermissionRequestTypes::LOOPBACK_NETWORK.get_raw() as u32;
-            let local_network = PermissionRequestTypes::LOCAL_NETWORK.get_raw() as u32
-                | PermissionRequestTypes::LOCAL_NETWORK_ACCESS_DEPRECATED.get_raw() as u32;
+            let local_network_current = PermissionRequestTypes::LOCAL_NETWORK.get_raw() as u32;
+            let local_network_deprecated =
+                PermissionRequestTypes::LOCAL_NETWORK_ACCESS_DEPRECATED.get_raw() as u32;
+            let local_network = local_network_current | local_network_deprecated;
             if requested_permissions != 0
                 && requested_permissions & !(loopback_network | local_network) == 0
             {
                 let Some(callback) = callback else {
                     return 0;
                 };
+                let browser_id = browser.map(|browser| browser.identifier()).unwrap_or_default();
                 dispatch_browser_site_request(BrowserSiteRequest::LocalNetworkAccess(
                     BrowserLocalNetworkAccessRequest {
                         origin: requesting_origin,
                         local_network: requested_permissions & local_network != 0,
+                        profile: self.profile.clone(),
+                        content_types: local_network_access_content_types(
+                            requested_permissions & loopback_network != 0,
+                            requested_permissions & local_network_current != 0,
+                            requested_permissions & local_network_deprecated != 0,
+                        ),
+                        prompt_id,
                         callback: Some(callback.clone()),
+                        page_gone: Some(register_local_network_prompt(prompt_id, browser_id)),
                     },
                 ));
                 return 1;
@@ -713,6 +730,15 @@ wrap_permission_handler! {
                 PermissionRequestResult::DENY
             });
             1
+        }
+
+        fn on_dismiss_permission_prompt(
+            &self,
+            _browser: Option<&mut cef::Browser>,
+            prompt_id: u64,
+            _result: PermissionRequestResult,
+        ) {
+            local_network_prompt_dismissed(prompt_id);
         }
     }
 }

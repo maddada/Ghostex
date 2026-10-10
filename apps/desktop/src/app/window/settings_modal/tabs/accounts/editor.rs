@@ -262,6 +262,7 @@ impl AccountsTab {
             switch_control(
                 p,
                 SharedString::from(format!("account-editor-{id}-eligible-switch")),
+                "Available for automatic switching",
                 draft.eligible,
                 false,
                 None,

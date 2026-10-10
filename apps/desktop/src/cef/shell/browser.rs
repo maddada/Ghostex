@@ -193,6 +193,7 @@ impl CefBrowser {
         let permission_handler = Some(GhostexGpuiPermissionHandler::new(
             trusted_clipboard_origin.clone(),
             media_access_handler,
+            profile.to_string(),
         ));
         let context_menu_handler = GhostexGpuiContextMenuHandler::new(
             popup_open_handler.clone(),
@@ -737,6 +738,7 @@ impl Drop for CefBrowser {
     fn drop(&mut self) {
         self.app_initiated_close.set(true);
         forget_page_keep_awake_probe(self.identifier());
+        local_network_prompts_browser_closed(self.identifier());
         #[cfg(target_os = "macos")]
         if let Some(view) = self.native_view() {
             platform::dispose_sidebar_hover_reveal(view);

@@ -522,6 +522,7 @@ impl Render for OpenTargetsTab {
                     let switch = switch_control(
                         &p,
                         SharedString::from(format!("open-target-{}", target.id)),
+                        target.label.clone(),
                         is_available && !hidden.contains(&target.id),
                         !is_available,
                         Some(format!("Install {} to enable this option.", target.label).into()),

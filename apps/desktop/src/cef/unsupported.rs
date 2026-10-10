@@ -106,6 +106,7 @@ pub struct BrowserExternalAppRequest {
 pub struct BrowserLocalNetworkAccessRequest {
     origin: String,
     local_network: bool,
+    profile: String,
 }
 
 impl BrowserLocalNetworkAccessRequest {
@@ -113,11 +114,23 @@ impl BrowserLocalNetworkAccessRequest {
         &self.origin
     }
 
+    pub fn profile(&self) -> &str {
+        &self.profile
+    }
+
     pub fn includes_local_network(&self) -> bool {
         self.local_network
     }
 
-    pub fn allow(self) {}
+    pub fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
+        std::future::pending()
+    }
+
+    pub fn answer(self, _allow: bool) {}
+}
+
+pub fn forget_local_network_access_answer(_profile: &str, _origin: &str) -> bool {
+    false
 }
 
 pub type BrowserSiteRequestHandler = Rc<dyn Fn(BrowserSiteRequest)>;

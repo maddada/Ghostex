@@ -41,13 +41,18 @@ impl Drop for BrowserExternalAppRequest {
     }
 }
 
-/// A pending Local Network Access prompt. It stays open until `allow` runs or it is dropped, and
-/// dropping it answers "not now" (DISMISS) so the page's request never hangs and the site is not
-/// blocked for good: Ghostex has no site-settings page to undo a block.
+/// A pending Local Network Access prompt. It stays open until it is answered or dropped, and
+/// dropping it unanswered answers "not now" (DISMISS) so the page's request never hangs.
 pub struct BrowserLocalNetworkAccessRequest {
     pub(crate) origin: String,
     pub(crate) local_network: bool,
+    /// The CEF profile of the asking browser, whose request context keeps the answer.
+    pub(crate) profile: String,
+    /// The Chromium content settings this prompt is for (loopback and/or local network).
+    pub(crate) content_types: Vec<ContentSettingTypes>,
+    pub(crate) prompt_id: u64,
     pub(crate) callback: Option<PermissionPromptCallback>,
+    pub(crate) page_gone: Option<futures::channel::oneshot::Receiver<()>>,
 }
 
 impl BrowserLocalNetworkAccessRequest {
@@ -55,24 +60,163 @@ impl BrowserLocalNetworkAccessRequest {
         &self.origin
     }
 
+    pub fn profile(&self) -> &str {
+        &self.profile
+    }
+
     /// True when the page asked for devices on the local network, not only apps on this computer.
     pub fn includes_local_network(&self) -> bool {
         self.local_network
     }
 
-    /// Chromium stores the grant for the origin in the browser profile, so it is asked once.
-    pub fn allow(mut self) {
+    /// Resolves when the asking page is gone (its tab or browser closed, or it navigated away),
+    /// so the app can take its question down; never resolves otherwise.
+    pub fn page_gone(&mut self) -> impl std::future::Future<Output = ()> + 'static {
+        let page_gone = self.page_gone.take();
+        async move {
+            let gone = match page_gone {
+                Some(page_gone) => page_gone.await.is_ok(),
+                None => false,
+            };
+            if !gone {
+                futures::future::pending::<()>().await;
+            }
+        }
+    }
+
+    /// Allow or Don't Allow, kept for the site in this browser profile as Chrome does, so the
+    /// site is not asked again until the answer is forgotten
+    /// (`forget_local_network_access_answer`).
+    pub fn answer(mut self, allow: bool) {
+        set_local_network_access_setting(
+            &self.profile,
+            &self.origin,
+            &self.content_types,
+            if allow {
+                ContentSettingValues::ALLOW
+            } else {
+                ContentSettingValues::BLOCK
+            },
+        );
         if let Some(callback) = self.callback.take() {
-            callback.cont(PermissionRequestResult::ACCEPT);
+            callback.cont(if allow {
+                PermissionRequestResult::ACCEPT
+            } else {
+                PermissionRequestResult::DENY
+            });
         }
     }
 }
 
 impl Drop for BrowserLocalNetworkAccessRequest {
     fn drop(&mut self) {
+        PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| pending.borrow_mut().remove(&self.prompt_id));
         if let Some(callback) = self.callback.take() {
             callback.cont(PermissionRequestResult::DISMISS);
         }
+    }
+}
+
+const LOCAL_NETWORK_ACCESS_CONTENT_TYPES: [ContentSettingTypes; 3] = [
+    ContentSettingTypes::LOOPBACK_NETWORK,
+    ContentSettingTypes::LOCAL_NETWORK,
+    ContentSettingTypes::LOCAL_NETWORK_ACCESS,
+];
+
+fn set_local_network_access_setting(
+    profile: &str,
+    origin: &str,
+    content_types: &[ContentSettingTypes],
+    value: ContentSettingValues,
+) -> bool {
+    if origin.is_empty() {
+        return false;
+    }
+    let Ok(context) = cef_request_context_for_profile(profile) else {
+        return false;
+    };
+    let origin = CefString::from(origin);
+    for content_type in content_types {
+        context.set_content_setting(Some(&origin), Some(&origin), *content_type, value);
+    }
+    true
+}
+
+/// Clears a site's Allow or Don't Allow in a browser profile, so the site asks again. False when
+/// the profile's browser context could not be reached.
+pub fn forget_local_network_access_answer(profile: &str, origin: &str) -> bool {
+    set_local_network_access_setting(
+        profile,
+        origin,
+        &LOCAL_NETWORK_ACCESS_CONTENT_TYPES,
+        ContentSettingValues::DEFAULT,
+    )
+}
+
+/// The Chromium content settings a Local Network Access prompt asks about.
+pub(crate) fn local_network_access_content_types(
+    loopback_network: bool,
+    local_network: bool,
+    local_network_deprecated: bool,
+) -> Vec<ContentSettingTypes> {
+    let mut content_types = Vec::new();
+    if loopback_network {
+        content_types.push(ContentSettingTypes::LOOPBACK_NETWORK);
+    }
+    if local_network {
+        content_types.push(ContentSettingTypes::LOCAL_NETWORK);
+    }
+    if local_network_deprecated {
+        content_types.push(ContentSettingTypes::LOCAL_NETWORK_ACCESS);
+    }
+    content_types
+}
+
+thread_local! {
+    /// Open Local Network Access prompts by Chromium prompt id: the asking browser's id and the
+    /// signal that takes the app's question down when the page goes away.
+    static PENDING_LOCAL_NETWORK_PROMPTS: RefCell<HashMap<u64, (i32, futures::channel::oneshot::Sender<()>)>> =
+        RefCell::new(HashMap::new());
+}
+
+/// CDXC:Browser 2026-10-10 WHY:
+/// The app's "Allow … to connect to apps on this computer?" question outlived its tab (Linear's
+/// tab closed under it in the live test) and, being a modal dialog, kept the window from closing.
+/// Chromium dismisses the prompt when the page navigates or closes (`on_dismiss_permission_prompt`)
+/// and a closing browser ends every prompt it raised, so the app's question follows its page.
+pub(crate) fn register_local_network_prompt(
+    prompt_id: u64,
+    browser_id: i32,
+) -> futures::channel::oneshot::Receiver<()> {
+    let (sender, receiver) = futures::channel::oneshot::channel();
+    PENDING_LOCAL_NETWORK_PROMPTS
+        .with(|pending| pending.borrow_mut().insert(prompt_id, (browser_id, sender)));
+    receiver
+}
+
+pub(crate) fn local_network_prompt_dismissed(prompt_id: u64) {
+    let entry =
+        PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| pending.borrow_mut().remove(&prompt_id));
+    if let Some((_, sender)) = entry {
+        let _ = sender.send(());
+    }
+}
+
+pub(crate) fn local_network_prompts_browser_closed(browser_id: i32) {
+    let senders = PENDING_LOCAL_NETWORK_PROMPTS.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        let prompt_ids = pending
+            .iter()
+            .filter(|(_, (id, _))| *id == browser_id)
+            .map(|(prompt_id, _)| *prompt_id)
+            .collect::<Vec<_>>();
+        prompt_ids
+            .into_iter()
+            .filter_map(|prompt_id| pending.remove(&prompt_id))
+            .collect::<Vec<_>>()
+    });
+    for (_, sender) in senders {
+        let _ = sender.send(());
     }
 }
 
@@ -195,7 +339,7 @@ pub(crate) fn dispatch_external_app_popup(
 /// ERR_UNKNOWN_URL_SCHEME page in the frame (linear.app redirecting a Browser tab to `linear://`
 /// when Linear's "Open in desktop app" is on), so every request handler's `on_before_browse` asks
 /// here first: the navigation is cancelled, the frame keeps what it showed, and the app prompts as
-/// before. A Browser tab that had loaded no page yet was opened only for that link, so it closes
+/// before. A Browser tab that never committed a page was opened only for that link, so it closes
 /// once the prompt is done with, as Chrome does (`page_metadata_handler` is Browser tabs only).
 /// True when the navigation was such a link and must be cancelled.
 pub(crate) fn cancel_external_app_navigation(
@@ -211,11 +355,11 @@ pub(crate) fn cancel_external_app_navigation(
         return false;
     };
     let is_main_frame = frame.is_none_or(|frame| frame.is_main() != 0);
-    let has_document = browser
+    let committed_page = browser
         .as_deref()
-        .is_some_and(|browser| browser.has_document() != 0);
+        .is_some_and(browser_committed_a_page);
     let close_link_only_tab = page_metadata_handler
-        .filter(|_| is_main_frame && !has_document)
+        .filter(|_| is_main_frame && !committed_page)
         .cloned();
     dispatch_browser_site_request(BrowserSiteRequest::OpenExternalApp(
         BrowserExternalAppRequest {
@@ -226,6 +370,20 @@ pub(crate) fn cancel_external_app_navigation(
         },
     ));
     true
+}
+
+/// CDXC:Browser 2026-10-10 WHY:
+/// `Browser::has_document` was false when linear.app's script sent its already-shown page to
+/// `linear://` (live test on Windows), so the Work page's Linear tab was closed under the user.
+/// The main frame's URL is its last committed one (`about:blank` or empty before the first
+/// commit) and stays put while the app-link navigation is pending, so it tells whether the tab
+/// ever showed a page.
+fn browser_committed_a_page(browser: &cef::Browser) -> bool {
+    browser.main_frame().is_some_and(|frame| {
+        let url = CefString::from(&frame.url()).to_string();
+        let url = url.trim();
+        !url.is_empty() && !url.eq_ignore_ascii_case("about:blank")
+    })
 }
 
 wrap_task! {

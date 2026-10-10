@@ -535,6 +535,7 @@ How to use this file:
 - **Linear API key** `workspaceLinearApiKey` (Settings UI row without a settings key; use `ghostex settings open`): The Linear key this workspace's projects use, unless a project sets its own.
 - **Claude account** `workspaceClaudeAccount` (Settings UI row without a settings key; use `ghostex settings open`): Which of your Claude accounts agents in this workspace's projects use.
 - **Browser sign-ins** `workspaceBrowserSignins` (Settings UI row without a settings key; use `ghostex settings open`): Each workspace's Browser keeps its own cookies; sign out of every site here.
+- **Site permissions** `workspaceSitePermissions` (Settings UI row without a settings key; use `ghostex settings open`): Forget your Allow and Don't Allow answers to sites in a workspace's Browser, such as a site connecting to apps on this computer.
 - **New workspace** `newWorkspace` (Settings UI row without a settings key; use `ghostex settings open`): Add a workspace, for example one per company you work for.
 ### Team
 

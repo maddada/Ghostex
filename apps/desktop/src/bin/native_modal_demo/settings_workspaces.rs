@@ -5,7 +5,8 @@
 //! team's Linear key set), `workspaces-team-flow` (the same, opened at the Team flow section),
 //! `workspaces-join` (the Work workspace not connected yet), `workspaces-team-member` and
 //! `workspaces-team-member-flow` (connected as a member using their own Linear key: the team's key
-//! and the Team flow are read-only). The Projects page's Work mode rows:
+//! and the Team flow are read-only), `workspaces-personal` (only the Personal workspace, so its
+//! rows fit the window down to Site permissions). The Projects page's Work mode rows:
 //! `projects-work-mode` (the Ghostex project in the Work workspace, using that workspace's Linear
 //! key) and `projects-work-mode-own` (the same project with its own key).
 use serde_json::{Value, json};
@@ -136,6 +137,15 @@ fn team_flow_steps(state: &str) -> Value {
 /// The scripted daemon for these states; `None` for paths it does not know.
 pub(super) fn rpc(state: &str, path: &str, params: &Value) -> Option<Result<Value, String>> {
     Some(Ok(match path {
+        // Only Personal, so its rows (down to Site permissions) fit the window.
+        "/api/readWorkspaces" if state == "workspaces-personal" => json!({
+            "sidebarWorkspaces": {
+                "order": ["personal"],
+                "workspaces": {
+                    "personal": { "workspaceId": "personal", "name": "Personal", "letter": "P", "color": "#3aa675", "kind": "personal", "claudeAccountId": null }
+                }
+            }
+        }),
         "/api/readWorkspaces" => workspaces(),
         "/api/readWorkModeStatus" if state == "projects-work-mode-own" => json!({
             "linearKeys": { "shared": true, "workspaces": ["work"], "projectOverrides": ["project-ghostex"] }

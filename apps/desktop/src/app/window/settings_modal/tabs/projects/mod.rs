@@ -255,10 +255,18 @@ impl ProjectsTab {
     ) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
         let picker = SearchableList::new("Search project paths", window, cx);
+        // The opening window's project (or the one the opener named); the first project when the
+        // page does not list it.
+        let selected_project_id = store
+            .read(cx)
+            .request()
+            .initial_project_id
+            .clone()
+            .unwrap_or_default();
         Self {
             store,
             fields: FieldStates::default(),
-            selected_project_id: String::new(),
+            selected_project_id,
             picker,
             drafts: ProjectDrafts::default(),
             seeded_from: None,

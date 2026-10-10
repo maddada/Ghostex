@@ -166,6 +166,7 @@ pub(super) fn easy_connect_card(
     let switch = switch_control(
         &t.p,
         "remote-easy-connect-switch",
+        "Easy Connect",
         is_on,
         switch_disabled,
         None,

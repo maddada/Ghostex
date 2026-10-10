@@ -126,13 +126,16 @@ pub fn plan_modal_action(view: &SidebarView, message: &Value) -> Option<ModalAct
                     "pullRequest" | "linearIssue" | "linearProject" | "githubIssue" | "githubProject"
                 )
             })?;
+            // The title the card draws (a work-mode session's branch title), not the rename
+            // seed, which is the agent's own title ("Claude Session") until the session is renamed.
+            let card_title = crate::sidebar_view::text::js_trim(&row.display_title);
             Some(ModalAction {
                 close_reason: "SettingsDismissal:sessionRowLinkWork",
                 open: json!({
                     "type": "open",
                     "modal": "workLinkPicker",
                     "sessionId": sidebar_session_id,
-                    "sessionTitle": title,
+                    "sessionTitle": if card_title.is_empty() { title.as_str() } else { card_title },
                     "kind": kind,
                 }),
             })

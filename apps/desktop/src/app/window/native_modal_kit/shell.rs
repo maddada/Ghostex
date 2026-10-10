@@ -38,6 +38,12 @@ impl ModalFit {
         }
     }
 
+    /// Fits the window to its content again on the next paint, shrinking it too: for a dialog
+    /// whose fields come and go (a row that only one mode shows).
+    pub(crate) fn refit(&self) {
+        self.requested.set(None);
+    }
+
     /// A prepaint listener for the column that holds the header and body.
     pub(crate) fn listener(
         &self,

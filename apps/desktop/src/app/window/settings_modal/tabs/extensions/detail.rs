@@ -467,6 +467,7 @@ impl ExtensionsTab {
             small_switch_control(
                 p,
                 "extension-detail-enabled",
+                "Enabled",
                 extension.enabled(),
                 pending,
                 None,
@@ -481,6 +482,7 @@ impl ExtensionsTab {
             small_switch_control(
                 p,
                 "extension-detail-pinned",
+                "Pinned",
                 extension.pinned(),
                 pending,
                 None,
@@ -619,6 +621,7 @@ impl ExtensionsTab {
                     switch_control(
                         p,
                         SharedString::from(format!("preference-{extension_id}-{name}")),
+                        definition.title.clone(),
                         value.as_bool() == Some(true),
                         false,
                         None,

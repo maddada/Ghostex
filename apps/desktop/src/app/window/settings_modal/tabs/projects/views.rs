@@ -181,6 +181,7 @@ fn binding_switch(
     let control = switch_control(
         p,
         SharedString::from(format!("project-view-{view_id}-{id}-switch")),
+        label.to_string(),
         checked,
         false,
         None,

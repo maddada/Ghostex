@@ -256,6 +256,7 @@ impl ExtensionsTab {
                 let control = small_switch_control(
                     p,
                     SharedString::from(format!("official-{}-switch", extension.id)),
+                    title.clone(),
                     enabled,
                     blocked.is_some(),
                     blocked.map(|blocked| format!("Turn on {} first", blocked.title).into()),
@@ -340,6 +341,7 @@ impl ExtensionsTab {
                     control: Some(small_switch_control(
                         p,
                         "official-cef-switch",
+                        CEF_TITLE,
                         cef["status"].as_str() != Some("notInstalled"),
                         true,
                         None,
@@ -675,6 +677,7 @@ impl ExtensionsTab {
             small_switch_control(
                 p,
                 SharedString::from(format!("installed-{id}-switch")),
+                title.clone(),
                 extension.enabled(),
                 pending,
                 None,
@@ -696,6 +699,7 @@ impl ExtensionsTab {
                     small_switch_control(
                         p,
                         SharedString::from(format!("installed-{id}-autoopen")),
+                        "Open automatically in sessions",
                         extension.chat_bar_auto_open(),
                         pending,
                         None,
@@ -971,6 +975,7 @@ impl ExtensionsTab {
             small_switch_control(
                 p,
                 SharedString::from(format!("custom-{id}-switch")),
+                name.clone(),
                 view.enabled(),
                 false,
                 None,

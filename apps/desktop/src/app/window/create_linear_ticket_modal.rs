@@ -183,7 +183,7 @@ impl GpuiCreateLinearTicketModalWindow {
             created: None,
             busy: None,
             error: None,
-            fit: ModalFit::fixed(),
+            fit: ModalFit::new(),
             focus_handle: cx.focus_handle(),
             _subscriptions: subscriptions,
         };
@@ -203,11 +203,14 @@ impl GpuiCreateLinearTicketModalWindow {
                 }
                 match result {
                     Ok(answer) if answer["tracker"].as_str() == Some("github") => {
+                        // No Team / Linear project row: the window shrinks to the fields left.
+                        this.fit.refit();
                         this.tracker = Tracker::Github;
                         this.repo = answer["repo"].as_str().map(str::to_string);
                         this.teams_loading = false;
                     }
                     Ok(_) => {
+                        this.fit.refit();
                         this.tracker = Tracker::Linear;
                         this.load_teams(window, cx);
                     }
@@ -624,6 +627,9 @@ impl GpuiCreateLinearTicketModalWindow {
         let p = self.palette;
         h_flex()
             .id(id)
+            .role(gpui::Role::Switch)
+            .aria_toggled(a11y_toggled(checked))
+            .aria_label(label)
             .w_full()
             .justify_between()
             .items_center()
@@ -658,7 +664,7 @@ impl GpuiCreateLinearTicketModalWindow {
                 .map(|(_, label)| label.clone())
                 .unwrap_or_else(|| NO_LINEAR_PROJECT.to_string()),
         );
-        let mut body = v_flex().w_full().flex_1().min_h_0().gap(px(16.0));
+        let mut body = v_flex().w_full().gap(px(16.0));
         // CDXC:WorkMode 2026-10-09 DECISION:
         // User: a Linear ticket can be created from the project header's "…" menu "(also can be created from the 'Work' page)". The Work page opens this same dialog; when it shows several work-mode projects and is not filtered to one, the dialog asks which project the ticket's work belongs to.
         if self.projects.len() > 1 {
@@ -684,23 +690,20 @@ impl GpuiCreateLinearTicketModalWindow {
                 .child(modal_section_title(&p, "Title"))
                 .child(modal_text_input(&p, &self.title_input, busy, window, cx)),
         );
-        body = body
-            .child(
-                v_flex()
-                    .w_full()
-                    .flex_1()
-                    .min_h_0()
-                    .gap(px(8.0))
-                    .child(modal_section_title(&p, "Description (optional)"))
-                    .child(modal_text_area(
-                        &p,
-                        &self.description_input,
-                        Some(96.0),
-                        busy,
-                        window,
-                        cx,
-                    )),
-            );
+        body = body.child(
+            v_flex()
+                .w_full()
+                .gap(px(8.0))
+                .child(modal_section_title(&p, "Description (optional)"))
+                .child(modal_text_area(
+                    &p,
+                    &self.description_input,
+                    Some(96.0),
+                    busy,
+                    window,
+                    cx,
+                )),
+        );
         if self.tracker != Tracker::Github {
             body = body.child(
                 h_flex()
@@ -742,7 +745,10 @@ impl GpuiCreateLinearTicketModalWindow {
                 "create-linear-ticket-start",
                 "Start work now",
                 self.start_work,
-                |this| this.start_work = !this.start_work,
+                |this| {
+                    this.start_work = !this.start_work;
+                    this.fit.refit();
+                },
                 cx,
             ));
         if self.start_work && !self.agents.is_empty() {

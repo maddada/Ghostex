@@ -1311,6 +1311,7 @@ impl IntegrationsTab {
             vec![switch_control(
                 p,
                 "ghostex-capture-enabled",
+                "Show the floating button",
                 enabled,
                 false,
                 None,
@@ -1339,6 +1340,7 @@ impl IntegrationsTab {
             vec![switch_control(
                 p,
                 "ghostex-capture-switch-to-session",
+                "Switch to the session after sending",
                 switch_to_session,
                 false,
                 None,

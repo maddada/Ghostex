@@ -113,10 +113,13 @@ pub(crate) fn settings_small_switch(
         .into_any_element()
 }
 
-/// A clickable small switch with an optional reason tooltip while disabled.
+/// A clickable small switch with an optional reason tooltip while disabled, named for the
+/// accessibility tree by `label` (its card or row title, as `switch_control`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn small_switch_control<V: 'static>(
     p: &SettingsPalette,
     id: impl Into<ElementId>,
+    label: impl Into<SharedString>,
     checked: bool,
     disabled: bool,
     disabled_reason: Option<SharedString>,
@@ -129,6 +132,7 @@ pub(crate) fn small_switch_control<V: 'static>(
         .role(gpui::Role::Switch)
         .aria_toggled(a11y_toggled(checked))
         .accessibility_id(id.to_string())
+        .aria_label(label)
         .flex_shrink_0()
         .when(!disabled, |this| {
             this.cursor_pointer().on_press(cx, move |this, window, cx| {

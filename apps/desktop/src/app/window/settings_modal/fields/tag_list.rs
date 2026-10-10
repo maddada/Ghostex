@@ -1192,6 +1192,7 @@ pub(crate) fn tag_list_field<V: SettingsPage>(
                 .child(switch_control(
                     p,
                     SharedString::from(format!("tag-enabled-{index}")),
+                    label.clone(),
                     item.enabled,
                     false,
                     None,

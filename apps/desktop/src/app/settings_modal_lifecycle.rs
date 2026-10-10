@@ -117,6 +117,10 @@ impl GhostexGpuiApp {
             .cloned()
             .unwrap_or_else(|| self.gpui_app_modal_sidebar_state_message_for_open(kind, cx));
         let mut request = SettingsOpenRequest::from_open_message(kind.modal_id(), open_message);
+        // Settings > Projects opens on this window's project unless the opener named one.
+        if request.initial_project_id.is_none() {
+            request.initial_project_id = self.active_project_id_for_view_scope();
+        }
         // The React page got its gxserver RPC from the page bootstrap; here it is the local token.
         request.gxserver_rpc_available = read_gpui_gxserver_auth_token().is_ok();
         let config = SettingsModalConfig {

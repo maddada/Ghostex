@@ -127,6 +127,9 @@ pub(crate) fn modal_panel_row(
 }
 
 /// The app-wide toggle: 32x20 track with a 2px border and 6px radius, 16px thumb with 4px radius.
+/// It only draws; the clickable row that holds it carries `.role(Role::Switch)`,
+/// `.aria_toggled(a11y_toggled(..))` and `.aria_label(<the row's visible label>)`, so a screen
+/// reader names it by that label and never by the row's element id.
 pub(crate) fn modal_switch(p: &ModalPalette, checked: bool, disabled: bool) -> AnyElement {
     div()
         .flex_shrink_0()

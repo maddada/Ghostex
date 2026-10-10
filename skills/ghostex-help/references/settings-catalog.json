@@ -10598,6 +10598,17 @@
       "agentWritable": false
     },
     {
+      "key": "workspaceSitePermissions",
+      "title": "Site permissions",
+      "subtitle": "Forget your Allow and Don't Allow answers to sites in a workspace's Browser, such as a site connecting to apps on this computer.",
+      "tab": "workspaces",
+      "tabTitle": "Workspaces",
+      "section": "workspaces",
+      "sectionTitle": "Workspaces",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "newWorkspace",
       "title": "New workspace",
       "subtitle": "Add a workspace, for example one per company you work for.",

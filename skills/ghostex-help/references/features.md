@@ -249,8 +249,12 @@ view from the strip.
   turn it off in Linear's Settings > Account > Preferences inside the Ghostex
   Browser to keep Linear pages there. A sign-in page that checks
   for an app on this computer (Okta FastPass looks for Okta Verify this way) asks
-  "Allow … to connect to apps on this computer?"; Allow is remembered for that site.
-  If the sign-in gave up while the question was open, try it again.
+  "Allow … to connect to apps on this computer?"; Allow and Don't Allow are both
+  remembered for that site in that workspace's Browser (Don't Allow on linear.app keeps
+  Linear pages in the Browser instead of sending them to the Linear desktop app). The
+  question goes away by itself when its tab closes. Settings > Workspaces > Site
+  permissions > Forget all answers lets every site ask again. If the sign-in gave up
+  while the question was open, try it again.
 - **Linear and Jira**: open either view from the **+** menu. Paste the workspace,
   project, team, or board URL you want as its home. Ghostex identifies the workspace
   from the address and preserves the full URL, including filters. Previously used

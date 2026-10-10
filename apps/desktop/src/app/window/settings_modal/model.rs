@@ -136,6 +136,9 @@ pub(crate) struct SettingsOpenRequest {
     pub(crate) initial_agents_section: Option<String>,
     pub(crate) initial_custom_view_id: Option<String>,
     pub(crate) initial_view_scope_key: Option<String>,
+    /// The project the Projects page opens on: `initialProjectId`, else the opening window's
+    /// current project (filled in by the host).
+    pub(crate) initial_project_id: Option<String>,
     /// Opens the Pick Color dialog of this colour setting (the preview binary's `pick-color`
     /// state, and the host where it has no system colour panel; no open message carries it).
     pub(crate) open_color_picker: Option<String>,
@@ -187,6 +190,8 @@ impl SettingsOpenRequest {
                 .filter(|section| section == "agentHooks"),
             initial_custom_view_id: optional_text(message, "initialCustomViewId"),
             initial_view_scope_key: optional_text(message, "initialViewScopeKey"),
+            initial_project_id: optional_text(message, "initialProjectId")
+                .filter(|id| !id.trim().is_empty()),
             open_color_picker: None,
             open_select: None,
             gxserver_rpc_available: false,

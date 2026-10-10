@@ -256,6 +256,7 @@ fn switch_row(
     let control = switch_control(
         p,
         SharedString::from(format!("{id}-switch")),
+        label,
         checked,
         false,
         None,

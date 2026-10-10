@@ -62,6 +62,7 @@ pub(super) fn tailscale_card(
     let switch = switch_control(
         &t.p,
         "remote-tailscale-switch",
+        "Tailscale",
         enabled,
         false,
         None,

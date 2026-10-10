@@ -62,34 +62,13 @@ pub(crate) fn settings_switch(p: &SettingsPalette, checked: bool, disabled: bool
         .into_any_element()
 }
 
-/// A clickable Settings switch.
+/// A clickable Settings switch, named for the accessibility tree by `label`: its row's visible
+/// title, never its element id (screen readers read the id when a switch has no label).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn switch_control<V: 'static>(
     p: &SettingsPalette,
     id: impl Into<ElementId>,
-    checked: bool,
-    disabled: bool,
-    disabled_reason: Option<SharedString>,
-    on_change: impl Fn(&mut V, bool, &mut Window, &mut Context<V>) + 'static,
-    cx: &mut Context<V>,
-) -> AnyElement {
-    labeled_switch_control(
-        p,
-        id,
-        None,
-        checked,
-        disabled,
-        disabled_reason,
-        on_change,
-        cx,
-    )
-}
-
-/// [`switch_control`] named for the accessibility tree by its row's label.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn labeled_switch_control<V: 'static>(
-    p: &SettingsPalette,
-    id: impl Into<ElementId>,
-    label: Option<SharedString>,
+    label: impl Into<SharedString>,
     checked: bool,
     disabled: bool,
     disabled_reason: Option<SharedString>,
@@ -102,7 +81,7 @@ pub(crate) fn labeled_switch_control<V: 'static>(
         .role(gpui::Role::Switch)
         .aria_toggled(a11y_toggled(checked))
         .accessibility_id(id.to_string())
-        .when_some(label, |this, label| this.aria_label(label))
+        .aria_label(label)
         .flex_shrink_0()
         .when(!disabled, |this| {
             this.cursor_pointer().on_press(cx, move |this, window, cx| {
@@ -406,10 +385,10 @@ pub(crate) fn toggle_field_with<V: SettingsPage>(
     on_change: impl Fn(&mut V, bool, &mut Window, &mut Context<V>) + 'static,
     cx: &mut Context<V>,
 ) -> AnyElement {
-    let control = labeled_switch_control(
+    let control = switch_control(
         p,
         SharedString::from(format!("{id}-switch")),
-        Some(spec.label.clone()),
+        spec.label.clone(),
         checked,
         false,
         None,

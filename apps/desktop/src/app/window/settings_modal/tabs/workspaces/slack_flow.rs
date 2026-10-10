@@ -216,6 +216,7 @@ impl WorkspacesTab {
                 switch_control(
                     p,
                     SharedString::from(format!("team-flow-ticket-switch-{workspace_id}")),
+                    "Never work without a ticket",
                     true,
                     true,
                     Some("Always on".into()),

@@ -8,9 +8,8 @@
 //! User: "ok implement the plan", choosing A1, B2, C1 and D3 of the Agents page mockup (docs/2026-10-06/agents-settings/). A1: agents that are off but were used before stay dimmed in place in the list. B2: agents that are off and never used are a compact chip grid under "More agents"; a click turns one on. C1: custom agents sit in the same list with a Custom tag and are the only rows with Delete; "Add custom agent" is the last row. D3: a row speaks only when something is wrong, with one summary line and Fix all above the list. Every agent has a switch; built-in agents can only be turned off, never removed.
 use super::super::super::super::native_modal_kit::*;
 use super::super::super::fields::{
-    card_inset, labeled_switch_control, reorder_handle, reorder_order, reorder_row,
-    reorder_scroll_container, settings_icon, settings_section, tooltip_text,
-    wrapped_tooltip_text,
+    card_inset, reorder_handle, reorder_order, reorder_row, reorder_scroll_container,
+    settings_icon, settings_section, switch_control, tooltip_text, wrapped_tooltip_text,
 };
 use super::super::super::model::SettingsTabId;
 use super::super::super::palette::SettingsPalette;
@@ -400,10 +399,10 @@ impl AgentsTab {
             );
         let row_status = self.render_row_status(p, agent, status, loading, cx);
         let switch_agent = agent.clone();
-        let switch = labeled_switch_control(
+        let switch = switch_control(
             p,
             SharedString::from(format!("agent-enabled-{agent_id}")),
-            Some(SharedString::from(name.clone())),
+            SharedString::from(name.clone()),
             agent.enabled,
             false,
             None,

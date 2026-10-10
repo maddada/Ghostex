@@ -53,6 +53,11 @@ pub(crate) fn workspaces() -> Section {
                 "Each workspace's Browser keeps its own cookies; sign out of every site here.",
             ),
             row(
+                "workspaceSitePermissions",
+                "Site permissions",
+                "Forget your Allow and Don't Allow answers to sites in a workspace's Browser, such as a site connecting to apps on this computer.",
+            ),
+            row(
                 "newWorkspace",
                 "New workspace",
                 "Add a workspace, for example one per company you work for.",

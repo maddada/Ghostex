@@ -921,6 +921,7 @@ impl WorkspacesTab {
             switch_control(
                 p,
                 SharedString::from(format!("team-own-linear-switch-{workspace_id}")),
+                "Create my Slack tickets with my own Linear key",
                 enabled,
                 busy || disabled_reason.is_some(),
                 disabled_reason,

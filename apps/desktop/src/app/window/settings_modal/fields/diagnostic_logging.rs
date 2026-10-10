@@ -285,10 +285,11 @@ pub(crate) fn diagnostic_logging_field<V: SettingsPage>(
                 .items_center()
                 .justify_between()
                 .gap(px(12.0))
-                .child(label(name))
+                .child(label(name.clone()))
                 .child(switch_control(
                     p,
                     SharedString::from(format!("diagnostic-{id}")),
+                    name.clone(),
                     checked,
                     false,
                     None,
