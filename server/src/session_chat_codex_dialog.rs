@@ -1205,6 +1205,8 @@ pub(crate) fn command_has_local_output(text: &str) -> bool {
     )
 }
 
+/// CDXC:AgentScreenDetection 2026-10-15 WHY:
+/// Codex redraws its wrapped recap below local-command results, so retaining it makes the screen diff anchor after the result and report no new output.
 fn history_without_composer(text: &str) -> Vec<String> {
     let mut lines: Vec<String> = text
         .lines()
@@ -1226,6 +1228,16 @@ fn history_without_composer(text: &str) -> Vec<String> {
         line.starts_with('›') && row(line).is_none()
     }) {
         lines.truncate(composer);
+    }
+    if let Some(recap) = lines
+        .iter()
+        .rposition(|line| line.starts_with("  ↳ Recap:"))
+    {
+        if lines[recap + 1..].iter().all(|line| {
+            line.trim().is_empty() || line.starts_with("           ") || is_composer_gap_line(line)
+        }) {
+            lines.truncate(recap);
+        }
     }
     while lines
         .last()
