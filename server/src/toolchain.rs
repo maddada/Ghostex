@@ -130,10 +130,18 @@ fn get_bd_tool_status() -> ToolCapabilityStatus {
 }
 
 fn get_bd_tool_status_for_candidates(candidates: &[ToolCandidate]) -> ToolCapabilityStatus {
-    if let Some(candidate) = candidates
+    let mut not_executable = None;
+    let available = candidates
         .iter()
-        .find(|candidate| matches!(inspect_candidate(candidate), CandidateInspection::Available))
-    {
+        .find(|candidate| match inspect_candidate(candidate) {
+            CandidateInspection::Available => true,
+            CandidateInspection::NotExecutable => {
+                not_executable.get_or_insert(*candidate);
+                false
+            }
+            CandidateInspection::Missing => false,
+        });
+    if let Some(candidate) = available {
         return ToolCapabilityStatus {
             availability: "available".to_string(),
             candidate_paths: None,
@@ -149,12 +157,7 @@ fn get_bd_tool_status_for_candidates(candidates: &[ToolCandidate]) -> ToolCapabi
         .iter()
         .map(|candidate| candidate.executable_path.to_string_lossy().to_string())
         .collect::<Vec<_>>();
-    if let Some(candidate) = candidates.iter().find(|candidate| {
-        matches!(
-            inspect_candidate(candidate),
-            CandidateInspection::NotExecutable
-        )
-    }) {
+    if let Some(candidate) = not_executable {
         return ToolCapabilityStatus {
             availability: "notExecutable".to_string(),
             candidate_paths: Some(candidate_paths),
@@ -300,11 +303,67 @@ fn system_bd_directories(
     ]);
     // Beads installed by Ghostex (Project board's Install Beads button).
     directories.push(crate::managed_tools::paths::bin_dir());
+    let windows_mounts = wsl_windows_mount_points();
+    filter_system_bd_directories(directories, &windows_mounts)
+}
+
+fn filter_system_bd_directories(
+    directories: Vec<PathBuf>,
+    windows_mounts: &[PathBuf],
+) -> Vec<PathBuf> {
     let mut seen = std::collections::HashSet::new();
     directories
         .into_iter()
         .filter(|directory| directory.is_absolute())
+        .filter(|directory| {
+            !windows_mounts
+                .iter()
+                .any(|mount| directory.starts_with(mount))
+        })
         .filter(|directory| seen.insert(directory.clone()))
+        .collect()
+}
+
+/// CDXC:ServerDaemon 2026-10-06 WHY:
+/// WSL inherits Windows PATH entries whose missing-file probes over DrvFS can exceed the daemon's 800ms health timeout, leaving a running server reported as unavailable and preventing the desktop from loading its token.
+/// Beads must run inside Linux, so exclude Windows mounts from its discovery without changing the PATH inherited by terminal sessions.
+/// Read the mount table rather than assuming /mnt/c so custom WSL automount roots and native Linux mounts under /mnt work too.
+fn wsl_windows_mount_points() -> Vec<PathBuf> {
+    if !cfg!(target_os = "linux")
+        || (env::var_os("WSL_DISTRO_NAME").is_none() && env::var_os("WSL_INTEROP").is_none())
+    {
+        return Vec::new();
+    }
+    let Ok(mounts) = fs::read_to_string("/proc/mounts") else {
+        return Vec::new();
+    };
+    windows_mount_points_from(&mounts)
+}
+
+fn windows_mount_points_from(mounts: &str) -> Vec<PathBuf> {
+    mounts
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let _source = fields.next()?;
+            let mount = fields.next()?;
+            let filesystem = fields.next()?;
+            let options = fields.next()?;
+            let windows_mount = filesystem == "drvfs"
+                || (filesystem == "9p"
+                    && options.split(',').any(|option| {
+                        option == "aname=drvfs" || option.starts_with("aname=drvfs;")
+                    }));
+            windows_mount.then(|| {
+                PathBuf::from(
+                    mount
+                        .replace("\\040", " ")
+                        .replace("\\011", "\t")
+                        .replace("\\012", "\n")
+                        .replace("\\134", "\\"),
+                )
+            })
+        })
         .collect()
 }
 
@@ -361,6 +420,71 @@ fn dedupe_candidates(candidates: Vec<ToolCandidate>) -> Vec<ToolCandidate> {
 #[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_mount_points_parse_wsl_mounts() {
+        for (mounts, expected) in [
+            (
+                r"C:\134 /mnt/c 9p rw,noatime,aname=drvfs;path=C:\134;uid=1000;gid=1000;symlinkroot=/mnt/,mmap,trans=fd,rfdno=5,wfdno=5 0 0",
+                "/mnt/c",
+            ),
+            (r"C:\134 /mnt/c drvfs rw,relatime 0 0", "/mnt/c"),
+            (r"D:\134 /win/d 9p rw,aname=drvfs 0 0", "/win/d"),
+            (r"D:\134 /mnt/my\040drive drvfs rw 0 0", "/mnt/my drive"),
+            (
+                r"D:\134 /mnt/my\011drive\012dir\134name drvfs rw 0 0",
+                "/mnt/my\tdrive\ndir\\name",
+            ),
+            (
+                r"D:\134 /mnt/literal\134040 drvfs rw 0 0",
+                r"/mnt/literal\040",
+            ),
+        ] {
+            assert_eq!(
+                windows_mount_points_from(mounts),
+                vec![PathBuf::from(expected)]
+            );
+        }
+    }
+
+    #[test]
+    fn windows_mount_points_exclude_non_windows_filesystems() {
+        let mounts = "drivers /usr/lib/wsl/drivers 9p ro,aname=drivers;fmask=222 0 0\n\
+            /dev/sdb /mnt/data ext4 rw,relatime 0 0\n\
+            tmpfs /run tmpfs rw,nosuid,nodev 0 0\n\
+            other /mnt/other 9p rw,aname=drvfs-other 0 0\n\
+            other /mnt/embedded 9p rw,other=aname=drvfs 0 0";
+        assert!(windows_mount_points_from(mounts).is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bd_system_directories_exclude_only_windows_mounts() {
+        let mounts = windows_mount_points_from(
+            "C: /mnt/c 9p rw,aname=drvfs;path=C: 0 0\n\
+            D: /win/d drvfs rw 0 0\n\
+            /dev/sdb /mnt/data ext4 rw 0 0",
+        );
+        let directories = filter_system_bd_directories(
+            [
+                "/mnt/c",
+                "/mnt/c/bin",
+                "/win/d/bin",
+                "/mnt/data",
+                "/mnt/copy/bin",
+                "relative-bin",
+                "/mnt/data",
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .collect(),
+            &mounts,
+        );
+        assert_eq!(
+            directories,
+            vec![PathBuf::from("/mnt/data"), PathBuf::from("/mnt/copy/bin")]
+        );
+    }
 
     #[test]
     fn gxserver_root_from_packaged_executable_uses_package_parent() {
@@ -421,6 +545,47 @@ mod tests {
         assert_eq!(status.availability, "notExecutable");
         assert!(status.message.contains("not executable"));
         assert!(status.guidance.unwrap_or_default().contains("update Beads"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bd_status_remembers_first_non_executable_candidate() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = dir.path().join("missing-bd");
+        let first = dir.path().join("first-bd");
+        let second = dir.path().join("second-bd");
+        for bd in [&first, &second] {
+            fs::write(bd, "#!/bin/sh\nexit 0\n").expect("write bd");
+            fs::set_permissions(bd, fs::Permissions::from_mode(0o644)).expect("chmod bd");
+        }
+        let candidates =
+            [missing, first.clone(), second.clone()].map(|executable_path| ToolCandidate {
+                executable_path,
+                source: ToolSource::SystemPath,
+            });
+        let status = get_bd_tool_status_for_candidates(&candidates);
+
+        assert_eq!(status.availability, "notExecutable");
+        assert!(status.message.contains(first.to_str().unwrap()));
+        assert!(!status.message.contains(second.to_str().unwrap()));
+        assert!(status.executable_path.is_none());
+        assert_eq!(
+            status.candidate_paths,
+            Some(
+                candidates
+                    .iter()
+                    .map(|candidate| candidate.executable_path.to_string_lossy().to_string())
+                    .collect()
+            )
+        );
+
+        make_executable(&second);
+        let status = get_bd_tool_status_for_candidates(&candidates);
+        assert_eq!(status.availability, "available");
+        assert_eq!(status.executable_path.as_deref(), second.to_str());
+        assert!(status.candidate_paths.is_none());
     }
 
     #[test]
