@@ -1,3 +1,4 @@
+use super::edit_shortcuts::ChatEditMenuActions as _;
 use super::keyboard::ComposerInputActions as _;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use gpui::StatefulInteractiveElement as _;
@@ -203,6 +204,7 @@ impl Render for NativeChatView {
             self.hide_frosted_overlays(cx);
         }
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
+        let edit_menu = self.edit_menu(window, cx);
         div()
             .id("native-session-chat")
             .role(gpui::Role::Group)
@@ -247,6 +249,7 @@ impl Render for NativeChatView {
             .capture_action(cx.listener(Self::composer_copy))
             .capture_action(cx.listener(Self::composer_cut))
             .capture_action(cx.listener(Self::note_paste_started))
+            .chat_edit_menu_actions(edit_menu)
             .on_drop(cx.listener(|chat, paths: &gpui::ExternalPaths, _, cx| {
                 let paths = paths
                     .0

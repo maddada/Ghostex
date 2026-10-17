@@ -1,3 +1,4 @@
+use super::edit_shortcuts::ChatEditMenuActions as _;
 use super::keyboard::ComposerInputActions as _;
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use gpui::{
@@ -30,6 +31,7 @@ impl Render for MaximizedComposer {
                 (true, true) => gpui::black().opacity(0.05),
             };
             let composer = chat.render_composer(&p, window, cx);
+            let edit_menu = chat.edit_menu(window, cx);
             let available = window.viewport_size();
             let width = (available.width.as_f32() - 48.0 * p.scale)
                 .min(896.0 * p.scale)
@@ -63,6 +65,7 @@ impl Render for MaximizedComposer {
                 .capture_action(cx.listener(NativeChatView::composer_copy))
                 .capture_action(cx.listener(NativeChatView::composer_cut))
                 .capture_action(cx.listener(NativeChatView::note_paste_started))
+                .chat_edit_menu_actions(edit_menu)
                 .on_drop(cx.listener(|chat, paths: &gpui::ExternalPaths, _, cx| {
                     let paths = paths
                         .0

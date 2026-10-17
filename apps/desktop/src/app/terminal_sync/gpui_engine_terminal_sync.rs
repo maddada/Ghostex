@@ -744,6 +744,11 @@ impl GhostexGpuiApp {
             );
             view.apply_settings(view_settings);
             view.set_copy_handler(Box::new(gpui_copy_feedback));
+            view.set_edit_menu_actions(terminal_element::TerminalEditMenuActions {
+                copy: std::any::TypeId::of::<GpuiEditMenuCopy>(),
+                paste: std::any::TypeId::of::<GpuiEditMenuPaste>(),
+                select_all: std::any::TypeId::of::<GpuiEditMenuSelectAll>(),
+            });
             if uses_zmx_visibility_claims {
                 view.enable_zmx_visibility_claims();
             }

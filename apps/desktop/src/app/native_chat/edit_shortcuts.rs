@@ -270,6 +270,22 @@ impl NativeChatView {
         }
     }
 
+    /// Which Edit menu commands the chat can act on this frame. GPUI enables a menu item only
+    /// while a handler for its action sits on the focus path, so the handlers are registered
+    /// only when they would act; a focus, draft or transcript selection change redraws the chat.
+    pub(super) fn edit_menu(&self, window: &mut Window, cx: &mut Context<Self>) -> ChatEditMenu {
+        let draft = self.composer_focused && !self.draft.is_empty();
+        // The selection check walks every transcript text block, so it runs only while the
+        // menu can reach this view at all.
+        ChatEditMenu {
+            copy: draft
+                || (self.surface_focus.contains_focused(window, cx)
+                    && gpui_component::TextSelection::has_selection(window, cx)),
+            cut: draft,
+            composer: self.composer_focused,
+        }
+    }
+
     /// Runs a VS Code line command on the composer as one undoable edit.
     pub(super) fn composer_line_edit(
         &mut self,
@@ -504,3 +520,53 @@ impl NativeChatView {
             || self.terminal_dialog_key_focus.is_focused(window)
     }
 }
+
+/// What the chat answers in the app's Edit menu this frame (`NativeChatView::edit_menu`).
+#[derive(Clone, Copy)]
+#[cfg_attr(target_family = "wasm", allow(dead_code))] // the web page has no app menu
+pub(super) struct ChatEditMenu {
+    copy: bool,
+    cut: bool,
+    /// Paste and Select All act on the focused composer.
+    composer: bool,
+}
+
+/// Edit › Cut, Copy, Paste and Select All (`app/helpers/os_cli/main_menus.rs`), forwarded as the
+/// input actions Cmd+X, Cmd+C, Cmd+V and Cmd+A dispatch, so the composer and the transcript
+/// (gpui-component's `Root` copies the window selection) answer them the same way. The web
+/// page has no app menu.
+pub(super) trait ChatEditMenuActions: gpui::InteractiveElement + Sized {
+    #[cfg(target_family = "wasm")]
+    fn chat_edit_menu_actions(self, _: ChatEditMenu) -> Self {
+        self
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    fn chat_edit_menu_actions(self, menu: ChatEditMenu) -> Self {
+        use crate::app::actions::{
+            GpuiEditMenuCopy, GpuiEditMenuCut, GpuiEditMenuPaste, GpuiEditMenuSelectAll,
+        };
+        use gpui_component::input;
+        fn forward<A: gpui::Action + Default>(window: &mut Window, cx: &mut gpui::App) {
+            window.dispatch_action(Box::new(A::default()), cx);
+        }
+        let mut this = self;
+        if menu.copy {
+            this = this
+                .on_action(|_: &GpuiEditMenuCopy, window, cx| forward::<input::Copy>(window, cx));
+        }
+        if menu.cut {
+            this =
+                this.on_action(|_: &GpuiEditMenuCut, window, cx| forward::<input::Cut>(window, cx));
+        }
+        if menu.composer {
+            this = this
+                .on_action(|_: &GpuiEditMenuPaste, window, cx| forward::<input::Paste>(window, cx))
+                .on_action(|_: &GpuiEditMenuSelectAll, window, cx| {
+                    forward::<input::SelectAll>(window, cx)
+                });
+        }
+        this
+    }
+}
+impl<T: gpui::InteractiveElement> ChatEditMenuActions for T {}

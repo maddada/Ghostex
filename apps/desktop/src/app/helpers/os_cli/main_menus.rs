@@ -229,6 +229,16 @@ pub(crate) fn ghostex_gpui_main_menus_for_source_focus(
             MenuItem::separator(),
             close_pane_item,
         ]),
+        /*
+        CDXC:Clipboard 2026-10-17 DECISION:
+        User: Edit › Copy, Cut, Paste and Select All work in the terminal and the chat, enabled
+        only when they can act (Copy with a selection), so apps that read a selection by
+        pressing Edit › Copy get the text. The OS selectors reach CEF views natively; for GPUI
+        views the app delegate dispatches these actions and validates them by whether a
+        handler is on the focus path: `TerminalEditMenuActions` (terminal_element.rs) and
+        `ChatEditMenuActions` (native_chat/edit_shortcuts.rs) register them only then. A
+        terminal has nothing to cut, so Cut stays disabled there.
+        */
         Menu::new("Edit").items(vec![
             MenuItem::os_action("Cut", GpuiEditMenuCut, OsAction::Cut),
             MenuItem::os_action("Copy", GpuiEditMenuCopy, OsAction::Copy),

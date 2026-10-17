@@ -101,6 +101,16 @@ gpui::actions!(
     [TerminalContextMenuCopy, TerminalContextMenuPaste]
 );
 
+/// The host's Edit menu actions the terminal answers. The host owns the menu,
+/// and this file is also built into binaries without it, so the host hands the
+/// action types in. Cut has no meaning in a terminal and stays unanswered.
+#[derive(Clone, Copy)]
+pub struct TerminalEditMenuActions {
+    pub copy: TypeId,
+    pub paste: TypeId,
+    pub select_all: TypeId,
+}
+
 pub(crate) const TERMINAL_KEY_CONTEXT: &str = "GhostexGpuiTerminal";
 const TERMINAL_CURSOR_BLINK_INTERVAL: Duration = Duration::from_millis(500);
 /// How long a displayed zmx viewer holds its frame after a resize-and-claim.
@@ -534,6 +544,7 @@ struct ParkedViewport {
 pub struct TerminalView {
     context_menu_handler: TerminalContextMenuHandler,
     copy_handler: Option<TerminalCopyHandler>,
+    edit_menu_actions: Option<TerminalEditMenuActions>,
     model: TerminalModel,
     font: TerminalFontConfig,
     /// Settings/config-derived size restored by the focused-surface reset shortcut.
@@ -718,6 +729,7 @@ impl TerminalView {
         Self {
             context_menu_handler,
             copy_handler: None,
+            edit_menu_actions: None,
             model,
             font,
             configured_font_size,
@@ -882,6 +894,10 @@ impl TerminalView {
 
     pub fn set_copy_handler(&mut self, handler: TerminalCopyHandler) {
         self.copy_handler = Some(handler);
+    }
+
+    pub fn set_edit_menu_actions(&mut self, actions: TerminalEditMenuActions) {
+        self.edit_menu_actions = Some(actions);
     }
 
     fn notify_copied(&self, cx: &mut App) {
@@ -1938,6 +1954,19 @@ impl TerminalView {
                 cx.notify();
             }
         }
+    }
+
+    /// Edit › Select All: every row of the scrollback, which Copy then copies.
+    fn select_all(&mut self, cx: &mut Context<Self>) {
+        let Some(frame) = self.frame.as_ref() else {
+            return;
+        };
+        let Some(last_row) = frame.scrollbar.total.checked_sub(1) else {
+            return;
+        };
+        self.drag = None;
+        self.selection = Some(line_selection(frame.cols, 0, last_row));
+        cx.notify();
     }
 
     #[allow(dead_code)] // reached only from the demo binary input path; kept with the rest of the TerminalView input handling
@@ -3388,24 +3417,38 @@ impl TerminalElement {
             cx,
         );
 
-        window.on_action(TypeId::of::<TerminalContextMenuCopy>(), {
+        // A Bubble-phase handler for `action` that runs `run` on the view.
+        let on_view_action = |action: TypeId,
+                              run: fn(&mut TerminalView, &mut Context<TerminalView>),
+                              window: &mut Window| {
             let entity = entity.clone();
-            move |_action, phase, _window, cx| {
-                if phase != DispatchPhase::Bubble {
-                    return;
+            window.on_action(action, move |_action, phase, _window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    entity.update(cx, run);
                 }
-                entity.update(cx, |view, cx| view.copy_selection(cx));
+            });
+        };
+        let paste: fn(&mut TerminalView, &mut Context<TerminalView>) =
+            |_view, cx| cx.emit(TerminalViewEvent::PasteRequested);
+        on_view_action(
+            TypeId::of::<TerminalContextMenuCopy>(),
+            TerminalView::copy_selection,
+            window,
+        );
+        on_view_action(TypeId::of::<TerminalContextMenuPaste>(), paste, window);
+        // GPUI enables a menu item only while a handler for its action sits on the focus
+        // path, so Copy is registered only while there is a selection to copy.
+        let (edit_menu_actions, has_selection) = {
+            let view = entity.read(cx);
+            (view.edit_menu_actions, view.selection.is_some())
+        };
+        if let Some(actions) = edit_menu_actions {
+            if has_selection {
+                on_view_action(actions.copy, TerminalView::copy_selection, window);
             }
-        });
-        window.on_action(TypeId::of::<TerminalContextMenuPaste>(), {
-            let entity = entity.clone();
-            move |_action, phase, _window, cx| {
-                if phase != DispatchPhase::Bubble {
-                    return;
-                }
-                entity.update(cx, |_view, cx| cx.emit(TerminalViewEvent::PasteRequested));
-            }
-        });
+            on_view_action(actions.paste, paste, window);
+            on_view_action(actions.select_all, TerminalView::select_all, window);
+        }
 
         window.on_key_event({
             let entity = entity.clone();
