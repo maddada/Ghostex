@@ -94,8 +94,8 @@ pub(crate) fn resolve_session_chat_file(
         return Err(GpuiSessionChatFileResolutionError::InvalidPath);
     }
 
-    let project_path = local_session_chat_path(&context.project_path)?;
-    let project_root = fs::canonicalize(&project_path)
+    let local_project_path = local_session_chat_path(&context.project_path)?;
+    let project_root = fs::canonicalize(&local_project_path)
         .map_err(|_| GpuiSessionChatFileResolutionError::ProjectUnavailable)?;
     if !fs::metadata(&project_root).is_ok_and(|metadata| metadata.is_dir()) {
         return Err(GpuiSessionChatFileResolutionError::ProjectUnavailable);
@@ -159,7 +159,7 @@ pub(crate) fn resolve_session_chat_file(
             file_path,
             is_directory: metadata.is_dir(),
             project_id: context.project_id,
-            project_path,
+            project_path: context.project_path,
             project_root,
         });
     }

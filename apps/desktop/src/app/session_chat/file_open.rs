@@ -142,27 +142,22 @@ impl GhostexGpuiApp {
         };
         let trimmed = trimmed.to_string();
         let path = trimmed.clone();
-        let window_handle = Window::window_handle(window);
         let background = cx.background_executor().clone();
-        cx.spawn(async move |_this, cx| {
+        cx.spawn_in(window, async move |this, cx| {
             let resolved = background
                 .spawn(async move { resolve_session_chat_file(context, &path) })
                 .await;
-            let _ = cx.update_window(window_handle, |view, window, app_cx| {
-                if let Ok(view) = view.downcast::<GhostexGpuiApp>() {
-                    let _ = view.update(app_cx, |this, cx| {
-                        this.finish_session_chat_file_open(
-                            resolved,
-                            trimmed,
-                            line,
-                            column,
-                            requested_view,
-                            session_id,
-                            window,
-                            cx,
-                        );
-                    });
-                }
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.finish_session_chat_file_open(
+                    resolved,
+                    trimmed,
+                    line,
+                    column,
+                    requested_view,
+                    session_id,
+                    window,
+                    cx,
+                );
             });
         })
         .detach();
