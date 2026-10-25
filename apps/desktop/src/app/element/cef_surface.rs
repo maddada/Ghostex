@@ -320,7 +320,9 @@ impl CefSurface {
         define `__ghostexExtensionBridgeReceive` itself to read it. Surfaces
         without an installed bridge get nothing.
         */
-        if !self.browser.extension_bridge_installed() {
+        if !self.browser.extension_bridge_installed()
+            || !self.browser.extension_bridge_main_frame_matches()
+        {
             return false;
         }
         let Ok(payload) = serde_json::to_string(message) else {

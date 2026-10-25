@@ -52,6 +52,9 @@ pub struct CefBrowser {
     motion_hidden: Cell<bool>,
     pub(crate) uses_system_page_appearance: bool,
     pub(crate) extension_bridge_installed: bool,
+    /// The surface the bridge was installed for, so outbound messages can check that the main
+    /// frame still shows that extension's page.
+    extension_bridge_surface: Option<ExtensionBridgeSurfaceSpec>,
     /// CDXC:Browser 2026-09-23 WHY:
     /// Remote reconnect disposes CEF surfaces while retaining their tabs. Mark app-owned disposal before releasing the native view so synchronous or deferred DoClose callbacks cannot turn that teardown into a user-requested tab close.
     app_initiated_close: StdRc<Cell<bool>>,
@@ -281,7 +284,7 @@ impl CefBrowser {
             find_handler,
             load_handler,
             project_workarea_bridge_event_handler,
-            extension_bridge_surface,
+            extension_bridge_surface.clone(),
             extension_bridge_event_handler,
             request_handler,
             permission_handler,
@@ -351,12 +354,28 @@ impl CefBrowser {
             motion_hidden: Cell::new(false),
             uses_system_page_appearance,
             extension_bridge_installed,
+            extension_bridge_surface: extension_bridge_surface
+                .filter(|_| extension_bridge_installed),
             app_initiated_close,
         })
     }
 
     pub fn extension_bridge_installed(&self) -> bool {
         self.extension_bridge_installed
+    }
+
+    /// Whether the main frame still shows the extension page the bridge was installed for.
+    ///
+    /// CDXC:Extensions 2026-10-25 WHY:
+    /// Inbound bridge messages and the bridge install already check the frame URL, but outbound context broadcasts and call answers were sent to whatever document the surface had navigated to, where a third-party page could define `__ghostexExtensionBridgeReceive` and read them (security audit 2026-10-25). Outbound dispatch now requires the same match.
+    pub fn extension_bridge_main_frame_matches(&self) -> bool {
+        let Some(surface) = self.extension_bridge_surface.as_ref() else {
+            return false;
+        };
+        let browser = self.browser.borrow();
+        browser.main_frame().is_some_and(|frame| {
+            surface.matches_url(&cef::CefString::from(&frame.url()).to_string())
+        })
     }
 
     pub fn identifier(&self) -> i32 {
