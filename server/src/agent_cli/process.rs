@@ -92,7 +92,7 @@ fn command(script: &str, home: &Path, env: &BTreeMap<String, String>) -> Command
 
 pub(crate) fn quote(value: &str) -> String {
     if cfg!(windows) {
-        format!("'{}'", value.replace('\'', "''"))
+        crate::platform::shell::powershell_single_quote(value)
     } else {
         format!("'{}'", value.replace('\'', "'\\''"))
     }

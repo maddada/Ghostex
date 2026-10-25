@@ -513,7 +513,8 @@ fn resolve_windows_desktop_launch() -> Launch {
 #[cfg(target_os = "windows")]
 fn resolve_windows_portable_desktop_launch(copy: &ghostex_paths::portable::PortableCopy) -> Launch {
     let executable = copy.app_executable();
-    let quote = |path: &Path| format!("'{}'", path.to_string_lossy().replace('\'', "''"));
+    let quote =
+        |path: &Path| crate::platform::shell::powershell_single_quote(&path.to_string_lossy());
     Launch {
         command: "powershell.exe".to_string(),
         args: vec![

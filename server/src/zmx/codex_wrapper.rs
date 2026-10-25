@@ -179,7 +179,8 @@ pub(crate) fn wmx_codex_wrapper_path_command() -> String {
     if !written {
         return String::new();
     }
-    let directory = directory.to_string_lossy().replace('\'', "''");
+    let directory =
+        crate::platform::shell::powershell_single_quoted_content(&directory.to_string_lossy());
     format!(
         "$env:Path='{directory}' + ';' + ((($env:Path -split ';') | Where-Object {{ $_ -and $_ -ne '{directory}' }}) -join ';'); function global:codex {{ $ghostexCodexFunction = $true; & ([ScriptBlock]::Create([IO.File]::ReadAllText('{directory}\\codex-wrapper.ps1'))) @args }}; "
     )

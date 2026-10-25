@@ -226,7 +226,7 @@ pub(crate) fn read_session_target(session: &Value) -> Option<(String, String)> {
 
 pub(crate) fn quote_shell_double_arg(value: &str) -> String {
     #[cfg(windows)]
-    return format!("'{}'", value.replace('\'', "''"));
+    return crate::platform::shell::powershell_single_quote(value);
     #[cfg(not(windows))]
     format!(
         "\"{}\"",
@@ -240,7 +240,7 @@ pub(crate) fn quote_shell_double_arg(value: &str) -> String {
 
 pub(crate) fn quote_shell_arg(value: &str) -> String {
     #[cfg(windows)]
-    return format!("'{}'", value.replace('\'', "''"));
+    return crate::platform::shell::powershell_single_quote(value);
     #[cfg(not(windows))]
     format!("'{}'", value.replace('\'', "'\\''"))
 }

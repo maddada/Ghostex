@@ -141,6 +141,30 @@ pub fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+/// The inside of a PowerShell single-quoted string for `text`: every character PowerShell reads
+/// as a single quote is doubled.
+///
+/// CDXC:PlatformSupport 2026-10-25 WHY:
+/// PowerShell ends a single-quoted string at U+0027 and also at the typographic quotes U+2018, U+2019, U+201A and U+201B. Doubling only the ASCII quote let a folder name, session title or prompt holding a curly quote close the literal, so the session startup failed to parse or ran the rest of the value as script (security audit 2026-10-25). Every PowerShell script Ghostex writes quotes values through this or `powershell_single_quote`.
+/// SEE-ALSO: apps/desktop/src/app/helpers/remote/windows.rs, apps/mobile/app/src/remote/powershell.ts.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn powershell_single_quoted_content(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len() + 2);
+    for ch in text.chars() {
+        if matches!(ch, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            escaped.push(ch);
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
+/// `text` as one PowerShell single-quoted string literal.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) fn powershell_single_quote(text: &str) -> String {
+    format!("'{}'", powershell_single_quoted_content(text))
+}
+
 impl PlatformShell {
     fn new(path: impl Into<String>) -> Self {
         let executable = path.into();
@@ -206,7 +230,7 @@ impl PlatformShell {
         if matches!(self.kind, PlatformShellKind::PowerShell) {
             return format!(
                 "& '{}' {}",
-                self.executable.replace('\'', "''"),
+                powershell_single_quoted_content(&self.executable),
                 powershell_script_args(script, !interactive).join(" ")
             );
         }

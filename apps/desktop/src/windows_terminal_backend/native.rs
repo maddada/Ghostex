@@ -26,7 +26,7 @@ pub(super) fn invocation(command: Option<String>, cwd: Option<&Path>) -> (String
             "{}{}",
             cwd.map(|path| format!(
                 "Set-Location -LiteralPath '{}'; ",
-                path.to_string_lossy().replace('\'', "''")
+                crate::app::helpers::gpui_powershell_single_quoted_content(&path.to_string_lossy())
             ))
             .unwrap_or_default(),
             command.unwrap_or_default()

@@ -10,7 +10,7 @@ use std::{io::Read, path::Path, sync::mpsc, time::Duration};
 pub(crate) fn command(agent: &str, notify_path: &Path) -> String {
     let executable = std::env::current_exe().unwrap_or_default();
     let notify = notify_path.to_string_lossy();
-    let quote = |text: &str| format!("'{}'", text.replace('\'', "''"));
+    let quote = crate::platform::shell::powershell_single_quote;
     if agent == "codex" {
         return codex_command(&executable, notify_path, quote);
     }

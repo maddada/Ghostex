@@ -69,7 +69,7 @@ pub(crate) fn list_command(program: &str, short: bool) -> String {
 }
 
 fn quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
+    crate::platform::shell::powershell_single_quote(text)
 }
 
 pub(crate) fn build_zmx_attach_command(input: ZmxAttachCommandInput) -> String {

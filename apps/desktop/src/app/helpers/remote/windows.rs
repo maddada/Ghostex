@@ -2,8 +2,24 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use flate2::{Compression, write::GzEncoder};
 use std::io::Write;
 
+/// The inside of a PowerShell single-quoted string for `value`: every character PowerShell reads as
+/// a single quote (U+0027 and the typographic U+2018, U+2019, U+201A, U+201B) is doubled, so a
+/// path or name holding a curly quote cannot close the literal.
+/// CDXC:PlatformSupport 2026-10-25 SEE-ALSO:
+/// server/src/platform/shell.rs `powershell_single_quoted_content` (gxserver) and apps/mobile/app/src/remote/powershell.ts (phone) must double the same five characters.
+pub(crate) fn gpui_powershell_single_quoted_content(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    for ch in value.chars() {
+        if matches!(ch, '\'' | '\u{2018}' | '\u{2019}' | '\u{201A}' | '\u{201B}') {
+            escaped.push(ch);
+        }
+        escaped.push(ch);
+    }
+    escaped
+}
+
 pub(crate) fn gpui_powershell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
+    format!("'{}'", gpui_powershell_single_quoted_content(value))
 }
 
 pub(crate) const GPUI_REMOTE_POWERSHELL_PRELUDE: &str = "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Console]::InputEncoding=[Text.UTF8Encoding]::new($false); [Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); $OutputEncoding=[Console]::OutputEncoding; ";

@@ -128,7 +128,7 @@ try {{
 
 #[cfg(target_os = "windows")]
 pub(crate) fn gpui_powershell_single_quote(value: &str) -> String {
-    value.replace('\'', "''")
+    super::gpui_powershell_single_quoted_content(value)
 }
 
 pub(crate) fn gpui_command_action_execution_text(command: &str, run_id: &str) -> String {

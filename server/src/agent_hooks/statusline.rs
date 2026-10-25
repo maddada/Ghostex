@@ -228,7 +228,7 @@ fn agent_statusline_command(script: &Path, wrapped: Option<&str>) -> String {
             .unwrap_or_default();
         return format!("{executable} {WINDOWS_STATUSLINE_VERB} '{script}'{wrapped}");
     }
-    let quote = |text: &str| format!("'{}'", text.replace('\'', "''"));
+    let quote = crate::platform::shell::powershell_single_quote;
     let wrapped = wrapped
         .map(|wrapped| format!(" {}", quote(&wrapped)))
         .unwrap_or_default();

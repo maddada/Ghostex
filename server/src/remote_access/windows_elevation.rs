@@ -152,8 +152,8 @@ exit $p.ExitCode
     )
 }
 
-// Inside a single-quoted PowerShell string the only special character is
-// the quote itself, written as two quotes.
+// Inside a single-quoted PowerShell string the only special characters are
+// the single quotes (ASCII and typographic), each written twice.
 fn single_quoted_literal(text: &str) -> String {
-    text.replace('\'', "''")
+    crate::platform::shell::powershell_single_quoted_content(text)
 }

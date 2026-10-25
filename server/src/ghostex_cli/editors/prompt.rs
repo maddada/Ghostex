@@ -482,7 +482,7 @@ pub(super) fn machine_editor_args(command: &str, file_path: &str) -> Vec<String>
         let shell = crate::platform::shell::command_shell();
         let script = format!(
             "& {command} '{}'; exit $LASTEXITCODE",
-            file_path.replace('\'', "''")
+            crate::platform::shell::powershell_single_quoted_content(file_path)
         );
         let mut args = vec![shell.executable.clone()];
         args.extend(shell.script_args(&script));

@@ -439,7 +439,7 @@ fn catch_up_prompt(
 /// A prompt argument for the shell that runs it: PowerShell on Windows, a POSIX shell elsewhere.
 pub(crate) fn quote_prompt_argument(prompt: &str) -> String {
     if cfg!(windows) {
-        format!("'{}'", prompt.replace('\'', "''"))
+        crate::platform::shell::powershell_single_quote(prompt)
     } else {
         quote_shell_arg(prompt)
     }
