@@ -554,6 +554,11 @@ stage_code_server_component_asset() {
 			--pattern "$(basename "$asset_sidecar")" \
 			--dir "$asset_dir" \
 			--clobber
+		# Store bytes are sealed only when a Ghostex release workflow on main built and attested them
+		# (CDXC:Release 2026-10-25 in tooling/release-gpui/publish-component.mjs).
+		GHOSTEX_PUBLISH_COMPONENT="$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
+			node --input-type=module -e 'const { requireGhostexAttestation } = await import(process.env.GHOSTEX_PUBLISH_COMPONENT); requireGhostexAttestation(process.argv[1], process.argv[2]);' \
+			"$asset_path" "$(basename "$asset_path")"
 	else
 		for required_path in \
 			"$WEB_DIR/code-server/out/node/entry.js" \

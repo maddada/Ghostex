@@ -310,7 +310,7 @@ if ($OnDemandComponents) {
     Remove-Item -Recurse -Force $CefComponentStage
     & node (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs") `
         --metadata-only `
-        --reuse-published `
+        --require-published-match `
         --component cef `
         --version $CefComponentVersion `
         --platform "windows-$ReleaseArch" `
@@ -427,7 +427,7 @@ if ($WslCodeServerArchive -and (Test-Path $WslCodeServerArchive)) {
     )
     & node (Join-Path $RepoRoot "tooling/release-gpui/publish-component.mjs") `
         --metadata-only `
-        --reuse-published `
+        --require-published-match `
         --component code-server `
         --version $ComponentVersion `
         --platform "windows-$ReleaseArch" `

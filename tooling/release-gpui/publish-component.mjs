@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { authenticateComponentChecksumSidecar, validateOnDemandManifestV2 } from './on-demand-manifest.mjs';
@@ -152,6 +153,84 @@ function runGh(args, { allowFailure = false } = {}) {
   return result;
 }
 
+/**
+ * Refuses a component archive unless a Ghostex release workflow on main built it: a GitHub build
+ * attestation signed by maddada/Ghostex from refs/heads/main whose subject names this exact asset
+ * with these bytes.
+ *
+ * CDXC:Release 2026-10-25 WHY:
+ * The components repository is a mirror, not a source of truth: reuse used to accept whatever bytes it served after checking them only against the store's own digest and sidecar, so a leaked COMPONENTS_GITHUB_TOKEN could put attacker-chosen code into the next signed release (security audit 2026-10-25, user decision Q3). `gh attestation verify` binds only the digest, so the subject name is checked too; otherwise an older genuine build could be replayed under a newer version's tag. A component published before its workflow attested it fails here: give it a new component version and let the release rebuild it rather than exempting it.
+ * SEE-ALSO: the attest steps in .github/workflows/release-gpui-code-server*.yml, apps/desktop/scripts/prepare-macos-code-server.sh.
+ */
+export function requireGhostexAttestation(filePath, assetName) {
+  const result = spawnSync(
+    'gh',
+    [
+      'attestation',
+      'verify',
+      filePath,
+      '--repo',
+      APP_RELEASE_GITHUB_REPO,
+      '--signer-repo',
+      APP_RELEASE_GITHUB_REPO,
+      '--source-ref',
+      'refs/heads/main',
+      '--format',
+      'json',
+    ],
+    { encoding: 'utf8' }
+  );
+  if (result.status !== 0) {
+    throw new Error(
+      `Refusing to reuse ${assetName}: no verifiable ${APP_RELEASE_GITHUB_REPO} build attestation (${(result.stderr || result.stdout || 'gh attestation verify failed').trim()})`
+    );
+  }
+  const digest = sha256File(filePath);
+  let verified = [];
+  try {
+    verified = JSON.parse(result.stdout);
+  } catch {
+    throw new Error(`Refusing to reuse ${assetName}: gh attestation verify printed no JSON`);
+  }
+  const named = (Array.isArray(verified) ? verified : []).some((entry) =>
+    (entry?.verificationResult?.statement?.subject ?? []).some(
+      (subject) => subject?.name === assetName && subject?.digest?.sha256 === digest
+    )
+  );
+  if (!named) {
+    throw new Error(`Refusing to reuse ${assetName}: no ${APP_RELEASE_GITHUB_REPO} attestation names this asset with these bytes`);
+  }
+}
+
+/**
+ * For an archive this run built itself: when the store already has one under the same name, its
+ * bytes must equal ours. The local bytes are what get sealed; a different published file stops the
+ * release instead of silently replacing what was built.
+ */
+function requirePublishedMatch({ assetDir, component, componentVersion, platform, repo }) {
+  const tag = `${component}-${componentVersion}`;
+  const assetName = `${component}-${componentVersion}-${platform}.tar.gz`;
+  const localPath = path.resolve(assetDir, assetName);
+  if (!existsSync(localPath)) throw new Error(`The locally built component ${assetName} is missing`);
+  const release = inspectRelease({ repo, tag });
+  if (!release.exists || !release.assets.some((asset) => asset.name === assetName)) return;
+  const scratch = mkdtempSync(path.join(os.tmpdir(), 'ghostex-component-'));
+  try {
+    runGh(['release', 'download', tag, '--repo', repo, '--pattern', assetName, '--dir', scratch]);
+    const published = sha256File(path.join(scratch, assetName));
+    const local = sha256File(localPath);
+    if (published !== local) {
+      throw new Error(
+        `The published ${tag}/${assetName} (${published}) differs from the one this build made (${local}). ` +
+          'Rebuild from the same inputs, or give the component a new version; the published file is never adopted.'
+      );
+    }
+    console.log(`Published component ${tag}/${assetName} matches the local build`);
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
 function reusePublishedAsset({ assetDir, component, componentVersion, platform, repo, requireSha256Sidecar = false }) {
   const tag = `${component}-${componentVersion}`;
   const assetName = `${component}-${componentVersion}-${platform}.tar.gz`;
@@ -180,6 +259,7 @@ function reusePublishedAsset({ assetDir, component, componentVersion, platform, 
         `${localSize}/${localDigest}; expected ${remote.size ?? 'unknown'}/${remoteDigest || 'unavailable'}`
     );
   }
+  requireGhostexAttestation(localPath, assetName);
   console.log(`Reused published component asset ${tag}/${assetName}`);
   return true;
 }
@@ -258,7 +338,7 @@ function uploadAssetIdempotently({ asset, repo, tag }) {
 }
 
 function parseArguments(argv) {
-  const options = { dryRun: false, metadataOnly: false, reusePublished: false };
+  const options = { dryRun: false, metadataOnly: false, reusePublished: false, requirePublishedMatch: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === '--dry-run') {
@@ -271,6 +351,10 @@ function parseArguments(argv) {
     }
     if (argument === '--reuse-published') {
       options.reusePublished = true;
+      continue;
+    }
+    if (argument === '--require-published-match') {
+      options.requirePublishedMatch = true;
       continue;
     }
     if (argument === '--require-sha256-sidecars') {
@@ -344,6 +428,18 @@ async function main() {
   const tag = options.tag ?? `${component}-${componentVersion}`;
   requireIdentifier(tag, 'tag');
   if (!options['asset-dir']) throw new Error('--asset-dir is required');
+  if (options.reusePublished && options.requirePublishedMatch) {
+    throw new Error('--reuse-published and --require-published-match are exclusive');
+  }
+  if (options.requirePublishedMatch) {
+    requirePublishedMatch({
+      assetDir: options['asset-dir'],
+      component,
+      componentVersion,
+      platform: requireIdentifier(options.platform, 'platform'),
+      repo,
+    });
+  }
   if (options.reusePublished) {
     const platform = requireIdentifier(options.platform, 'platform');
     reusePublishedAsset({

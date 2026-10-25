@@ -505,7 +505,7 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
 	rm -rf "$CEF_STAGE"
 	node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
 		--metadata-only \
-		--reuse-published \
+		--require-published-match \
 		--component cef \
 		--version "$CEF_COMPONENT_VERSION" \
 		--platform "windows-$RELEASE_ARCH" \
@@ -652,7 +652,7 @@ if [[ "$ON_DEMAND_COMPONENTS" == "1" ]]; then
 	printf '%s  %s\n' "$CODE_SERVER_ASSET_SHA256" "$(basename "$CODE_SERVER_ASSET")" >"$CODE_SERVER_ASSET.sha256"
 	node "$REPO_ROOT/tooling/release-gpui/publish-component.mjs" \
 		--metadata-only \
-		--reuse-published \
+		--require-published-match \
 		--component code-server \
 		--version "$CODE_SERVER_VERSION" \
 		--platform "windows-$RELEASE_ARCH" \
