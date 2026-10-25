@@ -543,7 +543,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Clipboard 2026-09-25 WHY:
-    /// A remote terminal runs on the remote machine, so a dropped item's local path names nothing the agent there can open. Drops on a remote Agents or command terminal therefore upload like the terminal's Attach File or Folder button and paste the remote references; local terminals keep the typed paths.
+    /// A remote terminal runs on the remote machine, so a dropped item's local path names nothing the agent there can open. Drops on a remote Agents or command terminal therefore upload like the terminal's Attach File or Folder button and paste the remote references; local terminals get the local paths, escaped and pasted (see `dropped_path_terminal_word`).
     pub(crate) fn insert_paths_into_gpui_engine_terminal(
         &mut self,
         target: GpuiEngineTerminalEventTarget,
@@ -570,20 +570,35 @@ impl GhostexGpuiApp {
             return;
         }
         let mut next_image_number = 1usize;
-        let text = paths
-            .iter()
-            .map(|path| {
-                if is_project_board_image_file_path(path) {
-                    let markdown =
-                        terminal_clipboard_markdown_image_reference(path, next_image_number);
-                    next_image_number += 1;
-                    markdown
-                } else {
-                    path.to_string_lossy().into_owned()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" ");
+        let mut skipped = 0usize;
+        let mut parts = Vec::with_capacity(paths.len());
+        for path in paths {
+            let Some(word) = dropped_path_terminal_word(path) else {
+                skipped += 1;
+                continue;
+            };
+            let raw = path.to_string_lossy();
+            if is_project_board_image_file_path(path)
+                && !raw.contains(DROPPED_IMAGE_REFERENCE_UNSAFE_CHARACTERS)
+            {
+                parts.push(terminal_clipboard_markdown_image_reference(
+                    path,
+                    next_image_number,
+                ));
+                next_image_number += 1;
+            } else {
+                parts.push(word);
+            }
+        }
+        if skipped > 0 {
+            self.dispatch_gpui_workspace_action_toast(
+                "warning",
+                "Some dropped items were not inserted",
+                "Names with line breaks or other control characters could run commands in the terminal, so they were skipped.",
+                cx,
+            );
+        }
+        let text = parts.join(" ");
         if text.is_empty() {
             return;
         }
@@ -598,7 +613,11 @@ impl GhostexGpuiApp {
                 .map(|record| record.view.clone()),
         };
         if let Some(view) = view {
-            view.update(cx, |view, cx| view.send_text_input(&text, cx));
+            // Paste semantics, like Cmd+V and the Attach button: bracketed paste when the program
+            // asked for it, unsafe bytes stripped.
+            view.update(cx, |view, cx| {
+                view.paste_text(&text, cx);
+            });
         }
     }
 
@@ -693,4 +712,56 @@ impl GhostexGpuiApp {
             .chain(self.command_gpui_engine_terminals.values())
             .find(|record| record.runtime_session_id == runtime_session_id)
     }
+}
+
+/// Characters that keep a dropped image as a plain quoted path instead of an `[Image #N](path)`
+/// reference: inside the reference the path stays raw (agents and the chat parse that shape), so
+/// a name with one of these could still start a command if the line reached a shell.
+const DROPPED_IMAGE_REFERENCE_UNSAFE_CHARACTERS: &[char] = &['$', '`', ';', '|', '&', '<', '>'];
+
+/// One inert shell word for a dropped local path, or `None` when the name is not UTF-8 or holds a
+/// control character (line feed, carriage return, escape, tab) that no quoting stops a line editor
+/// from acting on.
+///
+/// CDXC:Clipboard 2026-10-25 WHY:
+/// Drops used to type each path raw (`send_text_input`), so a file named with a line break ran a command the moment it was dropped at a shell prompt, and one with `$(...)` ran it on Enter (security audit 2026-10-25). Paths are now escaped the way upstream Ghostty's `Shell.escape` does (single-quoted for PowerShell on Windows) and pasted with bracketed paste, as Cmd+V is.
+fn dropped_path_terminal_word(path: &std::path::Path) -> Option<String> {
+    let raw = path.to_str()?;
+    if raw.chars().any(char::is_control) {
+        return None;
+    }
+    if cfg!(windows) {
+        return Some(gpui_powershell_quote(raw));
+    }
+    let mut out = String::with_capacity(raw.len() + 8);
+    for ch in raw.chars() {
+        if matches!(
+            ch,
+            '\\' | ' '
+                | '('
+                | ')'
+                | '['
+                | ']'
+                | '{'
+                | '}'
+                | '<'
+                | '>'
+                | '"'
+                | '\''
+                | '`'
+                | '!'
+                | '#'
+                | '$'
+                | '&'
+                | ';'
+                | '|'
+                | '*'
+                | '?'
+                | '~'
+        ) {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
+    Some(out)
 }
