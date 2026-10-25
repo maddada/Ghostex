@@ -66,7 +66,7 @@ pub(crate) fn file_open_target_for_path(path: &std::path::Path) -> SharedFileOpe
 /// not UTF-8) opens in the system app instead of Files' "Binary files are not previewed" notice.
 ///
 /// CDXC:Navigation 2026-10-17 DECISION:
-/// User (Q218): "Yes, binary files open in the system app": a binary file picked in Quick Access's Files tab, or opened from a chat or terminal link, that the Files view can't show opens in the system app. A remote project's file keeps the Files notice, because this computer's apps cannot reach it, so the remote route never asks here.
+/// User (Q218): "Yes, binary files open in the system app": a binary file picked in Quick Access's Files tab, or opened from a chat or terminal link, that the Files view can't show opens in the system app. A remote project's file keeps the Files notice, because this computer's apps cannot reach it, so the remote route never asks here. Since 2026-10-25 a chat or terminal link to a runnable file asks first (session_chat/runnable_links.rs).
 pub(crate) fn local_file_open_target(path: &std::path::Path) -> SharedFileOpenTarget {
     let target = file_open_target_for_path(path);
     let kind = DocsFileKind::for_path(&path.to_string_lossy());

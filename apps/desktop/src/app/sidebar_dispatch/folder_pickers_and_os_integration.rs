@@ -148,12 +148,48 @@ impl GhostexGpuiApp {
                 .map(|(_, value)| value.into_owned())
         };
         if action == "terminal" {
-            self.open_gpui_os_integration_quick_terminal(
-                query_value("command"),
-                query_value("cwd"),
-                query_value("title"),
+            let cwd = query_value("cwd");
+            let title = query_value("title");
+            let Some(command) = query_value("command").filter(|command| !command.trim().is_empty())
+            else {
+                self.open_gpui_os_integration_quick_terminal(None, cwd, title, cx);
+                return;
+            };
+            // A link can come from any web page or app, so its command runs only once the reader
+            // has seen it and chosen Run; Cancel is the default (CDXC:SessionChat 2026-10-25 in
+            // session_chat/runnable_links.rs).
+            const SHOWN_COMMAND_CHARS: usize = 2000;
+            let mut shown = command
+                .chars()
+                .take(SHOWN_COMMAND_CHARS)
+                .collect::<String>();
+            if command.chars().count() > SHOWN_COMMAND_CHARS {
+                shown.push_str("…");
+            }
+            let folder = cwd
+                .as_deref()
+                .map(str::trim)
+                .filter(|folder| !folder.is_empty())
+                .map(|folder| format!(" in {folder}"))
+                .unwrap_or_default();
+            let detail = format!(
+                "{shown}\n\nA ghostex:// link asked Ghostex to run this command in a new terminal{folder}. Run it only if you opened this link yourself and trust it."
+            );
+            let answer = window.prompt(
+                gpui::PromptLevel::Warning,
+                "Run a command from a link?",
+                Some(&detail),
+                &["Cancel", "Run"],
                 cx,
             );
+            cx.spawn(async move |this, cx| {
+                if answer.await == Ok(1) {
+                    let _ = this.update(cx, |this, cx| {
+                        this.open_gpui_os_integration_quick_terminal(Some(command), cwd, title, cx);
+                    });
+                }
+            })
+            .detach();
             return;
         }
         if action == "open" || action == "edit" {

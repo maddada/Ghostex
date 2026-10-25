@@ -1607,6 +1607,9 @@ the rest and Open file opens it in Editor or Files, just like a file reference
 pill; Copy path and Open file location sit beside it. Enable Show file edit previews in Settings > Chat to open every row to its
 first seven lines by default. Local folder links in desktop chat open your system file explorer; remote
 folder links open in this computer's Code view so you can browse the remote files.
+A link to an app shows it in the file explorer instead of starting it, and a link
+to a program, script or installer asks before opening it (Show in Finder is the
+default; Open Anyway opens it).
 File reference pills in the composer also open with one click using the same
 Code/Files preferences as transcript links. Double-click a composer pill to edit
 its reference text. Every file the chat shows has Copy Path and the location row:
@@ -2223,7 +2226,8 @@ does not compile, terminals keep their normal look. Windows and Linux are not
 supported yet.
 
 Terminal links (`ghostex://terminal`) without a folder open in the active local
-project. A folder supplied in the link takes precedence.
+project. A folder supplied in the link takes precedence. A link that carries a
+command shows the command and asks before running it.
 
 Related settings: `terminalFontFamily`, `terminalFontSize`,
 `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,

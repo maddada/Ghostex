@@ -14,6 +14,8 @@ use crate::app::session_chat_context_menu::{
 use crate::app::window::*;
 use crate::*;
 
+use super::runnable_links::{gpui_path_is_launching_bundle, gpui_path_is_runnable_file};
+
 impl GhostexGpuiApp {
     /*
     CDXC:SessionChat 2026-08-03:
@@ -150,8 +152,14 @@ impl GhostexGpuiApp {
             }
         };
         // CDXC:SessionChat 2026-09-23 DECISION:
-        // User: local folder links open in the system file explorer; remote folder links are browsed in this computer's Code view. This replaces the earlier explorer-only rule for remote folders.
+        // User: local folder links open in the system file explorer; remote folder links are browsed in this computer's Code view. This replaces the earlier explorer-only rule for remote folders. Since 2026-10-25 (runnable_links.rs) a folder macOS would launch, such as an app bundle, is shown in the file explorer instead of opened.
         if resolved.is_directory {
+            if gpui_path_is_launching_bundle(&resolved.file_path) {
+                if let Err(message) = gpui_reveal_path_in_finder(&resolved.file_path) {
+                    self.report_session_chat_file_open_failure(&message, cx);
+                }
+                return;
+            }
             if gpui_open_path(&resolved.file_path).is_err() {
                 self.report_session_chat_file_open_failure(
                     &format!("Could not open that folder in {GPUI_FILE_MANAGER_NAME}."),
@@ -208,6 +216,10 @@ impl GhostexGpuiApp {
         };
         match &target {
             shared_settings::SharedFileOpenTarget::SystemApp => {
+                if gpui_path_is_runnable_file(&file_path) {
+                    self.open_runnable_file_after_confirming(file_path, window, cx);
+                    return;
+                }
                 if gpui_open_path(&file_path).is_err() {
                     self.report_session_chat_file_open_failure(
                         "The operating system could not open that file.",
