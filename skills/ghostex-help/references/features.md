@@ -3625,7 +3625,10 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   off, and its actions (Edit, Details, Remove, Reinstall) appear when you hover
   it. Extension commands use the active local project's folder unless the
   extension supplies a folder; relative folders are resolved inside the active
-  project.
+  project. Installing or updating a third-party extension first lists what it
+  asks for (permissions, a background process, a remote website) and grants only
+  that; an update always shows the list again, and permissions you removed stay
+  removed when it updates.
   Features are whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
   default), Cloud Boxes (off by default; macOS and Linux only, not listed on

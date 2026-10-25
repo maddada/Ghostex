@@ -207,10 +207,21 @@ fn install_extension(
     let id = optional_text(params, "id");
     let url = optional_text(params, "url");
     let sha256 = optional_text(params, "sha256");
+    let approval = params
+        .get("approval")
+        .filter(|value| !value.is_null())
+        .map(|value| serde_json::from_value::<super::ExtensionInstallApproval>(value.clone()))
+        .transpose()
+        .map_err(|error| {
+            ExtensionError::bad_request(format!("installExtension approval is invalid: {error}"))
+        })?;
+    let approval = approval.as_ref();
     match (local_path, id, url, sha256) {
-        (Some(path), None, None, None) => registry.install_local(&PathBuf::from(path)),
-        (None, Some(id), Some(url), Some(sha256)) => registry.install_zip(&id, &url, &sha256),
-        (None, Some(id), None, None) => registry.install_from_catalog(&id),
+        (Some(path), None, None, None) => registry.install_local(&PathBuf::from(path), approval),
+        (None, Some(id), Some(url), Some(sha256)) => {
+            registry.install_zip(&id, &url, &sha256, approval)
+        }
+        (None, Some(id), None, None) => registry.install_from_catalog(&id, approval),
         _ => Err(ExtensionError::bad_request(
             "installExtension requires localPath, id, or id + url + sha256.",
         )),

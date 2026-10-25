@@ -3,8 +3,8 @@ use std::{collections::BTreeMap, fs, io::Write, path::Path};
 use uuid::Uuid;
 
 use super::{
-    ExtensionError, ExtensionManifest, ExtensionResult, ExtensionStatePatch, ExtensionStoreEntry,
-    ExtensionTerminalPlacement,
+    ExtensionError, ExtensionInstallApproval, ExtensionManifest, ExtensionResult,
+    ExtensionStatePatch, ExtensionStoreEntry, ExtensionTerminalPlacement,
 };
 
 pub(crate) type ExtensionStore = BTreeMap<String, ExtensionStoreEntry>;
@@ -77,15 +77,36 @@ pub(crate) fn default_store_entry(manifest: &ExtensionManifest) -> ExtensionStor
             .collect(),
         storage: BTreeMap::new(),
         version: manifest.version.clone(),
-        granted_permissions: manifest.permissions.clone(),
+        // Grants come only from an install the user approved; a payload with no store entry gets none.
+        granted_permissions: Vec::new(),
     }
 }
 
+/// The stored state for a payload being installed over `previous`.
+///
+/// CDXC:Extensions 2026-10-25 WHY:
+/// Every install used to grant whatever the new payload's manifest declared, so clicking Update (which skipped the consent dialog) silently granted newly declared permissions such as exec, and a reinstall brought back permissions the user had revoked (security audit 2026-10-25). Grants now come from the approval the consent dialog sends (only permissions it listed), or, for an update without one, from the previous grants the new version still declares; a first install without an approval (`ghostex extensions install` or install-local, typed by the user) still grants what it declares.
 pub(crate) fn store_entry_for_install(
     manifest: &ExtensionManifest,
     previous: Option<&ExtensionStoreEntry>,
+    approval: Option<&ExtensionInstallApproval>,
 ) -> ExtensionStoreEntry {
     let mut entry = default_store_entry(manifest);
+    entry.granted_permissions = match (approval, previous) {
+        (Some(approval), _) => manifest
+            .permissions
+            .iter()
+            .copied()
+            .filter(|permission| approval.permissions.contains(permission))
+            .collect(),
+        (None, Some(previous)) => previous
+            .granted_permissions
+            .iter()
+            .copied()
+            .filter(|permission| manifest.permissions.contains(permission))
+            .collect(),
+        (None, None) => manifest.permissions.clone(),
+    };
     let Some(previous) = previous else {
         return entry;
     };
@@ -108,6 +129,59 @@ pub(crate) fn store_entry_for_install(
         }
     }
     entry
+}
+
+/// Refuses an install that asks for more than the user approved: with an approval, a different version or capabilities it did not list; without one, an update that adds a background process or a new remote website (those need the consent dialog).
+pub(crate) fn check_install_approval(
+    manifest: &ExtensionManifest,
+    previous: Option<&ExtensionManifest>,
+    approval: Option<&ExtensionInstallApproval>,
+) -> ExtensionResult<()> {
+    let runs_command = |manifest: &ExtensionManifest| {
+        manifest
+            .server
+            .as_ref()
+            .is_some_and(|server| server.command.is_some())
+    };
+    let remote_url = |manifest: &ExtensionManifest| {
+        manifest
+            .server
+            .as_ref()
+            .and_then(|server| server.url.clone())
+    };
+    match approval {
+        Some(approval) => {
+            let new_url = remote_url(manifest);
+            if approval.version != manifest.version
+                || manifest
+                    .permissions
+                    .iter()
+                    .any(|permission| !approval.permissions.contains(permission))
+                || (runs_command(manifest) && !approval.background_process)
+                || (new_url.is_some() && new_url != approval.remote_url)
+            {
+                return Err(ExtensionError::bad_request(format!(
+                    "This version of {} asks for more than you approved. Review it again before installing.",
+                    manifest.name
+                )));
+            }
+        }
+        None => {
+            let Some(previous) = previous else {
+                return Ok(());
+            };
+            let new_url = remote_url(manifest);
+            if (runs_command(manifest) && !runs_command(previous))
+                || (new_url.is_some() && new_url != remote_url(previous))
+            {
+                return Err(ExtensionError::bad_request(format!(
+                    "This version of {} adds a background process or a remote website. Update it from Settings > Extensions so you can approve that first.",
+                    manifest.name
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn apply_state_patch(

@@ -54,6 +54,19 @@ pub enum ExtensionPermission {
     Clipboard,
 }
 
+/// What the user agreed to in the install consent: the version and the capabilities it listed.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExtensionInstallApproval {
+    pub version: String,
+    #[serde(default)]
+    pub permissions: Vec<ExtensionPermission>,
+    #[serde(default)]
+    pub background_process: bool,
+    #[serde(default)]
+    pub remote_url: Option<String>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExtensionKind {

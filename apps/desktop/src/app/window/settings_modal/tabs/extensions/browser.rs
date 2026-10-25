@@ -299,15 +299,24 @@ impl ExtensionsTab {
         );
     }
 
-    /// `installExtension(entry)`.
+    /// `installExtension(entry)`, with what the consent dialog showed as the approval, so gxserver
+    /// grants only the permissions listed there and refuses a payload that asks for more.
     pub(crate) fn install_extension(&mut self, name: String, cx: &mut Context<Self>) {
         if !self.has_transport(cx) {
             return;
         }
+        let approval = self.browser.consent_entry().map(|entry| {
+            json!({
+                "version": entry.version(),
+                "permissions": entry.permissions(),
+                "backgroundProcess": entry.runs_background_process(),
+                "remoteUrl": entry.remote_url(),
+            })
+        });
         self.run_for_extension(
             name.clone(),
             "/api/installExtension",
-            json!({ "id": name }),
+            json!({ "id": name, "approval": approval }),
             INSTALL_TIMEOUT,
             |page, value| {
                 if value["extension"].is_object() {

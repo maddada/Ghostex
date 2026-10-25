@@ -7,11 +7,12 @@ use std::{
 use crate::paths::GxserverPaths;
 
 use super::{
-    activate_staged_payload, apply_state_patch, catalog_zip_url, default_store_entry,
-    fetch_catalog, read_manifest, read_store, stage_local_payload, stage_zip_payload,
-    store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
-    ExtensionCatalogSnapshot, ExtensionError, ExtensionLaunchContext, ExtensionResult,
-    ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch, InstalledExtension,
+    activate_staged_payload, apply_state_patch, catalog_zip_url, check_install_approval,
+    default_store_entry, fetch_catalog, read_manifest, read_store, stage_local_payload,
+    stage_zip_payload, store_entry_for_install, validate_extension_id, write_store, ExtensionBadge,
+    ExtensionCatalogSnapshot, ExtensionError, ExtensionInstallApproval, ExtensionLaunchContext,
+    ExtensionResult, ExtensionRuntime, ExtensionRuntimeStatus, ExtensionStatePatch,
+    InstalledExtension,
 };
 
 #[derive(Clone)]
@@ -50,16 +51,24 @@ impl ExtensionRegistry {
         fetch_catalog(&self.extensions_dir)
     }
 
-    pub(crate) fn install_local(&self, source: &Path) -> ExtensionResult<InstalledExtension> {
+    pub(crate) fn install_local(
+        &self,
+        source: &Path,
+        approval: Option<&ExtensionInstallApproval>,
+    ) -> ExtensionResult<InstalledExtension> {
         let _guard = self.lock()?;
         let (work_dir, staged_payload, manifest) =
             stage_local_payload(&self.extensions_dir, source)?;
-        let result = self.activate_install(&staged_payload, manifest);
+        let result = self.activate_install(&staged_payload, manifest, approval);
         let _ = fs::remove_dir_all(work_dir);
         result
     }
 
-    pub(crate) fn install_from_catalog(&self, id: &str) -> ExtensionResult<InstalledExtension> {
+    pub(crate) fn install_from_catalog(
+        &self,
+        id: &str,
+        approval: Option<&ExtensionInstallApproval>,
+    ) -> ExtensionResult<InstalledExtension> {
         validate_extension_id(id)?;
         let _guard = self.lock()?;
         let snapshot = fetch_catalog(&self.extensions_dir)?;
@@ -74,7 +83,7 @@ impl ExtensionRegistry {
                 ))
             })?;
         let zip_url = catalog_zip_url(&snapshot.url, &entry.zip)?;
-        self.install_zip_locked(id, &zip_url, &entry.sha256)
+        self.install_zip_locked(id, &zip_url, &entry.sha256, approval)
     }
 
     pub(crate) fn install_zip(
@@ -82,9 +91,10 @@ impl ExtensionRegistry {
         id: &str,
         url: &str,
         expected_sha256: &str,
+        approval: Option<&ExtensionInstallApproval>,
     ) -> ExtensionResult<InstalledExtension> {
         let _guard = self.lock()?;
-        self.install_zip_locked(id, url, expected_sha256)
+        self.install_zip_locked(id, url, expected_sha256, approval)
     }
 
     pub(crate) fn uninstall(&self, id: &str) -> ExtensionResult<()> {
@@ -162,10 +172,11 @@ impl ExtensionRegistry {
         id: &str,
         url: &str,
         expected_sha256: &str,
+        approval: Option<&ExtensionInstallApproval>,
     ) -> ExtensionResult<InstalledExtension> {
         let (work_dir, staged_payload, manifest) =
             stage_zip_payload(&self.extensions_dir, id, url, expected_sha256)?;
-        let result = self.activate_install(&staged_payload, manifest);
+        let result = self.activate_install(&staged_payload, manifest, approval);
         let _ = fs::remove_dir_all(work_dir);
         result
     }
@@ -174,6 +185,7 @@ impl ExtensionRegistry {
         &self,
         staged_payload: &Path,
         manifest: super::ExtensionManifest,
+        approval: Option<&ExtensionInstallApproval>,
     ) -> ExtensionResult<InstalledExtension> {
         let id = manifest.name.clone();
         if id == "storybook" {
@@ -181,9 +193,11 @@ impl ExtensionRegistry {
                 "Storybook is now a built-in view. Open it from the project view picker.",
             ));
         }
+        let previous_manifest = read_manifest(&self.installed_dir().join(&id), Some(&id)).ok();
+        check_install_approval(&manifest, previous_manifest.as_ref(), approval)?;
         self.runtime.stop(&id)?;
         let mut store = read_store(&self.store_file)?;
-        let state = store_entry_for_install(&manifest, store.get(&id));
+        let state = store_entry_for_install(&manifest, store.get(&id), approval);
         activate_staged_payload(&self.installed_dir(), &id, staged_payload)?;
         store.insert(id.clone(), state.clone());
         write_store(&self.store_file, &store)?;
