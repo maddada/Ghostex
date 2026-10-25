@@ -191,6 +191,16 @@ impl GhostexGpuiApp {
         path: &str,
         cx: &mut gpui::Context<Self>,
     ) {
+        let trimmed = path.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > GPUI_PROJECT_CONTRACT_STRING_MAX_CHARS {
+            self.report_session_chat_file_locate_failure(
+                session_chat_file_resolution_error_message(
+                    GpuiSessionChatFileResolutionError::InvalidPath,
+                ),
+                cx,
+            );
+            return;
+        }
         let context = match self.session_chat_file_resolution_context(session_id) {
             Ok(context) => context,
             Err(error) => {
@@ -201,7 +211,7 @@ impl GhostexGpuiApp {
                 return;
             }
         };
-        let path = path.to_string();
+        let path = trimmed.to_string();
         let background = cx.background_executor().clone();
         cx.spawn(async move |this, cx| {
             let resolution = background
