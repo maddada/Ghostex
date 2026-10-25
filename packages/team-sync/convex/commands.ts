@@ -121,6 +121,11 @@ export const complete = mutation({
   },
 });
 
+/**
+ * Command types a member may queue directly. `slack.request` is queued only by the Slack flow's internal mutations (queueTicketWork, queueIssueCreation) with source "slack", because a Ghostex runs it as its own member's request.
+ */
+const MEMBER_COMMAND_TYPES = new Set(["ping"]);
+
 /** Queues a command for the caller or a teammate (Ghostex-originated work, and `ghostex team ping`). */
 export const enqueue = mutation({
   args: {
@@ -136,11 +141,13 @@ export const enqueue = mutation({
     if (!target || target.teamId !== me.teamId || target.removedAt !== undefined) {
       throw new ConvexError("No such teammate.");
     }
-    if (!args.type.trim()) throw new ConvexError("Pass a command type.");
+    const type = args.type.trim();
+    if (!type) throw new ConvexError("Pass a command type.");
+    if (!MEMBER_COMMAND_TYPES.has(type)) throw new ConvexError(`Teammates cannot queue "${type}" commands.`);
     return await ctx.db.insert("commands", {
       teamId: me.teamId,
       memberId,
-      type: args.type.trim(),
+      type,
       payload: args.payload ?? null,
       source: "ghostex",
       status: "pending",

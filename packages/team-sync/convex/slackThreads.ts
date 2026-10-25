@@ -1,7 +1,7 @@
-import { ConvexError, v } from "convex/values";
+import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import { mutation, query } from "./_generated/server";
+import { query } from "./_generated/server";
 import { normalizeTicket, requireMember } from "./lib/auth";
 
 const MESSAGES_PER_THREAD = 200;
@@ -140,63 +140,5 @@ export const getWorkingThread = query({
     if (!working) return null;
     const thread = await ctx.db.get(working.threadId);
     return thread ? await presentThread(ctx, thread, true) : null;
-  },
-});
-
-/** Links a Slack thread to a ticket (or moves it to another one). */
-export const linkToTicket = mutation({
-  args: {
-    memberToken: v.string(),
-    ticket: v.string(),
-    channelId: v.string(),
-    threadTs: v.string(),
-    permalink: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const me = await requireMember(ctx, args.memberToken);
-    const thread = await upsertThread(ctx, me.teamId, {
-      channelId: args.channelId,
-      threadTs: args.threadTs,
-      permalink: args.permalink,
-      ticket: normalizeTicket(args.ticket),
-    });
-    return thread._id;
-  },
-});
-
-/**
- * Records the ticket's working thread. A ticket has one: setting a different thread when one exists fails, and setting the same one again is a no-op.
- */
-export const setWorkingThread = mutation({
-  args: {
-    memberToken: v.string(),
-    ticket: v.string(),
-    channelId: v.string(),
-    threadTs: v.string(),
-    permalink: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const me = await requireMember(ctx, args.memberToken);
-    const ticket = normalizeTicket(args.ticket);
-    const existing = await workingThreadRow(ctx, me.teamId, ticket);
-    const thread = await upsertThread(ctx, me.teamId, {
-      channelId: args.channelId,
-      threadTs: args.threadTs,
-      permalink: args.permalink,
-      ticket,
-    });
-    if (existing) {
-      if (existing.threadId !== thread._id) {
-        throw new ConvexError(`${ticket} already has a working thread.`);
-      }
-      return thread._id;
-    }
-    await ctx.db.insert("ticketWorkingThreads", {
-      teamId: me.teamId,
-      ticket,
-      threadId: thread._id,
-      createdAt: Date.now(),
-    });
-    return thread._id;
   },
 });

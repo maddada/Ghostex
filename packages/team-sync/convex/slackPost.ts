@@ -63,6 +63,8 @@ export const openingPostOf = internalQuery({
     const commandId = ctx.db.normalizeId("commands", args.commandId);
     const command = commandId ? await ctx.db.get(commandId) : null;
     if (!command || command.memberId !== args.memberId || command.type !== "slack.request") return null;
+    // Only the Slack flow opens working threads; a member-queued command never names one.
+    if (command.source !== "slack" || command.createdBy !== undefined) return null;
     const post = (command.payload as { openingPost?: Partial<OpeningPost> | null } | null)?.openingPost;
     if (!post?.channelId || !post.ts || !Array.isArray(post.head)) return null;
     return { channelId: post.channelId, ts: post.ts, head: post.head.map(String), tags: String(post.tags ?? "") };
