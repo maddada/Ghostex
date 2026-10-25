@@ -675,28 +675,30 @@ pub(crate) fn build_commit_message_generation_shell_command(
     let stdin = Some(prompt.to_string());
     Ok(match agent.agent_id.as_str() {
         "codex" => {
-            let command = enforce_required_agent_permission_flag(&agent.command, "codex");
+            let command = one_shot_text_job_command(&agent.command, "codex");
             /*
             CDXC:Git 2026-10-01 DECISION:
             Commit message generation runs Codex on gpt-6-luna with high reasoning effort, and Claude on Sonnet 5.5 (claude-sonnet-5-5) at medium effort.
             */
             let command = format!(
-                "{command} exec --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"high\"'"
+                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"high\"'"
             );
             (command, stdin)
         }
         "cursor" => (
             format!(
                 "{} --print --mode ask --trust --output-format text {}",
-                agent.command,
+                one_shot_text_job_command(&agent.command, "cursor"),
                 crate::session_chat_catch_up::quote_prompt_argument(prompt)
             ),
             None,
         ),
         "claude" => {
-            let command = enforce_required_agent_permission_flag(&agent.command, "claude");
+            let command = one_shot_text_job_command(&agent.command, "claude");
             (
-                format!("{command} --model claude-sonnet-5-5 --effort medium -p"),
+                format!(
+                    "{command} --permission-mode dontAsk --model claude-sonnet-5-5 --effort medium -p"
+                ),
                 stdin,
             )
         }

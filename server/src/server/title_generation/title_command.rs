@@ -158,7 +158,8 @@ pub(crate) fn argument_title_generation_command(
 ) -> Option<String> {
     Some(match agent {
         "cursor" => format!(
-            "{command} --print --yolo --trust --model cursor-grok-4.5-low --output-format text {quoted_prompt}"
+            "{} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text {quoted_prompt}",
+            one_shot_text_job_command(command, "cursor")
         ),
         "grok" => format!(
             "{command} --model grok-4.5 --reasoning-effort low --output-format plain --no-alt-screen --no-plan --no-subagents --disable-web-search --max-turns 1 --single {quoted_prompt}"
@@ -178,15 +179,15 @@ pub(crate) fn argument_title_generation_command(
 pub(crate) fn stdin_title_generation_command(agent: &str, command: &str) -> Option<String> {
     Some(match agent {
         "codex" => {
-            let command = enforce_required_agent_permission_flag(command, "codex");
+            let command = one_shot_text_job_command(command, "codex");
             format!(
-                "{command} exec --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
+                "{command} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
             )
         }
         "claude" => {
-            let command = enforce_required_agent_permission_flag(command, "claude");
+            let command = one_shot_text_job_command(command, "claude");
             // CDXC:SessionTitles 2026-10-08 DECISION: User: "I want you to switch from haiku 4.5 to 5.5 for anything we used haiku for in this app (auto title etc)". The explicit id keeps an older CLI, whose `haiku` alias still means 4.5, from titling with 4.5.
-            format!("{command} -p --model claude-haiku-5-5 --effort low")
+            format!("{command} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low")
         }
         "empryo" => {
             format!("{command} --headless --quiet --no-genome --marionette-mode none --max-steps 1")

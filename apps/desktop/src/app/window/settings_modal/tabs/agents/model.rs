@@ -280,29 +280,33 @@ fn preview_command(agent: &str, command: Option<&str>) -> String {
     .to_string()
 }
 
-fn canonical_permission_command(agent: &str, command: &str) -> String {
-    let (canonical, paired, single): (&str, &[&str], &[&str]) = match agent {
+/// The configured command with its permission-bypass, approval and sandbox flags removed, as
+/// gxserver's `one_shot_text_job_command` (server/src/agents/accept_all.rs) builds the title job.
+fn one_shot_text_job_command(agent: &str, command: &str) -> String {
+    let (single, paired): (&[&str], &[&str]) = match agent {
         "codex" => (
-            "--yolo",
-            &["-a", "--ask-for-approval", "-s", "--sandbox"],
             &[
                 "--yolo",
                 "--approve-for-me",
                 "--dangerously-bypass-approvals-and-sandbox",
+                "--full-auto",
             ],
+            &["-a", "--ask-for-approval", "-s", "--sandbox"],
         ),
         "claude" => (
-            "--dangerously-skip-permissions",
-            &["--permission-mode"],
             &[
                 "--dangerously-skip-permissions",
                 "--allow-dangerously-skip-permissions",
             ],
+            &["--permission-mode"],
+        ),
+        "cursor" => (
+            &["--yolo", "--force", "-f", "--auto-review", "--plan"],
+            &["--mode"],
         ),
         _ => return command.to_string(),
     };
     let tokens: Vec<&str> = command.split_whitespace().collect();
-    let tokens: Vec<&str> = if tokens.is_empty() { vec![""] } else { tokens };
     let mut output: Vec<&str> = Vec::new();
     let mut index = 0;
     while index < tokens.len() {
@@ -328,7 +332,6 @@ fn canonical_permission_command(agent: &str, command: &str) -> String {
         output.push(token);
         index += 1;
     }
-    output.push(canonical);
     output.join(" ")
 }
 
@@ -339,7 +342,7 @@ fn here_doc(command: &str, prompt: &str) -> String {
 /// `getSessionTitleGenerationCommandPreview(agent, { command })`.
 pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> String {
     let command = preview_command(agent, command);
-    let permission = canonical_permission_command(agent, &command);
+    let read_only = one_shot_text_job_command(agent, &command);
     let prompt = settings_catalog().text(
         module::SETTINGS,
         "SESSION_TITLE_GENERATION_PROMPT_PLACEHOLDER",
@@ -352,15 +355,17 @@ pub(super) fn title_generation_preview(agent: &str, command: Option<&str>) -> St
     match agent {
         "codex" => here_doc(
             &format!(
-                "{permission} exec --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
+                "{read_only} exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-6-luna -c 'model_reasoning_effort=\"low\"'"
             ),
             &prompt,
         ),
         "cursor" => format!(
-            "{command} --print --yolo --trust --model cursor-grok-4.5-low --output-format text '{prompt}'"
+            "{read_only} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text '{prompt}'"
         ),
         "claude" => here_doc(
-            &format!("{permission} -p --model claude-haiku-5-5 --effort low"),
+            &format!(
+                "{read_only} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low"
+            ),
             &prompt,
         ),
         "grok" => format!(

@@ -37,9 +37,9 @@ use crate::{
     agents::{
         agent_metadata_title_revision, apply_created_session_identity,
         apply_live_process_session_identity, create_agent_session_params_for_project,
-        default_agent_command, dispatch_agent_endpoint, enforce_required_agent_permission_flag,
-        get_visible_terminal_title, is_terminal_auto_working_directory_title,
-        normalize_agent_hook_event_activity, read_agent_settings, read_first_user_input_draft,
+        default_agent_command, dispatch_agent_endpoint, get_visible_terminal_title,
+        is_terminal_auto_working_directory_title, normalize_agent_hook_event_activity,
+        one_shot_text_job_command, read_agent_settings, read_first_user_input_draft,
         read_text_from_map, reconcile_agent_metadata_title_for_session,
         resolve_project_agent_config, terminal_title_indicates_agent_identity, AgentEndpointError,
         FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,

@@ -3,32 +3,41 @@ use super::*;
 pub(crate) const GROK_PERMISSION_MODE_FLAG: &str = "--permission-mode";
 pub(crate) const GROK_BYPASS_PERMISSIONS_VALUE: &str = "bypassPermissions";
 
-pub(crate) fn enforce_required_agent_permission_flag(command: &str, agent_id: &str) -> String {
+/// The configured agent command for a one-shot text job (commit message, session title, Catch me
+/// up) with every permission-bypass, approval and sandbox flag removed; the job's builder then
+/// pins its own read-only mode (Codex `exec --sandbox read-only`, Claude `--permission-mode
+/// dontAsk`, Cursor `--mode ask`).
+///
+/// CDXC:AgentProviders 2026-10-25 WHY:
+/// These jobs used to force `--yolo` / `--dangerously-skip-permissions` (and Cursor's title job `--yolo`) whatever the Agent approvals policy said, while their prompt carries text other people write: a staged diff, a session's first message, the last 30 agent messages. A prompt injected there ran tools with the user's full authority and no sandbox (security audit 2026-10-25). The jobs only need text back, and print/exec modes never stop to ask, so they run read-only instead.
+pub(crate) fn one_shot_text_job_command(command: &str, agent_id: &str) -> String {
     let trimmed = command.trim();
     if trimmed.is_empty() {
         return String::new();
     }
-    let (canonical, single_token_alternatives, paired_alternatives): (&str, &[&str], &[&str]) =
-        match agent_id {
-            "codex" | "command-code" => (
+    let (single_token_alternatives, paired_alternatives): (&[&str], &[&str]) = match agent_id {
+        "codex" | "command-code" => (
+            &[
                 "--yolo",
-                &[
-                    "--yolo",
-                    "--approve-for-me",
-                    "--dangerously-bypass-approvals-and-sandbox",
-                ],
-                &["-a", "--ask-for-approval", "-s", "--sandbox"],
-            ),
-            "claude" => (
+                "--approve-for-me",
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--full-auto",
+            ],
+            &["-a", "--ask-for-approval", "-s", "--sandbox"],
+        ),
+        "claude" => (
+            &[
                 "--dangerously-skip-permissions",
-                &[
-                    "--dangerously-skip-permissions",
-                    "--allow-dangerously-skip-permissions",
-                ],
-                &["--permission-mode"],
-            ),
-            _ => return trimmed.to_string(),
-        };
+                "--allow-dangerously-skip-permissions",
+            ],
+            &["--permission-mode"],
+        ),
+        "cursor" => (
+            &["--yolo", "--force", "-f", "--auto-review", "--plan"],
+            &["--mode"],
+        ),
+        _ => return trimmed.to_string(),
+    };
     let tokens = trimmed.split_whitespace().collect::<Vec<_>>();
     let mut output = Vec::new();
     let mut index = 0;
@@ -62,7 +71,6 @@ pub(crate) fn enforce_required_agent_permission_flag(command: &str, agent_id: &s
         output.push(token);
         index += 1;
     }
-    output.push(canonical);
     output.join(" ")
 }
 
