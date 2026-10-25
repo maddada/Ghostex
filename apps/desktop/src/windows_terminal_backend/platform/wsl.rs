@@ -3,12 +3,15 @@ use super::{
 };
 use std::{
     env,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     process::{Child, Command, Output, Stdio},
+    time::{Duration, Instant},
 };
 
 use super::*;
+
+const WSL_PATH_CONVERSION_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Sets `ghostex_data_dir` and `ghostex_state_dir` the way Linux gxserver resolves them, for scripts
 /// that need a Ghostex folder without a round trip of their own.
@@ -111,7 +114,7 @@ pub(in crate::windows_terminal_backend) fn windows_path_for_wsl_path(
     else {
         return Err("This feature requires the WSL environment. Native PowerShell supports Windows agents and project terminals.".into());
     };
-    let output = hidden_command("wsl.exe")
+    let mut child = hidden_command("wsl.exe")
         .args([
             "--distribution",
             distribution.as_str(),
@@ -123,13 +126,38 @@ pub(in crate::windows_terminal_backend) fn windows_path_for_wsl_path(
         ])
         .arg(path)
         .stdin(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .output()
+        .spawn()
         .map_err(|_| "Could not translate the WSL project path into Windows.".to_string())?;
-    if !output.status.success() {
+    let deadline = Instant::now() + WSL_PATH_CONVERSION_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("WSL path conversion timed out.".to_string());
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("Could not translate the WSL project path into Windows.".to_string());
+            }
+        }
+    };
+    if !status.success() {
         return Err("Could not translate the WSL project path into Windows.".to_string());
     }
-    let translated = decode_windows_command_output(&output.stdout);
+    let mut stdout = Vec::new();
+    if let Some(mut pipe) = child.stdout.take() {
+        pipe.read_to_end(&mut stdout)
+            .map_err(|_| "Could not read the translated WSL project path.".to_string())?;
+    }
+    let translated = decode_windows_command_output(&stdout);
     let translated = translated.trim();
     let translated_path = PathBuf::from(translated);
     if translated.is_empty()
