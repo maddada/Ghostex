@@ -122,6 +122,9 @@ fn source_code_server_spawn_host_runtime(
         .arg(&user_data_dir)
         .arg("--extensions-dir")
         .arg(&extensions_dir);
+    // In the environment, not on the command line other accounts can read.
+    let runtime_key = source_code_server_new_launch_key();
+    command.env(SOURCE_CODE_SERVER_KEY_ENV, &runtime_key);
 
     #[cfg(windows)]
     {
@@ -143,6 +146,7 @@ fn source_code_server_spawn_host_runtime(
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
         runtime_origin: source_code_server_editor_origin(),
+        runtime_key: Some(runtime_key),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
         http_runtime_ready: readiness.http_runtime_ready,
@@ -210,7 +214,15 @@ pub(crate) fn source_code_server_spawn_runtime(
         settings.use_vscode_insiders_user_config,
         SOURCE_CODE_SERVER_OWNED_ENTRY,
     )?;
+    // WSL passes only the Windows variables WSLENV names into Linux.
+    let runtime_key = source_code_server_new_launch_key();
+    let wslenv = match std::env::var("WSLENV") {
+        Ok(existing) if !existing.is_empty() => format!("{existing}:{SOURCE_CODE_SERVER_KEY_ENV}"),
+        _ => SOURCE_CODE_SERVER_KEY_ENV.to_string(),
+    };
     command
+        .env(SOURCE_CODE_SERVER_KEY_ENV, &runtime_key)
+        .env("WSLENV", wslenv)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -228,6 +240,7 @@ pub(crate) fn source_code_server_spawn_runtime(
     Ok(SourceCodeServerRuntimeStartOutput {
         child,
         runtime_origin: source_code_server_editor_origin(),
+        runtime_key: Some(runtime_key),
         prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
         started_at,
         http_runtime_ready: readiness.http_runtime_ready,

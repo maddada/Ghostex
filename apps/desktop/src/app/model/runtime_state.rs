@@ -888,6 +888,7 @@ pub(crate) struct SharedSourceCodeServerRuntime {
     child: SharedSourceCodeServerChild,
     started_at: Option<Instant>,
     runtime_origin: String,
+    runtime_key: Option<String>,
     prompt_editor_ipc_ready: bool,
 }
 
@@ -905,6 +906,8 @@ pub(crate) struct SourceCodeServerRuntimeOwner {
     pub(crate) target: Option<SourceCodeServerRuntimeTarget>,
     pub(crate) settings: Option<SourceCodeServerRuntimeSettings>,
     pub(crate) runtime_origin: Option<String>,
+    /// The running editor's launch key (CDXC:CodeEditor 2026-10-25 in helpers/source_server/code_server.rs).
+    pub(crate) runtime_key: Option<String>,
     pub(crate) prompt_editor_ipc_ready: bool,
     pub(crate) pending_remote_prompt_editor_request: Option<PendingRemotePromptEditorRequest>,
 }
@@ -923,6 +926,7 @@ impl SourceCodeServerRuntimeOwner {
             target: None,
             settings: None,
             runtime_origin: None,
+            runtime_key: None,
             prompt_editor_ipc_ready: false,
             pending_remote_prompt_editor_request: None,
         }
@@ -993,6 +997,7 @@ impl SourceCodeServerRuntimeOwner {
             .then(|| {
                 source_code_server_runtime_url(
                     self.runtime_origin.as_deref()?,
+                    self.runtime_key.as_deref(),
                     target.project_path.as_path(),
                 )
             })
@@ -1061,6 +1066,7 @@ impl SourceCodeServerRuntimeOwner {
         self.settings = Some(settings);
         self.started_at = Some(started_at);
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1087,11 +1093,13 @@ impl SourceCodeServerRuntimeOwner {
         child: Child,
         started_at: Instant,
         runtime_origin: String,
+        runtime_key: Option<String>,
         prompt_editor_ipc_ready: bool,
     ) {
         self.replace_child(child);
         self.started_at = Some(started_at);
         self.runtime_origin = Some(runtime_origin);
+        self.runtime_key = runtime_key;
         self.prompt_editor_ipc_ready = prompt_editor_ipc_ready;
         self.set_ready_target(target, settings);
     }
@@ -1117,6 +1125,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = Some(target);
         self.settings = Some(settings);
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1134,6 +1143,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = Some(target);
         self.settings = Some(settings);
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1151,6 +1161,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = target;
         self.settings = settings;
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1169,6 +1180,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = target;
         self.settings = settings;
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1182,6 +1194,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = None;
         self.settings = None;
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
     }
 
@@ -1203,6 +1216,7 @@ impl SourceCodeServerRuntimeOwner {
             child: self.child.clone()?,
             started_at: self.started_at,
             runtime_origin: self.runtime_origin.clone()?,
+            runtime_key: self.runtime_key.clone(),
             prompt_editor_ipc_ready: self.prompt_editor_ipc_ready,
         })
     }
@@ -1224,6 +1238,7 @@ impl SourceCodeServerRuntimeOwner {
         self.child = Some(shared.child);
         self.started_at = shared.started_at;
         self.runtime_origin = Some(shared.runtime_origin);
+        self.runtime_key = shared.runtime_key;
         self.prompt_editor_ipc_ready = shared.prompt_editor_ipc_ready;
         self.set_ready_target(target, settings);
     }
@@ -1263,6 +1278,7 @@ impl SourceCodeServerRuntimeOwner {
                 self.failure = Some(SourceCodeServerRuntimeFailure::Launch);
                 self.install_progress = None;
                 self.runtime_origin = None;
+                self.runtime_key = None;
                 self.prompt_editor_ipc_ready = false;
                 true
             }
@@ -1287,6 +1303,7 @@ impl SourceCodeServerRuntimeOwner {
         self.target = None;
         self.settings = None;
         self.runtime_origin = None;
+        self.runtime_key = None;
         self.prompt_editor_ipc_ready = false;
         had_state
     }
@@ -1295,6 +1312,8 @@ impl SourceCodeServerRuntimeOwner {
 pub(crate) struct SourceCodeServerRuntimeStartOutput {
     pub(crate) child: Child,
     pub(crate) runtime_origin: String,
+    /// The key this launch gave the editor; the Code view's first load carries it.
+    pub(crate) runtime_key: Option<String>,
     pub(crate) prompt_editor_ipc_ready: bool,
     pub(crate) started_at: Instant,
     pub(crate) http_runtime_ready: bool,

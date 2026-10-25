@@ -83,6 +83,8 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
     }
 
     let startup_deadline = Instant::now() + readiness_timeout;
+    // Sent over the SSH input, never on the remote command line other users can list.
+    let runtime_key = source_code_server_new_launch_key();
     for local_port in source_code_server_remote_candidate_ports() {
         if Instant::now() >= startup_deadline {
             break;
@@ -127,7 +129,7 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
         if native_windows {
             let script = format!(
                 "{}\n{SOURCE_CODE_SERVER_REMOTE_WINDOWS_SCRIPT_END}\n",
-                gpui_remote_windows_code_launch(&target.project_path)
+                gpui_remote_windows_code_launch(&target.project_path, &runtime_key)
             );
             let Some(mut stdin) = child.stdin.take() else {
                 let _ = child.kill();
@@ -153,6 +155,19 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
                 }
             }
         } else {
+            // The launch script reads the key as its first input line; the input then stays
+            // open for the editor's life (source_code_supervisor.js).
+            let key_sent = child.stdin.as_mut().is_some_and(|stdin| {
+                stdin
+                    .write_all(format!("{runtime_key}\n").as_bytes())
+                    .and_then(|()| stdin.flush())
+                    .is_ok()
+            });
+            if !key_sent {
+                let _ = child.kill();
+                let _ = child.wait();
+                continue;
+            }
             let Some(mut stdout) = child.stdout.take() else {
                 let _ = child.kill();
                 let _ = child.wait();
@@ -186,6 +201,7 @@ pub(crate) fn source_code_server_spawn_remote_runtime(
             return Ok(SourceCodeServerRuntimeStartOutput {
                 child,
                 runtime_origin: format!("http://127.0.0.1:{local_port}"),
+                runtime_key: Some(runtime_key),
                 prompt_editor_ipc_ready: readiness.prompt_editor_ipc_ready,
                 started_at,
                 http_runtime_ready: readiness.http_runtime_ready,
@@ -332,7 +348,7 @@ pub(crate) fn source_code_server_remote_launch_command(
         "flock 9"
     };
     format!(
-        "set -eu\n{}\npackage=\"$code_root/package\"\nruntime=\"$code_root/runtime\"\nmkdir -p \"$runtime/user-data\" \"$runtime/extensions\"\nexec 9>\"$runtime/launch.lock\"\n{lock}\ncd {}\nexec \"$package/lib/node\" --eval {} -- \"$package/out/node/entry.js\" --auth none --log info --bind-addr 127.0.0.1:{} --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override --ignore-last-opened --app-name 'ghostex Code' --user-data-dir \"$runtime/user-data\" --extensions-dir \"$runtime/extensions\"",
+        "set -eu\n{}\npackage=\"$code_root/package\"\nruntime=\"$code_root/runtime\"\nmkdir -p \"$runtime/user-data\" \"$runtime/extensions\"\nexec 9>\"$runtime/launch.lock\"\n{lock}\ncd {}\nIFS= read -r GHOSTEX_CODE_SERVER_KEY\nexport GHOSTEX_CODE_SERVER_KEY\nexec \"$package/lib/node\" --eval {} -- \"$package/out/node/entry.js\" --auth none --log info --bind-addr 127.0.0.1:{} --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override --ignore-last-opened --app-name 'ghostex Code' --user-data-dir \"$runtime/user-data\" --extensions-dir \"$runtime/extensions\"",
         source_code_server_remote_data_root_script(),
         gpui_shell_single_quote(gpui_path_string(project_path).as_str()),
         gpui_shell_single_quote(include_str!("source_code_supervisor.js")),

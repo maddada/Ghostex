@@ -27,7 +27,9 @@ if (!$gxCode) {{ throw 'The Windows Ghostex installation is missing its native C
 ///
 /// CDXC:CodeEditor 2026-10-19 WHY:
 /// Windows OpenSSH leaves the session's PowerShell running when the client disconnects, so waiting only for Code to exit kept it (and its port) alive for days after the computer that opened it was gone. The client keeps SSH stdin open for the editor's whole life after the script (`source_code_server_spawn_remote_runtime`), and this script ends Code when that stdin closes, the way `source_code_supervisor.js` does on Linux and macOS hosts.
-pub(crate) fn gpui_remote_windows_code_launch(project_path: &Path) -> String {
+///
+/// The editor's launch key (CDXC:CodeEditor 2026-10-25 in helpers/source_server/code_server.rs) is set in the editor's own environment by this script, which reaches the remote over SSH input, so it never appears on a command line.
+pub(crate) fn gpui_remote_windows_code_launch(project_path: &Path, runtime_key: &str) -> String {
     format!(
         r#"{}
 $gxRuntime=Join-Path $gxData 'code-server/runtime'
@@ -46,6 +48,7 @@ $gxStart.WorkingDirectory={}
 $gxStart.Arguments='"'+$gxEntry+'" --auth none --bind-addr 127.0.0.1:{} --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override --ignore-last-opened --app-name "ghostex Code" --user-data-dir "'+$gxUserData+'" --extensions-dir "'+$gxExtensions+'" --session-socket "'+$gxPipe+'"'
 $gxStart.UseShellExecute=$false
 $gxStart.CreateNoWindow=$true
+$gxStart.EnvironmentVariables['GHOSTEX_CODE_SERVER_KEY']={}
 $gxChild=[Diagnostics.Process]::Start($gxStart)
 try {{
     & {{
@@ -67,6 +70,7 @@ try {{
         gpui_remote_windows_code_setup(),
         gpui_powershell_quote(&project_path.to_string_lossy()),
         SOURCE_CODE_SERVER_REMOTE_PORT,
+        gpui_powershell_quote(runtime_key),
         include_str!("windows_code_pipe.ps1")
     )
 }

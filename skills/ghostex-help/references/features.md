@@ -224,7 +224,9 @@ view from the strip.
   chat links, `ghostex edit <file>`, and Open In. Optional Use VS Code settings
   reuses the local VS Code configuration. The editor and the web runtime (see
   Browser) are both optional installs; the Code view offers each one the first
-  time it opens.
+  time it opens. Each time the editor starts it gets a new private key that
+  only Ghostex holds, so its address (127.0.0.1:3777) opened in another browser,
+  or by another account on the computer or on a remote host, answers Forbidden.
 - **Browser**: embedded Chromium tabs with profiles, splits, annotations,
   DevTools, and agent control through the `$ghostex-embedded-browser-use`
   skill. Its tabs sit in the view panel's tab strip, in the same row as the view

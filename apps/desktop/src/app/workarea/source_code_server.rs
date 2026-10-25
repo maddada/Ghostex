@@ -287,6 +287,7 @@ impl GhostexGpuiApp {
                     output.child,
                     output.started_at,
                     output.runtime_origin,
+                    output.runtime_key,
                     output.prompt_editor_ipc_ready,
                 );
                 self.watch_source_code_server_runtime_child(generation, cx);

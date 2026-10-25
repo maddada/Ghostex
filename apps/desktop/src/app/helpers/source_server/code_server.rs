@@ -30,8 +30,28 @@ pub(crate) fn source_code_server_runtime_target_from_project_snapshot(
     })
 }
 
+/// The environment variable the editor reads its launch key from.
+pub(crate) const SOURCE_CODE_SERVER_KEY_ENV: &str = "GHOSTEX_CODE_SERVER_KEY";
+
+/// The query parameter the Code view's first load carries the key in.
+const SOURCE_CODE_SERVER_KEY_QUERY: &str = "ghostex-key";
+
+/*
+CDXC:CodeEditor 2026-10-25 DECISION:
+User (security audit, Q10 "build the per-launch key"): the Code view's editor answered anyone who could reach its loopback port (another account on this computer, or another user of a remote host it runs on), as the Ghostex user. Every launch now makes a new random key and hands it to the editor without putting it on a command line: in the environment locally and in WSL, as the first line of the SSH input on a Mac or Linux remote, and inside the PowerShell script sent over SSH to a Windows remote. The Code view's URL carries it once; the editor sets a cookie for that port and redirects to the address without it (.dependencies/code-server/src/node/ghostexKey.ts). An editor from before this ignores the key and the extra query parameter, so it keeps working, open as before.
+*/
+/// A fresh key for one editor launch: two random v4 UUIDs, 244 random bits.
+pub(crate) fn source_code_server_new_launch_key() -> String {
+    format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
+}
+
 pub(crate) fn source_code_server_runtime_url(
     runtime_origin: &str,
+    runtime_key: Option<&str>,
     project_path: &Path,
 ) -> Option<ProjectWorkareaRealRuntimeUrl> {
     let folder = gpui_path_string(project_path);
@@ -47,9 +67,13 @@ pub(crate) fn source_code_server_runtime_url(
     } else {
         folder
     };
+    let mut params = vec![("folder", folder)];
+    if let Some(key) = runtime_key {
+        params.push((SOURCE_CODE_SERVER_KEY_QUERY, key.to_string()));
+    }
     ProjectWorkareaRealRuntimeUrl::from_authorized_runtime_url(append_url_query_params(
         format!("{}/", runtime_origin.trim_end_matches('/')),
-        &[("folder", folder)],
+        &params,
     ))
 }
 
