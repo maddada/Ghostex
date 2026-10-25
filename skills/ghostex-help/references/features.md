@@ -1492,7 +1492,9 @@ count, also while the agent is idle; the Scroll to bottom and "?" buttons and an
 armed Delayed Send sit to their left. A long label is cut with "…" so the pills
 keep their full size; hover it to read all of it (on the phone, press and hold the
 card). The card itself does not open: click or tap a pill to open its list in a
-menu (a sheet on the phone). The Background list has each running command with its
+menu (a sheet on the phone). On the computer, in a chat that has the Session
+details panel, Tasks opens that panel instead (it lists the tasks), and the Tasks
+pill hides while the panel shows. The Background list has each running command with its
 own timer; hover a row, or press and hold it on the phone, to see the command
 itself.
 Claude children stay in the Subagents list while the terminal lists them, including
@@ -1701,7 +1703,8 @@ context window is, with Claude's own breakdown into messages, memory files,
 skills, tools and free space; Ghostex asks a silent read-only copy of the
 session, so nothing is typed into it and no tokens are spent, and it counts
 again after a turn ends at most every ten minutes, or when you press the
-refresh button); Tasks (Claude's task list); Connectors (your workspace's
+refresh button); Tasks (Claude's task list; clicking the chat's Tasks pill opens
+the panel, and the pill hides while the panel shows); Connectors (your workspace's
 connected apps and every MCP server the session loaded, green when ready, amber
 while connecting or needing a sign-in; Manage opens Settings > Connectors);
 Skills (the ones the session used, then all of them; click one to open it in

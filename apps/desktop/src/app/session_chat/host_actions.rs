@@ -175,7 +175,7 @@ impl GhostexGpuiApp {
         let Some(action) = message.get("action").and_then(serde_json::Value::as_str) else {
             return;
         };
-        if self.handle_session_details_host_action(action, &message, window, cx) {
+        if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
         if action == "recordSendFailure" {

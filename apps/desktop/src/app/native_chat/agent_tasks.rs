@@ -1,7 +1,7 @@
-//! The agent's task plan, in the floating menu the Tasks pill on the working row opens: the list
-//! the CLI shows under its own transcript. Rows, order, the header line and the
-//! completed-task fold all come from the core's task panel
-//! (packages/gx-chat-core/src/extras/agent_tasks.rs).
+//! The agent's task plan, in the floating menu the Tasks pill on the working row opens when the
+//! chat has no Session details panel to show it in: the list the CLI shows under its own
+//! transcript. Rows, order, the header line and the completed-task fold all come from the core's
+//! task panel (packages/gx-chat-core/src/extras/agent_tasks.rs).
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt;

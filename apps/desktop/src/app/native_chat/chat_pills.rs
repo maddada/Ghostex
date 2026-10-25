@@ -1,4 +1,5 @@
-//! The pills on the working card (working_card.rs) and the floating menu each one opens. Always
+//! The pills on the working card (working_card.rs) and the floating menu each one opens (Tasks
+//! opens the Session details panel instead wherever that panel can show, session_details/). Always
 //! leftmost, two icon pills: "Scroll to bottom" and "Previous question". Then Threads, Tasks,
 //! Subagents and Background, whose labels, counts and order come from the core (`chatPills`,
 //! packages/gx-chat-core/src/extras/chat_pills.rs, where the user's decision lives); this opens the
@@ -389,6 +390,9 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
+                if id == "tasks" && this.show_session_details_for_tasks(cx) {
+                    return;
+                }
                 let anchor = this.working_card.menu_anchor(bounds.get());
                 this.toggle_pill_menu(&id, anchor, window, cx)
             }))

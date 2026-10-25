@@ -10,6 +10,9 @@
 //! CDXC:SessionChat 2026-10-24 DECISION:
 //! User (2026-10-23): "make running thread / running sub agents here have an indicator about this please (yellow color) because right now there's no color which is bad". From the mockups they picked a pulsing dot (Q449 "A"), pulsing rather than still (Q450 "pulse"), the same on the phone (Q451 "yes"), and for the Subagents number "running" (Q452: the running count while any run, the total once none do). Then (2026-10-24): "we have the yellow dot showing 2 ways here in the pills above the composer. let's unify to look just like the one that question shows". So a pill whose menu has a working subagent or thread is `running`: the renderers draw the ? pill's own corner dot (same spot inside the pill's top right edge, same size, same amber #f5a524, one shared helper on each platform), fading on the 1.6 s beat of the Subagents menu's running dot, and still with reduce motion on. Supersedes the 2026-10-23 dot before the icon in the sidebar's working yellow. The Threads number stays the in-flight count above.
 //!
+//! CDXC:SessionDetails 2026-10-25 DECISION:
+//! User: "we're showing the tasks twice. i think let's make clicking the tasks button not show the floating one, instead it should hide that pill and just show the session details sidebar". While this chat's Session details panel is on screen, docked or floating, its Tasks card lists the same tasks, so the Tasks pill is left out (`tasks_in_session_details`) and comes back when the panel closes. Where the panel can open, a click on the Tasks pill opens it instead of the pill's menu (apps/desktop/src/app/native_chat/session_details/mod.rs, `show_session_details_for_tasks`). Supersedes the 2026-10-18 menu above for the Tasks pill only: with no panel for the chat (the extension off, a chat that is not Claude's, the phone, which has no panel yet) Tasks still opens its menu.
+//!
 //! CDXC:SessionChat 2026-10-18 SEE-ALSO:
 //! apps/desktop/src/app/native_chat/working_card.rs and chat_pills.rs (desktop and web), apps/mobile/app/src/chat/native/cards/WorkingCard.tsx and ChatPills.tsx (phone) draw this list and must match.
 
@@ -30,12 +33,14 @@ fn count(value: &Value, key: &str) -> u64 {
 }
 
 /// The pills, in the order the row shows them, from the four projected panel values (`null` when
-/// the panel is absent).
+/// the panel is absent). `tasks_in_session_details`: the chat's Session details panel is on screen
+/// and lists the tasks itself.
 pub fn chat_pills(
     threads: &Value,
     tasks: &Value,
     fleet: &Value,
     background: &Value,
+    tasks_in_session_details: bool,
 ) -> Vec<ChatPill> {
     let mut pills = Vec::new();
     if threads.is_object() {
@@ -56,7 +61,7 @@ pub fn chat_pills(
             meta,
         });
     }
-    if tasks.is_object() {
+    if tasks.is_object() && !tasks_in_session_details {
         let meta = text(tasks, "meta");
         pills.push(ChatPill {
             id: "tasks".to_string(),
@@ -112,22 +117,22 @@ mod tests {
     #[test]
     fn subagents_count_the_running_ones_while_any_run() {
         let fleet = json!({"rows": [{"working": true}, {"working": false}, {"working": false}]});
-        let pill = &chat_pills(&Value::Null, &Value::Null, &fleet, &Value::Null)[0];
+        let pill = &chat_pills(&Value::Null, &Value::Null, &fleet, &Value::Null, false)[0];
         assert_eq!((pill.count.as_str(), pill.running), ("1", true));
 
         let finished = json!({"rows": [{"working": false}, {"working": false}]});
-        let pill = &chat_pills(&Value::Null, &Value::Null, &finished, &Value::Null)[0];
+        let pill = &chat_pills(&Value::Null, &Value::Null, &finished, &Value::Null, false)[0];
         assert_eq!((pill.count.as_str(), pill.running), ("2", false));
     }
 
     #[test]
     fn threads_run_only_while_one_is_working() {
         let waiting = json!({"inFlight": 1, "working": 0, "attention": true});
-        let pill = &chat_pills(&waiting, &Value::Null, &Value::Null, &Value::Null)[0];
+        let pill = &chat_pills(&waiting, &Value::Null, &Value::Null, &Value::Null, false)[0];
         assert_eq!((pill.count.as_str(), pill.running), ("1", false));
 
         let working = json!({"inFlight": 2, "working": 2});
-        let pill = &chat_pills(&working, &Value::Null, &Value::Null, &Value::Null)[0];
+        let pill = &chat_pills(&working, &Value::Null, &Value::Null, &Value::Null, false)[0];
         assert!(pill.running);
     }
 }

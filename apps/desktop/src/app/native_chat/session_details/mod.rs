@@ -92,6 +92,27 @@ impl NativeChatView {
         )
     }
 
+    /// The panel can go beside this chat: it applies to it, and the chat is drawn in its pane with
+    /// its composer (not the phone's transcript alone, a maximized composer or a hidden pane).
+    fn session_details_placeable(&self) -> bool {
+        self.session_details_available()
+            && !self.transcript_only
+            && self.maximized_window.is_none()
+            && !self.pane_hidden
+    }
+
+    /// A click on the Tasks pill: where the panel can go, the app shows this chat's panel, whose
+    /// Tasks card lists the tasks, and the pill steps aside while it shows (CDXC:SessionDetails
+    /// 2026-10-25 in gx-chat-core's extras/chat_pills.rs). False leaves the click to the pill's own
+    /// menu.
+    pub(super) fn show_session_details_for_tasks(&mut self, cx: &mut Context<Self>) -> bool {
+        if !self.session_details_placeable() {
+            return false;
+        }
+        self.host("showSessionDetails", json!({}), cx);
+        true
+    }
+
     fn session_details_menu_open(&self, cx: &Context<Self>) -> bool {
         self.option_menu
             .as_ref()
@@ -105,11 +126,7 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let wanted = self.session_details.wanted
-            && self.session_details_available()
-            && !self.transcript_only
-            && self.maximized_window.is_none()
-            && !self.pane_hidden;
+        let wanted = self.session_details.wanted && self.session_details_placeable();
         let pane = self.session_details.pane_bounds.get().size.width.as_f32();
         let docked = wanted && pane >= DOCK_MIN_WIDTH * p.scale;
         if self.session_details.docked != docked {

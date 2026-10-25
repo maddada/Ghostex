@@ -1,7 +1,8 @@
 //! The Session details panel at the app's level: one app-wide switch behind the header's context
-//! ring, the chat it opens the panel of (the focused session's, while it shows its chat), and the
-//! jobs the panel's rows hand to the app (Agents Hub on a skill, Settings > Connectors, the Git
-//! menu's Commit and Create PR). The panel itself is the chat's (native_chat/session_details/).
+//! ring (a chat's Tasks pill turns it on too), the chat it opens the panel of (the focused
+//! session's, while it shows its chat), and the jobs the panel's rows hand to the app (Agents Hub
+//! on a skill, Settings > Connectors, the Git menu's Commit and Create PR). The panel itself is the
+//! chat's (native_chat/session_details/).
 //!
 //! CDXC:SessionDetails 2026-10-25 DECISION:
 //! User (Q3): the button lives "only in the app header": one button for the window, which in a split opens the panel of the chat last clicked (the focused session's). Q6 was left open, so the switch is app-wide and remembered across restarts, like Claude Desktop's.
@@ -78,6 +79,22 @@ impl GhostexGpuiApp {
             return;
         }
         self.session_details.set_open(open);
+        cx.notify();
+    }
+
+    /// A chat's Tasks pill: the switch goes on for that chat, which becomes the focused one first
+    /// when it was not (in a split the panel belongs to the focused session's chat).
+    fn show_session_details_for_chat(
+        &mut self,
+        session_id: TerminalSessionId,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        if self.record_shell_focus_for_session_chat(session_id) == Some(true) {
+            self.persist_shell_layout_state();
+        }
+        if !self.session_details.open {
+            self.session_details.set_open(true);
+        }
         cx.notify();
     }
 
@@ -161,6 +178,7 @@ impl GhostexGpuiApp {
     /// The panel's jobs for the app, from the chat's host actions. True when `action` was one.
     pub(crate) fn handle_session_details_host_action(
         &mut self,
+        session_id: TerminalSessionId,
         action: &str,
         message: &Value,
         window: &mut gpui::Window,
@@ -168,6 +186,7 @@ impl GhostexGpuiApp {
     ) -> bool {
         match action {
             "sessionDetailsDismissed" => self.session_details_dismissed(cx),
+            "showSessionDetails" => self.show_session_details_for_chat(session_id, cx),
             "openAgentsHubSkill" => {
                 let name = message
                     .get("name")

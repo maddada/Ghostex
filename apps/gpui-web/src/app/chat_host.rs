@@ -208,6 +208,11 @@ impl GhostexGpuiApp {
                 "Save it from the Ghostex app.",
                 cx,
             ),
+            // The chat's Tasks pill: the panel of the chat the page shows, which lists the tasks.
+            Some("showSessionDetails") => {
+                self.session_details_open = true;
+                cx.notify();
+            }
             // The Session details panel's card closed by a click on the chat (shell.rs).
             Some("sessionDetailsDismissed") => {
                 self.session_details_dismissed_at = Some(web_time::Instant::now());
