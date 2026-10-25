@@ -36,7 +36,8 @@ ghostex browser mcp
 ```
 
 The bridge reaches Ghostex's pages through the local gxserver with its token,
-so it needs no DevTools port. Ghostex keeps its CEF remote-debugging port
+so it needs no DevTools port. When that Ghostex's window is closed, the bridge
+says so instead of attaching to another Ghostex. Ghostex keeps its CEF remote-debugging port
 closed unless Settings > Debugging > Show debug UI controls was on when it
 started, or a port variable names one. Only for an app started that way, or an
 older Ghostex whose bridge still needs the port, pass it explicitly:

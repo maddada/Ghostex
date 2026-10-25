@@ -92,8 +92,12 @@ pub(super) fn js_string_of(value: Option<&Value>) -> String {
     }
 }
 
-/// `http_json` with the gxserver token.
-pub(super) fn http_json_with_bearer(url: &str, token: &str, timeout_ms: u64) -> Result<Value, String> {
+/// `http_json` with the gxserver token. A failure carries the HTTP status when the server answered.
+pub(super) fn http_json_with_bearer(
+    url: &str,
+    token: &str,
+    timeout_ms: u64,
+) -> Result<Value, (Option<u16>, String)> {
     match ureq::get(url)
         .set("Authorization", &format!("Bearer {token}"))
         .timeout(Duration::from_millis(timeout_ms))
@@ -101,13 +105,16 @@ pub(super) fn http_json_with_bearer(url: &str, token: &str, timeout_ms: u64) -> 
     {
         Ok(response) => response
             .into_json::<Value>()
-            .map_err(|error| error.to_string()),
-        Err(ureq::Error::Status(code, response)) => Err(response
-            .into_json::<Value>()
-            .ok()
-            .and_then(|body| body.get("message")?.as_str().map(str::to_string))
-            .unwrap_or_else(|| format!("HTTP {code}"))),
-        Err(error) => Err(error.to_string()),
+            .map_err(|error| (None, error.to_string())),
+        Err(ureq::Error::Status(code, response)) => Err((
+            Some(code),
+            response
+                .into_json::<Value>()
+                .ok()
+                .and_then(|body| body.get("message")?.as_str().map(str::to_string))
+                .unwrap_or_else(|| format!("HTTP {code}")),
+        )),
+        Err(error) => Err((None, error.to_string())),
     }
 }
 
