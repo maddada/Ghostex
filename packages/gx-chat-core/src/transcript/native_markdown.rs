@@ -649,10 +649,42 @@ fn collect_edits(
     edits: &mut Vec<Edit>,
 ) {
     for node in nodes {
-        if matches!(
-            node,
-            Node::Link(_) | Node::LinkReference(_) | Node::Definition(_)
-        ) {
+        if let Node::Link(link) = node {
+            // Only this pass writes `ghostex-run:` links (below); one the author wrote becomes its
+            // own text, so no renderer draws a run chip for a command the reader cannot see.
+            if is_run_link_destination(&link.url) {
+                if let Some(position) = node.position() {
+                    let text = match (
+                        link.children.first().and_then(Node::position),
+                        link.children.last().and_then(Node::position),
+                    ) {
+                        (Some(first), Some(last)) => {
+                            markdown[first.start.offset..last.end.offset].to_string()
+                        }
+                        _ => String::new(),
+                    };
+                    edits.push(Edit {
+                        start: position.start.offset,
+                        end: position.end.offset,
+                        text,
+                    });
+                }
+            }
+            continue;
+        }
+        if let Node::Definition(definition) = node {
+            if is_run_link_destination(&definition.url) {
+                if let Some(position) = node.position() {
+                    edits.push(Edit {
+                        start: position.start.offset,
+                        end: position.end.offset,
+                        text: String::new(),
+                    });
+                }
+            }
+            continue;
+        }
+        if matches!(node, Node::LinkReference(_)) {
             continue;
         }
         if matches!(node, Node::Code(_) | Node::Html(_)) {
@@ -752,6 +784,27 @@ fn collect_edits(
             });
         }
     }
+}
+
+/// A link destination in the run-command family (`ghostex-run:` and the hover bar's
+/// `ghostex-run-copy:`/`ghostex-run-paste:`), whatever its case.
+///
+/// CDXC:SessionChat 2026-10-25 WHY:
+/// The renderers draw a run chip with Copy and Paste in terminal for any `ghostex-run:` link, so an agent reply could write `[`npm test`](ghostex-run:<other command>%0D)` and have Paste type a hidden command and press Enter (security audit 2026-10-25). Links the author wrote with these destinations are reduced to their text here; only the inline commands this pass recognises become run links, and `run_command::command_from_href` refuses any line break or control character.
+fn is_run_link_destination(url: &str) -> bool {
+    url.trim_start()
+        .get(..RUN_LINK_FAMILY.len())
+        .is_some_and(|head| head.eq_ignore_ascii_case(RUN_LINK_FAMILY))
+}
+
+const RUN_LINK_FAMILY: &str = "ghostex-run";
+
+/// Whether the text mentions a run-command destination, which only an author-written link would.
+fn has_run_link_evidence(markdown: &str) -> bool {
+    markdown
+        .as_bytes()
+        .windows(RUN_LINK_FAMILY.len())
+        .any(|window| window.eq_ignore_ascii_case(RUN_LINK_FAMILY.as_bytes()))
 }
 
 /// Turns the file references written into a message into real Markdown links, which is what the
@@ -1090,7 +1143,10 @@ pub fn native_markdown(markdown: &str, bare_paths: bool) -> String {
     let bare_wanted = bare_paths && has_path_evidence(markdown);
     // Commands are offered in what an agent wrote, never in a prompt somebody typed.
     let commands_wanted = !bare_paths && has_inline_code_command_evidence(markdown);
-    let paths_wanted = bare_wanted || commands_wanted || has_inline_code_path_evidence(markdown);
+    let paths_wanted = bare_wanted
+        || commands_wanted
+        || has_run_link_evidence(markdown)
+        || has_inline_code_path_evidence(markdown);
     let blocks_wanted = markdown.contains("```")
         || markdown.contains("~~~")
         || markdown.contains('>')

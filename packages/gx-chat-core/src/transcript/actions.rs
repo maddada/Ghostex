@@ -267,7 +267,11 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         // reach (`run_command.rs`): Run types it and presses Enter, Paste only types it.
         ActionKind::RunInTerminal | ActionKind::PasteInTerminal => {
             let command = text(action, "command");
-            if command.trim().is_empty() {
+            // Paste only types the command and leaves Enter to the user, so it carries one line.
+            if command.trim().is_empty()
+                || (action.kind == ActionKind::PasteInTerminal
+                    && command.chars().any(char::is_control))
+            {
                 return Vec::new();
             }
             let name = if action.kind == ActionKind::RunInTerminal {

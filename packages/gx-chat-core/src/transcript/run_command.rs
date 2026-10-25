@@ -291,9 +291,12 @@ pub fn command_href(command: &str) -> String {
     format!("{RUN_COMMAND_HREF_PREFIX}{}", encode_command(command))
 }
 
-/// The command a `ghostex-run:` href carries, or `None` for any other link.
+/// The command a `ghostex-run:` href carries, or `None` for any other link. The core only writes
+/// one-line commands there (`inline_command`), so one holding a line break or other control
+/// character is not the core's and is refused.
 pub fn command_from_href(href: &str) -> Option<String> {
     decode_command(href.strip_prefix(RUN_COMMAND_HREF_PREFIX)?)
+        .filter(|command| !command.chars().any(char::is_control))
 }
 
 /// The block as typed, without the `!` the agent's own shell prefix needs on its first line.

@@ -10,9 +10,7 @@
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_chat_core::transcript::run_command::{
-    RUN_COMMAND_HREF_PREFIX, command_from_href, decode_command,
-};
+use ghostex_gx_chat_core::transcript::run_command::{RUN_COMMAND_HREF_PREFIX, command_from_href};
 use gpui::{
     AnyElement, ClipboardItem, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, StatefulInteractiveElement as _, Styled as _, WeakEntity, div, px, svg,
@@ -139,14 +137,15 @@ pub(super) fn handle_link_press(
     chat: &WeakEntity<NativeChatView>,
     cx: &mut gpui::App,
 ) -> bool {
+    // Decoded through command_from_href, so a press address carries what a run link may: one line.
     if let Some(encoded) = href.strip_prefix(COPY_PRESS_PREFIX) {
-        if let Some(command) = decode_command(encoded) {
+        if let Some(command) = command_from_href(&format!("{RUN_COMMAND_HREF_PREFIX}{encoded}")) {
             crate::app::helpers::gpui_copy_to_clipboard(ClipboardItem::new_string(command), cx);
         }
         return true;
     }
     if let Some(encoded) = href.strip_prefix(PASTE_PRESS_PREFIX) {
-        if let Some(command) = decode_command(encoded) {
+        if let Some(command) = command_from_href(&format!("{RUN_COMMAND_HREF_PREFIX}{encoded}")) {
             send(chat, "pasteInTerminal", command, cx);
         }
         return true;

@@ -138,6 +138,14 @@ pub fn run_in_terminal_command(args: &[String]) -> CliResult<()> {
         ));
     }
     let paste = flags.truthy("paste");
+    // Paste only types the command and leaves Enter to the user, so a line break or other control
+    // character in it (which a terminal would act on) is refused, as the chat does.
+    if paste && command.chars().any(char::is_control) {
+        return Err(CliError::Other(
+            "run-in-terminal --paste types one line; the command holds a line break or other control character."
+                .to_string(),
+        ));
+    }
     if let Some(session_id) = idle_command_panel_terminal(&project_id, flags) {
         let ids = json!({ "projectId": project_id, "sessionId": session_id });
         let mut typed = ids.clone();
