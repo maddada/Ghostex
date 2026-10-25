@@ -177,11 +177,7 @@ pub(crate) fn gpui_upload_terminal_attachment_to_remote(
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let mut remote_path = format!(
-        "/tmp/ghostex-gpui-attachments/{}-{unique_id}-{filename}",
-        std::process::id()
-    );
-    let quoted_remote_path = gpui_shell_single_quote(remote_path.as_str());
+    let quoted_filename = gpui_shell_single_quote(filename.as_str());
     let remote_command = if matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsPowerShell
@@ -191,12 +187,17 @@ pub(crate) fn gpui_upload_terminal_attachment_to_remote(
             kind == GpuiTerminalAttachmentKind::Folder,
         )
     } else {
+        /*
+        CDXC:RemoteMachines 2026-10-25 WHY:
+        Uploads used to go into a fixed /tmp/ghostex-gpui-attachments folder made with `mkdir -p`, whose owner, mode and symlinks were never checked, so another account on the remote host could create it first and read or swap what the user attached (security audit 2026-10-25). Each upload now gets its own folder from `mktemp -d` (created exclusively, mode 0700, owned by the uploader) and reports the path behind the same marker the Windows upload uses.
+        */
+        let make_private_dir = "umask 077; d=$(mktemp -d \"${TMPDIR:-/tmp}/ghostex-gpui-attachments.XXXXXXXX\") || exit 1; p=\"$d\"/";
         match kind {
             GpuiTerminalAttachmentKind::Folder => format!(
-                "umask 077; mkdir -p /tmp/ghostex-gpui-attachments; mkdir -- {quoted_remote_path} && tar -xzf - -C {quoted_remote_path} --strip-components=1"
+                "{make_private_dir}{quoted_filename}; mkdir -- \"$p\" && tar -xzf - -C \"$p\" --strip-components=1 && printf '__GHOSTEX_UPLOAD__%s\\n' \"$p\""
             ),
             GpuiTerminalAttachmentKind::Image | GpuiTerminalAttachmentKind::File => format!(
-                "umask 077; mkdir -p /tmp/ghostex-gpui-attachments; cat > {quoted_remote_path} && chmod 600 {quoted_remote_path}"
+                "{make_private_dir}{quoted_filename}; cat > \"$p\" && chmod 600 \"$p\" && printf '__GHOSTEX_UPLOAD__%s\\n' \"$p\""
             ),
         }
     };
@@ -243,18 +244,23 @@ pub(crate) fn gpui_upload_terminal_attachment_to_remote(
     if upload_result.exit_code != 0 {
         return Err("Could not upload the selected item to the remote machine.".to_string());
     }
-    if matches!(
+    let uploaded_path = upload_result
+        .stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("__GHOSTEX_UPLOAD__"));
+    let remote_path = if matches!(
         execution_target,
         GpuiRemoteExecutionTarget::WindowsPowerShell
     ) {
-        remote_path = upload_result
-            .stdout
-            .lines()
-            .find_map(|line| line.strip_prefix("__GHOSTEX_UPLOAD__"))
+        uploaded_path
             .filter(|path| gpui_is_windows_remote_path(path))
             .ok_or_else(|| "Windows did not return the uploaded path.".to_string())?
-            .to_string();
+    } else {
+        uploaded_path
+            .filter(|path| path.starts_with('/') && path.ends_with(&format!("/{filename}")))
+            .ok_or_else(|| "The remote machine did not return the uploaded path.".to_string())?
     }
+    .to_string();
     Ok(GpuiTerminalAttachmentReference {
         kind,
         path: remote_path,
