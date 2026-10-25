@@ -37,11 +37,11 @@ pub(crate) async fn handle_events(
     Plain HTTP requests to the WebSocket-only event path must keep the TypeScript JSON `notFound` envelope. Do not expose Axum WebSocket extractor rejection bodies because clients rely on gxserver's product/protocol/requestId error shape.
     */
     let query_token = query_value(&uri, "authToken");
-    let authorized = is_authorized_headers(&headers, &state.auth_token)
-        || query_token
-            .as_deref()
-            .map(|token| is_expected_gxserver_auth_token(token, &state.auth_token))
-            .unwrap_or(false);
+    let authorized =
+        is_authorized_client_headers(&headers, &state.auth_token, &state.device_api_tokens)
+            || query_token.as_deref().is_some_and(|token| {
+                is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens)
+            });
     if !authorized {
         return json_response(
             StatusCode::UNAUTHORIZED,
@@ -90,6 +90,7 @@ pub(crate) async fn handle_terminal(
     };
     let terminal_state = TerminalWsState {
         auth_token: state.auth_token.clone(),
+        device_api_tokens: state.device_api_tokens.clone(),
         base_url: format!(
             "http://{}:{}",
             state.config.listeners.local.host, state.config.listeners.local.port

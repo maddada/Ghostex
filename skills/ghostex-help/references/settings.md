@@ -519,7 +519,8 @@ How to use this file:
 - **Easy Connect** `easyConnectEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.
 - **SSH access** `sshAccess` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt.
 - **Pairing code** `pairingCode` (Settings UI row without a settings key; use `ghostex settings open`): Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password.
-- **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers paired with this computer; remove one to unpair it.
+- **Paired devices** `pairedDevices` (Settings UI row without a settings key; use `ghostex settings open`): Phones and computers paired with this computer; remove one to unpair it and revoke its access.
+- **Only paired devices can connect** `pairedDevicesOnly` (Settings UI row without a settings key; use `ghostex settings open`): Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing.
 ### Tailscale
 
 - **Tailscale on or off** `tailscaleEnabled` (Settings UI row without a settings key; use `ghostex settings open`): Offer the Tailscale path; off keeps its card collapsed and hides it from Remote Setup.

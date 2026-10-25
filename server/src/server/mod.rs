@@ -45,7 +45,7 @@ use crate::{
         FIRST_PROMPT_AUTO_TITLE_ATTEMPT_ID_KEY, FIRST_USER_INPUT_DRAFT_STATUS_KEY,
         FIRST_USER_INPUT_DRAFT_UPDATED_AT_KEY,
     },
-    auth::{is_authorized_headers, is_expected_gxserver_auth_token},
+    auth::{is_authorized_client_headers, is_authorized_client_token},
     automations::handle_automation_endpoint,
     config::GxserverConfig,
     constants::{

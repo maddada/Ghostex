@@ -508,7 +508,7 @@ impl RemoteTab {
     }
 
     /// `refreshFast`: the Easy Connect status and the pairing code, both or neither.
-    fn refresh_fast(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn refresh_fast(&mut self, cx: &mut Context<Self>) {
         if !self.rpc_available(cx) || self.fast_in_flight {
             return;
         }
@@ -528,7 +528,9 @@ impl RemoteTab {
                     }
                     Ok(status) => this.rpc(
                         "/api/remotePairingCode",
-                        json!({}),
+                        // While the Easy Connect QR is on screen a new phone must get past the
+                        // allow-list (CDXC:RemotePairing 2026-10-25 in server/src/tailcat/supervisor.rs).
+                        json!({ "openTunnel": this.qr_preview == Some(PathCard::EasyConnect) }),
                         RPC_TIMEOUT,
                         cx,
                         move |this, code, cx| {

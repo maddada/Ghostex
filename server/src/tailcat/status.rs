@@ -86,6 +86,21 @@ pub fn apply_tailcat_state_update(
     Ok(record)
 }
 
+/// How long one `/api/remotePairingCode` ask keeps Easy Connect open to new phones.
+pub const TAILCAT_PAIRING_WINDOW_HOLD: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Lifts the allow-list while a pairing code is on screen (CDXC:RemotePairing 2026-10-25 in
+/// `supervisor.rs`); does nothing while the list is empty.
+pub fn hold_tailcat_pairing_window_open(paths: &GxserverPaths, runtime: &TailcatRuntime) {
+    let Ok(db) = open_gxserver_database(paths) else {
+        return;
+    };
+    let Ok(state) = read_tailcat_state_or_default(&TailcatRepository::new(&db)) else {
+        return;
+    };
+    runtime.hold_pairing_window_open(paths, &state, TAILCAT_PAIRING_WINDOW_HOLD);
+}
+
 /// Boot reconcile: restart the sidecar for a state that was left enabled.
 pub fn start_tailcat_from_persisted_state(paths: &GxserverPaths, runtime: &TailcatRuntime) {
     let Ok(db) = open_gxserver_database(paths) else {

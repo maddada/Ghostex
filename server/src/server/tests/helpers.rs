@@ -45,6 +45,7 @@ pub(super) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
     Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+        device_api_tokens: crate::auth::DeviceApiTokens::default(),
         automation_runtime,
         delayed_send_runtime,
         board_start_work_gate: Arc::new(Mutex::new(())),

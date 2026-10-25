@@ -45,6 +45,8 @@ struct TailcatRuntimeInner {
     token: Option<String>,
     last_error: Option<String>,
     binary_version: Option<(PathBuf, Option<String>)>,
+    /// While set and in the future, the allow-list is lifted so a new phone can pair.
+    pairing_open_until: Option<Instant>,
 }
 
 impl TailcatRuntime {
@@ -111,7 +113,11 @@ impl TailcatRuntime {
         }
         let spec = TailcatServeSpec {
             addr_file: tailcat_address_file(paths),
-            allowed_client_keys: state.allowed_client_keys.clone(),
+            allowed_client_keys: if self.pairing_window_open() {
+                Vec::new()
+            } else {
+                state.allowed_client_keys.clone()
+            },
             binary_path,
             key_file,
             ports: tailcat_served_ports(state),
@@ -121,6 +127,71 @@ impl TailcatRuntime {
         }
         self.stop();
         self.start(spec);
+    }
+
+    /*
+    CDXC:RemotePairing 2026-10-25 DECISION:
+    User (security audit, Q4 "per-device tokens and a tunnel allow-list"): with "Only paired devices can connect" on, Easy Connect admits only the client keys on the allow-list, so a removed phone can no longer even reach this computer. A new phone has no listed key yet and must reach `/api/pairDevice` through the tunnel, so while the Show QR dialog is open the desktop asks to hold pairing open and the allow-list is lifted; it returns 60 seconds after the last ask, by which time the new phone's key is on the list. Lifting and restoring the list restarts the helper, which drops paired phones' tunnels once each way; they reconnect by themselves.
+    SEE-ALSO: server/src/remote_access/http.rs (`/api/remotePairingCode` `openTunnel`), apps/desktop/src/app/window/settings_modal/tabs/remote/paired_devices.rs (the switch).
+    */
+    pub(crate) fn hold_pairing_window_open(
+        &self,
+        paths: &GxserverPaths,
+        state: &TailcatState,
+        hold: Duration,
+    ) {
+        if !state.enabled || state.allowed_client_keys.is_empty() {
+            return;
+        }
+        let was_open = {
+            let Ok(mut inner) = self.inner.lock() else {
+                return;
+            };
+            let now = Instant::now();
+            let was_open = inner.pairing_open_until.is_some_and(|until| until > now);
+            inner.pairing_open_until = Some(now + hold);
+            was_open
+        };
+        if was_open {
+            return;
+        }
+        self.apply(paths, state);
+        let runtime = self.clone();
+        let paths = paths.clone();
+        thread::spawn(move || runtime.close_pairing_window_when_due(&paths));
+    }
+
+    fn pairing_window_open(&self) -> bool {
+        self.inner.lock().ok().is_some_and(|inner| {
+            inner
+                .pairing_open_until
+                .is_some_and(|until| until > Instant::now())
+        })
+    }
+
+    /// Sleeps until the pairing window's latest deadline, then restores the allow-list.
+    fn close_pairing_window_when_due(&self, paths: &GxserverPaths) {
+        loop {
+            let until = {
+                let Ok(mut inner) = self.inner.lock() else {
+                    return;
+                };
+                let Some(until) = inner.pairing_open_until else {
+                    return;
+                };
+                if until <= Instant::now() {
+                    inner.pairing_open_until = None;
+                    None
+                } else {
+                    Some(until)
+                }
+            };
+            match until {
+                Some(until) => thread::sleep(until.saturating_duration_since(Instant::now())),
+                None => break,
+            }
+        }
+        super::status::start_tailcat_from_persisted_state(paths, self);
     }
 
     pub fn stop(&self) {

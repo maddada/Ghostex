@@ -25,6 +25,8 @@ pub struct RemotePairedDeviceRecord {
     pub platform: String,
     pub ssh_key_fingerprint: String,
     pub tailcat_client_key: Option<String>,
+    /// SHA-256 of the phone's own API token; `None` for a phone paired before device tokens.
+    pub api_token_hash: Option<String>,
     pub paired_at: String,
     pub last_seen_at: Option<String>,
 }
@@ -130,9 +132,10 @@ impl<'a> RemotePairingRepository<'a> {
             .execute(
                 r#"
                 INSERT INTO remote_paired_devices (
-                  id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt
+                  id, name, platform, sshKeyFingerprint, tailcatClientKey, apiTokenHash, pairedAt,
+                  lastSeenAt
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 "#,
                 params![
                     device.id,
@@ -140,6 +143,7 @@ impl<'a> RemotePairingRepository<'a> {
                     device.platform,
                     device.ssh_key_fingerprint,
                     device.tailcat_client_key,
+                    device.api_token_hash,
                     device.paired_at,
                     device.last_seen_at,
                 ],
@@ -153,7 +157,8 @@ impl<'a> RemotePairingRepository<'a> {
             .db
             .prepare(
                 r#"
-                SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt
+                SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt,
+                  apiTokenHash
                 FROM remote_paired_devices
                 ORDER BY pairedAt DESC, id ASC
                 "#,
@@ -170,7 +175,8 @@ impl<'a> RemotePairingRepository<'a> {
         self.db
             .query_row(
                 r#"
-                SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt
+                SELECT id, name, platform, sshKeyFingerprint, tailcatClientKey, pairedAt, lastSeenAt,
+                  apiTokenHash
                 FROM remote_paired_devices
                 WHERE id = ?1
                 "#,
@@ -196,6 +202,19 @@ impl<'a> RemotePairingRepository<'a> {
         Ok(Some(device))
     }
 
+    /// The stored hashes of every paired phone's API token.
+    pub fn list_api_token_hashes(&self) -> Result<Vec<String>> {
+        let mut statement = self
+            .db
+            .prepare("SELECT apiTokenHash FROM remote_paired_devices WHERE apiTokenHash IS NOT NULL")
+            .with_context(|| "prepare paired device token list")?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .with_context(|| "list paired device tokens")?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .with_context(|| "read paired device tokens")
+    }
+
     pub fn touch_device_seen(&self, id: &str) -> Result<Option<RemotePairedDeviceRecord>> {
         self.db
             .execute(
@@ -216,6 +235,7 @@ fn read_device_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RemotePairedDevi
         tailcat_client_key: row.get(4)?,
         paired_at: row.get(5)?,
         last_seen_at: row.get(6)?,
+        api_token_hash: row.get(7)?,
     })
 }
 

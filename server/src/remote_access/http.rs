@@ -6,7 +6,10 @@ use crate::{
     protocol::{rpc_error, rpc_success},
     server::{routed_json, AppState, RoutedResponse},
     storage::open_gxserver_database,
-    tailcat::{read_tailcat_status_payload_for_paths, tailcat_gxserver_api_port},
+    tailcat::{
+        hold_tailcat_pairing_window_open, read_tailcat_status_payload_for_paths,
+        tailcat_gxserver_api_port,
+    },
 };
 
 use super::pair_device::*;
@@ -45,6 +48,7 @@ pub(crate) async fn handle_remote_access_http(
     let paths = state.paths.clone();
     let tailcat_runtime = state.tailcat_runtime.clone();
     let pairing_runtime = state.remote_pairing_runtime.clone();
+    let device_tokens = state.device_api_tokens.clone();
     let logger = state.logger.clone();
 
     let outcome = match endpoint_path.as_str() {
@@ -78,7 +82,15 @@ pub(crate) async fn handle_remote_access_http(
             .await
         }
         "/api/remotePairingCode" => {
+            // The Show QR dialog is open: a new phone must get through the allow-list to pair.
+            let open_tunnel = params
+                .get("openTunnel")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             tokio::task::spawn_blocking(move || {
+                if open_tunnel {
+                    hold_tailcat_pairing_window_open(&paths, &tailcat_runtime);
+                }
                 let status = read_tailcat_status_payload_for_paths(&paths, &tailcat_runtime);
                 let identity = cached_remote_access_identity()?;
                 let ssh_port = ssh_port_for_pairing(&status.ports);
@@ -133,7 +145,9 @@ pub(crate) async fn handle_remote_access_http(
             };
             tokio::task::spawn_blocking(move || {
                 let db = open_gxserver_database(&paths)?;
-                if remove_paired_device(&paths, &db, &tailcat_runtime, &device_id)?.is_none() {
+                if remove_paired_device(&paths, &db, &tailcat_runtime, &device_tokens, &device_id)?
+                    .is_none()
+                {
                     return Err(RemoteAccessHttpError::unknown_device(&device_id));
                 }
                 Ok(json!({ "devices": list_paired_devices_json(&db)? }))
@@ -168,6 +182,7 @@ pub(crate) async fn handle_remote_access_http(
                     &db,
                     &tailcat_runtime,
                     &pairing_runtime,
+                    &device_tokens,
                     &logger,
                     params,
                 )?;
@@ -175,6 +190,7 @@ pub(crate) async fn handle_remote_access_http(
                     "deviceId": outcome.device_id,
                     "user": outcome.user,
                     "computerName": outcome.computer_name,
+                    "deviceApiToken": outcome.device_api_token,
                 }))
             })
             .await

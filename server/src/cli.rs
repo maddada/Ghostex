@@ -141,7 +141,7 @@ pub async fn run(args: Vec<String>) -> Result<()> {
                 args.iter().skip(1).any(|arg| arg == "--json"),
             )?;
         }
-        Some("endpoint") => print_endpoint()?,
+        Some("endpoint") => print_endpoint(args.iter().skip(1).any(|arg| arg == "--no-token"))?,
         Some("agent-skills") => {
             run_agent_skills_command(args.iter().skip(1).cloned().collect()).await?;
         }
@@ -178,20 +178,24 @@ const ENDPOINT_CAPABILITIES: [&str; 2] = ["sendRequestLedger", "voiceAgent"];
 /// as JSON.
 ///
 /// CDXC:Mobile 2026-09-27 WHY: a client that reaches this computer over SSH (the phone's GPUI chat) opens its own chat socket to gxserver through an SSH port forward, as the desktop's remote chats do, and needs the port and token for it. The desktop reads them with a shell snippet over SSH (`gpui_remote_token_read_command`); this verb answers from the daemon's own paths, so an SSH client needs no copy of that snippet. Anyone who can run it can already read the token file.
-fn print_endpoint() -> Result<()> {
+/// `--no-token` leaves the main token out: a paired phone that holds its own token asks this way, so
+/// the main token never reaches it (CDXC:RemotePairing 2026-10-25 in `auth.rs`).
+fn print_endpoint(without_token: bool) -> Result<()> {
     let paths = get_gxserver_paths(None);
     let metadata =
         read_runtime_metadata(&paths)?.ok_or_else(|| anyhow!("gxserver is not running."))?;
-    let auth = read_gxserver_auth_token(&paths)?
-        .ok_or_else(|| anyhow!("gxserver has no auth token yet; start it first."))?;
-    let endpoint = serde_json::json!({
+    let mut endpoint = serde_json::json!({
         "ok": true,
         "port": metadata.port,
         "baseUrl": format!("http://127.0.0.1:{}", metadata.port),
-        "authToken": auth.token,
         "protocolVersion": metadata.protocol_version,
         "capabilities": ENDPOINT_CAPABILITIES,
     });
+    if !without_token {
+        let auth = read_gxserver_auth_token(&paths)?
+            .ok_or_else(|| anyhow!("gxserver has no auth token yet; start it first."))?;
+        endpoint["authToken"] = Value::String(auth.token);
+    }
     println!("{}", serde_json::to_string(&endpoint)?);
     Ok(())
 }
@@ -542,7 +546,7 @@ Usage:
   gxserver stop      Stop only the gxserver control plane
   gxserver stop-all  Stop gxserver and kill tracked zmx sessions
   gxserver status    Print gxserver runtime state
-  gxserver endpoint  Print the running daemon's port and auth token as JSON (for SSH clients)
+  gxserver endpoint  Print the running daemon's port and auth token as JSON (for SSH clients; --no-token leaves the token out)
   gxserver agent-skills status [skill...] [--json]
   gxserver agent-skills install <skill...> --source <path> [--offline] [--json]
   gxserver agent-skills refresh [--json]

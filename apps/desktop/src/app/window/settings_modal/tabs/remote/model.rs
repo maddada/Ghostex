@@ -233,6 +233,8 @@ pub(crate) struct PairedDevice {
     pub(super) platform: String,
     pub(super) paired_at: String,
     pub(super) last_seen_at: Option<String>,
+    /// The phone's Easy Connect client key; `None` for a phone paired by an older Ghostex app.
+    pub(super) tailcat_client_key: Option<String>,
 }
 
 /// `readPairedDevicesResult`.
@@ -252,6 +254,7 @@ pub(super) fn read_paired_devices_result(value: &Value) -> Result<Vec<PairedDevi
             platform: text(device, "platform").unwrap_or_default(),
             paired_at: text(device, "pairedAt").unwrap_or_default(),
             last_seen_at: non_empty(device, "lastSeenAt"),
+            tailcat_client_key: non_empty(device, "tailcatClientKey"),
         })
         .collect())
 }

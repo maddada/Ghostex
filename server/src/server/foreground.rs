@@ -186,6 +186,7 @@ pub async fn run_gxserver_foreground(
     let state = Arc::new(AppState {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
+        device_api_tokens: load_device_api_tokens(&paths),
         automation_runtime,
         delayed_send_runtime,
         board_start_work_gate: Arc::new(Mutex::new(())),
@@ -589,4 +590,14 @@ pub(super) fn classify_existing_gxserver(
         Some(_) => ExistingGxserverState::Running,
         None => ExistingGxserverState::Stopped,
     }
+}
+
+/// The paired phones' token hashes at startup; an unreadable database starts with none, so only the
+/// main token works until the next pair or remove reloads them.
+fn load_device_api_tokens(paths: &GxserverPaths) -> crate::auth::DeviceApiTokens {
+    let tokens = crate::auth::DeviceApiTokens::default();
+    if let Ok(db) = crate::storage::open_gxserver_database(paths) {
+        let _ = crate::remote_access::reload_device_api_tokens(&db, &tokens);
+    }
+    tokens
 }

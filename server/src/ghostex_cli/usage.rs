@@ -637,8 +637,8 @@ pub fn usage() -> String {
         ),
         format_help_command("server status [--json]", "Print gxserver runtime state"),
         format_help_command(
-            "server endpoint",
-            "Print the running daemon's port and auth token as JSON (for SSH clients)",
+            "server endpoint [--no-token]",
+            "Print the running daemon's port and auth token as JSON (for SSH clients); --no-token leaves the token out",
         ),
         format_help_command(
             "server version | server --version",
@@ -1048,8 +1048,8 @@ pub fn server_usage() -> String {
         ),
         format_help_command("server status [--json]", "Print gxserver runtime state"),
         format_help_command(
-            "server endpoint",
-            "Print the running daemon's port and auth token as JSON (for SSH clients)",
+            "server endpoint [--no-token]",
+            "Print the running daemon's port and auth token as JSON (for SSH clients); --no-token leaves the token out",
         ),
         format_help_command("server version", "Print the gxserver package version"),
         format_help_command("server --version", "Alias for server version"),

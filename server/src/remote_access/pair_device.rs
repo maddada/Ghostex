@@ -6,6 +6,7 @@ use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::auth::{hash_device_api_token, mint_device_api_token, DeviceApiTokens};
 use crate::logging::{GxserverLogInput, GxserverLogger, LogLevel};
 use crate::paths::GxserverPaths;
 use crate::tailcat::TailcatRuntime;
@@ -59,6 +60,8 @@ pub struct PairDeviceOutcome {
     pub device_id: String,
     pub user: String,
     pub computer_name: String,
+    /// The phone's own API token (CDXC:RemotePairing 2026-10-25 in `auth.rs`); sent once, stored only as a hash.
+    pub device_api_token: String,
 }
 
 #[derive(Debug)]
@@ -108,6 +111,15 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
         .tailcat_client_key
         .map(|key| key.trim().to_string())
         .filter(|key| !key.is_empty());
+    // It goes onto tailcat's `--allow` list, where a malformed key stops the helper for everyone.
+    if tailcat_client_key
+        .as_deref()
+        .is_some_and(|key| !is_tailcat_client_public_key(key))
+    {
+        return Err(PairDeviceError::BadRequest(
+            "tailcatClientKey must be a nodekey: public key.".to_string(),
+        ));
+    }
     Ok(PairDeviceParams {
         secret: params.secret.trim().to_string(),
         device_name,
@@ -117,11 +129,22 @@ pub fn parse_pair_device_params(body: &Value) -> Result<PairDeviceParams, PairDe
     })
 }
 
+/// `nodekey:` and 64 lowercase hex digits, the form tailcat prints and reads.
+fn is_tailcat_client_public_key(key: &str) -> bool {
+    key.strip_prefix("nodekey:").is_some_and(|hex| {
+        hex.len() == 64
+            && hex
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    })
+}
+
 pub fn pair_device(
     paths: &GxserverPaths,
     db: &Connection,
     tailcat_runtime: &TailcatRuntime,
     pairing_runtime: &RemotePairingRuntime,
+    device_tokens: &DeviceApiTokens,
     logger: &GxserverLogger,
     params: PairDeviceParams,
 ) -> Result<PairDeviceOutcome, PairDeviceError> {
@@ -144,6 +167,7 @@ pub fn pair_device(
     pairing_runtime.forget_secret();
 
     let device_id = uuid::Uuid::new_v4().simple().to_string();
+    let device_api_token = mint_device_api_token();
     append_authorized_key(&key, &device_id, &params.device_name).map_err(|error| {
         if error.is::<AdministratorApprovalDeclined>() {
             PairDeviceError::ApprovalDeclined
@@ -157,6 +181,7 @@ pub fn pair_device(
         platform: params.platform,
         ssh_key_fingerprint: key.fingerprint(),
         tailcat_client_key: params.tailcat_client_key.clone(),
+        api_token_hash: Some(hash_device_api_token(&device_api_token)),
         paired_at: now_iso(),
         last_seen_at: None,
     };
@@ -174,6 +199,8 @@ pub fn pair_device(
         });
     }
 
+    super::paired_devices::reload_device_api_tokens(db, device_tokens)?;
+
     if let Some(client_key) = params.tailcat_client_key.as_deref() {
         super::paired_devices::add_tailcat_client_key_when_allow_listed(
             paths,
@@ -188,6 +215,7 @@ pub fn pair_device(
         device_id,
         user: identity.username,
         computer_name: identity.computer_name,
+        device_api_token,
     })
 }
 

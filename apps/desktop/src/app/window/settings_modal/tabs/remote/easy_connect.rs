@@ -484,6 +484,8 @@ pub(super) fn hidden_qr(
             move |tab: &mut RemoteTab, window, cx| {
                 tab.qr_preview = Some(card);
                 tab.qr_preview_focus.focus(window, cx);
+                // Ask at once, so a locked Easy Connect opens to the new phone without a poll's wait.
+                tab.refresh_fast(cx);
                 cx.notify();
             },
             cx,
@@ -540,9 +542,11 @@ fn phone_panel(tab: &mut RemoteTab, t: &RemoteTokens, cx: &mut Context<RemoteTab
                 .border_color(hsla(t.edge(0.60)))
                 .text_size(px(12.0))
                 .line_height(px(17.0))
-                .child(
-                    "The QR refreshes after pairing. Remove a paired phone below to disconnect it.",
-                ),
+                .child(if paired_only(tab) {
+                    "Only paired devices can connect, so Easy Connect lets a new phone in while the QR is showing. Remove a paired phone below to disconnect it."
+                } else {
+                    "The QR refreshes after pairing. Remove a paired phone below to disconnect it."
+                }),
         );
     qr_block(t, left, meta.into_any_element())
 }
@@ -658,6 +662,11 @@ fn computer_panel(
         )
         .child("To add this computer on another computer, copy its Easy Connect code below.")
         .child(list);
+    if paired_only(tab) {
+        meta = meta.child(
+            "Only paired devices can connect, so first run tailcat genkey --client --key=client-default on the other computer and add the key it prints under Advanced → Allowed client keys.",
+        );
+    }
     if let Some(code) = &code {
         let copied = tab.copied.contains("remote-copy-code");
         let payload = code.payload.clone();
@@ -704,6 +713,13 @@ fn computer_panel(
         .bg(hsla(t.card(0.18)))
         .child(meta)
         .into_any_element()
+}
+
+/// "Only paired devices can connect" is on: the allow-list holds at least one key.
+pub(super) fn paired_only(tab: &RemoteTab) -> bool {
+    tab.easy_connect
+        .as_ref()
+        .is_some_and(|status| !status.allowed_client_keys.is_empty())
 }
 
 /// `.settings-remote-off-block`: the faded QR placeholder and the Turn on button.

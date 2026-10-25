@@ -3,6 +3,7 @@
 //! CDXC:RemotePairing 2026-09-03:
 //! The friendly face of the pairing registry: one row per device with its platform glyph, when it paired, and whether it checked in within the last three minutes. Remove asks for confirmation inline, naming the device, and then posts `/api/removePairedDevice`, which also drops the device's SSH key.
 use super::super::super::super::native_modal_kit::*;
+use super::super::super::fields::switch_control;
 use super::RemoteTab;
 use super::model::{
     format_paired_device_detail, is_paired_device_connected_now, is_phone_platform,
@@ -13,6 +14,7 @@ use gpui::{
     AnyElement, Context, IntoElement, ParentElement as _, SharedString, Styled as _, div, px,
 };
 use gpui_component::{h_flex, v_flex};
+use serde_json::json;
 
 /// `.settings-remote-rows`: a bordered list whose rows divide with hairlines.
 pub(super) fn rows_frame(t: &RemoteTokens, rows: Vec<AnyElement>) -> AnyElement {
@@ -202,11 +204,95 @@ pub(super) fn paired_devices_list(
             })
             .collect(),
     };
+    let paired_only = paired_only_row(tab, t, rpc, cx);
     v_flex()
         .w_full()
         .min_w_0()
         .gap(px(6.0))
         .child(section_label(t, "Paired devices"))
         .child(rows_frame(t, rows))
+        .child(rows_frame(t, vec![paired_only]))
         .into_any_element()
+}
+
+/*
+CDXC:RemotePairing 2026-10-25 DECISION:
+User (security audit, Q4 "per-device tokens and a tunnel allow-list"): "Only paired devices can connect" is the friendly face of the allow-list. Turning it on lists every paired phone's Easy Connect key (plus any key already on the list), so a phone removed above can no longer reach this computer at all; turning it off empties the list, which lets in anyone with the code again. It is off until the user turns it on, because computers that connect with Easy Connect, and phones paired by an older Ghostex app, have no listed key and would be locked out: the row names those phones, and the Connect a computer panel says how to add a computer's key. New phones still pair while the QR is showing (CDXC:RemotePairing 2026-10-25 in server/src/tailcat/supervisor.rs).
+*/
+fn paired_only_row(
+    tab: &RemoteTab,
+    t: &RemoteTokens,
+    rpc: bool,
+    cx: &mut Context<RemoteTab>,
+) -> AnyElement {
+    let listed = tab
+        .easy_connect
+        .as_ref()
+        .map(|status| status.allowed_client_keys.clone())
+        .unwrap_or_default();
+    let devices = tab.paired_devices.clone().unwrap_or_default();
+    let device_keys: Vec<String> = devices
+        .iter()
+        .filter_map(|device| device.tailcat_client_key.clone())
+        .collect();
+    let without_key: Vec<String> = devices
+        .iter()
+        .filter(|device| device.tailcat_client_key.is_none())
+        .map(|device| device.name.clone())
+        .collect();
+    let on = !listed.is_empty();
+    let can_turn_on = !device_keys.is_empty();
+    let detail_text: SharedString = if !without_key.is_empty() {
+        format!(
+            "{} paired with an older Ghostex app and {} not listed; pair {} again to keep {} in.",
+            without_key.join(", "),
+            if without_key.len() == 1 { "is" } else { "are" },
+            if without_key.len() == 1 { "it" } else { "them" },
+            if without_key.len() == 1 { "it" } else { "them" },
+        )
+        .into()
+    } else if !on && !can_turn_on {
+        "Pair a phone first. Until this is on, anyone with this computer's Easy Connect code can reach its sign-in.".into()
+    } else {
+        "A removed phone can no longer reach this computer. Computers that connect with Easy Connect need their key added under Advanced.".into()
+    };
+    let switch = switch_control(
+        &t.p,
+        "remote-paired-only-switch",
+        "Only paired devices can connect",
+        on,
+        !rpc || tab.easy_connect.is_none() || (!on && !can_turn_on),
+        None,
+        move |tab: &mut RemoteTab, checked, _window, cx| {
+            let keys: Vec<String> = if checked {
+                let mut keys = listed.clone();
+                for key in &device_keys {
+                    if !keys.contains(key) {
+                        keys.push(key.clone());
+                    }
+                }
+                keys
+            } else {
+                Vec::new()
+            };
+            tab.set_easy_connect_state(
+                json!({ "allowedClientKeys": keys, "kind": "setAllowedClientKeys" }),
+                cx,
+            );
+        },
+        cx,
+    );
+    let main = v_flex()
+        .min_w_0()
+        .gap(px(3.0))
+        .child(
+            div()
+                .text_size(px(14.0))
+                .line_height(px(20.0))
+                .text_color(hsla(t.foreground))
+                .child("Only paired devices can connect"),
+        )
+        .child(detail(t, detail_text, true))
+        .into_any_element();
+    remote_row(main, Some(switch))
 }

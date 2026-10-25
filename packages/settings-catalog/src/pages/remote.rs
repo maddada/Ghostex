@@ -21,7 +21,8 @@ pub(crate) fn easy_connect() -> Section {
             row("easyConnectEnabled", "Easy Connect", "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click."),
             row("sshAccess", "SSH access", "Easy Connect carries SSH to this computer; Ghostex can turn it on with one admin prompt."),
             row("pairingCode", "Pairing code", "Connect a Phone with a QR, or Connect a Remote machine with Copy Easy Connect code and its SSH username and password."),
-            row("pairedDevices", "Paired devices", "Phones and computers paired with this computer; remove one to unpair it."),
+            row("pairedDevices", "Paired devices", "Phones and computers paired with this computer; remove one to unpair it and revoke its access."),
+            row("pairedDevicesOnly", "Only paired devices can connect", "Easy Connect lets in only paired phones and the keys listed under Advanced; a new phone can still pair while the QR is showing."),
         ],
     )
 }

@@ -30,10 +30,10 @@ fn initializes_sqlite_with_current_migrations_and_schema_layout() {
     let journal_mode: String = db
         .query_row("PRAGMA journal_mode", [], |row| row.get(0))
         .expect("journal_mode");
-    assert_eq!(user_version, 47);
+    assert_eq!(user_version, 48);
     assert_eq!(foreign_keys, 1);
     assert_eq!(journal_mode, "wal");
-    assert_eq!(schema_migration_count(&db), 47);
+    assert_eq!(schema_migration_count(&db), 48);
     assert_eq!(
         explicit_index_names(&db),
         vec![

@@ -2971,7 +2971,17 @@ sessions, so any client can control agents on any machine.
   Sessions search. Tapping an open session opens it; tapping a closed one (shown
   with a hollow dot) brings it back on its computer and opens it. Closed
   sessions appear once that computer runs an up-to-date Ghostex.
-  Paired devices are listed and can be removed. On the phone, open Web Preview
+  Paired devices are listed and can be removed. Each phone paired with an
+  up-to-date app gets its own access key, so removing it cuts that phone off
+  even if it kept a copy of anything it saw. Turn on Only paired devices can
+  connect (below the list) to let in only paired phones: a removed phone then
+  can't even reach the computer through Easy Connect, and a new phone can
+  still pair while the Show QR popup is open (paired phones reconnect once
+  when the popup opens and about a minute after it closes). A phone paired by
+  an older app is named there; pair it again to keep it in. Another computer
+  that connects with an Easy Connect code needs its key listed: run
+  `tailcat genkey --client --key=client-default` on it and add the key it
+  prints under Advanced > Allowed client keys. On the phone, open Web Preview
   from the machine menu and enter a website address or a port such as `3000`
   immediately, or choose a listening port from the list. The address bar stays
   editable while browsing. The Desktop site button in its toolbar loads the

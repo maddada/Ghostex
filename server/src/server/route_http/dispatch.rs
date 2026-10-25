@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    auth::is_authorized_headers,
+    auth::is_authorized_client_headers,
     extensions::serve_extension_static,
     protocol::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
@@ -194,7 +194,11 @@ pub(in crate::server) async fn route_http(
         .extension_registry
         .authorize_api_token(&parts.headers, &endpoint.path);
     if endpoint.requires_auth
-        && !is_authorized_headers(&parts.headers, &state.auth_token)
+        && !is_authorized_client_headers(
+            &parts.headers,
+            &state.auth_token,
+            &state.device_api_tokens,
+        )
         && token_extension_id.is_none()
     {
         return routed_json(

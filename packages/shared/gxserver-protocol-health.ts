@@ -90,6 +90,14 @@ export interface GxserverEnableSshAccessResult {
   ssh: GxserverRemoteSshAccessStatus;
 }
 
+export interface GxserverRemotePairingCodeParams {
+  /**
+   * The Easy Connect QR is on screen: while "Only paired devices can connect" is on, lift the
+   * allow-list so a new phone can pair; it returns 60 seconds after the last such ask.
+   */
+  openTunnel?: boolean;
+}
+
 export interface GxserverRemotePairingCodeResult {
   /*
    * `payload` is what the QR and the copy button carry: the encoded code wrapped in
@@ -109,6 +117,8 @@ export interface GxserverPairedDevice {
   pairedAt: string;
   lastSeenAt: string | null;
   sshKeyFingerprint: string;
+  /** The phone's Easy Connect client key; null for a phone paired by an older Ghostex app. */
+  tailcatClientKey: string | null;
 }
 
 // M2 (paired devices + pairing registration): served by
@@ -137,6 +147,8 @@ export interface GxserverPairDeviceResult {
   deviceId: string;
   user: string;
   computerName: string;
+  /** The phone's own API token; removing the device revokes it. Only its hash is stored. */
+  deviceApiToken: string;
 }
 
 export interface GxserverPairedDeviceSeenParams {

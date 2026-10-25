@@ -18,7 +18,7 @@ use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     agents::read_agent_settings,
-    auth::is_expected_gxserver_auth_token,
+    auth::{is_authorized_client_token, DeviceApiTokens},
     constants::GXSERVER_PROTOCOL_VERSION,
     domain::DomainRepository,
     paths::GxserverPaths,
@@ -32,6 +32,7 @@ const DEFAULT_ROWS: u16 = 30;
 #[derive(Clone)]
 pub(crate) struct TerminalWsState {
     pub auth_token: String,
+    pub device_api_tokens: DeviceApiTokens,
     pub base_url: String,
     pub paths: GxserverPaths,
     pub server_id: String,
@@ -60,7 +61,9 @@ pub(crate) async fn handle_terminal_socket(
     if query
         .get("authToken")
         .map(String::as_str)
-        .map(|token| is_expected_gxserver_auth_token(token, &state.auth_token))
+        .map(|token| {
+            is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens)
+        })
         != Some(true)
     {
         send_error_and_close(

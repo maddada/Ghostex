@@ -20,11 +20,14 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/tailscale/tailcat"
+	"tailscale.com/types/key"
 )
 
 const (
@@ -81,7 +84,68 @@ func (f *forward) lastError() string {
 var (
 	mu       sync.Mutex
 	forwards = map[string]*forward{}
+
+	// clientKey is this phone's Easy Connect identity once UseClientKeyFile
+	// loaded it; while zero, every tunnel makes a throwaway key. Guarded by mu.
+	clientKey key.NodePrivate
 )
+
+// UseClientKeyFile loads this phone's Easy Connect client key from path,
+// creating it on first use, makes every later tunnel use it, and returns its
+// public key ("nodekey:…").
+//
+// CDXC:RemotePairing 2026-10-25 DECISION:
+// User (security audit, Q4 "per-device tokens and a tunnel allow-list"): the
+// phone keeps one client key for good and sends its public half when it pairs,
+// so the computer can list it and, with "Only paired devices can connect" on,
+// refuse every key it has not listed, including a removed phone's. Until then
+// each tunnel made a throwaway key, which no allow-list could ever name. The
+// key file lives in the app's private storage; a reinstalled app makes a new
+// key and must pair again, as it must for its SSH key.
+func UseClientKeyFile(path string) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if !clientKey.IsZero() {
+		return clientKey.Public().String(), nil
+	}
+	loaded, err := readOrCreateClientKey(path)
+	if err != nil {
+		return "", err
+	}
+	clientKey = loaded
+	log.Printf("tailcat: client key loaded")
+	return clientKey.Public().String(), nil
+}
+
+func readOrCreateClientKey(path string) (key.NodePrivate, error) {
+	var loaded key.NodePrivate
+	text, err := os.ReadFile(path)
+	if err == nil {
+		if err := loaded.UnmarshalText([]byte(strings.TrimSpace(string(text)))); err != nil {
+			return key.NodePrivate{}, fmt.Errorf("tailcat client key file %s is unreadable: %w", path, err)
+		}
+		return loaded, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return key.NodePrivate{}, err
+	}
+	fresh := key.NewNode()
+	encoded, err := fresh.MarshalText()
+	if err != nil {
+		return key.NodePrivate{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return key.NodePrivate{}, err
+	}
+	partial := path + ".partial"
+	if err := os.WriteFile(partial, encoded, 0o600); err != nil {
+		return key.NodePrivate{}, err
+	}
+	if err := os.Rename(partial, path); err != nil {
+		return key.NodePrivate{}, err
+	}
+	return fresh, nil
+}
 
 // StartForward ensures a loopback listener that forwards every accepted
 // connection to remotePort on the tailcat peer identified by token, and
@@ -226,7 +290,9 @@ func Ping(token string, timeoutMs int) (int, error) {
 	if timeoutMs <= 0 {
 		timeoutMs = 15000
 	}
-	client := tailcat.NewClient(tailcat.Addr(token))
+	mu.Lock()
+	client := &tailcat.Client{Server: tailcat.Addr(token), Key: clientKey}
+	mu.Unlock()
 	defer client.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
@@ -274,6 +340,7 @@ func ensureForward(id, token string, remotePort int) (f *forward, port int, reus
 		// SEE-ALSO: server/src/tailcat/install.rs (TAILCAT_MODULE) and the go.mod pin next to this file.
 		client: &tailcat.Client{
 			Server: tailcat.Addr(token),
+			Key:    clientKey,
 			Logf:   forwardLogf(id),
 		},
 		closed: make(chan struct{}),

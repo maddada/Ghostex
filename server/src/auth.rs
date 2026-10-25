@@ -1,9 +1,15 @@
-use std::{fs, io, path::Path};
+use std::{
+    collections::HashSet,
+    fs, io,
+    path::Path,
+    sync::{Arc, RwLock},
+};
 
 use anyhow::{bail, Context, Result};
 use axum::http::{header, HeaderMap};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::RngCore;
+use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
 use crate::paths::GxserverPaths;
@@ -67,6 +73,77 @@ pub fn is_authorized_headers(headers: &HeaderMap, expected_token: &str) -> bool 
         return false;
     };
     is_expected_gxserver_auth_token(provided, expected_token)
+}
+
+/// The main token in the `Authorization` header, or a paired phone's own token.
+pub fn is_authorized_client_headers(
+    headers: &HeaderMap,
+    expected_token: &str,
+    device_tokens: &DeviceApiTokens,
+) -> bool {
+    bearer_token(headers)
+        .is_some_and(|provided| is_authorized_client_token(provided, expected_token, device_tokens))
+}
+
+/// The main token, or a paired phone's own token.
+pub fn is_authorized_client_token(
+    provided_token: &str,
+    expected_token: &str,
+    device_tokens: &DeviceApiTokens,
+) -> bool {
+    is_expected_gxserver_auth_token(provided_token, expected_token)
+        || device_tokens.accepts(provided_token)
+}
+
+/// Prefix of the API tokens `/api/pairDevice` gives each paired phone.
+pub const DEVICE_API_TOKEN_PREFIX: &str = "gxd_";
+
+/*
+CDXC:RemotePairing 2026-10-25 DECISION:
+User (security audit, Q4 "per-device tokens and a tunnel allow-list"): each phone paired through Easy Connect gets its own API token, and removing the phone from Paired devices revokes it. Before this every phone read the computer's main token over SSH and kept it, so a removed phone (or anyone who copied its token) could still call gxserver through the Easy Connect address. Only the token's SHA-256 is stored, next to the device row; this set mirrors those hashes so a request is checked without a database read, and it is refreshed on every pair and remove. A device token opens the same API the main token does: what it adds is that it can be taken away on its own.
+SEE-ALSO: server/src/remote_access/pair_device.rs (minting), server/src/remote_access/paired_devices.rs (revoking), apps/mobile/app/src/chat/gpui/endpoint.ts (the phone's use).
+*/
+#[derive(Clone, Default)]
+pub struct DeviceApiTokens {
+    hashes: Arc<RwLock<HashSet<String>>>,
+}
+
+impl DeviceApiTokens {
+    pub fn new(hashes: impl IntoIterator<Item = String>) -> Self {
+        let tokens = Self::default();
+        tokens.replace(hashes);
+        tokens
+    }
+
+    pub fn replace(&self, hashes: impl IntoIterator<Item = String>) {
+        let mut set = self
+            .hashes
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *set = hashes.into_iter().collect();
+    }
+
+    pub fn accepts(&self, provided_token: &str) -> bool {
+        if !provided_token.starts_with(DEVICE_API_TOKEN_PREFIX) {
+            return false;
+        }
+        let hash = hash_device_api_token(provided_token);
+        self.hashes
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .contains(&hash)
+    }
+}
+
+/// A fresh device token: the prefix and 32 random bytes in base64url.
+pub fn mint_device_api_token() -> String {
+    let mut random = [0_u8; TOKEN_BYTES];
+    rand::thread_rng().fill_bytes(&mut random);
+    format!("{DEVICE_API_TOKEN_PREFIX}{}", URL_SAFE_NO_PAD.encode(random))
+}
+
+pub fn hash_device_api_token(token: &str) -> String {
+    format!("{:x}", Sha256::digest(token.as_bytes()))
 }
 
 pub fn is_expected_gxserver_auth_token(provided_token: &str, expected_token: &str) -> bool {
