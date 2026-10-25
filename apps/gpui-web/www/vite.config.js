@@ -13,7 +13,9 @@ export default defineConfig({
     strictPort: true,
     fs: { allow: [repoRoot] },
     proxy: {
-      // `ghostex web` only answers its own origin, so the proxied request carries that origin.
+      // `ghostex web` only answers its own origin, so the proxied request carries that origin. The page's
+      // x-ghostex-web-bootstrap header (the run's key from the `#bootstrap=` link `ghostex web` prints)
+      // passes through unchanged; without it the bootstrap is refused.
       '/api/webBootstrap': {
         target: 'http://127.0.0.1:4173',
         changeOrigin: true,

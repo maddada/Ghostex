@@ -1,20 +1,22 @@
 mod bootstrap;
 mod static_files;
 
-use std::{path::PathBuf, process::Command, sync::Arc};
+use std::{io::Write as _, path::PathBuf, process::Command, sync::Arc};
 
 use axum::{
     body::Body,
     extract::State,
     http::{header, Method, Request, StatusCode},
     response::{IntoResponse, Response},
-    Router,
+    Json, Router,
 };
 
 use crate::{
+    auth::is_expected_gxserver_auth_token,
     config::{read_gxserver_config, GxserverConfig},
     ghostex_cli::rpc::{CliError, CliResult},
     paths::get_gxserver_paths,
+    protocol::rpc_error,
 };
 
 const USAGE: &str = "Usage: ghostex web [--port <port>] [--dist-dir <directory>] [--no-open]\n\nStart Ghostex Web on http://127.0.0.1:4173 and open it in the default browser.\nRuns in the foreground; Ctrl+C stops only the web server.\nServes the GPUI web build (cargo xtask web-build) and requires a running gxserver.";
@@ -75,8 +77,48 @@ struct WebState {
     config: GxserverConfig,
     port: u16,
     api_url: String,
+    bootstrap_secret: String,
 }
 
+/// The header that carries this run's key on `/api/webBootstrap`.
+const BOOTSTRAP_SECRET_HEADER: &str = "x-ghostex-web-bootstrap";
+
+/// A fresh random key for this `ghostex web` run (32 bytes, hex).
+fn new_bootstrap_secret() -> String {
+    use rand::RngCore as _;
+    let mut bytes = [0_u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// Writes a page that forwards the browser to `page_url`, readable only by this user, so the key
+/// never appears on a command line (other accounts can read process arguments). Jupyter opens its
+/// browser the same way.
+fn write_browser_launcher(page_url: &str, port: u16) -> CliResult<PathBuf> {
+    let path = get_gxserver_paths(None)
+        .auth_dir
+        .join(format!("web-open-{port}.html"));
+    let _ = std::fs::remove_file(&path);
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt as _;
+        options.mode(0o600);
+    }
+    let mut file = options.open(&path)?;
+    file.write_all(
+        format!(
+            "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"0;url={page_url}\"><title>Ghostex Web</title><a href=\"{page_url}\">Open Ghostex Web</a>"
+        )
+        .as_bytes(),
+    )?;
+    Ok(path)
+}
+
+/// CDXC:ServerApi 2026-10-25 WHY:
+/// `/api/webBootstrap` hands out the gxserver token, and its only gate was the Origin header, which any non-browser client (another account on the computer, for one) can leave out or forge (security audit 2026-10-25). Each run now makes a random key that only the page `ghostex web` opens receives, in its address fragment through a private launcher file (or the printed link for `--no-open`), and the bootstrap refuses any request without it. The Host and Origin checks stay.
+/// SEE-ALSO: apps/gpui-web/src/app/gx_store/web_transport.rs `bootstrap_secret`, apps/gpui-web/www/vite.config.js.
 async fn serve(config: GxserverConfig, port: u16, open_browser: bool) -> CliResult<()> {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
         .await
@@ -88,25 +130,36 @@ async fn serve(config: GxserverConfig, port: u16, open_browser: bool) -> CliResu
         "http://{}:{}",
         config.listeners.local.host, config.listeners.local.port
     );
+    let bootstrap_secret = new_bootstrap_secret();
+    let page_url = format!("{url}#bootstrap={bootstrap_secret}");
     let router = Router::new()
         .fallback(handle_request)
         .with_state(Arc::new(WebState {
             config,
             port,
             api_url,
+            bootstrap_secret,
         }));
-    println!("Ghostex Web: {url}\nPress Ctrl+C to stop the web server.");
-    if open_browser {
+    println!("Ghostex Web: {page_url}\nPress Ctrl+C to stop the web server.");
+    let launcher = if open_browser {
+        let launcher = write_browser_launcher(&page_url, port)?;
         browser_open_command()?
-            .arg(&url)
+            .arg(&launcher)
             .spawn()
             .map_err(|error| CliError::Other(format!("Failed to open {url}: {error}")))?;
-    }
-    axum::serve(listener, router)
+        Some(launcher)
+    } else {
+        None
+    };
+    let served = axum::serve(listener, router)
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;
         })
-        .await?;
+        .await;
+    if let Some(launcher) = launcher {
+        let _ = std::fs::remove_file(launcher);
+    }
+    served?;
     Ok(())
 }
 
@@ -128,6 +181,21 @@ async fn handle_request(State(state): State<Arc<WebState>>, request: Request<Bod
     }
     let path = request.uri().path();
     if path == "/api/webBootstrap" {
+        let presented = headers
+            .get(BOOTSTRAP_SECRET_HEADER)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        if !is_expected_gxserver_auth_token(presented, &state.bootstrap_secret) {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(rpc_error(
+                    "forbidden",
+                    "Open Ghostex Web with the link `ghostex web` printed; it carries this run's key.",
+                    None,
+                )),
+            )
+                .into_response();
+        }
         return if request.method() == Method::POST {
             bootstrap::bootstrap(headers, &state.api_url)
         } else {

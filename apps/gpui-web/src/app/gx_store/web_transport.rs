@@ -41,6 +41,15 @@ fn js_error(error: JsValue) -> String {
 }
 
 async fn post_envelope(url: &str, token: Option<&str>, body: &Value) -> Result<Value, String> {
+    post_envelope_with(url, token, None, body).await
+}
+
+async fn post_envelope_with(
+    url: &str,
+    token: Option<&str>,
+    bootstrap_secret: Option<&str>,
+    body: &Value,
+) -> Result<Value, String> {
     let init = RequestInit::new();
     init.set_method("POST");
     init.set_body(&JsValue::from_str(&body.to_string()));
@@ -55,6 +64,11 @@ async fn post_envelope(url: &str, token: Option<&str>, body: &Value) -> Result<V
     if let Some(token) = token {
         headers
             .set("authorization", &format!("Bearer {token}"))
+            .map_err(js_error)?;
+    }
+    if let Some(secret) = bootstrap_secret {
+        headers
+            .set("x-ghostex-web-bootstrap", secret)
             .map_err(js_error)?;
     }
     let window = web_sys::window().ok_or("no window")?;
@@ -84,9 +98,61 @@ async fn post_json(url: &str, token: Option<&str>, body: &Value) -> Result<Value
     }
 }
 
+/// The per-run key `ghostex web` put in the page's address (`#bootstrap=…`). It is kept in this
+/// tab's sessionStorage so a reload still connects, and taken out of the address bar.
+fn bootstrap_secret() -> Option<String> {
+    const KEY: &str = "ghostex-web-bootstrap";
+    let window = web_sys::window()?;
+    let storage = window.session_storage().ok().flatten();
+    let location = window.location();
+    let hash = location.hash().unwrap_or_default();
+    if let Some(secret) = hash
+        .strip_prefix("#bootstrap=")
+        .filter(|secret| !secret.is_empty())
+    {
+        if let Some(storage) = &storage {
+            let _ = storage.set_item(KEY, secret);
+        }
+        let without_key = format!(
+            "{}{}",
+            location.pathname().unwrap_or_default(),
+            location.search().unwrap_or_default()
+        );
+        // history.replaceState through Reflect: no reload, no history entry, no extra web-sys feature.
+        if let Ok(history) = js_sys::Reflect::get(&window, &JsValue::from_str("history"))
+            && let Ok(replace) = js_sys::Reflect::get(&history, &JsValue::from_str("replaceState"))
+            && let Some(replace) = replace.dyn_ref::<js_sys::Function>()
+        {
+            let _ = replace.call3(
+                &history,
+                &JsValue::NULL,
+                &JsValue::from_str(""),
+                &JsValue::from_str(&without_key),
+            );
+        }
+        return Some(secret.to_string());
+    }
+    storage?
+        .get_item(KEY)
+        .ok()
+        .flatten()
+        .filter(|secret| !secret.is_empty())
+}
+
 /// Asks the page's own server (`ghostex web`, or the dev server proxying to it) for the daemon.
 pub(crate) async fn bootstrap() -> Result<GxserverEndpoint, String> {
-    let result = post_json("/api/webBootstrap", None, &json!({})).await?;
+    let secret = bootstrap_secret().ok_or(
+        "Open Ghostex Web with the link `ghostex web` printed; it carries this run's key.",
+    )?;
+    let envelope = post_envelope_with("/api/webBootstrap", None, Some(&secret), &json!({})).await?;
+    if envelope["ok"] != true {
+        return Err(envelope["message"]
+            .as_str()
+            .or_else(|| envelope["error"].as_str())
+            .unwrap_or("Ghostex Web refused this page's key; open the link `ghostex web` printed.")
+            .to_string());
+    }
+    let result = envelope["result"].clone();
     let endpoint = GxserverEndpoint {
         base_url: result["baseUrl"]
             .as_str()

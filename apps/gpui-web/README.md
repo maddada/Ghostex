@@ -33,6 +33,8 @@ cargo xtask start-web        # builds the wasm (release, ~2 min cold) and the pa
 cargo xtask web-dev          # rebuilds the wasm and starts Vite on http://localhost:4174, which proxies the bootstrap to :4173
 ```
 
+Each `ghostex web` run makes a random key and prints its link as `http://127.0.0.1:4173/#bootstrap=<key>`; the bootstrap refuses any request without that key, so another account on the computer cannot fetch the gxserver token from it. Without `--no-open` it opens the browser through a private launcher file, so the key never shows up in a process list. For the Vite dev server, open `http://localhost:4174/#bootstrap=<key>` (add `?session=…` before the `#` as usual). The page keeps the key in the tab's sessionStorage, so reloads work; a new `ghostex web` run needs the new link.
+
 `cargo xtask web-build --debug` (or `web-dev --debug`) builds the wasm without optimization: it works but is 100 MB and slow.
 
 On Windows, run `cargo xtask web-build` from PowerShell with Zig 0.16, Rust 1.95.0's `wasm32-unknown-unknown` target and wasm-bindgen-cli 0.2.125 installed. The build restores this crate's tracked symlinks when Git checked them out as text; Windows Developer Mode or symlink privileges are required. It invokes Rust directly on Windows because the web-sys feature list exceeds the command-line limit through sccache. Serve the result against the running Windows gxserver with `ghostex web --dist-dir C:/dev/Ghostex/apps/gpui-web/www/dist --no-open` (adjust the checkout path).
