@@ -306,7 +306,9 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
     // macOS `projectBeadsPromptGenerationCommand` parity, including the
     // ephemeral Codex exec profile so a title prompt can never become a
     // restorable Codex transcript.
-    const CODEX_EXEC_ARGS: &str = "exec --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"'";
+    // Read-only like gxserver's one-shot text jobs (server/src/agents/accept_all.rs
+    // `one_shot_text_job_command`): the prompt carries ticket text, so it never runs with a bypass.
+    const CODEX_EXEC_ARGS: &str = "exec --sandbox read-only --ephemeral --skip-git-repo-check -m gpt-5.6-luna -c 'model_reasoning_effort=\"low\"'";
     let normalized_agent_id = agent_id
         .map(|value| value.trim().to_lowercase())
         .unwrap_or_default();
@@ -314,7 +316,7 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     if normalized_agent_id.is_empty() {
-        return Ok(format!("codex --yolo {CODEX_EXEC_ARGS}"));
+        return Ok(format!("codex {CODEX_EXEC_ARGS}"));
     }
     if let Some(command) = command {
         return Ok(match normalized_agent_id.as_str() {
@@ -323,10 +325,11 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
                 gpui_project_beads_permission_command(command, "codex")
             ),
             "cursor" => format!(
-                "{command} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
+                "{} --print --mode ask --trust --model cursor-grok-4.5-low --output-format text",
+                gpui_project_beads_permission_command(command, "cursor")
             ),
             "claude" => format!(
-                "{} -p --model claude-haiku-5-5 --effort low",
+                "{} -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low",
                 gpui_project_beads_permission_command(command, "claude")
             ),
             "gemini" => format!("{command} -p"),
@@ -334,9 +337,9 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
         });
     }
     match normalized_agent_id.as_str() {
-        "codex" => Ok(format!("codex --yolo {CODEX_EXEC_ARGS}")),
+        "codex" => Ok(format!("codex {CODEX_EXEC_ARGS}")),
         "claude" => Ok(
-            "claude --dangerously-skip-permissions -p --model claude-haiku-5-5 --effort low".to_string(),
+            "claude -p --permission-mode dontAsk --model claude-haiku-5-5 --effort low".to_string(),
         ),
         "cursor" => Ok(
             "cursor-agent --print --mode ask --trust --model cursor-grok-4.5-low --output-format text"
@@ -349,24 +352,29 @@ pub(crate) fn gpui_project_beads_prompt_generation_command(
     }
 }
 
+/// The configured command with every permission-bypass, approval and sandbox flag removed; the
+/// caller pins the read-only mode.
 fn gpui_project_beads_permission_command(command: &str, agent_id: &str) -> String {
-    let (canonical, alternatives, paired_alternatives): (&str, &[&str], &[&str]) = match agent_id {
+    let (alternatives, paired_alternatives): (&[&str], &[&str]) = match agent_id {
         "codex" => (
-            "--yolo",
             &[
                 "--yolo",
                 "--approve-for-me",
                 "--dangerously-bypass-approvals-and-sandbox",
+                "--full-auto",
             ],
             &["-a", "--ask-for-approval", "-s", "--sandbox"],
         ),
         "claude" => (
-            "--dangerously-skip-permissions",
             &[
                 "--dangerously-skip-permissions",
                 "--allow-dangerously-skip-permissions",
             ],
             &["--permission-mode"],
+        ),
+        "cursor" => (
+            &["--yolo", "--force", "-f", "--auto-review", "--plan"],
+            &["--mode"],
         ),
         _ => return command.trim().to_string(),
     };
@@ -403,7 +411,6 @@ fn gpui_project_beads_permission_command(command: &str, agent_id: &str) -> Strin
         output.push(token);
         index += 1;
     }
-    output.push(canonical);
     output.join(" ")
 }
 
