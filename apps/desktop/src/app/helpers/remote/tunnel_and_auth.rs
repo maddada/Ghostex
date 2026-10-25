@@ -114,7 +114,10 @@ pub(crate) fn gpui_spawn_remote_gxserver_tunnel(
         "-o".to_string(),
         "ExitOnForwardFailure=yes".to_string(),
         "-L".to_string(),
-        format!("{local_port}:127.0.0.1:{remote_port}"),
+        // Bound to 127.0.0.1 explicitly, like the code-server tunnel: without a bind address ssh can
+        // succeed on ::1 alone while another account already holds 127.0.0.1:<port>, which is where
+        // the health probe then sends the token.
+        format!("127.0.0.1:{local_port}:127.0.0.1:{remote_port}"),
     ]);
     arguments.extend(target_arguments);
     if let GpuiRemoteExecutionTarget::WindowsWsl { distribution } = execution_target {

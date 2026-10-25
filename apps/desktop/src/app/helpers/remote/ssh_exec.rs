@@ -458,6 +458,20 @@ pub(crate) fn gpui_remote_ssh_dial_refusal(config: &GpuiRemoteMachineConfig) -> 
             "The saved remote machine has no SSH host.".to_string()
         });
     }
+    // CDXC:RemoteMachines 2026-10-25 WHY:
+    // The user and host become ssh's destination argument (`user@host`), and a value starting with `-` is read as an option there (`-oProxyCommand=…` runs a command), while whitespace or control characters split or corrupt it. Both can arrive from an Easy Connect code or a hand-edited machine, so they are refused before any argument list is built (security audit 2026-10-25).
+    let user = config.ssh_user.as_deref().unwrap_or("");
+    if [config.ssh_host.as_str(), user].iter().any(|value| {
+        value.starts_with('-')
+            || value
+                .chars()
+                .any(|character| character.is_whitespace() || character.is_control())
+    }) {
+        return Err(
+            "The saved remote machine's SSH user or host is not valid. Edit the machine in Settings > Remote."
+                .to_string(),
+        );
+    }
     Ok(())
 }
 

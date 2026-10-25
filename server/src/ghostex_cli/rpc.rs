@@ -996,7 +996,9 @@ pub fn create_cli_ssh_forward_plan(
         "-o".to_string(),
         "ExitOnForwardFailure=yes".to_string(),
         "-L".to_string(),
-        format!("{local_port}:127.0.0.1:{remote_local_port}"),
+        // Bound to 127.0.0.1 explicitly, the address the probe and base_url use, so ssh cannot succeed
+        // on ::1 alone while another account holds 127.0.0.1:<port>.
+        format!("127.0.0.1:{local_port}:127.0.0.1:{remote_local_port}"),
     ];
     port_forward_command.extend(target_args);
     Ok(SshForwardPlan {
