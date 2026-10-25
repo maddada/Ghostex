@@ -26,6 +26,15 @@ pub(crate) enum GpuiSessionChatFileResolutionError {
     NotFile,
 }
 
+fn local_session_chat_path(path: &Path) -> Result<PathBuf, GpuiSessionChatFileResolutionError> {
+    #[cfg(target_os = "windows")]
+    if path.to_string_lossy().starts_with('/') {
+        return windows_terminal_backend::windows_path_for_wsl_path(path)
+            .map_err(|_| GpuiSessionChatFileResolutionError::ProjectUnavailable);
+    }
+    Ok(path.to_path_buf())
+}
+
 impl GhostexGpuiApp {
     pub(crate) fn resolve_session_chat_file(
         &mut self,
@@ -57,14 +66,15 @@ impl GhostexGpuiApp {
                     .map(PathBuf::from)
             })
             .ok_or(GpuiSessionChatFileResolutionError::ProjectUnavailable)?;
+        let project_path = local_session_chat_path(&project_path)?;
         let project_root = fs::canonicalize(&project_path)
             .map_err(|_| GpuiSessionChatFileResolutionError::ProjectUnavailable)?;
         if !fs::metadata(&project_root).is_ok_and(|metadata| metadata.is_dir()) {
             return Err(GpuiSessionChatFileResolutionError::ProjectUnavailable);
         }
 
-        let explicit_candidate = if Path::new(trimmed).is_absolute() {
-            Some(PathBuf::from(trimmed))
+        let explicit_candidate = if Path::new(trimmed).is_absolute() || trimmed.starts_with('/') {
+            Some(local_session_chat_path(Path::new(trimmed))?)
         } else if trimmed == "~" {
             Some(home_dir())
         } else {
@@ -90,7 +100,11 @@ impl GhostexGpuiApp {
                 .map(str::trim)
                 .filter(|working_directory| !working_directory.is_empty())
                 .map(PathBuf::from)
-                .filter(|working_directory| working_directory.is_absolute())
+                .filter(|working_directory| {
+                    working_directory.is_absolute()
+                        || working_directory.to_string_lossy().starts_with('/')
+                })
+                .and_then(|working_directory| local_session_chat_path(&working_directory).ok())
                 .and_then(|working_directory| fs::canonicalize(working_directory).ok())
                 .filter(|working_directory| working_directory.starts_with(&project_root));
             if let Some(working_directory) = working_directory {
