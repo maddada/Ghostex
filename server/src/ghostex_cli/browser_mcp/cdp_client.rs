@@ -23,7 +23,11 @@ pub(super) struct CdpClient {
 }
 
 impl CdpClient {
-    pub(super) fn connect(ws_url: &str, timeout_ms: u64) -> CliResult<CdpClient> {
+    pub(super) fn connect(
+        ws_url: &str,
+        timeout_ms: u64,
+        bearer: Option<&str>,
+    ) -> CliResult<CdpClient> {
         let (host, port) = parse_ws_host_port(ws_url)
             .ok_or_else(|| CliError::Other("Invalid WebSocket handshake".to_string()))?;
         let address = std::net::ToSocketAddrs::to_socket_addrs(&(host.as_str(), port))
@@ -42,7 +46,14 @@ impl CdpClient {
                 }
             })?;
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
-        let (socket, _response) = tungstenite::client::client(ws_url, stream)
+        let mut request = tungstenite::client::IntoClientRequest::into_client_request(ws_url)
+            .map_err(|error| CliError::Other(error.to_string()))?;
+        if let Some(token) = bearer {
+            let value = tungstenite::http::HeaderValue::from_str(&format!("Bearer {token}"))
+                .map_err(|error| CliError::Other(error.to_string()))?;
+            request.headers_mut().insert("authorization", value);
+        }
+        let (socket, _response) = tungstenite::client::client(request, stream)
             .map_err(|error| CliError::Other(error.to_string()))?;
         Ok(CdpClient {
             socket,

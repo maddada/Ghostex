@@ -51,6 +51,7 @@ pub(super) fn test_state(temp: &tempfile::TempDir) -> Arc<AppState> {
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
         device_api_tokens: crate::auth::DeviceApiTokens::default(),
+        cef_devtools: Default::default(),
         automation_runtime: crate::automations::AutomationRuntime::new(
             paths.clone(),
             metadata.server_id.clone(),

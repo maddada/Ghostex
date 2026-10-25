@@ -124,6 +124,7 @@ mod app_state;
 pub mod background_tasks;
 mod bot_sync;
 mod browser_tcp;
+mod cef_devtools;
 mod close_after_done_runtime;
 pub mod commit_message_generation;
 mod coordinator_open_http;

@@ -187,6 +187,7 @@ pub async fn run_gxserver_foreground(
         accounts: Arc::new(crate::accounts::runtime::AccountRuntime::default()),
         auth_token: auth.token,
         device_api_tokens: load_device_api_tokens(&paths),
+        cef_devtools: Default::default(),
         automation_runtime,
         delayed_send_runtime,
         board_start_work_gate: Arc::new(Mutex::new(())),
@@ -225,6 +226,18 @@ pub async fn run_gxserver_foreground(
         .route("/api/terminal", any(handle_terminal))
         .route("/api/browserTcp", any(browser_tcp::handle_browser_tcp))
         .route("/api/voice", any(crate::voice_agent::handle_voice))
+        .route(
+            "/api/cefDevtools/host",
+            any(cef_devtools::handle_cef_devtools_host),
+        )
+        .route(
+            "/api/cefDevtools/json",
+            axum::routing::get(cef_devtools::handle_cef_devtools_pages),
+        )
+        .route(
+            "/api/cefDevtools/page/{page_id}",
+            any(cef_devtools::handle_cef_devtools_page),
+        )
         .fallback_service(service_fn(move |request| {
             handle_http_request(http_state.clone(), request)
         }))

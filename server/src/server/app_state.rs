@@ -47,6 +47,8 @@ pub(crate) struct AppState {
     pub(crate) auth_token: String,
     /// Paired phones' own API tokens (CDXC:RemotePairing 2026-10-25 in `auth.rs`).
     pub(crate) device_api_tokens: crate::auth::DeviceApiTokens,
+    /// The desktop's DevTools host and the sessions through it (`cef_devtools.rs`).
+    pub(crate) cef_devtools: super::cef_devtools::CefDevtoolsHub,
     pub(crate) automation_runtime: AutomationRuntime,
     pub(crate) delayed_send_runtime: DelayedSendRuntime,
     /// Serializes `/api/startBoardWork` so concurrent calls for one bead

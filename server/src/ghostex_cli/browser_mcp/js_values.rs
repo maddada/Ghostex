@@ -92,6 +92,25 @@ pub(super) fn js_string_of(value: Option<&Value>) -> String {
     }
 }
 
+/// `http_json` with the gxserver token.
+pub(super) fn http_json_with_bearer(url: &str, token: &str, timeout_ms: u64) -> Result<Value, String> {
+    match ureq::get(url)
+        .set("Authorization", &format!("Bearer {token}"))
+        .timeout(Duration::from_millis(timeout_ms))
+        .call()
+    {
+        Ok(response) => response
+            .into_json::<Value>()
+            .map_err(|error| error.to_string()),
+        Err(ureq::Error::Status(code, response)) => Err(response
+            .into_json::<Value>()
+            .ok()
+            .and_then(|body| body.get("message")?.as_str().map(str::to_string))
+            .unwrap_or_else(|| format!("HTTP {code}"))),
+        Err(error) => Err(error.to_string()),
+    }
+}
+
 pub(super) fn http_json(url: &str, timeout_ms: u64) -> Result<Value, String> {
     match ureq::get(url)
         .timeout(Duration::from_millis(timeout_ms))

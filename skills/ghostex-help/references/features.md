@@ -229,8 +229,11 @@ view from the strip.
   or by another account on the computer or on a remote host, answers Forbidden.
 - **Browser**: embedded Chromium tabs with profiles, splits, annotations,
   DevTools, and agent control through the `$ghostex-embedded-browser-use`
-  skill. Its tabs sit in the view panel's tab strip, in the same row as the view
-  tabs, and stay there while you are in another view, so clicking one comes
+  skill, which reaches the pages through gxserver with its token. Chromium's
+  remote DevTools port stays closed, so other programs on the computer cannot
+  drive Ghostex's pages, unless Settings > Debugging > Show debug UI controls
+  was on when Ghostex started. Its tabs sit in the view panel's tab strip, in
+  the same row as the view tabs, and stay there while you are in another view, so clicking one comes
   back to Browser with that tab in front. Each tab shows its page icon and
   title, closes with its own x or a middle click, and drags anywhere along the
   strip to reorder. Right-click a tab for Select Tab, Pin Tab, Sleep (that tab),

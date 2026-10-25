@@ -35,10 +35,14 @@ Launch the bridge directly from the CLI for the current task:
 ghostex browser mcp
 ```
 
-If Ghostex uses a non-default CEF remote-debugging port, pass it explicitly:
+The bridge reaches Ghostex's pages through the local gxserver with its token,
+so it needs no DevTools port. Ghostex keeps its CEF remote-debugging port
+closed unless Settings > Debugging > Show debug UI controls was on when it
+started, or a port variable names one. Only for an app started that way, or an
+older Ghostex whose bridge still needs the port, pass it explicitly:
 
 ```bash
-ghostex browser mcp --port 9333
+ghostex browser mcp --port 9334
 ```
 
 The same value can be provided as `GHOSTEX_CEF_REMOTE_DEBUGGING_PORT`.

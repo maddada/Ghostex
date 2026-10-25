@@ -8541,7 +8541,7 @@
     {
       "key": "debuggingMode",
       "title": "Show debug UI controls",
-      "subtitle": "Show diagnostic logs.",
+      "subtitle": "Show diagnostic logs. From the next start, also opens Chromium's DevTools port (9334) for developer tools.",
       "tab": "debugging",
       "tabTitle": "Debugging",
       "section": "controls",

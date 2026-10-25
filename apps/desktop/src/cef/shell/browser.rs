@@ -880,11 +880,11 @@ pub(crate) fn cef_profile_cache_segment(profile: &str) -> Option<&str> {
         .then_some(profile)
 }
 
+/// CEF's DevTools port, or 0 for none.
+///
+/// CDXC:Browser 2026-10-25 DECISION:
+/// User (security audit, Q11): the port was always open on 127.0.0.1, so any local program could drive every Ghostex page; the browser skill now goes through gxserver (cef/shell/devtools_relay.rs). The port opens only for development: when a port variable names one (tooling and `cargo xtask` side-by-side runs set them), for a portable install's port table, or when Settings > Debugging > Show debug UI controls was on at launch (then on 9334, inside the tooling's 9333-9343 scan range). The GPUI-specific variable stays a more specific override so side-by-side runs can split ports.
 pub(crate) fn remote_debugging_port() -> i32 {
-    // Tooling (browser-use MCP, macOS app scripts) sets the shared
-    // GHOSTEX_CEF_REMOTE_DEBUGGING_PORT; the GPUI-specific name stays as a
-    // more-specific override so side-by-side runs can split ports. The
-    // default 9334 stays inside the tooling's 9333-9343 scan range.
     [
         "GHOSTEX_GPUI_CEF_REMOTE_DEBUGGING_PORT",
         "GHOSTEX_CEF_REMOTE_DEBUGGING_PORT",
@@ -897,7 +897,12 @@ pub(crate) fn remote_debugging_port() -> i32 {
             .filter(|port| *port > 0)
     })
     .or_else(|| ghostex_paths::portable::ports().map(|ports| i32::from(ports.cef_remote_debugging)))
-    .unwrap_or(9334)
+    .or_else(|| {
+        crate::shared_settings::shared_sidebar_settings_snapshot()
+            .debugging_mode()
+            .then_some(9334)
+    })
+    .unwrap_or(0)
 }
 
 pub(crate) fn register_native_view_browser(
@@ -934,9 +939,11 @@ pub(crate) fn unregister_native_view_browser(native_view: *mut c_void) {
     #[cfg(target_os = "linux")]
     remove_pointer_focus_handler(native_view);
 
-    CEF_BROWSERS_BY_NATIVE_VIEW.with(|browsers| {
-        browsers.borrow_mut().remove(&(native_view as usize));
-    });
+    let closed = CEF_BROWSERS_BY_NATIVE_VIEW
+        .with(|browsers| browsers.borrow_mut().remove(&(native_view as usize)));
+    if let Some(closed) = closed {
+        cef_devtools_relay_browser_closed(closed.identifier());
+    }
     KEYBOARD_ZOOM_CEF_NATIVE_VIEWS.with(|views| {
         views.borrow_mut().remove(&(native_view as usize));
     });

@@ -76,6 +76,7 @@ pub fn initialize(cx: &gpui::App) -> Result<()> {
             }
             anyhow::bail!("CEF initialization returned false");
         }
+        start_cef_devtools_relay();
         Ok(())
     }))?;
 
@@ -201,10 +202,6 @@ wrap_app! {
                 command_line.append_switch(Some(&CefString::from("use-mock-keychain")));
                 command_line.append_switch(Some(&CefString::from("enable-fullscreen")));
                 command_line.append_switch(Some(&CefString::from("allow-insecure-localhost")));
-                command_line.append_switch_with_value(
-                    Some(&CefString::from("remote-allow-origins")),
-                    Some(&CefString::from("*")),
-                );
                 // Per-OS Chromium switches (e.g. Linux forcing Ozone onto
                 // X11 to match the app-wide X11 embedding constraint) stay
                 // behind the platform seam like every other OS-specific
