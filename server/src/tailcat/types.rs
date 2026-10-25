@@ -49,8 +49,12 @@ pub fn tailcat_served_ports(state: &TailcatState) -> Vec<u16> {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum TailcatStateUpdate {
-    SetEnabled { enabled: bool },
-    SetPorts { ports: Vec<u16> },
+    SetEnabled {
+        enabled: bool,
+    },
+    SetPorts {
+        ports: Vec<u16>,
+    },
     /// `rename_all` names only the variants, so the field needs its wire name spelled out: the
     /// desktop's allow-list edits sent `allowedClientKeys` and were all refused as missing the
     /// field until 2026-10-25.

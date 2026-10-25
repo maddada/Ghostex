@@ -206,7 +206,9 @@ impl<'a> RemotePairingRepository<'a> {
     pub fn list_api_token_hashes(&self) -> Result<Vec<String>> {
         let mut statement = self
             .db
-            .prepare("SELECT apiTokenHash FROM remote_paired_devices WHERE apiTokenHash IS NOT NULL")
+            .prepare(
+                "SELECT apiTokenHash FROM remote_paired_devices WHERE apiTokenHash IS NOT NULL",
+            )
             .with_context(|| "prepare paired device token list")?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))

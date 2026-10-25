@@ -139,7 +139,10 @@ impl DeviceApiTokens {
 pub fn mint_device_api_token() -> String {
     let mut random = [0_u8; TOKEN_BYTES];
     rand::thread_rng().fill_bytes(&mut random);
-    format!("{DEVICE_API_TOKEN_PREFIX}{}", URL_SAFE_NO_PAD.encode(random))
+    format!(
+        "{DEVICE_API_TOKEN_PREFIX}{}",
+        URL_SAFE_NO_PAD.encode(random)
+    )
 }
 
 pub fn hash_device_api_token(token: &str) -> String {

@@ -61,9 +61,7 @@ pub(crate) async fn handle_terminal_socket(
     if query
         .get("authToken")
         .map(String::as_str)
-        .map(|token| {
-            is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens)
-        })
+        .map(|token| is_authorized_client_token(token, &state.auth_token, &state.device_api_tokens))
         != Some(true)
     {
         send_error_and_close(
