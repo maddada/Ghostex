@@ -234,18 +234,27 @@ impl WorkspacesTab {
         );
     }
 
+    /// Links (or clears) this member's Slack user. Linking needs the one-time code Ghostex sent that
+    /// Slack user privately (CDXC:TeamSync 2026-10-25 in packages/team-sync/convex/slackFlow.ts).
     fn save_slack_user(&mut self, workspace_id: String, cx: &mut Context<Self>) {
         let input_id = SharedString::from(format!("team-slack-user-{workspace_id}"));
+        let code_id = SharedString::from(format!("team-slack-code-{workspace_id}"));
         let Some(slack_user) = self.drafts.get(&input_id).map(|id| id.trim().to_string()) else {
             return;
         };
+        let code = self
+            .drafts
+            .get(&code_id)
+            .map(|code| code.trim().to_string())
+            .unwrap_or_default();
         self.team_write(
             workspace_id.clone(),
             "/api/setTeamSyncIdentity",
-            json!({ "workspaceId": workspace_id, "slackUserId": slack_user }),
+            json!({ "workspaceId": workspace_id, "slackUserId": slack_user, "slackLinkCode": code }),
             "Couldn't save your Slack user",
             move |page, _, _| {
                 page.drafts.remove(&input_id);
+                page.drafts.remove(&code_id);
             },
             cx,
         );
@@ -669,6 +678,8 @@ impl WorkspacesTab {
             .to_string();
         let input_id = SharedString::from(format!("team-slack-user-{workspace_id}"));
         let input = self.draft_input(&input_id, &saved, "U0123456789", window, cx);
+        let code_id = SharedString::from(format!("team-slack-code-{workspace_id}"));
+        let code_input = self.draft_input(&code_id, "", "Code from Slack", window, cx);
         let changed = self.draft_changed(&input_id, &saved);
         let save_workspace = workspace_id.to_string();
         let control = h_flex()
@@ -676,6 +687,14 @@ impl WorkspacesTab {
             .child(settings_text_input(
                 p,
                 &input,
+                Some(160.0),
+                true,
+                window,
+                cx,
+            ))
+            .child(settings_text_input(
+                p,
+                &code_input,
                 Some(160.0),
                 true,
                 window,
@@ -698,7 +717,7 @@ impl WorkspacesTab {
             p,
             input_id,
             RowSpec::new("Your Slack user").description(if saved.is_empty() {
-                "Not set. Your Slack member ID (your Slack profile → ⋯ → Copy member ID), so @Ghostex commands you send reach this computer."
+                "Not set. Send @Ghostex any message in Slack: its private reply has your member ID and a one-time code. Paste both here so @Ghostex commands you send reach this computer."
             } else {
                 "@Ghostex commands you send from this Slack user reach this computer."
             }),

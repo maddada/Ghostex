@@ -3523,12 +3523,16 @@ URLs, and the Slack signing secret and Linear webhook secret go into the Convex
 project's environment variables (`SLACK_SIGNING_SECRET`, `LINEAR_WEBHOOK_SECRET`).
 `ghostex team invite` makes a one-time invite link (valid for a week), and each
 teammate runs `ghostex team join <link>`. So that a Slack request reaches you, link
-your Slack member ID once with `ghostex team identity --slack-user U012ABC`.
+your Slack user once: send @Ghostex any message in Slack, and its private reply
+gives the exact command, `ghostex team identity --slack-user U012ABC --slack-code
+gxl_…`, with a one-time code that works for 30 minutes (Ghostex needs it to know
+the Slack user is really you).
 `ghostex team status` shows the connection, `ghostex team ping` checks that your
 Ghostex receives requests, and `ghostex team leave` disconnects. The same is in
 Settings > Workspaces under each Work workspace: **Team (Convex)** joins with a
 pasted invite link, shows who you are in the team, and has **Copy invite link**
-(owners) and **Leave**; **Your Slack user** links your Slack member ID; and **Set
+(owners) and **Leave**; **Your Slack user** links your Slack member ID with the
+code from that private reply; and **Set
 up a new team** shows the `ghostex team deploy` command to run in a terminal,
 because deploying needs your Convex CLI login.
 

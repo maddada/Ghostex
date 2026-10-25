@@ -113,13 +113,15 @@ export const info = query({
 });
 
 /**
- * Sets who the caller is in Slack and Linear. Linking a Slack user hands that user's waiting commands to the caller.
+ * Sets who the caller is in Slack and Linear. Linking a Slack user takes the one-time code Ghostex sent that Slack user privately (slackFlow.ts `slackLinkCommand`) and hands that user's waiting commands to the caller.
  */
 export const setIdentity = mutation({
   args: {
     memberToken: v.string(),
     name: v.optional(v.string()),
     slackUserId: v.optional(v.union(v.string(), v.null())),
+    /** The one-time code from Ghostex's private Slack reply; needed to link a Slack user. */
+    slackLinkCode: v.optional(v.string()),
     linearUserId: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
@@ -130,7 +132,30 @@ export const setIdentity = mutation({
     let handedOver = 0;
     if (args.slackUserId !== undefined) {
       const slackUserId = args.slackUserId?.trim() || undefined;
-      if (slackUserId) {
+      if (slackUserId && slackUserId !== me.slackUserId) {
+        // Proof the caller is this Slack user (CDXC:TeamSync 2026-10-25 in slackFlow.ts): a code sent
+        // only to them, unused and unexpired. A refused link throws, which rolls this back too, so a
+        // mistyped user id does not burn the code.
+        const code = args.slackLinkCode?.trim();
+        const codeHash = code ? await sha256Hex(code) : null;
+        const claim = codeHash
+          ? await ctx.db
+              .query("slackLinkCodes")
+              .withIndex("by_code_hash", (q) => q.eq("codeHash", codeHash))
+              .unique()
+          : null;
+        if (
+          claim === null ||
+          claim.teamId !== me.teamId ||
+          claim.slackUserId !== slackUserId ||
+          claim.usedAt !== undefined ||
+          claim.expiresAt < Date.now()
+        ) {
+          throw new ConvexError(
+            "Link your Slack user with the one-time code Ghostex sent you privately in Slack. Send @Ghostex any message there to get a new one.",
+          );
+        }
+        await ctx.db.patch(claim._id, { usedAt: Date.now() });
         const taken = await ctx.db
           .query("members")
           .withIndex("by_team_slack_user", (q) => q.eq("teamId", me.teamId).eq("slackUserId", slackUserId))

@@ -21,6 +21,7 @@ import {
   userNames,
   type SlackApiMessage,
 } from "./lib/slackApi";
+import { newSecret, sha256Hex } from "./lib/auth";
 import { buildThreadContext, messageUserIds, type ThreadContext } from "./lib/threadContext";
 import { findLinearProjectLinks, findTickets, parseTicketKey, titleFromText, type TicketRef } from "./lib/tickets";
 import type { LoadedRequest, QueuedWork } from "./slackFlowState";
@@ -328,6 +329,24 @@ async function createTicketFromThread(flow: FlowContext): Promise<LinearIssue> {
 /**
  * No GitHub issue in the thread of a GitHub team: the requester's Ghostex creates it (`slack.request` with `action: "createIssue"`, server/src/team_sync/slack_request.rs) in the repo the channel maps to, and the flow runs again with that issue once it reports back (slackFlowReport.ts).
  */
+/**
+ * The command that links the requester's Slack user to their Ghostex, with a one-time code only this
+ * requester sees: it goes into their private reply, and Convex keeps only its SHA-256 for 30 minutes.
+ *
+ * CDXC:TeamSync 2026-10-25 DECISION:
+ * User (security audit, Q5 "one-time code sent privately in Slack"): linking a Slack user needs proof that the member controls it. Before this any member could link any unlinked Slack user and receive that person's waiting requests (`teams:setIdentity`). The code reaches only the Slack user who wrote to Ghostex, and setIdentity links a Slack user only with an unused, unexpired code for that same user and team.
+ * SEE-ALSO: teams.ts `setIdentity`, server/src/team_sync/operations.rs (`--slack-code`), apps/desktop/src/app/window/settings_modal/tabs/workspaces/team.rs (Settings).
+ */
+async function slackLinkCommand(ctx: ActionCtx, request: { teamId: FlowContext["loaded"]["request"]["teamId"]; slackUserId: string }): Promise<string> {
+  const code = newSecret("gxl_", 16);
+  await ctx.runMutation(internal.slackFlowState.recordSlackLinkCode, {
+    teamId: request.teamId,
+    slackUserId: request.slackUserId,
+    codeHash: await sha256Hex(code),
+  });
+  return `ghostex team identity --slack-user ${request.slackUserId} --slack-code ${code}`;
+}
+
 async function queueGithubIssue(ctx: ActionCtx, flow: FlowContext): Promise<FlowOutcome> {
   const { request, settings } = flow.loaded;
   const mapping = settings.channelRepos.find((entry) => entry.channelId === request.channelId) ?? null;
@@ -359,7 +378,7 @@ async function queueGithubIssue(ctx: ActionCtx, flow: FlowContext): Promise<Flow
   });
   if (!queued.assigned) {
     await flow.note(
-      `There's no GitHub issue in this thread, and Ghostex doesn't know your Slack user yet, so no Ghostex can create one. In Ghostex, run \`ghostex team identity --slack-user ${request.slackUserId}\` and it starts right away.`,
+      `There's no GitHub issue in this thread, and Ghostex doesn't know your Slack user yet, so no Ghostex can create one. In Ghostex, run \`${await slackLinkCommand(ctx, request)}\` (or paste your member ID and the code into Settings > Workspaces > Your Slack user) within 30 minutes, and it starts right away.`,
     );
   } else if (!queued.online) {
     await flow.note("There's no GitHub issue in this thread. Your Ghostex isn't running; it creates the issue and starts as soon as it's back.");
@@ -557,7 +576,7 @@ async function workOnTicket(
     );
   } else if (!queued.assigned) {
     await flow.note(
-      `Ghostex doesn't know your Slack user yet, so no Ghostex can run this. In Ghostex, run \`ghostex team identity --slack-user ${request.slackUserId}\` and it starts right away.`,
+      `Ghostex doesn't know your Slack user yet, so no Ghostex can run this. In Ghostex, run \`${await slackLinkCommand(ctx, request)}\` (or paste your member ID and the code into Settings > Workspaces > Your Slack user) within 30 minutes, and it starts right away.`,
     );
   } else if (queued.action === "message") {
     if (inWorkingThread) {

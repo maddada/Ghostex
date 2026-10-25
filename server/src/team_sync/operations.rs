@@ -61,8 +61,10 @@ fn default_member_name() -> String {
         .unwrap_or_else(|_| "Teammate".to_string())
 }
 
-/// `{ workspaceId, inviteLink, name?, slackUserId? }`: exchanges the invite's one-time code for a
-/// member token and connects the workspace.
+/// `{ workspaceId, inviteLink, name?, slackUserId?, slackLinkCode? }`: exchanges the invite's
+/// one-time code for a member token and connects the workspace. A Slack user is linked only with the
+/// one-time code Ghostex sent that user in Slack; a link Convex refuses leaves the join in place and
+/// is reported as `slackLinkError`.
 pub(crate) fn join_team(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
@@ -99,17 +101,25 @@ pub(crate) fn join_team(
         own_linear_key: false,
     };
     save_connection(paths, &connection)?;
+    let mut summary = connection.summary();
     if let Some(slack_user_id) = text(params, "slackUserId") {
         let mut args = Map::new();
         args.insert("slackUserId".to_string(), json!(slack_user_id));
-        member_call(
+        if let Some(code) = text(params, "slackLinkCode") {
+            args.insert("slackLinkCode".to_string(), json!(code));
+        }
+        if let Err(error) = member_call(
             &connection,
             ConvexCallKind::Mutation,
             "teams:setIdentity",
             args,
-        )?;
+        ) {
+            if let Some(object) = summary.as_object_mut() {
+                object.insert("slackLinkError".to_string(), json!(error));
+            }
+        }
     }
-    Ok(connection.summary())
+    Ok(summary)
 }
 
 /// `{ workspaceId, deploymentUrl, memberToken }`: connects a workspace with a token made elsewhere
@@ -199,7 +209,8 @@ pub(crate) fn create_invite(
     }))
 }
 
-/// `{ workspaceId, slackUserId?, linearUserId?, name? }` (an empty string clears an id).
+/// `{ workspaceId, slackUserId?, slackLinkCode?, linearUserId?, name? }` (an empty string clears an
+/// id). Linking a Slack user needs the one-time code Ghostex sent that user privately in Slack.
 pub(crate) fn set_identity(
     paths: &GxserverPaths,
     params: &Map<String, Value>,
@@ -224,6 +235,9 @@ pub(crate) fn set_identity(
     }
     if args.is_empty() {
         return Err("Pass slackUserId, linearUserId or name.".to_string());
+    }
+    if let Some(code) = text(params, "slackLinkCode") {
+        args.insert("slackLinkCode".to_string(), json!(code));
     }
     member_call(
         &connection,

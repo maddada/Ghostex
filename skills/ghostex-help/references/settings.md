@@ -563,7 +563,7 @@ How to use this file:
 - **Set up a new team** `teamSetup` (Settings UI row without a settings key; use `ghostex settings open`): Deploy Ghostex's functions to your own Convex project with ghostex team deploy in a terminal.
 - **Slack app manifest** `slackAppManifest` (Settings UI row without a settings key; use `ghostex settings open`): Copy the manifest that creates your team's Slack app.
 - **Slack bot token and signing secret** `slackSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Stored in your team's Convex project with ghostex team slack-connect.
-- **Your Slack user** `slackUser` (Settings UI row without a settings key; use `ghostex settings open`): Your Slack member ID, so @Ghostex commands you send in Slack reach this computer.
+- **Your Slack user** `slackUser` (Settings UI row without a settings key; use `ghostex settings open`): Your Slack member ID and the one-time code from Ghostex's private Slack reply, so @Ghostex commands you send in Slack reach this computer.
 - **Linear for the team** `teamLinearKey` (Settings UI row without a settings key; use `ghostex settings open`): The team-wide Linear key Slack commands use to find and create tickets. Only the team's owners set or remove it; tickets created with it show the key's owner as the creator in Linear.
 - **Create my Slack tickets with my own Linear key** `teamOwnLinearKey` (Settings UI row without a settings key; use `ghostex settings open`): Tickets you request from Slack are created with this workspace's Linear key, so Linear shows you as their creator.
 ### Team flow

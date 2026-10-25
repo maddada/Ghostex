@@ -96,7 +96,7 @@ pub(crate) fn team() -> Section {
             row(
                 "slackUser",
                 "Your Slack user",
-                "Your Slack member ID, so @Ghostex commands you send in Slack reach this computer.",
+                "Your Slack member ID and the one-time code from Ghostex's private Slack reply, so @Ghostex commands you send in Slack reach this computer.",
             ),
             row(
                 "teamLinearKey",

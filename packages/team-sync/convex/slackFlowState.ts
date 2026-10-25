@@ -252,6 +252,18 @@ export const queueTicketWork = internalMutation({
   },
 });
 
+/** How long a Slack link code works after Ghostex sends it. */
+const SLACK_LINK_CODE_MS = 30 * 60 * 1000;
+
+/** Stores a Slack link code's hash for `teams:setIdentity` (the code itself goes only to that Slack user). */
+export const recordSlackLinkCode = internalMutation({
+  args: { teamId: v.id("teams"), slackUserId: v.string(), codeHash: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("slackLinkCodes", { ...args, expiresAt: Date.now() + SLACK_LINK_CODE_MS });
+    return null;
+  },
+});
+
 export const finishRequest = internalMutation({
   args: {
     requestId: v.id("slackRequests"),

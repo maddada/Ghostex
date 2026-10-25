@@ -37,6 +37,9 @@ pub(super) fn team_command(args: &[String]) -> CliResult<()> {
             if let Some(slack_user) = flags.string_value("slackUser") {
                 params.insert("slackUserId".to_string(), json!(slack_user));
             }
+            if let Some(code) = flags.string_value("slackCode") {
+                params.insert("slackLinkCode".to_string(), json!(code));
+            }
             call_and_print("/api/joinTeamSync", params, flags)
         }
         "status" => {
@@ -52,6 +55,7 @@ pub(super) fn team_command(args: &[String]) -> CliResult<()> {
             let mut params = workspace_params(flags)?;
             for (flag, key) in [
                 ("slackUser", "slackUserId"),
+                ("slackCode", "slackLinkCode"),
                 ("linearUser", "linearUserId"),
                 ("name", "name"),
             ] {

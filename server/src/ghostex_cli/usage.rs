@@ -507,7 +507,7 @@ pub fn usage() -> String {
             "A workspace's Executor: turn it on (Ghostex downloads Executor the first time), add apps from its catalog or by MCP server address, sign them in, list their tools and run one that only reads",
         ),
         format_help_command(
-            "team join <invite link> [--name n] [--slack-user U…] | status | invite | identity [--slack-user U…] [--linear-user id] | threads <ticket> | ping | leave | deploy [--team-name n] [--project slug] [--convex-team slug] [--dev]  (each takes --workspace name|id)",
+            "team join <invite link> [--name n] [--slack-user U… --slack-code gxl_…] | status | invite | identity [--slack-user U… --slack-code gxl_…] [--linear-user id] | threads <ticket> | ping | leave | deploy [--team-name n] [--project slug] [--convex-team slug] [--dev]  (each takes --workspace name|id)",
             "Connect a Work workspace to its team's Convex project: join with an invite link, or deploy Ghostex's functions with your Convex CLI login",
         ),
         format_help_command(

@@ -280,6 +280,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_team_kind_id", ["teamId", "kind", "slackId"]),
 
+  /**
+   * One-time codes that prove a member controls a Slack user, sent only to that Slack user in a private reply; only the SHA-256 is stored. `teams:setIdentity` links a Slack user only with an unused, unexpired code for it.
+   */
+  slackLinkCodes: defineTable({
+    teamId: v.id("teams"),
+    slackUserId: v.string(),
+    codeHash: v.string(),
+    expiresAt: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index("by_code_hash", ["codeHash"]),
+
   /** Calls the dev mocks (`devMocks.ts`) received; empty unless GHOSTEX_DEV_MOCKS is set. */
   devMockCalls: defineTable({
     service: v.union(v.literal("slack"), v.literal("linear")),

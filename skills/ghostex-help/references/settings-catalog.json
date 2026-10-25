@@ -11360,7 +11360,7 @@
     {
       "key": "slackUser",
       "title": "Your Slack user",
-      "subtitle": "Your Slack member ID, so @Ghostex commands you send in Slack reach this computer.",
+      "subtitle": "Your Slack member ID and the one-time code from Ghostex's private Slack reply, so @Ghostex commands you send in Slack reach this computer.",
       "tab": "workspaces",
       "tabTitle": "Workspaces",
       "section": "team",
