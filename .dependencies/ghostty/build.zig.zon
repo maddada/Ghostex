@@ -43,7 +43,7 @@
         .uucode = .{
             // jacobsandlund/uucode
             .url = "https://deps.files.ghostty.org/uucode-ea62149739404a73c202b48a33bf6dd2af4bd9b0.tar.gz",
-            .hash = "uucode-0.2.0-ZZjBPoGFVgCiflJNFc6Io8xzC67B6PA5bUkk4LT0kCxg",
+            .hash = "N-V-__8AAIGFVgCZkPhHOper20TsRm-7YM1zbvRc3jZBiW-p",
         },
         .zig_wayland = .{
             // codeberg ifreund/zig-wayland
