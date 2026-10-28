@@ -392,11 +392,32 @@ fn claude_queue_operation(record: &Map<String, Value>) -> Option<TranscriptQueue
     }
 }
 
-fn claude_interrupted_message_id(record: &Map<String, Value>) -> Option<String> {
+/// CDXC:SessionChat 2026-10-27 WHY:
+/// Claude Code 2.1.311 records Deny, Stop and Escape as a standalone request-interrupted text row without interruptedMessageId. Treating it as harness noise left the previous tool call working forever, blocking both the coordinator report and queued or conditional sends. Only the complete marker counts; tool results and text quoted inside another message still belong to their turn.
+fn claude_interrupted_message_id(record: &Map<String, Value>, fallback_id: &str) -> Option<String> {
     if record.get("type").and_then(Value::as_str) != Some("user") {
         return None;
     }
-    extract_string(record.get("interruptedMessageId"))
+    if let Some(id) = extract_string(record.get("interruptedMessageId")) {
+        return Some(id);
+    }
+    let content = record.get("message")?.get("content")?;
+    let text = match content {
+        Value::String(text) => text.as_str(),
+        Value::Array(blocks) if blocks.len() == 1 => {
+            let block = &blocks[0];
+            if block.get("type").and_then(Value::as_str) != Some("text") {
+                return None;
+            }
+            block.get("text")?.as_str()?
+        }
+        _ => return None,
+    };
+    matches!(
+        text,
+        "[Request interrupted by user]" | "[Request interrupted by user for tool use]"
+    )
+    .then(|| extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string()))
 }
 
 const CLAUDE_QUEUE_RECORD_TYPE: &str = "queue-operation";
@@ -599,7 +620,7 @@ pub fn decode_claude_transcript_line(line: &str, fallback_id: &str) -> Option<Se
         extract_string(record.get("uuid")).unwrap_or_else(|| fallback_id.to_string());
 
     // (A) Interruption marker — highest precedence.
-    if claude_interrupted_message_id(&record).is_some() {
+    if claude_interrupted_message_id(&record, fallback_id).is_some() {
         return Some(SessionChatMessage {
             id: record_message_id,
             role: SessionChatRole::System,
@@ -876,7 +897,7 @@ pub fn decode_claude_turn_lifecycle(
     }
 
     // 1. Interrupt beats everything.
-    if let Some(interrupted_message_id) = claude_interrupted_message_id(&record) {
+    if let Some(interrupted_message_id) = claude_interrupted_message_id(&record, fallback_id) {
         return Some(SessionChatTurnLifecycle {
             state: SessionChatTurnLifecycleState::Interrupted,
             turn_id: interrupted_message_id,

@@ -2758,6 +2758,9 @@ version of the Projects features in Cursor and Claude Code.
   sends its final message to the orchestrator (a "Message from" card in its
   chat); when a thread waits on a question, an approval, or a screen such as
   folder trust or an expired login, the orchestrator is told what it is asking.
+  Claude Code approvals are reported even when the thread's chat is closed. If
+  you deny an approval, stop the turn or interrupt it with Escape, the
+  orchestrator is told that the turn was interrupted and its work may be unfinished.
   The orchestrator then checks the work, commits it (only that thread's files,
   and it never pushes unless you ask), starts the next step, and tells you
   what needs you. Nobody has to poll. A thread reports only this way: Ghostex

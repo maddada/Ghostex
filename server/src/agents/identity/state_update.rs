@@ -194,6 +194,7 @@ pub(crate) fn apply_session_state_update(
     let mut stale_launch_metadata_cleared = 0;
     let mut launch_settings = object_field(&session, "launchSettings");
     if family_changed {
+        crate::session_approval::clear_approval_wait(&mut runtime_settings);
         for key in [
             "agentCommand",
             "accountId",

@@ -180,10 +180,15 @@ pub fn thread_prompt(session: &Value) -> Option<ThreadPrompt> {
     if let Some(stored) = session_chat_prompt_setting(session) {
         if let Some(prompt) = parse_stored_session_chat_prompt(&stored) {
             let summary = prompt_summary(&prompt);
-            return Some(ThreadPrompt {
-                key: stored_prompt_key(&stored),
-                summary,
-            });
+            let key = match &prompt {
+                SessionChatInteractivePrompt::Approval { .. } => {
+                    crate::session_approval::approval_wait_id(session)
+                        .map(str::to_owned)
+                        .unwrap_or_else(|| stored_prompt_key(&stored))
+                }
+                SessionChatInteractivePrompt::Question { .. } => stored_prompt_key(&stored),
+            };
+            return Some(ThreadPrompt { key, summary });
         }
     }
     let pending = crate::session_chat_async_questions::pending_question_count(session);
@@ -335,6 +340,8 @@ pub fn replace_thread_screen_waits(waits: HashMap<SessionKey, ThreadScreenWait>)
     }
 }
 
+/// The thread's last screen reading. An approval read off the screen of a session whose hooks
+/// report its approvals is left to its card (`session_approval::hooks_report_approvals`).
 fn recorded_screen_wait(session: &Value) -> Option<ThreadScreenWait> {
     let text = |key: &str| {
         session
@@ -343,11 +350,12 @@ fn recorded_screen_wait(session: &Value) -> Option<ThreadScreenWait> {
             .unwrap_or_default()
             .to_string()
     };
-    thread_screen_waits()
+    let wait = thread_screen_waits()
         .lock()
         .ok()?
         .get(&(text("projectId"), text("sessionId")))
-        .cloned()
+        .cloned()?;
+    (!wait.approval || !crate::session_approval::hooks_report_approvals(session)).then_some(wait)
 }
 
 fn applicable_screen_wait(session: &Value, hook_working: bool) -> Option<ThreadScreenWait> {
@@ -367,9 +375,11 @@ pub fn waits_on_screen(session: &Value) -> bool {
 }
 
 /// What a waiting thread waits on: a screen that blocks input, else its stored question or
-/// approval card, else a question read off its screen.
-/// Keys keep the `prompt:` prefix the supervisor always gave stored cards, so a thread already
-/// reported as waiting is not reported again after an upgrade.
+/// approval card, else a question read off its screen. An approval card is keyed by its
+/// PermissionRequest (`session_approval::approval_wait_id`), so the same command asked again is
+/// a new report.
+/// Legacy rows without approval metadata keep their stored-card keys; a first late hook can
+/// still follow a delivered screen report with its new UUID key.
 pub fn waiting_prompt(session: &Value) -> Option<ThreadPrompt> {
     let screen = recorded_screen_wait(session);
     match screen {

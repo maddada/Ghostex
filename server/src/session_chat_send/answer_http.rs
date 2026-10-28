@@ -982,6 +982,7 @@ pub(crate) async fn handle_answer_session_chat_prompt_http(
                 &target.project_id,
                 &target.session_id,
                 &answered,
+                crate::session_approval::approval_wait_id(&target.session),
             );
         }
     }

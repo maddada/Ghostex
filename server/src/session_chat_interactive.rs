@@ -916,8 +916,14 @@ pub(crate) fn retire_denied_session_chat_approval(
     project_id: &str,
     session_id: &str,
     answered: &SessionChatInteractivePrompt,
+    expected_approval_id: Option<&str>,
 ) {
-    retire_stored_session_chat_prompt(state, project_id, session_id, Some(answered));
+    retire_stored_session_chat_prompt(
+        state,
+        project_id,
+        session_id,
+        Some((answered, expected_approval_id)),
+    );
 }
 
 /// CDXC:SessionChat 2026-09-26 WHY: the chat's Stop is the same daemon-sent Escape as Deny, and it ends the tool call a card was asking about just as silently, so a card answered Yes and then stopped came back as a live Allow/Deny on the next open.
@@ -929,17 +935,24 @@ pub(crate) fn retire_interrupted_session_chat_prompt(
     retire_stored_session_chat_prompt(state, project_id, session_id, None);
 }
 
-/// Drops the stored card, or only the one `answered` names.
+/// CDXC:SessionStatus 2026-10-27 WHY:
+/// Deny sends Escape without an interrupt hook, so retiring its card must also settle its attention. Both changes share a writer reservation and the answered PermissionRequest's id: a second Escape activity RPC could erase a newer approval that arrived after the card guard, including the same command asked under a different id. Legacy cards still use the matched-card guard.
 fn retire_stored_session_chat_prompt(
     state: &AppState,
     project_id: &str,
     session_id: &str,
-    answered: Option<&SessionChatInteractivePrompt>,
+    answered: Option<(&SessionChatInteractivePrompt, Option<&str>)>,
 ) {
     let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
         return;
     };
-    let repository = crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+    let Ok(transaction) =
+        rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
+    else {
+        return;
+    };
+    let repository =
+        crate::domain::DomainRepository::new(&transaction, state.metadata.server_id.as_str());
     let Ok(Some(session)) = repository.get_session(project_id, session_id) else {
         return;
     };
@@ -947,8 +960,9 @@ fn retire_stored_session_chat_prompt(
     let Some(stored) = stored else {
         return;
     };
-    if answered.is_some_and(|answered| {
-        parse_stored_session_chat_prompt(&stored).as_ref() != Some(answered)
+    if answered.is_some_and(|(answered, expected_id)| {
+        crate::session_approval::approval_wait_id(&session) != expected_id
+            || parse_stored_session_chat_prompt(&stored).as_ref() != Some(answered)
     }) {
         return;
     }
@@ -964,16 +978,26 @@ fn retire_stored_session_chat_prompt(
         return;
     };
     activity.remove("sessionChatPrompt");
-    let update = json!({
+    let mut update = json!({
         "projectId": project_id,
         "sessionId": session_id,
         "runtimeSettings": runtime,
     });
+    if answered.is_some() {
+        let escape =
+            crate::session_status::compute_activity_update(&session, &Map::new(), Some("escape"));
+        update["runtimeSettings"]["agentActivity"] = escape.activity;
+        if let Some(last_active_at) = escape.last_active_at {
+            update["lastActiveAt"] = json!(last_active_at);
+        }
+    }
     let Some(update) = update.as_object() else {
         return;
     };
     if let Ok(updated) = repository.update_session(update) {
-        emit_session_chat_prompt_state_frame(state, &updated);
+        if transaction.commit().is_ok() {
+            emit_session_chat_prompt_state_frame(state, &updated);
+        }
     }
 }
 

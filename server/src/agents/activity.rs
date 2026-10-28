@@ -280,6 +280,14 @@ pub(crate) fn ingest_agent_hook_event(
                 activity_object.insert("sessionChatPrompt".to_string(), json!(prompt_json));
             }
         }
+        let approval_wait = crate::session_approval::approval_wait_entry(
+            params
+                .get("eventName")
+                .or_else(|| params.get("rawEventName"))
+                .and_then(Value::as_str)
+                == Some("PermissionRequest"),
+            session_chat_prompt_after.as_deref(),
+        );
         if !is_stale_activity_event(&session, now_ms) {
             let next_activity_name = update
                 .activity
@@ -289,22 +297,25 @@ pub(crate) fn ingest_agent_hook_event(
             session_chat_activity_changed = is_session_chat_working_activity(next_activity_name)
                 != is_session_chat_working_activity(&update.previous_activity);
             let activity_changed = should_persist_activity_update(&session, &update);
-            if activity_changed {
+            if activity_changed || approval_wait.is_some() {
                 let mut runtime_settings = object_field(&session, "runtimeSettings");
-                runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
-                promote_draft_on_first_activity(
-                    &session,
-                    &mut runtime_settings,
-                    update.last_active_at.as_deref(),
-                );
+                runtime_settings.extend(approval_wait);
                 let mut session_update = lifecycle_update(lifecycle);
+                if activity_changed {
+                    runtime_settings.insert("agentActivity".to_string(), update.activity.clone());
+                    promote_draft_on_first_activity(
+                        &session,
+                        &mut runtime_settings,
+                        update.last_active_at.as_deref(),
+                    );
+                    if let Some(last_active_at) = update.last_active_at.clone() {
+                        session_update.insert("lastActiveAt".to_string(), json!(last_active_at));
+                    }
+                }
                 session_update.insert(
                     "runtimeSettings".to_string(),
                     Value::Object(runtime_settings),
                 );
-                if let Some(last_active_at) = update.last_active_at.clone() {
-                    session_update.insert("lastActiveAt".to_string(), json!(last_active_at));
-                }
                 session = repository.update_session(&session_update)?;
                 changed = true;
             }
@@ -330,8 +341,9 @@ pub(crate) fn ingest_agent_hook_event(
             hook is the only live source for a pending Claude question.
             Persist the prompt alone onto the stored activity object.
             */
-            if session_chat_prompt_changed {
+            if session_chat_prompt_changed || approval_wait.is_some() {
                 let mut runtime_settings = object_field(&session, "runtimeSettings");
+                runtime_settings.extend(approval_wait);
                 let mut stored_activity = runtime_settings
                     .get("agentActivity")
                     .cloned()

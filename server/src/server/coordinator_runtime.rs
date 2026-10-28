@@ -54,6 +54,7 @@ struct SupervisorMemory {
 
 enum ReportKind {
     Finished,
+    Interrupted,
     Waiting {
         key: String,
         summary: String,
@@ -321,9 +322,14 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             has_run: true,
         };
         let hook_state = classify_thread_session(Some(&session), as_run, &now_iso, false);
+        // CDXC:Coordinators 2026-10-26 WHY:
+        // A permission prompt leaves its tool call open in the transcript, so the transcript check kept an unwatched thread working while it needed approval (a Claude thread on Claude Code's rm safety check, which asks even in bypass mode, never reached its coordinator). The shared approval rule takes precedence, as a wait read off the screen already does.
         let state_now = if is_running_empryo(&session) {
             empryo_thread_state(&db, &mut memory, &mut thread, &session, hook_state)
-        } else if hook_state == ThreadState::Waiting && coordinators::waits_on_screen(&session) {
+        } else if hook_state == ThreadState::Waiting
+            && (coordinators::waits_on_screen(&session)
+                || crate::session_approval::session_awaits_approval(&session, &now_iso))
+        {
             ThreadState::Waiting
         } else if hook_state != ThreadState::Working
             && hook_state != ThreadState::Sleeping
@@ -378,7 +384,29 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
             }
             ThreadState::Finished | ThreadState::Sleeping if thread.observed_working => {
                 let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
-                (now - since >= FINISH_STABILITY_MS).then_some(ReportKind::Finished)
+                if now - since < FINISH_STABILITY_MS {
+                    None
+                } else {
+                    // CDXC:Coordinators 2026-10-27 WHY:
+                    // A denied or stopped Claude turn has an interruption boundary, not a final answer. Forwarding the last assistant text would present the earlier tool-call preamble as the result, so interrupted turns settle the report without forwarding that text.
+                    let lifecycle = memory
+                        .transcript_gates
+                        .entry(key.clone())
+                        .or_default()
+                        .lifecycle(&session);
+                    match lifecycle.map(|lifecycle| lifecycle.state) {
+                        Some(crate::session_chat::SessionChatTurnLifecycleState::Interrupted) => {
+                            Some(ReportKind::Interrupted)
+                        }
+                        Some(crate::session_chat::SessionChatTurnLifecycleState::Working)
+                            if state_now != ThreadState::Sleeping =>
+                        {
+                            memory.not_working_since.remove(&key);
+                            None
+                        }
+                        _ => Some(ReportKind::Finished),
+                    }
+                }
             }
             _ => None,
         };
@@ -633,6 +661,10 @@ async fn deliver(state: Arc<AppState>, memory: Arc<Mutex<SupervisorMemory>>, del
                 };
                 (body, Some(message.unwrap_or_default()))
             }
+            ReportKind::Interrupted => (
+                report_body(&ThreadReport::Interrupted, &thread_ref),
+                Some("(turn interrupted)".to_string()),
+            ),
             ReportKind::Waiting { summary, .. } => (
                 report_body(&ThreadReport::Waiting { prompt: summary }, &thread_ref),
                 None,

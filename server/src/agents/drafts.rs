@@ -488,6 +488,17 @@ pub(crate) fn switch_draft_agent(
     ] {
         runtime_settings.remove(key);
     }
+    let previous_launch = object_field(&session, "launchSettings");
+    let previous_config = previous_agent_id
+        .as_deref()
+        .map(|id| resolve_project_agent_config(&project, id, Some(&previous_launch)))
+        .unwrap_or_default();
+    let previous_family =
+        resume_agent_family_id(previous_agent_id, &previous_config, &previous_launch);
+    let next_family = resume_agent_family_id(Some(agent_id.clone()), &agent_config, &Map::new());
+    if previous_family != next_family {
+        crate::session_approval::clear_approval_wait(&mut runtime_settings);
+    }
     let mut launch_settings = object_field(&session, "launchSettings");
     for key in [
         "acceptAllMode",

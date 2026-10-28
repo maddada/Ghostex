@@ -2,7 +2,7 @@
 //! every client (the sidebar's red dot, the orchestrator's crew badge, the notifications list,
 //! `ghostex sessions`).
 
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 
 use crate::agents::session_chat_prompt_setting;
 use crate::presentation::{effective_lifecycle_state, presentation_activity};
@@ -27,6 +27,48 @@ fn stored_approval_card(session: &Value) -> bool {
     session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
         .is_some_and(|prompt| matches!(prompt, SessionChatInteractivePrompt::Approval { .. }))
+}
+
+/// CDXC:Coordinators 2026-10-27 WHY:
+/// One permission prompt reaches gxserver twice, as the approval card its PermissionRequest hook stores and as any reading of its screen, and the coordinator supervisor reported it once for each (live, Ghostex-3). A screen reading does not say which prompt it shows or when it was taken, and binding it to a card by capture time or by the command it shows failed review on ordering each time (a cached image of an answered prompt came back as a wait, a new prompt passed for an answered one). So once a session's hooks have stored an approval card, its approvals reach coordinators only through cards; the chat still shows the prompt read off the screen. Each PermissionRequest records a fresh id (`approvalWait`), so the same command asked again is a new wait. Agents whose approvals exist only on their screen never store a card and keep the screen reading. A prompt whose hook does not arrive after earlier ones did is not reported.
+const APPROVAL_WAIT: &str = "approvalWait";
+
+fn approval_wait(session: &Value) -> Option<&Value> {
+    session.get("runtimeSettings")?.get(APPROVAL_WAIT)
+}
+
+/// True once this CLI family's hooks have stored an approval card: its approvals then reach
+/// coordinators only through cards. Identity adoption and draft replacement clear the record
+/// when the CLI family changes; same-family profiles keep it.
+pub(crate) fn hooks_report_approvals(session: &Value) -> bool {
+    approval_wait(session).is_some()
+}
+
+/// The last recorded PermissionRequest's id; callers decide whether its card is still pending.
+pub(crate) fn approval_wait_id(session: &Value) -> Option<&str> {
+    approval_wait(session)?.get("id")?.as_str()
+}
+
+pub(crate) fn clear_approval_wait(runtime: &mut Map<String, Value>) {
+    runtime.remove(APPROVAL_WAIT);
+}
+
+/// The `runtimeSettings` entry that records a PermissionRequest which left an approval card
+/// stored, under a fresh id.
+pub(crate) fn approval_wait_entry(
+    permission_request: bool,
+    stored_after: Option<&str>,
+) -> Option<(String, Value)> {
+    stored_after
+        .filter(|_| permission_request)
+        .and_then(parse_stored_session_chat_prompt)
+        .filter(|prompt| matches!(prompt, SessionChatInteractivePrompt::Approval { .. }))
+        .map(|_| {
+            (
+                APPROVAL_WAIT.to_string(),
+                json!({ "id": uuid::Uuid::new_v4().to_string() }),
+            )
+        })
 }
 
 #[cfg(test)]

@@ -182,6 +182,7 @@ pub enum ThreadReport<'a> {
     Finished {
         message: Option<&'a str>,
     },
+    Interrupted,
     Waiting {
         prompt: &'a str,
     },
@@ -212,6 +213,9 @@ pub fn report_body(report: &ThreadReport<'_>, thread_ref: &str) -> String {
         }
         ThreadReport::Finished { message: None } => format!(
             "Ghostex thread report: finished its turn, but its final message could not be read. Read it with: ghostex read-session-chat {thread_ref} --last 2 --format text"
+        ),
+        ThreadReport::Interrupted => format!(
+            "Ghostex thread report: its turn was interrupted. The requested work may be unfinished. Read its chat with: ghostex read-session-chat {thread_ref} --last 2 --format text"
         ),
         ThreadReport::Waiting { prompt } => format!(
             "Ghostex thread report: waiting for an answer.\n\n{}",
