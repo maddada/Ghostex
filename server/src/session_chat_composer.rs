@@ -60,7 +60,7 @@ mod input;
 pub use input::{claude_composer_draft, session_chat_composer_input, SessionChatComposerInput};
 pub(crate) use input::{
     empryo_composer_busy, empryo_input_head, empryo_input_unfocused, empryo_tab_bar,
-    omp_paste_chip_shown,
+    omp_paste_chip_shown, OMP_NAV_CURSOR_GLYPHS,
 };
 
 /// The row Hermes's live composer starts on, the one readiness reads, or `None` when it is not on screen.

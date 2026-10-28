@@ -32,21 +32,30 @@ pub enum QuestionListUi {
     Cursor,
     /// `→ Red`, one question at a time.
     Pi,
-    /// `❯ ○ Red`, ←/→ (or Tab) between question tabs.
+    /// `❯ ○ Red`, ←/→ (or Tab) between question tabs. The cursor and the
+    /// box follow OMP's symbol preset.
     Omp,
 }
 
 impl QuestionListUi {
-    fn marker(self) -> char {
+    fn markers(self) -> &'static [char] {
         match self {
-            QuestionListUi::Cursor => '›',
-            QuestionListUi::Pi => '→',
-            QuestionListUi::Omp => '❯',
+            QuestionListUi::Cursor => &['›'],
+            QuestionListUi::Pi => &['→'],
+            QuestionListUi::Omp => crate::session_chat_composer::OMP_NAV_CURSOR_GLYPHS,
         }
     }
 
     fn moves_between_questions(self) -> bool {
         !matches!(self, QuestionListUi::Pi)
+    }
+
+    /// The bars that frame the list's rows. OMP draws them as `|` with ASCII symbols; other agents' labels may end in `|`.
+    fn frame_bars(self) -> &'static [char] {
+        match self {
+            QuestionListUi::Omp => &['│', '┃', '|'],
+            QuestionListUi::Cursor | QuestionListUi::Pi => &['│', '┃'],
+        }
     }
 }
 
@@ -102,27 +111,50 @@ fn compact(text: &str) -> String {
     text.chars().filter(|c| !c.is_whitespace()).collect()
 }
 
-fn screen_lines(screen: &str) -> Vec<String> {
+/// The screen's lines without the bars that frame `ui`'s list.
+fn screen_lines(screen: &str, ui: QuestionListUi) -> Vec<String> {
     screen
         .lines()
         .map(|line| {
             crate::session_chat_options::strip_ansi_sgr(line)
                 .trim()
-                .trim_matches(['│', '┃'])
+                .trim_matches(ui.frame_bars())
                 .trim()
                 .to_string()
         })
         .collect()
 }
 
+/// OMP's radio and checkbox in its ASCII symbol preset (`( )`/`(o)` radio) and its Nerd Font preset (`\u{f10c}`/`\u{f192}` radio, `\u{f096}`/`\u{f14a}` checkbox), with whether each is ticked.
+const OMP_PRESET_BOXES: [(&str, bool); 6] = [
+    ("( )", false),
+    ("(o)", true),
+    ("\u{f10c}", false),
+    ("\u{f192}", true),
+    ("\u{f096}", false),
+    ("\u{f14a}", true),
+];
+
+/// The text after the OMP preset box `text` starts with, and whether the box is ticked. Only OMP lists read them: a Cursor or pi label may itself start with `(o)`.
+fn omp_preset_box(ui: QuestionListUi, text: &str) -> Option<(&str, bool)> {
+    if ui != QuestionListUi::Omp {
+        return None;
+    }
+    OMP_PRESET_BOXES
+        .iter()
+        .find_map(|(glyph, ticked)| Some((text.strip_prefix(glyph)?, *ticked)))
+}
+
 /// The row text without its checkbox or radio glyph.
-fn row_text(line: &str) -> &str {
+fn row_text(line: &str, ui: QuestionListUi) -> &str {
     let mut text = line.trim_start();
     loop {
         if let Some(rest) = text.strip_prefix('[').and_then(|rest| {
             let (inside, rest) = rest.split_once(']')?;
             (inside.chars().count() <= 1).then_some(rest)
         }) {
+            text = rest.trim_start();
+        } else if let Some((rest, _)) = omp_preset_box(ui, text) {
             text = rest.trim_start();
         } else if let Some(rest) = text.strip_prefix(['○', '●', '◉', '◯', '☐', '☑', '☒', '✓', '✔'])
         {
@@ -134,7 +166,7 @@ fn row_text(line: &str) -> &str {
 }
 
 /// Whether the row's box is ticked, `None` when it draws none.
-fn row_ticked(line: &str) -> Option<bool> {
+fn row_ticked(line: &str, ui: QuestionListUi) -> Option<bool> {
     let text = line.trim_start();
     if let Some(rest) = text.strip_prefix('[') {
         let (inside, _) = rest.split_once(']')?;
@@ -143,6 +175,9 @@ fn row_ticked(line: &str) -> Option<bool> {
             "x" | "X" | "✓" | "✔" | "*" => Some(true),
             _ => None,
         };
+    }
+    if let Some((_, ticked)) = omp_preset_box(ui, text) {
+        return Some(ticked);
     }
     match text.chars().next()? {
         '☐' | '○' | '◯' => Some(false),
@@ -176,7 +211,7 @@ pub fn read_question_list_screen(
     target: &QuestionRowTarget,
     screen: &str,
 ) -> Option<QuestionListScreen> {
-    let lines = screen_lines(screen);
+    let lines = screen_lines(screen, target.ui);
     // Earlier questions can still be on screen (omp previews them all in its
     // tool call); the live one is the lowest.
     let (heading, question) = target
@@ -197,7 +232,7 @@ pub fn read_question_list_screen(
         });
     }
     let labels: Vec<String> = target.labels.iter().map(|label| compact(label)).collect();
-    let marker = target.ui.marker();
+    let markers = target.ui.markers();
     let mut screen = QuestionListScreen {
         question,
         ticked: vec![None; labels.len() + 1],
@@ -207,9 +242,9 @@ pub fn read_question_list_screen(
     let mut seen_option = false;
     let mut free_row_seen = false;
     for line in &lines[heading + 1..] {
-        let marked = line.starts_with(marker);
-        let unmarked = line.trim_start_matches(marker).trim_start();
-        let raw_text = row_text(unmarked);
+        let marked = line.starts_with(markers);
+        let unmarked = line.trim_start_matches(markers).trim_start();
+        let raw_text = row_text(unmarked, target.ui);
         let text = compact(raw_text);
         // The longest label wins, so "Blue green" is not read as "Blue".
         let option = labels
@@ -218,7 +253,7 @@ pub fn read_question_list_screen(
             .filter(|(_, label)| !label.is_empty() && text.starts_with(label.as_str()))
             .max_by_key(|(_, label)| label.len())
             .map(|(index, _)| index);
-        let ticked = row_ticked(unmarked);
+        let ticked = row_ticked(unmarked, target.ui);
         // The free-text row follows the options and draws a box (or is the
         // highlighted row, for lists that draw none).
         let free_row =
@@ -341,20 +376,39 @@ pub fn next_question_row_keys(
     })
 }
 
+/// OMP's Escape key in its key hints: "esc" before OMP 18.3.3, then its Unicode, Nerd Font and ASCII symbol presets.
+const OMP_CANCEL_HINTS: &[&str] = &["esc cancel", "⎋ cancel", "\u{f12b7} cancel", "Esc cancel"];
+/// The question list's move hint: `↑/↓` in OMP's Unicode and Nerd Font presets (and before 18.3.3), `Up/Down` in its ASCII preset.
+const OMP_LIST_MOVE_HINTS: &[&str] = &["↑/↓ move", "Up/Down move"];
+
+fn omp_cancel_hint(line: &str) -> bool {
+    OMP_CANCEL_HINTS.iter().any(|hint| line.contains(hint))
+}
+
+/// Whether `row` starts the legend OMP's prompt editor draws under the custom-answer and note prompts (`⏎ or ⌃Q submit  ⎋ cancel  ⌃G external editor`). Every footer of the question list shows the cancel key too, but only the editor names its external editor; a narrow pane wraps that name onto the next row.
+fn omp_prompt_legend(lines: &[String], row: usize) -> bool {
+    let next = lines.get(row + 1).map_or("", String::as_str);
+    omp_cancel_hint(&lines[row]) && format!("{} {next}", lines[row]).contains("external editor")
+}
+
 /// omp's custom-answer or note prompt ("Custom answer: <question>" or
 /// "Note for <option>: <question>" over "> text"): `Some(true)` when it holds
 /// text, `None` when neither is open.
+///
+/// CDXC:AgentScreenDetection 2026-10-28 WHY:
+/// Since 18.3.3 OMP writes its key hints with the symbol preset's key labels (`⏎ or ⌃Q submit  ⎋ cancel  ⌃G external editor` with Unicode symbols), so the prompt's legend no longer reads "esc cancel" in any preset. An open custom-answer prompt then read as closed, and an Other answer from chat opened it, typed nothing and failed as "no longer on screen". The legend is told from the question list's footers by its external-editor key, because the list shows the same cancel key and, while it pages or sits on its Submit tab, no move hint.
 pub fn read_omp_custom_prompt(screen: &str) -> Option<bool> {
-    let lines = screen_lines(screen);
+    let lines = screen_lines(screen, QuestionListUi::Omp);
     let header = lines.iter().rposition(|line| {
         line.contains("Custom answer:") || (line.contains("Note for ") && line.contains(':'))
     })?;
-    let legend = header
-        + lines[header..]
-            .iter()
-            .position(|line| line.contains("esc cancel"))?;
+    let legend = (header..lines.len()).find(|&row| omp_prompt_legend(&lines, row))?;
     // The question list drawn again below means the prompt has closed.
-    if lines[header..].iter().any(|line| line.contains("↑/↓ move")) {
+    if lines[header..]
+        .iter()
+        .any(|line| OMP_LIST_MOVE_HINTS.iter().any(|hint| line.contains(hint)))
+        || lines[legend + 1..].iter().any(|line| omp_cancel_hint(line))
+    {
         return None;
     }
     let body = &lines[header + 1..legend];

@@ -482,6 +482,9 @@ pub(super) fn omp_input_region(lines: &[String]) -> Option<Range<usize>> {
 /// OMP's `chip.paste` symbol in its Unicode, Nerd Font and ASCII symbol presets.
 const OMP_PASTE_CHIP_GLYPHS: &[&str] = &["\u{1f4c4}", "\u{f15c}", "txt"];
 
+/// OMP's `nav.cursor` symbol, the selection marker of its lists, in its Unicode, Nerd Font and ASCII symbol presets.
+pub(crate) const OMP_NAV_CURSOR_GLYPHS: &[char] = &['❯', '\u{f054}', '>'];
+
 /// CDXC:Clipboard 2026-10-18 WHY:
 /// OMP 18.11 keeps a long paste in its editor as `[Paste #N, +M lines]` but draws it in the input box as a `<chip.paste> #N` chip (`📄 #1`), with the paste's first lines in a separate box above the input. The input box showed neither the pasted text nor the `[Paste` spelling paste verification looked for, so every OMP message over ten lines failed as "The terminal did not accept the pasted message", was cleared with Ctrl+C and retried until the row failed: Send Bug / Feedback's brief (GitHub #254) and an orchestrator's first brief to an OMP thread. A chip in the input box is OMP's proof that the paste landed.
 pub(crate) fn omp_paste_chip_shown(input_text: &str) -> bool {
@@ -527,7 +530,7 @@ fn omp_input(lines: &[String]) -> Option<(Range<usize>, OmpShape)> {
         .or_else(|| omp_gutter_input(lines))
 }
 
-/// Rows OMP may draw under its input: the one-line status bar, or the slash-command list (two-space rows with one selected `❯ ` row), which hides the status bar.
+/// Rows OMP may draw under its input: the one-line status bar, or the slash-command list (two-space rows with one row selected by OMP's list cursor), which hides the status bar.
 fn omp_composer_tail(rows: &[String]) -> bool {
     let rows: Vec<_> = rows.iter().filter(|row| !row.trim().is_empty()).collect();
     let status_bar = rows.len() <= 1
@@ -537,13 +540,22 @@ fn omp_composer_tail(rows: &[String]) -> bool {
     status_bar || omp_slash_list(&rows)
 }
 
-/// OMP's slash-command list: two-space rows with one selected `❯ ` row, drawn under every shape's input.
+/// OMP's slash-command list: two-space rows with one row selected by OMP's list cursor, drawn under every shape's input.
+///
+/// CDXC:AgentScreenDetection 2026-10-28 WHY:
+/// OMP draws the list's selected row with its symbol preset's `nav.cursor` (`❯` with Unicode symbols, `\u{f054}` with Nerd Font, `>` with ASCII), while the composer's own gutter is a literal `❯` in every preset. Reading only `❯` here called a Nerd Font or ASCII OMP's input "not on screen" while `/switch …` showed its list, so a model change from chat typed the command and never pressed Enter.
 fn omp_slash_list(rows: &[&String]) -> bool {
     !rows.is_empty()
         && rows
             .iter()
-            .all(|row| row.starts_with("❯ ") || row.starts_with("  "))
-        && rows.iter().filter(|row| row.starts_with('❯')).count() == 1
+            .all(|row| omp_list_cursor_row(row) || row.starts_with("  "))
+        && rows.iter().filter(|row| omp_list_cursor_row(row)).count() == 1
+}
+
+/// A list row OMP's cursor selects: `nav.cursor`, then a space.
+fn omp_list_cursor_row(row: &str) -> bool {
+    row.strip_prefix(OMP_NAV_CURSOR_GLYPHS)
+        .is_some_and(|rest| rest.starts_with(' '))
 }
 
 /// The input's rows from `start`: following rows that `continues` accepts, blank rows included, ending at the last row with text.
@@ -610,9 +622,10 @@ fn omp_capped_input(
     omp_composer_tail(&lines[end + 1..]).then_some((start..end + 1, shape))
 }
 
-/// `rule` and `borderless` shapes: a `❯ ` row then two-space rows, above the status bar or the slash list. The slash list draws the same `❯ ` and two-space rows, so the input is the topmost `❯ ` row of the trailing gutter block whose rows are followed only by that tail.
+/// `rule` and `borderless` shapes: a `❯ ` row then two-space rows, above the status bar or the slash list. The slash list draws two-space rows and a cursor row (`❯ ` with Unicode symbols), so the input is the topmost `❯ ` row of the trailing gutter block whose rows are followed only by that tail.
 fn omp_gutter_input(lines: &[String]) -> Option<(Range<usize>, OmpShape)> {
-    let gutter = |line: &str| omp_marked_row(line) || line.starts_with("  ");
+    let gutter =
+        |line: &str| omp_marked_row(line) || omp_list_cursor_row(line) || line.starts_with("  ");
     let last = lines.iter().rposition(|line| !line.trim().is_empty())?;
     let bottom = if gutter(&lines[last]) { last + 1 } else { last };
     let top = lines[..bottom]
