@@ -1042,6 +1042,46 @@ fn command_capture_times_out_without_waiting_for_the_reader() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn command_capture_timeout_ends_what_the_command_started() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    /*
+    The check needs the shell to have started its background child before the
+    time limit; on a loaded machine it may not even have run yet. An attempt
+    whose shell never wrote the pid proves nothing either way, so the next one
+    gets a longer limit; normally the first succeeds within half a second.
+    */
+    for (attempt, limit_ms) in [500, 2_000, 8_000].into_iter().enumerate() {
+        let pid_file = temp.path().join(format!("background-{attempt}.pid"));
+        let output = run_command_bounded(
+            shell_command(&format!(
+                "sleep 30 & echo $! > '{0}.tmp' && mv '{0}.tmp' '{0}'; sleep 30",
+                pid_file.display()
+            )),
+            Duration::from_millis(limit_ms),
+            Duration::from_secs(30),
+            &ABANDONED_COMMAND_READERS,
+        );
+        assert_eq!(output, None);
+        let Ok(text) = std::fs::read_to_string(&pid_file) else {
+            continue;
+        };
+        let background: u32 = text.trim().parse().expect("a pid");
+        // The killed process is reaped by init a moment later; until then it still answers.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while crate::platform::process::process_is_alive(background) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            !crate::platform::process::process_is_alive(background),
+            "the command's background child must end with it"
+        );
+        return;
+    }
+    panic!("the shell never started its background child before the time limit");
+}
+
 /*
 MINOR-1 regression: the command itself succeeds and is reaped, but something
 it left behind still holds the write end of the pipe, so `read_to_end` never

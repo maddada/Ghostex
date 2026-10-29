@@ -117,7 +117,8 @@ impl GhRun {
 
 /// Runs `gh` like `run_gh_command`, but keeps stdout and stderr when it fails: a refused scope
 /// and `gh issue create`'s own error both arrive that way. `None` when `gh` could not start or
-/// took longer than `timeout`.
+/// took longer than `timeout`. After `gh` exits it reads both pipes to their end, so a process `gh`
+/// left holding one keeps it waiting.
 ///
 /// CDXC:WorkMode 2026-10-09 WHY:
 /// `run_gh_command` drops a failed command's output (right for the status probes), but the scope
@@ -137,14 +138,9 @@ pub(crate) fn run_gh_full(cwd: Option<&str>, args: &[&str], timeout: Duration) -
     if let Some(cwd) = cwd {
         command.current_dir(cwd);
     }
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x0800_0000);
-    }
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
-    let mut stderr = child.stderr.take()?;
+    let mut tree = crate::platform::process::ProcessTree::spawn(&mut command).ok()?;
+    let mut stdout = tree.child().stdout.take()?;
+    let mut stderr = tree.child().stderr.take()?;
     let out_reader = std::thread::spawn(move || {
         let mut buffer = Vec::new();
         let _ = stdout.read_to_end(&mut buffer);
@@ -157,14 +153,13 @@ pub(crate) fn run_gh_full(cwd: Option<&str>, args: &[&str], timeout: Duration) -
     });
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => {
                 std::thread::sleep(Duration::from_millis(50));
             }
             _ => {
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 return None;
             }
         }

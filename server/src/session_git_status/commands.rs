@@ -1,15 +1,9 @@
 use super::*;
+use crate::platform::process::COMMAND_READER_GRACE;
 
 const GIT_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 const GH_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 const COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(10);
-
-/// How long the parent waits for the output-draining thread after the command
-/// has exited successfully. A command cannot exit before it has written its
-/// output, so at most a pipe buffer is ever still in flight and the thread
-/// finishes at once; the grace only expires when something outlived the command
-/// and its process group and still holds the write end of the pipe.
-const COMMAND_READER_GRACE: Duration = Duration::from_secs(2);
 
 /// Draining threads abandoned because their pipe outlived the command that
 /// owned it. See `run_command_bounded`.
@@ -123,7 +117,7 @@ pub(crate) fn gh_cli_is_available() -> bool {
 }
 
 /*
-The shared git-probe runner: time-boxed, process-group killed on timeout, output
+The shared git-probe runner: time-boxed, process-tree killed on timeout, output
 drained by a helper thread (see `run_command_bounded`). `project_git_remote` runs
 its `origin` probe through this same plumbing (via
 `run_project_git_remote_probe_command`) rather than mirroring the hardening, so
@@ -212,19 +206,20 @@ fn gh_command(cwd: Option<&str>, args: &[&str]) -> Command {
 Time-boxed capture. stdout is drained by a helper thread for the whole lifetime
 of the child: `git diff --numstat` on a large branch easily exceeds a pipe
 buffer, and a poll-then-read loop would deadlock against a child blocked writing
-into a full pipe. On timeout the child's whole process GROUP is killed and the
-child is reaped, and the caller sees the same `None` as any other failure —
-probes degrade to "no git status", never to a wedged worker.
+into a full pipe. On timeout the child's whole process tree (its process group
+on Unix, its job on Windows: `ProcessTree`) is killed and the child is reaped,
+and the caller sees the same `None` as any other failure — probes degrade to
+"no git status", never to a wedged worker.
 
-Killing the group rather than only the child is what makes the time box real: a
+Killing the tree rather than only the child is what makes the time box real: a
 killed `git` can leave a grandchild behind (an external diff driver, a
 credential helper) still holding the write end of the pipe, and the draining
 thread's `read_to_end` then never returns. For anything that survives even that
-— a helper that detached itself out of the group — the parent waits no longer
-than `COMMAND_READER_GRACE` for the drained output and abandons the thread
-otherwise, so one pathological checkout can never wedge the refresh pass (a
-tokio blocking worker) permanently. Abandonments are counted so the leak shows
-up in the log instead of being silent.
+— a helper that detached itself out of the group or broke away from the job —
+the parent waits no longer than `COMMAND_READER_GRACE` for the drained output
+and abandons the thread otherwise, so one pathological checkout can never wedge
+the refresh pass (a tokio blocking worker) permanently. Abandonments are counted
+so the leak shows up in the log instead of being silent.
 */
 fn run_command_with_timeout(
     command: Command,
@@ -254,10 +249,8 @@ fn run_command_bounded_keeping_output(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    crate::platform::process::NoConsoleWindow::no_console_window(&mut command);
-    configure_command_process_group(&mut command);
-    let mut child = command.spawn().ok()?;
-    let mut stdout = child.stdout.take()?;
+    let mut tree = crate::platform::process::ProcessTree::spawn(&mut command).ok()?;
+    let mut stdout = tree.child().stdout.take()?;
     let (output_tx, output_rx) = mpsc::channel();
     std::thread::spawn(move || {
         let mut buffer = Vec::new();
@@ -267,28 +260,24 @@ fn run_command_bounded_keeping_output(
 
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {
                 if Instant::now() >= deadline {
-                    kill_command_process_group(&child);
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    tree.end();
                     break None;
                 }
                 std::thread::sleep(COMMAND_POLL_INTERVAL);
             }
             Err(_) => {
-                kill_command_process_group(&child);
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 break None;
             }
         }
     };
     /*
     A failed or timed-out command has no output worth waiting for, so the
-    receiver is dropped here: the draining thread ends with the pipe the group
+    receiver is dropped here: the draining thread ends with the pipe the tree
     kill just closed, and nothing blocks in the meantime.
     */
     if !status?.success() && !keep_failed_output {
@@ -300,35 +289,6 @@ fn run_command_bounded_keeping_output(
     };
     Some(String::from_utf8_lossy(&output).trim().to_string())
 }
-
-/*
-Probe commands run in their own process group so a timeout can take out
-everything the command started, not just the command.
-*/
-fn configure_command_process_group(command: &mut Command) {
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-
-    #[cfg(not(unix))]
-    let _ = command;
-}
-
-#[cfg(unix)]
-fn kill_command_process_group(child: &std::process::Child) {
-    let process_group_id = child.id() as libc::pid_t;
-    if process_group_id <= 0 {
-        return;
-    }
-    unsafe {
-        libc::kill(-process_group_id, libc::SIGKILL);
-    }
-}
-
-#[cfg(not(unix))]
-fn kill_command_process_group(_child: &std::process::Child) {}
 
 /// Drains the abandoned-reader count so the refresh pass can log it. Zero on a
 /// healthy machine, and a non-zero value means some probe command left output

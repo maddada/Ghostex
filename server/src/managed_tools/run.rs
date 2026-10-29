@@ -4,12 +4,13 @@ use std::{
     ffi::OsStr,
     io::Read,
     path::{Path, PathBuf},
-    process::{Child, Command, ExitStatus, Stdio},
+    process::{Command, ExitStatus, Stdio},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use super::jobs::Log;
+use crate::platform::process::ProcessTree;
 
 /// The PATH a tool command runs with: `prefix` first (a tool installed moments ago), then the
 /// normalized session PATH, which already ends with Ghostex's tool folders.
@@ -35,7 +36,7 @@ pub(crate) fn run(
     timeout: Duration,
 ) -> Result<(), String> {
     let program = program.as_ref();
-    let mut command = crate::platform::process::background_command(program);
+    let mut command = Command::new(program);
     command
         .args(args)
         .env("PATH", job_path(prefix))
@@ -47,28 +48,28 @@ pub(crate) fn run(
     for (key, value) in env {
         command.env(key, value);
     }
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
     let name = Path::new(program)
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let mut child = command
-        .spawn()
+    let mut tree = ProcessTree::spawn(&mut command)
         .map_err(|error| format!("Could not start {name}: {error}"))?;
     let readers = [
-        child.stdout.take().map(|pipe| drain(pipe, log.clone())),
-        child.stderr.take().map(|pipe| drain(pipe, log.clone())),
+        tree.child()
+            .stdout
+            .take()
+            .map(|pipe| drain(pipe, log.clone())),
+        tree.child()
+            .stderr
+            .take()
+            .map(|pipe| drain(pipe, log.clone())),
     ];
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() >= deadline => {
-                kill_tree(&mut child);
+                tree.end();
                 return Err(format!(
                     "{name} did not finish within {} minutes.",
                     timeout.as_secs() / 60
@@ -78,8 +79,13 @@ pub(crate) fn run(
             Err(error) => return Err(error.to_string()),
         }
     };
+    // What a reader collected is already in the job's log; one held open by a leftover is let go.
     for reader in readers.into_iter().flatten() {
-        let _ = reader.join();
+        let _ = crate::platform::process::join_reader_within(
+            reader,
+            crate::platform::process::COMMAND_READER_GRACE,
+            &name,
+        );
     }
     if status.success() {
         Ok(())
@@ -124,14 +130,14 @@ pub(crate) enum Unfinished {
 }
 
 /// Runs `command` with no input and at most `timeout`, then stops it and every process it started.
-/// The command leads its own process group on Unix, so a wrapper's children go too.
+/// The command leads its own process tree (`ProcessTree`), so a wrapper's children go too.
 pub(crate) fn output_within(command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
     bounded(command, timeout, true)
 }
 
 /// `output_within` for an interactive shell, which must stay in gxserver's process group: one in a
-/// group of its own stops itself (SIGTTIN) when the `ghostex` CLI runs it from a terminal. Only the
-/// shell is stopped at the limit.
+/// group of its own stops itself (SIGTTIN) when the `ghostex` CLI runs it from a terminal. On Unix
+/// only the shell is stopped at the limit.
 pub(crate) fn output_within_caller_group(
     command: Command,
     timeout: Duration,
@@ -144,25 +150,25 @@ fn bounded(
     timeout: Duration,
     own_group: bool,
 ) -> Result<Finished, Unfinished> {
-    crate::platform::process::NoConsoleWindow::no_console_window(&mut command)
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    #[cfg(unix)]
-    if own_group {
-        use std::os::unix::process::CommandExt;
-        command.process_group(0);
-    }
-    let mut child = command.spawn().map_err(|_| Unfinished::Start)?;
-    let stdout = collect(child.stdout.take());
-    let stderr = collect(child.stderr.take());
+    let spawn = if own_group {
+        ProcessTree::spawn
+    } else {
+        ProcessTree::spawn_in_caller_group
+    };
+    let mut tree = spawn(&mut command).map_err(|_| Unfinished::Start)?;
+    let stdout = collect(tree.child().stdout.take());
+    let stderr = collect(tree.child().stderr.take());
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break status,
             Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
             _ => {
-                stop(&mut child, own_group);
+                tree.end();
                 return Err(Unfinished::TimedOut(timeout));
             }
         }
@@ -170,9 +176,7 @@ fn bounded(
     // A child it left behind can hold the pipes open; it gets what is left of the time limit.
     while !(stdout.1.is_finished() && stderr.1.is_finished()) {
         if Instant::now() >= deadline {
-            if own_group {
-                kill_group(child.id());
-            }
+            tree.end();
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -212,39 +216,4 @@ fn collect(
         }
     });
     (buffer, reader)
-}
-
-fn stop(child: &mut Child, own_group: bool) {
-    if own_group {
-        kill_tree(child);
-    } else {
-        let _ = child.kill();
-        let _ = child.wait();
-    }
-}
-
-/// Stops `child` and every process it started: its process group on Unix (it must lead one,
-/// `process_group(0)`), its process tree on Windows.
-pub(crate) fn kill_tree(child: &mut Child) {
-    kill_group(child.id());
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-fn kill_group(pid: u32) {
-    #[cfg(unix)]
-    if pid > 0 {
-        unsafe {
-            libc::kill(-(pid as i32), libc::SIGKILL);
-        }
-    }
-    #[cfg(windows)]
-    {
-        let _ = crate::platform::process::background_command("taskkill.exe")
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status();
-    }
 }

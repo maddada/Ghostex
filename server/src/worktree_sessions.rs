@@ -490,26 +490,25 @@ A time-boxed `git` capture, shaped like the session-git-status probe's: stdout i
 drained by a helper thread for the child's whole lifetime (a poll-then-read loop
 deadlocks against a child blocked on a full pipe), optional locks are disabled so
 gxserver never contends with the user's own git, and terminal prompts are off so
-a credential prompt cannot wedge the daemon. A timeout kills the child and reads
-as an ordinary failure.
+a credential prompt cannot wedge the daemon. A timeout kills the child and
+everything it started (`ProcessTree`), which also closes the pipe the reader is
+joined on, and reads as an ordinary failure.
 */
 pub fn run_worktree_git(cwd: &str, args: &[&str], timeout: Duration) -> Option<String> {
     if cwd.trim().is_empty() || !Path::new(cwd).is_dir() {
         return None;
     }
-    let mut command = crate::platform::process::background_command("git");
+    let mut command = std::process::Command::new("git");
     command
         .args(args)
         .current_dir(cwd)
         .env("GIT_OPTIONAL_LOCKS", "0")
-        .env("GIT_TERMINAL_PROMPT", "0");
-    let mut child = command
+        .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let mut stdout = child.stdout.take()?;
+        .stderr(Stdio::null());
+    let mut tree = crate::platform::process::ProcessTree::spawn(&mut command).ok()?;
+    let mut stdout = tree.child().stdout.take()?;
     let reader = std::thread::spawn(move || {
         let mut buffer = Vec::new();
         let _ = stdout.read_to_end(&mut buffer);
@@ -517,27 +516,29 @@ pub fn run_worktree_git(cwd: &str, args: &[&str], timeout: Duration) -> Option<S
     });
     let deadline = Instant::now() + timeout;
     let status = loop {
-        match child.try_wait() {
+        match tree.child().try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => {
                 if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    tree.end();
                     break None;
                 }
                 std::thread::sleep(COMMAND_POLL_INTERVAL);
             }
             Err(_) => {
-                let _ = child.kill();
-                let _ = child.wait();
+                tree.end();
                 break None;
             }
         }
     };
-    let output = reader.join().unwrap_or_default();
     if !status?.success() {
         return None;
     }
+    let output = crate::platform::process::join_reader_within(
+        reader,
+        crate::platform::process::COMMAND_READER_GRACE,
+        "git",
+    )?;
     Some(String::from_utf8_lossy(&output).trim().to_string())
 }
 

@@ -108,6 +108,267 @@ pub(crate) fn end_with_server(pid: u32) {
     let _ = pid;
 }
 
+/// A command started as the root of a process tree, so that `end` stops it and every process it started.
+///
+/// CDXC:PlatformSupport 2026-10-29 DECISION:
+/// This is the shared runner the time-boxed `git`/`gh` commands end through on a timeout, with everything they started, and the one the coming command source will use. The repository owner: "Yes to the job-object runner, and yes please to the separate `git`/`gh` timeout PR for Windows; land it first so the command source uses the same runner."
+///
+/// CDXC:PlatformSupport 2026-10-29 WHY:
+/// Windows does not end a child's children with it, and `taskkill /T` follows parent pids, so a grandchild whose parent had already exited (a `gh` child `git`, a credential helper) survived a timeout and kept the output pipe open. On Windows the command starts suspended, joins a job of its own and only then runs, so nothing it starts can escape before it joins. It is resumed with `NtResumeProcess`, which is undocumented but has been stable since Windows XP: stable `std` does not expose the main thread's handle, and the documented route, a system-wide Toolhelp thread snapshot to find that thread, measured about 7 ms per spawn on a CI runner. The job has no kill-on-close, so a helper a finished command left behind (git's fsmonitor daemon) keeps running as it does on Unix, and breakaway stays allowed so a child that asks to leave the job still starts. On Unix the command leads its own process group.
+pub(crate) struct ProcessTree {
+    child: std::process::Child,
+    #[cfg(unix)]
+    leads_group: bool,
+    #[cfg(windows)]
+    job: std::os::windows::io::OwnedHandle,
+}
+
+impl ProcessTree {
+    /// Spawns `command` as the root of its own tree. On Windows this sets the creation flags (CREATE_NO_WINDOW included), replacing any the caller set.
+    pub(crate) fn spawn(command: &mut Command) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            command.process_group(0);
+            Ok(Self {
+                child: command.spawn()?,
+                leads_group: true,
+            })
+        }
+        #[cfg(windows)]
+        {
+            spawn_in_job(command)
+        }
+    }
+
+    /// `spawn` for an interactive shell, which must stay in the caller's process group on Unix (one in a group of its own stops itself with SIGTTIN when run from a terminal), so there `end` stops only the shell. The same as `spawn` on Windows.
+    pub(crate) fn spawn_in_caller_group(command: &mut Command) -> std::io::Result<Self> {
+        #[cfg(unix)]
+        {
+            Ok(Self {
+                child: command.spawn()?,
+                leads_group: false,
+            })
+        }
+        #[cfg(windows)]
+        {
+            spawn_in_job(command)
+        }
+    }
+
+    pub(crate) fn child(&mut self) -> &mut std::process::Child {
+        &mut self.child
+    }
+
+    /// Stops every process still in the tree and reaps the root.
+    pub(crate) fn end(&mut self) {
+        #[cfg(unix)]
+        if self.leads_group {
+            if let Ok(group) = libc::pid_t::try_from(self.child.id()) {
+                if group > 0 {
+                    unsafe {
+                        libc::kill(-group, libc::SIGKILL);
+                    }
+                }
+            }
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            let ended = unsafe {
+                windows_sys::Win32::System::JobObjects::TerminateJobObject(
+                    self.job.as_raw_handle() as _,
+                    1,
+                )
+            };
+            if ended == 0 {
+                log_process_tree_failure(
+                    "processTreeEndFailed",
+                    &job_step_error(
+                        "could not end the command's job",
+                        std::io::Error::last_os_error(),
+                    ),
+                );
+            }
+        }
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// How long the parent waits for the output-draining thread after the command
+/// has exited. A command cannot exit before it has written its output, so at
+/// most a pipe buffer is ever still in flight and the thread normally finishes
+/// at once. An expired grace shows only that the reader did not finish in time:
+/// usually something the command left behind still holds the write end of the
+/// pipe, but a starved thread or a slow log sink can delay it too.
+pub(crate) const COMMAND_READER_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Waits up to `grace` for `reader`, a thread draining a command's pipe, and returns what it read. `None` when the reader did not finish within `grace` (the thread is left to finish on its own) or panicked; either is logged under the command's `executable`.
+pub(crate) fn join_reader_within<T>(
+    reader: std::thread::JoinHandle<T>,
+    grace: std::time::Duration,
+    executable: &str,
+) -> Option<T> {
+    let deadline = std::time::Instant::now() + grace;
+    while !reader.is_finished() {
+        if std::time::Instant::now() >= deadline {
+            log_reader_problem(
+                "commandReaderAbandoned",
+                "The thread reading the command's output did not finish within its grace after the command exited, so Ghostex stopped waiting for it.",
+                executable,
+            );
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let joined = reader.join();
+    if joined.is_err() {
+        log_reader_problem(
+            "commandReaderPanicked",
+            "The thread reading the command's output panicked, so its output was lost.",
+            executable,
+        );
+    }
+    joined.ok()
+}
+
+/// The log these helpers write to. Tests drive the reader timeout on purpose, so under test it lives in a temporary home instead of the user's own log.
+fn process_logger() -> &'static crate::logging::GxserverLogger {
+    static LOGGER: std::sync::OnceLock<crate::logging::GxserverLogger> = std::sync::OnceLock::new();
+    LOGGER.get_or_init(|| {
+        #[cfg(test)]
+        let home = Some(
+            std::env::temp_dir().join(format!("gxserver-process-tests-{}", std::process::id())),
+        );
+        #[cfg(not(test))]
+        let home = None;
+        crate::logging::GxserverLogger::new(crate::paths::get_gxserver_paths(home))
+    })
+}
+
+fn log_reader_problem(event: &str, message: &str, executable: &str) {
+    use crate::logging::{GxserverLogInput, LogLevel};
+    let _ = process_logger().log(GxserverLogInput {
+        level: LogLevel::Warn,
+        event: event.to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(message.to_string()),
+        details: Some(serde_json::json!({ "executable": executable })),
+    });
+}
+
+/// `error` with the step that failed in front. It keeps the kind, and the OS code only as text in the message: `raw_os_error()` on the result is `None`.
+#[cfg(windows)]
+fn job_step_error(step: &str, error: std::io::Error) -> std::io::Error {
+    std::io::Error::new(error.kind(), format!("{step}: {error}"))
+}
+
+/// Logs a job failure where it happens, so it never reads as "the tool is not installed" with nothing in the log.
+#[cfg(windows)]
+fn log_process_tree_failure(event: &str, error: &std::io::Error) {
+    use crate::logging::{GxserverLogInput, LogLevel};
+    let _ = process_logger().log(GxserverLogInput {
+        level: LogLevel::Error,
+        event: event.to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(error.to_string()),
+        details: None,
+    });
+}
+
+#[cfg(windows)]
+#[link(name = "ntdll")]
+extern "system" {
+    fn NtResumeProcess(process: windows_sys::Win32::Foundation::HANDLE) -> i32;
+}
+
+#[cfg(windows)]
+fn spawn_in_job(command: &mut Command) -> std::io::Result<ProcessTree> {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+    let job = command_job().inspect_err(|error| {
+        log_process_tree_failure("processTreeStartFailed", error);
+    })?;
+    command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+    // An ordinary start failure (the program is not installed) is the caller's answer, not a log line.
+    let mut child = command.spawn()?;
+    if let Err(error) = join_and_resume(&job, &child) {
+        log_process_tree_failure("processTreeStartFailed", &error);
+        // It never ran a line of its own, so nothing else is left to stop.
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
+    }
+    Ok(ProcessTree { child, job })
+}
+
+/// A job of its own for one command: no kill-on-close, breakaway allowed (see `ProcessTree`).
+#[cfg(windows)]
+fn command_job() -> std::io::Result<std::os::windows::io::OwnedHandle> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::System::JobObjects::{
+        CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
+        JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_BREAKAWAY_OK,
+    };
+    let job = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+    if job.is_null() {
+        return Err(job_step_error(
+            "could not create a job for the command",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    let job = unsafe { OwnedHandle::from_raw_handle(job as _) };
+    let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = unsafe { std::mem::zeroed() };
+    limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_BREAKAWAY_OK;
+    let limited = unsafe {
+        SetInformationJobObject(
+            job.as_raw_handle() as _,
+            JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        )
+    };
+    if limited == 0 {
+        return Err(job_step_error(
+            "could not set the command job's limits",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    Ok(job)
+}
+
+/// Puts the suspended `child` in `job`, then lets it run.
+#[cfg(windows)]
+fn join_and_resume(
+    job: &std::os::windows::io::OwnedHandle,
+    child: &std::process::Child,
+) -> std::io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+    let joined =
+        unsafe { AssignProcessToJobObject(job.as_raw_handle() as _, child.as_raw_handle() as _) };
+    if joined == 0 {
+        return Err(job_step_error(
+            "could not put the command in its job",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    let status = unsafe { NtResumeProcess(child.as_raw_handle() as _) };
+    if status < 0 {
+        return Err(std::io::Error::other(format!(
+            "could not resume the command: NtResumeProcess returned NTSTATUS {status:#010x}"
+        )));
+    }
+    Ok(())
+}
+
 /// The process's creation time as a Windows FILETIME (100ns ticks since 1601), or `None` once it has exited or cannot be opened.
 #[cfg(windows)]
 pub(crate) fn process_creation_filetime(process_id: i64) -> Option<u64> {
@@ -419,6 +680,100 @@ pub(crate) fn spawn_server(executable: &OsStr) -> std::io::Result<u32> {
         }
     }
     Err(std::io::Error::last_os_error())
+}
+
+#[cfg(all(test, windows))]
+mod process_tree_tests {
+    use super::{process_is_alive, ProcessTree};
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+
+    /// Ends the tree when the test leaves early, so a failed assertion does not leave PowerShell and `ping` running.
+    struct EndOnDrop(ProcessTree);
+
+    impl Drop for EndOnDrop {
+        fn drop(&mut self) {
+            self.0.end();
+        }
+    }
+
+    /// `text` as a single-quoted PowerShell string.
+    fn single_quoted(text: &str) -> String {
+        format!("'{}'", text.replace('\'', "''"))
+    }
+
+    fn wait_until(limit: Duration, done: impl Fn() -> bool) -> bool {
+        let deadline = Instant::now() + limit;
+        while !done() {
+            if Instant::now() >= deadline {
+                return false;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        true
+    }
+
+    // The case `taskkill /T` misses: the root starts a parent, the parent starts a grandchild and exits, so nothing links the grandchild to the root any more.
+    #[test]
+    fn end_stops_a_grandchild_whose_parent_already_exited() {
+        // A space and an apostrophe, as a `%TEMP%` under a user name like "Jane O'Neil" has.
+        let temp = tempfile::Builder::new()
+            .prefix("tree test o'neil ")
+            .tempdir()
+            .expect("tempdir");
+        let pids = temp.path().join("pids.txt");
+        let parent_script = temp.path().join("parent.ps1");
+        let root_script = temp.path().join("root.ps1");
+        std::fs::write(
+            &parent_script,
+            format!(
+                "$grandchild = Start-Process ping -ArgumentList '-n','120','127.0.0.1' -NoNewWindow -PassThru\r\nSet-Content -LiteralPath {} -Value \"$PID $($grandchild.Id)\"\r\n",
+                single_quoted(&pids.display().to_string())
+            ),
+        )
+        .unwrap();
+        // Start-Process joins -ArgumentList with spaces and adds no quotes, so the script path carries its own.
+        std::fs::write(
+            &root_script,
+            format!(
+                "Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',{} -NoNewWindow\r\nStart-Sleep -Seconds 120\r\n",
+                single_quoted(&format!("\"{}\"", parent_script.display()))
+            ),
+        )
+        .unwrap();
+        let mut command = Command::new("powershell.exe");
+        command
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&root_script)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        let mut tree = EndOnDrop(ProcessTree::spawn(&mut command).expect("spawn"));
+
+        let read_pids = || -> Option<(u32, u32)> {
+            let text = std::fs::read_to_string(&pids).ok()?;
+            let mut fields = text.split_whitespace().map(str::parse::<u32>);
+            Some((fields.next()?.ok()?, fields.next()?.ok()?))
+        };
+        assert!(
+            wait_until(Duration::from_secs(60), || read_pids().is_some()),
+            "the parent never recorded its grandchild"
+        );
+        let (parent, grandchild) = read_pids().unwrap();
+        assert!(
+            wait_until(Duration::from_secs(30), || !process_is_alive(parent)),
+            "the parent must have exited before the tree ends"
+        );
+        assert!(process_is_alive(grandchild));
+
+        tree.0.end();
+        assert!(
+            wait_until(Duration::from_secs(10), || !process_is_alive(grandchild)),
+            "the orphaned grandchild must end with the tree"
+        );
+    }
 }
 
 #[cfg(all(test, unix))]
