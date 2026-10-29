@@ -501,7 +501,7 @@ pub fn run_worktree_git(cwd: &str, args: &[&str], timeout: Duration) -> Option<S
     }
     let output = crate::platform::process::join_reader_within(
         reader?,
-        crate::platform::process::COMMAND_READER_GRACE,
+        Instant::now() + crate::platform::process::COMMAND_READER_GRACE,
         "git",
     )?;
     Some(String::from_utf8_lossy(&output).trim().to_string())

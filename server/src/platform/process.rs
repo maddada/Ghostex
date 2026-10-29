@@ -204,13 +204,12 @@ impl ProcessTree {
 /// pipe, but a starved thread or a slow log sink can delay it too.
 pub(crate) const COMMAND_READER_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 
-/// Waits up to `grace` for `reader`, a thread draining a command's pipe, and returns what it read. `None` when the reader did not finish within `grace` (the thread is left to finish on its own) or panicked; either is logged under the command's `executable`.
+/// Waits until `deadline` for `reader`, a thread draining a command's pipe, and returns what it read. `None` when the reader had not finished by `deadline` (the thread is left to finish on its own) or panicked; either is logged under the command's `executable`.
 pub(crate) fn join_reader_within<T>(
     reader: std::thread::JoinHandle<T>,
-    grace: std::time::Duration,
+    deadline: std::time::Instant,
     executable: &str,
 ) -> Option<T> {
-    let deadline = std::time::Instant::now() + grace;
     while !reader.is_finished() {
         if std::time::Instant::now() >= deadline {
             log_reader_problem(
@@ -283,10 +282,11 @@ fn log_process_tree_failure(event: &str, error: &std::io::Error) {
     });
 }
 
-// Linked the way windows-sys links, so building needs no ntdll.lib import library.
 #[cfg(windows)]
 #[link(name = "ntdll.dll", kind = "raw-dylib", modifiers = "+verbatim")]
 extern "system" {
+    /// CDXC:Build 2026-10-29 WHY:
+    /// ntdll is linked with `raw-dylib`, the way windows-sys links, so building for Windows needs no `ntdll.lib` import library.
     fn NtResumeProcess(process: windows_sys::Win32::Foundation::HANDLE) -> i32;
 }
 
