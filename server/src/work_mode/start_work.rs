@@ -400,3 +400,60 @@ fn text_param(params: &Map<String, Value>, key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    use super::*;
+
+    fn ticket(request: Value) -> WorkTicket {
+        WorkTicket::from_params(request.as_object().unwrap())
+            .map_err(|error| error.message)
+            .unwrap()
+    }
+
+    /// The targets of a session on no known branch, linked by hand to `work_links`.
+    fn targets(work_links: Value) -> WorkTargets {
+        let project = json!({ "projectId": "PStartWorkLinks", "path": "/gx-char/start-work" });
+        let session = json!({
+            "projectId": "PStartWorkLinks",
+            "sessionId": "S1",
+            "runtimeSettings": { "workLinks": work_links },
+        });
+        work_targets(&project, &session)
+    }
+
+    #[test]
+    fn starting_work_links_the_new_session_to_its_ticket() {
+        let request = |value: Value| Value::Object(ticket(value).link_request());
+        assert_eq!(
+            request(json!({ "source": "linear", "ticketId": "acm-1" })),
+            json!({ "linearIssues": ["ACM-1"] })
+        );
+        assert_eq!(
+            request(json!({ "source": "github", "ticketId": "#12" })),
+            json!({ "githubIssues": [12] })
+        );
+        assert_eq!(
+            request(json!({ "pullRequest": "https://github.com/acme/app/pull/5" })),
+            json!({ "pullRequest": "https://github.com/acme/app/pull/5" })
+        );
+    }
+
+    #[test]
+    fn a_worktree_is_reused_when_its_session_links_the_ticket_or_its_branch_names_it() {
+        let linear = ticket(json!({ "source": "linear", "ticketId": "ACM-1" }));
+        let github = ticket(json!({ "source": "github", "ticketId": 12 }));
+        let unlinked = targets(Value::Null);
+        assert!(linear.is_linked(&targets(json!({ "linearIssues": ["ACM-1"] })), "main"));
+        assert!(linear.is_linked(&unlinked, "leandro/acm-1-fix"));
+        assert!(!linear.is_linked(&unlinked, "leandro/acm-2-fix"));
+        assert!(!linear.is_linked(&targets(json!({ "githubIssues": [1] })), "main"));
+        assert!(github.is_linked(&targets(json!({ "githubIssues": [12] })), "main"));
+        assert!(github.is_linked(&unlinked, "leandro/12-fix"));
+        assert!(!github.is_linked(&unlinked, "leandro/acm-12-fix"));
+        let pull_request = ticket(json!({ "pullRequest": 5 }));
+        assert!(!pull_request.is_linked(&targets(json!({ "pullRequest": 5 })), "main"));
+    }
+}
