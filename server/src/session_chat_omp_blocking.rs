@@ -17,7 +17,9 @@ OMP's standard inline and fullscreen surfaces use `OverlayPanel`/overlay-box:
 a rounded `╭ ... ╮` through `╰ ... ╯` frame with stable titles or action
 footers. The normal composer is also rounded, so the live composer's own frame
 is excluded, and a live composer below a match retires it, preventing a
-dismissed selector left in scrollback from keeping chat blocked. Unframed states require paired, exact UI
+dismissed selector left in scrollback from keeping chat blocked. The one
+exception is a tool approval sitting directly on the composer (see
+`classify_rounded_frame`). Unframed states require paired, exact UI
 evidence, never a generic word such as "Settings", "Ask", or "paused" alone.
 
 Extensions may supply arbitrary `ui.custom` components or replace the editor
@@ -362,13 +364,15 @@ fn live_unframed(
     (!composer_after(composer, evidence)).then_some(OmpBlockingScreen { title, detail })
 }
 
+/// CDXC:AgentScreenDetection 2026-10-28 WHY:
+/// OMP 18.13 draws a tool approval inline and keeps its composer on screen right below it (the `pi` and the `box` shape alike), and removes the frame as soon as the call is approved or denied. The stale-scrollback rule, which retires a frame with the live composer below it, therefore dropped every live approval: the chat showed no card, the composer read as ready, and a chat message would have reached OMP, whose footer reads "type to deny and steer". An approval frame is live while nothing but the composer follows it; with any line between them it stays retired like every other frame.
 fn classify_rounded_frame(
     lines: &[String],
     composer: Option<usize>,
     start: usize,
     end: usize,
 ) -> Option<OmpBlockingScreen> {
-    if composer == Some(start) || composer_after(composer, end) {
+    if composer == Some(start) {
         return None;
     }
     let title = frame_title(&lines[start]);
@@ -378,12 +382,17 @@ fn classify_rounded_frame(
         && text.contains("approve")
         && text.contains("deny")
         && has_choice_controls(&text)
+        && (composer == Some(end + 1) || !composer_after(composer, end))
     {
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for tool approval",
             detail:
                 "Approve or deny the pending tool call in the terminal before sending a message.",
         });
+    }
+
+    if composer_after(composer, end) {
+        return None;
     }
 
     if is_auth_title(&title) {

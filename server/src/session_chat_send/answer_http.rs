@@ -499,6 +499,8 @@ async fn answer_session_chat_prompt(
                 },
             );
         };
+        let agent =
+            crate::session_chat_follower::omp_agent_for_pi_transcript(&target.session, agent);
         let result =
             crate::session_chat_resume_picker::answer_terminal_key(&target, &agent, &params).await;
         // The card draws the screen the key changed; republish it now, not on the next probe.

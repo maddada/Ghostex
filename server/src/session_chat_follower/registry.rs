@@ -42,13 +42,19 @@ pub(crate) fn session_chat_display_agent_for_session(session: &Value) -> Option<
             .is_some_and(Value::is_object)
             .then(|| crate::claude_cloud::CLAUDE_CLOUD_AGENT_ID.to_string());
     };
+    Some(omp_agent_for_pi_transcript(session, agent))
+}
+
+/// CDXC:AgentScreenDetection 2026-10-28 WHY:
+/// OMP writes Pi's transcript format, so an OMP session's transcript agent is `pi`, but its terminal shows OMP's screen. Readers of that screen need `omp`: the chat's agent above, and the `terminalKey` answer path, whose key check read OMP's blocking screens with Pi's rules, answered "The agent's screen changed" and cleared the card while OMP still waited.
+pub(crate) fn omp_agent_for_pi_transcript(session: &Value, agent: String) -> String {
     if agent == "pi"
         && crate::session_chat_composer::session_chat_composer_agent_id(session).as_deref()
             == Some("omp")
     {
-        return Some("omp".to_string());
+        return "omp".to_string();
     }
-    Some(agent)
+    agent
 }
 
 pub(crate) fn session_chat_identity_fingerprint(session: &Value) -> String {
