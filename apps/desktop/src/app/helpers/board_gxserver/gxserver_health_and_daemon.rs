@@ -5,7 +5,6 @@
 // See docs/2026-08-22/repo-restructure/SPLITS.md C1.
 
 use std::{
-    collections::HashSet,
     env, fs,
     path::{Path, PathBuf},
     time::Duration,
@@ -701,57 +700,13 @@ pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> Stri
     sparse LaunchServices PATH that cannot see Homebrew-installed Ghostex tools.
     This PATH is for the app and gxserver only; it is never exported into a
     terminal session's shell (see CDXC:Zmx).
-    2026-09-03: also search the Nix profile directories (GitHub issue #118) so
-    nix-darwin users' `claude`, `bd`, and `gx` are visible to the app's CLI
-    checks. Every entry is a search candidate; a missing directory is skipped
-    by lookup and costs nothing.
+    Probes the login shell dynamically with per-process caching and falls back
+    to standard paths, ensuring user-installed tools and package-manager
+    environments (Nix, Homebrew, mise, asdf) are naturally resolved in their
+    intended precedence order without hardcoded directory lists.
     */
-    let home = env::var("HOME")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let user = env::var("USER")
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let mut entries = vec![
-        "/opt/homebrew/bin".to_string(),
-        "/opt/homebrew/sbin".to_string(),
-        "/usr/local/bin".to_string(),
-        "/usr/local/sbin".to_string(),
-    ];
-    if let Some(home) = home.as_deref() {
-        entries.extend([
-            format!("{home}/.volta/bin"),
-            format!("{home}/.local/share/mise/shims"),
-            format!("{home}/.local/bin"),
-            format!("{home}/.asdf/shims"),
-            format!("{home}/.nodenv/shims"),
-            format!("{home}/.nix-profile/bin"),
-        ]);
-    }
-    if let Some(user) = user.as_deref() {
-        entries.push(format!("/etc/profiles/per-user/{user}/bin"));
-    }
-    entries.extend([
-        "/run/current-system/sw/bin".to_string(),
-        "/nix/var/nix/profiles/default/bin".to_string(),
-        "/usr/bin".to_string(),
-        "/bin".to_string(),
-        "/usr/sbin".to_string(),
-        "/sbin".to_string(),
-    ]);
-    if let Some(current_path) = current_path {
-        entries.extend(current_path.split(':').map(str::to_string));
-    }
-
-    let mut seen = HashSet::new();
-    entries
-        .into_iter()
-        .map(|entry| entry.trim().to_string())
-        .filter(|entry| !entry.is_empty() && seen.insert(entry.clone()))
-        .collect::<Vec<_>>()
-        .join(":")
+    let home = ghostex_paths::user_home_dir();
+    ghostex_paths::tool_path::normalized_user_tool_path(current_path, &home)
 }
 
 #[cfg(target_os = "macos")]

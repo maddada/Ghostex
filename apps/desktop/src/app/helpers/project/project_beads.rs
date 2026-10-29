@@ -408,37 +408,7 @@ fn gpui_project_beads_permission_command(command: &str, agent_id: &str) -> Strin
 }
 
 pub(crate) fn gpui_project_beads_title_generation_path(existing: Option<&str>) -> String {
-    // macOS `projectBoardNativeProcessPath`: common tool directories lead so
-    // agent CLIs resolve even under minimal login-shell PATH files.
-    let home = std::env::var("HOME").unwrap_or_default();
-    let user = std::env::var("USER").unwrap_or_default();
-    let default_entries = [
-        format!("{home}/.local/share/mise/shims"),
-        format!("{home}/.local/bin"),
-        format!("{home}/.asdf/shims"),
-        format!("{home}/.nix-profile/bin"),
-        format!("/etc/profiles/per-user/{user}/bin"),
-        "/run/current-system/sw/bin".to_string(),
-        "/nix/var/nix/profiles/default/bin".to_string(),
-        "/opt/homebrew/bin".to_string(),
-        "/opt/homebrew/sbin".to_string(),
-        "/usr/local/bin".to_string(),
-        "/usr/local/sbin".to_string(),
-        "/usr/bin".to_string(),
-        "/bin".to_string(),
-        "/usr/sbin".to_string(),
-        "/sbin".to_string(),
-    ];
-    let mut seen = std::collections::HashSet::new();
-    default_entries
-        .into_iter()
-        .chain(existing.unwrap_or_default().split(':').map(str::to_string))
-        .filter(|entry| {
-            let normalized = entry.trim().to_string();
-            !normalized.is_empty() && seen.insert(normalized)
-        })
-        .collect::<Vec<_>>()
-        .join(":")
+    gpui_normalized_user_tool_path(existing)
 }
 
 pub(crate) fn gpui_project_beads_sanitize_generated_title(line: &str) -> String {

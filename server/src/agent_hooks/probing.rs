@@ -10,12 +10,9 @@ use serde_json::{Map, Value};
 
 #[cfg(not(windows))]
 use crate::platform::shell::command_shell;
-use crate::{
-    domain::DomainStateError,
-    platform::shell::{command_shell_for_path, login_shell_candidates},
-};
+use crate::domain::DomainStateError;
 
-use super::config::{GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS, SHELL_PATH_SENTINEL};
+use super::config::GXSERVER_AGENT_HOOK_COLOR_DISABLING_ENVIRONMENT_KEYS;
 #[cfg(not(windows))]
 use super::plugin_sources::shell_quote;
 use super::probe_cache::{
@@ -289,43 +286,20 @@ pub(crate) fn normalize_gxserver_process_path(
 /// `probe_cache::login_shell_path_entries`, which keeps the interactive shell
 /// spawn to once per process.
 pub(super) fn probe_login_shell_path_entries(home_dir: &Path, timeout: Duration) -> Vec<String> {
-    for candidate in login_shell_candidates() {
-        let candidate_path = PathBuf::from(&candidate);
-        if !is_executable(&candidate_path) {
-            continue;
-        }
-        let entries = run_login_shell_path_probe(&candidate, home_dir, timeout);
-        if !entries.is_empty() {
-            return entries;
-        }
-    }
-    Vec::new()
-}
-
-fn run_login_shell_path_probe(shell_path: &str, home_dir: &Path, timeout: Duration) -> Vec<String> {
-    let shell = command_shell_for_path(shell_path);
-    let mut command = Command::new(&shell.executable);
-    command.args(
-        shell.interactive_script_args(&format!("printf '\\n{SHELL_PATH_SENTINEL}%s\\n' \"$PATH\"")),
-    );
-    apply_hook_command_environment(&mut command, home_dir);
-    // A new terminal starts without the tool folders gxserver appended to its own PATH.
-    command.env(
-        "PATH",
-        crate::managed_tools::paths::process_path_without_tools(),
-    );
-    // An interactive shell stays in our process group (`output_within_caller_group`).
-    let Some(stdout) = successful_stdout(crate::managed_tools::run::output_within_caller_group(
-        command, timeout,
-    )) else {
-        return Vec::new();
-    };
-    stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix(SHELL_PATH_SENTINEL))
-        .map(|path| split_path(Some(path)))
-        .unwrap_or_default()
+    let managed_paths = crate::managed_tools::paths::path_dirs();
+    let initial_path = crate::managed_tools::paths::process_path_without_tools();
+    ghostex_paths::tool_path::probe_login_shell_path_entries_with_path(
+        home_dir,
+        timeout,
+        Some(initial_path.as_os_str()),
+    )
+    .into_iter()
+    .filter(|entry| {
+        !managed_paths
+            .iter()
+            .any(|dir| path_string(dir).as_str() == entry.as_str())
+    })
+    .collect()
 }
 
 fn apply_hook_command_environment(command: &mut Command, home_dir: &Path) {
@@ -375,21 +349,6 @@ fn unique_path_entries(entries: Vec<String>) -> Vec<String> {
         output.push(entry);
     }
     output
-}
-
-fn is_executable(path: &Path) -> bool {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        fs::metadata(path)
-            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
-            .unwrap_or(false)
-    }
-    #[cfg(not(unix))]
-    {
-        path.is_file()
-    }
 }
 
 pub(crate) fn read_file_text(path: &Path) -> String {
