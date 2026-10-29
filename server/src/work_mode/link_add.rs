@@ -7,6 +7,8 @@
 //! The added ticket joins the session's effective list here, where the branch's links are known,
 //! and the undo restores each touched key as it was stored (absent = automatic again).
 
+use std::collections::HashMap;
+
 use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
@@ -34,17 +36,19 @@ pub(crate) fn expand_added_work_links(
     let ticket = TicketRef::from_params(params)
         .transpose()
         .map_err(DomainStateError::bad_request)?;
-    let mut added_linear = params.get("addLinearIssues").map(list_values);
-    let mut added_github = params.get("addGithubIssues").map(list_values);
+    let mut added: HashMap<WorkSourceId, Vec<Value>> = WorkSourceId::BUILT_IN
+        .into_iter()
+        .filter_map(|source| {
+            params
+                .get(added_work_link_field(source))
+                .map(|value| (source, list_values(value)))
+        })
+        .collect();
     match ticket {
-        Some(TicketRef {
-            source: WorkSourceId::Linear,
-            id,
-        }) => added_linear.get_or_insert_with(Vec::new).push(json!(id)),
-        Some(TicketRef {
-            source: WorkSourceId::Github,
-            id,
-        }) => added_github.get_or_insert_with(Vec::new).push(json!(id)),
+        Some(ticket) => added
+            .entry(ticket.source)
+            .or_default()
+            .push(json!(ticket.id)),
         None if !ADD_KEYS.iter().any(|key| params.contains_key(*key)) => return Ok(None),
         None => {}
     }
@@ -64,8 +68,9 @@ pub(crate) fn expand_added_work_links(
             .unwrap_or(Value::Null)
     };
 
-    if let Some(added) = added_linear {
-        let mut identifiers = targets.linear_issues.clone();
+    if let Some(added) = added.remove(&WorkSourceId::Linear) {
+        let linked = targets.ids_of(WorkSourceId::Linear);
+        let mut identifiers = linked.clone();
         for item in added {
             let text = item.as_str().unwrap_or_default();
             let identifier = normalize_linear_identifier(text).ok_or_else(|| {
@@ -77,13 +82,14 @@ pub(crate) fn expand_added_work_links(
                 identifiers.push(identifier);
             }
         }
-        if identifiers != targets.linear_issues {
+        if identifiers != linked {
             undo.insert("linearIssues".to_string(), previous("linearIssues"));
             request.insert("linearIssues".to_string(), json!(identifiers));
         }
     }
-    if let Some(added) = added_github {
-        let mut numbers = targets.github_issues.clone();
+    if let Some(added) = added.remove(&WorkSourceId::Github) {
+        let linked = targets.github_issue_numbers();
+        let mut numbers = linked.clone();
         for item in added {
             let number = item
                 .as_u64()
@@ -99,7 +105,7 @@ pub(crate) fn expand_added_work_links(
                 numbers.push(number);
             }
         }
-        if numbers != targets.github_issues {
+        if numbers != linked {
             undo.insert("githubIssues".to_string(), previous("githubIssues"));
             request.insert("githubIssues".to_string(), json!(numbers));
         }

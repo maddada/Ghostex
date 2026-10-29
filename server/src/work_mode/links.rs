@@ -9,7 +9,7 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 
-use super::parse_github_project_reference;
+use super::{parse_github_project_reference, WorkSourceId};
 
 /// A session's hand-set links. `None` = automatic, `Some(empty)` = explicitly none.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -20,6 +20,27 @@ pub(crate) struct ManualWorkLinks {
     pub(crate) linear_project: Option<Option<String>>,
     /// A GitHub Project as `owner/number`.
     pub(crate) github_project: Option<Option<String>>,
+}
+
+impl ManualWorkLinks {
+    /// One source's hand-set ticket ids; `None` = automatic.
+    pub(crate) fn ticket_ids(&self, source: WorkSourceId) -> Option<Vec<String>> {
+        match source {
+            WorkSourceId::Linear => self.linear_issues.clone(),
+            WorkSourceId::Github => self
+                .github_issues
+                .as_ref()
+                .map(|numbers| numbers.iter().map(u64::to_string).collect()),
+        }
+    }
+}
+
+/// The request key that adds tickets of a source to the ones a session already links.
+pub(crate) fn added_work_link_field(source: WorkSourceId) -> &'static str {
+    match source {
+        WorkSourceId::Linear => "addLinearIssues",
+        WorkSourceId::Github => "addGithubIssues",
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

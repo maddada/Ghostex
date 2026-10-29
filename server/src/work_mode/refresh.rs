@@ -107,15 +107,16 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
             refresh_work_repo(cwd);
         }
         if let Some(key) = targets.linear_key {
+            let identifiers = targets.ids_of(WorkSourceId::Linear);
             wanted_issues
                 .entry(key)
                 .or_default()
-                .extend(targets.linear_issues.iter().cloned());
+                .extend(identifiers.iter().cloned());
             if targets.pull_request.is_none() {
                 awaiting_pull_request
                     .entry(key)
                     .or_default()
-                    .extend(targets.linear_issues.iter().cloned());
+                    .extend(identifiers);
             }
         }
     }
@@ -175,7 +176,7 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
         if let Some(selector) = targets.pull_request.as_deref() {
             wanted.extend(read_of(selector, true));
         }
-        for number in &targets.github_issues {
+        for number in &targets.github_issue_numbers() {
             wanted.extend(read_of(&number.to_string(), false));
         }
         for read in wanted {
@@ -221,7 +222,7 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
                 let Some(cwd) = targets.cwd.as_deref() else {
                     continue;
                 };
-                let numbers = targets.github_issues.iter().copied().chain(
+                let numbers = targets.github_issue_numbers().into_iter().chain(
                     targets
                         .pull_request
                         .as_deref()

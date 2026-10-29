@@ -2,6 +2,8 @@
 //! branch whose last segment starts with the number, listed from each repo's open issues through
 //! `gh` (the same `gh` pass that lists the repo's PRs, which stay the code host's).
 
+use std::borrow::Cow;
+
 use serde_json::Value;
 
 use super::*;
@@ -14,6 +16,42 @@ fn number_of(id: &str) -> Result<u64, String> {
 }
 
 impl WorkSource for GithubSource {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("GitHub")
+    }
+
+    fn link_kind(&self) -> &'static str {
+        "issue"
+    }
+
+    fn key(&self, id: &str, repo: &str) -> String {
+        format!("issue:{repo}#{id}")
+    }
+
+    fn label(&self, id: &str) -> String {
+        format!("#{id}")
+    }
+
+    fn untitled(&self, id: &str) -> String {
+        format!("Issue #{id}")
+    }
+
+    fn keys_name_a_repo(&self) -> bool {
+        true
+    }
+
+    fn invalid_ref(&self, _text: &str) -> String {
+        "ticketId must be a GitHub issue number.".to_string()
+    }
+
+    fn project_kind(&self) -> Option<TicketProjectKind> {
+        Some(TicketProjectKind::Github)
+    }
+
+    fn team_of(&self, _id: &str) -> Option<String> {
+        None
+    }
+
     fn parse_ref(&self, text: &str) -> Option<String> {
         text.trim()
             .trim_start_matches('#')
@@ -32,6 +70,37 @@ impl WorkSource for GithubSource {
             .map(|number| number.to_string())
             .into_iter()
             .collect()
+    }
+
+    fn branch_names(&self, branch: &str, id: &str) -> bool {
+        github_issue_in_branch(branch).map(|number| number.to_string()) == Some(id.to_string())
+    }
+
+    /// The issue the head branch starts with, then the ones the description closes.
+    fn tickets_in_pull_request(
+        &self,
+        _known_keys: &[String],
+        pull_request: &PullRequestText,
+    ) -> Vec<String> {
+        github_issue_in_branch(pull_request.head)
+            .into_iter()
+            .chain(
+                pull_request
+                    .body
+                    .map(closing_issue_numbers)
+                    .unwrap_or_default(),
+            )
+            .map(|number| number.to_string())
+            .collect()
+    }
+
+    /// The `gh` feed lists every open issue of the repo.
+    fn list_holds_every_open_ticket(&self) -> bool {
+        true
+    }
+
+    fn status_follows_pull_request(&self) -> bool {
+        true
     }
 
     fn cached_list(&self, projects: &[WorkProjectInput], plan: &WorkFeedPlan) -> SourceList {
@@ -147,5 +216,20 @@ impl WorkSource for GithubSource {
             branch_name: None,
             repo: Some(created.repo),
         })
+    }
+
+    fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String> {
+        let number = number_of(id)?;
+        github_issue_branch(scope.cwd.unwrap_or_default(), number).map_err(|error| error.message)
+    }
+
+    /// GitHub ties issues to PRs through the PR itself (its branch and description).
+    fn tickets_attached_to(
+        &self,
+        _scope: &TicketScope,
+        _url: &str,
+        _force: bool,
+    ) -> Result<Vec<String>, String> {
+        Ok(Vec::new())
     }
 }

@@ -48,43 +48,35 @@ pub(crate) fn pull_request_tickets_known_locally(
             if !links_this_pr {
                 continue;
             }
-            for identifier in targets.linear_issues {
-                push_ticket(&mut tickets, linear_ticket(identifier));
-            }
             // A session's GitHub issues are in its own repo, which is the PR's.
-            for number in targets.github_issues {
-                push_ticket(&mut tickets, github_ticket(number));
+            for linked in targets.tickets {
+                push_ticket(&mut tickets, WorkItemRef::Ticket(linked.ticket));
             }
         }
     }
     tickets
 }
 
-/// The tickets the PR's head branch names: Linear identifiers with a real team key, or the GitHub
-/// issue number a `<user>/<number>-<slug>` branch starts with.
+/// The tickets the PR's head branch names, each source's in turn: Linear identifiers with a known
+/// team key, or the GitHub issue number a `<user>/<number>-<slug>` branch starts with.
 pub(crate) fn pull_request_branch_tickets(
     pull_request: &Value,
-    linear_team_keys: &[String],
+    known_keys: &[String],
 ) -> Vec<WorkItemRef> {
     let Some(head) = pull_request.get("headBranch").and_then(Value::as_str) else {
         return Vec::new();
     };
+    let text = PullRequestText { head, body: None };
     let mut tickets = Vec::new();
-    for identifier in linear_identifiers_in_branch(head, linear_team_keys) {
-        push_ticket(&mut tickets, linear_ticket(identifier));
-    }
-    if let Some(number) = github_issue_in_branch(head) {
-        push_ticket(&mut tickets, github_ticket(number));
+    for source in WorkSourceId::BUILT_IN {
+        for id in work_source(source).tickets_in_pull_request(known_keys, &text) {
+            push_ticket(
+                &mut tickets,
+                WorkItemRef::Ticket(TicketRef::new(source, id)),
+            );
+        }
     }
     tickets
-}
-
-fn linear_ticket(identifier: String) -> WorkItemRef {
-    WorkItemRef::Ticket(TicketRef::new(WorkSourceId::Linear, identifier))
-}
-
-fn github_ticket(number: u64) -> WorkItemRef {
-    WorkItemRef::Ticket(TicketRef::new(WorkSourceId::Github, number.to_string()))
 }
 
 /// The Linear issues whose attachments include the PR's URL (Linear's documented

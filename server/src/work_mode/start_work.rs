@@ -68,23 +68,22 @@ impl WorkTicket {
         request
     }
 
+    /// The ticket of a source, `None` for a PR.
+    fn ticket_ref(&self) -> Option<TicketRef> {
+        match self {
+            Self::Linear(identifier) => Some(TicketRef::new(WorkSourceId::Linear, identifier)),
+            Self::Github(number) => Some(TicketRef::new(WorkSourceId::Github, number.to_string())),
+            Self::PullRequest(_) => None,
+        }
+    }
+
     /// Whether a session already works on this ticket, by its links or its worktree's branch.
     fn is_linked(&self, targets: &WorkTargets, worktree_branch: &str) -> bool {
-        match self {
-            Self::Linear(identifier) => {
-                let key = identifier.split_once('-').map(|(key, _)| key.to_string());
-                targets.linear_issues.contains(identifier)
-                    || key.is_some_and(|key| {
-                        linear_identifiers_in_branch(worktree_branch, &[key]).contains(identifier)
-                    })
-            }
-            Self::Github(number) => {
-                targets.github_issues.contains(number)
-                    || github_issue_in_branch(worktree_branch) == Some(*number)
-            }
-            // Decided by the PR's plan, which knows its number and branch.
-            Self::PullRequest(_) => false,
-        }
+        // A PR is decided by the PR's plan, which knows its number and branch.
+        self.ticket_ref().is_some_and(|ticket| {
+            targets.ids_of(ticket.source).contains(&ticket.id)
+                || work_source(ticket.source).branch_names(worktree_branch, &ticket.id)
+        })
     }
 }
 
@@ -247,30 +246,19 @@ fn plan_ticket_work(
         });
     }
 
-    let branch = match ticket {
-        WorkTicket::Linear(identifier) => {
-            let api_key = project_linear_api_key(state, &project).ok_or_else(|| {
-                DomainStateError::bad_request(
-                    "Set a Linear API key first (Settings, or ghostex issues linear-key).",
-                )
-            })?;
-            linear_issue_ticket(&api_key, identifier)
+    let branch = match ticket.ticket_ref() {
+        Some(ticket) => {
+            let linear_key = project_linear_api_key(state, &project);
+            let scope = TicketScope {
+                project_id,
+                cwd: project.get("path").and_then(Value::as_str),
+                linear_api_key: linear_key.as_deref(),
+            };
+            work_source(ticket.source)
+                .branch_for(&scope, &ticket.id)
                 .map_err(DomainStateError::bad_request)?
-                .branch_name
-                .ok_or_else(|| {
-                    DomainStateError::bad_request(format!(
-                        "Linear gave no branch name for {identifier}."
-                    ))
-                })?
         }
-        WorkTicket::Github(number) => {
-            let cwd = project
-                .get("path")
-                .and_then(Value::as_str)
-                .unwrap_or_default();
-            github_issue_branch(cwd, *number)?
-        }
-        WorkTicket::PullRequest(_) => {
+        None => {
             let plan = pull_request
                 .as_ref()
                 .ok_or_else(|| DomainStateError::bad_request("The PR could not be read."))?;
@@ -388,7 +376,7 @@ pub(crate) fn project_linear_identifiers(
     Ok(repository
         .list_sessions(Some(project_id))?
         .iter()
-        .flat_map(|session| work_targets(&project, session).linear_issues)
+        .flat_map(|session| work_targets(&project, session).ids_of(WorkSourceId::Linear))
         .collect())
 }
 

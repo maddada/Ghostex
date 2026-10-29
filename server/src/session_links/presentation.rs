@@ -18,7 +18,7 @@ use crate::session_git_status::effective_session_git_cwd;
 use crate::work_mode::{
     cached_linear_issue_read, cached_work_github_issue, cached_work_github_issue_url,
     cached_work_pull_request, cached_work_repo, manual_work_links, project_linear_key,
-    work_targets, LinearIssueRead, ManualPullRequest,
+    work_targets, LinearIssueRead, ManualPullRequest, WorkSourceId,
 };
 
 use super::{
@@ -103,20 +103,18 @@ pub(crate) fn session_link_entries(project: &Value, session: &Value) -> Vec<Sess
             push(entry, &mut entries);
         }
     }
-    for number in &targets.github_issues {
+    for number in targets.github_issue_numbers() {
         if let Some(repo) = &repo {
             let link = SessionLinkRef::Github {
                 kind: SessionLinkKind::Issue,
                 repo: repo.clone(),
-                number: *number,
+                number,
             };
             push(live(link, manual.github_issues.is_some()), &mut entries);
         }
     }
-    for identifier in &targets.linear_issues {
-        let link = SessionLinkRef::Linear {
-            identifier: identifier.clone(),
-        };
+    for identifier in targets.ids_of(WorkSourceId::Linear) {
+        let link = SessionLinkRef::Linear { identifier };
         push(live(link, manual.linear_issues.is_some()), &mut entries);
     }
     for item in stored.items {

@@ -1,11 +1,15 @@
 //! Where a workspace's tickets come from. Each source (Linear, GitHub issues) answers the same
-//! questions: which tickets a branch or a typed reference names, which tickets the Work list shows,
-//! what its caches know about one ticket, its details with comments, and how to create one. PRs,
+//! questions: what its tickets are called (keys, labels, link kinds), which tickets a branch, a PR
+//! or a typed reference names, which tickets the Work list shows, what its caches know about one
+//! ticket, its details with comments, and how to create one. PRs,
 //! checks and the Clean up offer are not a source's business: they belong to the code host
 //! (GitHub) whatever the tracker is.
 //!
 //! CDXC:WorkMode 2026-10-27 SEE-ALSO:
 //! `source_linear.rs` and `source_github.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
+
+use std::borrow::Cow;
+use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 
@@ -21,6 +25,10 @@ pub(crate) enum WorkSourceId {
 }
 
 impl WorkSourceId {
+    /// The sources every work-mode session's branch and hand-set links are read for, whatever its
+    /// workspace's tracker.
+    pub(crate) const BUILT_IN: [Self; 2] = [Self::Linear, Self::Github];
+
     pub(crate) fn as_wire(self) -> &'static str {
         match self {
             Self::Linear => "linear",
@@ -28,29 +36,42 @@ impl WorkSourceId {
         }
     }
 
-    /// How errors and buttons name it.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            Self::Linear => "Linear",
-            Self::Github => "GitHub",
-        }
-    }
-
-    /// The list row's field for the project a ticket is in (Linear project, GitHub Project).
-    pub(crate) fn project_field(self) -> &'static str {
-        match self {
-            Self::Linear => "linearProject",
-            Self::Github => "githubProject",
-        }
-    }
-
     pub(crate) fn from_wire(value: Option<&Value>) -> Option<Self> {
-        match value?.as_str()?.trim() {
+        Self::parse(value?.as_str()?)
+    }
+
+    pub(crate) fn parse(text: &str) -> Option<Self> {
+        match text.trim() {
             "linear" => Some(Self::Linear),
             "github" => Some(Self::Github),
             _ => None,
         }
     }
+}
+
+/// Which kind of project a source's tickets sit in: a Linear project or a GitHub Project. The
+/// Work list and the details row put it in that kind's own field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TicketProjectKind {
+    Linear,
+    Github,
+}
+
+impl TicketProjectKind {
+    /// The list row's field for it.
+    pub(crate) fn field(self) -> &'static str {
+        match self {
+            Self::Linear => "linearProject",
+            Self::Github => "githubProject",
+        }
+    }
+}
+
+/// What a PR says about its tickets: its head branch, and its description where the caller read
+/// one.
+pub(crate) struct PullRequestText<'a> {
+    pub(crate) head: &'a str,
+    pub(crate) body: Option<&'a str>,
 }
 
 /// One ticket of one source: `ACM-12` of Linear, `218` of GitHub.
@@ -71,26 +92,17 @@ impl TicketRef {
     /// The key links, list rows, pins and removals are stored and matched by: `linear:ACM-12`,
     /// `issue:owner/repo#218`.
     pub(crate) fn key(&self, repo: &str) -> String {
-        match self.source {
-            WorkSourceId::Linear => format!("linear:{}", self.id),
-            WorkSourceId::Github => format!("issue:{repo}#{}", self.id),
-        }
+        work_source(self.source).key(&self.id, repo)
     }
 
     /// What a row, a chip and the team flow show: `ACM-12`, `#218`.
     pub(crate) fn label(&self) -> String {
-        match self.source {
-            WorkSourceId::Linear => self.id.clone(),
-            WorkSourceId::Github => format!("#{}", self.id),
-        }
+        work_source(self.source).label(&self.id)
     }
 
     /// The title a row shows before the ticket was read.
     pub(crate) fn untitled(&self) -> String {
-        match self.source {
-            WorkSourceId::Linear => self.id.clone(),
-            WorkSourceId::Github => format!("Issue #{}", self.id),
-        }
+        work_source(self.source).untitled(&self.id)
     }
 
     /// The `source` + `ticketId` a request names; `None` when it names no ticket.
@@ -104,16 +116,12 @@ impl TicketRef {
             .map(|number| number.to_string())
             .or_else(|| id.as_str().map(str::to_string))
             .unwrap_or_default();
+        let source_rules = work_source(source);
         Some(
-            work_source(source)
+            source_rules
                 .parse_ref(&text)
                 .map(|id| Self::new(source, id))
-                .ok_or_else(|| match source {
-                    WorkSourceId::Linear => {
-                        format!("\"{text}\" is not a Linear issue ID like SPX-1245.")
-                    }
-                    WorkSourceId::Github => "ticketId must be a GitHub issue number.".to_string(),
-                }),
+                .ok_or_else(|| source_rules.invalid_ref(&text)),
         )
     }
 }
@@ -158,6 +166,9 @@ pub(crate) enum TicketRead {
 pub(crate) struct SourceList {
     pub(crate) tickets: Vec<ListedTicket>,
     pub(crate) errors: Vec<String>,
+    /// The ticket-id prefixes this list knows (Linear's team keys), which name its tickets in a
+    /// PR's branch.
+    pub(crate) known_keys: BTreeSet<String>,
 }
 
 pub(crate) struct ListedTicket {
@@ -196,12 +207,49 @@ pub(crate) struct CreatedTicket {
 }
 
 pub(crate) trait WorkSource: Sync {
+    /// How errors and buttons name it.
+    fn name(&self) -> Cow<'static, str>;
+    /// The `kind` its tickets publish as session links: `linear`, `issue`.
+    fn link_kind(&self) -> &'static str;
+    /// `TicketRef::key`.
+    fn key(&self, id: &str, repo: &str) -> String;
+    /// `TicketRef::label`.
+    fn label(&self, id: &str) -> String;
+    /// `TicketRef::untitled`.
+    fn untitled(&self, id: &str) -> String;
+    /// Whether its keys name the repo (GitHub's do; a Linear key names one ticket wherever it is
+    /// worked).
+    fn keys_name_a_repo(&self) -> bool;
+    /// Why a request's `ticketId` names none of its tickets.
+    fn invalid_ref(&self, text: &str) -> String;
+    /// The kind of project its tickets sit in, if it has projects.
+    fn project_kind(&self) -> Option<TicketProjectKind>;
+    /// The team a ticket id belongs to, when ids carry one (`ACM` of `ACM-12`).
+    fn team_of(&self, id: &str) -> Option<String>;
+
     /// `acm-12` → `ACM-12`, `#218` → `218`; `None` when the text names none of its tickets.
     fn parse_ref(&self, text: &str) -> Option<String>;
-    /// Whether `read_detail` can ask at all (a Linear key; a checkout and a signed-in `gh`).
-    fn can_read(&self, scope: &TicketScope) -> bool;
     /// The tickets a branch names.
     fn tickets_in_branch(&self, scope: &TicketScope, branch: &str) -> Vec<String>;
+    /// Whether a worktree's branch names this one ticket, for reusing that worktree on Start work.
+    fn branch_names(&self, branch: &str, id: &str) -> bool;
+    /// The tickets a PR names, in order. `known_keys` are the ticket-id prefixes the caller knows
+    /// (`SourceList::known_keys`).
+    fn tickets_in_pull_request(
+        &self,
+        known_keys: &[String],
+        pull_request: &PullRequestText,
+    ) -> Vec<String>;
+
+    /// Whether its Work list feed already holds every open ticket, so a ticket a session links
+    /// needs no row of its own from the card caches.
+    fn list_holds_every_open_ticket(&self) -> bool;
+    /// Whether a ticket's status follows the PR folded into it (an open GitHub issue has no
+    /// progress state of its own).
+    fn status_follows_pull_request(&self) -> bool;
+
+    /// Whether `read_detail` can ask at all (a Linear key; a checkout and a signed-in `gh`).
+    fn can_read(&self, scope: &TicketScope) -> bool;
     /// The Work list's tickets from the caches the background pass filled.
     fn cached_list(&self, projects: &[WorkProjectInput], plan: &WorkFeedPlan) -> SourceList;
     /// One ticket from the caches, for a session's card and a linked ticket the list lacks.
@@ -210,6 +258,15 @@ pub(crate) trait WorkSource: Sync {
     fn read_detail(&self, scope: &TicketScope, id: &str, force: bool) -> Result<Value, String>;
     /// Blocking.
     fn create(&self, scope: &TicketScope, draft: &TicketDraft) -> Result<CreatedTicket, String>;
+    /// The branch Start work cuts for a ticket. Blocking.
+    fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String>;
+    /// The tickets the tracker itself ties to a PR's URL (Linear's GitHub attachments). Blocking.
+    fn tickets_attached_to(
+        &self,
+        scope: &TicketScope,
+        url: &str,
+        force: bool,
+    ) -> Result<Vec<String>, String>;
 }
 
 /// The one lookup every caller uses instead of matching on the tracker.
@@ -226,10 +283,7 @@ pub(crate) fn ticket_link_value(ticket: &TicketRef, repo: &str, read: &TicketRea
     link.insert("key".to_string(), json!(ticket.key(repo)));
     link.insert(
         "kind".to_string(),
-        json!(match ticket.source {
-            WorkSourceId::Linear => "linear",
-            WorkSourceId::Github => "issue",
-        }),
+        json!(work_source(ticket.source).link_kind()),
     );
     link.insert("label".to_string(), json!(ticket.label()));
     match read {

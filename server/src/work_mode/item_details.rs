@@ -114,13 +114,13 @@ pub(crate) fn read_work_item(
         WorkItemRef::Ticket(ticket) => {
             item.get("source").and_then(Value::as_str) == Some(ticket.source.as_wire())
                 && item.get("ticketId").and_then(Value::as_str) == Some(ticket.id.as_str())
-                && match (&wanted_repo, ticket.source) {
+                && match &wanted_repo {
                     // A Linear key names one ticket wherever it is worked.
-                    (_, WorkSourceId::Linear) => true,
-                    (Some(repo), _) => {
+                    _ if !work_source(ticket.source).keys_name_a_repo() => true,
+                    Some(repo) => {
                         item.get("key").and_then(Value::as_str) == Some(ticket.key(repo).as_str())
                     }
-                    (None, _) => project_id
+                    None => project_id
                         .is_none_or(|id| item.get("projectId").and_then(Value::as_str) == Some(id)),
                 }
         }
@@ -240,7 +240,7 @@ pub(crate) fn read_work_item(
                 })
             });
         if let (Some(task), WorkItemRef::Ticket(wanted)) = (ticket_task, ticket_ref) {
-            let name = wanted.source.name();
+            let name = work_source(wanted.source).name();
             match task
                 .join()
                 .unwrap_or_else(|_| Err(format!("{name} read failed.")))
@@ -300,27 +300,22 @@ pub(crate) fn read_work_item(
         for ticket in pull_request_branch_tickets(pr, &team_keys) {
             push_ticket(&mut pr_tickets, ticket);
         }
-        // Only adds tickets; a failed read leaves the ones found above.
-        if let (Some(api_key), Some(url)) =
-            (linear_key.as_deref(), pr.get("url").and_then(Value::as_str))
-        {
-            let attached = cached_detail(
-                format!("linear-attached:{}:{url}", linear_key_fingerprint(api_key)),
-                force,
-                || linear_issues_attached_to_url(api_key, url).map(|ids| json!(ids)),
-            );
-            for identifier in attached
-                .ok()
-                .as_ref()
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(Value::as_str)
-            {
-                push_ticket(
-                    &mut pr_tickets,
-                    WorkItemRef::Ticket(TicketRef::new(WorkSourceId::Linear, identifier)),
-                );
+        if let Some(url) = pr.get("url").and_then(Value::as_str) {
+            for source in WorkSourceId::BUILT_IN {
+                let source_rules = work_source(source);
+                if !source_rules.can_read(&scope) {
+                    continue;
+                }
+                // Only adds tickets; a failed read leaves the ones found above.
+                for id in source_rules
+                    .tickets_attached_to(&scope, url, force)
+                    .unwrap_or_default()
+                {
+                    push_ticket(
+                        &mut pr_tickets,
+                        WorkItemRef::Ticket(TicketRef::new(source, id)),
+                    );
+                }
             }
         }
         // No ticket was known before the PR was read: read the first one it names now.
@@ -330,7 +325,7 @@ pub(crate) fn read_work_item(
                 if source.can_read(&scope) {
                     match source.read_detail(&scope, &first.id, force) {
                         Ok(value) => ticket = Some(value),
-                        Err(error) => errors.push(format!("{}: {error}", first.source.name())),
+                        Err(error) => errors.push(format!("{}: {error}", source.name())),
                     }
                 }
             }
@@ -539,8 +534,11 @@ fn synthesized_item(
                         item[key] = value.clone();
                     }
                 }
-                if let Some(value) = ticket.get("project") {
-                    item[wanted.source.project_field()] = value.clone();
+                if let (Some(value), Some(kind)) = (
+                    ticket.get("project"),
+                    work_source(wanted.source).project_kind(),
+                ) {
+                    item[kind.field()] = value.clone();
                 }
                 item["assignedToMe"] = json!(ticket
                     .pointer("/assignee/isMe")

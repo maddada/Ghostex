@@ -7,7 +7,7 @@ use serde_json::{json, Map, Value};
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::storage::open_gxserver_database;
-use crate::work_mode::work_targets;
+use crate::work_mode::{work_targets, WorkSourceId};
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 
 use super::connections::read_team_connection;
@@ -60,7 +60,7 @@ pub(crate) fn post_slack_working_thread(
     args.insert("sessionId".to_string(), json!(session_id));
     args.insert(
         "tickets".to_string(),
-        json!(work_targets(&project, &session).linear_issues),
+        json!(work_targets(&project, &session).ids_of(WorkSourceId::Linear)),
     );
     args.insert("text".to_string(), json!(text));
     args.insert(

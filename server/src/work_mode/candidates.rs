@@ -231,12 +231,8 @@ fn linked_values(kind: WorkLinkKind, targets: &WorkTargets) -> Vec<String> {
             .and_then(pull_request_number)
             .map(|number| vec![number.to_string()])
             .unwrap_or_default(),
-        WorkLinkKind::LinearIssue => targets.linear_issues.clone(),
-        WorkLinkKind::GithubIssue => targets
-            .github_issues
-            .iter()
-            .map(|number| number.to_string())
-            .collect(),
+        WorkLinkKind::LinearIssue => targets.ids_of(WorkSourceId::Linear),
+        WorkLinkKind::GithubIssue => targets.ids_of(WorkSourceId::Github),
         WorkLinkKind::GithubProject => session_github_project(targets)
             .map(|project| vec![project.reference()])
             .unwrap_or_default(),
@@ -247,9 +243,13 @@ fn linked_values(kind: WorkLinkKind, targets: &WorkTargets) -> Vec<String> {
             None => targets
                 .linear_key
                 .and_then(|key| {
-                    targets.linear_issues.iter().find_map(|identifier| {
-                        cached_linear_issue(key, identifier).and_then(|issue| issue.project_name)
-                    })
+                    targets
+                        .ids_of(WorkSourceId::Linear)
+                        .iter()
+                        .find_map(|identifier| {
+                            cached_linear_issue(key, identifier)
+                                .and_then(|issue| issue.project_name)
+                        })
                 })
                 .into_iter()
                 .collect(),

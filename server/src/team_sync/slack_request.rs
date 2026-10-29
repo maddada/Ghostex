@@ -27,7 +27,7 @@ use crate::session_chat_queue_runtime::{
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
     create_github_issue, origin_repo, plan_pull_request, start_work_on_ticket, work_targets,
-    NewGithubIssue,
+    NewGithubIssue, WorkSourceId,
 };
 use crate::workspaces::{project_workspace_id, read_sidebar_workspaces};
 use crate::worktree_sessions::read_worktree_session_marker;
@@ -337,10 +337,10 @@ fn find_ticket_session(
         for session in &sessions {
             let targets = work_targets(project, session);
             let linked = if is_github {
-                github_number.is_some_and(|number| targets.github_issues.contains(&number))
+                github_number.is_some_and(|number| targets.github_issue_numbers().contains(&number))
             } else {
                 targets
-                    .linear_issues
+                    .ids_of(WorkSourceId::Linear)
                     .iter()
                     .any(|issue| issue.eq_ignore_ascii_case(&ticket))
             };

@@ -1,7 +1,9 @@
 //! Linear as a ticket source: tickets named `ACM-12`, matched in branches by the team keys the
 //! Linear key can see, listed from the viewer's and the linked teams' open issues.
 
-use serde_json::Value;
+use std::borrow::Cow;
+
+use serde_json::{json, Value};
 
 use super::*;
 
@@ -64,7 +66,45 @@ pub(crate) fn ticket_of_linear_issue(info: LinearIssueInfo) -> Ticket {
     }
 }
 
+const NO_LINEAR_KEY: &str = "Set a Linear API key first (Settings, or ghostex issues linear-key).";
+
 impl WorkSource for LinearSource {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Linear")
+    }
+
+    fn link_kind(&self) -> &'static str {
+        "linear"
+    }
+
+    fn key(&self, id: &str, _repo: &str) -> String {
+        format!("linear:{id}")
+    }
+
+    fn label(&self, id: &str) -> String {
+        id.to_string()
+    }
+
+    fn untitled(&self, id: &str) -> String {
+        id.to_string()
+    }
+
+    fn keys_name_a_repo(&self) -> bool {
+        false
+    }
+
+    fn invalid_ref(&self, text: &str) -> String {
+        format!("\"{text}\" is not a Linear issue ID like SPX-1245.")
+    }
+
+    fn project_kind(&self) -> Option<TicketProjectKind> {
+        Some(TicketProjectKind::Linear)
+    }
+
+    fn team_of(&self, id: &str) -> Option<String> {
+        id.split_once('-').map(|(team, _)| team.to_string())
+    }
+
     fn parse_ref(&self, text: &str) -> Option<String> {
         normalize_linear_identifier(text)
     }
@@ -80,11 +120,39 @@ impl WorkSource for LinearSource {
             .unwrap_or_default()
     }
 
+    fn branch_names(&self, branch: &str, id: &str) -> bool {
+        self.team_of(id).is_some_and(|team| {
+            linear_identifiers_in_branch(branch, &[team]).contains(&id.to_string())
+        })
+    }
+
+    fn tickets_in_pull_request(
+        &self,
+        known_keys: &[String],
+        pull_request: &PullRequestText,
+    ) -> Vec<String> {
+        linear_identifiers_in_branch(pull_request.head, known_keys)
+    }
+
+    fn list_holds_every_open_ticket(&self) -> bool {
+        false
+    }
+
+    fn status_follows_pull_request(&self) -> bool {
+        false
+    }
+
     fn cached_list(&self, _projects: &[WorkProjectInput], plan: &WorkFeedPlan) -> SourceList {
         let mut list = SourceList::default();
         for request in &plan.linear {
+            list.known_keys.extend(request.team_keys.iter().cloned());
             match cached_linear_feed(request) {
                 Some(Ok(feed)) => {
+                    list.known_keys.extend(
+                        feed.issues
+                            .iter()
+                            .filter_map(|issue| issue.team_key.clone()),
+                    );
                     list.tickets
                         .extend(feed.issues.into_iter().map(|issue| ListedTicket {
                             ticket: ticket_of_list_issue(issue),
@@ -108,9 +176,7 @@ impl WorkSource for LinearSource {
     }
 
     fn read_detail(&self, scope: &TicketScope, id: &str, force: bool) -> Result<Value, String> {
-        let api_key = scope.linear_api_key.ok_or_else(|| {
-            "Set a Linear API key first (Settings, or ghostex issues linear-key).".to_string()
-        })?;
+        let api_key = scope.linear_api_key.ok_or(NO_LINEAR_KEY)?;
         cached_detail(
             format!("linear:{}:{id}", linear_key_fingerprint(api_key)),
             force,
@@ -119,9 +185,7 @@ impl WorkSource for LinearSource {
     }
 
     fn create(&self, scope: &TicketScope, draft: &TicketDraft) -> Result<CreatedTicket, String> {
-        let api_key = scope
-            .linear_api_key
-            .ok_or("Set a Linear API key first (Settings, or ghostex issues linear-key).")?;
+        let api_key = scope.linear_api_key.ok_or(NO_LINEAR_KEY)?;
         let extra = |key: &str| draft.extra.get(key).and_then(Value::as_str);
         let ticket = create_linear_issue(
             api_key,
@@ -139,5 +203,33 @@ impl WorkSource for LinearSource {
             branch_name: ticket.branch_name,
             repo: None,
         })
+    }
+
+    fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String> {
+        let api_key = scope.linear_api_key.ok_or(NO_LINEAR_KEY)?;
+        linear_issue_ticket(api_key, id)?
+            .branch_name
+            .ok_or_else(|| format!("Linear gave no branch name for {id}."))
+    }
+
+    fn tickets_attached_to(
+        &self,
+        scope: &TicketScope,
+        url: &str,
+        force: bool,
+    ) -> Result<Vec<String>, String> {
+        let api_key = scope.linear_api_key.ok_or(NO_LINEAR_KEY)?;
+        let attached = cached_detail(
+            format!("linear-attached:{}:{url}", linear_key_fingerprint(api_key)),
+            force,
+            || linear_issues_attached_to_url(api_key, url).map(|ids| json!(ids)),
+        )?;
+        Ok(attached
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect())
     }
 }
