@@ -324,6 +324,44 @@ fn omp_shows(screen: &str, model: &str, effort: &str) -> bool {
     }) && (effort.is_empty() || selection.effort.is_some_and(|shown| shown.value == effort))
 }
 
+/// How many of OMP's `/switch` answers for `model` (`provider/id`) are on screen: `Session-only model: <model>.` alone (OMP's text command) or followed by ` Use <key> or /model for roles.` (its TUI). The `. Use` boundary keeps an answer for `openai/gpt-5.5` from counting for `openai/gpt-5`.
+fn omp_switch_answers(screen: &str, model: &str) -> usize {
+    screen_lines(screen)
+        .iter()
+        .filter(|line| {
+            line.strip_prefix("Session-only model: ")
+                .and_then(|rest| rest.strip_prefix(model))
+                .and_then(|rest| rest.strip_prefix('.'))
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(" Use "))
+        })
+        .count()
+}
+
+/// How many of OMP's `/effort` answers for `level` are on screen: the whole line `Thinking set to <level>.`.
+fn omp_effort_answers(screen: &str, level: &str) -> usize {
+    screen_lines(screen)
+        .iter()
+        .filter(|line| {
+            line.strip_prefix("Thinking set to ")
+                .and_then(|rest| rest.strip_prefix(level))
+                == Some(".")
+        })
+        .count()
+}
+
+/// What `screen` says about an OMP command sent while `errors_before` error lines and `answers_before` of its answers were on screen: OMP's refusal (the first error line past those), its answer (more answers than before: OMP prints a repeat of the same answer as a new line, seen on real OMP screens), or nothing yet.
+fn omp_command_outcome(
+    screen: &str,
+    errors_before: usize,
+    answers: impl Fn(&str) -> usize,
+    answers_before: usize,
+) -> Option<Result<(), String>> {
+    if let Some(reason) = pi_family_errors(screen).into_iter().nth(errors_before) {
+        return Some(Err(reason));
+    }
+    (answers(screen) > answers_before).then_some(Ok(()))
+}
+
 impl PickerDriver<'_> {
     /// CDXC:AgentProviders 2026-09-27 WHY:
     /// Hermes' status bar never shows the reasoning effort, so an effort-only change cannot be recognised as already applied and the command is always typed. It counts once Hermes answers it: the first `✓ Model switched`, `✗ <reason>` or `Model switch cancelled.` line past the answers already on screen. The status bar alone is not proof, because a same-model pick leaves it unchanged while Hermes can still refuse the command or hold it behind its expensive-model question (verified in Hermes Agent v0.21.4); it only counts for a new model once older answers have scrolled out of the capture. Delivery is verified before Enter, so a switch with no answer within the step is final instead of retried: retyping the same command cannot change Hermes' answer.
@@ -641,8 +679,8 @@ impl PickerDriver<'_> {
         Err(picker_timeout("Pi selector focus"))
     }
 
-    /// CDXC:AgentProviders 2026-09-30 WHY:
-    /// OMP's `/switch <provider>/<id>[:<level>]` changes the model and level for this session in one command (`/model` only opens its selector, ignoring arguments). Its composer head names the model by display name, which the lineup's `terminalLabels` map back to the row.
+    /// CDXC:AgentProviders 2026-10-29 WHY:
+    /// OMP's `/switch <provider>/<id>` changes the model for this session and answers `Session-only model: <provider>/<id>.`, and `/effort <level>` answers `Thinking set to <level>.` (`/model` only opens its selector, ignoring arguments). A pick counts once those answers appear. OMP's composer head, which picks used to be confirmed on, follows its `composer.shape` and status line settings, and with a `pi` composer or a custom status line every applied switch was reported unconfirmed and typed again. `/switch <provider>/<id>:<level>` sets both in one command, but its answer names no level, and it can lower a level above the session's thinking ceiling without saying so, where `/effort` refuses a level the model or the ceiling does not allow. Refusals come as `Error:` lines (`Unknown model`, `No API key for …`, `Unknown thinking level: … Available: …`). This replaces the one `/switch <provider>/<id>:<level>` confirmed on the composer head (2026-09-30).
     async fn drive_omp(&self, plan: &CodexPickerPlan) -> Result<(), DomainStateError> {
         if !plan.model.contains('/') {
             return Err(invalid_params("An OMP model is picked as provider/id."));
@@ -655,31 +693,64 @@ impl PickerDriver<'_> {
         {
             return Ok(());
         }
-        let command = if plan.effort.is_empty() {
-            format!("/switch {}", plan.model)
-        } else {
-            format!("/switch {}:{}", plan.model, plan.effort)
-        };
+        self.run_omp_command(
+            "applied model",
+            &format!("/switch {}", plan.model),
+            |screen| omp_switch_answers(screen, &plan.model),
+        )
+        .await?
+        .map_err(|reason| {
+            unsupported_selection(format!("OMP did not switch to {}: {reason}", plan.model))
+        })?;
+        if plan.effort.is_empty() {
+            return Ok(());
+        }
+        self.composer_ready("omp").await?;
+        self.run_omp_command(
+            "applied thinking level",
+            &format!("/effort {}", plan.effort),
+            |screen| omp_effort_answers(screen, &plan.effort),
+        )
+        .await?
+        .map_err(|reason| {
+            unsupported_selection(format!(
+                "OMP did not set the thinking level to {}: {reason}",
+                plan.effort
+            ))
+        })
+    }
+
+    /// Pastes an OMP command (as [`Self::type_pi_family_command`] does), presses Enter and waits for [`omp_command_outcome`] (the inner `Err` is OMP's refusal). Both baselines come from the one screen that shows the command typed, the last before Enter. Clears the command when it did not go through.
+    async fn run_omp_command(
+        &self,
+        step: &str,
+        command: &str,
+        answers: impl Fn(&str) -> usize,
+    ) -> Result<Result<(), String>, DomainStateError> {
         let result = async {
-            let errors_before = self.type_pi_family_command("omp", &command).await?;
-            self.write(CODEX_SUBMIT).await?;
-            let outcome = self
-                .wait_for("applied model", |screen| {
-                    if let Some(reason) = pi_family_errors(screen).into_iter().nth(errors_before) {
-                        return Some(Err(reason));
-                    }
-                    let typed = session_chat_composer_input("omp", screen)
-                        .is_some_and(|input| collapse_spaces(&input.text) == command);
-                    (!typed && omp_shows(screen, &plan.model, &plan.effort)).then_some(Ok(()))
+            self.write(&crate::session_chat_send::wrap_terminal_bracketed_paste_text(command))
+                .await?;
+            let (errors_before, answers_before) = self
+                .wait_for("type model command", |screen| {
+                    session_chat_composer_input("omp", screen)
+                        .is_some_and(|input| collapse_spaces(&input.text) == command)
+                        .then(|| (pi_family_errors(screen).len(), answers(screen)))
                 })
                 .await?;
-            outcome.map_err(|reason| {
-                unsupported_selection(format!("OMP did not switch to {}: {reason}", plan.model))
+            if (self.cancelled)() {
+                return Err(agent_busy(
+                    "The model change was cancelled by another action on this session.",
+                ));
+            }
+            self.write(CODEX_SUBMIT).await?;
+            self.wait_for(step, |screen| {
+                omp_command_outcome(screen, errors_before, &answers, answers_before)
             })
+            .await
         }
         .await;
-        if result.is_err() {
-            self.abandon_pi_family_command("omp", &command).await;
+        if !matches!(result, Ok(Ok(()))) {
+            self.abandon_pi_family_command("omp", command).await;
         }
         result
     }
@@ -940,5 +1011,146 @@ pub(crate) async fn run_provider_model_picker_job(
         if let Some(job) = jobs.get_mut(&job_id) {
             job.outcome = Some(outcome);
         }
+    }
+}
+
+#[cfg(test)]
+mod omp_answer_tests {
+    use super::{omp_command_outcome, omp_effort_answers, omp_switch_answers, pi_family_errors};
+
+    const MODEL: &str = "anthropic/claude-opus-5-5";
+    /// OMP 18.13.3's `/switch` notice in its TUI (`selector-controller.ts`), drawn as a dim line
+    /// with a one-column margin after a blank row.
+    const SWITCH_NOTICE: &str =
+        " Session-only model: anthropic/claude-opus-5-5. Use \u{2325}M or /model for roles.";
+    const RULE: &str = "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}";
+
+    /// The three composer shapes OMP draws below the conversation: `pi` (rules around the input,
+    /// the status line below) and `borderless` (`❯`, the status line below) as captured with OMP
+    /// 18.13.3, and `box` with a custom status line that wraps inside the frame's top edge.
+    fn composers(input: &str) -> [String; 3] {
+        [
+            format!("{RULE}\n{input}\n{RULE}\n \u{2b22} Opus 5.5 \u{b7} \u{25d2} high \u{b7} \u{1f4c1} ~/project \u{b7} keel: no active thread \u{b7} \u{3c0}"),
+            format!("\u{276f} {input}\n [M] Opus 5.5 - [high] \u{b7} [D] ~/project \u{b7} keel: no active thread \u{b7} pi"),
+            format!("\u{256d}\u{2500}\u{2500} \u{25cf} Opus 5.5 \u{b7} \u{25d1} med  \u{1f4c1} ~/project  keel: no active thr\nead  \u{3c0} \u{2500}\u{2500}\u{256e}\n\u{2502} {input} \u{2502}\n\u{2570}\u{2500}{RULE}\u{2500}\u{256f}"),
+        ]
+    }
+
+    fn screen(chat: &[&str], composer: &str) -> String {
+        format!("{}\n\n{composer}", chat.join("\n\n"))
+    }
+
+    #[test]
+    fn a_switch_counts_once_its_answer_is_printed_whatever_the_composer_shape() {
+        for (typed, answered) in composers("/switch anthropic/claude-opus-5-5")
+            .into_iter()
+            .zip(composers(""))
+        {
+            let before = screen(&[" Ready when you are."], &typed);
+            let after = screen(&[" Ready when you are.", SWITCH_NOTICE], &answered);
+            assert_eq!(omp_switch_answers(&before, MODEL), 0, "{before}");
+            assert_eq!(omp_switch_answers(&after, MODEL), 1, "{after}");
+        }
+    }
+
+    #[test]
+    fn a_repeated_switch_answer_is_one_more_line() {
+        let [composer, ..] = composers("");
+        let before = screen(&[SWITCH_NOTICE], &composer);
+        let after = screen(&[SWITCH_NOTICE, SWITCH_NOTICE], &composer);
+        assert!(omp_switch_answers(&after, MODEL) > omp_switch_answers(&before, MODEL));
+    }
+
+    #[test]
+    fn an_answer_in_place_of_the_previous_notice_still_counts() {
+        let [composer, ..] = composers("");
+        let before = screen(&[" Thinking set to high."], &composer);
+        let after = screen(&[SWITCH_NOTICE], &composer);
+        assert_eq!(omp_switch_answers(&before, MODEL), 0);
+        assert_eq!(omp_switch_answers(&after, MODEL), 1);
+        assert_eq!(omp_effort_answers(&after, "high"), 0);
+    }
+
+    #[test]
+    fn only_the_exact_model_counts() {
+        let [composer, ..] = composers("");
+        let chat = [
+            " Session-only model: anthropic/claude-opus-5-5-fast. Use \u{2325}M or /model for roles.",
+            " Session-only model: openai/gpt-5.5. Use Option+M or /model for roles.",
+            // The answer of OMP's text command (`builtin-modes.ts`), without the key hint.
+            " Session-only model: openai/gpt-5.",
+        ];
+        let shown = screen(&chat, &composer);
+        assert_eq!(omp_switch_answers(&shown, MODEL), 0);
+        assert_eq!(omp_switch_answers(&shown, "openai/gpt-5.5"), 1);
+        assert_eq!(omp_switch_answers(&shown, "openai/gpt-5"), 1);
+    }
+
+    #[test]
+    fn only_the_whole_effort_line_counts() {
+        let [composer, ..] = composers("");
+        let chat = [
+            " Thinking set to xhigh.",
+            " Thinking set to high. Not an answer.",
+            " Thinking set to high.Not an answer.",
+        ];
+        let shown = screen(&chat, &composer);
+        assert_eq!(omp_effort_answers(&shown, "high"), 0);
+        assert_eq!(omp_effort_answers(&shown, "xhigh"), 1);
+    }
+
+    #[test]
+    fn a_command_counts_only_on_a_fresh_answer_or_a_fresh_refusal() {
+        let [composer, ..] = composers("");
+        let older = [
+            SWITCH_NOTICE,
+            " Error: Unknown model: anthropic/claude-opus-9",
+        ];
+        let answers = |screen: &str| omp_switch_answers(screen, MODEL);
+        let baseline = screen(&older, &composer);
+        let (errors_before, answers_before) =
+            (pi_family_errors(&baseline).len(), answers(&baseline));
+        assert_eq!((errors_before, answers_before), (1, 1));
+        assert_eq!(
+            omp_command_outcome(&baseline, errors_before, answers, answers_before),
+            None
+        );
+        let answered = screen(&[older[0], older[1], SWITCH_NOTICE], &composer);
+        assert_eq!(
+            omp_command_outcome(&answered, errors_before, answers, answers_before),
+            Some(Ok(()))
+        );
+        let refused = screen(
+            &[
+                older[0],
+                older[1],
+                " Error: No API key for anthropic/claude-opus-5-5",
+            ],
+            &composer,
+        );
+        assert_eq!(
+            omp_command_outcome(&refused, errors_before, answers, answers_before),
+            Some(Err("No API key for anthropic/claude-opus-5-5".to_string()))
+        );
+    }
+
+    #[test]
+    fn omp_refusals_of_switch_and_effort_are_errors() {
+        let [composer, ..] = composers("");
+        // `showError` in OMP 18.13.3 (`modes/utils/ui-helpers.ts`), with the messages of `/switch`
+        // (`builtin-modes.ts`, `model-controls.ts`) and `/effort` (`helpers/effort.ts`).
+        let chat = [
+            " Error: Unknown model: anthropic/claude-opus-9",
+            " Error: No API key for anthropic/claude-opus-5-5",
+            " Error: Unknown thinking level: max. Available: off, auto, minimal, low, medium, high",
+        ];
+        assert_eq!(
+            pi_family_errors(&screen(&chat, &composer)),
+            [
+                "Unknown model: anthropic/claude-opus-9",
+                "No API key for anthropic/claude-opus-5-5",
+                "Unknown thinking level: max. Available: off, auto, minimal, low, medium, high",
+            ]
+        );
     }
 }
