@@ -515,8 +515,8 @@ pub fn worktree_git_succeeds(cwd: &str, args: &[&str], timeout: Duration) -> boo
 }
 
 /// Runs `git` the way `run_worktree_git` describes: whether it exited 0, and the thread draining
-/// its stdout when `keep_output` asked for one. `None` when it could not start or ran past
-/// `timeout`.
+/// its stdout when `keep_output` asked for one. `None` when `cwd` is empty or not a folder, git
+/// could not start, its status could not be read, or it ran past `timeout`.
 fn run_worktree_git_process(
     cwd: &str,
     args: &[&str],
