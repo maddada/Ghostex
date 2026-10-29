@@ -283,8 +283,9 @@ fn log_process_tree_failure(event: &str, error: &std::io::Error) {
     });
 }
 
+// Linked the way windows-sys links, so building needs no ntdll.lib import library.
 #[cfg(windows)]
-#[link(name = "ntdll")]
+#[link(name = "ntdll.dll", kind = "raw-dylib", modifiers = "+verbatim")]
 extern "system" {
     fn NtResumeProcess(process: windows_sys::Win32::Foundation::HANDLE) -> i32;
 }

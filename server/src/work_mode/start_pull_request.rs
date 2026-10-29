@@ -10,7 +10,7 @@ use serde_json::{json, Map, Value};
 
 use crate::domain::DomainStateError;
 use crate::session_git_status::run_gh_command;
-use crate::worktree_sessions::{run_worktree_git, WORKTREE_FETCH_COMMAND_TIMEOUT};
+use crate::worktree_sessions::{worktree_git_succeeds, WORKTREE_FETCH_COMMAND_TIMEOUT};
 
 use super::*;
 
@@ -43,18 +43,17 @@ impl PullRequestPlan {
             return Ok(());
         }
         let refspec = format!("+refs/pull/{}/head:refs/heads/{}", self.number, self.branch);
-        run_worktree_git(
+        if worktree_git_succeeds(
             project_path,
             &["fetch", "origin", &refspec],
             WORKTREE_FETCH_COMMAND_TIMEOUT,
-        )
-        .map(|_| ())
-        .ok_or_else(|| {
-            DomainStateError::bad_request(format!(
-                "Could not fetch PR #{} from origin into {}.",
-                self.number, self.branch
-            ))
-        })
+        ) {
+            return Ok(());
+        }
+        Err(DomainStateError::bad_request(format!(
+            "Could not fetch PR #{} from origin into {}.",
+            self.number, self.branch
+        )))
     }
 }
 
