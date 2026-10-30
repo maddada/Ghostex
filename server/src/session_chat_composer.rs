@@ -57,10 +57,10 @@ use crate::storage::open_gxserver_database;
 
 #[path = "session_chat_composer_input.rs"]
 mod input;
+pub(crate) use input::omp_composer::{omp_paste_chip_shown, OMP_NAV_CURSOR_GLYPHS};
 pub use input::{claude_composer_draft, session_chat_composer_input, SessionChatComposerInput};
 pub(crate) use input::{
     empryo_composer_busy, empryo_input_head, empryo_input_unfocused, empryo_tab_bar,
-    omp_paste_chip_shown, OMP_NAV_CURSOR_GLYPHS,
 };
 
 /// The row Hermes's live composer starts on, the one readiness reads, or `None` when it is not on screen.
@@ -71,7 +71,7 @@ pub(crate) fn hermes_composer_row(screen_text: &str) -> Option<usize> {
 
 /// The first row of OMP's live input on an untrimmed, ANSI-stripped screen, found by the shapes `omp_input_region` reads, or `None` when it is not on screen.
 pub(crate) fn omp_composer_input_row(lines: &[String]) -> Option<usize> {
-    input::omp_input_region(lines).map(|region| region.start)
+    input::omp_composer::omp_input_region(lines).map(|region| region.start)
 }
 
 /// Non-blank lines kept from the bottom of a capture. Wide enough to hold
@@ -939,7 +939,7 @@ pub fn detect_session_chat_composer_ready(
             "hermes-agent" => input::hermes_input_region(&raw_lines).is_some(),
             "pi" => input::unmarked_rule_input_region(&raw_lines).is_some(),
             "zcode" => input::zcode_input_region(&raw_lines).is_some(),
-            "omp" => input::omp_input_region(&raw_lines).is_some(),
+            "omp" => input::omp_composer::omp_input_region(&raw_lines).is_some(),
             _ => unreachable!(),
         }
     } else {
