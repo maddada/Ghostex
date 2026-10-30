@@ -118,12 +118,11 @@ async fn list_work_items(
     })
     .await
     .map_err(task_error)??;
-    let github_cwds = plan.github_cwds();
     let mut refreshing = false;
-    if force || work_feeds_stale(&plan.linear, &github_cwds) {
-        let linear = plan.linear.clone();
+    if force || work_feeds_stale(&plan) {
+        let refresh_plan = plan.clone();
         let refresh = tokio::task::spawn_blocking(move || {
-            refresh_work_feeds(&linear, &github_cwds, force);
+            refresh_work_feeds(&refresh_plan, force);
         });
         refreshing = tokio::time::timeout(WORK_LIST_WAIT, refresh).await.is_err();
     }

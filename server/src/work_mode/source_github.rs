@@ -94,6 +94,25 @@ impl WorkSource for GithubSource {
             .collect()
     }
 
+    /// Its issues come in the code host's `gh` list of each repo, with the repo's PRs
+    /// (`WorkFeedPlan::github`), so it plans no feed of its own.
+    fn plan_list(&self, _projects: &[WorkProjectInput], _plan: &mut WorkFeedPlan) {}
+
+    fn list_stale(&self, _plan: &WorkFeedPlan) -> bool {
+        false
+    }
+
+    fn refresh_list(&self, _plan: &WorkFeedPlan, _force: bool) {}
+
+    /// A card's issues are read by the code host's batched reads, in the same call per repo as
+    /// the session's PR (refresh.rs).
+    fn refresh_tickets(&self, _pass: &TicketPass) {}
+
+    /// Its tickets are named by number, with no prefix.
+    fn known_keys(&self, _scope: &TicketScope, _plan: &WorkFeedPlan) -> Vec<String> {
+        Vec::new()
+    }
+
     /// The `gh` feed lists every open issue of the repo.
     fn list_holds_every_open_ticket(&self) -> bool {
         true

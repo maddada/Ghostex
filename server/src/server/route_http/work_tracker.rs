@@ -220,8 +220,9 @@ fn create_issue(
                     .get("projectId")
                     .and_then(Value::as_str)
                     .unwrap_or_default(),
+                workspace_id: None,
                 cwd: Some(cwd),
-                linear_api_key: None,
+                credentials: None,
             },
             &TicketDraft {
                 title: &title,

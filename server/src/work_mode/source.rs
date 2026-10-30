@@ -9,7 +9,7 @@
 //! `source_linear.rs` and `source_github.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use serde_json::{json, Map, Value};
 
@@ -183,10 +183,22 @@ pub(crate) struct ListedTicket {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TicketScope<'a> {
     pub(crate) project_id: &'a str,
+    /// The workspace whose credentials the project uses (`stored_project_workspace_id`).
+    pub(crate) workspace_id: Option<&'a str>,
     /// The project's checkout, where `gh` runs.
     pub(crate) cwd: Option<&'a str>,
-    /// The project's Linear key, for the calls that need the key itself.
-    pub(crate) linear_api_key: Option<&'a str>,
+    /// Where the source looks up its own credentials. `None` on the presentation projection,
+    /// which reads only what the background pass cached.
+    pub(crate) credentials: Option<&'a WorkCredentials>,
+}
+
+/// What one background card pass hands every source.
+pub(crate) struct TicketPass<'a> {
+    pub(crate) credentials: &'a WorkCredentials,
+    /// The work-mode projects, by id.
+    pub(crate) projects: &'a HashMap<&'a str, &'a Value>,
+    /// The sessions of those projects the pass refreshes.
+    pub(crate) sessions: &'a [Value],
 }
 
 /// What Create ticket sends. `extra` holds a source's own fields (Linear's team and project).
@@ -240,6 +252,20 @@ pub(crate) trait WorkSource: Sync {
         known_keys: &[String],
         pull_request: &PullRequestText,
     ) -> Vec<String>;
+
+    /// Adds the Work list feeds it reads for these projects to the plan.
+    fn plan_list(&self, projects: &[WorkProjectInput], plan: &mut WorkFeedPlan);
+    /// Whether any of its planned Work list feeds is missing or stale.
+    fn list_stale(&self, plan: &WorkFeedPlan) -> bool;
+    /// Fetches its stale planned feeds (every one with `force`). Blocking; runs on a thread of its
+    /// own while `refresh_work_feeds` holds its lock.
+    fn refresh_list(&self, plan: &WorkFeedPlan, force: bool);
+    /// Reads what the pass's session cards need from it, within its own per-pass budget.
+    /// Blocking; the background pass, before the code host's reads.
+    fn refresh_tickets(&self, pass: &TicketPass);
+    /// The ticket-id prefixes it knows outside a Work list (`SourceList::known_keys`), for a PR's
+    /// details.
+    fn known_keys(&self, scope: &TicketScope, plan: &WorkFeedPlan) -> Vec<String>;
 
     /// Whether its Work list feed already holds every open ticket, so a ticket a session links
     /// needs no row of its own from the card caches.

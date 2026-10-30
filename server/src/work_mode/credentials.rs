@@ -14,6 +14,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use serde_json::{json, Map, Value};
 
@@ -86,13 +87,67 @@ pub(crate) fn linear_api_key(
     project_id: Option<&str>,
     workspace_id: Option<&str>,
 ) -> Option<String> {
-    let credentials = read_credentials(paths);
-    let scoped = |field: &str, id: Option<&str>| {
-        id.and_then(|id| non_empty(credentials.get(field).and_then(|keys| keys.get(id))))
-    };
-    scoped("projectLinearApiKeys", project_id)
-        .or_else(|| scoped("workspaceLinearApiKeys", workspace_id))
-        .or_else(|| non_empty(credentials.get("linearApiKey")))
+    WorkCredentials::new(paths).linear_api_key(project_id, workspace_id)
+}
+
+/// Where each ticket source looks up its own credentials: the private file, read on the first
+/// lookup and kept for the request or pass that made it. A source that needs none never opens it.
+pub(crate) struct WorkCredentials {
+    paths: GxserverPaths,
+    file: OnceLock<Map<String, Value>>,
+}
+
+impl WorkCredentials {
+    pub(crate) fn new(paths: &GxserverPaths) -> Self {
+        Self {
+            paths: paths.clone(),
+            file: OnceLock::new(),
+        }
+    }
+
+    /// Credentials holding only one project's own Linear key (none without one), for tests that
+    /// never touch the file.
+    #[cfg(test)]
+    pub(crate) fn with_project_linear_key(project_id: &str, api_key: Option<&str>) -> Self {
+        let mut file = Map::new();
+        if let Some(api_key) = api_key {
+            file.insert(
+                "projectLinearApiKeys".to_string(),
+                json!({ project_id: api_key }),
+            );
+        }
+        Self {
+            paths: crate::paths::get_gxserver_paths(Some(PathBuf::from("/gx-char/credentials"))),
+            file: OnceLock::from(file),
+        }
+    }
+
+    fn file(&self) -> &Map<String, Value> {
+        self.file.get_or_init(|| read_credentials(&self.paths))
+    }
+
+    /// The key a project's Linear calls use: its own override, else its workspace's key, else the
+    /// shared key.
+    pub(crate) fn linear_api_key(
+        &self,
+        project_id: Option<&str>,
+        workspace_id: Option<&str>,
+    ) -> Option<String> {
+        let credentials = self.file();
+        let scoped = |field: &str, id: Option<&str>| {
+            id.and_then(|id| non_empty(credentials.get(field).and_then(|keys| keys.get(id))))
+        };
+        scoped("projectLinearApiKeys", project_id)
+            .or_else(|| scoped("workspaceLinearApiKeys", workspace_id))
+            .or_else(|| non_empty(credentials.get("linearApiKey")))
+    }
+}
+
+/// Never prints a credential.
+impl std::fmt::Debug for WorkCredentials {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("WorkCredentials { .. }")
+    }
 }
 
 /// Stores (or, with `None`, removes) the shared key, one workspace's key, or one project's

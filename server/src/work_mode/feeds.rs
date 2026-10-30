@@ -233,8 +233,23 @@ pub(crate) fn seed_work_feeds(
     });
 }
 
-/// Whether any of these feeds is missing or stale.
-pub(crate) fn work_feeds_stale(linear: &[LinearFeedRequest], github_cwds: &[String]) -> bool {
+/// Whether any of the plan's feeds is missing or stale.
+pub(crate) fn work_feeds_stale(plan: &WorkFeedPlan) -> bool {
+    WorkSourceId::BUILT_IN
+        .into_iter()
+        .any(|source| work_source(source).list_stale(plan))
+        || {
+            let Ok(cache) = cache().lock() else {
+                return false;
+            };
+            plan.github_cwds()
+                .iter()
+                .any(|cwd| cache.github.get(cwd).is_none_or(|cached| !cached.fresh()))
+        }
+}
+
+/// Whether any of these Linear feeds is missing or stale.
+pub(crate) fn linear_feeds_stale(linear: &[LinearFeedRequest]) -> bool {
     let Ok(cache) = cache().lock() else {
         return false;
     };
@@ -243,88 +258,57 @@ pub(crate) fn work_feeds_stale(linear: &[LinearFeedRequest], github_cwds: &[Stri
             .linear
             .get(&request.cache_key())
             .is_none_or(|cached| !cached.fresh())
-    }) || github_cwds
-        .iter()
-        .any(|cwd| cache.github.get(cwd).is_none_or(|cached| !cached.fresh()))
+    })
 }
 
-/// Fetches every stale feed, all at once (one thread per Linear key and per repo). Blocking; the
-/// route runs it on a blocking worker and stops waiting after its own time limit, while this
-/// carries on and fills the caches for the next read.
-pub(crate) fn refresh_work_feeds(
-    linear: &[LinearFeedRequest],
-    github_cwds: &[String],
-    force: bool,
-) {
+/// Fetches every stale feed of the plan, all at once (one thread per source, Linear key and repo).
+/// Blocking; the route runs it on a blocking worker and stops waiting after its own time limit,
+/// while this carries on and fills the caches for the next read.
+pub(crate) fn refresh_work_feeds(plan: &WorkFeedPlan, force: bool) {
     let Ok(_guard) = refresh_lock().lock() else {
         return;
     };
-    let stale_linear: Vec<&LinearFeedRequest> = {
-        let Ok(cache) = cache().lock() else {
-            return;
-        };
-        linear
-            .iter()
-            .filter(|request| {
-                force
-                    || cache
-                        .linear
-                        .get(&request.cache_key())
-                        .is_none_or(|cached| !cached.fresh())
-            })
-            .collect()
-    };
-    let gh = !github_cwds.is_empty() && gh_cli_is_available();
-    let stale_github: Vec<&String> = if gh {
-        let Ok(cache) = cache().lock() else {
-            return;
-        };
-        github_cwds
-            .iter()
-            .filter(|cwd| {
-                force
-                    || cache
-                        .github
-                        .get(cwd.as_str())
-                        .is_none_or(|cached| !cached.fresh())
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-    // Whether the repo lists may ask for project items (`projectItems`).
-    if gh {
-        refresh_github_projects_access(force);
-    }
-    let viewer_stale = gh
-        && cache().lock().ok().is_some_and(|cache| {
-            cache
-                .viewer_login
-                .as_ref()
-                .is_none_or(|cached| cached.fetched_at.elapsed() >= VIEWER_LOGIN_TTL)
-        });
-
     std::thread::scope(|scope| {
-        for request in stale_linear {
-            scope.spawn(move || {
-                let value = fetch_linear_feed(request);
-                if let Ok(mut cache) = cache().lock() {
-                    cache.linear.insert(
-                        request.cache_key(),
-                        Cached {
-                            value,
-                            fetched_at: Instant::now(),
-                        },
-                    );
-                }
-            });
+        // First, so each source judges what is stale before the `gh` checks below take their time.
+        for source in WorkSourceId::BUILT_IN {
+            scope.spawn(move || work_source(source).refresh_list(plan, force));
         }
+        let github_cwds = plan.github_cwds();
+        let gh = !github_cwds.is_empty() && gh_cli_is_available();
+        let stale_github: Vec<String> = if gh {
+            let Ok(cache) = cache().lock() else {
+                return;
+            };
+            github_cwds
+                .into_iter()
+                .filter(|cwd| {
+                    force
+                        || cache
+                            .github
+                            .get(cwd.as_str())
+                            .is_none_or(|cached| !cached.fresh())
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        // Whether the repo lists may ask for project items (`projectItems`).
+        if gh {
+            refresh_github_projects_access(force);
+        }
+        let viewer_stale = gh
+            && cache().lock().ok().is_some_and(|cache| {
+                cache
+                    .viewer_login
+                    .as_ref()
+                    .is_none_or(|cached| cached.fetched_at.elapsed() >= VIEWER_LOGIN_TTL)
+            });
         for cwd in stale_github {
             scope.spawn(move || {
-                let value = fetch_github_feed(cwd);
+                let value = fetch_github_feed(&cwd);
                 if let Ok(mut cache) = cache().lock() {
                     cache.github.insert(
-                        cwd.clone(),
+                        cwd,
                         Cached {
                             value,
                             fetched_at: Instant::now(),
@@ -343,6 +327,42 @@ pub(crate) fn refresh_work_feeds(
                         value: login,
                         fetched_at: Instant::now(),
                     });
+                }
+            });
+        }
+    });
+}
+
+/// Fetches these Linear feeds that are stale (every one with `force`), one thread per key.
+/// Blocking; runs under `refresh_work_feeds`' lock.
+pub(crate) fn refresh_linear_feeds(linear: &[LinearFeedRequest], force: bool) {
+    let stale: Vec<&LinearFeedRequest> = {
+        let Ok(cache) = cache().lock() else {
+            return;
+        };
+        linear
+            .iter()
+            .filter(|request| {
+                force
+                    || cache
+                        .linear
+                        .get(&request.cache_key())
+                        .is_none_or(|cached| !cached.fresh())
+            })
+            .collect()
+    };
+    std::thread::scope(|scope| {
+        for request in stale {
+            scope.spawn(move || {
+                let value = fetch_linear_feed(request);
+                if let Ok(mut cache) = cache().lock() {
+                    cache.linear.insert(
+                        request.cache_key(),
+                        Cached {
+                            value,
+                            fetched_at: Instant::now(),
+                        },
+                    );
                 }
             });
         }
