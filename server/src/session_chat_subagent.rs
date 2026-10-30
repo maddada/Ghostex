@@ -13,9 +13,11 @@ use crate::server::{
 };
 use crate::session_chat::{
     resolve_session_chat_transcript_agent, resolve_session_chat_transcript_path,
-    SessionChatTranscriptAgent,
+    SessionChatTranscriptAgent, SessionChatTurnLifecycle, SessionChatTurnLifecycleState,
 };
-use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::session_chat_follower::{
+    session_chat_agent_for_session, session_chat_display_agent_for_session,
+};
 use crate::session_chat_tail::{read_session_chat_tail_page, SessionChatTailPage};
 use crate::storage::open_gxserver_database;
 
@@ -212,6 +214,29 @@ fn claude_child(root: &Path, selector: &str) -> anyhow::Result<ChildTranscript> 
     })
 }
 
+/// The transcript family whose subagents this session can open.
+///
+/// CDXC:SessionChat 2026-10-30 WHY:
+/// OMP sessions read as Pi transcripts, but only OMP keeps its subagents' transcripts in the session's artifacts folder, so the Pi family opens children only when the session runs OMP; a plain Pi session has none to open.
+pub(crate) fn subagent_family(session: &Value) -> anyhow::Result<SessionChatTranscriptAgent> {
+    let omp = session_chat_display_agent_for_session(session).as_deref() == Some("omp");
+    resolve_session_chat_transcript_agent(session_chat_agent_for_session(session).as_deref())
+        .filter(|family| {
+            matches!(
+                family,
+                SessionChatTranscriptAgent::Codex
+                    | SessionChatTranscriptAgent::Claude
+                    | SessionChatTranscriptAgent::OpenCode
+                    | SessionChatTranscriptAgent::Hermes
+            ) || (omp && *family == SessionChatTranscriptAgent::Pi)
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Subagent transcripts are supported for Codex, Claude, OpenCode, Hermes and OMP."
+            )
+        })
+}
+
 pub(crate) async fn handle_read_subagent(
     state: &AppState,
     endpoint_path: String,
@@ -229,22 +254,7 @@ pub(crate) async fn handle_read_subagent(
             .get_session(project_id, session_id)
             .map_err(|e| anyhow::anyhow!("{}", e.message))?
             .ok_or_else(|| anyhow::anyhow!("The session no longer exists."))?;
-        let agent = session_chat_agent_for_session(&session);
-        let family = resolve_session_chat_transcript_agent(agent.as_deref())
-            .filter(|a| {
-                matches!(
-                    a,
-                    SessionChatTranscriptAgent::Codex
-                        | SessionChatTranscriptAgent::Claude
-                        | SessionChatTranscriptAgent::OpenCode
-                        | SessionChatTranscriptAgent::Hermes
-                )
-            })
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Subagent transcripts are supported for Codex, Claude, OpenCode and Hermes."
-                )
-            })?;
+        let family = subagent_family(&session)?;
         let root_id = read_runtime_text(&session, "agentSessionId")
             .ok_or_else(|| anyhow::anyhow!("The session has no transcript identity yet."))?;
         let root_path = read_runtime_text(&session, "agentSessionPath");
@@ -276,8 +286,14 @@ pub(crate) async fn handle_read_subagent(
                 id: selector.clone(),
                 agent_type: None,
             },
+            SessionChatTranscriptAgent::Pi => {
+                let (path, agent_type) =
+                    crate::session_chat_omp_fleet::omp_child_transcript(&root, &selector)?;
+                ChildTranscript { id: selector.clone(), name: selector.clone(), path, agent_type }
+            }
             _ => claude_child(&root, &selector)?,
         };
+        let newest = before_offset.is_none();
         match read_session_chat_tail_page(family, &child.path, limit, before_offset)? {
             SessionChatTailPage::NotFound => anyhow::bail!("This subagent's transcript is not available yet."),
             SessionChatTailPage::Page { messages, lifecycle, has_more, before_offset, .. } => {
@@ -297,9 +313,34 @@ pub(crate) async fn handle_read_subagent(
                     "status": if messages.is_empty() { "empty" } else { "ready" },
                     "messages": messages, "hasMore": has_more, "beforeOffset": before_offset,
                     "epoch": 0, "seq": 0,
-                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", _ => "claude" },
+                    "agent": match family { SessionChatTranscriptAgent::OpenCode => "opencode", SessionChatTranscriptAgent::Codex => "codex", SessionChatTranscriptAgent::Hermes => "hermes", SessionChatTranscriptAgent::Pi => "omp", _ => "claude" },
                     "agentSessionId": child.id, "subagent": details,
                 });
+                // An OMP child's run ends on its final `yield` or its session's exit and resumes on a
+                // reply after either, which no Pi turn boundary marks, so the newest page reports the
+                // turn the roster reads (session_chat_fleet_transcript.rs).
+                let lifecycle = match lifecycle {
+                    page if family == SessionChatTranscriptAgent::Pi && newest => {
+                        crate::session_chat_fleet_transcript::latest_child_turn(&child.path, family)?.map(|turn| {
+                            let interrupted = page.as_ref().is_some_and(|page| {
+                                page.state == SessionChatTurnLifecycleState::Interrupted
+                                    && turn.turn_id.as_ref() == Some(&page.turn_id)
+                            });
+                            SessionChatTurnLifecycle {
+                                state: if turn.working {
+                                    SessionChatTurnLifecycleState::Working
+                                } else if interrupted {
+                                    SessionChatTurnLifecycleState::Interrupted
+                                } else {
+                                    SessionChatTurnLifecycleState::Completed
+                                },
+                                timestamp: Some(if turn.working { turn.started_at } else { turn.timestamp }),
+                                turn_id: turn.turn_id.unwrap_or_default(),
+                            }
+                        })
+                    }
+                    lifecycle => lifecycle,
+                };
                 if let Some(lifecycle) = lifecycle { result["lifecycle"] = serde_json::to_value(lifecycle)?; }
                 Ok(result)
             }

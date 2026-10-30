@@ -83,6 +83,7 @@ fn apply_turn(child: &mut Child, working: bool, at: i64) {
         working,
         timestamp: at,
         started_at,
+        turn_id: None,
     });
 }
 

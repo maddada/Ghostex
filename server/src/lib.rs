@@ -187,6 +187,7 @@ mod session_chat_model_selection_alert;
 pub mod session_chat_notice;
 mod session_chat_notice_progress;
 pub mod session_chat_omp_blocking;
+pub(crate) mod session_chat_omp_fleet;
 pub mod session_chat_open_questions;
 pub(crate) mod session_chat_opencode;
 pub mod session_chat_options;

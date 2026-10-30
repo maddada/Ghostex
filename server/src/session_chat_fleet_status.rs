@@ -1,12 +1,12 @@
 //! CDXC:SessionStatus 2026-09-06 WHY:
-//! Subagents and Claude monitors can outlive the lead turn while nobody follows its chat. Probe running Claude, Codex and Hermes sessions on the daemon's clock so the shared status projection discovers and retires that work without an open chat.
+//! Subagents and Claude monitors can outlive the lead turn while nobody follows its chat. Probe running Claude, Codex, Hermes and OMP sessions on the daemon's clock so the shared status projection discovers and retires that work without an open chat.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::domain::DomainRepository;
 use crate::server::AppState;
-use crate::session_chat_follower::session_chat_agent_for_session;
+use crate::session_chat_follower::session_chat_display_agent_for_session;
 use crate::session_chat_options::{
     session_chat_option_agent, SessionChatOptionAgent, SESSION_CHAT_OPTION_CACHE_TTL,
 };
@@ -62,6 +62,9 @@ pub(crate) fn record_agent_start(
 }
 
 /// The agents `read_fleet` can read a subagent roster for.
+///
+/// CDXC:SessionStatus 2026-10-30 WHY:
+/// An OMP session reads as a Pi transcript, but only OMP keeps subagent transcripts in an artifacts folder beside its session file. The roster is therefore keyed on the CLI the session runs (`session_chat_display_agent_for_session` folds a Pi transcript back to `omp`), and a plain Pi session keeps having none.
 pub(crate) fn has_fleet_reader(agent: Option<SessionChatOptionAgent>) -> bool {
     matches!(
         agent,
@@ -69,6 +72,7 @@ pub(crate) fn has_fleet_reader(agent: Option<SessionChatOptionAgent>) -> bool {
             SessionChatOptionAgent::Claude
                 | SessionChatOptionAgent::Codex
                 | SessionChatOptionAgent::Hermes
+                | SessionChatOptionAgent::Omp
         )
     )
 }
@@ -77,7 +81,7 @@ pub(crate) fn read_fleet(
     session: &serde_json::Value,
     screen: Option<&str>,
 ) -> anyhow::Result<Option<crate::session_chat_agent_fleet::SessionChatAgentFleet>> {
-    match session_chat_option_agent(session_chat_agent_for_session(session).as_deref()) {
+    match session_chat_option_agent(session_chat_display_agent_for_session(session).as_deref()) {
         Some(SessionChatOptionAgent::Claude) => {
             crate::session_chat_claude_fleet::read_claude_fleet(session, screen)
         }
@@ -87,6 +91,7 @@ pub(crate) fn read_fleet(
         Some(SessionChatOptionAgent::Hermes) => {
             crate::session_chat_hermes_fleet::read_hermes_fleet(session)
         }
+        Some(SessionChatOptionAgent::Omp) => crate::session_chat_omp_fleet::read_omp_fleet(session),
         _ => Ok(None),
     }
 }
@@ -139,8 +144,14 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
         .iter()
         .filter(|session| {
             matches!(
-                session_chat_option_agent(session_chat_agent_for_session(session).as_deref()),
-                Some(SessionChatOptionAgent::Claude | SessionChatOptionAgent::Codex)
+                session_chat_option_agent(
+                    session_chat_display_agent_for_session(session).as_deref()
+                ),
+                Some(
+                    SessionChatOptionAgent::Claude
+                        | SessionChatOptionAgent::Codex
+                        | SessionChatOptionAgent::Omp
+                )
             )
         })
         .filter_map(|session| session.get("zmxName").and_then(serde_json::Value::as_str))
@@ -157,7 +168,7 @@ fn refresh_fleet_status(state: &AppState, shutdown: &tokio::sync::broadcast::Rec
         if stopping() {
             return;
         }
-        let agent = session_chat_agent_for_session(&session);
+        let agent = session_chat_display_agent_for_session(&session);
         if agent.as_deref() == Some("empryo") {
             crate::session_chat_empryo_events::observe_empryo_screen_events(&repository, &session);
             continue;

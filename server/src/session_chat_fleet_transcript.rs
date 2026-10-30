@@ -22,6 +22,9 @@ pub(crate) struct ChildTurn {
     pub working: bool,
     pub timestamp: i64,
     pub started_at: i64,
+    /// The record that opened a working turn or closed a finished one. Only OMP children's turns
+    /// carry it, for their viewer's lifecycle.
+    pub turn_id: Option<String>,
 }
 
 pub(crate) fn timestamp(record: &Value) -> Option<i64> {
@@ -164,6 +167,7 @@ fn settle_quiet_child(
                 working: false,
                 timestamp: at,
                 started_at: turn.started_at,
+                turn_id: turn.turn_id,
             })
         }
         (turn, _) => turn,
@@ -202,8 +206,43 @@ fn visit_child_record(
                 working: event.state == SessionChatTurnLifecycleState::Working,
                 timestamp: at,
                 started_at: at,
+                turn_id: None,
             });
             return Ok(false);
+        }
+        return Ok(true);
+    }
+    // OMP's subagents (the only Pi-format children with a roster): a prompt opens the turn, a
+    // closing reply or OMP's own run end closes it, and a reply after a close means it resumed.
+    if agent == SessionChatTranscriptAgent::Pi {
+        let id = record.get("id").and_then(Value::as_str).map(str::to_string);
+        let event = crate::session_chat_decode_pi::decode_pi_turn_lifecycle(line, "");
+        if crate::session_chat_omp_fleet::omp_child_turn_ended(&record)
+            || event
+                .as_ref()
+                .is_some_and(|event| event.state != SessionChatTurnLifecycleState::Working)
+        {
+            if turn.is_none() {
+                *turn = Some(ChildTurn {
+                    working: false,
+                    timestamp: at,
+                    started_at: at,
+                    turn_id: id,
+                });
+            }
+            return Ok(false);
+        }
+        let prompt = event.is_some();
+        if prompt || record.pointer("/message/role").and_then(Value::as_str) == Some("assistant") {
+            let latest = turn.get_or_insert(ChildTurn {
+                working: true,
+                timestamp: at,
+                started_at: at,
+                turn_id: None,
+            });
+            latest.started_at = at;
+            latest.turn_id = id;
+            return Ok(!prompt);
         }
         return Ok(true);
     }
@@ -218,6 +257,7 @@ fn visit_child_record(
                 working: false,
                 timestamp: at,
                 started_at: at,
+                turn_id: None,
             });
         }
         return Ok(false);
@@ -247,6 +287,7 @@ fn visit_child_record(
             working: true,
             timestamp: at,
             started_at: at,
+            turn_id: None,
         });
         latest.started_at = at;
         if user_prompt {
@@ -316,6 +357,7 @@ pub(crate) fn latest_child_turn(
             // More of a turn that was already working when last read: it started where that one did.
             (Some(mut newer), Some(older)) if older.working => {
                 newer.started_at = older.started_at;
+                newer.turn_id = older.turn_id;
                 Some(newer)
             }
             (newer, _) => newer,

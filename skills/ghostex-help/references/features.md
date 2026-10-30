@@ -2054,6 +2054,9 @@ For Codex and Claude, the Subagents list and popup title show the child's latest
 model and effort in compact form, such as Opus 5 High or Astra xHigh. Codex rows
 show the child's name/path beside the model and effort, after a ‣ separator.
 For Claude, hover to see the agent type, such as Explore or general-purpose.
+OMP sessions list their subagents too: every role, including agent definitions of
+your own, and subagents that other subagents started. Finished ones stay in the
+list as Idle, and clicking one opens its transcript.
 Unrecorded model values are labelled Model not recorded.
 When Claude runs a workflow (Claude Code's Workflow tool, a script that starts
 several agents in phases), the chat shows it as one Workflow card instead of a

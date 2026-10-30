@@ -51,6 +51,14 @@ pub(crate) fn read(path: &Path, family: SessionChatTranscriptAgent) -> io::Resul
             effort: text(model.and_then(|m| m.get("variant"))),
         });
     }
+    // OMP's subagents: their latest `model_change` and `thinking_level_change`, read incrementally.
+    if family == SessionChatTranscriptAgent::Pi {
+        let records = crate::session_chat_omp_fleet::read_child_records(path)?;
+        return Ok(SubagentModel {
+            model: records.model,
+            effort: records.effort,
+        });
+    }
     type Cache = HashMap<PathBuf, (TranscriptFileVersion, SubagentModel)>;
     static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
     let cache = CACHE.get_or_init(Mutex::default);
