@@ -1517,6 +1517,7 @@ dependencies = [
  "toml_edit",
  "tower",
  "tungstenite 0.29.0",
+ "unicode-width",
  "ureq",
  "url",
  "uuid",

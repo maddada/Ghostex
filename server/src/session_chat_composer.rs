@@ -69,9 +69,9 @@ pub(crate) fn hermes_composer_row(screen_text: &str) -> Option<usize> {
     input::hermes_input_region(&raw_lines).map(|region| region.start)
 }
 
-/// The first row of OMP's live input on an untrimmed, ANSI-stripped screen, found by the shapes `omp_input_region` reads, or `None` when it is not on screen.
-pub(crate) fn omp_composer_input_row(lines: &[String]) -> Option<usize> {
-    input::omp_composer::omp_input_region(lines).map(|region| region.start)
+/// The first row OMP's live composer draws on an untrimmed, ANSI-stripped screen (its top chrome, or its input's first row for the shapes without any), found by the shapes `omp_input_region` reads, or `None` when it is not on screen.
+pub(crate) fn omp_composer_top_row(lines: &[String]) -> Option<usize> {
+    input::omp_composer::omp_composer_top(lines)
 }
 
 /// Non-blank lines kept from the bottom of a capture. Wide enough to hold
