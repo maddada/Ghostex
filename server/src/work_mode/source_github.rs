@@ -20,8 +20,8 @@ impl WorkSource for GithubSource {
         Cow::Borrowed("GitHub")
     }
 
-    fn link_kind(&self) -> &'static str {
-        "issue"
+    fn link_kind(&self) -> Cow<'static, str> {
+        Cow::Borrowed("issue")
     }
 
     fn key(&self, id: &str, repo: &str) -> String {
@@ -46,10 +46,6 @@ impl WorkSource for GithubSource {
 
     fn project_kind(&self) -> Option<TicketProjectKind> {
         Some(TicketProjectKind::Github)
-    }
-
-    fn team_of(&self, _id: &str) -> Option<String> {
-        None
     }
 
     fn parse_ref(&self, text: &str) -> Option<String> {
@@ -240,15 +236,5 @@ impl WorkSource for GithubSource {
     fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String> {
         let number = number_of(id)?;
         github_issue_branch(scope.cwd.unwrap_or_default(), number).map_err(|error| error.message)
-    }
-
-    /// GitHub ties issues to PRs through the PR itself (its branch and description).
-    fn tickets_attached_to(
-        &self,
-        _scope: &TicketScope,
-        _url: &str,
-        _force: bool,
-    ) -> Result<Vec<String>, String> {
-        Ok(Vec::new())
     }
 }

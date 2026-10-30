@@ -305,9 +305,14 @@ pub(crate) fn read_work_item(
     });
 
     if let (WorkItemRef::PullRequest(_), Some(pr)) = (item_ref, pull_request.as_ref()) {
-        let known_keys: Vec<String> = WorkSourceId::BUILT_IN
+        let known_keys: Vec<(WorkSourceId, Vec<String>)> = WorkSourceId::BUILT_IN
             .into_iter()
-            .flat_map(|source| work_source(source).known_keys(&scope_for(source), plan))
+            .map(|source| {
+                (
+                    source,
+                    work_source(source).known_keys(&scope_for(source), plan),
+                )
+            })
             .collect();
         for ticket in pull_request_branch_tickets(pr, &known_keys) {
             push_ticket(&mut pr_tickets, ticket);

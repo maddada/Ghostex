@@ -82,8 +82,8 @@ impl WorkSource for LinearSource {
         Cow::Borrowed("Linear")
     }
 
-    fn link_kind(&self) -> &'static str {
-        "linear"
+    fn link_kind(&self) -> Cow<'static, str> {
+        Cow::Borrowed("linear")
     }
 
     fn key(&self, id: &str, _repo: &str) -> String {

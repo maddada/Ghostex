@@ -26,7 +26,11 @@ pub(crate) enum WorkSourceId {
 
 impl WorkSourceId {
     /// The sources every work-mode session's branch and hand-set links are read for, whatever its
-    /// workspace's tracker.
+    /// workspace's tracker. The order also breaks ties when a PR folds into a Work list row: a
+    /// session linking the PR to a ticket decides first, then a ticket the tracker attached the
+    /// PR to, and only then the tickets the PR's branch or description names, each source's in
+    /// this order. So a PR whose branch names a Linear ticket and a GitHub issue folds into the
+    /// Linear one when both have a row.
     pub(crate) const BUILT_IN: [Self; 2] = [Self::Linear, Self::Github];
 
     pub(crate) fn as_wire(self) -> &'static str {
@@ -222,7 +226,7 @@ pub(crate) trait WorkSource: Sync {
     /// How errors and buttons name it.
     fn name(&self) -> Cow<'static, str>;
     /// The `kind` its tickets publish as session links: `linear`, `issue`.
-    fn link_kind(&self) -> &'static str;
+    fn link_kind(&self) -> Cow<'static, str>;
     /// `TicketRef::key`.
     fn key(&self, id: &str, repo: &str) -> String;
     /// `TicketRef::label`.
@@ -235,9 +239,13 @@ pub(crate) trait WorkSource: Sync {
     /// Why a request's `ticketId` names none of its tickets.
     fn invalid_ref(&self, text: &str) -> String;
     /// The kind of project its tickets sit in, if it has projects.
-    fn project_kind(&self) -> Option<TicketProjectKind>;
+    fn project_kind(&self) -> Option<TicketProjectKind> {
+        None
+    }
     /// The team a ticket id belongs to, when ids carry one (`ACM` of `ACM-12`).
-    fn team_of(&self, id: &str) -> Option<String>;
+    fn team_of(&self, _id: &str) -> Option<String> {
+        None
+    }
 
     /// `acm-12` → `ACM-12`, `#218` → `218`; `None` when the text names none of its tickets.
     fn parse_ref(&self, text: &str) -> Option<String>;
@@ -246,7 +254,7 @@ pub(crate) trait WorkSource: Sync {
     /// Whether a worktree's branch names this one ticket, for reusing that worktree on Start work.
     fn branch_names(&self, branch: &str, id: &str) -> bool;
     /// The tickets a PR names, in order. `known_keys` are the ticket-id prefixes the caller knows
-    /// (`SourceList::known_keys`).
+    /// for this source (its `SourceList::known_keys`), never another source's.
     fn tickets_in_pull_request(
         &self,
         known_keys: &[String],
@@ -286,13 +294,16 @@ pub(crate) trait WorkSource: Sync {
     fn create(&self, scope: &TicketScope, draft: &TicketDraft) -> Result<CreatedTicket, String>;
     /// The branch Start work cuts for a ticket. Blocking.
     fn branch_for(&self, scope: &TicketScope, id: &str) -> Result<String, String>;
-    /// The tickets the tracker itself ties to a PR's URL (Linear's GitHub attachments). Blocking.
+    /// The tickets the tracker itself ties to a PR's URL (Linear's GitHub attachments); none for a
+    /// tracker that ties issues to PRs only through the PR (its branch and description). Blocking.
     fn tickets_attached_to(
         &self,
-        scope: &TicketScope,
-        url: &str,
-        force: bool,
-    ) -> Result<Vec<String>, String>;
+        _scope: &TicketScope,
+        _url: &str,
+        _force: bool,
+    ) -> Result<Vec<String>, String> {
+        Ok(Vec::new())
+    }
 }
 
 /// The one lookup every caller uses instead of matching on the tracker.

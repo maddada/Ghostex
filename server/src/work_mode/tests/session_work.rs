@@ -478,3 +478,28 @@ fn a_branch_with_a_pr_shows_the_pr_in_the_sessions_work_and_links() {
         }),
     );
 }
+
+#[test]
+fn a_session_without_a_pr_of_its_own_takes_its_tickets_pr_in_its_repo() {
+    let (project, session) = linear_session(
+        "TicketPr",
+        "/gx-char/session/linear-ticket-pr",
+        "leandro/acm-12-checkout",
+        Value::Null,
+    );
+    // Linear attached PRs from two repos; the session works in acme/app.
+    let mut issue = linear_issue_info("ACM-12", ("started", "In Progress"));
+    issue.pull_request_urls = vec![
+        "https://github.com/acme/other/pull/3".to_string(),
+        "https://github.com/acme/app/pull/7".to_string(),
+    ];
+    seed_linear_issue(
+        linear_key_fingerprint("lin-key-TicketPr"),
+        "ACM-12",
+        Some(issue),
+    );
+    assert_eq!(
+        work_targets(&project, &session).pull_request.as_deref(),
+        Some("https://github.com/acme/app/pull/7")
+    );
+}
