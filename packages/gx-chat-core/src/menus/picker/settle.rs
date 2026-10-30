@@ -160,6 +160,7 @@ pub fn settle(
         .pickers
         .model_selection
         .adopt_pending(&state.session.pending_model_selection);
+    crate::menus::picker::hold_card::remember_model_hold(state);
     settle_desired_receipt(state, context);
 
     // `forkBranches.ensure()` at the top of `publish`: once per chat, never again.

@@ -1083,7 +1083,9 @@ where they are while you open, change and close views.
   seconds. Messages you send after picking it wait instead of reaching the agent
   on the wrong model. Hover the session to read why, then pick a model again in
   the chat's model menu (the same one, or another); once it applies, the dot
-  clears and the waiting messages are sent.
+  clears and the waiting messages are sent. Once Ghostex has stopped retrying the change,
+  the session's chat also shows a card above the chat box with how many messages wait
+  and why; its Pick model button opens the model menu.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,

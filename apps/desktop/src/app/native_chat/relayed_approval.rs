@@ -198,6 +198,7 @@ impl NativeChatView {
                 trailing: Vec::new(),
                 body,
                 footer_start,
+                footer_note: None,
                 footer_end,
             },
             None,

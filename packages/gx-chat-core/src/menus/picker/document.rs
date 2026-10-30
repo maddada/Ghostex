@@ -52,6 +52,8 @@ pub fn document_with(
         Tri::Null => Tri::Null,
         Tri::Value(value) => Tri::Value(value.clone()),
     };
+    into.model_hold_card =
+        crate::menus::picker::hold_card::model_hold_card(state, inputs.menu.as_ref());
 
     into.fork_branches =
         match fork_branches_projection(&pickers.fork_branches.branches, context.now_ms) {
