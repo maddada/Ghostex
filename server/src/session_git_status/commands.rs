@@ -58,8 +58,8 @@ fn gh_availability_cache() -> &'static Mutex<Option<(Instant, bool)>> {
 /// within a minute of start).
 pub(crate) fn cached_gh_cli_available() -> bool {
     #[cfg(test)]
-    if GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
-        return true;
+    if let Some(assumed) = GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
+        return assumed;
     }
     gh_availability_cache()
         .lock()
@@ -70,14 +70,14 @@ pub(crate) fn cached_gh_cli_available() -> bool {
 
 #[cfg(test)]
 thread_local! {
-    static GH_ASSUMED_AVAILABLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static GH_ASSUMED_AVAILABLE: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
 }
 
 /// Puts `gh_cli_is_available` and `cached_gh_cli_available` back to what they were when dropped.
 #[cfg(test)]
 #[must_use = "bind it for the whole test: `let _gh = ...`; a bare `_` drops it at once"]
 pub(crate) struct GhAssumedAvailable {
-    previous: bool,
+    previous: Option<bool>,
 }
 
 #[cfg(test)]
@@ -92,14 +92,23 @@ impl Drop for GhAssumedAvailable {
 #[cfg(test)]
 pub(crate) fn assume_gh_cli_available_for_test() -> GhAssumedAvailable {
     GhAssumedAvailable {
-        previous: GH_ASSUMED_AVAILABLE.with(|assumed| assumed.replace(true)),
+        previous: GH_ASSUMED_AVAILABLE.with(|assumed| assumed.replace(Some(true))),
+    }
+}
+
+/// `assume_gh_cli_available_for_test` for a test that needs `gh` signed out, so nothing it runs
+/// reaches GitHub.
+#[cfg(test)]
+pub(crate) fn assume_gh_cli_signed_out_for_test() -> GhAssumedAvailable {
+    GhAssumedAvailable {
+        previous: GH_ASSUMED_AVAILABLE.with(|assumed| assumed.replace(Some(false))),
     }
 }
 
 pub(crate) fn gh_cli_is_available() -> bool {
     #[cfg(test)]
-    if GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
-        return true;
+    if let Some(assumed) = GH_ASSUMED_AVAILABLE.with(|assumed| assumed.get()) {
+        return assumed;
     }
     let cache = gh_availability_cache();
     if let Ok(cache) = cache.lock() {

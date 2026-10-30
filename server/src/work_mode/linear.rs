@@ -235,6 +235,10 @@ pub(super) fn linear_graphql(
 /// One GraphQL call's answer, GraphQL errors included; `Err` only when Linear could not be asked
 /// or refused the key.
 fn linear_graphql_answer(api_key: &str, query: &str, variables: Value) -> Result<Value, String> {
+    #[cfg(test)]
+    if let Some(answer) = LINEAR_TEST_ANSWER.with(|answer| answer.borrow().clone()) {
+        return answer(query, &variables);
+    }
     let api_key = api_key.trim();
     // Personal API keys go in as they are; OAuth tokens need the Bearer scheme.
     let authorization = if api_key.starts_with("lin_oauth_") {
@@ -261,6 +265,41 @@ fn linear_graphql_answer(api_key: &str, query: &str, variables: Value) -> Result
         Err(error) => return Err(format!("Could not reach Linear: {error}")),
     };
     Ok(body)
+}
+
+#[cfg(test)]
+type LinearTestAnswer = std::rc::Rc<dyn Fn(&str, &Value) -> Result<Value, String>>;
+
+#[cfg(test)]
+thread_local! {
+    static LINEAR_TEST_ANSWER: std::cell::RefCell<Option<LinearTestAnswer>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Puts Linear's calls back to what answered them before when dropped.
+#[cfg(test)]
+#[must_use = "bind it for the whole test: `let _linear = ...`; a bare `_` drops it at once"]
+pub(crate) struct LinearAnsweredForTest {
+    previous: Option<LinearTestAnswer>,
+}
+
+#[cfg(test)]
+impl Drop for LinearAnsweredForTest {
+    fn drop(&mut self) {
+        LINEAR_TEST_ANSWER.with(|answer| *answer.borrow_mut() = self.previous.take());
+    }
+}
+
+/// Answers this thread's Linear calls with `answer(query, variables)` instead of asking Linear,
+/// for as long as the guard is held, so a test can see what a pass asks for and nothing it runs
+/// reaches Linear. Per thread for the reason `assume_gh_cli_available_for_test` is.
+#[cfg(test)]
+pub(crate) fn answer_linear_for_test(
+    answer: impl Fn(&str, &Value) -> Result<Value, String> + 'static,
+) -> LinearAnsweredForTest {
+    let answer: LinearTestAnswer = std::rc::Rc::new(answer);
+    LinearAnsweredForTest {
+        previous: LINEAR_TEST_ANSWER.with(|current| current.replace(Some(answer))),
+    }
 }
 
 /// Checks a key and says whose it is: `{ id, name, organization }` (`id` is the Linear user's).
