@@ -231,6 +231,29 @@ impl SessionChatOptionDetector {
                 project_id, session_id,
             );
         }
+        // An agent back at the shell is one that restarts by hand: what it offered goes with it.
+        if detected.captured
+            && (detected.notice.as_ref().is_some_and(|notice| {
+                notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_EXITED
+            }) || crate::session_chat_notice::session_chat_screen_ends_with_shell_prompt(
+                &detected.composer.screen_tail.join("\n"),
+            ))
+        {
+            crate::session_chat_mode_availability::forget_for_agent_restart(
+                &self.compacting_publisher,
+                project_id,
+                session_id,
+            );
+        }
+        crate::session_chat_mode_availability::note_screen_mode(
+            project_id,
+            session_id,
+            detected
+                .options
+                .as_ref()
+                .and_then(|options| options.selection.mode.as_ref())
+                .map(|mode| mode.value.as_str()),
+        );
         let mut compacting_transition: Option<Option<String>> = None;
         let mut fleet_transition: Option<Option<String>> = None;
         let mut monitor_transition: Option<Option<String>> = None;

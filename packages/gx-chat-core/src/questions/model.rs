@@ -123,6 +123,10 @@ pub struct TerminalNotice {
     pub detected_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conversation_lock: Option<Value>,
+    /// The failed queue row this card stands for (`{ promptId }`,
+    /// server/src/session_chat_send_failure.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_failure: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dialog: Option<TerminalDialog>,
     /// The whole plan Claude's "Ready to code?" asks to approve, as Markdown from its plan file

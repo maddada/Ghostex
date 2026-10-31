@@ -1197,6 +1197,25 @@ pub(crate) async fn handle_select_session_chat_model_http(
     } else {
         select_session_chat_model(state, &params).await
     };
+    if let Err(error) = &result {
+        // A pick the queue is not carrying (`ghostex select-session-chat-model`): the queued ones
+        // remember theirs in session_chat_model_selection.rs.
+        let (project_id, session_id) = (
+            read_trimmed(&params, "projectId"),
+            read_trimmed(&params, "sessionId"),
+        );
+        crate::session_chat_mode_availability::remember_refusal(
+            state,
+            &project_id,
+            &session_id,
+            &error.message,
+        );
+        crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+            state,
+            &project_id,
+            &session_id,
+        );
+    }
     match result {
         Ok(result) => routed_json(
             Some(endpoint_path),

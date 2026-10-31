@@ -229,6 +229,15 @@ pub struct StartupDelivery {
     pub wait_reason: Option<String>,
 }
 
+/// A mode the session's agent cannot use, and how to turn it on
+/// (server/src/session_chat_mode_availability.rs).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnavailableMode {
+    pub value: String,
+    pub why: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TurnLifecycle {
@@ -316,6 +325,10 @@ pub struct ChatSideState {
     /// Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub later_question_ids: Option<Vec<String>>,
+    /// The modes this session's agent cannot use, which its mode menu greys out with how to turn
+    /// them on. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unavailable_modes: Option<Vec<UnavailableMode>>,
     /// The question forms and pages the user removed without answering (form or page ids,
     /// server/src/session_chat_open_questions.rs): no longer counted as waiting. Absent means
     /// unchanged.

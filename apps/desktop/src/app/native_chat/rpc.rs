@@ -31,22 +31,32 @@ pub(super) async fn request(
     Ok(envelope["result"].take())
 }
 
+/// CDXC:SessionChat 2026-10-31 WHY:
+/// gxserver answers a send once it has typed it, and a send to a mid-turn agent waits up to five minutes for each of its three attempts to show on screen (session_chat_send/busy_input_wait.rs). This call used to give up after 60 s of silence: the message left the thread and went back to the chat box with a socket error while gxserver went on typing it, so the agent could still take a message the user then sent again, and the real answer minutes later had nobody listening (GitHub #374). The wait is the send's; only a daemon that has stopped answering should end it.
+const SEND_RPC_TIMEOUT: Duration = Duration::from_secs(16 * 60);
+
+fn request_timeout(endpoint: &str) -> Duration {
+    if endpoint == "/api/sendSessionChatMessage" {
+        SEND_RPC_TIMEOUT
+    } else {
+        Duration::from_secs(60)
+    }
+}
+
 fn transport(
     remote: Option<GpuiRemoteGxserverRequestTarget>,
     endpoint: &str,
     params: &Value,
 ) -> Result<(u16, String), String> {
+    let timeout = request_timeout(endpoint);
     match remote {
-        Some(target) => gpui_remote_gxserver_post_typed_operation(
-            &target,
-            endpoint,
-            params,
-            Duration::from_secs(60),
-        ),
+        Some(target) => {
+            gpui_remote_gxserver_post_typed_operation(&target, endpoint, params, timeout)
+        }
         None => gxserver_post_typed_operation_across_restart(
             endpoint,
             params,
-            Duration::from_secs(60),
+            timeout,
             Duration::from_secs(5),
         ),
     }

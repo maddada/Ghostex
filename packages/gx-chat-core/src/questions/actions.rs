@@ -102,7 +102,9 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .param("id")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            effects.extend(crate::questions::open_questions::open_resource(state, context, id));
+            effects.extend(crate::questions::open_questions::open_resource(
+                state, context, id,
+            ));
         }
         ActionKind::CloseResource => crate::questions::resource_modal::close(state),
         ActionKind::GoToResource => {
@@ -307,11 +309,20 @@ fn dismiss_notice(
     let dismissed = dismissed_notice_state(notice, context.now_millis());
     let value = serde_json::to_string(&dismissed).ok();
     state.questions.dismissed_notice = Some(dismissed);
-    vec![Effect::WriteStorage {
+    let mut effects = vec![Effect::WriteStorage {
         key: notice_key(&state.identity.session_key),
         value,
         durable: true,
-    }]
+    }];
+    // Closing a failed send's card deals with it, on every client, so gxserver hears of it: the
+    // sidebar's dot and the notification go too (server/src/session_chat_send_failure.rs).
+    if notice.send_failure.is_some() {
+        effects.extend(answer_prompt(
+            state,
+            &serde_json::json!({ "kind": "restartAgent", "actionId": "dismissSendFailure" }),
+        ));
+    }
+    effects
 }
 
 /// What the notice card's primary or secondary button sends.

@@ -204,6 +204,7 @@ pub fn compute_native_chat_options(state: &ChatState, _context: &ChatContext) ->
         draft_agent_id: draft_agent_id.clone(),
         has_provider: provider.is_some(),
         selection_error: selection_error.clone(),
+        unavailable_modes: state.session.unavailable_modes.clone(),
     };
     let option_menus =
         native_option_menus(catalog.as_ref(), &values, &option_descriptors, &menu_params);

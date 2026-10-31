@@ -52,6 +52,14 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         _ => Tri::Null,
     };
     into.notice_visible = gates::notice_visible(state);
+    // CDXC:SessionChat 2026-10-31 WHY: a failed row's own line carries Retry too, so while the card that stands for it is on screen the row says only that it was not sent. Two buttons that do the same thing would be one too many (GitHub #374).
+    into.send_failure_card_prompt_id = notice
+        .as_ref()
+        .filter(|_| into.notice_visible)
+        .and_then(|notice| notice.send_failure.as_ref())
+        .and_then(|failure| failure.get("promptId"))
+        .and_then(Value::as_str)
+        .map(str::to_string);
     into.notice_error = match questions.notice_error.as_ref() {
         Some(error) => Tri::Value(error.clone()),
         None => Tri::Absent,

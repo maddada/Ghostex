@@ -94,6 +94,10 @@ pub fn side_state_moves(
             .is_some_and(|deliveries| session.agent_message_deliveries.as_ref() != Some(deliveries))
         || side.retired_async_question_ids.is_some()
         || side.later_question_ids.is_some()
+        || side
+            .unavailable_modes
+            .as_ref()
+            .is_some_and(|modes| &session.unavailable_modes != modes)
         || side.removed_question_ids.is_some()
         || side
             .resource_index

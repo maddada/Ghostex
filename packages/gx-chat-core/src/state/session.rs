@@ -36,6 +36,8 @@ pub struct SessionState {
     /// The question forms and pages the user put off "For later", as gxserver keeps them (form or
     /// page ids, `crate::questions::later`). Absent means unchanged.
     pub later_question_ids: Vec<String>,
+    /// The modes this session's agent cannot use, as gxserver keeps them. Absent means unchanged.
+    pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// The question forms and pages the user removed without answering, as gxserver keeps them
     /// (`crate::questions::later`). Absent means unchanged.
     pub removed_question_ids: Vec<String>,
@@ -136,6 +138,7 @@ impl Default for SessionState {
             prompt: None,
             retired_async_question_ids: Vec::new(),
             later_question_ids: Vec::new(),
+            unavailable_modes: Vec::new(),
             removed_question_ids: Vec::new(),
             resource_index: Vec::new(),
             async_questions_since: None,

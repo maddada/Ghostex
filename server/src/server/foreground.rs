@@ -370,6 +370,10 @@ pub async fn run_gxserver_foreground(
         crate::session_chat_queue_runtime::session_chat_queue_stuck_notifier(&state),
     )
     .start(shutdown_tx.subscribe());
+    crate::session_chat_send_failure::spawn_send_failure_task(
+        state.clone(),
+        shutdown_tx.subscribe(),
+    );
     /*
     CDXC:ZmxWireGeneration 2026-08-23:
     An app or remote-package update replaces the bundled zmx binary underneath

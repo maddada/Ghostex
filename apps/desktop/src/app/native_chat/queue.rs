@@ -198,7 +198,11 @@ impl NativeChatView {
                     json!({"type":"removeQueue","promptId":id}),
                 ),
             ] {
-                if capabilities[capability] == true && (capability != "canRetry" || failed) {
+                let on_card =
+                    self.snapshot["sendFailureCardPromptId"].as_str() == Some(id.as_str());
+                if capabilities[capability] == true
+                    && (capability != "canRetry" || (failed && !on_card))
+                {
                     actions = actions.child(self.queue_action(
                         format!("queue-{capability}:{id}"),
                         label,

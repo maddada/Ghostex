@@ -576,6 +576,104 @@ pub(crate) fn start_draft_agent_if_missing(state: &AppState, target: &SessionCha
 
 /// A send accepted now and typed by the queue once the agent's input box appears; the chat draws
 /// it in the transcript, not in the queue strip. The row keeps the send's `imagePaths` too.
+/// A chat box send that failed for good stays in the thread as a failed row, in the place a held
+/// message would be, with the reason on it. The draft goes with it, as for any queued message, so
+/// Retry can never send it twice.
+pub(crate) fn queue_failed_composer_send(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    params: &Map<String, Value>,
+    target: &SessionChatSendTarget,
+    text: &str,
+    error: DomainStateError,
+) -> RoutedResponse {
+    let mut startup_params = params.clone();
+    startup_params.insert("startupSend".to_string(), json!(true));
+    let queued = crate::session_chat_queue::handle_session_chat_queue_endpoint(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        "/api/queueSessionChatPrompt",
+        &startup_params,
+    );
+    let prompt_id = queued.ok().and_then(|result| {
+        result
+            .value
+            .pointer("/prompt/id")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let Some(prompt_id) = prompt_id.filter(|prompt_id| {
+        crate::session_chat_queue::fail_session_chat_queued_prompt(
+            &state.paths,
+            &target.project_id,
+            &target.session_id,
+            prompt_id,
+            &error.message,
+        )
+        .is_ok()
+    }) else {
+        return domain_error_response(endpoint_path, request_id, error);
+    };
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state,
+        &target.project_id,
+        &target.session_id,
+    );
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(
+            request_id,
+            json!({
+                "queued": true,
+                "textBytes": text.len(),
+                "queuedPromptId": prompt_id,
+                "notSent": true,
+            }),
+        ),
+    )
+}
+
+/// The same failed row for a message that has no send call left to answer: it was typed into an
+/// agent that then died and could not be restarted.
+pub(crate) fn queue_failed_send(
+    state: &AppState,
+    target: &SessionChatSendTarget,
+    text: &str,
+    reason: &str,
+) -> Result<(), DomainStateError> {
+    let mut params = Map::new();
+    params.insert("projectId".to_string(), json!(target.project_id));
+    params.insert("sessionId".to_string(), json!(target.session_id));
+    params.insert("text".to_string(), json!(text));
+    params.insert("startupSend".to_string(), json!(true));
+    let queued = crate::session_chat_queue::handle_session_chat_queue_endpoint(
+        &state.paths,
+        state.metadata.server_id.as_str(),
+        "/api/queueSessionChatPrompt",
+        &params,
+    )?;
+    let prompt_id = queued
+        .value
+        .pointer("/prompt/id")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    crate::session_chat_queue::fail_session_chat_queued_prompt(
+        &state.paths,
+        &target.project_id,
+        &target.session_id,
+        prompt_id,
+        reason,
+    )?;
+    crate::session_chat_queue_runtime::broadcast_session_chat_queue_state(
+        state,
+        &target.project_id,
+        &target.session_id,
+    );
+    Ok(())
+}
+
 pub(crate) fn queue_startup_send(
     state: &AppState,
     endpoint_path: String,

@@ -672,27 +672,6 @@ pub fn session_chat_delivery_mismatch_notice(
     )])
 }
 
-/// The one card left after gxserver failed to recover a send on its own (session_chat_queue_runtime/send_heal.rs).
-/// Fix it runs that recovery again; the screen tail stays for the hover preview.
-pub fn session_chat_send_recovery_failed_notice(
-    agent_exited: bool,
-    screen_tail: Option<String>,
-) -> SessionChatTerminalNotice {
-    SessionChatTerminalNotice::new(
-        SESSION_CHAT_NOTICE_DELIVERY_FAILED,
-        SessionChatTerminalNoticeSeverity::Error,
-        SessionChatTerminalNoticeSource::Watchdog,
-        "Your message was not sent",
-    )
-    .with_detail(if agent_exited {
-        "The agent in this session stopped, and Ghostex could not start it again by itself. Fix it restarts the agent on this same conversation. Then send your message again."
-    } else {
-        "The agent in this session is not taking messages, and Ghostex could not get it working again by itself. Fix it restarts the agent on this same conversation. Then send your message again."
-    })
-    .with_screen_tail(screen_tail)
-    .with_actions(vec![SessionChatTerminalNoticeAction::fix_send()])
-}
-
 /*
 CDXC:AgentScreenDetection 2026-08-28:
 The transcript recorded an API refusal row for the last turn (see

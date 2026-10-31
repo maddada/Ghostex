@@ -198,7 +198,11 @@ pub(crate) fn session_row(
         context.always_show_state_tooltip,
     );
     // The red dot says something went wrong; hovering the row says what.
-    let tooltip = match session.model_selection_failure.as_deref() {
+    let failure = session
+        .model_selection_failure
+        .as_deref()
+        .or(session.send_failure.as_deref());
+    let tooltip = match failure {
         Some(reason) if tooltip.is_empty() => reason.to_string(),
         Some(reason) => format!("{reason}\n\n{tooltip}"),
         None => tooltip,
@@ -258,7 +262,8 @@ pub(crate) fn session_row(
         title_tooltip: tooltip,
         activity: session.activity.as_str().to_string(),
         has_background_work: session.background_work_detected_at.is_some(),
-        model_selection_failed: session.model_selection_failure.is_some(),
+        // One red dot says something went wrong and needs the user, whichever it was.
+        model_selection_failed: failure.is_some(),
         program_status_failed,
         pending_question_count: session.pending_question_count,
         awaiting_approval: session.awaiting_approval,

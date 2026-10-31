@@ -158,6 +158,9 @@ pub struct Document {
     #[serde(default)]
     pub open_questions: crate::questions::open_questions::OpenQuestions,
     pub notice_visible: bool,
+    /// The failed queue row the visible card stands for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub send_failure_card_prompt_id: Option<String>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub notice_error: Tri<String>,
     #[serde(default, skip_serializing_if = "Tri::is_absent")]

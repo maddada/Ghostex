@@ -75,6 +75,9 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.later_question_ids.clone() {
         state.session.later_question_ids = ids;
     }
+    if let Some(modes) = frame.state.unavailable_modes.clone() {
+        state.session.unavailable_modes = modes;
+    }
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;
     }
@@ -147,6 +150,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.forked_at = None;
         session.retired_async_question_ids = Vec::new();
         session.later_question_ids = Vec::new();
+        session.unavailable_modes = Vec::new();
         session.removed_question_ids = Vec::new();
         session.resource_index = Vec::new();
     }
@@ -413,6 +417,9 @@ pub fn apply_authoritative(
     }
     if let Some(ids) = result.state.later_question_ids.clone() {
         state.session.later_question_ids = ids;
+    }
+    if let Some(modes) = result.state.unavailable_modes.clone() {
+        state.session.unavailable_modes = modes;
     }
     if let Some(ids) = result.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;

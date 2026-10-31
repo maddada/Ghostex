@@ -255,4 +255,9 @@ pub(crate) fn forget_session_chat_options(state: &AppState, project_id: &str, se
         .publish_fleet(project_id, session_id, None);
     crate::session_chat_compacting::SessionChatCompactingPublisher::new(state)
         .publish_monitor(project_id, session_id, None);
+    crate::session_chat_mode_availability::forget_for_agent_restart(
+        &crate::session_chat_compacting::SessionChatCompactingPublisher::new(state),
+        project_id,
+        session_id,
+    );
 }

@@ -31,8 +31,10 @@ pub(crate) async fn restart(
     state: &AppState,
     params: &Map<String, Value>,
 ) -> Result<(), DomainStateError> {
-    if let Some(fixed) = fix_refused_send(state, params).await {
-        return fixed;
+    if let Some(answered) =
+        crate::session_chat_send_failure::answer_card_action(state, params).await
+    {
+        return answered;
     }
     match params.get("actionId").and_then(Value::as_str) {
         Some(SESSION_CHAT_NOTICE_ACTION_SIGN_IN) => return sign_in(state, params).await,
@@ -194,46 +196,6 @@ async fn restart_on_opencode2(
     crate::session_chat_queue_runtime::cycle_session(state, &target.project_id, &target.session_id)
         .await
         .map_err(|reason| invalid(format!("Ghostex could not restart this session: {reason}.")))
-}
-
-/// Fix it on the card a failed send recovery left (session_chat_queue_runtime/send_heal.rs): the
-/// user asked for the restart the recovery would not risk on its own, so it runs without the
-/// idle and once-in-ten-minutes checks. `None` when the session shows no such card.
-async fn fix_refused_send(
-    state: &AppState,
-    params: &Map<String, Value>,
-) -> Option<Result<(), DomainStateError>> {
-    let target = resolve_session_chat_send_target(state, params, "fixSend").ok()?;
-    let notice = crate::session_chat_notice::session_chat_watchdog_notice(
-        &target.project_id,
-        &target.session_id,
-    )?;
-    if !notice
-        .actions
-        .iter()
-        .any(|action| action.id == crate::session_chat_notice::SESSION_CHAT_NOTICE_ACTION_FIX_SEND)
-    {
-        return None;
-    }
-    let restarted = crate::session_chat_queue_runtime::cycle_session(
-        state,
-        &target.project_id,
-        &target.session_id,
-    )
-    .await
-    .map_err(|reason| invalid(format!("Ghostex could not fix this session: {reason}.")));
-    if restarted.is_ok() {
-        crate::session_chat_notice::clear_session_chat_watchdog_notice(
-            &target.project_id,
-            &target.session_id,
-        );
-        crate::session_chat_options::session_chat_terminal_notice_publisher(
-            state,
-            &target.project_id,
-            &target.session_id,
-        )();
-    }
-    Some(restarted)
 }
 
 /// Sign in on the card of an agent that could not start because its account has no saved login

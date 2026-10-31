@@ -512,6 +512,12 @@ pub(crate) fn sender(state: &Arc<AppState>) -> ModelSelectionSender {
                     &state, &project, &session,
                 ),
                 Err(error) => {
+                    crate::session_chat_mode_availability::remember_refusal(
+                        &state,
+                        &project,
+                        &session,
+                        &error.message,
+                    );
                     crate::session_chat_model_selection_alert::note_model_selection_failure(
                         &state,
                         &project,

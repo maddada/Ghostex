@@ -178,11 +178,16 @@ impl NativeChatView {
         line.role(gpui::Role::Alert)
             .child(div().text_color(error).child(message))
             .when(!prompt_id.is_empty(), |line| {
-                line.child(action(
-                    format!("answers-retry:{key}"),
-                    "Retry",
-                    json!({"type":"retryQueue","promptId":prompt_id.clone()}),
-                ))
+                // The card that stands for this row has its own Retry (chat core's
+                // `sendFailureCardPromptId`).
+                let on_card = self.snapshot["sendFailureCardPromptId"] == delivery["promptId"];
+                line.when(!on_card, |line| {
+                    line.child(action(
+                        format!("answers-retry:{key}"),
+                        "Retry",
+                        json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                    ))
+                })
                 .child(remove())
             })
             .into_any_element()

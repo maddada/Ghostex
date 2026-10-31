@@ -463,6 +463,11 @@ pub(crate) fn project_presentation_session(
         "modelSelectionFailure",
         crate::session_chat_model_selection_alert::session_model_selection_failure(session),
     );
+    insert_optional_string(
+        &mut output,
+        "sendFailure",
+        crate::session_chat_send_failure::session_send_failure_dot(session),
+    );
     if let (Some(project_id), Some(session_id)) = (
         string_field(session, "projectId"),
         string_field(session, "sessionId"),

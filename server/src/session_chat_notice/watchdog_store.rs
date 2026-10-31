@@ -225,10 +225,22 @@ pub fn resolve_session_chat_terminal_notice(
         !session_chat_notice_hidden(project_id, session_id, notice)
             && crate::session_chat_notice_progress::visible(project_id, session_id, notice)
     };
-    merge_session_chat_terminal_notices(
-        session_chat_watchdog_notice(project_id, session_id).filter(visible),
-        screen.filter(visible),
-    )
+    let screen = screen.filter(visible);
+    let failed_send = crate::session_chat_send_failure::send_failure_card(project_id, session_id);
+    // A failed send is the card unless the agent's screen says something only it can answer (a
+    // sign-in, a usage limit, a dialog), which comes first; the message keeps its reason on its own
+    // row meanwhile. An agent that exited is what the failed send's card already says, with the
+    // way out, and a card saying a new message waits would contradict it.
+    let screen_says_more = screen.as_ref().is_some_and(|notice| {
+        notice.kind != SESSION_CHAT_NOTICE_AGENT_EXITED && !notice.start_failed()
+    });
+    match failed_send.filter(|_| !screen_says_more) {
+        Some(card) => Some(card),
+        None => merge_session_chat_terminal_notices(
+            session_chat_watchdog_notice(project_id, session_id).filter(visible),
+            screen,
+        ),
+    }
     .map(|mut notice| {
         if notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT {
             notice.account_wait = crate::accounts::limit_wait::notice_wait(project_id, session_id);

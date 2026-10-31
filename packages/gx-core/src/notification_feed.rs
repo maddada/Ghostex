@@ -22,11 +22,12 @@ pub const NOTIFICATION_FEED_STATE_MESSAGE_TYPE: &str = "notificationFeedState";
 
 /// `resetExpiring` and `resetRedeemed` are account rows (banked usage resets): they carry
 /// `accountId`, and their `sessionId` names no session.
-const KINDS: [&str; 6] = [
+const KINDS: [&str; 7] = [
     "finished",
     "needsInput",
     "bell",
     "custom",
+    "sendFailed",
     "resetExpiring",
     "resetRedeemed",
 ];

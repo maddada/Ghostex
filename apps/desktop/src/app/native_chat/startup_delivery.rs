@@ -47,7 +47,12 @@ impl NativeChatView {
                 || (delivery["state"] == "queued"
                     && !reason.is_empty()
                     && self.snapshot["queue"]["capabilities"]["canRemove"] == true));
-        let status = if failed {
+        // The card that stands for this row has the reason and Retry (chat core's
+        // `sendFailureCardPromptId`), so the row only says what happened to it.
+        let on_card = failed && self.snapshot["sendFailureCardPromptId"] == delivery["promptId"];
+        let status = if on_card {
+            "Not sent".to_string()
+        } else if failed {
             let message = text(delivery, "errorMessage");
             if message.is_empty() {
                 "Message could not be delivered.".to_string()
@@ -87,11 +92,13 @@ impl NativeChatView {
                 .text_color(p.muted)
                 .child(status)
                 .when(failed, |this| {
-                    this.child(action(
-                        "startup-delivery-retry",
-                        "Retry",
-                        json!({"type":"retryQueue","promptId":prompt_id.clone()}),
-                    ))
+                    this.when(!on_card, |this| {
+                        this.child(action(
+                            "startup-delivery-retry",
+                            "Retry",
+                            json!({"type":"retryQueue","promptId":prompt_id.clone()}),
+                        ))
+                    })
                     .child(action(
                         "startup-delivery-remove",
                         "Remove",

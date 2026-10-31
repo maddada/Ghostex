@@ -61,6 +61,8 @@ pub(crate) enum GpuiNotificationFeedKind {
     NeedsInput,
     Bell,
     Custom,
+    /// A chat message could not be sent (drawn red, and the bell's badge turns red with it).
+    SendFailed,
     /// A saved account's banked usage reset expires soon (an account row, drawn red).
     ResetExpiring,
     /// Ghostex used an expiring banked reset on its own (an account row).
@@ -74,6 +76,7 @@ impl GpuiNotificationFeedKind {
             "needsInput" => Some(Self::NeedsInput),
             "bell" => Some(Self::Bell),
             "custom" => Some(Self::Custom),
+            "sendFailed" => Some(Self::SendFailed),
             "resetExpiring" => Some(Self::ResetExpiring),
             "resetRedeemed" => Some(Self::ResetRedeemed),
             _ => None,
@@ -86,13 +89,14 @@ impl GpuiNotificationFeedKind {
             Self::NeedsInput => "Needs input",
             Self::Bell => "Bell",
             Self::Custom => "Notification",
+            Self::SendFailed => "Not sent",
             Self::ResetExpiring => "Reset expiring",
             Self::ResetRedeemed => "Reset used",
         }
     }
 
     pub(crate) fn urgent(self) -> bool {
-        self == Self::ResetExpiring
+        matches!(self, Self::ResetExpiring | Self::SendFailed)
     }
 
     /// The card's accent: red for urgent rows, the attention blue otherwise.
@@ -119,7 +123,9 @@ impl GpuiNotificationFeedKind {
             Self::Finished => "titlebar/message-circle.svg",
             Self::NeedsInput => "titlebar/help-circle.svg",
             Self::Bell => "titlebar/bell.svg",
-            Self::Custom | Self::ResetExpiring | Self::ResetRedeemed => "titlebar/info-circle.svg",
+            Self::Custom | Self::SendFailed | Self::ResetExpiring | Self::ResetRedeemed => {
+                "titlebar/info-circle.svg"
+            }
         }
     }
 }

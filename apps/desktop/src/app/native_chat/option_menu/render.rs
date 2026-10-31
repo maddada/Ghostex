@@ -364,7 +364,12 @@ impl Render for ChatOptionMenuPanel {
                 .px(px(m.row_x * scale))
                 .py(px(m.row_y * scale))
                 .rounded(px(m.row_radius * scale))
-                .opacity(if disabled { 0.42 } else { 1.0 })
+                // A greyed mode's line says how to turn it on, so it stays readable.
+                .opacity(match (disabled, description.is_some()) {
+                    (false, _) => 1.0,
+                    (true, true) => 0.72,
+                    (true, false) => 0.42,
+                })
                 .when(selected, |item| item.bg(hover))
                 .on_mouse_move(cx.listener(move |this, _, window, cx| {
                     if !disabled {
@@ -441,7 +446,7 @@ impl Render for ChatOptionMenuPanel {
                                 .mt(px(2.0 * scale))
                                 .text_size(px(12.0 * scale))
                                 .line_height(px(16.0 * scale))
-                                .truncate()
+                                .when(!disabled, |line| line.truncate())
                                 .text_color(foreground.opacity(0.58))
                                 .child(description),
                         )

@@ -222,10 +222,9 @@ impl PickerDriver<'_> {
                     return Ok(());
                 }
                 if seen.contains(&current) {
-                    return Err(unsupported_selection(format!(
-                        "The agent does not offer the {target} mode in this session; its mode cycle is {}.",
-                        seen.join(" → ")
-                    )));
+                    return Err(unsupported_selection(
+                        crate::session_chat_mode_availability::refusal_message(target, &seen),
+                    ));
                 }
                 seen.push(current.clone());
                 if agent == SessionChatOptionAgent::Codex && target == "plan" {

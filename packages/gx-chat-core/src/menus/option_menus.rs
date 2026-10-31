@@ -119,6 +119,8 @@ pub struct OptionMenuParams {
     pub has_provider: bool,
     /// Why the last selection was abandoned, shown above the rows that offered it.
     pub selection_error: Option<String>,
+    /// The modes this session's agent cannot use.
+    pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
 }
 
 fn command(descriptor_id: &str) -> Map<String, Value> {
@@ -194,8 +196,22 @@ pub fn native_option_menus(
                             ));
                             item.label = Some(choice.label.clone());
                             item.description = choice.description.clone();
-                            item.checked = Some(current.as_deref() == Some(choice.value.as_str()));
+                            let checked = current.as_deref() == Some(choice.value.as_str());
+                            item.checked = Some(checked);
                             item.disabled = Some(disabled);
+                            // CDXC:SessionChat 2026-10-31 DECISION:
+                            // GitHub #374, user: a mode the session can't use is greyed out, with how to turn it on in the menu's own words. The mode it is in right now is never greyed: the agent has just shown it can be used.
+                            // SEE-ALSO: server/src/session_chat_mode_availability.rs.
+                            if descriptor.id == "mode" && !checked {
+                                if let Some(mode) = params
+                                    .unavailable_modes
+                                    .iter()
+                                    .find(|mode| mode.value == choice.value)
+                                {
+                                    item.disabled = Some(true);
+                                    item.description = Some(mode.why.clone());
+                                }
+                            }
                             item.command = Some(map);
                             item
                         })

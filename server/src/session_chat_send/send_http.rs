@@ -337,6 +337,23 @@ async fn send_session_chat_message_attempt(
                 &text,
             )
         }
+        // CDXC:SessionChat 2026-10-31 WHY: a chat box send names its draft revision, and only the chat
+        // box has a thread to keep the message in. Everything else that sends here (`ghostex`, Slack,
+        // automations) gets the error to act on. See the DECISION in session_chat_send_failure.rs.
+        Err(error)
+            if draft_version.is_some()
+                && matches!(error.code, "dependencyUnavailable" | "composerNotCleared") =>
+        {
+            crate::session_chat_send_wake::queue_failed_composer_send(
+                state,
+                endpoint_path,
+                request_id,
+                &params,
+                &target,
+                &text,
+                error,
+            )
+        }
         Err(error) => domain_error_response(endpoint_path, request_id, error),
     }
 }

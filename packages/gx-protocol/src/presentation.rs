@@ -859,6 +859,10 @@ pub struct PresentationSession {
     /// The sidebar draws it as a red dot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_selection_failure: Option<String>,
+    /// A chat message that could not be sent, or that waits on a closed session: the same red dot,
+    /// and its tooltip (server/src/session_chat_send_failure.rs).
+    #[serde(default)]
+    pub send_failure: Option<String>,
     /// The session's OSC 7501 program status; absent when it has no records to show.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub program_status: Option<ProgramStatus>,

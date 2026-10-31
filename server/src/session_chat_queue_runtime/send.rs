@@ -745,6 +745,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
         }
     }
     let mut agent_restarting = false;
+    let mut heal_gave_up: Option<String> = None;
     if let (Err(error), Some(heal_steps)) = (&sent, heal_steps) {
         if heals_refused_send(error, source, terminal_agent.as_deref()) {
             match super::send_heal::heal_refused_send(
@@ -761,7 +762,7 @@ pub(crate) async fn send_session_chat_message_with_draft(
             {
                 super::send_heal::SendHeal::Delivered => sent = Ok(()),
                 super::send_heal::SendHeal::Restarting => agent_restarting = true,
-                super::send_heal::SendHeal::GaveUp => {}
+                super::send_heal::SendHeal::GaveUp(reason) => heal_gave_up = reason,
             }
         }
     }
@@ -830,15 +831,19 @@ pub(crate) async fn send_session_chat_message_with_draft(
                 message: error.message,
             });
         }
+        let reason = crate::session_chat_send_failure::send_failure_reason(
+            &error.message,
+            heal_gave_up.as_deref(),
+        );
         if error.failure == crate::session_chat_send::SessionChatSendFailure::ComposerNotCleared {
             return Err(DomainStateError {
                 code: "composerNotCleared",
-                message: error.message,
+                message: reason,
             });
         }
         return Err(DomainStateError {
             code: "dependencyUnavailable",
-            message: error.message,
+            message: reason,
         });
     }
     if let Some(command) = archive_command {
@@ -857,6 +862,16 @@ pub(crate) async fn send_session_chat_message_with_draft(
         &target.project_id,
         &target.session_id,
     );
+    // The user sent something new and the agent took it, so an older failure's card and dot are
+    // dealt with; its row keeps its own reason, Retry and Remove. A row the queue sent on its own
+    // says nothing about what the user has seen.
+    if source == SessionChatMessageSource::Composer {
+        crate::session_chat_send_failure::clear_send_failure(
+            state,
+            &target.project_id,
+            &target.session_id,
+        );
+    }
     /*
     CDXC:AgentScreenDetection 2026-08-19:
     The bytes reached zmx, which says nothing about the agent having received

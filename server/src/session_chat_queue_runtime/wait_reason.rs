@@ -210,7 +210,7 @@ fn screen_excerpt(screen_tail: &[String]) -> Option<String> {
         })
         .take(STUCK_SCREEN_ROWS)
         .map(|line| {
-            let row = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            let row = crate::session_chat_send_failure::displayable_reason(line);
             if row.chars().count() <= STUCK_SCREEN_ROW_CHARS {
                 row
             } else {
@@ -257,6 +257,19 @@ pub(super) fn stuck_notification_body(waited_minutes: i64, screen_tail: &[String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_stuck_row_quotes_no_terminal_codes_or_keys() {
+        let body = stuck_notification_body(
+            5,
+            &[
+                "Reply to: S90:P3lv0:G1c0r^[[201~".to_string(),
+                "key sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789".to_string(),
+            ],
+        );
+        assert!(!body.contains("[201~"), "{body}");
+        assert!(!body.contains("sk-ant"), "{body}");
+    }
 
     fn at(seconds: i64) -> DateTime<Utc> {
         DateTime::from_timestamp(1_800_000_000 + seconds, 0).unwrap()

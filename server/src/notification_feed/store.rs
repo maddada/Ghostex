@@ -16,6 +16,8 @@ pub(crate) const NOTIFICATION_FEED_KIND_FINISHED: &str = "finished";
 pub(crate) const NOTIFICATION_FEED_KIND_NEEDS_INPUT: &str = "needsInput";
 pub(crate) const NOTIFICATION_FEED_KIND_BELL: &str = "bell";
 pub(crate) const NOTIFICATION_FEED_KIND_CUSTOM: &str = "custom";
+/// A chat message could not be sent for good (session_chat_send_failure.rs), drawn red.
+pub(crate) const NOTIFICATION_FEED_KIND_SEND_FAILED: &str = "sendFailed";
 /// A banked usage reset of a saved account expires soon; clients draw it red.
 pub(crate) const NOTIFICATION_FEED_KIND_RESET_EXPIRING: &str = "resetExpiring";
 /// Ghostex used an expiring banked reset on its own.
@@ -64,9 +66,10 @@ pub(crate) fn insert_notification_feed_row(
 ) -> DomainResult<Value> {
     let id = uuid::Uuid::new_v4().to_string();
     let created_at = now_iso();
+    // A finished turn says nothing about a message that was not sent, so it never replaces that row.
     db.execute(
-        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL",
-        params![row.session_id],
+        "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND (kind <> ?2 OR ?3 = ?2)",
+        params![row.session_id, NOTIFICATION_FEED_KIND_SEND_FAILED, row.kind],
     )
     .map_err(sql_error)?;
     db.execute(
@@ -127,10 +130,23 @@ pub(crate) fn mark_session_notifications_read(
     let sql = if include_deferred {
         "UPDATE notification_feed SET readAt = ?1, deferredAt = NULL WHERE sessionId = ?2 AND readAt IS NULL"
     } else {
-        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL"
+        // Attention ending on its own says nothing about a message that was not sent.
+        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND deferredAt IS NULL AND kind <> 'sendFailed'"
     };
     db.execute(sql, params![now_iso(), session_id])
         .map_err(sql_error)
+}
+
+/// The failed send's row goes read once the failure is dealt with.
+pub(crate) fn mark_session_send_failure_read(
+    db: &Connection,
+    session_id: &str,
+) -> DomainResult<usize> {
+    db.execute(
+        "UPDATE notification_feed SET readAt = ?1 WHERE sessionId = ?2 AND readAt IS NULL AND kind = ?3",
+        params![now_iso(), session_id, NOTIFICATION_FEED_KIND_SEND_FAILED],
+    )
+    .map_err(sql_error)
 }
 
 /// Turns the session's unread turn-end row into a Needs input row with `body`, when its finished

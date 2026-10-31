@@ -145,6 +145,8 @@ pub struct SessionChatQueueSnapshot {
     pub retired_async_question_ids: Vec<String>,
     /// The question forms and pages put off "For later" (`session_chat_open_questions::read_later_ids`).
     pub later_question_ids: Vec<String>,
+    /// The modes this session's agent cannot use (session_chat_mode_availability.rs).
+    pub unavailable_modes: Vec<ghostex_gx_protocol::UnavailableMode>,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
     /// The session's resource index (`session_chat_resources::frame_index`), set only where a
@@ -175,6 +177,10 @@ impl SessionChatQueueSnapshot {
         target.insert(
             "laterQuestionIds".to_string(),
             json!(self.later_question_ids),
+        );
+        target.insert(
+            "unavailableModes".to_string(),
+            json!(self.unavailable_modes),
         );
         target.insert(
             "removedQuestionIds".to_string(),
@@ -222,6 +228,7 @@ impl SessionChatQueueSnapshot {
         revision
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
+        revision.push_str(&serde_json::to_string(&self.unavailable_modes).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
         revision.push_str(&self.resource_epoch.to_string());
         for prompt in &self.queue {
@@ -887,6 +894,9 @@ fn read_snapshot(
         later_question_ids: crate::session_chat_open_questions::read_later_ids(
             db, project_id, session_id,
         ),
+        unavailable_modes: crate::session_chat_mode_availability::read_unavailable_modes(
+            db, project_id, session_id,
+        ),
         removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
             db, project_id, session_id,
         ),
@@ -1450,6 +1460,7 @@ fn fail_prompt(
         params![prompt_id, project_id, session_id, reason, now_iso()],
     )
     .map_err(sql_error)?;
+    crate::session_chat_send_failure::report_failed_row(project_id, session_id, prompt_id, reason);
     Ok(())
 }
 
@@ -1575,7 +1586,8 @@ fn bounded_reason(reason: &str) -> String {
     if reason.is_empty() {
         return "The prompt could not be delivered.".to_string();
     }
-    reason.chars().take(300).collect()
+    // A row's reason is shown to the user, so it never carries a credential or terminal codes.
+    crate::session_chat_send_failure::displayable_reason(reason)
 }
 
 fn create_prompt_id() -> String {

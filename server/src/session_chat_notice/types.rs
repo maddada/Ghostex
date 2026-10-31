@@ -189,6 +189,27 @@ impl SessionChatTerminalNoticeAction {
         }
     }
 
+    /// Retry: the failed message goes back to the queue with nothing else changed.
+    pub fn retry_send() -> Self {
+        Self {
+            id: crate::session_chat_send_failure::ACTION_RETRY.to_string(),
+            label: "Retry".to_string(),
+            kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+            send: None,
+        }
+    }
+
+    /// Start fresh: the agent starts on a new conversation in this session, for a failed message
+    /// whose agent is gone and has no conversation to resume.
+    pub fn start_fresh_send() -> Self {
+        Self {
+            id: crate::session_chat_send_failure::ACTION_START_FRESH.to_string(),
+            label: "Start fresh".to_string(),
+            kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+            send: None,
+        }
+    }
+
     pub fn trust_and_remember() -> Self {
         Self {
             id: "trustAndRemember".to_string(),
@@ -272,6 +293,8 @@ pub struct SessionChatTerminalNotice {
     pub auto_trust: bool,
     /// A usage-limit notice while account recovery waits with every account full: what the card says about it (accounts/limit_wait.rs). Attached by `resolve_session_chat_terminal_notice`, never classified from the screen.
     pub account_wait: Option<Value>,
+    /// The failed queue row this card stands for (session_chat_send_failure.rs).
+    pub send_failure_prompt_id: Option<String>,
     /// Server-side delivery policy for this particular detected state.
     blocks_input: bool,
 }
@@ -301,6 +324,7 @@ impl SessionChatTerminalNotice {
             conversation_lock: None,
             auto_trust: false,
             account_wait: None,
+            send_failure_prompt_id: None,
             blocks_input: session_chat_notice_kind_blocks_input(kind),
         }
     }
@@ -528,6 +552,9 @@ impl SessionChatTerminalNotice {
         map.insert("detectedAt".to_string(), json!(self.detected_at));
         if let Some(wait) = self.account_wait.as_ref() {
             map.insert("accountWait".to_string(), wait.clone());
+        }
+        if let Some(prompt_id) = self.send_failure_prompt_id.as_deref() {
+            map.insert("sendFailure".to_string(), json!({ "promptId": prompt_id }));
         }
         if !self.choices.is_empty() {
             map.insert(

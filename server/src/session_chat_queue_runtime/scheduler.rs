@@ -560,9 +560,12 @@ impl SessionChatQueueRuntime {
                     head.map_or(Assessment::Skip, |head| hold(head, WaitReason::Asleep))
                 }
                 NotRunningHead::HoldAndWake(id) => Assessment::HoldAndWake(id.to_string()),
-                NotRunningHead::Wait => {
-                    head.map_or(Assessment::Skip, |head| hold(head, WaitReason::Closed))
-                }
+                NotRunningHead::Wait => head.map_or(Assessment::Skip, |head| {
+                    crate::session_chat_send_failure::note_held_on_closed_session(
+                        project_id, session_id, &head.id,
+                    );
+                    hold(head, WaitReason::Closed)
+                }),
             };
         }
         // CDXC:SessionChat 2026-09-05 DECISION:
@@ -751,7 +754,12 @@ impl SessionChatQueueRuntime {
             if notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_EXITED {
                 return deliver(head);
             }
-            if notice.blocks_queued_delivery() && !escape_closes_claude_panel(&composer, &notice) {
+            // CDXC:SessionChat 2026-10-31 WHY: a delivery verdict is about an earlier message, not this
+            // one. "Your message might not have reached the agent" (a guess from a quiet transcript)
+            // failed the next rows under its own title, without trying them, so they said nothing of
+            // what happened to them; reproduced on 2026-10-31 with a frozen Claude. The row goes to
+            // the send path, whose fresh read and recovery decide.
+            if notice_fails_a_row(&notice) && !escape_closes_claude_panel(&composer, &notice) {
                 // CDXC:SessionChat 2026-10-29 WHY: a cached notice never fails a row on its own. In the isolated repro, Claude's "Read outside the working directories" dialog was closed with Escape, the hooks said idle at once, and the cached screen still named the dialog, so the queued message was failed with the closed dialog's title. The screen is read fresh first and the row fails only if the notice is still there after that read.
                 if !self.notice_confirmed(key, &head.id, &notice.title, now) {
                     (self.compacting_refresher)(project_id, session_id, composer_agent.as_deref());
@@ -1192,6 +1200,13 @@ fn session_queue_key(project_id: &str, session_id: &str) -> String {
     format!("{project_id}\u{1f}{session_id}")
 }
 
+/// Whether a notice makes the next row fail untried. A delivery verdict never does: see
+/// CDXC:SessionChat 2026-10-31 where this is asked.
+fn notice_fails_a_row(notice: &crate::session_chat_notice::SessionChatTerminalNotice) -> bool {
+    notice.blocks_queued_delivery()
+        && notice.kind != crate::session_chat_notice::SESSION_CHAT_NOTICE_DELIVERY_FAILED
+}
+
 /// An account switch or recovery is under way, which owns the session's next input.
 fn account_recovery_waiting(session: &Value) -> bool {
     matches!(
@@ -1318,6 +1333,27 @@ mod tests {
             input_box_hold_log_due(&mut hold, "Q2", after(8 * 3600 + 60)),
             (60_000, true)
         );
+    }
+
+    #[test]
+    fn a_delivery_verdict_about_an_earlier_message_fails_no_row() {
+        use crate::session_chat_notice::{
+            SessionChatTerminalNotice, SessionChatTerminalNoticeSeverity,
+            SessionChatTerminalNoticeSource, SESSION_CHAT_NOTICE_DELIVERY_FAILED,
+            SESSION_CHAT_NOTICE_USAGE_LIMIT,
+        };
+        let notice = |kind| {
+            SessionChatTerminalNotice::new(
+                kind,
+                SessionChatTerminalNoticeSeverity::Warning,
+                SessionChatTerminalNoticeSource::Watchdog,
+                "Your message might not have reached the agent",
+            )
+        };
+        assert!(!notice_fails_a_row(&notice(
+            SESSION_CHAT_NOTICE_DELIVERY_FAILED
+        )));
+        assert!(notice_fails_a_row(&notice(SESSION_CHAT_NOTICE_USAGE_LIMIT)));
     }
 
     #[test]
