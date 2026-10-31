@@ -17,8 +17,13 @@ const MAX_DEPTH: usize = 16;
 
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
 
-/// How much of a refused attribute value an error quotes: Settings shows it.
-const MAX_SHOWN_VALUE_CHARS: usize = 40;
+/// How much of a refused element name, attribute name or attribute value an error quotes:
+/// Settings shows it.
+const MAX_SHOWN_CHARS: usize = 40;
+
+/// How much of the XML parser's complaint an error quotes: all of it, unless it quotes a long
+/// name from the icon.
+const MAX_SHOWN_XML_ERROR_CHARS: usize = 100;
 
 /// Elements kept (with their allowed attributes); any other SVG element is dropped with
 /// everything inside it.
@@ -101,7 +106,10 @@ pub(crate) fn sanitize_icon(text: &str) -> Result<String, String> {
     }
     let document = roxmltree::Document::parse(text).map_err(|error| match error {
         roxmltree::Error::DtdDetected => "it declares a DOCTYPE".to_string(),
-        error => format!("it isn't valid XML ({error})"),
+        error => format!(
+            "it isn't valid XML ({})",
+            crate::work_mode::cut(&error.to_string(), MAX_SHOWN_XML_ERROR_CHARS)
+        ),
     })?;
     let root = document.root_element();
     if root.tag_name().name() != "svg" || root.tag_name().namespace() != Some(SVG_NAMESPACE) {
@@ -148,7 +156,10 @@ fn write_node(node: roxmltree::Node, depth: usize, out: &mut String) -> Result<(
     }
     let name = node.tag_name().name();
     if REJECTED_ELEMENTS.contains(&name) || name.starts_with("animate") {
-        return Err(format!("it contains a <{name}> element"));
+        return Err(format!(
+            "it contains a <{}> element",
+            crate::work_mode::cut(name, MAX_SHOWN_CHARS)
+        ));
     }
     // Editor metadata in other namespaces, text, markers and the like are not drawn.
     if node.tag_name().namespace() != Some(SVG_NAMESPACE)
@@ -184,7 +195,10 @@ fn write_attributes(node: roxmltree::Node, out: &mut String, skip: &[&str]) -> R
             || name.eq_ignore_ascii_case("href")
             || name.to_ascii_lowercase().starts_with("on")
         {
-            return Err(format!("it has a {name} attribute"));
+            return Err(format!(
+                "it has a {} attribute",
+                crate::work_mode::cut(name, MAX_SHOWN_CHARS)
+            ));
         }
         if attribute.namespace().is_some() || skip.contains(&name) || !ATTRIBUTES.contains(&name) {
             continue;
@@ -198,7 +212,7 @@ fn write_attributes(node: roxmltree::Node, out: &mut String, skip: &[&str]) -> R
         if !allowed {
             return Err(format!(
                 "its {name} is \"{}\", which an icon can't use",
-                crate::work_mode::cut(value, MAX_SHOWN_VALUE_CHARS)
+                crate::work_mode::cut(value, MAX_SHOWN_CHARS)
             ));
         }
         out.push_str(&format!(" {name}=\"{}\"", escape(value)));

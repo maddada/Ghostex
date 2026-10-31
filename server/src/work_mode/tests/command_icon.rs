@@ -113,6 +113,16 @@ fn an_icon_that_could_reach_outside_itself_is_dropped() {
             svg(&format!(r#"<path d="M2 2h20v20H2z" fill="expression({})"/>"#, "a".repeat(5000))),
             "its fill is \"expression(aaaaaaaaaaaaaaaaaaaaaaaaaaaaa…\", which an icon can't use",
         ),
+        (
+            "a long refused element name quoted short",
+            svg(&format!("<animate{}/>", "a".repeat(5000))),
+            "it contains a <animateaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa…> element",
+        ),
+        (
+            "a long refused attribute name quoted short",
+            svg(&format!(r#"<path d="M2 2h20v20H2z" on{}="x()"/>"#, "a".repeat(5000))),
+            "it has a onaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa… attribute",
+        ),
         ("not SVG", r#"<html viewBox="0 0 24 24"/>"#.to_string(), "its root element isn't an SVG <svg>"),
         ("no namespace", r#"<svg viewBox="0 0 24 24"><path d="M2 2h20v20H2z"/></svg>"#.to_string(), "its root element isn't an SVG <svg>"),
         ("nothing drawn", svg("<g><path d=\"\"/></g>"), "it draws nothing"),
@@ -124,4 +134,11 @@ fn an_icon_that_could_reach_outside_itself_is_dropped() {
     assert!(sanitize_icon("not xml <")
         .unwrap_err()
         .starts_with("it isn't valid XML"));
+    let long_tag = sanitize_icon(&svg(&format!("<{}></g>", "a".repeat(5000)))).unwrap_err();
+    assert!(
+        long_tag.starts_with("it isn't valid XML (expected 'aaaa"),
+        "{long_tag}"
+    );
+    assert!(long_tag.ends_with("aaa…)"), "{long_tag}");
+    assert!(long_tag.chars().count() < 150, "{long_tag}");
 }
