@@ -62,6 +62,7 @@ fn codex_response_item(
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
     match payload.get("type").and_then(Value::as_str) {
         Some("reasoning") => {
@@ -192,6 +193,7 @@ fn codex_event_message(
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
     match payload.get("type").and_then(Value::as_str) {
         Some(CODEX_EVENT_TURN_ABORTED) => Some(transcript_message(
@@ -263,6 +265,7 @@ fn codex_event_message(
                     async_questions: None,
                     queued: false,
                     api_error: None,
+                    custom_message: None,
                 });
             }
             /*
@@ -312,6 +315,7 @@ fn codex_event_message(
                     async_questions: None,
                     queued: false,
                     api_error: None,
+                    custom_message: None,
                 });
             }
             /*
@@ -363,6 +367,7 @@ fn codex_event_message(
                     async_questions: None,
                     queued: false,
                     api_error: None,
+                    custom_message: None,
                 });
             }
             /*
@@ -390,6 +395,7 @@ fn codex_event_message(
                     async_questions: None,
                     queued: false,
                     api_error: None,
+                    custom_message: None,
                 });
             }
             // CDXC:SessionChat 2026-09-29 WHY:
@@ -407,6 +413,7 @@ fn codex_event_message(
                     async_questions: None,
                     queued: false,
                     api_error: None,
+                    custom_message: None,
                 });
             }
             let role = match item_type {
@@ -460,6 +467,7 @@ fn codex_event_message(
                 async_questions,
                 queued: false,
                 api_error: None,
+                custom_message: None,
             })
         }
         _ => None,

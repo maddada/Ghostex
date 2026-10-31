@@ -197,9 +197,10 @@ pub struct SettledPrefix {
     turn_order_max: (u8, Option<i64>),
     /// The forms the prefix redid (`hide_redone_forms`), which strip later replies too.
     redone: Vec<(String, String)>,
-    /// The prefix's last user row carries deferred work, which a following row without a byte
-    /// offset would fold into (`completed_work_render_items`).
-    last_user_deferred: bool,
+    /// The prefix's last turn opener (a prompt, or an OMP wake-up, `opens_omp_turn`) carries
+    /// deferred work, which a following row without a byte offset would fold into
+    /// (`completed_work_render_items`).
+    last_opener_deferred: bool,
     scans: Vec<ScanRow>,
     prefix_scans: Scans,
     /// `prefix_scans.found` settled with nothing answered.
@@ -293,9 +294,8 @@ fn restarts_response(projection: &TranscriptProjection) -> bool {
     let rendered = &projection.rendered;
     (1..rendered.len()).any(|at| {
         let row = &rendered[at];
-        row.role == ChatRole::User
-            && ((!row.queued && suppressed_turn_label(row).is_none())
-                || crate::transcript::turns::wakes_settled_agent(rendered, at))
+        (row.role == ChatRole::User && !row.queued && suppressed_turn_label(row).is_none())
+            || crate::transcript::turns::wakes_settled_agent(rendered, at)
     })
 }
 
@@ -421,6 +421,23 @@ fn projection_ids(projection: &TranscriptProjection) -> impl Iterator<Item = &st
         .map(|message| message.id.as_str())
 }
 
+/// The loaded sections a chunk's folds read, each once: every fold's own, and for a wake-up's fold
+/// the prompt's before it, which several wake-ups share (`CompletedWorkTurn::section`).
+fn deferred_keys(items: &[TranscriptItem]) -> Vec<&str> {
+    let mut keys: Vec<&str> = Vec::new();
+    for item in items {
+        if let TranscriptItem::CompletedWork { id, deferred, .. } = item {
+            let owner = deferred.as_ref().and_then(|work| work["startId"].as_str());
+            for key in std::iter::once(id.as_str()).chain(owner) {
+                if !keys.contains(&key) {
+                    keys.push(key);
+                }
+            }
+        }
+    }
+    keys
+}
+
 /// The newest summary turn of `projection` with a reply, numbered from its first.
 fn newest_reply_in(projection: &TranscriptProjection) -> Option<usize> {
     projection
@@ -497,7 +514,7 @@ impl SettledPrefix {
             opens_active_stretch(first)
         } else {
             opens_turn(first, self.key.summary)
-                && !(self.last_user_deferred && first.byte_offset.is_none())
+                && !(self.last_opener_deferred && first.byte_offset.is_none())
         };
         if order_key(first) <= self.order_max || !opens {
             return false;
@@ -618,14 +635,9 @@ impl SettledPrefix {
                     linked_tags: entry.linked_tags.clone(),
                 })
                 .collect(),
-            deferred: items
-                .iter()
-                .filter_map(|item| match item {
-                    TranscriptItem::CompletedWork { id, .. } => {
-                        Some((id.clone(), scope.deferred.get(id).cloned()))
-                    }
-                    _ => None,
-                })
+            deferred: deferred_keys(&items)
+                .into_iter()
+                .map(|id| (id.to_string(), scope.deferred.get(id).cloned()))
                 .collect(),
             used,
         };
@@ -667,13 +679,12 @@ impl SettledPrefix {
         self.ids.extend(ids);
         self.used.extend(built.chunk.used.iter().cloned());
         if !built.chunk.active {
-            if let Some(user) = projection
-                .rendered
-                .iter()
-                .rev()
-                .find(|message| message.role == ChatRole::User)
-            {
-                self.last_user_deferred = user.deferred_work.is_some();
+            let rendered = &projection.rendered;
+            if let Some(opener) = (0..rendered.len()).rev().find(|at| {
+                rendered[*at].role == ChatRole::User
+                    || crate::transcript::turns::opens_omp_turn(rendered, *at)
+            }) {
+                self.last_opener_deferred = rendered[opener].deferred_work.is_some();
             }
             self.turn_order_max = self.order_max;
         }
@@ -1033,7 +1044,7 @@ impl SettledPrefix {
             order_max: (0, None),
             turn_order_max: (0, None),
             redone,
-            last_user_deferred: false,
+            last_opener_deferred: false,
             scans: Vec::new(),
             prefix_scans: Scans::default(),
             prefix_askers: Vec::new(),

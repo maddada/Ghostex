@@ -76,6 +76,7 @@ fn hook_message(id: String, role: ChatRole, blocks: Vec<ChatBlock>, timestamp: i
         startup_delivery: None,
         api_error: None,
         mention_paths: None,
+        custom_message: None,
     }
 }
 

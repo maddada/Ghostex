@@ -8,8 +8,8 @@ use crate::transcript::foreign::{merge_messages_with, order_messages};
 use crate::transcript::image_markers::normalize_image_transcript_messages;
 use crate::transcript::local_command::{fold_shell_commands, normalize_local_command_messages};
 use crate::transcript::noise::{
-    drop_hidden_messages, fold_model_effort_pairs, is_command_turn, is_turn_seam,
-    suppressed_turn_label,
+    classify_suppressed_turn, drop_hidden_messages, fold_model_effort_pairs, is_command_turn,
+    is_turn_seam, SuppressedTurn,
 };
 use crate::transcript::side_question::fold_side_questions;
 use crate::transcript::tool_fold::fold_tool_messages;
@@ -37,16 +37,30 @@ pub fn fold_chat_transcript(messages: &[ChatMessage]) -> Vec<ChatMessage> {
         .map(|at| messages[at].id.as_str())
         .collect();
     fold_tool_messages(messages, &|message| {
-        suppressed_turn_label(message).is_some() && !wakes.contains(&message.id.as_str())
+        passes_over_tool_burst(message, wakes.contains(&message.id.as_str()))
     })
 }
 
-/// A completed turn's work, with the rows a deferred read brought back merged in.
+/// Whether the chat's tool fold ([`fold_chat_transcript`]) passes over `message`, which `wakes`
+/// says opened a turn: a harness marker or status that did not wake the agent. A row the chat
+/// never shows is dropped before the fold (`normalize_chat_transcript`), so it is passed over as
+/// well; gxserver, which reads rows as they were written, needs that. Never true for a row whose
+/// role `may_suppress_turn` (`noise.rs`) rules out.
+pub fn passes_over_tool_burst(message: &ChatMessage, wakes: bool) -> bool {
+    match classify_suppressed_turn(message) {
+        Some(SuppressedTurn::Hidden) => true,
+        Some(SuppressedTurn::Collapsed { .. } | SuppressedTurn::Status { .. }) => !wakes,
+        None => false,
+    }
+}
+
+/// A completed turn's work, with the rows a deferred read brought back merged in. `deferred` is the
+/// whole section the turn's `section` names; the turn takes its own part of it.
 pub fn completed_chat_work(
     turn: &CompletedWorkTurn,
     deferred: Option<&[ChatMessage]>,
 ) -> Vec<ChatMessage> {
-    let rows = match deferred {
+    let rows = match deferred.map(|section| section_part(turn, section)) {
         Some(deferred) => {
             let final_id = turn
                 .final_message
@@ -72,6 +86,30 @@ pub fn completed_chat_work(
         None => turn.work.clone(),
     };
     fold_chat_transcript(&normalize_chat_transcript(&rows))
+}
+
+/// The rows of a loaded section that belong to `turn`: after its opener (the prompt that owns the
+/// section is not in it), up to the OMP wake-up that opens the next turn.
+///
+/// CDXC:SessionChat 2026-10-30 WHY: gxserver folds a prompt and the OMP wake-ups the agent answered after it into one `deferredWork` stretch, the shape every chat core reads, so an older chat that does not open turns at OMP rows still reaches all of the work through the prompt. This core opens a turn at each such wake-up (`wakes_settled_agent`) and cuts the loaded stretch at them, so each fold holds its own work, whichever of their folds loaded it.
+pub(crate) fn section_part<'a>(
+    turn: &CompletedWorkTurn,
+    section: &'a [ChatMessage],
+) -> &'a [ChatMessage] {
+    let start = if turn.user.deferred_work.is_some() {
+        0
+    } else {
+        match section.iter().position(|row| row.id == turn.user.id) {
+            Some(at) => at + 1,
+            None => return &[],
+        }
+    };
+    let end = turn
+        .next_opener
+        .as_deref()
+        .and_then(|next| section[start..].iter().position(|row| row.id == next))
+        .map_or(section.len(), |at| start + at);
+    &section[start..end]
 }
 
 /// Everything the projection reads off one message list.

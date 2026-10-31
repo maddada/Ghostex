@@ -390,6 +390,7 @@ fn user_submission_record(text: String) -> Option<WatchdogRecord> {
         async_questions: None,
         queued: false,
         api_error: None,
+        custom_message: None,
     };
     (!is_noise_message(&probe)).then_some(WatchdogRecord::UserSubmission(text))
 }

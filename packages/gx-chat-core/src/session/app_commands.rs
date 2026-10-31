@@ -122,6 +122,7 @@ fn row(id: String, role: ChatRole, blocks: Vec<&str>, timestamp: Option<i64>) ->
         startup_delivery: None,
         api_error: None,
         mention_paths: None,
+        custom_message: None,
     }
 }
 

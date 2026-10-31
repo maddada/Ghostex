@@ -133,6 +133,7 @@ pub fn streaming_message(text: &str) -> ChatMessage {
         startup_delivery: None,
         api_error: None,
         mention_paths: None,
+        custom_message: None,
     }
 }
 
