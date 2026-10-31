@@ -114,6 +114,10 @@ impl WorkSource for LinearSource {
         id.split_once('-').map(|(team, _)| team.to_string())
     }
 
+    fn borrows_other_projects_credentials(&self) -> bool {
+        true
+    }
+
     fn parse_ref(&self, text: &str) -> Option<String> {
         normalize_linear_identifier(text)
     }

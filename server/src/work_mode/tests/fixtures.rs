@@ -142,11 +142,6 @@ pub(super) fn work_project(
     }
 }
 
-/// Whether any of the plan's Work list feeds is missing or stale.
-pub(super) fn work_feeds_stale_for(plan: &WorkFeedPlan) -> bool {
-    work_feeds_stale(plan)
-}
-
 /// The list without what depends on the clock (`generatedAt`).
 pub(super) fn stable_list(mut list: Value) -> Value {
     let object = list.as_object_mut().unwrap();

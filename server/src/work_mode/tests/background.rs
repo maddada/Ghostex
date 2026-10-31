@@ -5,7 +5,8 @@
 //! GitHub: the caches are seeded fresh, so a pass finds nothing due, or a test answers Linear's
 //! calls itself to see what the pass asks for.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::sync::Arc;
 
 use serde_json::{json, Map, Value};
 
@@ -153,7 +154,7 @@ fn the_work_list_feeds_are_stale_until_each_one_is_cached() {
     // Linear's feed is missing while every GitHub feed is cached.
     let projects = stale_projects("linear-missing");
     let plan = work_feed_plan(&projects);
-    assert!(work_feeds_stale_for(&plan));
+    assert!(work_feeds_stale(&plan));
     seed_work_feeds(
         &[],
         &[
@@ -168,13 +169,13 @@ fn the_work_list_feeds_are_stale_until_each_one_is_cached() {
         ],
         Some(VIEWER_LOGIN),
     );
-    assert!(work_feeds_stale_for(&plan));
+    assert!(work_feeds_stale(&plan));
     seed_work_feeds(
         &[(&plan.linear[0], LinearFeed { issues: Vec::new() })],
         &[],
         Some(VIEWER_LOGIN),
     );
-    assert!(!work_feeds_stale_for(&plan));
+    assert!(!work_feeds_stale(&plan));
 
     // One GitHub feed is missing while Linear's is cached.
     let projects = stale_projects("github-missing");
@@ -187,7 +188,7 @@ fn the_work_list_feeds_are_stale_until_each_one_is_cached() {
         )],
         Some(VIEWER_LOGIN),
     );
-    assert!(work_feeds_stale_for(&plan));
+    assert!(work_feeds_stale(&plan));
     seed_work_feeds(
         &[],
         &[(
@@ -196,7 +197,7 @@ fn the_work_list_feeds_are_stale_until_each_one_is_cached() {
         )],
         Some(VIEWER_LOGIN),
     );
-    assert!(!work_feeds_stale_for(&plan));
+    assert!(!work_feeds_stale(&plan));
 }
 
 /// A work-mode project in a checkout with no GitHub remote, so the pass finds no GitHub reads due.
@@ -467,4 +468,247 @@ fn the_details_of_a_linear_ticket_use_another_projects_key_when_its_own_project_
     );
     assert_eq!(read["ticket"]["title"], json!("Read with the other key"));
     assert_eq!(read["errors"], json!([]));
+}
+
+/// A project in workspace `ws-bg-scope`, whose own key is the workspace's: a shared key exists
+/// too, so a scope that lost its workspace id would read with the shared one instead.
+fn workspace_key_setup(
+    project_id: &str,
+) -> (tempfile::TempDir, crate::paths::GxserverPaths, Value) {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    store_linear_api_key(
+        &paths,
+        LinearKeyScope::Shared,
+        Some("lin-key-bg-scope-shared"),
+    )
+    .unwrap();
+    store_linear_api_key(
+        &paths,
+        LinearKeyScope::Workspace("ws-bg-scope"),
+        Some("lin-key-bg-scope-workspace"),
+    )
+    .unwrap();
+    let project = json!({
+        "projectId": project_id,
+        "name": project_id,
+        "path": format!("/gx-char/bg/scope/{project_id}"),
+        "launchSettings": { "workspaceId": "ws-bg-scope" },
+    });
+    (temp, paths, project)
+}
+
+#[test]
+fn a_projects_ticket_scope_reads_its_workspaces_key() {
+    let (_temp, paths, project) = workspace_key_setup("PBgScopeList");
+    let input = WorkProjectInput {
+        credentials: Arc::new(WorkCredentials::new(&paths)),
+        project_id: "PBgScopeList".to_string(),
+        name: "PBgScopeList".to_string(),
+        path: project["path"].as_str().map(str::to_string),
+        project,
+        sessions: Vec::new(),
+        repo: None,
+        workspace_id: "ws-bg-scope".to_string(),
+        tracker: WorkSourceId::Linear,
+    };
+    let mut plan = WorkFeedPlan::default();
+
+    work_source(WorkSourceId::Linear).plan_list(std::slice::from_ref(&input), &mut plan);
+
+    assert_eq!(
+        requests_by_key(&plan).into_keys().collect::<Vec<_>>(),
+        vec![linear_key_fingerprint("lin-key-bg-scope-workspace")]
+    );
+}
+
+#[test]
+fn the_card_pass_reads_a_project_with_its_workspaces_key() {
+    let (_temp, paths, project) = workspace_key_setup("PBgScopePass");
+    // Fresh team keys for both keys, so the pass asks Linear nothing whichever key it picks.
+    for key in ["lin-key-bg-scope-shared", "lin-key-bg-scope-workspace"] {
+        seed_linear_team_keys(linear_key_fingerprint(key), &["ACM"]);
+    }
+    let credentials = WorkCredentials::new(&paths);
+    let projects: HashMap<&str, &Value> = HashMap::from([("PBgScopePass", &project)]);
+
+    work_source(WorkSourceId::Linear).refresh_tickets(&TicketPass {
+        credentials: &credentials,
+        projects: &projects,
+        sessions: &[],
+    });
+
+    assert_eq!(
+        project_linear_key("PBgScopePass"),
+        Some(linear_key_fingerprint("lin-key-bg-scope-workspace"))
+    );
+}
+
+/// A source that keeps every default and reads only with project `PBgBorrowKey`'s credentials.
+struct OneProjectSource;
+
+impl WorkSource for OneProjectSource {
+    fn name(&self) -> std::borrow::Cow<'static, str> {
+        "One project".into()
+    }
+    fn link_kind(&self) -> std::borrow::Cow<'static, str> {
+        unreachable!()
+    }
+    fn key(&self, _: &str, _: &str) -> String {
+        unreachable!()
+    }
+    fn label(&self, _: &str) -> String {
+        unreachable!()
+    }
+    fn untitled(&self, _: &str) -> String {
+        unreachable!()
+    }
+    fn keys_name_a_repo(&self) -> bool {
+        unreachable!()
+    }
+    fn invalid_ref(&self, _: &str) -> String {
+        unreachable!()
+    }
+    fn parse_ref(&self, _: &str) -> Option<String> {
+        unreachable!()
+    }
+    fn tickets_in_branch(&self, _: &TicketScope, _: &str) -> Vec<String> {
+        unreachable!()
+    }
+    fn branch_names(&self, _: &str, _: &str) -> bool {
+        unreachable!()
+    }
+    fn tickets_in_pull_request(&self, _: &[String], _: &PullRequestText) -> Vec<String> {
+        unreachable!()
+    }
+    fn plan_list(&self, _: &[WorkProjectInput], _: &mut WorkFeedPlan) {
+        unreachable!()
+    }
+    fn list_stale(&self, _: &WorkFeedPlan) -> bool {
+        unreachable!()
+    }
+    fn refresh_list(&self, _: &WorkFeedPlan, _: bool) {
+        unreachable!()
+    }
+    fn refresh_tickets(&self, _: &TicketPass) {
+        unreachable!()
+    }
+    fn known_keys(&self, _: &TicketScope, _: &WorkFeedPlan) -> Vec<String> {
+        unreachable!()
+    }
+    fn list_holds_every_open_ticket(&self) -> bool {
+        unreachable!()
+    }
+    fn status_follows_pull_request(&self) -> bool {
+        unreachable!()
+    }
+    fn can_read(&self, scope: &TicketScope) -> bool {
+        scope.project_id == "PBgBorrowKey"
+    }
+    fn cached_list(&self, _: &[WorkProjectInput], _: &WorkFeedPlan) -> SourceList {
+        unreachable!()
+    }
+    fn cached_ticket(&self, _: &TicketScope, _: &str) -> TicketRead {
+        unreachable!()
+    }
+    fn read_detail(&self, _: &TicketScope, _: &str, _: bool) -> Result<Value, String> {
+        unreachable!()
+    }
+    fn create(&self, _: &TicketScope, _: &TicketDraft) -> Result<CreatedTicket, String> {
+        unreachable!()
+    }
+    fn branch_for(&self, _: &TicketScope, _: &str) -> Result<String, String> {
+        unreachable!()
+    }
+}
+
+#[test]
+fn only_linear_reads_the_details_with_another_projects_credentials() {
+    let projects = vec![
+        work_project(
+            project("PBgBorrowNone", "/gx-char/bg/borrow/none"),
+            Vec::new(),
+            None,
+            "acme/borrow-none",
+            WorkSourceId::Linear,
+        ),
+        work_project(
+            project("PBgBorrowKey", "/gx-char/bg/borrow/key"),
+            Vec::new(),
+            Some("lin-key-bg-borrow"),
+            "acme/borrow-key",
+            WorkSourceId::Linear,
+        ),
+    ];
+    let cwd = Some("/gx-char/bg/borrow/none");
+    let scope_of = |rules: &dyn WorkSource| {
+        let scope = source_scope(rules, projects.first(), &projects, cwd);
+        (scope.project_id.to_string(), scope.cwd.map(str::to_string))
+    };
+
+    assert_eq!(
+        scope_of(work_source(WorkSourceId::Linear)),
+        ("PBgBorrowKey".to_string(), cwd.map(str::to_string))
+    );
+    assert_eq!(
+        scope_of(&OneProjectSource),
+        ("PBgBorrowNone".to_string(), cwd.map(str::to_string))
+    );
+}
+
+#[test]
+fn a_linear_feed_request_never_prints_its_key() {
+    let request = LinearFeedRequest {
+        api_key: "lin-key-bg-debug-secret".to_string(),
+        team_keys: ["ACM".to_string()].into(),
+    };
+    let printed = format!("{request:?}");
+    assert!(!printed.contains("lin-key-bg-debug-secret"), "{printed}");
+    assert!(printed.contains("ACM"), "{printed}");
+}
+
+#[test]
+fn the_card_pass_knows_a_sessions_repo_before_linear_is_asked() {
+    let _gh = crate::session_git_status::assume_gh_cli_signed_out_for_test();
+    let checkout = tempfile::tempdir().expect("tempdir");
+    let cwd = checkout.path().to_str().unwrap().to_string();
+    for args in [
+        &["init", "-q"][..],
+        &[
+            "remote",
+            "add",
+            "origin",
+            "https://github.com/acme/order-check.git",
+        ],
+    ] {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(&cwd)
+            .status()
+            .expect("git");
+        assert!(status.success());
+    }
+    let repo_when_asked = std::rc::Rc::new(std::cell::RefCell::new(None));
+    let _linear = answer_linear_for_test({
+        let (repo_when_asked, cwd) = (repo_when_asked.clone(), cwd.clone());
+        move |_query, _variables| {
+            *repo_when_asked.borrow_mut() = Some(cached_work_repo(&cwd));
+            Ok(json!({ "data": { "issues": { "nodes": [] } } }))
+        }
+    });
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let api_key = "lin-key-bg-pass-repo-first";
+    store_linear_api_key(&paths, LinearKeyScope::Shared, Some(api_key)).unwrap();
+    seed_linear_team_keys(linear_key_fingerprint(api_key), &["ACM"]);
+    let project = json!({ "projectId": "PBgPassRepo", "name": "PBgPassRepo", "path": cwd });
+    let sessions = vec![linear_session("PBgPassRepo", "S1", &["ACM-3"])];
+    remember_project_linear_key("PBgPassRepo", Some(linear_key_fingerprint(api_key)));
+
+    refresh_work_caches(&paths, std::slice::from_ref(&project), &sessions);
+
+    assert_eq!(
+        *repo_when_asked.borrow(),
+        Some(Some("acme/order-check".to_string()))
+    );
 }

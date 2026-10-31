@@ -246,6 +246,15 @@ pub(crate) trait WorkSource: Sync {
     fn team_of(&self, _id: &str) -> Option<String> {
         None
     }
+    /// Whether the details page may read with another project's credentials when the item's own
+    /// project has none it can read with. Only Linear does, so a project without its own key can
+    /// still open a ticket; a source's credentials otherwise never leave their project.
+    ///
+    /// CDXC:WorkMode 2026-10-31 DECISION:
+    /// The repository owner, on the details fallback: "That's today's Linear behaviour and it should stay for Linear, but the contract says a command never gets another workspace's secrets. Please make this fallback Linear's own, not something every source inherits."
+    fn borrows_other_projects_credentials(&self) -> bool {
+        false
+    }
 
     /// `acm-12` → `ACM-12`, `#218` → `218`; `None` when the text names none of its tickets.
     fn parse_ref(&self, text: &str) -> Option<String>;

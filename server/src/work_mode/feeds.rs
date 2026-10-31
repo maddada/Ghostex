@@ -165,10 +165,21 @@ fn refresh_lock() -> &'static Mutex<()> {
 }
 
 /// What one Linear key is asked for: the viewer's issues plus these teams' open ones.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct LinearFeedRequest {
     pub(crate) api_key: String,
     pub(crate) team_keys: BTreeSet<String>,
+}
+
+/// Never prints the key.
+impl std::fmt::Debug for LinearFeedRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LinearFeedRequest")
+            .field("api_key", &"••••")
+            .field("team_keys", &self.team_keys)
+            .finish()
+    }
 }
 
 impl LinearFeedRequest {

@@ -95,11 +95,11 @@ pub(crate) fn cached_detail(
     value
 }
 
-/// The scope a source reads the details with: the project's own, or, when the source cannot read
-/// with the project's credentials (no Linear key of its own), the first project's it can read
-/// with, in the project's checkout.
-fn source_scope<'a>(
-    source: WorkSourceId,
+/// The scope a source reads the details with, in the project's checkout: the project's own, or,
+/// for a source that borrows credentials (`borrows_other_projects_credentials`) and cannot read
+/// with the project's (no Linear key of its own), the first project's it can read with.
+pub(crate) fn source_scope<'a>(
+    rules: &dyn WorkSource,
     project: Option<&'a WorkProjectInput>,
     projects: &'a [WorkProjectInput],
     cwd: Option<&'a str>,
@@ -108,14 +108,14 @@ fn source_scope<'a>(
         cwd,
         ..owner.ticket_scope()
     };
-    let rules = work_source(source);
     match project {
-        Some(own) => project
+        Some(own) if rules.borrows_other_projects_credentials() => project
             .into_iter()
             .chain(projects)
             .map(in_checkout)
             .find(|scope| rules.can_read(scope))
             .unwrap_or_else(|| in_checkout(own)),
+        Some(own) => in_checkout(own),
         None => TicketScope {
             cwd,
             ..TicketScope::default()
@@ -175,7 +175,8 @@ pub(crate) fn read_work_item(
         .or_else(|| projects.first());
     let cwd = project.and_then(|input| input.path.clone());
     let gh = gh_cli_is_available();
-    let scope_for = |source: WorkSourceId| source_scope(source, project, projects, cwd.as_deref());
+    let scope_for =
+        |source: WorkSourceId| source_scope(work_source(source), project, projects, cwd.as_deref());
 
     // The PR to read: the item's folded one, or the request's own.
     let mut pull_request_selector = item
