@@ -2,6 +2,53 @@
 
 ## Unreleased
 
+## 10.42.0 - 2026-11-01
+
+**Ghostex 10.42.0 is out.** The Unified sidebar is easier to filter and organize, chats show failed sends where they happened, sessions have shareable links, and the new Interface page lets you preview and apply your fonts. Update Ghostex on remote computers too so session links and handoff work across them.
+
+### 🧭 Sidebar and sessions
+
+- **The Unified sidebar has a filter bar with chips** for projects, machines, Spaces and session search. Search in the dropdown for a project or session, remove one chip at a time, or open the count for chips that do not fit.
+- **Remove a project from the Unified list with its row's X,** then reopen it from Recent Projects when you need it. Its sessions keep running while the project is out of sight.
+- **The Unified sidebar scales to more sessions:** group sessions by project, arrange project groups, remember filters and folded shelves, and use its own hover actions. Machine tabs scroll when many computers are connected.
+- **Copy Link gives a session its own shareable link.** Opening one focuses the session on this computer or a connected machine, asks before starting its agent, and can offer to restore a closed session. Windows and Linux open `ghostex://` links too.
+- **`ghostex://terminal` links are removed** because they ran commands with no prompt.
+- **Handoff / Export has a simpler dialog** for sending a conversation to an agent in this project, another project or another computer, or saving it as Markdown. Drag a session to a Project sidebar project to hand it off there.
+
+### 💬 Chat and worktrees
+
+- **Failed sends stay in the thread with the real reason, Retry and Fix it.** The session gets a red dot and a Not sent notification until you deal with it; a mode that the session cannot use is greyed out with instructions.
+- **A queued message or answer that stops progressing says what is known and can be removed,** instead of spinning or claiming it is still waiting.
+- **The new chat's worktree tray can use a new or existing worktree,** creating a new branch when you send the first message and remembering your choice per project.
+- **The `$` picker includes enabled Claude Code plugin skills and commands** under their `plugin:name` names, thanks to @roypadina.
+- **Chat Resources covers the whole conversation,** and forms and charts open in a floating view where you can read or answer them. The Resources list calls coordinator pages Worker pages.
+- **Accounts & limits marks the active account and shows a problem on its row,** with Reconnect when it helps. The Usage panel has a clearer layout and shows when its limits were updated.
+
+### 🎨 Interface and integrations
+
+- **Settings > Interface puts App font, Monospace font, Text strength and Default chat zoom together.** Pick a font, see it in the live preview, then press Apply. The monospace choice reaches terminals, code, diffs and chat code blocks; sidebar icons follow Sidebar zoom.
+- **Colourfulness reaches Full,** so a dark sidebar and work area can take the theme colour you picked.
+- **Settings > Integrations groups each computer use, hidden screen and embedded browser tool with its skill and permissions,** so their install and setup controls stay together.
+- **A coordinator can use Low effort** when its agent offers it. The start level stays High.
+- **Kanban cards show Blocked by and Blocks,** including links added by an agent, and refuse a dependency loop.
+- **Linear pull request links are accepted only when they are GitHub pull request links.**
+- **Work tickets explain invalid icons and unfinished answers more clearly,** thanks to @lardissone.
+
+### 📱 On the phone
+
+- **Chat shows failed sends and unavailable modes like the computer,** and its Theme page is now Interface.
+- **Android terminals allocate scrollback as it is used,** reducing memory pressure when several terminals stay warm.
+- **iOS scrollback uses the selected row limit correctly,** so a terminal can retain the history you chose.
+
+### 🩹 Fixes and polish
+
+- **Linux AppImages start on a clean offline computer,** and the packages support Ubuntu 22.04. When the embedded browser cannot download while offline, its window explains that and retries.
+- **Windows explains when its session host is missing or blocked,** thanks to @ilmimris.
+- **Remote connections wait through slow responses and repair a missing or broken session runtime** when they reconnect.
+- **Ghostex keeps settings and saved remote machines after a crash or power loss.**
+- **A Claude session in Bypass Permissions mode continues past its startup warning,** and the chat's Alt+S shortcut stashes a prompt again.
+- **Browser tools stay on pages in their agent's project,** and Kanban blockers and browser tabs receive clearer help.
+
 ## 10.41.0 - 2026-10-30
 
 **Ghostex 10.41.0 is out.** A Unified sidebar lists every session from every computer, Space and project in one list, the agent button remembers its pick per project, the voice agent can stop sessions and start coordinators, Dictate says why it failed and can use an OpenAI key, and queued messages that got stuck now unstick themselves. Update Ghostex on your remote computers too: several fixes live in the background service.
