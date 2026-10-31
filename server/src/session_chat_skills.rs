@@ -609,11 +609,11 @@ fn is_ignored_directory(name: &str) -> bool {
 }
 
 /// The plugins the session's Claude Code loads, `(plugin name, install folder)`: each entry of
-/// `installed_plugins.json` that applies to the session's folder and that `enabledPlugins` leaves
-/// on (local settings over project settings over the user's, then the plugin's `defaultEnabled`).
+/// `installed_plugins.json` that applies to the session's folder and that `enabledPlugins` turns
+/// on (local settings over project settings over the user's). A plugin none of them names is off.
 ///
 /// CDXC:AgentSkills 2026-10-29 WHY:
-/// Claude Code loads a plugin's skills and commands only from the `installPath` of an enabled plugin and names them `/plugin:name`. Walking all of `plugins/cache` listed superseded versions, disabled plugins and leftover clone folders under bare names that two plugins can share, and never listed `commands/*.md`. Plugins are installed per config folder (`CLAUDE_CONFIG_DIR`), so the session's own folder is read.
+/// Claude Code loads a plugin's skills and commands only from the `installPath` of an enabled plugin and names them `/plugin:name`. Walking all of `plugins/cache` listed superseded versions, disabled plugins and leftover clone folders under bare names that two plugins can share, and never listed `commands/*.md`. Plugins are installed per config folder (`CLAUDE_CONFIG_DIR`), so the session's own folder is read. Checked against Claude Code 2.1.312's own list: a plugin missing from `enabledPlugins` stays unloaded even when its manifest says `defaultEnabled` (that key only matters when it is installed), so it may not be listed.
 fn enabled_claude_plugins(
     claude_home: &Path,
     project_path: Option<&Path>,
@@ -648,11 +648,7 @@ fn enabled_claude_plugins(
                 .rev()
                 .flatten()
                 .find_map(|settings| settings["enabledPlugins"][key.as_str()].as_bool())
-                .unwrap_or_else(|| {
-                    read(install.join(".claude-plugin").join("plugin.json"))
-                        .and_then(|manifest| manifest["defaultEnabled"].as_bool())
-                        != Some(false)
-                });
+                .unwrap_or(false);
             let name = key.split('@').next()?.to_string();
             enabled.then_some((name, install))
         })
@@ -767,6 +763,7 @@ fn ghostex_skill_description(skill_name: &str) -> Option<String> {
 mod tests {
     use std::{fs, path::Path};
 
+    use serde_json::{json, Value};
     use tempfile::tempdir;
 
     use super::read_session_chat_skills;
@@ -845,7 +842,7 @@ mod tests {
         .expect("installed plugins");
         fs::write(
             config.join("settings.json"),
-            r#"{"enabledPlugins": {"off@market": false}}"#,
+            r#"{"enabledPlugins": {"tools@market": true, "off@market": false, "elsewhere@market": true}}"#,
         )
         .expect("settings");
         let paths = get_gxserver_paths(Some(home.path().to_path_buf()));
@@ -858,6 +855,90 @@ mod tests {
             .filter_map(|skill| skill["name"].as_str())
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["tools:alpha", "tools:beta"]);
+    }
+
+    /// One user-scope plugin per `(name, skills, manifest)` under `config`, listed for Claude with
+    /// these user `enabledPlugins`.
+    fn claude_plugin_rows(
+        plugins: &[(&str, &[&str], Value)],
+        enabled: Value,
+        project: Option<&Path>,
+    ) -> Vec<String> {
+        let home = tempdir().expect("home");
+        let config = home.path().join("profile");
+        let mut installed = serde_json::Map::new();
+        for (name, skills, manifest) in plugins {
+            let install = config.join("plugins/cache/market").join(name).join("1.0.0");
+            for skill in *skills {
+                add_skill(&install.join("skills"), skill);
+            }
+            fs::create_dir_all(install.join(".claude-plugin")).expect("manifest folder");
+            fs::write(
+                install.join(".claude-plugin/plugin.json"),
+                manifest.to_string(),
+            )
+            .expect("manifest");
+            installed.insert(
+                format!("{name}@market"),
+                json!([{"scope": "user", "installPath": install}]),
+            );
+        }
+        fs::write(
+            config.join("plugins/installed_plugins.json"),
+            json!({"version": 2, "plugins": installed}).to_string(),
+        )
+        .expect("installed plugins");
+        fs::write(
+            config.join("settings.json"),
+            json!({"enabledPlugins": enabled}).to_string(),
+        )
+        .expect("settings");
+        let paths = get_gxserver_paths(Some(home.path().to_path_buf()));
+        read_session_chat_skills(&paths, "claude", project, Some(&config))["skills"]
+            .as_array()
+            .expect("claude skills")
+            .iter()
+            .filter_map(|skill| skill["name"].as_str().map(str::to_string))
+            .collect()
+    }
+
+    #[test]
+    fn a_claude_plugin_stays_off_unless_enabled_plugins_turns_it_on() {
+        let project = tempdir().expect("project");
+        fs::create_dir_all(project.path().join(".claude")).expect("project settings folder");
+        fs::write(
+            project.path().join(".claude/settings.json"),
+            r#"{"enabledPlugins": {"project-on@market": true, "project-off@market": false}}"#,
+        )
+        .expect("project settings");
+        fs::write(
+            project.path().join(".claude/settings.local.json"),
+            r#"{"enabledPlugins": {"local-off@market": false}}"#,
+        )
+        .expect("local settings");
+        let rows = claude_plugin_rows(
+            &[
+                ("on", &["a"], json!({"name": "on"})),
+                ("unnamed", &["b"], json!({"name": "unnamed"})),
+                (
+                    "default-on",
+                    &["c"],
+                    json!({"name": "default-on", "defaultEnabled": true}),
+                ),
+                ("versioned", &["d"], json!({"name": "versioned"})),
+                ("project-on", &["e"], json!({"name": "project-on"})),
+                ("project-off", &["f"], json!({"name": "project-off"})),
+                ("local-off", &["g"], json!({"name": "local-off"})),
+            ],
+            json!({
+                "on@market": true,
+                "versioned@market": ["1.0.0"],
+                "project-off@market": true,
+                "local-off@market": true,
+            }),
+            Some(project.path()),
+        );
+        assert_eq!(rows, vec!["on:a", "project-on:e"]);
     }
 }
 
