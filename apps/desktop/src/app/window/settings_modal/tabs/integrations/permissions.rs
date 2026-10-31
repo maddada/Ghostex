@@ -1,5 +1,5 @@
-//! The Accessibility and Screen Recording rows of SpaceO and Fast Computer & Browser Use in the
-//! Desktop control section, and the re-checks that keep their status live while the page is
+//! The Accessibility and Screen Recording rows of SpaceO and Fast Computer & Browser Use in their
+//! tool sections (tool_sections.rs), and the re-checks that keep their status live while the page is
 //! open (the grant flow itself is in helpers/os_cli/tool_permissions.rs).
 
 use super::*;

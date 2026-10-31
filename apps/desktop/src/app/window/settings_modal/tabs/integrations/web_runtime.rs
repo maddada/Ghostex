@@ -3,14 +3,14 @@
 //!
 //! CDXC:CefRuntime 2026-10-29 DECISION:
 //! User: "A small row in Settings > Integrations". The web runtime left the Extensions store, so
-//! its management lives here as one compact row beside the Tools; it installs from the first view
+//! its management lives here as one compact row beside the Tools, in the Embedded browser section (tool_sections.rs); it installs from the first view
 //! that needs it too (CDXC:CefRuntime 2026-09-28 in app/helpers/web_runtime.rs). The status comes
 //! from plugins_modal.rs (`pluginSettingsStatus`); the actions are its `reinstallPlugin`,
 //! `uninstallPlugin` and `cancelPluginChange` handlers (delayed_send/app_modal_sidebar_command/
 //! settings_tools.rs).
 use super::super::super::fields::{
     ListItemStatus, SizedButtonSize, SizedButtonVariant, settings_icon, settings_list_item,
-    settings_section, settings_sized_button, settings_square_button,
+    settings_sized_button, settings_square_button,
 };
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::post_store_message;
@@ -22,7 +22,7 @@ use gpui_component::h_flex;
 use serde_json::{Value, json};
 
 const TITLE: &str = "Chromium runtime (CEF)";
-const DESCRIPTION: &str = "The optional web runtime for the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.";
+pub(super) const DESCRIPTION: &str = "The optional web runtime for the Browser, the VS Code view, website and extension views, and HTML files in Files. It also installs from the first view that needs it.";
 
 /// The row's detail line: the status label, the version, a change waiting for the next launch, and
 /// the last error.
@@ -72,11 +72,11 @@ impl IntegrationsTab {
     }
 
     /// The web runtime lives on this computer, so another machine's page has no row for it.
-    pub(super) fn web_runtime_section(
+    pub(super) fn web_runtime_status_row(
         &mut self,
         p: &SettingsPalette,
         cx: &mut Context<Self>,
-    ) -> Option<AnyElement> {
+    ) -> AnyElement {
         let runtime = self
             .store
             .read(cx)
@@ -84,7 +84,7 @@ impl IntegrationsTab {
             .and_then(|status| status["plugins"].as_array())
             .and_then(|plugins| plugins.iter().find(|plugin| plugin["id"] == "cef"))
             .cloned();
-        let row = match runtime {
+        match runtime {
             None => settings_list_item(
                 p,
                 None,
@@ -98,9 +98,7 @@ impl IntegrationsTab {
                 None,
             ),
             Some(runtime) => self.web_runtime_row(p, &runtime, cx),
-        };
-        settings_section(p, "Web runtime", Some(DESCRIPTION.into()), None, vec![row])
-            .map(IntoElement::into_any_element)
+        }
     }
 
     fn web_runtime_row(

@@ -1,6 +1,7 @@
-//! SpaceO's rows in the Desktop control section, laid out like Fast Computer & Browser Use's: the SpaceO row
-//! (Install, or Update, Reinstall and Uninstall once installed), its job progress, its install
-//! command, and its Accessibility and Screen Recording rows (permissions.rs).
+//! SpaceO's install rows, laid out like Fast Computer & Browser Use's: the SpaceO row (Install, or
+//! Update, Reinstall and Uninstall once installed), its job progress and its install command.
+//! tool_sections.rs puts its skill and its Accessibility and Screen Recording rows (permissions.rs)
+//! after them.
 
 use super::*;
 
@@ -32,123 +33,111 @@ impl IntegrationsTab {
         p: &SettingsPalette,
         status: Option<&Value>,
         checking: bool,
-        show_spaceo: bool,
-        show_permissions: bool,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let name = spaceo_name();
         let installed = flag(status, "spaceoInstalled") == Some(true);
         let job = spaceo_job(status);
         let mut rows = Vec::new();
-        if show_spaceo {
-            let controls = if installed {
-                self.spaceo_installed_actions(p, status, checking, &job, cx)
+        let controls = if installed {
+            self.spaceo_installed_actions(p, status, checking, &job, cx)
+        } else {
+            let disabled = checking || job.running;
+            let reason = if checking {
+                format!("{name} status is being checked.")
             } else {
-                let disabled = checking || job.running;
-                let reason = if checking {
-                    format!("{name} status is being checked.")
+                job.running_reason.clone().unwrap_or_default()
+            };
+            let button = settings_button(
+                p,
+                "integrations-spaceo-install",
+                if job.running {
+                    format!("Installing {name}…")
                 } else {
-                    job.running_reason.clone().unwrap_or_default()
-                };
-                let button = settings_button(
-                    p,
-                    "integrations-spaceo-install",
-                    if job.running {
-                        format!("Installing {name}…")
-                    } else {
-                        format!("Install {name}")
-                    },
-                    Some(if job.running {
-                        ICON_LOADER
-                    } else {
-                        ICON_DOWNLOAD
-                    }),
-                    ButtonVariant::Outline,
-                    disabled,
-                    Some(reason.into()),
-                    |page: &mut Self, _window, cx| page.post("installSpaceo", cx),
-                    cx,
-                );
-                // The plan is the enabled button's tooltip; a disabled one shows its reason.
-                vec![match job.plan.clone().filter(|_| !disabled) {
-                    Some(plan) => div()
-                        .id("integrations-spaceo-install-plan")
-                        .tooltip(tooltip_text(plan))
-                        .child(button)
-                        .into_any_element(),
-                    None => button,
-                }]
-            };
-            let installed_prefix = if installed {
-                match text(status, "spaceoVersion") {
-                    Some(version) => format!("Version {version} installed. "),
-                    None => "Installed. ".to_string(),
-                }
+                    format!("Install {name}")
+                },
+                Some(if job.running {
+                    ICON_LOADER
+                } else {
+                    ICON_DOWNLOAD
+                }),
+                ButtonVariant::Outline,
+                disabled,
+                Some(reason.into()),
+                |page: &mut Self, _window, cx| page.post("installSpaceo", cx),
+                cx,
+            );
+            // The plan is the enabled button's tooltip; a disabled one shows its reason.
+            vec![match job.plan.clone().filter(|_| !disabled) {
+                Some(plan) => div()
+                    .id("integrations-spaceo-install-plan")
+                    .tooltip(tooltip_text(plan))
+                    .child(button)
+                    .into_any_element(),
+                None => button,
+            }]
+        };
+        let installed_prefix = if installed {
+            match text(status, "spaceoVersion") {
+                Some(version) => format!("Version {version} installed. "),
+                None => "Installed. ".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        rows.push(integration_row(
+            p,
+            "spaceo",
+            Some(if checking {
+                ListItemStatus::Neutral
+            } else if installed {
+                ListItemStatus::Success
             } else {
-                String::new()
-            };
+                ListItemStatus::Warning
+            }),
+            Some(ICON_DEVICE_LAPTOP),
+            RowTitle {
+                link: None,
+                label: name.clone(),
+                description: format!(
+                    "{installed_prefix}{name} gives agents their own hidden screen on this Mac: apps open on a virtual display, so agents click, type and take screenshots there while you keep your own screen, pointer and focus. Installing it also installs the Ghostex SpaceO skill. Needs an Apple Silicon Mac with macOS 14 or later."
+                ),
+                badge: None,
+                pill: None,
+            },
+            controls,
+        ));
+        if let Some(detail) = job.detail.clone() {
+            let output = job.output.trim();
             rows.push(integration_row(
                 p,
-                "spaceo",
-                Some(if checking {
-                    ListItemStatus::Neutral
-                } else if installed {
-                    ListItemStatus::Success
-                } else {
-                    ListItemStatus::Warning
-                }),
-                Some(ICON_DEVICE_LAPTOP),
+                "spaceo-job",
+                None,
+                None,
                 RowTitle {
                     link: None,
-                    label: name.clone(),
-                    description: format!(
-                        "{installed_prefix}{name} gives agents their own hidden screen on this Mac: apps open on a virtual display, so agents click, type and take screenshots there while you keep your own screen, pointer and focus. Installing it also installs the Ghostex SpaceO skill. Needs an Apple Silicon Mac with macOS 14 or later."
-                    ),
+                    label: detail,
+                    description: if output.is_empty() {
+                        job.plan.clone().unwrap_or_default()
+                    } else {
+                        output
+                            .lines()
+                            .rev()
+                            .take(12)
+                            .collect::<Vec<_>>()
+                            .into_iter()
+                            .rev()
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    },
                     badge: None,
                     pill: None,
                 },
-                controls,
+                Vec::new(),
             ));
-            if let Some(detail) = job.detail.clone() {
-                let output = job.output.trim();
-                rows.push(integration_row(
-                    p,
-                    "spaceo-job",
-                    None,
-                    None,
-                    RowTitle {
-                        link: None,
-                        label: detail,
-                        description: if output.is_empty() {
-                            job.plan.clone().unwrap_or_default()
-                        } else {
-                            output
-                                .lines()
-                                .rev()
-                                .take(12)
-                                .collect::<Vec<_>>()
-                                .into_iter()
-                                .rev()
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        },
-                        badge: None,
-                        pill: None,
-                    },
-                    Vec::new(),
-                ));
-            }
-            if !installed && let Some(command) = text(status, "spaceoInstallCommand") {
-                rows.push(self.spaceo_install_command_row(p, &name, command.to_string(), cx));
-            }
         }
-        if show_permissions {
-            rows.extend(self.permission_rows(
-                p,
-                status,
-                super::permissions::PermissionTool::Spaceo,
-                cx,
-            ));
+        if !installed && let Some(command) = text(status, "spaceoInstallCommand") {
+            rows.push(self.spaceo_install_command_row(p, &name, command.to_string(), cx));
         }
         rows
     }

@@ -533,7 +533,7 @@ impl IntegrationsTab {
             )),
             Some(tools) => {
                 // PowerShell 7 has its own row in General > Terminal; a remote machine's Fast
-                // Computer & Browser Use and SpaceO have theirs under Desktop control.
+                // Computer & Browser Use and SpaceO have theirs in their own sections.
                 for tool in tools.iter().filter(|tool| {
                     tool["supported"] == true
                         && !matches!(id(tool).as_str(), "powershell" | "trycua" | "spaceo")
@@ -559,7 +559,7 @@ impl IntegrationsTab {
     }
 
     /// The rows of the managed tools `ids` names, in that order, with an unsupported one saying why
-    /// (a remote machine's Desktop control: Fast Computer & Browser Use and SpaceO).
+    /// (a remote machine's Fast Computer & Browser Use and SpaceO, in their own sections).
     pub(super) fn managed_rows_for(
         &mut self,
         p: &SettingsPalette,
