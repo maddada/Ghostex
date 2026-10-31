@@ -362,6 +362,35 @@ fn omp_command_outcome(
     (answers(screen) > answers_before).then_some(Ok(()))
 }
 
+/// CDXC:AgentProviders 2026-10-31 WHY:
+/// OMP's `/switch` completes its argument from OMP's model list, and Enter on that list accepts the selected row instead of submitting unless the row is exactly what was typed (OMP 18.13.3 `packages/tui/src/components/editor.ts`, `slash-commands/builtin-completions.ts`). For an id OMP does not list as typed, Enter rewrote the input to another `/switch <provider>/<id>`, the wait for OMP's answer timed out, and the cleanup, which cleared only the exact typed command, left that line in the input: every retry then waited for an empty input, and one Enter there would have switched the session to a model nobody picked.
+/// So once an OMP attempt's command was seen in the input, its cleanup also clears a line that starts with the same command word (`/switch ` after a `/switch`, `/effort ` after an `/effort`), which is where OMP's completion leaves it. Without that delivery, or for another command word, only the exact command is cleared, so a line typed in the terminal before the paste landed, or a different command typed during the wait, stays. A line with the same command word typed in the terminal during the wait cannot be told from OMP's completion and is cleared too. Pi keeps the exact match.
+/// Whether the input on `screen` holds what a failed `command` left behind: the command itself, or a line starting with `owned_prefix`.
+fn pi_family_leftover_input(
+    agent: &str,
+    screen: &str,
+    command: &str,
+    owned_prefix: Option<&str>,
+) -> bool {
+    session_chat_composer_input(agent, screen).is_some_and(|input| {
+        let text = collapse_spaces(&input.text);
+        text == command || owned_prefix.is_some_and(|prefix| text.starts_with(prefix))
+    })
+}
+
+/// CDXC:AgentProviders 2026-10-31 WHY:
+/// `/switch` never applies an id OMP does not list: its argument completion turns the Enter into accepting another listed model, so typing such an id only waited for an answer that could not come and retried. Once gxserver holds OMP's lineup, such an id is refused before anything is typed, with a final reason; until the first lineup lands the pick is typed as before and the cleanup clears what OMP left in the input.
+/// Whether OMP's lineup has a row for `model` (`provider/id`, the rows' `value`).
+fn omp_lineup_lists(catalog: &Value, model: &str) -> bool {
+    catalog
+        .pointer("/agents/omp/models")
+        .and_then(Value::as_array)
+        .is_some_and(|rows| {
+            rows.iter()
+                .any(|row| row.get("value").and_then(Value::as_str) == Some(model))
+        })
+}
+
 impl PickerDriver<'_> {
     /// CDXC:AgentProviders 2026-09-27 WHY:
     /// Hermes' status bar never shows the reasoning effort, so an effort-only change cannot be recognised as already applied and the command is always typed. It counts once Hermes answers it: the first `✓ Model switched`, `✗ <reason>` or `Model switch cancelled.` line past the answers already on screen. The status bar alone is not proof, because a same-model pick leaves it unchanged while Hermes can still refuse the command or hold it behind its expensive-model question (verified in Hermes Agent v0.21.4); it only counts for a new model once older answers have scrolled out of the capture. Delivery is verified before Enter, so a switch with no answer within the step is final instead of retried: retyping the same command cannot change Hermes' answer.
@@ -506,8 +535,14 @@ impl PickerDriver<'_> {
         .await
     }
 
-    /// Clears a pick left behind: Pi's selector, then the typed command.
-    async fn abandon_pi_family_command(&self, agent: &str, command: &str) {
+    /// Clears a pick left behind: Pi's selector, then the typed command, or a line starting with
+    /// `owned_prefix` (see [`pi_family_leftover_input`]).
+    async fn abandon_pi_family_command(
+        &self,
+        agent: &str,
+        command: &str,
+        owned_prefix: Option<&str>,
+    ) {
         if (self.cancelled)() {
             return;
         }
@@ -520,9 +555,7 @@ impl PickerDriver<'_> {
             tokio::time::sleep(Duration::from_millis(PICKER_CANCEL_SETTLE_MS)).await;
         }
         if let Some(screen) = self.capture().await {
-            if session_chat_composer_input(agent, &screen)
-                .is_some_and(|input| collapse_spaces(&input.text) == command)
-            {
+            if pi_family_leftover_input(agent, &screen, command, owned_prefix) {
                 let _ = self.write(AGENT_TUI_CLEAR_INPUT_LINE).await;
             }
         }
@@ -545,7 +578,7 @@ impl PickerDriver<'_> {
             let command = format!("/model {}", plan.model);
             let result = self.pi_switch_model(plan, provider, id, &command).await;
             if result.is_err() {
-                self.abandon_pi_family_command("pi", &command).await;
+                self.abandon_pi_family_command("pi", &command, None).await;
             }
             result?;
         }
@@ -584,7 +617,7 @@ impl PickerDriver<'_> {
         }
         .await;
         if result.is_err() {
-            self.abandon_pi_family_command("pi", &command).await;
+            self.abandon_pi_family_command("pi", &command, None).await;
         }
         result
     }
@@ -685,6 +718,16 @@ impl PickerDriver<'_> {
         if !plan.model.contains('/') {
             return Err(invalid_params("An OMP model is picked as provider/id."));
         }
+        if crate::session_chat_pi_models::pi_family_model_catalog(
+            crate::session_chat_pi_models::PiFamilyAgent::Omp,
+        )
+        .is_some_and(|catalog| !omp_lineup_lists(&catalog, &plan.model))
+        {
+            return Err(unsupported_selection(format!(
+                "{} is not in OMP's model list.",
+                plan.model
+            )));
+        }
         self.composer_ready("omp").await?;
         if self
             .capture()
@@ -720,13 +763,14 @@ impl PickerDriver<'_> {
         })
     }
 
-    /// Pastes an OMP command (as [`Self::type_pi_family_command`] does), presses Enter and waits for [`omp_command_outcome`] (the inner `Err` is OMP's refusal). Both baselines come from the one screen that shows the command typed, the last before Enter. Clears the command when it did not go through.
+    /// Pastes an OMP command (as [`Self::type_pi_family_command`] does), presses Enter and waits for [`omp_command_outcome`] (the inner `Err` is OMP's refusal). Both baselines come from the one screen that shows the command typed, the last before Enter. Clears the command when it did not go through, and once it was seen in the input, OMP's completion of it.
     async fn run_omp_command(
         &self,
         step: &str,
         command: &str,
         answers: impl Fn(&str) -> usize,
     ) -> Result<Result<(), String>, DomainStateError> {
+        let mut delivered = false;
         let result = async {
             self.write(&crate::session_chat_send::wrap_terminal_bracketed_paste_text(command))
                 .await?;
@@ -737,6 +781,7 @@ impl PickerDriver<'_> {
                         .then(|| (pi_family_errors(screen).len(), answers(screen)))
                 })
                 .await?;
+            delivered = true;
             if (self.cancelled)() {
                 return Err(agent_busy(
                     "The model change was cancelled by another action on this session.",
@@ -750,7 +795,12 @@ impl PickerDriver<'_> {
         }
         .await;
         if !matches!(result, Ok(Ok(()))) {
-            self.abandon_pi_family_command("omp", command).await;
+            let owned_prefix = command
+                .find(' ')
+                .filter(|_| delivered)
+                .map(|space| &command[..=space]);
+            self.abandon_pi_family_command("omp", command, owned_prefix)
+                .await;
         }
         result
     }
@@ -1016,7 +1066,12 @@ pub(crate) async fn run_provider_model_picker_job(
 
 #[cfg(test)]
 mod omp_answer_tests {
-    use super::{omp_command_outcome, omp_effort_answers, omp_switch_answers, pi_family_errors};
+    use super::{
+        omp_command_outcome, omp_effort_answers, omp_switch_answers, pi_family_errors,
+        pi_family_leftover_input, CodexPickerPlan, PickerDriver, AGENT_TUI_CLEAR_INPUT_LINE,
+        UNSUPPORTED_SELECTION_CODE,
+    };
+    use crate::session_chat_send::test_terminal::{self, TestTerminal};
 
     const MODEL: &str = "anthropic/claude-opus-5-5";
     /// OMP 18.13.3's `/switch` notice in its TUI (`selector-controller.ts`), drawn as a dim line
@@ -1152,5 +1207,195 @@ mod omp_answer_tests {
                 "Unknown thinking level: max. Available: off, auto, minimal, low, medium, high",
             ]
         );
+    }
+
+    /// OMP's input holding `input` in three `composer.shape`s: `pi` (one-space padded rows between
+    /// rules), `borderless` (`❯`), and `box`, which merges the input's last row into its foot.
+    fn inputs(input: &str) -> [String; 3] {
+        let rule = RULE.repeat(5);
+        [
+            format!("{rule}\n {input}\n{rule}\n \u{2b22} Opus 5.5 \u{b7} \u{25d2} high"),
+            format!("\u{276f} {input}\n [M] Opus 5.5 - [high] \u{b7} pi"),
+            format!("\u{256d}\u{2500}\u{2500} \u{25cf} Opus 5.5 \u{2500}\u{2500}\u{256e}\n\u{2570}\u{2500} {input} \u{2500}\u{256f}"),
+        ]
+    }
+
+    #[test]
+    fn a_completed_line_after_a_delivered_command_is_left_over_in_every_shape() {
+        let typed = "/switch openrouter/qwen3.8-max";
+        // Enter accepted OMP's completion row (with its trailing space) instead of submitting.
+        for composer in inputs("/switch openrouter/qwen/qwen3.8-max ") {
+            let shown = screen(&[" Ready when you are."], &composer);
+            assert!(
+                pi_family_leftover_input("omp", &shown, typed, Some("/switch ")),
+                "{shown}"
+            );
+            assert!(
+                !pi_family_leftover_input("omp", &shown, typed, None),
+                "{shown}"
+            );
+        }
+        for composer in inputs("/effort high") {
+            let shown = screen(&[" Ready when you are."], &composer);
+            assert!(
+                pi_family_leftover_input("omp", &shown, "/effort xhigh", Some("/effort ")),
+                "{shown}"
+            );
+        }
+        for composer in inputs("fix the failing test") {
+            let shown = screen(&[" Ready when you are."], &composer);
+            assert!(
+                !pi_family_leftover_input("omp", &shown, typed, Some("/switch ")),
+                "{shown}"
+            );
+        }
+    }
+
+    fn never() -> bool {
+        false
+    }
+
+    fn driver(zmx_name: &str) -> PickerDriver<'_> {
+        PickerDriver {
+            project_id: "project",
+            session_id: "session",
+            zmx_name,
+            source: "test",
+            cancelled: &never,
+        }
+    }
+
+    /// Runs `command` through the OMP driver on a scripted terminal, which never answers, and
+    /// returns the terminal once the driver gave up and cleaned up.
+    async fn failed_omp_command(name: &str, terminal: TestTerminal, command: &str) -> TestTerminal {
+        test_terminal::open(name, terminal);
+        let outcome = driver(name)
+            .run_omp_command("applied model", command, |screen| {
+                omp_switch_answers(screen, "openrouter/qwen3.8-max")
+            })
+            .await;
+        assert!(!matches!(outcome, Ok(Ok(()))));
+        test_terminal::terminal(name)
+    }
+
+    #[tokio::test]
+    async fn a_switch_omp_completed_after_the_paste_landed_is_cleared() {
+        let terminal = failed_omp_command(
+            "omp-completed-switch",
+            TestTerminal {
+                after_enter: "/switch openrouter/qwen/qwen3.8-max ".to_string(),
+                ..TestTerminal::default()
+            },
+            "/switch openrouter/qwen3.8-max",
+        )
+        .await;
+        assert_eq!(
+            terminal.writes.last().map(String::as_str),
+            Some(AGENT_TUI_CLEAR_INPUT_LINE)
+        );
+        assert_eq!(terminal.input, "");
+    }
+
+    #[tokio::test]
+    async fn another_command_typed_during_the_wait_stays() {
+        let terminal = failed_omp_command(
+            "omp-user-effort",
+            TestTerminal {
+                after_enter: "/effort high".to_string(),
+                ..TestTerminal::default()
+            },
+            "/switch openrouter/qwen3.8-max",
+        )
+        .await;
+        assert!(!terminal
+            .writes
+            .iter()
+            .any(|write| write == AGENT_TUI_CLEAR_INPUT_LINE));
+        assert_eq!(terminal.input, "/effort high");
+    }
+
+    #[tokio::test]
+    async fn a_line_in_the_input_when_the_paste_failed_stays() {
+        let terminal = failed_omp_command(
+            "omp-paste-refused",
+            TestTerminal {
+                input: "/switch openai/gpt-5.5".to_string(),
+                refuse_paste: true,
+                ..TestTerminal::default()
+            },
+            "/switch openrouter/qwen3.8-max",
+        )
+        .await;
+        assert!(!terminal
+            .writes
+            .iter()
+            .any(|write| write == AGENT_TUI_CLEAR_INPUT_LINE));
+        assert_eq!(terminal.input, "/switch openai/gpt-5.5");
+    }
+
+    #[tokio::test]
+    async fn pi_cleanup_clears_only_its_exact_command() {
+        for (input, cleared) in [
+            ("/model openai/gpt-5.5", true),
+            ("/model openai/gpt-5.5-mini", false),
+            ("/thinking high", false),
+        ] {
+            let name = format!("pi-cleanup-{input}");
+            test_terminal::open(
+                &name,
+                TestTerminal {
+                    input: input.to_string(),
+                    ..TestTerminal::default()
+                },
+            );
+            driver(&name)
+                .abandon_pi_family_command("pi", "/model openai/gpt-5.5", None)
+                .await;
+            let terminal = test_terminal::terminal(&name);
+            assert_eq!(!terminal.writes.is_empty(), cleared, "{input}");
+            assert_eq!(terminal.input.is_empty(), cleared, "{input}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_id_missing_from_omps_lineup_is_refused_before_anything_is_typed() {
+        let pick = |model: &str| CodexPickerPlan {
+            provider: "omp".to_string(),
+            model: model.to_string(),
+            effort: "high".to_string(),
+            ..CodexPickerPlan::default()
+        };
+        let lineup =
+            crate::session_chat_pi_models::serve_test_omp_lineup(Some(&[serde_json::json!({
+                "provider": "openrouter",
+                "id": "qwen/qwen3.8-max",
+                "name": "Qwen3.8 Max",
+                "thinking": ["low", "medium", "high"],
+            })]));
+        test_terminal::open("omp-lineup", TestTerminal::default());
+        let refused = driver("omp-lineup")
+            .drive_omp(&pick("openrouter/qwen3.8-max"))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code, UNSUPPORTED_SELECTION_CODE);
+        assert_eq!(
+            refused.message,
+            "openrouter/qwen3.8-max is not in OMP's model list."
+        );
+        assert!(test_terminal::terminal("omp-lineup").writes.is_empty());
+        // No terminal answers under this name, so a pick that passes the check fails on its first
+        // read of the input: a listed id, and any id while no lineup has been read.
+        let listed = driver("gx-test-omp-lineup-no-terminal")
+            .drive_omp(&pick("openrouter/qwen/qwen3.8-max"))
+            .await
+            .unwrap_err();
+        assert_eq!(listed.code, "sessionNotRunning");
+        drop(lineup);
+        let _unread = crate::session_chat_pi_models::serve_test_omp_lineup(None);
+        let unread = driver("gx-test-omp-lineup-no-terminal")
+            .drive_omp(&pick("openrouter/qwen3.8-max"))
+            .await
+            .unwrap_err();
+        assert_eq!(unread.code, "sessionNotRunning");
     }
 }

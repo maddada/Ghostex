@@ -99,6 +99,16 @@ static REFRESHING: Mutex<Vec<PiFamilyAgent>> = Mutex::new(Vec::new());
 /// The last lineup read from the CLI, or `None` until the first read lands. A stale or missing
 /// lineup starts a background read; the caller never waits for it.
 pub(crate) fn pi_family_model_catalog(agent: PiFamilyAgent) -> Option<Value> {
+    #[cfg(test)]
+    if let Some(catalog) = TEST_LINEUP.with(|lineup| {
+        lineup
+            .borrow()
+            .as_ref()
+            .filter(|(served, _)| *served == agent)
+            .map(|(_, catalog)| catalog.clone())
+    }) {
+        return catalog;
+    }
     let (catalog, stale) = LINEUPS
         .lock()
         .ok()
@@ -116,6 +126,37 @@ pub(crate) fn pi_family_model_catalog(agent: PiFamilyAgent) -> Option<Value> {
         refresh_in_background(agent);
     }
     catalog
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The lineup [`serve_test_omp_lineup`] serves on this thread instead of the shared one.
+    static TEST_LINEUP: std::cell::RefCell<Option<(PiFamilyAgent, Option<Value>)>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Makes [`pi_family_model_catalog`] answer, on this thread only and until the guard drops, with a
+/// lineup built from `omp models --json` rows, or with none read yet for `None`. Nothing is started
+/// and the shared lineup is left alone, so tests reach the real catalog shape without the CLI.
+#[cfg(test)]
+#[must_use]
+pub(crate) fn serve_test_omp_lineup(models: Option<&[Value]>) -> TestLineup {
+    let catalog = models.map(|models| {
+        let rows = models.iter().filter_map(omp_model_row).collect();
+        build_catalog(PiFamilyAgent::Omp, rows, None, &[])
+    });
+    TEST_LINEUP.with(|lineup| *lineup.borrow_mut() = Some((PiFamilyAgent::Omp, catalog)));
+    TestLineup
+}
+
+#[cfg(test)]
+pub(crate) struct TestLineup;
+
+#[cfg(test)]
+impl Drop for TestLineup {
+    fn drop(&mut self) {
+        TEST_LINEUP.with(|lineup| *lineup.borrow_mut() = None);
+    }
 }
 
 fn refresh_in_background(agent: PiFamilyAgent) {
