@@ -149,6 +149,64 @@ fn a_ticket_is_cut_to_its_caps_and_keeps_only_safe_links() {
 }
 
 #[test]
+fn a_pull_request_url_is_exactly_a_github_pull_request_of_at_most_the_url_cap() {
+    let kept = |url: &str| {
+        one_ticket(ticket(json!({ "pullRequestUrls": [url] })), &[])
+            .unwrap()
+            .pull_request_urls
+    };
+    for url in [
+        "https://github.com/acme/app/pull/7",
+        "https://github.com/acme-co/my.app_1/pull/1234",
+    ] {
+        assert_eq!(kept(url), vec![url]);
+    }
+    // The URL cap counts the whole link: 2048 bytes are kept, 2049 are not.
+    let at_cap = |len: usize| {
+        let short = "https://github.com//b/pull/1".len();
+        format!("https://github.com/{}/b/pull/1", "a".repeat(len - short))
+    };
+    assert_eq!(kept(&at_cap(2048)), vec![at_cap(2048)]);
+    assert_eq!(kept(&at_cap(2049)), Vec::<String>::new());
+    for url in [
+        // A ticket's first URL is the selector of `gh pr view`, so this would read as its flag.
+        "--repo=a/github.com/x/pull/1",
+        "-R/github.com/x/pull/1",
+        "javascript:alert(1)//github.com/a/pull/1",
+        "https://evil.example/github.com/acme/app/pull/7",
+        "https://github.com.evil.example/acme/app/pull/7",
+        "https://user@github.com/acme/app/pull/7",
+        "http://github.com/acme/app/pull/7",
+        "HTTPS://github.com/acme/app/pull/7",
+        " https://github.com/acme/app/pull/7",
+        "https://github.com/acme/app/pull/7/files",
+        "https://github.com/acme/app/pull/7/",
+        "https://github.com/acme/app/pull/7?x=1",
+        "https://github.com/acme/app/pull/7#top",
+        "https://github.com/acme/app/pull/",
+        "https://github.com/acme/app/pull/x",
+        "https://github.com/acme/app/pull/+7",
+        "https://github.com/acme/app/issues/7",
+        "https://github.com/acme/pull/7",
+        "https://github.com/acme/app/more/pull/7",
+        "https://github.com//app/pull/7",
+        "https://github.com/acme/../pull/7",
+        "https://github.com/acme/a b/pull/7",
+        "https://github.com/ac%6de/app/pull/7",
+    ] {
+        assert_eq!(kept(url), Vec::<String>::new(), "{url}");
+    }
+    // A number too large for any PR can't be read back as one.
+    assert_eq!(
+        kept(&format!(
+            "https://github.com/acme/app/pull/{}",
+            "9".repeat(30)
+        )),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
 fn a_ticket_row_is_skipped_for_an_id_not_in_canonical_form_or_an_unknown_group() {
     for row in [
         ticket(json!({ "id": "acm-12" })),

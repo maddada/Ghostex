@@ -494,7 +494,7 @@ fn parse_ticket(
         cycle: text(ticket, "cycle").map(|cycle| cut(cycle, 64)),
         branch_name: branch_name(ticket),
         pull_request_urls: strings(ticket, "pullRequestUrls")
-            .filter(|url| is_github_pull_request_url(url))
+            .filter(|url| github_pull_request_url(url))
             .take(MAX_PULL_REQUESTS)
             .map(str::to_string)
             .collect(),
@@ -582,6 +582,29 @@ fn web_url(url: &str) -> Option<String> {
     let lower = url.to_ascii_lowercase();
     ((lower.starts_with("https://") || lower.starts_with("http://")) && url.len() <= MAX_URL_BYTES)
         .then(|| url.to_string())
+}
+
+/// Whether `url` is exactly `https://github.com/<owner>/<repo>/pull/<number>`.
+///
+/// CDXC:WorkMode 2026-10-31 WHY:
+/// A ticket's first PR link becomes the selector of `gh pr view` (item_details.rs), so a loose check would let a command's answer read as a flag there: `--repo=a/github.com/x/pull/1` passes `is_github_pull_request_url`, and `gh` takes it as `--repo`. The repository owner, on ticket ids: "`-x` must never read as a flag."
+fn github_pull_request_url(url: &str) -> bool {
+    let Some(path) = url.strip_prefix("https://github.com/") else {
+        return false;
+    };
+    let parts: Vec<&str> = path.split('/').collect();
+    let [owner, repo, "pull", number] = parts[..] else {
+        return false;
+    };
+    url.len() <= MAX_URL_BYTES
+        && !owner.is_empty()
+        && owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        && !matches!(repo, "" | "." | "..")
+        && repo
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+        && number.chars().all(|c| c.is_ascii_digit())
+        && number.parse::<u64>().is_ok()
 }
 
 fn https_url(url: &str) -> Option<String> {
