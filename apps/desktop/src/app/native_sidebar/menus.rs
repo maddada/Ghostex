@@ -24,6 +24,9 @@ pub(crate) const SIDEBAR_MENU_OWNER_GAP: f32 = 3.0;
 /// The sidebar menu button's trigger id.
 pub(crate) const SIDEBAR_MORE_TRIGGER: &str = "sidebar-more";
 
+/// The hover group of a menu row whose button shows while the pointer is on it.
+const MENU_ROW_GROUP: &str = "native-menu-row";
+
 /// What a sidebar menu hangs from, and the button that toggles it.
 pub(crate) struct SidebarMenuOpener {
     /// The row or button the menu opens from; it stays uncovered.
@@ -420,7 +423,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:Sidebar 2026-10-31 DECISION:
-    /// User: "click on a button on the right side twice to remove a project". A row's `secondary` with a `confirmLabel` takes two clicks. The first arms it: the icon becomes that word in the destructive red, bold, on a faint red fill, like the Files list's "Confirm delete" (CDXC:ContextMenus 2026-10-10 in context_menu.rs). The second runs it, and the row leaves. It stands down after `SIDEBAR_MENU_ARM_TIMEOUT`, when the pointer leaves the row, when the keyboard moves or the query changes, and when the menu closes. With the keyboard, Right arms and Right again runs; Left or Escape stands it down.
+    /// User: "click on a button on the right side twice to remove a project", then, of the first version: "should be when i hover on the project, not shown always", "more on the right", "never show [a word], it should always just be a red bg x icon button (same button but with red bg)". A row's `secondary` with `confirm` takes two clicks. It shows only on the row the pointer is over, the row the keyboard is on and an armed row, in the column where other rows have their tick; a ticked row's tick gives way to it there. The first click arms it: the same button in the same place, on a red fill. The second runs it, and the row leaves. It stands down after `SIDEBAR_MENU_ARM_TIMEOUT`, when the pointer leaves the row, when the keyboard moves or the query changes, and when the menu closes. With the keyboard, Right arms and Right again runs; Left or Escape stands it down.
     pub(super) fn activate_native_sidebar_menu_secondary(
         &mut self,
         panel_index: usize,
@@ -859,6 +862,7 @@ impl GhostexGpuiApp {
                 let disabled = item["disabled"] == true;
                 let heading = item["heading"] == true;
                 let selected = panel.selected == Some(item_index);
+                let confirm = item["secondary"]["confirm"] == true;
                 let row_bounds = Bounds {
                     origin: Point::new(bounds.left(), bounds.top() + px(offset * scale)),
                     size: gpui::size(bounds.size.width, px(34.0 * scale)),
@@ -956,9 +960,20 @@ impl GhostexGpuiApp {
                         .when_some(item.get("secondary"), |row, secondary| {
                             let label = secondary["label"].as_str().unwrap_or_default().to_owned();
                             let icon_only = label.is_empty();
-                            let confirm = secondary["confirmLabel"].as_str();
+                            let icon_path =
+                                gpui_sidebar_command_icon_asset_path(secondary["icon"].as_str());
                             let armed = panel.row_is_armed(item);
-                            let destructive = titlebar_popup_menu_destructive();
+                            // Painted over its column rather than added and removed, so no row
+                            // changes size as it appears.
+                            let revealed = !confirm || armed || selected;
+                            let overlay = || {
+                                div()
+                                    .absolute()
+                                    .size_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                            };
                             row.child(
                                 h_flex()
                                     .id(format!("native-menu-secondary-{panel_index}-{item_index}"))
@@ -970,6 +985,7 @@ impl GhostexGpuiApp {
                                             name.to_owned()
                                         })
                                     })
+                                    .relative()
                                     .flex_shrink_0()
                                     .h(px(28.0 * scale))
                                     .rounded(px(4.0 * scale))
@@ -977,42 +993,57 @@ impl GhostexGpuiApp {
                                     // An icon-only button (the workspace menu's new-window button)
                                     // is a square whose icon centre lines up with the checkmark
                                     // other rows show at the same right edge (14px wide, flush).
-                                    .when(icon_only && !armed, |button| {
+                                    .when(icon_only, |button| {
                                         button
                                             .w(px(22.0 * scale))
                                             .justify_center()
-                                            .when(confirm.is_none(), |button| {
-                                                button.mr(px(-4.0 * scale))
-                                            })
+                                            .mr(px(-4.0 * scale))
                                     })
-                                    .when(!icon_only && !armed, |button| {
+                                    .when(!icon_only, |button| {
                                         button.px(px(5.0 * scale)).gap(px(3.0 * scale))
                                     })
                                     .when(armed, |button| {
-                                        button
-                                            .px(px(6.0 * scale))
-                                            .bg(destructive.opacity(0.16))
-                                            .hover(|button| button.bg(destructive.opacity(0.24)))
-                                            .text_size(px(11.5 * scale))
-                                            .font_weight(FontWeight::BOLD)
-                                            .text_color(destructive)
-                                            .child(confirm.unwrap_or_default().to_owned())
+                                        let red = gpui::rgb(0xdc2626);
+                                        button.bg(red).hover(move |button| button.bg(red))
                                     })
-                                    .when(!armed, |button| {
-                                        button.child(
-                                            gpui::svg()
-                                                .path(gpui_sidebar_command_icon_asset_path(
-                                                    secondary["icon"].as_str(),
-                                                ))
-                                                .size(px(14.0 * scale))
-                                                .text_color(if confirm.is_some() {
-                                                    foreground.opacity(0.55)
-                                                } else {
-                                                    foreground
-                                                }),
-                                        )
+                                    .map(|button| {
+                                        let icon =
+                                            gpui::svg().path(icon_path).size(px(14.0 * scale));
+                                        if confirm {
+                                            button
+                                                .when(item["checked"] == true, |button| {
+                                                    button.child(
+                                                        overlay()
+                                                            .when(revealed, |tick| {
+                                                                tick.opacity(0.0)
+                                                            })
+                                                            .group_hover(MENU_ROW_GROUP, |tick| {
+                                                                tick.opacity(0.0)
+                                                            })
+                                                            .child(titlebar_svg_icon(
+                                                                "titlebar/check.svg",
+                                                                14.0 * scale,
+                                                                foreground,
+                                                            )),
+                                                    )
+                                                })
+                                                .child(
+                                                    overlay()
+                                                        .when(!revealed, |mark| mark.opacity(0.0))
+                                                        .group_hover(MENU_ROW_GROUP, |mark| {
+                                                            mark.opacity(1.0)
+                                                        })
+                                                        .child(icon.text_color(if armed {
+                                                            gpui::white()
+                                                        } else {
+                                                            foreground.opacity(0.55)
+                                                        })),
+                                                )
+                                        } else {
+                                            button.child(icon.text_color(foreground))
+                                        }
                                     })
-                                    .when(!icon_only && !armed, |button| button.child(label))
+                                    .when(!icon_only, |button| button.child(label))
                                     .on_click(cx.listener(move |app, _, _, cx| {
                                         cx.stop_propagation();
                                         app.activate_native_sidebar_menu_secondary(
@@ -1023,19 +1054,18 @@ impl GhostexGpuiApp {
                                     })),
                             )
                         })
-                        .when(item["secondary"]["confirmLabel"].is_string(), |row| {
-                            // Stands down as the pointer leaves, and keeps the tick's column so
-                            // the button doesn't move as the row is ticked.
-                            row.on_hover(cx.listener(move |app, hovered: &bool, _, cx| {
-                                if !*hovered {
-                                    app.disarm_native_sidebar_menu_row(panel_index, None, cx);
-                                }
-                            }))
-                            .when(item["checked"] != true, |row| {
-                                row.child(div().size(px(14.0 * scale)).flex_shrink_0())
-                            })
+                        // A button that takes two clicks stands down as the pointer leaves, and
+                        // shows while the pointer is on its row.
+                        .when(confirm, |row| {
+                            row.group(MENU_ROW_GROUP).on_hover(cx.listener(
+                                move |app, hovered: &bool, _, cx| {
+                                    if !*hovered {
+                                        app.disarm_native_sidebar_menu_row(panel_index, None, cx);
+                                    }
+                                },
+                            ))
                         })
-                        .when(item["checked"] == true, |row| {
+                        .when(item["checked"] == true && !confirm, |row| {
                             row.child(titlebar_svg_icon(
                                 "titlebar/check.svg",
                                 14.0 * scale,

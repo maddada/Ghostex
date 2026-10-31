@@ -125,13 +125,11 @@ pub(crate) fn searched_menu_rows(rows: &[Value], query: &str) -> Vec<Value> {
     left
 }
 
-/// The row's Remove-style button (a `secondary` with a `confirmLabel`), by what it runs: it stays
-/// armed by that across a re-filter that moves the row.
+/// The row's two-click button (a `secondary` with `confirm`), by what it runs: it stays armed by
+/// that across a re-filter that moves the row.
 fn confirm_id(item: &Value) -> Option<String> {
     let secondary = item.get("secondary")?;
-    secondary["confirmLabel"]
-        .is_string()
-        .then(|| secondary["command"].to_string())
+    (secondary["confirm"] == true).then(|| secondary["command"].to_string())
 }
 
 #[derive(Clone)]
@@ -151,9 +149,13 @@ pub(crate) struct SidebarMenuPanel {
     pub(crate) max_height: Option<Pixels>,
     /// Set for a menu that narrows as the user types.
     pub(crate) search: Option<SidebarMenuSearch>,
-    /// The row whose Remove-style button took its first click (`confirm_id`), and which arming
+    /// The row whose two-click button took its first click (`confirm_id`), and which arming
     /// that was, so an older arming's timer doesn't disarm a newer one.
     pub(crate) armed: Option<(String, u64)>,
+    /// How many times the list was sent back to its top, which a removal must not do. The handle
+    /// only moves when it next lays out, so a test can't read the move from it.
+    #[cfg(test)]
+    pub(crate) back_to_top: u32,
 }
 
 pub(crate) struct SidebarMenuState {
@@ -184,6 +186,8 @@ impl SidebarMenuPanel {
             max_height: None,
             search: None,
             armed: None,
+            #[cfg(test)]
+            back_to_top: 0,
         }
     }
 
@@ -213,14 +217,14 @@ impl SidebarMenuPanel {
         });
     }
 
-    /// Whether this row's Remove-style button is waiting for its second click.
+    /// Whether this row's two-click button is waiting for its second click.
     pub(crate) fn row_is_armed(&self, item: &Value) -> bool {
         self.armed
             .as_ref()
             .is_some_and(|(armed, _)| confirm_id(item).as_ref() == Some(armed))
     }
 
-    /// The first click of a Remove-style button, or `false` when `item` has none.
+    /// The first click of a two-click button, or `false` when `item` has none.
     pub(crate) fn arm_row(&mut self, item: &Value, arming: u64) -> bool {
         let Some(id) = confirm_id(item) else {
             return false;
@@ -230,17 +234,30 @@ impl SidebarMenuPanel {
     }
 
     /// Takes the query to `query`: the rows narrow, the first one is picked and the list goes back
-    /// to its top, and an armed button stands down because its row may have gone.
+    /// to its top, for a new set of results.
     fn set_search_query(&mut self, query: String) {
         let Some(search) = &mut self.search else {
             return;
         };
         search.query = query;
+        self.narrow_rows();
+        self.select_first_row();
+        self.scroll.scroll_to_item(0);
+        #[cfg(test)]
+        {
+            self.back_to_top += 1;
+        }
+    }
+
+    /// The rows the current query leaves. An armed button stands down because its row may have
+    /// gone. The scroll position is the caller's to change.
+    fn narrow_rows(&mut self) {
+        let Some(search) = &self.search else {
+            return;
+        };
         let rows = searched_menu_rows(&search.rows, &search.query);
         self.replace_items(rows);
         self.armed = None;
-        self.select_first_row();
-        self.scroll.scroll_to_item(0);
     }
 
     /// A key for the search field; `true` when it changed the query. Backspace takes off a letter;
@@ -268,7 +285,12 @@ impl SidebarMenuPanel {
         true
     }
 
-    /// A row whose project has just been removed leaves the list; the query stays.
+    /// A row whose project has just been removed leaves the list, and the rest stay where they
+    /// are: the query, the scroll position (the next layout only pulls it back if the list now
+    /// ends above it) and the keyboard cursor's place.
+    ///
+    /// CDXC:Sidebar 2026-10-31 DECISION:
+    /// User: "pleae dont scroll me to the top when i click on [the X] to confirm closing project". A removal is one row leaving a list you are working through, not new results, so it doesn't go through `set_search_query`'s return to the top.
     pub(crate) fn drop_confirmed_row(&mut self, item: &Value) {
         self.armed = None;
         let Some(id) = confirm_id(item) else {
@@ -280,10 +302,8 @@ impl SidebarMenuPanel {
         search
             .rows
             .retain(|row| confirm_id(row).as_ref() != Some(&id));
-        let query = search.query.clone();
         let selected = self.selected;
-        self.set_search_query(query);
-        // The cursor stays about where it was rather than jumping to the top.
+        self.narrow_rows();
         if let Some(selected) = selected {
             let enabled = |item: &Value| {
                 item["separator"] != true && item["heading"] != true && item["disabled"] != true
@@ -359,10 +379,6 @@ impl SidebarMenuPanel {
                 }
                 if item.get("secondary").is_some() {
                     extra += 36.0;
-                }
-                // Room for the armed button's word and the tick's column it keeps.
-                if confirm_id(item).is_some() {
-                    extra += 30.0 + 22.0;
                 }
                 if item["checked"] == true {
                     extra += 22.0;
@@ -590,7 +606,7 @@ mod tests {
             serde_json::json!({
                 "icon": "x",
                 "label": "",
-                "confirmLabel": "Remove?",
+                "confirm": true,
                 "command": {"type": "unifiedRemoveProject", "key": key},
             })
         };
@@ -835,6 +851,64 @@ mod tests {
         // A later search does not bring it back.
         panel.set_search_query(String::new());
         assert!(!panel.items.iter().any(|item| item["label"] == "my-apps"));
+    }
+
+    fn row_labelled(panel: &SidebarMenuPanel, label: &str) -> Value {
+        panel
+            .items
+            .iter()
+            .find(|row| row["label"] == label)
+            .unwrap()
+            .clone()
+    }
+
+    #[test]
+    fn a_removal_keeps_the_scroll_where_typing_goes_back_to_the_top() {
+        let mut panel = searchable();
+        let scrolled = Point::new(px(0.0), px(-240.0));
+        panel.scroll.set_offset(scrolled);
+        let row = row_labelled(&panel, "Ghostex");
+        panel.arm_row(&row, 1);
+        panel.drop_confirmed_row(&row);
+        assert_eq!(panel.back_to_top, 0, "the removal sent the list to its top");
+        assert_eq!(panel.scroll.offset(), scrolled);
+        panel.search_key(&typed("m"));
+        assert_eq!(panel.back_to_top, 1);
+    }
+
+    #[test]
+    fn removing_the_last_row_keeps_the_scroll_and_the_cursor_on_what_is_left() {
+        let mut panel = searchable();
+        let scrolled = Point::new(px(0.0), px(-240.0));
+        panel.scroll.set_offset(scrolled);
+        let last = row_labelled(&panel, "my-apps");
+        panel.selected = panel.items.iter().position(|row| row["label"] == "my-apps");
+        panel.arm_row(&last, 1);
+        panel.drop_confirmed_row(&last);
+        assert_eq!(panel.back_to_top, 0);
+        assert_eq!(panel.scroll.offset(), scrolled);
+        assert_eq!(panel.items[panel.selected.unwrap()]["label"], "Ghostex");
+    }
+
+    #[test]
+    fn removing_a_row_in_a_search_keeps_the_scroll_too() {
+        let mut panel = searchable();
+        panel.search_key(&typed("m"));
+        panel.search_key(&typed("y"));
+        let resets = panel.back_to_top;
+        let row = row_labelled(&panel, "my-apps");
+        panel.drop_confirmed_row(&row);
+        assert_eq!(panel.back_to_top, resets);
+    }
+
+    #[test]
+    fn the_cursor_stays_in_place_after_a_removal_above_it() {
+        let mut panel = searchable();
+        let first = row_labelled(&panel, "Ghostex");
+        panel.selected = panel.items.iter().position(|row| row["label"] == "Ghostex");
+        panel.drop_confirmed_row(&first);
+        // The row that was under it moved up into its place.
+        assert_eq!(panel.items[panel.selected.unwrap()]["label"], "my-apps");
     }
 
     #[test]

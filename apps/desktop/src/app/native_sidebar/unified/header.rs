@@ -67,7 +67,7 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
                 item["secondary"] = json!({
                     "icon": "x",
                     "label": "",
-                    "confirmLabel": "Remove?",
+                    "confirm": true,
                     "ariaLabel": format!("Remove {}", option.label),
                     "command": {"type": "unifiedRemoveProject", "key": option.key},
                 });
@@ -331,7 +331,8 @@ mod tests {
             option("a-group", &[]),
         ]));
         let remove = &row(&items, "ghostex")["secondary"];
-        assert_eq!(remove["confirmLabel"], "Remove?");
+        assert_eq!(remove["confirm"], true);
+        assert_eq!(remove["ariaLabel"], "Remove ghostex");
         assert_eq!(remove["command"]["type"], "unifiedRemoveProject");
         assert_eq!(remove["command"]["key"], "ghostex");
         assert!(row(&items, "a-group").get("secondary").is_none());
