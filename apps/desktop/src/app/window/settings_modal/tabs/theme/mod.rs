@@ -1061,8 +1061,10 @@ impl Render for ThemeTab {
                 move |tab, _window, cx| store.update(cx, |store, cx| store.set_active_tab(tab, cx)),
             )));
         }
-        blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
+        // CDXC:Settings 2026-10-31: User, of the Text section: "move this section to the top of the
+        // interface page in settings".
         blocks.extend(font.map(|section| PageBlock::section("font", section)));
+        blocks.extend(colours.map(|section| PageBlock::section("theming", section)));
         blocks.extend(transparency.map(|section| PageBlock::section("transparency", section)));
         blocks.extend(chat_terminal.map(|section| PageBlock::section("chatTerminal", section)));
         if !t.searching {
