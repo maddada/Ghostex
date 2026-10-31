@@ -1,5 +1,9 @@
 use std::{ffi::OsStr, process::Command};
 
+#[path = "process_run.rs"]
+mod run;
+pub(crate) use run::*;
+
 /// The child gets a console of its own that is never shown.
 #[cfg(windows)]
 pub(crate) const CREATE_NO_WINDOW: u32 = 0x0800_0000;

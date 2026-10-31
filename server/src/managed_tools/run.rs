@@ -5,12 +5,11 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
-    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use super::jobs::Log;
-use crate::platform::process::ProcessTree;
+use crate::platform::process::{self, ProcessTree};
 
 /// The PATH a tool command runs with: `prefix` first (a tool installed moments ago), then the
 /// normalized session PATH, which already ends with Ghostex's tool folders.
@@ -130,69 +129,24 @@ pub(crate) enum Unfinished {
 /// Runs `command` with no input and at most `timeout`, then stops it and every process it started.
 /// The command leads its own process tree (`ProcessTree`), so a wrapper's children go too.
 pub(crate) fn output_within(command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
-    bounded(command, timeout)
-}
-
-fn bounded(mut command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut tree = ProcessTree::spawn(&mut command).map_err(|_| Unfinished::Start)?;
-    let stdout = collect(tree.child().stdout.take());
-    let stderr = collect(tree.child().stderr.take());
-    let deadline = Instant::now() + timeout;
-    let status = loop {
-        match tree.child().try_wait() {
-            Ok(Some(status)) => break status,
-            Ok(None) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(20)),
-            _ => {
-                tree.end();
-                return Err(Unfinished::TimedOut(timeout));
-            }
-        }
+    // A version or status answer is short; a runaway printer is not kept whole.
+    let keep = process::Keep::Head(256 * 1024);
+    let limits = process::RunLimits {
+        timeout,
+        stdin: None,
+        stdout: keep,
+        stderr: keep,
     };
-    // A child it left behind can hold the pipes open; it gets what is left of the time limit.
-    while !(stdout.1.is_finished() && stderr.1.is_finished()) {
-        if Instant::now() >= deadline {
-            tree.end();
-            break;
+    match process::run_bounded(command, limits) {
+        Ok(output) => Ok(Finished {
+            status: output.status,
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        }),
+        Err(process::Unfinished::Start(_)) => Err(Unfinished::Start),
+        Err(process::Unfinished::TimedOut(limit)) => Err(Unfinished::TimedOut(limit)),
+        Err(process::Unfinished::TooLarge(_)) => {
+            unreachable!("a stream kept by its head never runs over its cap")
         }
-        std::thread::sleep(Duration::from_millis(20));
     }
-    let text = |(buffer, _): &(Arc<Mutex<Vec<u8>>>, _)| {
-        buffer
-            .lock()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .unwrap_or_default()
-    };
-    Ok(Finished {
-        status,
-        stdout: text(&stdout),
-        stderr: text(&stderr),
-    })
-}
-
-/// Reads a pipe to its end on a thread of its own, keeping what arrived so far readable.
-fn collect(
-    pipe: Option<impl Read + Send + 'static>,
-) -> (Arc<Mutex<Vec<u8>>>, std::thread::JoinHandle<()>) {
-    let buffer = Arc::new(Mutex::new(Vec::new()));
-    let sink = buffer.clone();
-    let reader = std::thread::spawn(move || {
-        let Some(mut pipe) = pipe else { return };
-        let mut chunk = [0u8; 8192];
-        while let Ok(read) = pipe.read(&mut chunk) {
-            if read == 0 {
-                break;
-            }
-            if let Ok(mut bytes) = sink.lock() {
-                // A version or status answer is short; a runaway printer is not kept whole.
-                if bytes.len() < 256 * 1024 {
-                    bytes.extend_from_slice(&chunk[..read]);
-                }
-            }
-        }
-    });
-    (buffer, reader)
 }
