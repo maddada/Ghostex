@@ -6,6 +6,9 @@
 use ghostex_gx_protocol::StartupDelivery;
 use serde_json::Value;
 
+use crate::session::constants::{
+    DELIVERY_UNCONFIRMED, LEFT_QUEUE_RETENTION_MS, LEFT_QUEUE_UNCONFIRMED_WORDS,
+};
 use crate::session::text::normalize_pending_text;
 use crate::state::PendingSend;
 
@@ -139,10 +142,71 @@ pub fn pending_with_startup_sends(
                 matching_after_timestamp: None,
                 sent_while_working: false,
                 shell_command: false,
+                left_queue_at_ms: None,
             }),
         }
     }
     entries
+}
+
+/// Sends whose queue row is gone stop saying they wait, and end with what is known about them.
+///
+/// `oldest_loaded_ms` is the first loaded row's time while older rows exist.
+///
+/// CDXC:SessionChat 2026-10-31 DECISION:
+/// User: "ok please give the user a way to remove stuck cards like that please and we need to detect this also". Only the queue knows a send still waits, yet an echo kept "Waiting for the agent to be free…" after its row left, until the transcript carried the message. It may never carry it: a remote Windows machine lost power, Claude's file came back with the delivered answers zeroed out, and a reader opening that chat five hours later got the row back from a saved snapshot, so the card sat over a working agent for good. A row that left reads as on its way for [`LEFT_QUEUE_RETENTION_MS`]. Then a send older than the loaded rows goes, since the transcript above them can hold it and only a page read could tell; any other says plainly the conversation doesn't show it, with no spinner and with Remove. A row still in the queue is a real wait however long it lasts, and stays as the row says.
+/// SEE-ALSO: session/answer_echoes.rs (gxserver's resource index confirms answers the window can't show), composer/actions.rs and composer/send.rs (Remove), apps/desktop/src/app/native_chat/page_answers.rs, startup_delivery.rs, inter_agent_message.rs; apps/mobile/app/src/chat/native/transcript/PageAnswersCard.tsx, SystemRows.tsx, MessageActions.tsx, AgentMessageCards.tsx.
+pub fn settle_rows_gone_from_queue(
+    entries: Vec<PendingSend>,
+    queue: &[Value],
+    now_ms: i64,
+    oldest_loaded_ms: Option<i64>,
+) -> Vec<PendingSend> {
+    let in_queue = |id: &str| queue.iter().any(|row| queue_field(row, "id") == Some(id));
+    entries
+        .into_iter()
+        .filter_map(|mut entry| {
+            // A form's echo names no row until its send is answered; it has its own ending.
+            let Some(row) = entry
+                .queued_prompt_id
+                .clone()
+                .or_else(|| {
+                    entry
+                        .startup_delivery
+                        .as_ref()
+                        .map(|delivery| delivery.prompt_id.clone())
+                })
+                .filter(|row| !row.is_empty())
+            else {
+                return Some(entry);
+            };
+            if in_queue(&row) {
+                entry.left_queue_at_ms = None;
+                return Some(entry);
+            }
+            let left_at = *entry.left_queue_at_ms.get_or_insert(now_ms);
+            let on_its_way = now_ms - left_at < LEFT_QUEUE_RETENTION_MS;
+            if !on_its_way && oldest_loaded_ms.is_some_and(|oldest| entry.sent_at_ms < oldest) {
+                return None;
+            }
+            entry.startup_delivery = Some(if on_its_way {
+                StartupDelivery {
+                    prompt_id: row,
+                    state: "sending".to_string(),
+                    error_message: None,
+                    wait_reason: None,
+                }
+            } else {
+                StartupDelivery {
+                    prompt_id: row,
+                    state: DELIVERY_UNCONFIRMED.to_string(),
+                    error_message: None,
+                    wait_reason: Some(LEFT_QUEUE_UNCONFIRMED_WORDS.to_string()),
+                }
+            });
+            Some(entry)
+        })
+        .collect()
 }
 
 /// Preserves hidden startup sends in their slots when the visible queue is reordered.

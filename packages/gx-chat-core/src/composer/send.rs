@@ -746,6 +746,15 @@ pub fn settle_queue_mutation(
                 state.messages.new_composition_identity();
             }
             if let Some(removed) = removed.as_deref() {
+                crate::questions::forms::reopen_after_removed_answers(state, removed);
+                sends::drop_queued_send(state, removed);
+            }
+        }
+        // The row or its session is gone by the time Remove arrived, so the card is all there is.
+        crate::wire::RpcOutcome::Err { code, .. }
+            if removed.is_some() && code.as_deref() == Some("notFound") =>
+        {
+            if let Some(removed) = removed.as_deref() {
                 sends::drop_queued_send(state, removed);
             }
         }

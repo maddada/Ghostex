@@ -757,6 +757,24 @@ fn insert_attachments(action: &UserAction) -> Vec<Effect> {
 
 fn remove_queue(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     let prompt_id = string_param(action, "promptId");
+    // The row already left (`settle_rows_gone_from_queue`): the card is all there is to remove.
+    let row_left = !state
+        .session
+        .queue_prompts
+        .iter()
+        .flatten()
+        .any(|row| row.get("id").and_then(Value::as_str) == Some(prompt_id));
+    if row_left
+        && state
+            .pending
+            .sends
+            .iter()
+            .any(|entry| entry.queued_prompt_id.as_deref() == Some(prompt_id))
+    {
+        crate::session::sends::drop_queued_send(state, prompt_id);
+        state.core.request_publish();
+        return Vec::new();
+    }
     let document = crate::composer::document::queue(state);
     let mut edit = None;
     if action.param("edit") == Some(&Value::Bool(true)) {

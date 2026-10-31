@@ -62,6 +62,21 @@ fn open(state: &ChatState, id: &str) -> bool {
             .is_some_and(|entry| entry.send.is_none() && entry.sent.is_none())
 }
 
+/// The reader took a form's answers out of the queue before they were typed, so the form is open
+/// again with its saved picks.
+pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &str) {
+    let page = state
+        .pending
+        .sends
+        .iter()
+        .find(|entry| entry.queued_prompt_id.as_deref() == Some(queued_prompt_id))
+        .and_then(|entry| crate::transcript::page_answers::answers_page_id(&entry.text));
+    if let Some(entry) = page.and_then(|page| state.questions.forms.get_mut(&page)) {
+        entry.sent = None;
+        state.core.request_publish();
+    }
+}
+
 fn answered(draft: &QuestionDraft) -> bool {
     draft.skipped
         || !draft.indices.is_empty()
@@ -549,7 +564,9 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
             // takes no answer (`questions/later.rs`).
             let phase = if phase == "open" && removed.contains(&form.id) {
                 "canceled"
-            } else if phase == "open" && crate::questions::resource_modal::is_withdrawn(state, &form.id) {
+            } else if phase == "open"
+                && crate::questions::resource_modal::is_withdrawn(state, &form.id)
+            {
                 // Only the modal's form reads Withdrawn: it opens to be read and takes no answer.
                 "withdrawn"
             } else {

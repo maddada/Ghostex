@@ -62,6 +62,7 @@ pub fn begin_send(
         matching_after_timestamp: None,
         sent_while_working: working && !steers_into_running_turn(state),
         shell_command: false,
+        left_queue_at_ms: None,
     };
     let entry = assign_occurrence(&state.pending.sends, entry);
     state.pending.sends.push(entry);

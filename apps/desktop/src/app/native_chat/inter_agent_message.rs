@@ -677,8 +677,8 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
         let failure = text(card, "failure");
-        // A message still waiting says why instead, once gxserver has held it a minute; it has no
-        // Retry or Remove (the card's `retryPromptId` is set only when it failed).
+        // A message still waiting says why instead, once gxserver has held it a minute, with Remove
+        // (`removePromptId`); Retry is only for one that failed (`retryPromptId`).
         let failure = if failure.is_empty() {
             text(card, "waitReason")
         } else {
@@ -689,6 +689,7 @@ impl NativeChatView {
         }
         let s = p.scale;
         let retry = card["retryPromptId"].clone();
+        let remove = card["removePromptId"].clone();
         let action = |suffix: &str, label: &'static str, command: Value| {
             div()
                 .id(SharedString::from(format!("{key}:{suffix}")))
@@ -725,6 +726,13 @@ impl NativeChatView {
                         "remove",
                         "Remove",
                         json!({"type":"removeQueue","promptId":retry.clone()}),
+                    ))
+                })
+                .when(remove.is_string(), |row| {
+                    row.child(action(
+                        "remove",
+                        "Remove",
+                        json!({"type":"removeQueue","promptId":remove.clone()}),
                     ))
                 })
                 .into_any_element(),

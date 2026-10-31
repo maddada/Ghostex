@@ -44,12 +44,24 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatMe
         .into_iter()
         .map(|answers| answers.page_id)
         .collect();
+    // gxserver's index saw the answers in the transcript, even when the loaded rows no longer hold
+    // them or the file has since lost them. Only a row that left counts: a failed row's Retry keeps
+    // its card whatever an earlier send of the same page did.
+    let indexed: Vec<&str> = state
+        .session
+        .resource_index
+        .iter()
+        .filter(|entry| entry.get("status").and_then(serde_json::Value::as_str) == Some("answered"))
+        .filter_map(|entry| entry.get("id").and_then(serde_json::Value::as_str))
+        .collect();
     let mut sends = std::mem::take(&mut state.pending.sends);
     sends.retain(|entry| {
         let Some(page_id) = answers_page_id(&entry.text) else {
             return true;
         };
-        if confirmed.contains(&page_id) {
+        if confirmed.contains(&page_id)
+            || (entry.left_queue_at_ms.is_some() && indexed.contains(&page_id.as_str()))
+        {
             return false;
         }
         // A form's echo lives while its send is in flight, and on as the queue row it became.

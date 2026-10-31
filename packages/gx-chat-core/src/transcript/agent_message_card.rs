@@ -181,6 +181,8 @@ pub fn dress_received(message: &mut Value) {
     let failed = delivery.is_object() && delivery["state"] == "failed";
     let status = if failed {
         status("Not sent", "Not sent", "failed", "alert")
+    } else if delivery["state"] == crate::session::constants::DELIVERY_UNCONFIRMED {
+        status("Not confirmed", "Not confirmed", "waiting", "clock")
     } else if delivery.is_object() {
         status("Waiting for agent", "Waiting for agent", "waiting", "clock")
     } else if message["queued"] == true {
@@ -231,6 +233,13 @@ pub fn dress_received(message: &mut Value) {
             .filter(|reason| !reason.is_empty())
         {
             card["waitReason"] = reason.into();
+            // A row held long enough to say why, or one that left unconfirmed, can be removed.
+            if matches!(
+                delivery["state"].as_str(),
+                Some("queued" | crate::session::constants::DELIVERY_UNCONFIRMED)
+            ) {
+                card["removePromptId"] = delivery["promptId"].clone();
+            }
         }
     }
     message["interAgentMessage"]["card"] = crowned(card, coordinator);
@@ -617,6 +626,21 @@ mod wait_reason_tests {
         dress_received(&mut message);
         let card = &message["interAgentMessage"]["card"];
         assert_eq!(card["waitReason"], json!(reason));
+        assert_eq!(card["removePromptId"], json!("Q1"));
+        let mut typing = json!({
+            "interAgentMessage": {"agentId": "claude"},
+            "startupDelivery": {"promptId": "Q1", "state": "sending", "waitReason": reason},
+        });
+        dress_received(&mut typing);
+        assert!(typing["interAgentMessage"]["card"]["removePromptId"].is_null());
+        let mut unconfirmed = json!({
+            "interAgentMessage": {"agentId": "claude"},
+            "startupDelivery": {"promptId": "Q1", "state": "unconfirmed", "waitReason": "It left."},
+        });
+        dress_received(&mut unconfirmed);
+        let card = &unconfirmed["interAgentMessage"]["card"];
+        assert_eq!(card["removePromptId"], json!("Q1"));
+        assert_eq!(card["status"]["label"], json!("Not confirmed"));
         let mut failed = json!({
             "interAgentMessage": {"agentId": "claude"},
             "startupDelivery": {"promptId": "Q1", "state": "failed", "errorMessage": "No box.", "waitReason": reason},

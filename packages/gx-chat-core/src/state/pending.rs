@@ -58,6 +58,9 @@ pub struct PendingSend {
     /// A `!` shell command for an agent that records one as a shell row: the echo draws as that
     /// row's tool card, still running, so the swap to the recorded card is invisible.
     pub shell_command: bool,
+    /// When the queue was first seen without this send's row
+    /// (`session/startup_sends.rs::settle_rows_gone_from_queue`).
+    pub left_queue_at_ms: Option<i64>,
 }
 
 /// A command Ghostex typed into the agent, shown as its own row until the transcript covers it.

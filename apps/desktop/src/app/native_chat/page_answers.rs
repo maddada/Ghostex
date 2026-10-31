@@ -72,8 +72,10 @@ impl NativeChatView {
     }
 
     /// The bottom-left line of answers on their way: a spinner while the queue holds or types
-    /// them, or why they could not be delivered with Retry (the queue keeps the answers) and
-    /// Remove.
+    /// them, with Remove while they are only held; why they could not be delivered with Retry (the
+    /// queue keeps the answers) and Remove; or, once they left the queue and the conversation never
+    /// showed them, that fact with Remove and no spinner
+    /// (CDXC:SessionChat 2026-10-31 in packages/gx-chat-core/src/session/startup_sends.rs).
     fn answers_delivery(
         &self,
         answers: &Value,
@@ -94,8 +96,40 @@ impl NativeChatView {
             .gap(px(6.0 * s))
             .text_size(px(12.0 * s))
             .line_height(px(18.0 * s));
+        let action = |id: String, label: &'static str, command: Value| {
+            div()
+                .id(gpui::SharedString::from(id))
+                .role(gpui::Role::Button)
+                .aria_label(label)
+                .chat_cursor_pointer()
+                .px(px(6.0 * s))
+                .py(px(2.0 * s))
+                .rounded(px(5.0 * s))
+                .text_color(p.primary)
+                .hover(|style| style.bg(p.border))
+                .child(label)
+                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
+        };
+        let remove = || {
+            action(
+                format!("answers-remove:{key}"),
+                "Remove",
+                json!({"type":"removeQueue","promptId":prompt_id.clone()}),
+            )
+        };
+        if delivery["state"] == "unconfirmed" {
+            return line
+                .role(gpui::Role::Status)
+                .text_color(p.muted)
+                .child(text(delivery, "waitReason"))
+                .when(!prompt_id.is_empty(), |line| line.child(remove()))
+                .into_any_element();
+        }
         if !failed {
             let reason = text(delivery, "waitReason");
+            let removable = delivery["state"] == "queued"
+                && !prompt_id.is_empty()
+                && self.snapshot["queue"]["capabilities"]["canRemove"] == true;
             let label: gpui::SharedString = if delivery["state"] == "queued" && !reason.is_empty() {
                 // Why gxserver still holds the answers, once they have waited about a minute.
                 reason.into()
@@ -131,6 +165,7 @@ impl NativeChatView {
                 .text_color(p.muted)
                 .child(glyph)
                 .child(label)
+                .when(removable, |line| line.child(remove()))
                 .into_any_element();
         }
         let message = text(delivery, "errorMessage");
@@ -140,20 +175,6 @@ impl NativeChatView {
             format!("Your answers could not be delivered: {message}")
         };
         let error: Hsla = rgb(if p.light { 0xb91c1c } else { 0xfb7185 }).into();
-        let action = |id: String, label: &'static str, command: Value| {
-            div()
-                .id(gpui::SharedString::from(id))
-                .role(gpui::Role::Button)
-                .aria_label(label)
-                .chat_cursor_pointer()
-                .px(px(6.0 * s))
-                .py(px(2.0 * s))
-                .rounded(px(5.0 * s))
-                .text_color(p.primary)
-                .hover(|style| style.bg(p.border))
-                .child(label)
-                .on_click(cx.listener(move |this, _, _, cx| this.invoke(command.clone(), cx)))
-        };
         line.role(gpui::Role::Alert)
             .child(div().text_color(error).child(message))
             .when(!prompt_id.is_empty(), |line| {
@@ -162,11 +183,7 @@ impl NativeChatView {
                     "Retry",
                     json!({"type":"retryQueue","promptId":prompt_id.clone()}),
                 ))
-                .child(action(
-                    format!("answers-remove:{key}"),
-                    "Remove",
-                    json!({"type":"removeQueue","promptId":prompt_id.clone()}),
-                ))
+                .child(remove())
             })
             .into_any_element()
     }

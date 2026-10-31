@@ -39,6 +39,14 @@ impl NativeChatView {
             return None;
         }
         let prompt_id = delivery["promptId"].clone();
+        // A held row that says why can go from here too, and a send that left the queue
+        // unconfirmed has only this line (CDXC:SessionChat 2026-10-31 in
+        // packages/gx-chat-core/src/session/startup_sends.rs).
+        let removable = !failed
+            && (delivery["state"] == "unconfirmed"
+                || (delivery["state"] == "queued"
+                    && !reason.is_empty()
+                    && self.snapshot["queue"]["capabilities"]["canRemove"] == true));
         let status = if failed {
             let message = text(delivery, "errorMessage");
             if message.is_empty() {
@@ -87,6 +95,13 @@ impl NativeChatView {
                     .child(action(
                         "startup-delivery-remove",
                         "Remove",
+                        json!({"type":"removeQueue","promptId":prompt_id.clone()}),
+                    ))
+                })
+                .when(removable, |this| {
+                    this.child(action(
+                        "startup-delivery-remove",
+                        "Remove",
                         json!({"type":"removeQueue","promptId":prompt_id}),
                     ))
                 })
@@ -111,7 +126,10 @@ impl NativeChatView {
         let id = text(message, "id");
         let s = p.scale;
         let delivery = &message["startupDelivery"];
-        let waiting = delivery.is_object() && delivery["state"] != "failed";
+        // An unconfirmed send is no longer waiting on anything: its line says so, with no spinner.
+        let waiting = delivery.is_object()
+            && delivery["state"] != "failed"
+            && delivery["state"] != "unconfirmed";
         let queued = message["queued"] == true && delivery.is_null();
         if !waiting && !queued {
             return None;

@@ -116,6 +116,16 @@ pub const TERMINAL_TOOL_ID_PREFIX: &str = "terminal-tool:";
 /// How long a missing terminal sample is held before the tool row drops, which bridges the
 /// terminal's repaint gaps. `packages/core-ui/chat/session-chat-terminal-status.ts`.
 pub const TERMINAL_TOOL_HOLD_MS: f64 = 5_000.0;
+/// How long an echo may say it is on its way after its queue row left, with no transcript row yet.
+/// gxserver types a row and removes it within seconds (58 real deliveries on a remote machine:
+/// median 1.2 s, longest 8.2 s), so this covers that row reaching the transcript and the next read,
+/// and stays above [`STALL_THRESHOLD_MS`] so a read that has stalled recovers first.
+pub const LEFT_QUEUE_RETENTION_MS: i64 = 30_000;
+/// The delivery state of a send past [`LEFT_QUEUE_RETENTION_MS`] that the transcript never showed.
+pub const DELIVERY_UNCONFIRMED: &str = "unconfirmed";
+/// A send past [`LEFT_QUEUE_RETENTION_MS`], in words true whether it was typed or removed elsewhere.
+pub const LEFT_QUEUE_UNCONFIRMED_WORDS: &str =
+    "This left the queue, but the conversation doesn't show it.";
 
 /// Family a's timer keys. One per `setTimeout` or `setInterval` the controller keeps, named with
 /// the family prefix `docs/2026-09-21/rust-chat/FAMILIES.md` asks for so two families cannot
@@ -126,6 +136,7 @@ pub const TIMER_RESYNC_FOLLOW_UP: &str = "a:resync-follow-up";
 pub const TIMER_STALL: &str = "a:stall";
 pub const TIMER_READ_DEADLINE: &str = "a:read-deadline";
 pub const TIMER_TERMINAL_TOOL_HOLD: &str = "a:terminal-tool-hold";
+pub const TIMER_LEFT_QUEUE: &str = "a:left-queue";
 
 /// The `notFound` retry delay for `attempt`, zero-based.
 pub fn not_found_retry_delay_ms(attempt: u32) -> u64 {
