@@ -201,14 +201,14 @@ fn main() {
         Cua Driver checks, and other fixed local-tool actions see the same
         standard user locations as gxserver. This is startup environment
         ownership, not a per-action fallback.
+        2026-10-31: this asks the login shell for its PATH and waits at most
+        `STARTUP_PROBE_WAIT`; the probe's thread only uses std's environment
+        calls, which are locked against this `set_var`.
         */
         #[cfg(target_os = "macos")]
         {
             let current_path = env::var("PATH").ok();
-            env::set_var(
-                "PATH",
-                gpui_normalized_user_tool_path(current_path.as_deref()),
-            );
+            env::set_var("PATH", gpui_startup_user_tool_path(current_path.as_deref()));
         }
     }
     // A second launch brings the running Ghostex forward and exits (see

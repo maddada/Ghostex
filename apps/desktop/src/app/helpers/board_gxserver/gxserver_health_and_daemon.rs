@@ -700,13 +700,32 @@ pub(crate) fn gpui_normalized_user_tool_path(current_path: Option<&str>) -> Stri
     sparse LaunchServices PATH that cannot see Homebrew-installed Ghostex tools.
     This PATH is for the app and gxserver only; it is never exported into a
     terminal session's shell (see CDXC:Zmx).
-    Probes the login shell dynamically with per-process caching and falls back
-    to standard paths, ensuring user-installed tools and package-manager
-    environments (Nix, Homebrew, mise, asdf) are naturally resolved in their
-    intended precedence order without hardcoded directory lists.
+    2026-10-31: the login shell's own PATH leads (probed once per process),
+    then the inherited PATH, then the usual tool folders (Homebrew, mise,
+    asdf, volta, nodenv, Nix profiles, `~/.local/bin`) as fallbacks that can
+    never shadow either, so a failed probe still finds them. NixOS's
+    `/run/wrappers/bin` stays ahead of the Nix profiles (GitHub PR #354).
     */
     let home = ghostex_paths::user_home_dir();
     ghostex_paths::tool_path::normalized_user_tool_path(current_path, &home)
+}
+
+/// `gpui_normalized_user_tool_path` for the app's own startup PATH: it waits for the login
+/// shell at most `STARTUP_PROBE_WAIT`, then uses the fallbacks alone and lets the probe finish
+/// in the background for later callers (CDXC:OsIntegration 2026-10-31 in tool_path.rs).
+#[cfg(target_os = "macos")]
+pub(crate) fn gpui_startup_user_tool_path(current_path: Option<&str>) -> String {
+    let home = ghostex_paths::user_home_dir();
+    let login_shell_entries = ghostex_paths::tool_path::login_shell_path_entries_within(
+        &home,
+        ghostex_paths::tool_path::STARTUP_PROBE_WAIT,
+    )
+    .unwrap_or_default();
+    ghostex_paths::tool_path::normalized_user_tool_path_with(
+        login_shell_entries,
+        current_path,
+        &home,
+    )
 }
 
 #[cfg(target_os = "macos")]
