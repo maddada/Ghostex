@@ -279,6 +279,14 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
         }
         _ => return Err("credentials is missing".to_string()),
     };
+    for (index, field) in credentials.iter().enumerate() {
+        if credentials[..index]
+            .iter()
+            .any(|earlier| earlier.name == field.name)
+        {
+            return Err(format!("credential name \"{}\" is used twice", field.name));
+        }
+    }
     Ok(CommandInfo {
         id: id.to_string(),
         name: name.to_string(),

@@ -71,6 +71,14 @@ fn info_needs_a_free_well_formed_id_a_name_an_id_format_and_its_credentials() {
             json!({ "credentials": [{ "name": "API token", "label": "Token" }] }),
             "credential name \"API token\" isn't lowercase letters, digits or underscores",
         ),
+        (
+            json!({ "credentials": [
+                { "name": "token", "label": "Token", "secret": true },
+                { "name": "url", "label": "Server" },
+                { "name": "token", "label": "Same name", "secret": false },
+            ] }),
+            "credential name \"token\" is used twice",
+        ),
     ] {
         assert_eq!(
             parse_info(&info(changes.clone())),
