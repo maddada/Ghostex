@@ -15,8 +15,6 @@ use std::{
 use super::ProcessTree;
 
 /// How much of one output stream `run_bounded` keeps.
-// Only the command ticket source's runner keeps a tail or caps a stream.
-#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Keep {
     /// The first `n` bytes, give or take one read past them; the rest is read and dropped without
@@ -41,16 +39,25 @@ pub(crate) struct RunLimits {
 }
 
 /// What a bounded command printed before it exited.
-#[derive(Debug)]
 pub(crate) struct RunOutput {
     pub(crate) status: ExitStatus,
     pub(crate) stdout: Vec<u8>,
     pub(crate) stderr: Vec<u8>,
 }
 
-// Only the command ticket source's runner reads why a command did not start or how much it
-// answered.
-#[cfg_attr(not(test), allow(dead_code))]
+/// Only the status and how much each stream held: output can carry a credential the command was
+/// given.
+impl std::fmt::Debug for RunOutput {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RunOutput")
+            .field("status", &self.status)
+            .field("stdout_bytes", &self.stdout.len())
+            .field("stderr_bytes", &self.stderr.len())
+            .finish()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) enum Unfinished {
     /// It could not start at all (missing, not executable).

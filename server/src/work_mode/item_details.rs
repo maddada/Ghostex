@@ -18,8 +18,8 @@ use super::*;
 
 /// Re-opening a ticket within this long shows what was read a moment ago.
 const DETAIL_TTL: Duration = Duration::from_secs(45);
-const MAX_COMMENTS: usize = 30;
-const MAX_TEXT_CHARS: usize = 20_000;
+pub(crate) const MAX_COMMENTS: usize = 30;
+pub(crate) const MAX_TEXT_CHARS: usize = 20_000;
 
 /// The item a request names: a source's ticket, or a PR (the code host's).
 #[derive(Clone, Debug, PartialEq)]

@@ -239,3 +239,21 @@ fn passing_the_cap_ends_the_whole_tree() {
     );
     assert_all_gone(&mut leftovers, "the command or its child");
 }
+
+#[test]
+fn run_output_debug_shows_the_status_and_sizes_never_the_bytes() {
+    let output = run_bounded(
+        shell("printf out-secret; printf err-secret-x >&2; exit 3"),
+        limits(None, Keep::AtMost(MIB), Keep::Tail(8192)),
+    )
+    .expect("finished");
+    let printed = format!("{output:?}");
+    assert!(!printed.contains("secret"), "{printed}");
+    assert!(printed.contains("stdout_bytes: 10"), "{printed}");
+    assert!(printed.contains("stderr_bytes: 12"), "{printed}");
+    assert_eq!(output.status.code(), Some(3));
+    assert!(
+        printed.contains(&format!("{:?}", output.status)),
+        "{printed}"
+    );
+}
