@@ -6,7 +6,8 @@ use std::{
 use crate::platform::resources;
 use crate::protocol::ToolCapabilityStatus;
 
-#[cfg(windows)]
+// Compiled into tests everywhere, so what it decides is tested without a Windows machine.
+#[cfg(any(windows, test))]
 #[path = "toolchain/windows.rs"]
 mod windows;
 
