@@ -938,7 +938,7 @@ impl ThemeTab {
         .map(IntoElement::into_any_element)
     }
 
-    /// Related settings on the Chat, Sidebar & Sessions and Terminal pages: each Open searches
+    /// Related settings on the Sidebar & Sessions and Terminal pages: each Open searches
     /// that page for the row.
     fn related_section(
         &mut self,
@@ -946,12 +946,6 @@ impl ThemeTab {
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let rows = [
-            (
-                "Chat size",
-                "Default chat zoom",
-                ICON_FONT,
-                SettingsTabId::Chat,
-            ),
             (
                 "Sidebar size",
                 "Sidebar Interface Size",

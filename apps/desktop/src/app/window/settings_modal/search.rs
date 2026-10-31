@@ -640,6 +640,11 @@ mod tests {
             "sessionChatTextStrengthPercent"
         ));
         assert!(finds_row(
+            "default chat zoom",
+            "theming",
+            "sessionChatZoomPercent"
+        ));
+        assert!(finds_row(
             "thinking in grey",
             "theming",
             "sessionChatMutedThinking"

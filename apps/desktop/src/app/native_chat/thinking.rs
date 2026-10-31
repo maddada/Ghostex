@@ -101,7 +101,7 @@ impl NativeChatView {
             .w_full()
             .min_w_0()
             .gap(px(6.0 * s))
-            .pb(px(13.0 * s))
+            .pb(px(super::chat_text_look::THINKING_GAP * s))
             .child(lane_marker(lane.prose, p))
             .child(
                 div()

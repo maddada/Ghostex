@@ -9,7 +9,6 @@ pub(crate) fn chat() -> Section {
         vec![
             row("preferredAgentInterface", "Default view for compatible agents", "Automatically switch to chat as soon as Ghostex detects that an agent session supports it.").options(PREFERRED_AGENT_INTERFACE_OPTIONS),
             row("closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs."),
-            row("sessionChatZoomPercent", "Default chat zoom (%)", "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%."),
             row("sessionChatCustomTranscriptWidthEnabled", "Custom transcript width (set with Transcript width)", "On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width."),
             row("sessionChatTranscriptWidthPercent", "Transcript width", "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way."),
             row("sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts."),

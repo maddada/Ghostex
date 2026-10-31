@@ -4,9 +4,11 @@ use super::super::super::super::native_modal_kit::hsla;
 use super::super::super::catalog::{SettingOption, module, settings_catalog};
 use super::super::super::fields::toggle_field_with;
 use super::super::super::fields::{
-    ButtonVariant, SliderBinding, SliderSaver, card_inset, color_field, reset_key, select_field,
-    settings_button, settings_section, slider_number_field_with, text_field, tooltip_text,
+    ButtonVariant, RowSpec, SliderBinding, SliderSaver, card_inset, color_field, reset_key,
+    select_field, setting_row, settings_button, settings_section, slider_number_field_with,
+    text_field, tooltip_text,
 };
+use super::super::super::model::SettingsTabId;
 use super::super::super::page::PageBlock;
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsStore;
@@ -87,6 +89,36 @@ fn ghostty_preset(page: &mut GeneralTab, recommended: bool, cx: &mut Context<Gen
         };
         store.post_message(json!({ "type": action }), cx);
     });
+}
+
+/// CDXC:Settings 2026-10-31 DECISION:
+/// User: the Terminal page gets a link row to the moved Monospace font, which jumps to it on the Interface page. The font itself lives once, beside the App font and the chat preview (`theme/font.rs`).
+fn monospace_font_link(p: &SettingsPalette, cx: &mut Context<GeneralTab>) -> AnyElement {
+    let button = settings_button(
+        p,
+        "terminal-monospace-font-link",
+        "Open",
+        None,
+        ButtonVariant::Outline,
+        false,
+        None,
+        |page: &mut GeneralTab, _window, cx| {
+            let store = page.store.clone();
+            store.update(cx, |store, cx| {
+                store.scroll_to_section(SettingsTabId::Theme, "font", cx);
+            });
+        },
+        cx,
+    );
+    setting_row(
+        p,
+        "terminal-monospace-font-link-row",
+        RowSpec::new("Monospace font")
+            .description("The terminal's font is set on the Interface page, with the App font."),
+        None,
+        button,
+        cx,
+    )
 }
 
 fn post(page: &mut GeneralTab, message: Value, cx: &mut Context<GeneralTab>) {
@@ -403,6 +435,9 @@ fn terminal_section(
             window,
             cx,
         ));
+    }
+    if !g.search.is_searching() {
+        rows.push(monospace_font_link(&p, cx));
     }
     rows.extend(page.slider(
         g,

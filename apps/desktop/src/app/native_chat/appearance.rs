@@ -1,4 +1,6 @@
-use super::chat_text_look::{CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT};
+use super::chat_text_look::{
+    CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT, zoom_scale,
+};
 use crate::app::helpers::{
     gpui_session_chat_uses_light_theme, sidebar_titlebar_pack_rgb, sidebar_titlebar_rgb_channels,
     work_area_background_for_variant,
@@ -299,7 +301,7 @@ impl ChatAppearance {
             } else {
                 lifted(0.03, 0.0)
             },
-            scale: super::zoom::chat_zoom_percent(settings) / 100.0,
+            scale: zoom_scale(super::zoom::chat_zoom_percent(settings)),
             // A picked app font replaces this through `crate::ui_fonts`, and a saved font that
             // is not installed leaves the chat on it.
             font: CHAT_BODY_FONT.to_string(),

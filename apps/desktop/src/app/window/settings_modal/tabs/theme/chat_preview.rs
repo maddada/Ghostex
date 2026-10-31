@@ -14,8 +14,9 @@ use super::colours::{Rgb, preview_colours};
 use crate::ui_fonts::{exact_family, monospace_default_face, monospace_replacement, picked_family};
 use chat_text_look::{
     CHAT_BODY_FONT, CHAT_MONO_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT,
-    PROSE_LINE_HEIGHT, PROSE_SIZE, USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS, inline_code_fill,
-    inline_code_font_scale,
+    PROSE_LINE_HEIGHT, PROSE_SIZE, THINKING_GAP, USER_BUBBLE_PADDING, USER_BUBBLE_RADIUS,
+    inline_code_fill, inline_code_font_scale, inline_code_padding_x, inline_code_radius,
+    zoom_scale,
 };
 use gpui::{
     AnyElement, App, FontWeight, Hsla, IntoElement as _, ParentElement as _, SharedString,
@@ -102,20 +103,21 @@ pub(super) fn chat_preview(
     )
     .unwrap_or(0);
     let muted_thinking = values.bool("sessionChatMutedThinking");
+    let scale = zoom_scale(values.f64("sessionChatZoomPercent") as f32);
     let (_, background, _) = preview_colours(values, !light);
     let reply = colors.reply_prose(muted_thinking, strength);
     let line = move |color: Hsla| {
         div()
             .min_w_0()
-            .text_size(px(PROSE_SIZE))
-            .line_height(px(PROSE_LINE_HEIGHT))
+            .text_size(px(PROSE_SIZE * scale))
+            .line_height(px(PROSE_LINE_HEIGHT * scale))
             .text_color(color)
     };
     let user = h_flex().w_full().justify_end().child(
         div()
             .max_w(relative(0.8))
-            .rounded(px(USER_BUBBLE_RADIUS))
-            .p(px(USER_BUBBLE_PADDING))
+            .rounded(px(USER_BUBBLE_RADIUS * scale))
+            .p(px(USER_BUBBLE_PADDING * scale))
             .bg(bubble_fill(background, light))
             .child(
                 line(colors.user_prose(strength))
@@ -126,26 +128,26 @@ pub(super) fn chat_preview(
         .child("Checking where it's called before renaming it.");
     let code = div()
         .flex_shrink_0()
-        .px(px(5.6))
-        .rounded(px(6.0))
+        .px(px(inline_code_padding_x() * scale))
+        .rounded(px(inline_code_radius() * scale))
         .bg(inline_code_fill(light))
         .font_family(mono_family)
         .font_weight(FontWeight::NORMAL)
-        .text_size(px(PROSE_SIZE * inline_code_font_scale()))
+        .text_size(px(PROSE_SIZE * inline_code_font_scale() * scale))
         // Text strength leaves code at the reply's own colour.
         .text_color(colors.reply_base(muted_thinking))
         .child("greet_user(name)");
     let answer = h_flex()
         .flex_wrap()
         .items_center()
-        .gap(px(4.0))
+        .gap(px(4.0 * scale))
         .child(line(reply).child("Done. It's now"))
         .child(code)
         .child(line(reply).child("and both callers use it."));
     v_flex()
         .mt(px(8.0))
         .p(px(14.0))
-        .gap(px(13.0))
+        .gap(px(THINKING_GAP * scale))
         .rounded(px(8.0))
         .border_1()
         .border_color(hsla(p.hairline))

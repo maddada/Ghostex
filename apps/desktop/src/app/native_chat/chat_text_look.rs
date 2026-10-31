@@ -26,18 +26,45 @@ pub(crate) const USER_BUBBLE_PADDING: f32 = 12.0;
 pub(crate) const INPUT_STEP_DARK: f32 = 0.03;
 pub(crate) const INPUT_STEP_LIGHT: f32 = 0.032;
 
-/// Inline code's size as a share of the prose around it.
-pub(crate) fn inline_code_font_scale() -> f32 {
-    static SCALE: LazyLock<f32> = LazyLock::new(|| {
+/// The gap below an agent's thinking, before the zoom.
+pub(crate) const THINKING_GAP: f32 = 13.0;
+
+/// Inline code's sideways padding and corner radius come from the shared Markdown appearance too.
+fn inline_code_visual() -> &'static serde_json::Value {
+    static VISUAL: LazyLock<serde_json::Value> = LazyLock::new(|| {
         let visual: serde_json::Value = serde_json::from_str(include_str!(
             "../../../../../packages/gx-chat-core/visual/markdown-visual.json"
         ))
         .expect("shared Markdown appearance");
-        visual["inlineCode"]["fontScale"]
-            .as_f64()
-            .expect("inline code's font scale") as f32
+        visual["inlineCode"].clone()
     });
-    *SCALE
+    &VISUAL
+}
+
+fn inline_code_number(name: &str) -> f32 {
+    inline_code_visual()[name]
+        .as_f64()
+        .unwrap_or_else(|| panic!("inline code's {name}")) as f32
+}
+
+/// The chat's drawing scale at Default chat zoom `percent`.
+pub(crate) fn zoom_scale(percent: f32) -> f32 {
+    percent / 100.0
+}
+
+/// Inline code's sideways padding, before the zoom.
+pub(crate) fn inline_code_padding_x() -> f32 {
+    inline_code_number("paddingX")
+}
+
+/// Inline code's corner radius, before the zoom.
+pub(crate) fn inline_code_radius() -> f32 {
+    inline_code_number("radius")
+}
+
+/// Inline code's size as a share of the prose around it.
+pub(crate) fn inline_code_font_scale() -> f32 {
+    inline_code_number("fontScale")
 }
 
 /// Inline code's fill.
@@ -153,5 +180,14 @@ mod tests {
     #[test]
     fn inline_code_has_a_size_from_the_shared_appearance() {
         assert!(inline_code_font_scale() > 0.0);
+        assert!(inline_code_padding_x() > 0.0);
+        assert!(inline_code_radius() > 0.0);
+    }
+
+    #[test]
+    fn the_zoom_is_the_percent_exactly() {
+        assert_eq!(zoom_scale(100.0), 1.0);
+        assert_eq!(zoom_scale(70.0), 0.7);
+        assert_eq!(zoom_scale(200.0), 2.0);
     }
 }

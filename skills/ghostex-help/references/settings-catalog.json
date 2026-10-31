@@ -38,21 +38,6 @@
       "agentWritable": true
     },
     {
-      "key": "sessionChatZoomPercent",
-      "title": "Default chat zoom (%)",
-      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "number",
-      "default": 100,
-      "min": 70,
-      "max": 200,
-      "step": 5,
-      "agentWritable": true
-    },
-    {
       "key": "sessionChatCustomTranscriptWidthEnabled",
       "title": "Custom transcript width (set with Transcript width)",
       "subtitle": "On once Transcript width is dragged to a percentage; off keeps Auto, where the transcript matches the prompt composer's width.",
@@ -3554,6 +3539,23 @@
       "sectionTitle": "Interface",
       "type": "string",
       "default": "JetBrains Mono",
+      "agentWritable": true
+    },
+    {
+      "key": "sessionChatZoomPercent",
+      "title": "Default chat zoom (%)",
+      "subtitle": "Scale every desktop chat, including messages and the prompt composer, from 70% to 200% in 5% steps. Cmd+= and Cmd+- in a chat change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
       "agentWritable": true
     },
     {

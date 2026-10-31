@@ -13,6 +13,7 @@ use crate::ui_fonts::{APP_FONT_SETTING, MONOSPACE_FONT_SETTING};
 use gpui::{AnyElement, Context, IntoElement, Window};
 use serde_json::json;
 
+const CHAT_ZOOM_KEY: &str = "sessionChatZoomPercent";
 const TEXT_STRENGTH_KEY: &str = "sessionChatTextStrengthPercent";
 const MUTED_THINKING_KEY: &str = "sessionChatMutedThinking";
 
@@ -94,6 +95,27 @@ impl ThemeTab {
                         cx,
                     )
                 },
+                window,
+                cx,
+            ));
+        }
+        if t.visible(CHAT_ZOOM_KEY) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    CHAT_ZOOM_KEY,
+                    "Default chat zoom (%)",
+                    "Scale the desktop chat interface, including messages and the prompt composer, from 70% to 200% in 5% steps. The preview draws at this size.",
+                ),
+                Some(reset_key::<Self>(CHAT_ZOOM_KEY)),
+                SliderBinding {
+                    key: CHAT_ZOOM_KEY,
+                    min: number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
+                    max: number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
+                    step: number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
+                },
+                t.values.f64(CHAT_ZOOM_KEY),
                 window,
                 cx,
             ));

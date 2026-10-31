@@ -1,7 +1,7 @@
 //! Keyboard zoom for the chat: Cmd+= / Cmd+- / Cmd+0 (Ctrl on Windows and Linux).
 //!
 //! GPUI chat paints everything at `ChatAppearance::scale`, which is the saved
-//! `sessionChatZoomPercent` (Settings > Chat > Default chat zoom). The chords step that setting,
+//! `sessionChatZoomPercent` (Settings > Interface > Default chat zoom). The chords step that setting,
 //! so every open chat on the computer, and every window drawn from one (the maximized composer,
 //! the pickers, the image viewer), changes size together.
 

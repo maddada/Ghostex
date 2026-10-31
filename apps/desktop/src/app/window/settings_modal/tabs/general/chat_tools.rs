@@ -42,21 +42,6 @@ fn chat_section(
     }
     // CDXC:Sessions 2026-10-09 DECISION: the New-session cleanup is an Advanced setting, off by default, that only runs for Chat; gxserver enforces the Chat condition.
     rows.extend(page.toggle(g, s, "closeEmptySessionsOnNew", "Close empty sessions when starting a new one", "When you start a new session, close this project's other sessions that have nothing typed, drafted or queued. Only applies when Chat is the default view for that agent; with Terminal it never runs.", false, cx));
-    rows.extend(page.slider(
-        g,
-        s,
-        "sessionChatZoomPercent",
-        "Default chat zoom (%)",
-        "Scale the desktop chat interface, including messages and the prompt composer, from 70% to 200% in 5% steps. Default: 100%.",
-        (
-            g.number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
-            g.number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
-            g.number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
-        ),
-        false,
-        window,
-        cx,
-    ));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q20): Custom transcript width and Transcript
     // width are one slider. It reads Auto (the transcript matches the prompt composer) until it is
     // dragged, which turns the custom width on; its reset goes back to Auto.
