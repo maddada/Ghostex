@@ -70,8 +70,9 @@ pub(crate) fn work_targets(project: &Value, session: &Value) -> WorkTargets {
     let linear_key = project_linear_key(project_id);
     let scope = TicketScope {
         project_id,
+        workspace_id: None,
         cwd: cwd.as_deref(),
-        linear_api_key: None,
+        credentials: None,
     };
     let in_branch = |source: WorkSourceId| match branch.as_deref() {
         Some(branch) => work_source(source).tickets_in_branch(&scope, branch),
@@ -238,8 +239,9 @@ pub(crate) fn presentation_session_work(project: &Value, session: &Value) -> Opt
             .get("projectId")
             .and_then(Value::as_str)
             .unwrap_or_default(),
+        workspace_id: None,
         cwd: targets.cwd.as_deref(),
-        linear_api_key: None,
+        credentials: None,
     };
     let repo = targets.cwd.as_deref().and_then(cached_work_repo);
     let tickets: Vec<Value> = targets

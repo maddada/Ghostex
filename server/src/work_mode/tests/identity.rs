@@ -36,24 +36,56 @@ fn ticket_keys_labels_and_link_kinds_stay_what_saved_links_hold() {
     );
 }
 
+/// Each source's known ticket-id prefixes: `linear` for Linear, none for GitHub.
+fn known_keys(linear: &[&str]) -> Vec<(WorkSourceId, Vec<String>)> {
+    vec![
+        (
+            WorkSourceId::Linear,
+            linear.iter().map(|key| key.to_string()).collect(),
+        ),
+        (WorkSourceId::Github, Vec::new()),
+    ]
+}
+
 #[test]
 fn a_pr_branch_names_linear_tickets_by_known_keys_and_a_github_issue_by_its_number() {
     let ticket = |source, id: &str| WorkItemRef::Ticket(TicketRef::new(source, id));
     // The details page reads no body here: a "Closes #13" does not name #13.
     let pull_request = json!({ "headBranch": "leandro/12-acm-1-fix", "body": "Closes #13" });
     assert_eq!(
-        pull_request_branch_tickets(&pull_request, &["ACM".to_string()]),
+        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"])),
         vec![
             ticket(WorkSourceId::Linear, "ACM-1"),
             ticket(WorkSourceId::Github, "12"),
         ]
     );
     assert_eq!(
-        pull_request_branch_tickets(&pull_request, &[]),
+        pull_request_branch_tickets(&pull_request, &known_keys(&[])),
         vec![ticket(WorkSourceId::Github, "12")]
     );
     assert_eq!(
-        pull_request_branch_tickets(&json!({ "body": "Closes #13" }), &["ACM".to_string()]),
+        pull_request_branch_tickets(&json!({ "body": "Closes #13" }), &known_keys(&["ACM"])),
+        Vec::<WorkItemRef>::new()
+    );
+}
+
+#[test]
+fn a_pr_branch_matches_each_source_only_by_its_own_known_keys() {
+    let pull_request = json!({ "headBranch": "leandro/acm-1-fix" });
+    let ticket = |source, id: &str| WorkItemRef::Ticket(TicketRef::new(source, id));
+    assert_eq!(
+        pull_request_branch_tickets(&pull_request, &known_keys(&["ACM"])),
+        vec![ticket(WorkSourceId::Linear, "ACM-1")]
+    );
+    // `ACM` known to another source names no Linear ticket.
+    assert_eq!(
+        pull_request_branch_tickets(
+            &pull_request,
+            &[
+                (WorkSourceId::Linear, Vec::new()),
+                (WorkSourceId::Github, vec!["ACM".to_string()]),
+            ]
+        ),
         Vec::<WorkItemRef>::new()
     );
 }

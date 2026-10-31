@@ -57,22 +57,23 @@ pub(crate) fn pull_request_tickets_known_locally(
     tickets
 }
 
-/// The tickets the PR's head branch names, each source's in turn: Linear identifiers with a known
-/// team key, or the GitHub issue number a `<user>/<number>-<slug>` branch starts with.
+/// The tickets the PR's head branch names, each source's in turn with the ticket-id prefixes it
+/// knows: Linear identifiers with a known team key, or the GitHub issue number a
+/// `<user>/<number>-<slug>` branch starts with.
 pub(crate) fn pull_request_branch_tickets(
     pull_request: &Value,
-    known_keys: &[String],
+    known_keys: &[(WorkSourceId, Vec<String>)],
 ) -> Vec<WorkItemRef> {
     let Some(head) = pull_request.get("headBranch").and_then(Value::as_str) else {
         return Vec::new();
     };
     let text = PullRequestText { head, body: None };
     let mut tickets = Vec::new();
-    for source in WorkSourceId::BUILT_IN {
-        for id in work_source(source).tickets_in_pull_request(known_keys, &text) {
+    for (source, keys) in known_keys {
+        for id in work_source(*source).tickets_in_pull_request(keys, &text) {
             push_ticket(
                 &mut tickets,
-                WorkItemRef::Ticket(TicketRef::new(source, id)),
+                WorkItemRef::Ticket(TicketRef::new(*source, id)),
             );
         }
     }

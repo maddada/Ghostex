@@ -95,6 +95,34 @@ pub(crate) fn cached_detail(
     value
 }
 
+/// The scope a source reads the details with: the project's own, or, when the source cannot read
+/// with the project's credentials (no Linear key of its own), the first project's it can read
+/// with, in the project's checkout.
+fn source_scope<'a>(
+    source: WorkSourceId,
+    project: Option<&'a WorkProjectInput>,
+    projects: &'a [WorkProjectInput],
+    cwd: Option<&'a str>,
+) -> TicketScope<'a> {
+    let in_checkout = |owner: &'a WorkProjectInput| TicketScope {
+        cwd,
+        ..owner.ticket_scope()
+    };
+    let rules = work_source(source);
+    match project {
+        Some(own) => project
+            .into_iter()
+            .chain(projects)
+            .map(in_checkout)
+            .find(|scope| rules.can_read(scope))
+            .unwrap_or_else(|| in_checkout(own)),
+        None => TicketScope {
+            cwd,
+            ..TicketScope::default()
+        },
+    }
+}
+
 /// Everything the details page shows. `projects` are the work-mode projects the window shows,
 /// `project_id` the one the request named (or the item's own).
 pub(crate) fn read_work_item(
@@ -146,19 +174,8 @@ pub(crate) fn read_work_item(
         .and_then(|id| projects.iter().find(|input| input.project_id == id))
         .or_else(|| projects.first());
     let cwd = project.and_then(|input| input.path.clone());
-    let linear_key = project
-        .and_then(|input| input.linear_api_key.clone())
-        .or_else(|| {
-            projects
-                .iter()
-                .find_map(|input| input.linear_api_key.clone())
-        });
     let gh = gh_cli_is_available();
-    let scope = TicketScope {
-        project_id: project.map_or("", |input| input.project_id.as_str()),
-        cwd: cwd.as_deref(),
-        linear_api_key: linear_key.as_deref(),
-    };
+    let scope_for = |source: WorkSourceId| source_scope(source, project, projects, cwd.as_deref());
 
     // The PR to read: the item's folded one, or the request's own.
     let mut pull_request_selector = item
@@ -220,7 +237,10 @@ pub(crate) fn read_work_item(
             })
         });
         let ticket_task = match ticket_ref {
-            WorkItemRef::Ticket(wanted) if work_source(wanted.source).can_read(&scope) => {
+            WorkItemRef::Ticket(wanted)
+                if work_source(wanted.source).can_read(&scope_for(wanted.source)) =>
+            {
+                let scope = scope_for(wanted.source);
                 Some(threads.spawn(move || {
                     work_source(wanted.source).read_detail(&scope, &wanted.id, force)
                 }))
@@ -285,24 +305,22 @@ pub(crate) fn read_work_item(
     });
 
     if let (WorkItemRef::PullRequest(_), Some(pr)) = (item_ref, pull_request.as_ref()) {
-        let mut team_keys: Vec<String> = plan
-            .linear
-            .iter()
-            .flat_map(|request| request.team_keys.iter().cloned())
+        let known_keys: Vec<(WorkSourceId, Vec<String>)> = WorkSourceId::BUILT_IN
+            .into_iter()
+            .map(|source| {
+                (
+                    source,
+                    work_source(source).known_keys(&scope_for(source), plan),
+                )
+            })
             .collect();
-        team_keys.extend(
-            linear_key
-                .as_deref()
-                .map(linear_key_fingerprint)
-                .and_then(cached_linear_team_keys)
-                .unwrap_or_default(),
-        );
-        for ticket in pull_request_branch_tickets(pr, &team_keys) {
+        for ticket in pull_request_branch_tickets(pr, &known_keys) {
             push_ticket(&mut pr_tickets, ticket);
         }
         if let Some(url) = pr.get("url").and_then(Value::as_str) {
             for source in WorkSourceId::BUILT_IN {
                 let source_rules = work_source(source);
+                let scope = scope_for(source);
                 if !source_rules.can_read(&scope) {
                     continue;
                 }
@@ -322,6 +340,7 @@ pub(crate) fn read_work_item(
         if matches!(ticket_ref, WorkItemRef::PullRequest(_)) {
             if let Some(WorkItemRef::Ticket(first)) = pr_tickets.first() {
                 let source = work_source(first.source);
+                let scope = scope_for(first.source);
                 if source.can_read(&scope) {
                     match source.read_detail(&scope, &first.id, force) {
                         Ok(value) => ticket = Some(value),
@@ -1292,7 +1311,10 @@ mod tests {
             path: None,
             project: json!({ "projectId": "PCharShare" }),
             sessions: Vec::new(),
-            linear_api_key: Some(api_key.to_string()),
+            credentials: std::sync::Arc::new(WorkCredentials::with_project_linear_key(
+                "PCharShare",
+                Some(api_key),
+            )),
             repo: None,
             workspace_id: crate::workspaces::DEFAULT_WORKSPACE_ID.to_string(),
             tracker: WorkSourceId::Linear,
@@ -1347,7 +1369,10 @@ mod tests {
             path: Some("/gx-char/details".to_string()),
             project: json!({ "projectId": "PCharDetails" }),
             sessions: Vec::new(),
-            linear_api_key: None,
+            credentials: std::sync::Arc::new(WorkCredentials::with_project_linear_key(
+                "PCharDetails",
+                None,
+            )),
             repo: Some("acme/app".to_string()),
             workspace_id: crate::workspaces::DEFAULT_WORKSPACE_ID.to_string(),
             tracker: WorkSourceId::Linear,
@@ -1474,7 +1499,10 @@ mod tests {
             path: Some("/gx-char/details-read".to_string()),
             project: json!({ "projectId": "PCharRead" }),
             sessions: Vec::new(),
-            linear_api_key: Some(api_key.to_string()),
+            credentials: std::sync::Arc::new(WorkCredentials::with_project_linear_key(
+                "PCharRead",
+                Some(api_key),
+            )),
             repo: Some("acme/app".to_string()),
             workspace_id: crate::workspaces::DEFAULT_WORKSPACE_ID.to_string(),
             tracker: WorkSourceId::Linear,
@@ -1632,7 +1660,10 @@ mod tests {
             path: Some(cwd.to_string()),
             project: json!({ "projectId": "PCharReadGh" }),
             sessions: Vec::new(),
-            linear_api_key: None,
+            credentials: std::sync::Arc::new(WorkCredentials::with_project_linear_key(
+                "PCharReadGh",
+                None,
+            )),
             repo: Some("acme/web".to_string()),
             workspace_id: crate::workspaces::DEFAULT_WORKSPACE_ID.to_string(),
             tracker: WorkSourceId::Github,

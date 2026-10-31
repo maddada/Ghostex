@@ -28,8 +28,13 @@ pub(crate) fn share_work_item_with_sidebar(projects: &[WorkProjectInput], detail
             // Only an issue a card already caches gains the URLs, so trying every key is harmless.
             let mut fingerprints: Vec<u64> = projects
                 .iter()
-                .filter_map(|input| input.linear_api_key.as_deref())
-                .map(linear_key_fingerprint)
+                .filter_map(|input| {
+                    input.credentials.linear_api_key(
+                        Some(&input.project_id),
+                        crate::workspaces::stored_project_workspace_id(&input.project),
+                    )
+                })
+                .map(|key| linear_key_fingerprint(&key))
                 .collect();
             fingerprints.sort_unstable();
             fingerprints.dedup();

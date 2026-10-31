@@ -10,7 +10,8 @@
 //! ticket's row; a PR with no ticket is its own row with a "No ticket" warning. Personal
 //! work-mode projects get the Work list too, showing only their issues and PRs.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -32,7 +33,8 @@ pub(crate) struct WorkProjectInput {
     pub(crate) project: Value,
     /// The sessions in the sidebar (every one that is not closed).
     pub(crate) sessions: Vec<Value>,
-    pub(crate) linear_api_key: Option<String>,
+    /// Where its tickets' sources look up their credentials, shared by every project of a request.
+    pub(crate) credentials: Arc<WorkCredentials>,
     /// `owner/repo` of the project's GitHub `origin`.
     pub(crate) repo: Option<String>,
     /// The workspace the project is in (a worktree project follows its parent checkout).
@@ -45,8 +47,9 @@ impl WorkProjectInput {
     pub(crate) fn ticket_scope(&self) -> TicketScope<'_> {
         TicketScope {
             project_id: &self.project_id,
+            workspace_id: crate::workspaces::stored_project_workspace_id(&self.project),
             cwd: self.path.as_deref(),
-            linear_api_key: self.linear_api_key.as_deref(),
+            credentials: Some(&self.credentials),
         }
     }
 }
@@ -63,6 +66,7 @@ pub(crate) fn load_work_projects(
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let all_projects = repository.list_projects()?;
     let workspaces = crate::workspaces::read_sidebar_workspaces(&db)?;
+    let credentials = Arc::new(WorkCredentials::new(&state.paths));
     let mut projects = Vec::new();
     for project in all_projects.iter().cloned() {
         if !project_work_mode(&project) {
@@ -91,7 +95,7 @@ pub(crate) fn load_work_projects(
                 .map(str::to_string)
                 .unwrap_or_else(|| project_id.clone()),
             sessions: repository.list_sessions_excluding_stopped(Some(&project_id))?,
-            linear_api_key: project_linear_api_key(state, &project),
+            credentials: credentials.clone(),
             repo: path.as_deref().and_then(work_repo_of),
             workspace_id: crate::workspaces::project_workspace_id(
                 &workspaces,
@@ -107,10 +111,13 @@ pub(crate) fn load_work_projects(
     Ok(projects)
 }
 
-/// Which feeds a set of projects reads: one Linear request per key (the viewer's issues plus the
-/// teams that key's projects link to) and one `gh` checkout per GitHub repo.
+/// Which feeds a set of projects reads, worked out once per request so the refresh and the list
+/// that follows read the same feeds: each source's own (`WorkSource::plan_list`) and one `gh`
+/// checkout per GitHub repo for the code host.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct WorkFeedPlan {
+    /// Linear's requests, one per key: the viewer's issues plus the teams that key's projects link
+    /// to (source_linear.rs).
     pub(crate) linear: Vec<LinearFeedRequest>,
     /// The checkout `gh` lists each repo from, and the project it stands for.
     pub(crate) github: Vec<(String, String)>,
@@ -123,43 +130,20 @@ impl WorkFeedPlan {
 }
 
 pub(crate) fn work_feed_plan(projects: &[WorkProjectInput]) -> WorkFeedPlan {
-    let mut linear: HashMap<u64, LinearFeedRequest> = HashMap::new();
+    let mut plan = WorkFeedPlan::default();
+    for source in WorkSourceId::BUILT_IN {
+        work_source(source).plan_list(projects, &mut plan);
+    }
+    // Worktree projects share their repo with the main checkout: the repo is listed once.
     let mut repos_seen = HashSet::new();
-    let mut github = Vec::new();
     for input in projects {
-        // CDXC:WorkMode 2026-10-09 DECISION:
-        // User: the Work page lists the primary tracker's tickets (plus PRs): Linear tickets for a Linear workspace, GitHub issues for a GitHub one.
-        if let Some(api_key) = input
-            .linear_api_key
-            .as_ref()
-            .filter(|_| input.tracker == WorkSourceId::Linear)
-        {
-            let request = linear
-                .entry(linear_key_fingerprint(api_key))
-                .or_insert_with(|| LinearFeedRequest {
-                    api_key: api_key.clone(),
-                    team_keys: BTreeSet::new(),
-                });
-            for session in &input.sessions {
-                for identifier in work_targets(&input.project, session).ids_of(WorkSourceId::Linear)
-                {
-                    if let Some((key, _)) = identifier.split_once('-') {
-                        request.team_keys.insert(key.to_string());
-                    }
-                }
-            }
-        }
-        // Worktree projects share their repo with the main checkout: the repo is listed once.
         if let (Some(path), Some(repo)) = (&input.path, &input.repo) {
             if repos_seen.insert(repo.clone()) {
-                github.push((path.clone(), input.project_id.clone()));
+                plan.github.push((path.clone(), input.project_id.clone()));
             }
         }
     }
-    WorkFeedPlan {
-        linear: linear.into_values().collect(),
-        github,
-    }
+    plan
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -794,7 +778,7 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
     let linear_configured = linear_projects.is_empty()
         || linear_projects
             .iter()
-            .any(|input| input.linear_api_key.is_some());
+            .any(|input| work_source(WorkSourceId::Linear).can_read(&input.ticket_scope()));
     let tracker = if projects.is_empty() || !linear_projects.is_empty() {
         WorkSourceId::Linear
     } else {

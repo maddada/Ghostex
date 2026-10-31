@@ -248,11 +248,12 @@ fn plan_ticket_work(
 
     let branch = match ticket.ticket_ref() {
         Some(ticket) => {
-            let linear_key = project_linear_api_key(state, &project);
+            let credentials = WorkCredentials::new(&state.paths);
             let scope = TicketScope {
                 project_id,
+                workspace_id: crate::workspaces::stored_project_workspace_id(&project),
                 cwd: project.get("path").and_then(Value::as_str),
-                linear_api_key: linear_key.as_deref(),
+                credentials: Some(&credentials),
             };
             work_source(ticket.source)
                 .branch_for(&scope, &ticket.id)

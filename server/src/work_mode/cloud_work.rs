@@ -122,11 +122,12 @@ fn plan_cloud_ticket(
     let projects = repository.list_projects()?;
     let workspaces = read_sidebar_workspaces(&db)?;
     let workspace_id = project_workspace_id(&workspaces, &project, &projects);
-    let linear_key = project_linear_api_key(state, &project);
+    let credentials = WorkCredentials::new(&state.paths);
     let scope = TicketScope {
         project_id: &project_id,
+        workspace_id: crate::workspaces::stored_project_workspace_id(&project),
         cwd: Some(&project_path),
-        linear_api_key: linear_key.as_deref(),
+        credentials: Some(&credentials),
     };
     let detail = work_ticket_detail(&scope, &item).map_err(DomainStateError::bad_request)?;
 

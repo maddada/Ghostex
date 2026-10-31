@@ -125,17 +125,26 @@ pub(super) fn work_project(
     repo: &str,
     tracker: WorkSourceId,
 ) -> WorkProjectInput {
+    let project_id = project["projectId"].as_str().unwrap().to_string();
     WorkProjectInput {
-        project_id: project["projectId"].as_str().unwrap().to_string(),
+        credentials: Arc::new(WorkCredentials::with_project_linear_key(
+            &project_id,
+            linear_api_key,
+        )),
+        project_id,
         name: project["name"].as_str().unwrap().to_string(),
         path: project["path"].as_str().map(str::to_string),
         project,
         sessions,
-        linear_api_key: linear_api_key.map(str::to_string),
         repo: Some(repo.to_string()),
         workspace_id: crate::workspaces::DEFAULT_WORKSPACE_ID.to_string(),
         tracker,
     }
+}
+
+/// Whether any of the plan's Work list feeds is missing or stale.
+pub(super) fn work_feeds_stale_for(plan: &WorkFeedPlan) -> bool {
+    work_feeds_stale(plan)
 }
 
 /// The list without what depends on the clock (`generatedAt`).
@@ -144,5 +153,7 @@ pub(super) fn stable_list(mut list: Value) -> Value {
     object.remove("generatedAt");
     list
 }
+
+use std::sync::Arc;
 
 use super::*;
