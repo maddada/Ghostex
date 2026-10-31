@@ -65,6 +65,12 @@ The same value can be provided as `GHOSTEX_CEF_REMOTE_DEBUGGING_PORT`.
   a specific Ghostex project or worktree.
 - Keep the returned browser session id and the MCP page id from
   `ghostex_list_pages`; reuse them instead of opening duplicate panes.
+- Without a `pageId`, the tools drive your own page: the one you selected or
+  used last, else the one you last opened with `ghostex browser open`, else the
+  page in front of your project's Browser. They never pick another project's
+  page on their own, and the user switching tabs does not move you; with no page
+  of your own they return an error that says so. `ghostex_list_pages` lists your
+  project's pages and marks the one you opened `agentPage`.
 - Use `--reuse exact` for exact-URL reuse, or `--new` only when a separate pane
   is intentional.
 
