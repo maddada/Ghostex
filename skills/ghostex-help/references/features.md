@@ -1281,7 +1281,7 @@ whether it is working, newest first, and narrows as you type. A picked session
 goes in as a mention, `[<title>](<Global Ref>)`, which the agent can pass to
 `ghostex agents send`. The `$` list holds the skills that agent's own CLI loads: its
 home skills folders (Codex, Pi, Cursor, Gemini CLI and GitHub Copilot also read
-`~/.agents/skills`, and Cursor lists its own built-in skills too) and the skills folders inside the session's project. A picked skill shows as a pill in the way that agent invokes
+`~/.agents/skills`, and Cursor lists its own built-in skills too) and the skills folders inside the session's project. For Claude Code it also holds the skills and commands of its enabled plugins, named `plugin:name`. A picked skill shows as a pill in the way that agent invokes
 skills: `/skill-name` for Claude Code, which Claude receives as its slash
 command, and `$skill-name` for Codex.
 Skills, second from the bottom of the chat's More actions menu and of the ⋯ menu
@@ -1801,6 +1801,12 @@ or continuing on another device. A message that has waited about a minute says w
 example that the agent is still working, is waiting for your answer, or that its input box can't
 be read yet; in that last case Ghostex keeps trying on its own and, if it still can't deliver after
 a few minutes, marks the message Not sent with Retry.
+When a chat message cannot be sent, it stays in the thread with a card saying why.
+Retry sends it again, Fix it restarts the agent on its conversation and then
+sends it, and Terminal view shows what the agent is showing. The session gets a
+red dot in the sidebar and a Not sent row in Notifications until you deal with
+it. A mode the session cannot use is greyed out in the Mode menu, with how to
+turn it on.
 While the agent works, a one-line card just above the chat box says what it is
 doing: the running tool's description (or its command) while a tool runs, and a
 working word such as "Considering…" between tools. The conversation ends above the
@@ -1891,9 +1897,9 @@ background card lists each command still running on its own row, named the way
 the agent described it, with how long it has been running; hover a row (press
 and hold on the phone) to see the command itself. When one finishes, a row in
 the chat says so, with its exit code only when it did not succeed.
-Chat follows the app theme by default. In Settings > Theme > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
+Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
 
-Set Default chat zoom (%) in Settings > Chat to scale the desktop chat interface, including messages, controls, and the prompt composer. Choose 70% to 200% in 5% steps; the initial default is 100%. The saved level applies to every open chat and when chats open again (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step this same level, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
+Set Default chat zoom (%) in Settings > Interface > Text to scale the desktop chat interface, including messages, controls, and the prompt composer. Choose 70% to 200% in 5% steps; the initial default is 100%. The saved level applies to every open chat and when chats open again (`sessionChatZoomPercent`). With a chat focused, Cmd+= and Cmd+- (Ctrl on Windows and Linux) step this same level, so every chat changes size together and the new level is saved; Cmd+0 sets it back to 100%.
 
 To search a chat, press Cmd+F (Ctrl+F on Windows and Linux) with the chat focused, including while typing in the chat box. Only what you can see is searched: text inside a folded turn, tool group, thinking or collapsed card, or the hidden part of a long message behind Show more, is skipped until you open it. Every matching word is highlighted, the current one more strongly, and the counter shows which match you are on; Enter or the down arrow goes to the next match, Shift+Enter or the up arrow to the previous one, and the chat scrolls to it. Escape or the close button ends the search and returns you to the chat box. On the phone, Search Conversation in the session's menu opens the same search.
 
@@ -1986,7 +1992,7 @@ Chat; the phone keeps its own switch, also on by default.
 
 While the agent is working, its thinking shows as a closed "Thinking…" card with the newest finished line beside it, so it never pushes the rest of the chat away; click (or tap) the card to read the whole thought, which keeps the newest lines in view as they arrive, and click again to close it. The commands the thought runs stay in view below the card, and when the turn ends everything folds into its "Previous turn" card as before. This works the same for every agent, on the computer, the web and the phone.
 
-Show thinking in grey (Settings > Chat, off by default) shows the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
+Show thinking in grey (Settings > Interface > Text, off by default) shows the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart (`sessionChatMutedThinking`); the phone has the same switch in its Settings > Chat.
 
 Tool call cards (Settings > Chat, a preview, off by default) show each run of tool calls between two pieces of the agent's text as one card: its header stacks the tools' icons and says "Using 3 tools" while they run and "Used 6 tools" with any failures and the time once done, and each call reads like a sentence that changes tense when it ends ("Reading main.rs", then "Read main.rs · 92 lines · 30ms"), with its result and time on the right. A failed call says what failed with the reason underneath, and calls to apps such as Linear, GitHub or Notion show the app's logo. The card folds to one line as soon as the agent writes again; click (or tap) it to open it again, and click a call to see its command and output (`chatToolCallCards`). The phone has its own switch for it in its Settings > Chat.
 
@@ -2554,7 +2560,7 @@ you are scrolled up or have text selected. To go back to the terminal's own
 scrollback, type `/tui` in Codex, choose Scrollback, then restart the session
 (Sleep and Wake it, or Full Reload).
 
-Terminals follow the app theme by default. The Theme page in Settings holds
+Terminals follow the app theme by default. The Interface page in Settings holds
 Appearance, and its Advanced part holds Chat theme and Terminal theme.
 Terminal theme can override the app with Light, Dark, or System. The palette
 selectors show the theme set in Ghostex's terminal config, including separate light
@@ -2569,12 +2575,12 @@ behind dark terminals and pure white behind light ones. Choose Follow theme to u
 the theme's background color instead, or Custom color to pick your own for dark mode.
 
 Terminals are see-through only while the window is: set Transparency to Dark only
-or Always (Settings, Theme, Transparency; it starts Off on Windows and Dark only on
+or Always (Settings, Interface, Transparency; it starts Off on Windows and Dark only on
 macOS and Linux). Background opacity (Settings, Terminal) then sets how much of the
 work area's tint terminals keep: 100% matches the rest of the work area, lower
 shows more of your desktop through them. While transparency is off the row offers
 Turn on transparency instead. The window's Blur (on Windows with Desktop and windows,
-the Acrylic, Plain blur or Off choice) is set on the Theme page only (Settings > Theme >
+the Acrylic, Plain blur or Off choice) is set on the Interface page only (Settings > Interface >
 Transparency). Ghostty's own `background-opacity`
 and `background-blur` lines in the terminal config do not change Ghostex's panes.
 
@@ -2588,8 +2594,15 @@ off to go back to normal rendering; running sessions keep going. If a shader fil
 does not compile, terminals keep their normal look. Windows and Linux are not
 supported yet.
 
-Terminal links (`ghostex://terminal`) without a folder open in the active local
-project. A folder supplied in the link takes precedence.
+The Monospace font (Settings > Interface > Text, `terminalFontFamily`, default
+JetBrains Mono) sets one font for terminals, code in the Files view, diffs, code
+blocks, inline code and tool output in chat. Its list shows the monospace fonts
+installed on this computer; type any other name or a Ghostty list in its search
+field. The App font and the Monospace font each take effect when you press Apply:
+every window redraws at once, nothing restarts, and the preview under them shows
+your pick first, with a sample of your message, thinking and a reply that also
+follows Text strength and Show thinking in grey. Terminals on remote machines
+follow it, because this computer draws them. The phone keeps its own fonts.
 
 Related settings: `terminalFontFamily`, `terminalFontSize`,
 `terminalGhosttyTheme`, `terminalColorScheme`, `terminalGhosttyLightTheme`,
@@ -2796,6 +2809,12 @@ Copy menu also has Copy ID, which copies a mention of the session,
 `[<session title>](<Global Ref>)`, to paste into another chat (it shows there
 as the session's pill), and copies the session's branch, its Linear issue ID and
 link, and its pull request or GitHub issue link when it has them.
+A session's Copy menu also has Copy Link, which copies an https link to that
+session. Opening it from a browser, GitHub or a note brings Ghostex forward and
+focuses the session, on this computer or a connected machine. Ghostex asks
+first if that would start the session's agent, and offers to restore a closed
+session from Previous Sessions. On a computer that does not have the session,
+it says so and does nothing else.
 Copy Details lists the session's agent, title, Global Ref, agent session id,
 zmx name and project, and ends by telling the agent to run `ghostex agents`,
 which explains how to message other agents and check their status: paste it
@@ -4482,8 +4501,8 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   Agent approvals (Keep default or Skip permissions, the same setting as
   Settings > Agents, `agentAcceptAllEnabled`), next to the look: Appearance, the theme colour squares (Dark and Light tabs),
   Colourfulness and one Transparency row (the simple choices from Settings >
-  Theme), with a "More theme options in Settings > Theme" link that opens the
-  Theme page. Turning transparency on there also switches Appearance to Dark. The very first run opens on a short
+  Interface), with a "More theme options in Settings > Interface" link that opens the
+  Interface page. Turning transparency on there also switches Appearance to Dark. The very first run opens on a short
   intro video before the panels: press Play to watch it there (on Linux it
   opens in your web browser, and says so), it shows once, and Continue (or Enter) goes on to
   setup at any time; the
@@ -4545,22 +4564,21 @@ Related settings: none; window positions and layouts are saved automatically.
 
 ## Appearance and app
 
-Theme colours, colourfulness, window glass, and active pane outline live on their
-own Settings page, Theme, right below General (`ghostex settings open --tab theme`).
-It has four groups, Colours, Font, Transparency and Chat and terminal, each one
-card whose finer controls sit under its own More row, plus links to related settings
-on General; a search for a row inside a More row opens it.
-Font: App font lists the fonts installed on this computer, with a search field and
+Theme colours, colourfulness, window glass, and active pane outline live on the
+Interface page in Settings, right below General (`ghostex settings open --tab theme`).
+It has Colours, Text and Transparency sections, with Advanced controls and links
+to related settings on General; a search for a row inside More opens it.
+Text: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The
 pick applies to the whole app (sidebar, chat, composer, menus, dialogs, Settings,
 tooltips and notifications), while terminals, code, diffs and other monospace text
 keep their own font. App default, at the top of the list, goes back to Ghostex's
 own fonts. A saved font that isn't on this computer stays listed as not installed,
 and the app uses its own fonts until it is. The phone keeps its own font. To make
-chat text stronger, use Settings > Chat > Text strength, from the standard colour
+chat text stronger, use Settings > Interface > Text strength, from the standard colour
 (0%, the default) up to full white in dark mode or full black in light mode, on the
 computer and the phone; muted text, links, code blocks and status colours stay as they are.
-Settings: `sessionChatFontFamily`, `sessionChatTextStrengthPercent`.
+Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatZoomPercent`, `sessionChatTextStrengthPercent`.
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
 mode colour, each a row of sixteen small colour squares (Graphite, the default,
