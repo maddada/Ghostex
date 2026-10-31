@@ -4269,7 +4269,7 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   Screen Recording row that always show Granted, Not granted or Needs restart
   and update on their own while Settings is open. Grant makes the tool itself
   ask macOS for the permission, so it is listed in System Settings (SpaceO as
-  "spaceo", Fast Computer & Browser Use as "CuaDriver"), and opens that
+  "spaceo", Fast Computer & Browser Use as "Cua Driver"), and opens that
   Privacy & Security pane; turn the switch on there and the row turns to
   Granted. For SpaceO, a small Ghostex tag sits on the right edge of System
   Settings (its left edge when the right has no room), pointing into its app
@@ -4279,7 +4279,13 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   Accessibility). If SpaceO started before a permission, it restarts by
   itself once no agent is using it (the tag says Restarts when SpaceO is free
   while one is), then shows SpaceO is ready and closes; the rows' Needs
-  restart has a Restart SpaceO button that waits the same way. Close the tag
+  restart has a Restart SpaceO button that waits the same way. Fast Computer
+  & Browser Use has no tag: if it isn't listed, click + and add
+  /Applications/CuaDriver.app. During a Grant it restarts by itself once macOS
+  has both permissions, and its Needs restart row has a Restart Cua Driver
+  button, which ends what agents are doing with it right then. If it is
+  already on but the row stays Not granted, the entry is out of date: select
+  it, remove it with the minus button, and click Grant again. Close the tag
   any time with its x. SpaceO is macOS only: on Windows and Linux its rows
   are hidden and `ghostex spaceo install-skill` says so. Ask agents
   to use $ghostex-spaceo (or /ghostex-spaceo in Claude).
