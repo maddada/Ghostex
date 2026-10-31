@@ -365,7 +365,7 @@ view from the strip.
   to remove the view), and web links and saved Browser actions open in the
   system browser. Nothing is downloaded until you press Install; once installed,
   the runtime starts quietly a few seconds after Ghostex opens, so pages open
-  fast. Settings > Integrations > Web runtime (Chromium runtime (CEF))
+  fast. Settings > Integrations > Embedded browser (Chromium runtime (CEF))
   installs, reinstalls or uninstalls it; the Install button on the first view
   that needs it does the same. Uninstall while the runtime is running removes
   it the next time Ghostex starts (Keep installed undoes that until then); on
@@ -598,7 +598,8 @@ Settings > Extensions.
 ## Sidebar
 
 There are two sidebars, picked in Settings > Sidebar & Sessions > Sidebar
-(`sidebarView`: `project`, the default, or `unified`). The Project sidebar,
+(`sidebarView`: `project`, the default, or `unified`) or with Switch to Unified
+View / Switch to Project View in the sidebar menu's Sort & Filter. The Project sidebar,
 described below, shows one machine and one Space at a time, project by project.
 The Unified sidebar shows every session from every machine, Space and project
 in one list: each session is a card with its project, the machine's name when it
@@ -616,9 +617,19 @@ Working section switch (`unifiedWorkingSection`, on by default, under the
 Sidebar switch) is on; a session leaves it for the top of the list when it needs
 you. Parked shows only while session parking is on. Hovering a card swaps its
 status for Snooze (1 Hour, 3 Hours, Tomorrow or Next Week) and Park; a snoozed
-or parked row offers Unsnooze or Unpark instead. The filter button at the top
-narrows the list to projects, machines or Spaces in a dropdown that scrolls when
-long; picking a project in Quick Access > Projects also filters to it. Next to
+or parked row offers Unsnooze or Unpark instead. The row at the top is a filter
+bar that always shows what is filtered: each pick is a chip with its own X, and
+those that don't fit become a count that opens the menu; with nothing picked it
+reads All sessions. The filter button narrows the list to projects, machines or
+Spaces in a dropdown that scrolls when long. Type in it to find a Space or project
+on any machine, or to search sessions: its first row, Search sessions for, makes
+what you typed a chip that narrows the list by title, project, branch or machine
+(picks are kept across restarts, the search text isn't). A project row shows
+an X on its right while you're on it: click it once and it turns red, click again to remove
+that project from the list on every machine that has it. That is Close Project:
+the project goes to Recent Projects, where Quick Access > Projects reopens it, and
+its sessions keep running out of sight until you reopen it. Picking a project in
+Quick Access > Projects also filters to it. Next to
 the filter are Add project and New session, which opens the new-session picker
 (agents, Browser, Terminal) in the filtered project when the filter is one
 project. Cards show the project's own icon when it has one, and right-clicking
@@ -1603,8 +1614,8 @@ macOS) sends right away with every question marked skipped, even ones you alread
 form with more than one question also ends with an optional notes box
 for anything else you want the agent to know. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent as a message (when the agent is
-busy, they wait in the chat's queue and go as soon as it is free), the chat
-shows them as a card, and the form then reads Answered. Questions that need a picture,
+busy, they wait in the chat's queue and go as soon as it is free; the card says what it waits for and its Remove takes them back so the form can be answered again), the chat
+shows them as a card, and the form then reads Answered. If a card or message left the queue but the conversation never shows it, it says so instead of spinning, and Remove clears it. Questions that need a picture,
 such as choosing between two mockups, come as a page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
@@ -3386,8 +3397,9 @@ sessions, so any client can control agents on any machine.
   available) or its Ghostex CLI, agent skills and Tools, and Install, Update and
   Uninstall run there through its own Ghostex. A machine that is not connected
   shows why and can't be picked; one whose Ghostex is too old says to update it
-  first. On a remote Mac, Integrations also installs and updates Desktop control
-  (Fast Computer & Browser Use and SpaceO; never on Linux or Windows). Their
+  first. On a remote Mac, Integrations also installs and updates Fast Computer &
+  Browser Use and SpaceO, each in its own section with its skills (never on
+  Linux or Windows). Their
   Accessibility and Screen Recording permissions can only be allowed by someone
   at that Mac, so until then the row says so. Turning agents on, their defaults
   and resume hooks are set on each computer itself. On the phone, a computer's
@@ -4194,11 +4206,11 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   header's Open button, the Open In page and the Open In rows in Quick Access
   and menus, and keeps your apps and custom targets for when you turn it back
   on (`openInTitlebarButtonHidden`).
-- Settings > Integrations installs the bundled agent skills (Ghostex CLI,
-  Ghostex Help, Computer Use and Browser Use through Fast Computer & Browser
-  Use, SpaceO through SpaceO, Embedded Browser Use, Project Board Beads,
-  Ghostex Visuals) and
-  shows their install status; an installed skill's row shows the command you
+- Settings > Integrations installs the bundled agent skills and shows their
+  install status: Ghostex CLI, Ghostex Help, Ghostex Visuals, Ghostex Agents and
+  Project Board Beads under Agent skills, and each computer or browser skill
+  right under its tool in that tool's own section (below). Uninstall all under
+  Agent skills removes all of them; an installed skill's row shows the command you
   type to use it, such as `$ghostex-computer-use`. Each skill is installed
   once, in `~/.agents/skills`; agents that do not read that folder (Claude
   Code, Kiro, Droid, Hermes and others) get a link to it in their own skills
@@ -4208,9 +4220,11 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   each time Ghostex starts; a copy an older Ghostex left in an agent's own
   folder is replaced by a link then. Offline installs use the copy inside the
   app.
-  Its Desktop control section installs Fast Computer & Browser Use, Trycua's
-  open-source driver (the `trycua/cua` link next to its name opens the project
-  on GitHub). Installing it, Ghostex Computer Use or Ghostex Browser Use also
+  Its Computer & browser use section holds everything for Fast Computer &
+  Browser Use, Trycua's open-source driver (the `trycua/cua` link next to its
+  name opens the project on GitHub): its install row, the Ghostex Computer Use
+  and Ghostex Browser Use skills right under it, then its permissions.
+  Installing it, Ghostex Computer Use or Ghostex Browser Use also
   installs Trycua's cua-driver skill (`cua-driver skills install`), which
   teaches agents the driver's own commands and which both Ghostex skills read
   first; if that skill is missing, the row shows an Install skill button.
@@ -4221,8 +4235,9 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   that removes Fast Computer & Browser Use but keeps its Accessibility and
   Screen Recording permissions. Hover them to see the installed and latest
   versions.
-  On an Apple Silicon Mac with macOS 14 or later, the same section also
-  installs SpaceO, which gives agents their own hidden screen: apps open on a
+  On an Apple Silicon Mac with macOS 14 or later, the Computer use on a hidden
+  screen section holds SpaceO, its Ghostex SpaceO skill and its permissions.
+  SpaceO gives agents their own hidden screen: apps open on a
   virtual display, so agents click, type and take screenshots there while you
   keep your own screen, pointer and focus. Install SpaceO runs its official
   installer, keeps SpaceO running in the background and installs the Ghostex
@@ -4252,6 +4267,8 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   any time with its x. SpaceO is macOS only: on Windows and Linux its rows
   are hidden and `ghostex spaceo install-skill` says so. Ask agents
   to use $ghostex-spaceo (or /ghostex-spaceo in Claude).
+  The Embedded browser section holds the Chromium runtime (CEF) and the Ghostex
+  Embedded Browser Use skill, which lets agents control Ghostex's browser panes.
   Commands: `ghostex spaceo install-skill`, `spaceo doctor`.
 - Settings > Integrations > Tools lists the tools Ghostex can install for you
   when something you set up needs them: Node.js and npm, uv, Homebrew (Mac),
