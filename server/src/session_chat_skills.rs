@@ -14,12 +14,13 @@ use crate::agent_skills::GHOSTEX_AGENT_SKILL_NAMES;
 use crate::domain::{read_domain_rpc_params, DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 use crate::protocol::rpc_success;
-use crate::server::{domain_error_response, routed_json, AppState, RoutedResponse};
+use crate::server::{
+    domain_error_response, read_runtime_text, routed_json, AppState, RoutedResponse,
+};
+use crate::session_chat_agent_tasks::claude_config_directory;
 use crate::session_chat_follower::session_chat_display_agent_for_session;
 use crate::session_chat_skill_invocation::skill_invocation;
-use crate::session_chat_skill_variants::{
-    collapse_session_chat_skill_variants, read_claude_installed_plugin_roots,
-};
+use crate::session_chat_skill_variants::collapse_session_chat_skill_variants;
 use crate::storage::open_gxserver_database;
 use axum::http::StatusCode;
 
@@ -59,6 +60,7 @@ pub fn read_session_chat_skills(
     paths: &GxserverPaths,
     agent_id: &str,
     project_path: Option<&Path>,
+    claude_config_dir: Option<&Path>,
 ) -> Value {
     let agent_id = normalize_agent_id(agent_id);
     if agent_id == "grok" {
@@ -96,14 +98,6 @@ pub fn read_session_chat_skills(
             },
         ));
     }
-    if agent_id == "claude" {
-        roots.push((
-            paths.home_dir.join(".claude").join("plugins").join("cache"),
-            SkillRootSpec {
-                source_kind: "pluginCache",
-            },
-        ));
-    }
 
     let mut seen_skill_paths = HashSet::new();
     let mut skills = Vec::new();
@@ -111,7 +105,13 @@ pub fn read_session_chat_skills(
         discover_root_skills(&root, spec, &mut seen_skill_paths, &mut skills);
     }
     let installed_plugin_roots = if agent_id == "claude" {
-        read_claude_installed_plugin_roots(&paths.home_dir)
+        let claude_home =
+            claude_config_dir.map_or_else(|| paths.home_dir.join(".claude"), Path::to_path_buf);
+        let plugins = enabled_claude_plugins(&claude_home, project_path);
+        for (plugin, install) in &plugins {
+            discover_claude_plugin_skills(plugin, install, &mut skills);
+        }
+        plugins.into_iter().map(|(_, install)| install).collect()
     } else {
         Vec::new()
     };
@@ -608,6 +608,118 @@ fn is_ignored_directory(name: &str) -> bool {
     )
 }
 
+/// The plugins the session's Claude Code loads, `(plugin name, install folder)`: each entry of
+/// `installed_plugins.json` that applies to the session's folder and that `enabledPlugins` leaves
+/// on (local settings over project settings over the user's, then the plugin's `defaultEnabled`).
+///
+/// CDXC:AgentSkills 2026-10-29 WHY:
+/// Claude Code loads a plugin's skills and commands only from the `installPath` of an enabled plugin and names them `/plugin:name`. Walking all of `plugins/cache` listed superseded versions, disabled plugins and leftover clone folders under bare names that two plugins can share, and never listed `commands/*.md`. Plugins are installed per config folder (`CLAUDE_CONFIG_DIR`), so the session's own folder is read.
+fn enabled_claude_plugins(
+    claude_home: &Path,
+    project_path: Option<&Path>,
+) -> Vec<(String, PathBuf)> {
+    let read = |path: PathBuf| {
+        fs::read(path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+    };
+    let Some(installed) = read(claude_home.join("plugins").join("installed_plugins.json")) else {
+        return Vec::new();
+    };
+    let mut settings = vec![read(claude_home.join("settings.json"))];
+    if let Some(folder) = project_path {
+        settings.push(read(folder.join(".claude").join("settings.json")));
+        settings.push(read(folder.join(".claude").join("settings.local.json")));
+    }
+    installed["plugins"]
+        .as_object()
+        .into_iter()
+        .flatten()
+        .filter_map(|(key, installs)| {
+            // A project-scope install applies only inside its project.
+            let install = installs.as_array()?.iter().find(|install| {
+                install["projectPath"]
+                    .as_str()
+                    .is_none_or(|root| project_path.is_some_and(|folder| folder.starts_with(root)))
+            })?;
+            let install = PathBuf::from(install["installPath"].as_str()?);
+            let enabled = settings
+                .iter()
+                .rev()
+                .flatten()
+                .find_map(|settings| settings["enabledPlugins"][key.as_str()].as_bool())
+                .unwrap_or_else(|| {
+                    read(install.join(".claude-plugin").join("plugin.json"))
+                        .and_then(|manifest| manifest["defaultEnabled"].as_bool())
+                        != Some(false)
+                });
+            let name = key.split('@').next()?.to_string();
+            enabled.then_some((name, install))
+        })
+        .collect()
+}
+
+/// A plugin's skills (`skills/<name>/SKILL.md`) and commands (`commands/<name>.md`) as Claude
+/// Code's `/` menu lists them: `plugin:name`, a skill over a command of the same name, and nothing
+/// marked `user-invocable: false`. Only the default folders are read, not extra ones a
+/// plugin.json `skills` or `commands` key names.
+fn discover_claude_plugin_skills(plugin: &str, install: &Path, skills: &mut Vec<SessionChatSkill>) {
+    let mut names = HashSet::new();
+    for (root, commands) in [
+        (install.join("skills"), false),
+        (install.join("commands"), true),
+    ] {
+        let Ok(entries) = fs::read_dir(&root) else {
+            continue;
+        };
+        let mut entries = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>();
+        entries.sort();
+        for path in entries {
+            let (skill_file_path, name) = if commands {
+                let is_markdown = path.extension().is_some_and(|extension| extension == "md");
+                (path.clone(), path.file_stem().filter(|_| is_markdown))
+            } else {
+                (path.join("SKILL.md"), path.file_name())
+            };
+            let Some(name) = name.and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let name = format!("{plugin}:{name}");
+            if !skill_file_path.is_file()
+                || !names.insert(name.clone())
+                || !user_invocable(&skill_file_path)
+            {
+                continue;
+            }
+            skills.push(SessionChatSkill {
+                directory_path: path,
+                skill_file_path,
+                name,
+                source_kind: "pluginCache",
+                root_path: root.clone(),
+                variant_label: None,
+            });
+        }
+    }
+}
+
+/// False when the file's front matter sets `user-invocable: false`, which keeps a skill out of
+/// Claude Code's `/` menu.
+fn user_invocable(skill_file: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(skill_file) else {
+        return false;
+    };
+    let mut lines = text.lines();
+    lines.next().map(str::trim) != Some("---")
+        || !lines
+            .take_while(|line| line.trim() != "---")
+            .filter_map(|line| line.strip_prefix("user-invocable:"))
+            .any(|value| value.trim().trim_matches(['"', '\'']) == "false")
+}
+
 fn skill_to_value(skill: SessionChatSkill, agent_id: &str) -> Value {
     let mut value = json!({
         "directoryPath": skill.directory_path.to_string_lossy(),
@@ -677,7 +789,7 @@ mod tests {
         add_skill(&repository.path().join(".claude/skills"), "project-claude");
         let paths = get_gxserver_paths(Some(home.path().to_path_buf()));
 
-        let codex = read_session_chat_skills(&paths, "codex", Some(repository.path()));
+        let codex = read_session_chat_skills(&paths, "codex", Some(repository.path()), None);
         let codex_names = codex["skills"]
             .as_array()
             .expect("codex skills")
@@ -689,7 +801,7 @@ mod tests {
             vec!["codex-skill", "project-shared", "shared-skill"]
         );
 
-        let claude = read_session_chat_skills(&paths, "claude", Some(repository.path()));
+        let claude = read_session_chat_skills(&paths, "claude", Some(repository.path()), None);
         let claude_names = claude["skills"]
             .as_array()
             .expect("claude skills")
@@ -697,6 +809,55 @@ mod tests {
             .filter_map(|skill| skill["name"].as_str())
             .collect::<Vec<_>>();
         assert_eq!(claude_names, vec!["claude-skill", "project-claude"]);
+    }
+
+    #[test]
+    fn lists_enabled_claude_plugin_skills_and_commands_by_plugin_name() {
+        let home = tempdir().expect("home");
+        let config = home.path().join("profile");
+        let cache = config.join("plugins/cache/market");
+        let install = cache.join("tools/2.0.0");
+        add_skill(&install.join("skills"), "alpha");
+        add_skill(&cache.join("tools/1.0.0/skills"), "superseded");
+        fs::create_dir_all(install.join("skills/hidden")).expect("hidden skill");
+        fs::write(
+            install.join("skills/hidden/SKILL.md"),
+            "---\nname: hidden\nuser-invocable: false\n---\n",
+        )
+        .expect("hidden instructions");
+        fs::create_dir_all(install.join("commands")).expect("commands");
+        for command in ["alpha.md", "beta.md", "notes.txt"] {
+            fs::write(install.join("commands").join(command), "# command\n").expect("command");
+        }
+        let disabled = cache.join("off/1.0.0");
+        add_skill(&disabled.join("skills"), "gamma");
+        fs::write(
+            config.join("plugins/installed_plugins.json"),
+            serde_json::json!({"version": 2, "plugins": {
+                "tools@market": [{"scope": "user", "installPath": install}],
+                "off@market": [{"scope": "user", "installPath": disabled}],
+                "elsewhere@market": [
+                    {"scope": "project", "projectPath": "/nowhere", "installPath": install}
+                ],
+            }})
+            .to_string(),
+        )
+        .expect("installed plugins");
+        fs::write(
+            config.join("settings.json"),
+            r#"{"enabledPlugins": {"off@market": false}}"#,
+        )
+        .expect("settings");
+        let paths = get_gxserver_paths(Some(home.path().to_path_buf()));
+
+        let claude = read_session_chat_skills(&paths, "claude", None, Some(&config));
+        let names = claude["skills"]
+            .as_array()
+            .expect("claude skills")
+            .iter()
+            .filter_map(|skill| skill["name"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["tools:alpha", "tools:beta"]);
     }
 }
 
@@ -761,15 +922,22 @@ pub(crate) async fn handle_read_session_chat_skills_http(
                 .map(PathBuf::from)
         };
         let project_path = folder(&session, "cwd").or_else(|| folder(&project, "path"));
-        Ok::<_, DomainStateError>((agent_id, project_path))
+        let claude_config_dir = read_runtime_text(&session, "agentSessionPath")
+            .map(|path| claude_config_directory(Some(&path)));
+        Ok::<_, DomainStateError>((agent_id, project_path, claude_config_dir))
     })();
-    let (agent_id, project_path) = match resolved {
+    let (agent_id, project_path, claude_config_dir) = match resolved {
         Ok(resolved) => resolved,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
     let paths = state.paths.clone();
     let result = match tokio::task::spawn_blocking(move || {
-        read_session_chat_skills(&paths, &agent_id, project_path.as_deref())
+        read_session_chat_skills(
+            &paths,
+            &agent_id,
+            project_path.as_deref(),
+            claude_config_dir.as_deref(),
+        )
     })
     .await
     {
