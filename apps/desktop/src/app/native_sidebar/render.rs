@@ -153,7 +153,7 @@ impl GhostexGpuiApp {
                 180.0,
             ))
             .text_color(appearance.foreground)
-            .text_size(px(15.55 * appearance.scale))
+            .text_size(px(super::appearance::SIDEBAR_TEXT_SIZE * appearance.scale))
             .font_family(crate::ui_fonts::UI_FONT)
             .font_weight(FontWeight::LIGHT)
             .child(self.render_native_sidebar_navigation(&appearance, false, usage_meter_count, cx))

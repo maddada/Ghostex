@@ -60,8 +60,9 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
                 "checked": picked.contains(&option.key),
                 "command": {"type": "unifiedFilter", "kind": kind, "key": option.key},
             });
+            // On its own line: the rows are tall enough, and the machines' names no longer get cut.
             if let Some(detail) = &option.detail {
-                item["suffix"] = Value::String(detail.clone());
+                item["detail"] = Value::String(detail.clone());
             }
             if !option.project_group_ids.is_empty() {
                 item["secondary"] = json!({
@@ -93,6 +94,14 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
     // A single project is no filter, but its row is the way to remove it.
     section("Projects", "repo", &unified.options.repos, &filter.repos, 1);
     Value::Array(items)
+}
+
+/// How much of the window the filter menu may take.
+const FILTER_MENU_WINDOW_SHARE: f32 = 0.75;
+
+/// The filter menu's tallest height, before the zoom (`SidebarMenuOpener::capped` applies it).
+fn filter_menu_max_height(window_height: f32, scale: f32) -> f32 {
+    window_height * FILTER_MENU_WINDOW_SHARE / scale
 }
 
 /// What the filter button says: everything, or the first pick and how many more.
@@ -127,8 +136,8 @@ fn filter_label(unified: &UnifiedSidebarSnapshot) -> String {
 }
 
 impl GhostexGpuiApp {
-    /// CDXC:Sidebar 2026-10-30 DECISION:
-    /// User: "please make the sidebar filter in unified sidebar mode not take all the height like it does now". The filter menu is a dropdown: hung under the filter button with its left edge on the button's, no taller than the app's other dropdown menus (`TITLEBAR_POPUP_MENU_MAX_HEIGHT`) or the room left below it in the window, shrinking to fit a short list, and its rows scroll inside it with the bar showing only while they scroll. Pressing the button again closes it.
+    /// CDXC:Sidebar 2026-10-31 DECISION:
+    /// User (2026-10-30): "please make the sidebar filter in unified sidebar mode not take all the height like it does now". The filter menu is a dropdown: hung under the filter button with its left edge on the button's, shrinking to fit a short list, and its rows scroll inside it with the bar showing only while they scroll. Pressing the button again closes it. Its rows have since grown to a session card's height, which leaves about four at the app's usual dropdown height, so its tallest is three quarters of the window (`filter_menu_max_height`): still not all of it, and never past the room left below it. This supersedes `TITLEBAR_POPUP_MENU_MAX_HEIGHT` for this menu.
     pub(super) fn show_unified_filter_menu(
         menu: &Value,
         owner: Option<gpui::Bounds<gpui::Pixels>>,
@@ -146,7 +155,10 @@ impl GhostexGpuiApp {
             menu,
             SidebarMenuOpener::below(owner)
                 .toggled_by("native-unified-filter", press_position(event))
-                .capped(crate::app::consts::TITLEBAR_POPUP_MENU_MAX_HEIGHT),
+                .capped(filter_menu_max_height(
+                    f32::from(window.viewport_size().height),
+                    scale,
+                )),
             scale,
             window,
             cx,
@@ -339,6 +351,22 @@ mod tests {
         for no_button in ["space-a", "windows"] {
             assert!(row(&items, no_button).get("secondary").is_none());
         }
+    }
+
+    #[test]
+    fn the_menu_may_take_three_quarters_of_the_window_at_any_zoom() {
+        assert_eq!(filter_menu_max_height(900.0, 1.0), 675.0);
+        // Before the zoom, so the opener's scaling lands on the same share of the window.
+        assert_eq!(filter_menu_max_height(900.0, 1.5) * 1.5, 675.0);
+    }
+
+    #[test]
+    fn a_rows_machines_go_on_its_second_line() {
+        let mut repo = option("ghostex", &["project:a"]);
+        repo.detail = Some("Local, Windows".to_string());
+        let items = filter_menu_items(&snapshot(vec![repo]));
+        assert_eq!(row(&items, "ghostex")["detail"], "Local, Windows");
+        assert!(row(&items, "ghostex").get("suffix").is_none());
     }
 
     #[test]

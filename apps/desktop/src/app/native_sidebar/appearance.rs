@@ -3,6 +3,9 @@ use serde_json::Value;
 
 use crate::app::helpers::*;
 
+/// The sidebar's text size, before the zoom.
+pub(crate) const SIDEBAR_TEXT_SIZE: f32 = 15.55;
+
 #[derive(Clone)]
 pub(crate) struct SidebarAppearance {
     pub(crate) light: bool,

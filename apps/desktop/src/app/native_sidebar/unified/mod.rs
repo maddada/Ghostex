@@ -3,6 +3,7 @@
 //! installed by the store (gx_store/unified_sidebar.rs).
 
 mod cards;
+pub(crate) use cards::{UNIFIED_CARD_GAP, UNIFIED_CARD_HEIGHT};
 mod filter_bar;
 mod groups;
 mod header;

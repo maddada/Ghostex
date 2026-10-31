@@ -68,7 +68,7 @@ pub(crate) struct SidebarMenuSearch {
     pub(crate) rows: Vec<Value>,
 }
 
-/// The rows `query` leaves: a row whose label and suffix hold every typed word, with the headings
+/// The rows `query` leaves: a row whose label, suffix and detail hold every typed word, with the headings
 /// and separators of what is left. A row marked `searchHidden` (All sessions) leaves as soon as
 /// anything is typed, so it can't take Enter from a match. When the first row's `search` has a
 /// `submit`, a row that hands on the text itself comes first, so Enter takes it as typed; the
@@ -84,9 +84,10 @@ pub(crate) fn searched_menu_rows(rows: &[Value], query: &str) -> Vec<Value> {
             heading = Some(row);
         } else {
             let text = format!(
-                "{} {}",
+                "{} {} {}",
                 row["label"].as_str().unwrap_or_default(),
-                row["suffix"].as_str().unwrap_or_default()
+                row["suffix"].as_str().unwrap_or_default(),
+                row["detail"].as_str().unwrap_or_default()
             )
             .to_lowercase();
             let hidden = !words.is_empty() && row["searchHidden"] == true;
@@ -221,14 +222,14 @@ impl SidebarMenuPanel {
     }
 
     /// A selectable row's height, before the zoom. A searchable menu (the Unified filter dropdown)
-    /// lists like the sidebar's sessions, so it shares their height and gap and follows them. The
-    /// other sidebar menus keep their own, which only happens to be the same number today.
+    /// lists like the Unified sidebar's session cards, so it shares their height and gap and
+    /// follows them. The other sidebar menus keep their own.
     ///
     /// CDXC:Sidebar 2026-10-31 DECISION:
-    /// User: "please make the height of the projects in the list here match the height of the sessions in the sidebar and make the buttons same height and width". This means the Project sidebar's one-line session rows and their hover buttons, not the Unified sidebar's tall cards. Headings, separators and the search field keep their own heights.
+    /// User: "please make the height of the projects in the list here match the height of the sessions in the sidebar and make the buttons same height and width", then, asked which sessions: "Match Unified's tall cards". Rows take the height of a full card (`UNIFIED_CARD_HEIGHT`, the most common one), and the X the size of a card's hover buttons. Headings, separators and the search field keep their own heights.
     pub(crate) fn row_height(&self) -> f32 {
         if self.search.is_some() {
-            super::session_list::SESSION_HEIGHT
+            super::unified::UNIFIED_CARD_HEIGHT
         } else {
             SIDEBAR_MENU_ROW_HEIGHT
         }
@@ -237,7 +238,7 @@ impl SidebarMenuPanel {
     /// The gap between rows, before the zoom.
     pub(crate) fn row_gap(&self) -> f32 {
         if self.search.is_some() {
-            super::session_list::SESSION_SPACING
+            super::unified::UNIFIED_CARD_GAP
         } else {
             0.0
         }
@@ -651,10 +652,10 @@ mod tests {
             {"separator": true},
             {"label": "Spaces", "heading": true},
             {"label": "My Apps", "command": {"kind": "space", "key": "a"}},
-            {"label": "Active", "suffix": "Windows", "command": {"kind": "space", "key": "b"}},
+            {"label": "Active", "detail": "Windows", "command": {"kind": "space", "key": "b"}},
             {"separator": true},
             {"label": "Projects", "heading": true},
-            {"label": "Ghostex", "suffix": "Local, Windows", "secondary": remove("ghostex"),
+            {"label": "Ghostex", "detail": "Local, Windows", "secondary": remove("ghostex"),
              "command": {"kind": "repo", "key": "ghostex"}},
             {"label": "my-apps", "secondary": remove("my-apps"),
              "command": {"kind": "repo", "key": "my-apps"}},
@@ -939,13 +940,16 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_dropdowns_rows_are_the_sessions_height_and_other_menus_keep_theirs() {
+    fn the_filter_dropdowns_rows_are_a_cards_height_and_other_menus_keep_theirs() {
         let panel = searchable();
         assert_eq!(
             panel.row_height(),
-            super::super::session_list::SESSION_HEIGHT
+            crate::app::native_sidebar::unified::UNIFIED_CARD_HEIGHT
         );
-        assert_eq!(panel.row_gap(), super::super::session_list::SESSION_SPACING);
+        assert_eq!(
+            panel.row_gap(),
+            crate::app::native_sidebar::unified::UNIFIED_CARD_GAP
+        );
         let other = SidebarMenuPanel::new(
             vec![serde_json::json!({"label": "Rename"})],
             Point::default(),
@@ -960,9 +964,9 @@ mod tests {
         panel.search_key(&typed("m"));
         panel.search_key(&typed("y"));
         // Spaces, My Apps, a separator, Projects, my-apps.
-        let session = super::super::session_list::SESSION_HEIGHT;
-        let rows = 24.0 + session + 13.0 + 24.0 + session;
-        let gaps = 4.0 * super::super::session_list::SESSION_SPACING;
+        let card = crate::app::native_sidebar::unified::UNIFIED_CARD_HEIGHT;
+        let rows = 24.0 + card + 13.0 + 24.0 + card;
+        let gaps = 4.0 * crate::app::native_sidebar::unified::UNIFIED_CARD_GAP;
         let expected = 14.0 + SIDEBAR_MENU_SEARCH_HEIGHT + rows + gaps;
         assert_eq!(
             panel.bounds(sidebar(1000.0), 1.0, false).size.height,
@@ -973,6 +977,26 @@ mod tests {
             panel.bounds(sidebar(1000.0), 1.5, false).size.height,
             px(expected * 1.5)
         );
+    }
+
+    #[test]
+    fn a_tall_filter_dropdown_stops_at_its_cap_and_never_passes_the_window() {
+        let owner = Bounds::new(Point::new(px(8.0), px(40.0)), size(px(200.0), px(28.0)));
+        let mut panel = searchable();
+        panel.placement = SidebarMenuPlacement::Attached {
+            owner,
+            from: owner,
+            align_right: false,
+            gap: px(3.0),
+        };
+        panel.measured_height = Some(px(5000.0));
+        panel.max_height = Some(px(675.0));
+        let tall = panel.bounds(sidebar(900.0), 1.0, false);
+        assert_eq!(tall.top(), px(71.0));
+        assert_eq!(tall.size.height, px(675.0));
+        // A short window: the room below wins.
+        let short = panel.bounds(sidebar(500.0), 1.0, false);
+        assert_eq!(short.bottom(), px(500.0 - 12.0));
     }
 
     #[test]
