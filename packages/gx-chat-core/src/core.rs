@@ -322,6 +322,8 @@ impl ChatCore {
         // `presentation.update(state.messages, …)` runs here in `publish`, on the list the
         // composition above has just produced.
         crate::transcript::rows::refresh(&mut self.state, &self.context);
+        // A "Go to chat" on a Resources item older than the loaded rows scrolls once they hold it.
+        crate::questions::resource_modal::after_refresh(&mut self.state, &self.context);
         // Auto-read reads the `finalIds` the refresh above just computed.
         crate::read_aloud::observe(&mut self.state, &self.context);
         // The test is "did the STATE change", asked in the only terms the core has: assemble the

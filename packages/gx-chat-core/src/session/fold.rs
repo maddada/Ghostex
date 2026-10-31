@@ -194,6 +194,11 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.removed_question_ids.clone()));
 
+    folded.result.state.resource_index = side
+        .resource_index
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.resource_index.clone()));
+
     folded.result.state.async_questions_since = match &side.async_questions_since {
         Tri::Absent => previous_side
             .map(|state| state.async_questions_since.clone())

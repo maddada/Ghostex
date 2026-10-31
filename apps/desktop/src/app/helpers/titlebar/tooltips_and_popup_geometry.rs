@@ -114,8 +114,9 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     the window itself limits it, so the dropdown cap below applies to header dropdowns alone.
     */
     let max_height = match kind {
-        GpuiTitlebarPopupKind::ContextMenu => f32::INFINITY,
-        GpuiTitlebarPopupKind::AccountUsage(_) => 640.0,
+        GpuiTitlebarPopupKind::ContextMenu | GpuiTitlebarPopupKind::AccountUsage(_) => {
+            f32::INFINITY
+        }
         GpuiTitlebarPopupKind::SessionLinks => {
             crate::app::native_sidebar::links_list::session_links_max_height(
                 main_window_bounds.size.height.as_f32(),
@@ -127,6 +128,12 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
         | GpuiTitlebarPopupKind::RemoteSites => TITLEBAR_POPUP_READING_MENU_MAX_HEIGHT,
         _ => TITLEBAR_POPUP_MENU_MAX_HEIGHT,
     };
+    if let GpuiTitlebarPopupKind::AccountUsage(_) = kind
+        && let Some(frame) =
+            account_usage_popup_frame(main_window_bounds, trigger_bounds, content_height, width)
+    {
+        return frame;
+    }
     let available_height = (main_window_bounds.size.height.as_f32() - 28.0).max(180.0);
     let height = content_height.min(max_height).min(available_height);
     let horizontal_margin = 8.0;
@@ -205,9 +212,86 @@ pub(crate) fn titlebar_popup_window_bounds_for_trigger_bounds(
     }
 }
 
+/// Between the usage panel and the account tile it opens from, and the window edges it keeps clear of.
+const ACCOUNT_USAGE_TRIGGER_GAP: f32 = 8.0;
+const ACCOUNT_USAGE_WINDOW_MARGIN: f32 = 8.0;
+/// Below this much room above its tile the panel takes the ordinary dropdown placement.
+const ACCOUNT_USAGE_MIN_ROOM: f32 = 180.0;
+
+/// CDXC:AgentProviders 2026-10-30 DECISION:
+/// User: the usage panel "floats a small gap above the account tiles" and its height fits its
+/// content up to what fits on screen, then scrolls. It opens from the tile's left edge, above it,
+/// as tall as its content or the room above the tile, whichever is less, so it never covers the
+/// tiles. `window_bounds` and the result are in screen space, `trigger_bounds` in the window's.
+/// None when the tile has too little room above it (it is not at the bottom of the window).
+pub(crate) fn account_usage_popup_frame(
+    window_bounds: Bounds<Pixels>,
+    trigger_bounds: Bounds<Pixels>,
+    content_height: f32,
+    width: f32,
+) -> Option<Bounds<Pixels>> {
+    let room =
+        trigger_bounds.top().as_f32() - ACCOUNT_USAGE_TRIGGER_GAP - ACCOUNT_USAGE_WINDOW_MARGIN;
+    if room < ACCOUNT_USAGE_MIN_ROOM {
+        return None;
+    }
+    let height = content_height.min(room);
+    let min_left = ACCOUNT_USAGE_WINDOW_MARGIN;
+    let max_left =
+        (window_bounds.size.width.as_f32() - width - ACCOUNT_USAGE_WINDOW_MARGIN).max(min_left);
+    let left = trigger_bounds.left().as_f32().clamp(min_left, max_left);
+    let top = trigger_bounds.top().as_f32() - ACCOUNT_USAGE_TRIGGER_GAP - height;
+    Some(Bounds {
+        origin: point(
+            window_bounds.origin.x + px(left),
+            window_bounds.origin.y + px(top),
+        ),
+        size: size(px(width), px(height)),
+    })
+}
+
 #[cfg(test)]
 mod tests {
+    use super::account_usage_popup_frame;
+    use gpui::{Bounds, point, px, size};
     use gpui_component::tooltip::split_trailing_shortcut;
+
+    fn bounds(x: f32, y: f32, width: f32, height: f32) -> Bounds<gpui::Pixels> {
+        Bounds {
+            origin: point(px(x), px(y)),
+            size: size(px(width), px(height)),
+        }
+    }
+
+    /// The Codex tile in the user's screenshot: the panel sits 8px above it, as tall as its content.
+    #[test]
+    fn the_usage_panel_floats_above_its_tile_at_its_content_height() {
+        let window = bounds(100.0, 50.0, 1200.0, 800.0);
+        let tile = bounds(280.0, 652.0, 76.0, 26.0);
+        let frame = account_usage_popup_frame(window, tile, 520.0, 380.0).unwrap();
+        assert_eq!(
+            frame,
+            bounds(380.0, 50.0 + 652.0 - 8.0 - 520.0, 380.0, 520.0)
+        );
+    }
+
+    #[test]
+    fn a_tall_panel_shortens_to_the_room_above_its_tile_and_scrolls() {
+        let window = bounds(0.0, 0.0, 1200.0, 500.0);
+        let tile = bounds(10.0, 452.0, 76.0, 26.0);
+        let frame = account_usage_popup_frame(window, tile, 900.0, 380.0).unwrap();
+        assert_eq!(frame.top(), px(8.0));
+        assert_eq!(frame.bottom(), px(452.0 - 8.0));
+    }
+
+    #[test]
+    fn a_tile_without_room_above_takes_the_ordinary_placement() {
+        let window = bounds(0.0, 0.0, 1200.0, 800.0);
+        assert!(
+            account_usage_popup_frame(window, bounds(10.0, 40.0, 76.0, 26.0), 500.0, 380.0)
+                .is_none()
+        );
+    }
 
     #[test]
     fn a_bracketed_chord_after_the_label_splits_off() {

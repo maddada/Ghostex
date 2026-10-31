@@ -44,7 +44,13 @@ fn folded_by_default(_section: &str) -> bool {
 /// anywhere in the list (user, 2026-10-28: "lets also not show the Q numbers in the question
 /// tooltip when hovering on them").
 fn row_tooltip(row: &Value) -> String {
-    [text(row, "title"), text(row, "timeTitle")]
+    let thread = text(row, "thread");
+    let posted_in = if thread.is_empty() {
+        String::new()
+    } else {
+        format!("Posted in {thread}")
+    };
+    [text(row, "title"), posted_in, text(row, "timeTitle")]
         .into_iter()
         .filter(|part| !part.is_empty())
         .collect::<Vec<_>>()
@@ -692,7 +698,9 @@ impl NativeChatView {
             _ => (p.card_muted, p.foreground),
         };
         let tooltip = row_tooltip(row);
+        let thread = text(row, "thread");
         let jump = id.clone();
+        let opens_in_modal = matches!(kind.as_str(), "form" | "chart");
         div()
             .id(SharedString::from(format!("chat-questions-row:{id}")))
             .group(group.clone())
@@ -729,10 +737,29 @@ impl NativeChatView {
                     .text_color(title_color)
                     .child(title),
             )
+            // A page a thread posted names the thread (a coordinator's Thread pages group).
+            .when(!thread.is_empty(), |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .max_w(px(140.0 * s))
+                        .truncate()
+                        .text_size(px(11.0 * s))
+                        .text_color(p.card_muted)
+                        .child(thread),
+                )
+            })
             .child(self.row_trailing(&id, &status, &age, buttons, group, p, cx))
             .on_click(cx.listener(move |this, _, _, cx| {
                 cx.stop_propagation();
-                this.invoke(json!({"type": "jumpToQuestion", "id": jump}), cx);
+                // A form or chart opens in the floating modal and the chat stays where it is; a
+                // page opens as it always did.
+                let action = if opens_in_modal {
+                    json!({"type": "openResource", "id": jump})
+                } else {
+                    json!({"type": "jumpToQuestion", "id": jump})
+                };
+                this.invoke(action, cx);
                 this.close_pill_menu(cx);
             }))
             .into_any_element()
@@ -754,6 +781,16 @@ mod tests {
         let tooltip = row_tooltip(&row);
         assert_eq!(tooltip, "Run 4, part 3 of 3\n1:57 AM, 28th October 2026");
         assert!(!tooltip.contains("Q633"));
+    }
+
+    #[test]
+    fn a_thread_pages_tooltip_names_its_thread() {
+        let row =
+            json!({"title": "Layout notes", "thread": "Fix the sidebar", "timeTitle": "1:57 AM"});
+        assert_eq!(
+            row_tooltip(&row),
+            "Layout notes\nPosted in Fix the sidebar\n1:57 AM"
+        );
     }
 
     #[test]

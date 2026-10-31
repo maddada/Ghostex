@@ -12,7 +12,7 @@ use std::time::Duration;
 
 /// How many times one menu takes key status back before a key loss closes it after all, so a
 /// program that refocuses the main window on every change cannot keep the two fighting.
-const MAX_REKEYS: u32 = 20;
+pub(in crate::app::native_chat) const MAX_REKEYS: u32 = 20;
 /// How long after a panel opens its key status is checked once.
 const SETTLE_KEY_AFTER: Duration = Duration::from_millis(150);
 
@@ -24,7 +24,7 @@ unsafe extern "C" {
 
 /// Whether the key status a menu just lost went where the user sent it: to a pointer press
 /// somewhere in the app, or away with the app itself. Anything else took it without the user.
-fn key_loss_is_dismissal() -> bool {
+pub(in crate::app::native_chat) fn key_loss_is_dismissal() -> bool {
     #[cfg(target_os = "macos")]
     {
         unsafe { GhostexGpuiPointerPressedRecently() || !GhostexGpuiApplicationIsActive() }
@@ -41,6 +41,15 @@ fn watch_pointer_presses() {
     unsafe {
         GhostexGpuiPointerPressedRecently();
     }
+}
+
+/// Whether a row's command opens a window that takes the keyboard itself, so closing the menu must
+/// not hand key status back to the window it came from.
+///
+/// CDXC:SessionChat 2026-10-30 WHY:
+/// User: "the pop up that appears when i click on reply goes away right away i cant type in it". GPUI's `activate_window` only queues `makeKeyAndOrderFront`, so the main window took key status from the Reply popover a moment after it opened, and a popover closes on key loss. Only macOS queues it that way, which is why the GPUI web build never showed this.
+fn row_opens_key_window(command: &Value) -> bool {
+    command["type"] == "replyToSelection"
 }
 
 /// Which edge of its trigger a composer menu lines up with. Either way it opens 4px above the
@@ -208,6 +217,7 @@ impl ChatOptionMenu {
         }
         self.closed = true;
         self.tooltips = None;
+        let restore_focus = restore_focus && !command.as_ref().is_some_and(row_opens_key_window);
         let windows = std::mem::take(&mut self.windows);
         let source = self.source;
         let focus = self.source_focus.clone();
@@ -925,5 +935,26 @@ impl NativeChatView {
         self.option_menu = Some(menu);
         self.menu_toggle.note_opened();
         cx.notify();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::row_opens_key_window;
+    use serde_json::json;
+
+    /// The main window's activation lands after the popover opens, so it took key status from it.
+    #[test]
+    fn reply_row_leaves_key_status_for_its_popover() {
+        assert!(row_opens_key_window(
+            &json!({"type":"replyToSelection","quote":"> words\n\n"})
+        ));
+    }
+
+    #[test]
+    fn other_rows_still_give_the_keyboard_back() {
+        for kind in ["copyText", "appendToDraft", "host", "submit"] {
+            assert!(!row_opens_key_window(&json!({ "type": kind })));
+        }
     }
 }

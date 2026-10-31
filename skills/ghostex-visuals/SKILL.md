@@ -340,9 +340,11 @@ needs it reads worse. Check every page before you publish it:
 ghostex visual check page.html   # screenshots at 390px (phone) and 1280px, and what doesn't fit
 ```
 
-Look at both screenshots and fix everything it lists. `ghostex show` runs the
-phone check again after publishing and lists anything left: fix it, run
-`ghostex show` again and reply with the new block. If `visual check` can't
+Look at both screenshots and fix everything it lists, including a "Pick
+buttons" warning that a question sits under mockups with no Pick button tied
+(see Question pages). `ghostex show` runs the phone check again after
+publishing and lists anything left: fix it, run `ghostex show` again and reply
+with the new block. If `visual check` can't
 read an `.html` file, this Ghostex is older than the check: skip it.
 
 ### No page chrome of your own
@@ -431,7 +433,8 @@ page has. First run `ghostex show help`: if it doesn't mention
 chat instead.
 
 A question page is the same skeleton (keep the marker) with
-`<gx-questions>` in place of `<gx-page>`:
+`<gx-questions>` in place of `<gx-page>`. Every variant carries `data-question`
+and `data-choice` (first bullet below), which gives it a Pick button:
 
 ```html
 <gx-questions submit="Send to the agent">
@@ -459,6 +462,27 @@ A question page is the same skeleton (keep the marker) with
 </gx-questions>
 ```
 
+- **Tie every variant to its choice, so each mockup has a Pick button at the
+  right end of its title and the reader never has to scroll down to choose.**
+  Wrap the variant's title and its mockup in one element with `data-question`
+  (the question's `name`, title or tag) and `data-choice` (the choice's
+  value, label or letter), for example
+  `<section data-question="Q1" data-choice="tabs"><h3>A. Tabs</h3>…</section>`
+  (as in the example above). The kit puts a Pick button by that title, shows
+  the variant picked there and in the question (clicking either clears both).
+  It adds no note box under the mockup (the reader's notes go in the
+  question's own note box), so never tell the reader they can write a note
+  under each mockup. Older Ghostex versions ignore the attributes; the
+  question still works.
+  - A question whose variants you did not tie still gets Pick buttons when the
+    kit can read them: a heading above the question (after the previous
+    question) that starts with a choice's letter (`A. Tabs`, `Option B:`) or
+    is exactly a choice's label gets that choice's Pick button. Never rely on
+    it: a heading that matches nothing, or two choices, or the same choice as
+    another heading, gets no button, because a wrong Pick is worse than none.
+  - When a question sits under mockups and no Pick could be tied,
+    `ghostex visual check` and `ghostex show` say so, naming the question
+    (a warning; the page still works). Add the attributes and check again.
 - Put the whole page in one `<gx-questions>`. It lays out like `<gx-page>`:
   the column, with `<gx-wide>` only for mockups wider than 720px (the
   wide Settings mockups above; the small header mockups stay in the column).
@@ -473,16 +497,6 @@ A question page is the same skeleton (keep the marker) with
   phone. Draw each variant once, in the
   page's theme; the reader checks the other theme with the switch. Never
   collect all the mockups first and all the questions at the end.
-- Tie each variant to its choice so the reader can pick it right there: wrap
-  the variant's title and its mockup in one element with `data-question`
-  (the question's `name`, title or tag) and `data-choice` (the choice's
-  value, label or letter), for example
-  `<section data-question="Q1" data-choice="tabs"><h3>A. Tabs</h3>…</section>`.
-  The kit puts a Pick button by that title, shows the variant picked there
-  and in the question (clicking either clears both). It adds no note box
-  under the mockup (the reader's notes go in the question's own note box), so
-  never tell the reader they can write a note under each mockup.
-  Older Ghostex versions ignore the attributes; the question still works.
 - `<gx-question>`: `title`; `tag`, an optional short label such as an issue
   id; `name`, the answer's key (the title when there is none); `multiple`
   for several picks; `type="text"` for a text box instead of choices. Content

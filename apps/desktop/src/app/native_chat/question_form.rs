@@ -137,7 +137,93 @@ impl NativeChatView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(entry) = self.form_inputs.get_mut(&key) {
+        self.sync_form_input_in(false, key, hint, value, form_id, change, window, cx)
+    }
+
+    /// The text box `key` names, from the transcript's own boxes or, while the Resources modal is
+    /// drawn, from the modal's (`modal_form_inputs`: made in its window, so they never share a
+    /// window with the card's).
+    pub(super) fn form_input_entry(&self, key: &str) -> Option<&FormInput> {
+        if self.form_in_modal.get() {
+            self.modal_form_inputs.get(key)
+        } else {
+            self.form_inputs.get(key)
+        }
+    }
+
+    /// Gives the Resources modal's form its text boxes (made with the modal's `window`), and drops
+    /// the ones of a form that is not open.
+    pub(super) fn sync_modal_form_inputs(
+        &mut self,
+        id: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let snapshot = self.snapshot.clone();
+        let form = &snapshot["questionForms"][id];
+        let mut wanted = HashSet::new();
+        if form["state"] == "open" {
+            for (index, question) in form["questions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
+                let key = format!("{id}:{index}");
+                let draft = &form["drafts"][index];
+                wanted.insert(key.clone());
+                let form_id = id.to_string();
+                self.sync_form_input_in(
+                    true,
+                    key,
+                    placeholder(question, draft),
+                    text(draft, "other"),
+                    id,
+                    move |text| json!({"type":"formText","form":form_id,"question":index,"text":text}),
+                    window,
+                    cx,
+                );
+            }
+            if form["takesNotes"] == true {
+                let key = format!("{id}:notes");
+                wanted.insert(key.clone());
+                let form_id = id.to_string();
+                self.sync_form_input_in(
+                    true,
+                    key,
+                    NOTES_PLACEHOLDER.to_string(),
+                    text(form, "notes"),
+                    id,
+                    move |text| json!({"type":"formNotes","form":form_id,"text":text}),
+                    window,
+                    cx,
+                );
+            }
+        }
+        self.modal_form_inputs.retain(|key, _| wanted.contains(key));
+    }
+
+    fn inputs_mut(&mut self, modal: bool) -> &mut std::collections::HashMap<String, FormInput> {
+        if modal {
+            &mut self.modal_form_inputs
+        } else {
+            &mut self.form_inputs
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn sync_form_input_in(
+        &mut self,
+        modal: bool,
+        key: String,
+        hint: String,
+        value: String,
+        form_id: &str,
+        change: impl Fn(String) -> Value + 'static,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if let Some(entry) = self.inputs_mut(modal).get_mut(&key) {
             if entry.placeholder != hint {
                 entry.placeholder = hint.clone();
                 entry
@@ -169,7 +255,7 @@ impl NativeChatView {
             window,
             move |this, input, event: &InputEvent, window, cx| match event {
                 InputEvent::Change => {
-                    if let Some(entry) = this.form_inputs.get_mut(&typed_key) {
+                    if let Some(entry) = this.inputs_mut(modal).get_mut(&typed_key) {
                         entry.settled = true;
                     }
                     this.invoke(change(input.read(cx).value().to_string()), cx)
@@ -183,11 +269,12 @@ impl NativeChatView {
                 InputEvent::PressEnter {
                     secondary: true, ..
                 } => this.invoke(json!({"type":"formSend","form":form_id}), cx),
-                InputEvent::Focus => super::focus::reclaim_keyboard_focus(window),
+                // The modal's boxes keep the keyboard in the modal's own window.
+                InputEvent::Focus if !modal => super::focus::reclaim_keyboard_focus(window),
                 _ => {}
             },
         );
-        self.form_inputs.insert(
+        self.inputs_mut(modal).insert(
             key,
             FormInput {
                 input,
@@ -346,10 +433,12 @@ impl NativeChatView {
             "sending" => (None, "Sending…"),
             "queued" => (Some("titlebar/clock.svg"), "Queued"),
             "canceled" => (Some("titlebar/x.svg"), "Canceled"),
+            // The agent withdrew it (shown in the Resources modal): it takes no answer.
+            "withdrawn" => (Some("titlebar/x.svg"), "Withdrawn"),
             _ if later => (Some("titlebar/clock.svg"), "For later"),
             _ => (Some("titlebar/clock.svg"), "Waiting"),
         };
-        let canceled = phase == "canceled";
+        let canceled = phase == "canceled" || phase == "withdrawn";
         let state = SINGLE_LINE_CARD
             .pill(
                 glyph,
@@ -383,6 +472,7 @@ impl NativeChatView {
             "sending" => "Sending…".to_string(),
             // Removed from Chat Resources without an answer (gx-chat-core questions/later.rs).
             "canceled" => "Canceled: it takes no answer.".to_string(),
+            "withdrawn" => "Withdrawn: no answer needed.".to_string(),
             _ if !send_error.is_empty() => send_error.clone(),
             // Nothing to say: the (i) icon holds the sentence about blank questions (`ask_info_hint`).
             _ => String::new(),
@@ -637,7 +727,7 @@ impl NativeChatView {
             ));
         }
         let written = text(draft, "other");
-        match self.form_inputs.get(&format!("{id}:{index}")) {
+        match self.form_input_entry(&format!("{id}:{index}")) {
             Some(FormInput { input, .. }) if enabled => {
                 column = column.child(note_box(input, "Note", p));
             }
@@ -736,7 +826,7 @@ impl NativeChatView {
             return None;
         }
         let s = p.scale;
-        let content = match self.form_inputs.get(&format!("{id}:notes")) {
+        let content = match self.form_input_entry(&format!("{id}:notes")) {
             Some(FormInput { input, .. }) if enabled => note_box(input, "Notes", p),
             _ => {
                 let notes = text(form, "notes");

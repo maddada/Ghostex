@@ -147,3 +147,28 @@ pub(crate) fn session_chat_queue_compacting_refresher(
         },
     )
 }
+
+/// Posts a stuck row's notification to the bell, the way `ghostex notify` does, so it reaches the
+/// user on every client even when the session it waits on is the one nobody is watching.
+pub(crate) fn session_chat_queue_stuck_notifier(
+    state: &Arc<AppState>,
+) -> crate::session_chat_queue_runtime::SessionChatQueueStuckNotifier {
+    let state = state.clone();
+    Arc::new(move |project_id: &str, session_id: &str, body: &str| {
+        let Ok(db) = crate::storage::open_gxserver_database(&state.paths) else {
+            return;
+        };
+        let repository =
+            crate::domain::DomainRepository::new(&db, state.metadata.server_id.as_str());
+        let mut params = Map::new();
+        params.insert("projectId".to_string(), json!(project_id));
+        params.insert("sessionId".to_string(), json!(session_id));
+        params.insert("body".to_string(), json!(body));
+        let _ = crate::notification_feed::create_notification_endpoint(
+            &state,
+            &repository,
+            &db,
+            &params,
+        );
+    })
+}

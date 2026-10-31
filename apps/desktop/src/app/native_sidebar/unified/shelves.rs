@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use ghostex_gx_core::unified_sidebar::UnifiedShelf;
 
-use super::cards::{now_ms, repo_tile, show_project_icons};
+use super::cards::{mark_active, now_ms, repo_tile, show_project_icons};
 use super::model::{UnifiedCard, UnifiedShelfView};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
@@ -166,11 +166,7 @@ impl GhostexGpuiApp {
             .px(px(8.0 * scale))
             .gap(px(8.0 * scale))
             .rounded(px(5.0 * scale))
-            .when(focused, |row| {
-                row.bg(appearance.session_selected)
-                    .border_1()
-                    .border_color(appearance.session_outline)
-            })
+            .relative()
             .when(!focused, |row| {
                 row.hover(|row| row.bg(appearance.session_hover))
             })
@@ -183,7 +179,14 @@ impl GhostexGpuiApp {
                     .opacity(0.8)
                     .child(card.session.title().to_owned()),
             )
-            .child(action.unwrap_or(trailing));
+            .child(action.unwrap_or(trailing))
+            .when(focused, |row| {
+                mark_active(
+                    row,
+                    appearance.session_selected,
+                    crate::app::native_sidebar::decorations::session_outline(appearance),
+                )
+            });
         div()
             .w_full()
             .pb(px(1.0 * scale))

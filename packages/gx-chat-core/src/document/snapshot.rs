@@ -147,6 +147,10 @@ pub struct Document {
     /// The question forms (```questions blocks) by id, with the reader's picks or the sent answers
     /// (`questions/forms.rs`); the transcript's Markdown names each by id where it is drawn.
     pub question_forms: BTreeMap<String, Value>,
+    /// The form or chart a Resources row opened in the floating modal, or `null`
+    /// (`questions/resource_modal.rs`); a form's picks are in `questionForms` under its id.
+    #[serde(default)]
+    pub resource_modal: Value,
     /// The Previous question pill and the jumps to a question (`questions/open_questions.rs`).
     #[serde(default)]
     pub open_questions: crate::questions::open_questions::OpenQuestions,

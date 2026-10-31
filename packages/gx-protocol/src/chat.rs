@@ -251,6 +251,7 @@ pub struct TurnLifecycle {
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
 /// | `accountSwitch`, `apiRetry`, `pendingModelSelection`, `asyncQuestionsSince`, `forkedAt` | a daemon without queue support; otherwise always written, `null` meaning none |
 /// | `retiredAsyncQuestionIds`, `laterQuestionIds`, `removedQuestionIds` | a daemon without queue support; otherwise always written |
+/// | `resourceIndex` | UNCHANGED (a daemon before 2026-10-30 never writes it) |
 ///
 /// Payload shapes are kept loose (`Value`) until the native chat needs each one typed; every one
 /// has a TypeScript interface in `packages/shared/session-chat.ts`.
@@ -320,6 +321,13 @@ pub struct ChatSideState {
     /// unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub removed_question_ids: Option<Vec<String>>,
+    /// The session's resource index (`ResourceEntry` records, gx-chat-core
+    /// `questions/resource_index.rs`; server/src/session_chat_resources.rs): every question form,
+    /// page and chart the whole conversation held, so the Resources list and count cover more than
+    /// the loaded rows. A coordinator's also lists the pages its threads posted. Absent means
+    /// unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_index: Option<Vec<Value>>,
 }
 
 /// `sessionChatSnapshot` and `sessionChatReplaced`: an authoritative tail window.

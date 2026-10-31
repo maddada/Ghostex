@@ -147,6 +147,7 @@ fn trigger_id(id: &str) -> &'static str {
         "background" => "chat-pill-background",
         // The Resources pill opens the question list.
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
+        super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
         _ => "chat-pill-subagents",
     }
 }
@@ -165,6 +166,7 @@ fn menu_width(id: &str) -> f32 {
     match id {
         "tasks" => 360.0,
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_MENU_WIDTH,
+        super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_WIDTH,
         _ => 440.0,
     }
 }
@@ -500,6 +502,9 @@ impl NativeChatView {
         if id == super::questions_list::QUESTIONS_MENU {
             return self.questions_menu_height();
         }
+        if id == super::resource_modal::RESOURCE_MODAL_MENU {
+            return self.resource_modal_height();
+        }
         if id == "filesLinks" {
             let scale = ChatAppearance::current(&self.snapshot).scale;
             let pane = f32::from(self.bounds.get().size.height) / scale;
@@ -527,6 +532,7 @@ impl NativeChatView {
             "subagents" => self.fleet_menu_body(p, cx),
             "background" => self.background_menu_body(p),
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
+            super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
             super::session_details::SESSION_DETAILS_MENU => {
                 self.session_details_menu_body(p, window, cx)
             }
@@ -559,6 +565,9 @@ impl NativeChatView {
         }
         if trigger == super::questions_list::QUESTIONS_TRIGGER {
             self.questions_menu_closed(cx);
+        }
+        if trigger == super::resource_modal::RESOURCE_MODAL_TRIGGER {
+            self.resource_modal_closed(cx);
         }
     }
 }

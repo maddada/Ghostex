@@ -21,6 +21,10 @@ pub(crate) const VISUAL_PAGE_ROUTE_PREFIX: &str = "/visual/";
 /// The query that asks for [`PAGE_SCRIPT`] in the page: `/visual/<id>?gx-page-script=1`.
 pub(crate) const PAGE_SCRIPT_QUERY: &str = "gx-page-script=1";
 
+/// The query that opens a page read-only: `/visual/<id>?gx-readonly=1`. The Resources list of a
+/// coordinator opens the pages its threads posted this way (gx-chat-core `READ_ONLY_QUERY`).
+pub(crate) const READ_ONLY_QUERY: &str = "gx-readonly=1";
+
 /// The floating page window's own script (its picture viewer and its scroll memory), put into the
 /// page for a reader that cannot add it itself.
 ///
@@ -54,9 +58,19 @@ pub(crate) async fn serve(
     let page_script = query
         .as_deref()
         .is_some_and(|query| query.split('&').any(|pair| pair == PAGE_SCRIPT_QUERY));
+    let read_only = query
+        .as_deref()
+        .is_some_and(|query| query.split('&').any(|pair| pair == READ_ONLY_QUERY));
     let page = tokio::task::spawn_blocking(move || {
         read_page(&gxserver_state_dir, &id)
             .map(|page| with_page_state(page, read_record(&gxserver_state_dir, &id), page_script))
+            .map(|page| {
+                if read_only {
+                    with_read_only(page)
+                } else {
+                    page
+                }
+            })
     })
     .await
     .ok()
@@ -87,6 +101,30 @@ pub(crate) async fn serve(
         }
     }
     response
+}
+
+/// The page opened read-only: `window.__gxReadOnly` makes the page API's `submit` refuse (so no
+/// answers leave it, whatever the page's own script does), and a note says why.
+///
+/// CDXC:SessionChat 2026-10-30 DECISION:
+/// User: a coordinator's Resources lists "any of the inline html files that were posted in a thread". A thread's questions are answered by its coordinator bringing them over, and a page answers to the session that published it, so a page opened from the coordinator's list must not send answers on its own. It opens read-only; pressing Send says nothing was sent and why. The thread's own chat opens the same page normally, and it still takes answers there.
+fn with_read_only(page: Vec<u8>) -> Vec<u8> {
+    const SCRIPT: &str = "<script>window.__gxReadOnly=true;document.addEventListener('DOMContentLoaded',function(){var n=document.createElement('div');n.textContent='Read-only: a thread posted this page, so answers sent from here go nowhere.';n.style.cssText='position:fixed;top:8px;right:8px;z-index:2147483647;max-width:280px;padding:6px 10px;border-radius:8px;font:12px/1.35 system-ui,sans-serif;background:rgba(0,0,0,.72);color:#fff;pointer-events:none';document.body.appendChild(n);});</script>";
+    let Ok(html) = String::from_utf8(page) else {
+        return Vec::new();
+    };
+    // After `<head>` (never before the doctype, which would put the page in quirks mode).
+    let at = html
+        .find("<head")
+        .and_then(|head| html[head..].find('>').map(|close| head + close + 1))
+        .or_else(|| {
+            html.find("<body")
+                .and_then(|body| html[body..].find('>').map(|close| body + close + 1))
+        })
+        .unwrap_or(0);
+    let mut out = html;
+    out.insert_str(at, SCRIPT);
+    out.into_bytes()
 }
 
 fn status(code: StatusCode) -> RoutedResponse {
@@ -200,6 +238,34 @@ mod tests {
         let start = html.find("ghostex.__state(").unwrap() + "ghostex.__state(".len();
         let end = start + html[start..].find(");</script>").unwrap();
         serde_json::from_str(&html[start..end]).unwrap()
+    }
+
+    #[test]
+    fn a_read_only_page_refuses_answers_and_keeps_its_doctype_first() {
+        let served = String::from_utf8(with_read_only(page(""))).unwrap();
+        assert!(served.starts_with("<!doctype html>"));
+        let head = served.find("<head>").unwrap();
+        assert!(served.find("window.__gxReadOnly=true").unwrap() > head);
+        // The page API's submit (every page `ghostex show` publishes carries it) checks the flag
+        // before it posts anything.
+        let api = super::super::theme::PAGE_API;
+        let check = api
+            .find("if(window.__gxReadOnly){reject(")
+            .expect("submit checks the flag");
+        let post = api
+            .find("fetch(base+\"/answers\"")
+            .expect("submit posts the answers");
+        assert!(
+            check < post,
+            "the check runs before any answers leave the page"
+        );
+        let served =
+            String::from_utf8(with_read_only(with_page_state(page(""), None, false))).unwrap();
+        assert!(served.contains("window.__gxReadOnly=true"));
+        assert!(
+            served.contains("if(window.__gxReadOnly){reject("),
+            "a served page carries the guard"
+        );
     }
 
     #[test]

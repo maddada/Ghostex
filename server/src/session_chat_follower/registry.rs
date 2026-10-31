@@ -421,7 +421,7 @@ pub(crate) fn sync_session_chat_follower_for_session(
         let project_id = project_id.clone();
         let session_id = session_id.clone();
         Arc::new(move || {
-            crate::session_chat_queue::read_session_chat_queue_snapshot(
+            crate::session_chat_queue::read_session_chat_frame_snapshot(
                 &paths,
                 &project_id,
                 &session_id,

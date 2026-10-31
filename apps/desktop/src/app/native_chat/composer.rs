@@ -420,6 +420,7 @@ impl NativeChatView {
             waiting.push(card.into_any_element());
         }
         self.sync_files_links_menu(window, cx);
+        self.sync_resource_modal_menu(window, cx);
         if maximized && let Some(suggestions) = self.inline_suggestions(window, cx) {
             let height =
                 super::suggestions::suggestion_panel_height(&self.snapshot["suggestions"], s);

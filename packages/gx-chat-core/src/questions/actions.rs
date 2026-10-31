@@ -97,6 +97,21 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 .unwrap_or_default();
             crate::questions::open_questions::pick_filter(state, filter);
         }
+        ActionKind::OpenResource => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::open_questions::open_resource(state, context, id));
+        }
+        ActionKind::CloseResource => crate::questions::resource_modal::close(state),
+        ActionKind::GoToResource => {
+            let id = action
+                .param("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            effects.extend(crate::questions::resource_modal::go_to(state, context, id));
+        }
         ActionKind::QuestionListMore => crate::questions::open_questions::more(state),
         ActionKind::QuestionListReset => crate::questions::open_questions::reset_pages(state),
         ActionKind::QuestionForLater => {

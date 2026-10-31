@@ -21,6 +21,9 @@ pub enum ChatRpcMethod {
     ReadSessionChatSkills,
     ReadSessionChatFiles,
     ReadSessionChatImage,
+    /// One form, page or chart of the session's resource index, read back by its offsets
+    /// (`server/src/session_chat_resources.rs`).
+    ReadSessionChatResource,
     /// A published page's picture for its chat card (`server/src/visual_pages/thumbnail.rs`).
     ReadVisualPageThumbnail,
     SendSessionChatMessage,
@@ -78,6 +81,7 @@ impl ChatRpcMethod {
             Self::ReadSessionChatSkills => "readSessionChatSkills",
             Self::ReadSessionChatFiles => "readSessionChatFiles",
             Self::ReadSessionChatImage => "readSessionChatImage",
+            Self::ReadSessionChatResource => "readSessionChatResource",
             Self::ReadVisualPageThumbnail => "readVisualPageThumbnail",
             Self::SendSessionChatMessage => "sendSessionChatMessage",
             Self::InterruptSessionChat => "interruptSessionChat",
@@ -122,6 +126,7 @@ impl ChatRpcMethod {
             "readSessionChatSkills" => Self::ReadSessionChatSkills,
             "readSessionChatFiles" => Self::ReadSessionChatFiles,
             "readSessionChatImage" => Self::ReadSessionChatImage,
+            "readSessionChatResource" => Self::ReadSessionChatResource,
             "readVisualPageThumbnail" => Self::ReadVisualPageThumbnail,
             "sendSessionChatMessage" => Self::SendSessionChatMessage,
             "interruptSessionChat" => Self::InterruptSessionChat,

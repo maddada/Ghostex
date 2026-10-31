@@ -6,6 +6,8 @@
 //! sidebar's own list model is untouched by it.
 
 mod build;
+#[cfg(test)]
+mod fixture_tests;
 mod repo;
 mod spaces;
 #[cfg(test)]

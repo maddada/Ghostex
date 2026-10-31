@@ -98,6 +98,7 @@ pub(crate) fn resolve_session_chat_read_state(
             code: "notFound",
             message: "The session no longer exists.".to_string(),
         })?;
+    crate::session_chat_resources::ensure_indexed(state, &db, project_id, session_id);
     let agent = session_chat_display_agent_for_session(&session);
     /*
     CDXC:Drafts 2026-08-28:
@@ -123,7 +124,8 @@ pub(crate) fn resolve_session_chat_read_state(
     let stored_prompt = crate::agents::session_chat_prompt_setting(&session);
     let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(
         &db, project_id, session_id,
-    );
+    )
+    .with_resource_index(&db, project_id, session_id);
     let available_agents = if crate::agents::session_is_draft(&session) {
         repository
             .get_project(project_id)?

@@ -17,6 +17,7 @@ impl NativeChatView {
                 .handle
                 .map(|handle| handle.window_id()),
             self.maximized_window.map(|handle| handle.window_id()),
+            self.reply_popover_window(),
         ];
         if let Some(menu_source) = self.active_option_menu_source(cx)
             && (menu_source == source || children.contains(&Some(menu_source)))

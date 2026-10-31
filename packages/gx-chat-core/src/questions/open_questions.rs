@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use crate::effect::Effect;
 use crate::state::{ChatContext, ChatState};
 use crate::transcript::open_questions::{tag_target, Asker, AskerKind};
+use crate::questions::resource_index::ResourceEntry;
 use crate::transcript::page_answers::PageAnswers;
 
 /// The document's `openQuestions`.
@@ -116,6 +117,9 @@ pub struct QuestionListRow {
     pub at_ms: Option<i64>,
     /// The full date, for a tooltip.
     pub time_title: String,
+    /// The thread that posted this page, on a row of a coordinator's Thread pages group.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub thread: String,
 }
 
 /// One jump to a question: scroll to `item` once per `revision`, then highlight `target` (the
@@ -173,8 +177,8 @@ fn always_whole(section: &str) -> bool {
     section == "unanswered"
 }
 
-/// The list paged: Unanswered and For later whole, then the other sections' rows in their order
-/// up to `pages` pages of `LIST_PAGE` (page 0 is the first), the rest left out. A section keeps
+/// The list paged: Unanswered and For later whole, then each other group's rows up to `pages` pages
+/// of `LIST_PAGE` (page 0 is the first), the rest left out. A section keeps
 /// its `count` (the full total) even when its rows are cut. Returns the sections and how many rows
 /// were left out.
 ///
@@ -184,14 +188,15 @@ pub fn page_sections(
     sections: Vec<QuestionListSection>,
     pages: u32,
 ) -> (Vec<QuestionListSection>, u32) {
-    let mut budget = (pages as usize + 1) * LIST_PAGE;
+    // Each paged group has its own budget, so a coordinator's Thread pages are on the first page
+    // beside its Earlier list and not behind all of it.
+    let budget = (pages as usize + 1) * LIST_PAGE;
     let mut left_out = 0usize;
     let paged = sections
         .into_iter()
         .map(|mut section| {
             if !always_whole(&section.id) {
                 let keep = section.rows.len().min(budget);
-                budget -= keep;
                 left_out += section.rows.len() - keep;
                 section.rows.truncate(keep);
             }
@@ -304,12 +309,109 @@ fn status_of(
     }
 }
 
+/// The session's resource index (gxserver's, `resource_index.rs`) as records.
+pub(crate) fn indexed(state: &ChatState) -> Vec<ResourceEntry> {
+    state
+        .session
+        .resource_index
+        .iter()
+        .filter_map(|value| serde_json::from_value(value.clone()).ok())
+        .collect()
+}
+
+/// The index records the loaded rows do not hold: older than what the chat has loaded, or from a
+/// thread. A loaded row is always the fresher reading of its id.
+fn index_only(state: &ChatState) -> Vec<ResourceEntry> {
+    let mut known: std::collections::HashSet<&str> = state
+        .transcript_view
+        .askers
+        .iter()
+        .map(|asker| asker.id.as_str())
+        .collect();
+    known.extend(state.questions.content.items.iter().map(|item| item.id.as_str()));
+    indexed(state)
+        .into_iter()
+        .filter(|entry| !known.contains(entry.id.as_str()))
+        .collect()
+}
+
+/// The status a record reads as here: the reader's For later and Remove marks are this session's
+/// (`laterQuestionIds`, `removedQuestionIds`) and apply to the records too.
+fn indexed_status(
+    entry: &ResourceEntry,
+    later: &std::collections::BTreeSet<String>,
+    removed: &std::collections::BTreeSet<String>,
+) -> String {
+    match entry.status.as_str() {
+        "waiting" if removed.contains(&entry.id) => "canceled",
+        "waiting" if later.contains(&entry.id) => "later",
+        "withdrawn" if removed.contains(&entry.id) => "canceled",
+        "" => "other",
+        other => other,
+    }
+    .to_string()
+}
+
+/// How many forms and question pages the index says wait on the reader that the loaded rows do not
+/// hold, not counting the ones put off For later or removed.
+fn indexed_waiting(state: &ChatState) -> u32 {
+    let later = crate::questions::later::later_ids(state);
+    let removed = crate::questions::later::removed_ids(state);
+    let on_the_way: Vec<String> = answers_on_the_way(state)
+        .into_iter()
+        .map(|answers| answers.page_id)
+        .collect();
+    index_only(state)
+        .iter()
+        .filter(|entry| entry.thread.is_none())
+        .filter(|entry| indexed_status(entry, &later, &removed) == "waiting")
+        .filter(|entry| !on_the_way.contains(&entry.id))
+        .count() as u32
+}
+
+fn indexed_row(
+    entry: &ResourceEntry,
+    status: String,
+    context: &ChatContext,
+) -> QuestionListRow {
+    let time = crate::transcript::message_time::message_time(entry.at_ms, context);
+    let fallback = match entry.kind.as_str() {
+        "form" => "Questions",
+        "chart" => "Chart",
+        _ => "Page",
+    };
+    QuestionListRow {
+        id: entry.id.clone(),
+        kind: entry.kind.clone(),
+        title: if entry.title.is_empty() {
+            fallback.to_string()
+        } else {
+            entry.title.clone()
+        },
+        status,
+        tags: entry.tags.clone(),
+        time: time["label"].as_str().unwrap_or_default().to_string(),
+        age: age_of(entry.at_ms, context),
+        at_ms: entry.at_ms,
+        time_title: time["title"].as_str().unwrap_or_default().to_string(),
+        thread: entry
+            .thread
+            .as_ref()
+            .map(|thread| thread.title.clone())
+            .unwrap_or_default(),
+    }
+}
+
 /// The list's two groups: what waits on the reader (Unanswered, then those put off For later), and
 /// everything else.
 ///
 /// CDXC:SessionChat 2026-10-29 DECISION:
 /// User, of the Chat Resources list: "show 12 here when first opened please. and don't split pages from answered from withdrawn, just different icon or icon color is enough. Just split unanswered from the others". The list has two groups only: Unanswered (the waiting questions, then the For later ones, which still need an answer and carry their own marker and button) and "Earlier", every answered form, page, chart and withdrawn question in one list, newest first, told apart by the row's icon and `status` (a withdrawn row's icon is dimmed). "Earlier" has no header while nothing is unanswered. The first page is 12 rows (`LIST_PAGE`). Supersedes the 2026-10-27 sections (Unanswered, For later, Answered, Withdrawn, Pages, Charts).
-const GROUPS: [(&str, &str); 2] = [("unanswered", "Unanswered"), ("earlier", "Earlier")];
+const GROUPS: [(&str, &str); 3] = [
+    ("unanswered", "Unanswered"),
+    ("earlier", "Earlier"),
+    ("threads", "Thread pages"),
+];
 
 /// The pill's list: every form, page and chart in its group, all kinds. Earlier is newest first;
 /// Unanswered is oldest first, so the waiting questions read in the order they were asked.
@@ -342,10 +444,27 @@ pub fn list(state: &ChatState, context: &ChatContext) -> Vec<QuestionListSection
         row.status = "other".to_string();
         placed.push((item.at, askers + index, row));
     }
+    // What the whole conversation held beyond the loaded rows (the session's resource index), and
+    // the pages the coordinator's threads posted.
+    let mut thread_pages: Vec<QuestionListRow> = Vec::new();
+    for entry in index_only(state) {
+        let mut status = indexed_status(&entry, &later, &removed);
+        // Answers sent from the modal wait in the queue: the form reads answered at once.
+        if status == "waiting" && on_the_way.contains(&entry.id) {
+            status = "answered".to_string();
+        }
+        let row = indexed_row(&entry, status, context);
+        if entry.thread.is_some() {
+            thread_pages.push(row);
+        } else {
+            placed.push((entry.at_ms, 0, row));
+        }
+    }
     // Newest first; a row the transcript gave no time sorts by its place.
     placed.sort_by(|(a_at, a_index, _), (b_at, b_index, _)| {
         b_at.cmp(a_at).then(b_index.cmp(a_index))
     });
+    thread_pages.sort_by(|a, b| b.at_ms.cmp(&a.at_ms));
     let rows: Vec<QuestionListRow> = placed.into_iter().map(|(_, _, row)| row).collect();
     // Waiting first, then the put-off ones, each oldest first (`rows` is newest first).
     let unanswered: Vec<QuestionListRow> = ["waiting", "later"]
@@ -360,7 +479,7 @@ pub fn list(state: &ChatState, context: &ChatContext) -> Vec<QuestionListSection
         .collect();
     GROUPS
         .iter()
-        .zip([unanswered, earlier])
+        .zip([unanswered, earlier, thread_pages])
         .filter_map(|((id, title), rows)| {
             (!rows.is_empty()).then(|| QuestionListSection {
                 id: id.to_string(),
@@ -402,6 +521,7 @@ fn list_row(asker: &Asker, context: &ChatContext) -> QuestionListRow {
         age: age_of(asker.at, context),
         at_ms: asker.at,
         time_title: time["title"].as_str().unwrap_or_default().to_string(),
+        thread: String::new(),
     }
 }
 
@@ -429,6 +549,7 @@ fn content_row(
         age: age_of(item.at, context),
         at_ms: item.at,
         time_title: time["title"].as_str().unwrap_or_default().to_string(),
+        thread: String::new(),
     }
 }
 
@@ -473,7 +594,8 @@ pub fn answers_on_the_way(state: &ChatState) -> Vec<PageAnswers> {
 /// The document's `openQuestions`.
 pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
     let open = unanswered(state);
-    let count = open.len() as u32;
+    // The loaded rows' unanswered questions, plus the ones older than what the chat has loaded.
+    let count = open.len() as u32 + indexed_waiting(state);
     let filter = state.questions.open_questions.filter.as_str();
     let all = list(state, context);
     let total = all.iter().map(|section| section.count).sum();
@@ -508,9 +630,9 @@ pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
             .collect(),
         state.questions.open_questions.pages,
     );
-    // "Earlier" has a header only under an Unanswered group.
+    // "Earlier" has a header only beside another group.
     let mut sections = sections;
-    if !sections.iter().any(|section| section.id == "unanswered") {
+    if sections.len() == 1 {
         for section in &mut sections {
             section.title.clear();
         }
@@ -559,7 +681,22 @@ pub fn project(state: &ChatState, context: &ChatContext) -> OpenQuestions {
 pub fn previous(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let open: Vec<Asker> = unanswered(state).into_iter().cloned().collect();
     if open.is_empty() {
-        return Vec::new();
+        // The only questions waiting are older than the loaded rows (the pill counts them):
+        // there is no row to scroll to, so say where they are.
+        // The only questions waiting are older than the loaded rows: "Go to chat" brings the
+        // newest of them in and scrolls to it, as the Resources modal's button does.
+        let newest = indexed(state)
+            .into_iter()
+            .filter(|entry| entry.thread.is_none() && entry.status == "waiting")
+            .filter(|entry| {
+                !crate::questions::later::later_ids(state).contains(&entry.id)
+                    && !crate::questions::later::removed_ids(state).contains(&entry.id)
+            })
+            .max_by_key(|entry| entry.at_ms.unwrap_or(i64::MIN));
+        return match newest {
+            Some(entry) => crate::questions::resource_modal::go_to(state, context, &entry.id),
+            None => Vec::new(),
+        };
     }
     let last = state.questions.open_questions.last.as_deref();
     let at = open
@@ -597,9 +734,53 @@ pub fn jump_to_id(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec
         .find(|item| item.id == id)
         .cloned()
     else {
-        return Vec::new();
+        return open_indexed(state, context, id);
     };
     jump_to_row(state, context, &item.message_id, &item.id, None)
+}
+
+/// `openResource {id}`: a row of the list clicked. A form or chart opens in the floating modal and
+/// the chat stays where it is (`resource_modal.rs`); a page opens as it always did (an older one,
+/// or a thread's, by its address; a loaded one by scrolling to its card).
+pub fn open_resource(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
+    let effects = crate::questions::resource_modal::open(state, id);
+    if state.questions.resource_modal.as_ref().is_some_and(|modal| modal.id == id) {
+        return effects;
+    }
+    jump_to_id(state, context, id)
+}
+
+/// A jump to an item only the resource index holds: a page opens where the reader's Open chat
+/// pages in setting says (a thread's page read-only, so nothing the reader types in it is sent);
+/// a form or chart older than the loaded rows is brought in and scrolled to (`resource_modal::go_to`).
+fn open_indexed(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
+    let Some(entry) = indexed(state).into_iter().find(|entry| entry.id == id) else {
+        return Vec::new();
+    };
+    match (&entry.url, entry.kind.as_str()) {
+        (Some(url), "page") => {
+            let url = if entry.thread.is_some() {
+                read_only_url(url)
+            } else {
+                url.clone()
+            };
+            vec![Effect::Open(crate::effect::OpenTarget::Url {
+                url,
+                external: false,
+            })]
+        }
+        _ => crate::questions::resource_modal::go_to(state, context, id),
+    }
+}
+
+/// The query that opens a published page read-only (server/src/visual_pages/serve.rs): its
+/// answers are not sent, because they would go to the thread that posted it and not to the
+/// coordinator the reader is talking to.
+pub const READ_ONLY_QUERY: &str = "gx-readonly=1";
+
+fn read_only_url(url: &str) -> String {
+    let separator = if url.contains('?') { '&' } else { '?' };
+    format!("{url}{separator}{READ_ONLY_QUERY}")
 }
 
 /// A Q-tag link's click (`#gx-question=Q80`, `transcript/open_questions.rs`): the latest form or
@@ -630,7 +811,7 @@ fn jump_to(
 }
 
 /// Scrolls to the row holding `message_id` and flashes `target` there.
-fn jump_to_row(
+pub(crate) fn jump_to_row(
     state: &mut ChatState,
     context: &ChatContext,
     message_id: &str,
@@ -1286,5 +1467,122 @@ mod tests {
         pick_filter(&mut state, "qa");
         assert_eq!(state.questions.open_questions.pages, 0);
         assert_eq!(section(&list(&state), "earlier").len(), LIST_PAGE);
+    }
+
+    fn indexed(id: &str, kind: &str, status: &str, at: i64) -> serde_json::Value {
+        serde_json::json!({"id": id, "kind": kind, "title": format!("About {id}"), "status": status, "atMs": at,
+            "url": if kind == "page" { Some(format!("http://127.0.0.1:1/visual/{id}")) } else { None }})
+    }
+
+    /// The conversation held more than the chat has loaded: the pill's count, the list, the totals
+    /// and the filters cover the index, and a loaded row still wins for its own id.
+    #[test]
+    fn the_index_adds_what_the_loaded_rows_do_not_hold() {
+        let mut state = ChatState::default();
+        let mut loaded = asker("loaded", AskerKind::Form, Some(9_000));
+        loaded.answered = true;
+        state.transcript_view.askers.push(loaded);
+        state.session.resource_index = vec![
+            indexed("old-open", "form", "waiting", 1_000),
+            indexed("old-done", "form", "answered", 2_000),
+            indexed("old-page", "page", "other", 3_000),
+            // The loaded row for this id says answered; the index record is stale.
+            indexed("loaded", "form", "waiting", 9_000),
+        ];
+        let pill = project(&state, &ChatContext::default());
+        assert_eq!(pill.total, 4, "the loaded row once, plus the three older ones");
+        assert_eq!(pill.count, 1, "the older waiting question counts");
+        assert_eq!(pill.summary, "1 unanswered");
+        assert_eq!(section(&pill, "unanswered"), vec!["old-open"]);
+        assert_eq!(
+            section(&pill, "earlier"),
+            vec!["loaded", "old-page", "old-done"],
+            "newest first across loaded and indexed rows"
+        );
+        assert_eq!(with_status(&pill, "answered"), vec!["loaded", "old-done"]);
+        let html = pill.filters.iter().find(|f| f.id == "html").unwrap();
+        assert_eq!(html.count, 1);
+        // The reader's marks apply to indexed rows too.
+        state.session.later_question_ids = vec!["old-open".to_string()];
+        let pill = project(&state, &ChatContext::default());
+        assert_eq!((pill.count, pill.summary.as_str()), (0, "0 unanswered · 1 for later"));
+        assert_eq!(with_status(&pill, "later"), vec!["old-open"]);
+        state.session.removed_question_ids = vec!["old-open".to_string()];
+        assert_eq!(with_status(&project(&state, &ChatContext::default()), "canceled"), vec!["old-open"]);
+    }
+
+    /// The count survives a compaction and a partly loaded chat: nothing loaded, all in the index.
+    #[test]
+    fn a_chat_with_nothing_loaded_still_counts_the_whole_conversation() {
+        let mut state = ChatState::default();
+        state.session.resource_index = (0..300)
+            .map(|n| indexed(&format!("r{n}"), if n % 3 == 0 { "page" } else { "form" }, "answered", n))
+            .collect();
+        let pill = project(&state, &ChatContext::default());
+        assert_eq!(pill.total, 300);
+        assert_eq!(pill.filters[0].count, 300);
+        assert_eq!(section(&pill, "earlier").len(), LIST_PAGE, "still one page of rows");
+        assert_eq!(pill.remaining as usize, 300 - LIST_PAGE);
+    }
+
+    /// A coordinator lists the pages its threads posted in their own group, counted in the total.
+    #[test]
+    fn thread_pages_get_their_own_group_with_the_threads_name() {
+        let mut state = ChatState::default();
+        let mut done = asker("mine", AskerKind::Form, Some(5_000));
+        done.answered = true;
+        state.transcript_view.askers.push(done);
+        let mut page = indexed("tp", "page", "other", 7_000);
+        page["thread"] = serde_json::json!({"title": "Fix the sidebar", "projectId": "p", "sessionId": "s"});
+        state.session.resource_index = vec![page];
+        let pill = project(&state, &ChatContext::default());
+        assert_eq!(pill.total, 2);
+        let ids: Vec<&str> = pill.sections.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["earlier", "threads"]);
+        assert_eq!(pill.sections[1].title, "Thread pages");
+        assert_eq!(pill.sections[1].rows[0].thread, "Fix the sidebar");
+        assert_eq!(pill.count, 0, "a thread's page never counts as waiting");
+    }
+
+    /// Opening an indexed row: a page opens (a thread's read-only), anything older than the loaded
+    /// rows says so.
+    #[test]
+    fn opening_an_indexed_row_opens_the_page_or_says_why_not() {
+        let mut state = ChatState::default();
+        let mut thread_page = indexed("tp", "page", "other", 1);
+        thread_page["thread"] = serde_json::json!({"title": "T", "projectId": "p", "sessionId": "s"});
+        state.session.resource_index = vec![
+            indexed("own-page", "page", "other", 2),
+            thread_page,
+            indexed("old-form", "form", "waiting", 3),
+        ];
+        let context = ChatContext::default();
+        let open = |state: &mut ChatState, id: &str| jump_to_id(state, &context, id);
+        match &open(&mut state, "own-page")[..] {
+            [Effect::Open(crate::effect::OpenTarget::Url { url, .. })] => {
+                assert_eq!(url, "http://127.0.0.1:1/visual/own-page");
+            }
+            other => panic!("{other:?}"),
+        }
+        match &open(&mut state, "tp")[..] {
+            [Effect::Open(crate::effect::OpenTarget::Url { url, .. })] => {
+                assert_eq!(url, &format!("http://127.0.0.1:1/visual/tp?{READ_ONLY_QUERY}"));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(matches!(&open(&mut state, "old-form")[..], [Effect::Toast { .. }]));
+        // The ? pill with only an older question waiting says where it is.
+        assert!(matches!(&previous(&mut state, &context)[..], [Effect::Toast { .. }]));
+    }
+
+    #[test]
+    fn thread_pages_are_on_the_first_page_beside_a_long_earlier_list() {
+        let (paged, left) = page_sections(
+            vec![sized("unanswered", 2), sized("earlier", 200), sized("threads", 30)],
+            0,
+        );
+        let shown: Vec<usize> = paged.iter().map(|s| s.rows.len()).collect();
+        assert_eq!(shown, [2, LIST_PAGE, LIST_PAGE], "each paged group has its own page");
+        assert_eq!(left as usize, (200 - LIST_PAGE) + (30 - LIST_PAGE));
     }
 }

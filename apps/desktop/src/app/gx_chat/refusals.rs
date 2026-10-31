@@ -93,6 +93,7 @@ fn rpc_method_name(wire: &str) -> &'static str {
         ChatRpcMethod::ReadSessionChatSkills => "readSessionChatSkills",
         ChatRpcMethod::ReadSessionChatFiles => "readSessionChatFiles",
         ChatRpcMethod::ReadSessionChatImage => "readSessionChatImage",
+        ChatRpcMethod::ReadSessionChatResource => "readSessionChatResource",
         ChatRpcMethod::ReadVisualPageThumbnail => "readVisualPageThumbnail",
         ChatRpcMethod::SendSessionChatMessage => "sendSessionChatMessage",
         ChatRpcMethod::InterruptSessionChat => "interruptSessionChat",

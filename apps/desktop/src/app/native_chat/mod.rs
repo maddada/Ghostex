@@ -64,6 +64,7 @@ mod question_ping;
 mod questions_list;
 pub(crate) mod queue;
 mod reference_menu;
+mod resource_modal;
 mod rewind;
 mod row_click;
 mod rpc;

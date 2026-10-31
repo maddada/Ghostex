@@ -333,6 +333,23 @@ pub(super) async fn route_chat_http(
                 )
             },
         ),
+        // One form, page or chart of the session's resource index, read back by its offsets
+        // (session_chat_resources.rs).
+        "/api/readSessionChatResource" => handle_domain_http(
+            &state,
+            endpoint.path,
+            request_id,
+            &body_json,
+            |repository, db, params, _| {
+                crate::session_chat_resources::read_resource(
+                    repository,
+                    db,
+                    &read_project_id(params)?,
+                    &read_session_id(params)?,
+                    params.get("id").and_then(Value::as_str).unwrap_or_default(),
+                )
+            },
+        ),
         "/api/exportSessionTranscript" => {
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await

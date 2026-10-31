@@ -24,6 +24,12 @@
 //! <section data-question="Q1" data-choice="tabs"><h3>A. Tabs</h3>…mockup…</section>
 //! ```
 //!
+//! A question with choices and no tied mockup gets them tied by the kit (`autoTie`): a heading above
+//! it (after the previous question) that starts with a choice's letter ("A. Same layout") or reads as
+//! its label gets that choice's Pick button, at the right end of the heading's row. A heading that
+//! matches nothing or is ambiguous stays untouched, and a question under mockups that gets no Pick is
+//! listed in `window.__ghostexKit.untied` for `ghostex show` / `ghostex visual check` to warn about.
+//!
 //! The page template (v2, pages that carry `<meta name="ghostex-page" content="v2">`, version.rs):
 //! `<gx-page>` and `<gx-questions>` lay their children out in one centred column
 //! (`--gx-text-width`, 720px, with a `--gx-gutter` on each side). A `<gx-wide>` child is a centred
@@ -286,7 +292,7 @@ function question(qe,index,used,changed){
   if(text){
     var area=el("textarea","gx-text");area.placeholder=qe.getAttribute("placeholder")||"Your answer (optional)";area.setAttribute("aria-labelledby",titleId);
     has=function(){return !!area.value.trim();};area.addEventListener("input",notify);qe.append(area);
-    return{key:key,tag:(tag||"").trim(),choices:[],collect:function(out){out[key]=area.value.trim()||SKIPPED;},
+    return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:[],collect:function(out){out[key]=area.value.trim()||SKIPPED;},
       restore:function(answers){if(typeof answers[key]==="string"&&answers[key]!==SKIPPED)area.value=answers[key];live();},
       lock:function(){answered(!!area.value.trim());area.readOnly=true;if(!area.value)area.hidden=true;}};
   }
@@ -310,12 +316,21 @@ function question(qe,index,used,changed){
   var other=choice([document.createTextNode(OTHER)],OTHER,false,OTHER);other.button.classList.add("gx-other");
   has=function(){return choices.some(function(c){return c.on();})||!!note.value.trim();};
   sync();qe.append(list,note);
-  return{key:key,tag:(tag||"").trim(),choices:choices,collect:function(out){var on=choices.filter(function(c){return c.on();}).map(function(c){return c.value;});
+  return{el:qe,title:title,key:key,tag:(tag||"").trim(),choices:choices,collect:function(out){var on=choices.filter(function(c){return c.on();}).map(function(c){return c.value;});
       var written=note.value.trim();out[key]=on.length?(multiple?on:on[0]):written?null:SKIPPED;if(written)out[key+" (note)"]=written;},
     restore:function(answers){var v=answers[key],picked=Array.isArray(v)?v:v==null?[]:[v];
       choices.forEach(function(c){c.set(picked.indexOf(c.value)>=0);});
       if(typeof answers[key+" (note)"]==="string")note.value=answers[key+" (note)"];sync();live();},
     lock:function(){answered(choices.some(function(c){return c.on();})||!!note.value.trim());choices.forEach(function(c){c.button.disabled=true;});note.readOnly=true;if(!note.value)note.hidden=true;}};
+}
+/* The Pick button of one variant: at the right end of its heading's row (or a small head the kit adds when the variant has no heading), it clicks that choice, and shows it picked, here and in the question. `node` carries the picked ring. */
+function attachPick(node,heading,c){
+  var pick=el("button","gx-pick");pick.type="button";
+  if(heading){heading.classList.add("gx-has-pick");heading.append(pick);}
+  else{var head=el("div","gx-option-head");head.append(el("span","gx-option-label",c.label),pick);node.insertBefore(head,node.firstChild);}
+  pick.addEventListener("click",function(){c.button.click();});
+  return{
+    sync:function(){var on=c.on();node.classList.toggle("gx-picked",on);pick.setAttribute("aria-pressed",on?"true":"false");pick.textContent=on?"\u2713 Picked":"Pick";pick.setAttribute("data-gx-tip",on?"Click again to clear":"Pick \u201c"+c.label+"\u201d");pick.disabled=c.button.disabled;}};
 }
 /* A mockup tied to a choice (`data-question` + `data-choice`): a Pick button by its title that
    clicks that choice. It has no note box (User 2026-10-30). */
@@ -328,15 +343,43 @@ function bindOptions(questions){
     var c=q&&q.choices.filter(function(x){return x.value===wanted||x.label===wanted||x.letter===wanted.toLowerCase();})[0];
     if(!c){if(window.console)console.warn("ghostex: no choice \""+wanted+"\" in question \""+asked+"\"");return;}
     var heading=/^H[1-6]$/.test(node.tagName)?node:node.querySelector("h1,h2,h3,h4,h5,h6");
-    var pick=el("button","gx-pick");pick.type="button";
-    /* The Pick button sits at the right end of the title's row. */
-    if(heading){heading.classList.add("gx-has-pick");heading.append(pick);}
-    else{var head=el("div","gx-option-head");head.append(el("span","gx-option-label",c.label),pick);node.insertBefore(head,node.firstChild);}
-    pick.addEventListener("click",function(){c.button.click();});
-    found.push({
-      sync:function(){var on=c.on();node.classList.toggle("gx-picked",on);pick.setAttribute("aria-pressed",on?"true":"false");pick.textContent=on?"\u2713 Picked":"Pick";pick.setAttribute("data-gx-tip",on?"Click again to clear":"Pick \u201c"+c.label+"\u201d");pick.disabled=c.button.disabled;}});
+    var option=attachPick(node,heading,c);option.q=q;found.push(option);
   });
   return found;
+}
+/* CDXC:SessionChat 2026-10-30 DECISION:
+   User, on a question page whose variants were not tied to its choices: "PLEASE for inline htmls we must show the pick button on the top right so i can pick one easily instead of having to pick below". An agent can forget `data-question` / `data-choice`, so the kit ties the variants itself when a question has none: a heading above the question (after the previous question, so only the mockups it asks about) that starts with a choice's letter ("A. Same layout") or reads as its label gets that choice's Pick button, exactly like a tied variant. A heading that already has a Pick, matches nothing or matches two choices (or a choice another heading also matches) stays untouched: a wrong Pick is worse than none. A question under mockups that still gets no Pick is listed in `window.__ghostexKit.untied`, which `ghostex show` and `ghostex visual check` (server/src/ghostex_cli/visual_page_check.rs) tell the author about. */
+var LETTERED=/^(?:(?:option|variant|choice|design|idea|proposal)\s+)?([A-Za-z])(?:[.):]|\s+[\u2013\u2014-])(?:\s+|$)(.*)$/i;
+var MOCKUP="gx-wide,.gx-frame,.gx-figure,figure,img,svg,iframe,canvas,video,[class*=mock i],[class*=variant i],[class*=screen i],[class*=device i]";
+function norm(text){return(text||"").toLowerCase().replace(/[^\p{L}\p{N}]+/gu," ").trim();}
+function byLetterAny(m,real){return !!m&&real.some(function(c){return c.letter===m[1].toLowerCase();});}
+function autoTie(questions,explicit){
+  var tied=explicit.map(function(o){return o.q;}),options=[],report={auto:[],untied:[]},prev=null;
+  var heads=Array.prototype.filter.call(document.querySelectorAll("h2,h3,h4,h5,h6"),function(h){
+    return !h.closest("gx-question,gx-page>header,gx-questions>header,.gx-theme-switch,[data-question][data-choice]")&&!h.classList.contains("gx-has-pick")&&!h.querySelector(".gx-pick");
+  });
+  questions.forEach(function(q){
+    var qe=q.el,before=prev;prev=qe;
+    var real=q.choices.filter(function(c){return !c.button.classList.contains("gx-other");});
+    if(!real.length||tied.indexOf(q)>=0)return;
+    function above(n){return(!before||(before.compareDocumentPosition(n)&Node.DOCUMENT_POSITION_FOLLOWING))&&(qe.compareDocumentPosition(n)&Node.DOCUMENT_POSITION_PRECEDING)&&!n.contains(qe);}
+    var hits=[],lettered=false;
+    heads.filter(above).forEach(function(h){
+      var text=(h.textContent||"").replace(/\s+/g," ").trim(),m=text.match(LETTERED),rest=norm(m?m[2]:text),letter=m?m[1].toLowerCase():"";
+      if(byLetterAny(m,real))lettered=true;
+      var byLabel=rest?real.filter(function(c){return norm(c.label)===rest||norm(c.value)===rest;}):[];
+      var byLetter=letter?real.filter(function(c){return c.letter===letter;}):[];
+      if(byLabel.length>1||(byLabel.length===1&&byLetter.length&&byLetter[0]!==byLabel[0]))return;
+      var c=byLabel[0]||byLetter[0];
+      if(c)hits.push({h:h,c:c,text:text});
+    });
+    var good=hits.filter(function(x){return hits.filter(function(y){return y.c===x.c;}).length===1;});
+    good.forEach(function(x){options.push(attachPick(x.h,x.h,x.c));report.auto.push({question:q.key,heading:x.text,choice:x.c.letter});});
+    if(good.length)return;
+    var under=lettered||Array.prototype.some.call(document.querySelectorAll(MOCKUP),function(n){return !n.closest("gx-question,gx-questions>.gx-send,.gx-seg,.gx-theme-switch,#gx-tip")&&above(n);});
+    if(under)report.untied.push({question:q.key,tag:q.tag,title:q.title});
+  });
+  return{options:options,report:report};
 }
 function setup(root){
   var used={},questions=[],options=[];
@@ -346,7 +389,8 @@ function setup(root){
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
   function changed(){syncOptions();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
-  options=bindOptions(questions);syncOptions();
+  var explicit=bindOptions(questions),auto=autoTie(questions,explicit);
+  options=explicit.concat(auto.options);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied};syncOptions();
   var bar=el("div","gx-send"),button=el("button","gx-send-button"),label=el("span",null,root.getAttribute("submit")||"Send answers"),status=el("span","gx-send-status"),info=el("button","gx-send-info");
   /* The sentence about blank questions is an (i) icon with the quick tooltip, not a line of text beside the buttons (the SessionChat 2026-10-24 DECISION in apps/desktop/src/app/native_chat/ask_card.rs `ask_info_hint`). Any status message replaces the icon. */
   info.type="button";info.setAttribute("aria-label","Questions you leave blank are sent as skipped.");info.setAttribute("data-gx-tip","Questions you leave blank are sent as skipped.");info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);

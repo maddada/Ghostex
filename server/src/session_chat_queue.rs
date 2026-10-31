@@ -147,6 +147,13 @@ pub struct SessionChatQueueSnapshot {
     pub later_question_ids: Vec<String>,
     /// The question forms and pages the user removed without answering (`session_chat_open_questions::read_removed_ids`).
     pub removed_question_ids: Vec<String>,
+    /// The session's resource index (`session_chat_resources::frame_index`), set only where a
+    /// frame or read result is built (`with_resource_index`): the list is large and the snapshot
+    /// is read in many places that never send it.
+    pub resource_index: std::sync::Arc<Vec<Value>>,
+    /// The index table's write counter when this was read, so the long poll's fingerprint moves
+    /// when any index changes.
+    pub resource_epoch: u64,
     pub pending_model_selection: Option<crate::session_chat_model_selection::PendingModelSelection>,
 }
 
@@ -173,6 +180,9 @@ impl SessionChatQueueSnapshot {
             "removedQuestionIds".to_string(),
             json!(self.removed_question_ids),
         );
+        if !self.resource_index.is_empty() {
+            target.insert("resourceIndex".to_string(), json!(*self.resource_index));
+        }
         target.insert(
             "accountSwitch".to_string(),
             self.account_switch.clone().unwrap_or(Value::Null),
@@ -213,6 +223,7 @@ impl SessionChatQueueSnapshot {
             .push_str(&serde_json::to_string(&self.retired_async_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.later_question_ids).unwrap_or_default());
         revision.push_str(&serde_json::to_string(&self.removed_question_ids).unwrap_or_default());
+        revision.push_str(&self.resource_epoch.to_string());
         for prompt in &self.queue {
             revision.push_str(&prompt.id);
             revision.push(':');
@@ -708,6 +719,35 @@ pub fn read_session_chat_queue_snapshot(
     read_snapshot(&db, project_id, session_id).unwrap_or_default()
 }
 
+impl SessionChatQueueSnapshot {
+    /// This snapshot with the session's resource index, for the frames and read results that
+    /// carry it to a chat.
+    pub fn with_resource_index(
+        mut self,
+        db: &Connection,
+        project_id: &str,
+        session_id: &str,
+    ) -> Self {
+        self.resource_index =
+            crate::session_chat_resources::frame_index(db, project_id, session_id);
+        self
+    }
+}
+
+/// The snapshot a frame builder sends: [`read_session_chat_queue_snapshot`] plus the index.
+pub fn read_session_chat_frame_snapshot(
+    paths: &GxserverPaths,
+    project_id: &str,
+    session_id: &str,
+) -> SessionChatQueueSnapshot {
+    let Ok(db) = open_gxserver_database(paths) else {
+        return SessionChatQueueSnapshot::default();
+    };
+    read_snapshot(&db, project_id, session_id)
+        .unwrap_or_default()
+        .with_resource_index(&db, project_id, session_id)
+}
+
 /// Same read against a connection the caller already holds (the long-poll
 /// fingerprint runs every 500ms per poller and must not open a second one).
 pub fn read_session_chat_queue_snapshot_with(
@@ -850,6 +890,8 @@ fn read_snapshot(
         removed_question_ids: crate::session_chat_open_questions::read_removed_ids(
             db, project_id, session_id,
         ),
+        resource_index: Default::default(),
+        resource_epoch: crate::session_chat_resources::epoch(),
         account_switch: crate::accounts::switch_progress::read(db, project_id, session_id),
         api_retry: read_api_retry(db, project_id, session_id),
         queue,

@@ -1,5 +1,6 @@
 use super::wait_reason::{
-    HeadWait, InputBoxStep, WaitReason, INPUT_BOX_LAST_RESORT_AFTER_MS, WATCHDOG_AFTER_MS,
+    stuck_input_box_text, stuck_notification_body, HeadWait, InputBoxStep, WaitReason,
+    INPUT_BOX_LAST_RESORT_AFTER_MS, WATCHDOG_AFTER_MS,
 };
 use super::*;
 
@@ -55,6 +56,10 @@ pub type SessionChatQueueCompactingRefresher = Arc<dyn Fn(&str, &str, Option<&st
 /// (`wake_session_holding_startup_send` in session_chat_send_wake.rs); a no-op for a live daemon.
 pub type SessionChatQueueWaker = Arc<dyn Fn(&str, &str, &str) + Send + Sync>;
 
+/// Posts `(project, session, body)` to the notification bell when the session's head row has been
+/// stuck on a missing input box for five minutes (`INPUT_BOX_STUCK_AFTER_MS`), once per row.
+pub type SessionChatQueueStuckNotifier = Arc<dyn Fn(&str, &str, &str) + Send + Sync>;
+
 #[derive(Default)]
 struct SessionQueueGate {
     /// First moment this session looked stopped without looking busy since.
@@ -100,6 +105,24 @@ fn notice_check_confirmed(
             false
         }
     }
+}
+
+/// What noting the head row's wait changed (`SessionChatQueueRuntime::note_wait`).
+#[derive(Default)]
+struct NotedWait {
+    /// The row's words changed, so the queue is republished.
+    changed: bool,
+    /// The row has just become stuck on the input box: what to log and post to the bell.
+    stuck: Option<StuckReport>,
+}
+
+struct StuckReport {
+    /// The row's words.
+    text: String,
+    /// The bell notification's body.
+    body: String,
+    /// The cached screen the words quote.
+    screen: Vec<String>,
 }
 
 /// One session's verdict for a tick (`SessionChatQueueRuntime::assess`).
@@ -253,6 +276,7 @@ pub struct SessionChatQueueRuntime {
     composer_reader: SessionChatQueueComposerReader,
     compacting_refresher: SessionChatQueueCompactingRefresher,
     waker: SessionChatQueueWaker,
+    stuck_notifier: SessionChatQueueStuckNotifier,
     gates: Arc<Mutex<HashMap<String, SessionQueueGate>>>,
     composer_holds: crate::session_chat_queue_undelivered::SessionChatQueueComposerHolds,
     /// Sessions with a delivery in flight. The claim in
@@ -273,6 +297,7 @@ impl SessionChatQueueRuntime {
         composer_reader: SessionChatQueueComposerReader,
         compacting_refresher: SessionChatQueueCompactingRefresher,
         waker: SessionChatQueueWaker,
+        stuck_notifier: SessionChatQueueStuckNotifier,
     ) -> Self {
         Self {
             paths,
@@ -284,6 +309,7 @@ impl SessionChatQueueRuntime {
             composer_reader,
             compacting_refresher,
             waker,
+            stuck_notifier,
             gates: Arc::new(Mutex::new(HashMap::new())),
             composer_holds: Default::default(),
             delivering: Arc::new(Mutex::new(HashSet::new())),
@@ -355,6 +381,7 @@ impl SessionChatQueueRuntime {
         let mut blocked: Vec<(String, String, String, String)> = Vec::new();
         let mut to_wake: Vec<(String, String, String)> = Vec::new();
         let mut to_publish: Vec<(String, String)> = Vec::new();
+        let mut to_notify: Vec<(String, String, StuckReport)> = Vec::new();
 
         for (project_id, session_id) in targets {
             let key = session_queue_key(&project_id, &session_id);
@@ -380,8 +407,17 @@ impl SessionChatQueueRuntime {
                 Assessment::Deliver(_) | Assessment::Delivering => None,
             };
             if let Some(held) = held {
-                if self.note_wait(&key, held.as_ref().map(|(id, reason)| (*id, reason)), now) {
+                let noted = self.note_wait(
+                    &key,
+                    held.as_ref().map(|(id, reason)| (*id, reason)),
+                    now,
+                    || (self.composer_reader)(&project_id, &session_id).screen_tail,
+                );
+                if noted.changed {
                     to_publish.push((project_id.clone(), session_id.clone()));
+                }
+                if let Some(stuck) = noted.stuck {
+                    to_notify.push((project_id.clone(), session_id.clone(), stuck));
                 }
             }
             match assessment {
@@ -419,6 +455,16 @@ impl SessionChatQueueRuntime {
 
         for (project_id, session_id) in to_publish {
             (self.publisher_factory)(&project_id, &session_id)();
+        }
+        for (project_id, session_id, stuck) in to_notify {
+            crate::session_chat_send_diagnostics::record_send_recovery_from_worker(
+                "sessionChatQueueStuckOnInputBox",
+                &project_id,
+                &session_id,
+                &stuck.text,
+                &stuck.screen,
+            );
+            (self.stuck_notifier)(&project_id, &session_id, &stuck.body);
         }
         for (project_id, session_id, prompt_id, reason) in blocked {
             if let Ok(snapshot) = fail_session_chat_queued_prompt(
@@ -569,11 +615,15 @@ impl SessionChatQueueRuntime {
         {
             (self.waker)(project_id, session_id, &head.id);
         }
+        // A panel the send closes itself (Claude's rating survey, an Escape-safe offer) holds a
+        // startup send no longer than an ordinary row: it goes on to the gates below, and out as
+        // soon as the agent is idle.
         if awaiting_startup
             && crate::session_chat_composer::has_session_chat_composer_signature(
                 composer_agent.as_deref(),
             )
             && !composer_ready
+            && !composer.should_dismiss()
         {
             self.reset_gate(key);
             // The screen is read again on the startup send's backoff (every 2 s, then less
@@ -934,27 +984,54 @@ impl SessionChatQueueRuntime {
 
     /// Moves the head row's wait clock and puts the words for why it waits on the row (after a
     /// minute), clearing a previous head's. Answers whether the row's words changed, so the
-    /// caller republishes the queue. A wait for anything but the input box ends that ladder.
-    fn note_wait(&self, key: &str, held: Option<(&str, &WaitReason)>, now: DateTime<Utc>) -> bool {
+    /// caller republishes the queue, and the bell notification due for a row stuck on the input
+    /// box. A wait for anything but the input box ends that ladder. `screen` is the session's
+    /// cached screen, read only for a stuck row's words.
+    fn note_wait(
+        &self,
+        key: &str,
+        held: Option<(&str, &WaitReason)>,
+        now: DateTime<Utc>,
+        screen: impl FnOnce() -> Vec<String>,
+    ) -> NotedWait {
+        let mut noted = NotedWait::default();
         let Ok(mut gates) = self.gates.lock() else {
-            return false;
+            return noted;
         };
         let gate = gates.entry(key.to_string()).or_default();
-        let mut changed = false;
         let previous = gate.head_wait.as_ref().map(|wait| wait.prompt_id.clone());
         if let Some(previous) = previous.filter(|id| held.is_none_or(|(head, _)| head != id)) {
-            changed |= crate::session_chat_queue::set_queue_wait_reason(&previous, None);
+            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(&previous, None);
             gate.head_wait = None;
         }
         let Some((prompt_id, reason)) = held else {
             gate.input_box_hold = None;
-            return changed;
+            return noted;
         };
         if !reason.is_input_box() {
             gate.input_box_hold = None;
         }
         let words = HeadWait::observe(&mut gate.head_wait, prompt_id, reason, now);
-        changed | crate::session_chat_queue::set_queue_wait_reason(prompt_id, words)
+        let stuck = gate.head_wait.as_mut().and_then(|wait| {
+            let minutes = wait.stuck_minutes(reason, now)?;
+            Some((minutes, !std::mem::replace(&mut wait.stuck_reported, true)))
+        });
+        drop(gates);
+        let Some((minutes, report)) = stuck else {
+            noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, words);
+            return noted;
+        };
+        let screen = screen();
+        let text = stuck_input_box_text(minutes, &screen);
+        noted.changed |= crate::session_chat_queue::set_queue_wait_reason(prompt_id, Some(&text));
+        if report {
+            noted.stuck = Some(StuckReport {
+                body: stuck_notification_body(minutes, &screen),
+                text,
+                screen,
+            });
+        }
+        noted
     }
 
     /// CDXC:SessionChat 2026-10-29 WHY:

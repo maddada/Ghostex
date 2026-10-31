@@ -1,125 +1,98 @@
+use super::super::resources_style::{
+    RESOURCE_CARD_RADIUS, RESOURCE_CONTROL_RADIUS, resource_card_border, resource_card_fill,
+    resource_glass_washes,
+};
 pub(super) use super::text::tracked;
 use crate::*;
-use gpui::{Background, BoxShadow, SharedString, linear_color_stop, linear_gradient};
+use gpui::{BoxShadow, SharedString};
 use std::sync::Arc;
 
-/// CDXC:AgentProviders 2026-09-12 DECISION:
-/// User: migrate usage dropdowns to GPUI with exactly the current style, UX, colors and layout, rather than adopting the Tips panel's appearance.
-/// User picked Claude #d97757 and Codex #8cbbe8, with an accent glow, translucent cards, gradient bars, and tinted neutrals.
-/// User wanted a lighter background and a fixed 1px outline to distinguish the popup from the chat behind it.
-/// The later Redeem button color revision is owned by limits.rs.
+/// CDXC:AgentProviders 2026-10-30 DECISION:
+/// User: the usage panel gets "rounded corners and looks closer to" the Notifications panel; they
+/// picked mockup A (Q811, the Notifications layout) and Q812 A (provider colour only on the bars,
+/// the Live dot and the icon). Every neutral here is the Notifications / Resources ink, card and
+/// glass wash (`resources_style.rs`), so the panel follows the theme and window glass the way
+/// Notifications does; `accent` (Claude #d97757, Codex #8cbbe8, picked 2026-09-12) is only for the
+/// limit bars, the history bars, the Live dot and text, and the logo. This supersedes the
+/// 2026-09-12 tinted neutrals, accent glow, gradient bars and decorative background.
 #[derive(Clone, Copy)]
 pub(super) struct Palette {
     pub accent: Hsla,
-    pub accent_ink: Hsla,
-    pub light_appearance: bool,
-    pub deep: Hsla,
-    pub light: Hsla,
-    pub soft: Hsla,
-    pub accent_line: Hsla,
-    pub line: Hsla,
-    pub strong: Hsla,
+    /// The accent as text: the darker shade on a light panel, where the bar colour is too pale.
+    pub accent_text: Hsla,
+    /// Section labels and quiet text: the Notifications heading ink.
     pub muted: Hsla,
+    /// Fine print and the chart's axis.
     pub dim: Hsla,
+    /// Values and labels inside cards.
+    pub ink: Hsla,
+    /// A card's edge and the hairlines inside it.
+    pub line: Hsla,
+    /// A bar's empty track.
+    pub track: Hsla,
+    /// Rows and buttons raised on a card.
     pub raised: Hsla,
-    pub outline: Hsla,
     pub codex: bool,
-}
-
-pub(super) fn mix(a: Hsla, weight: f32, b: Hsla) -> Hsla {
-    let a = gpui::Rgba::from(a);
-    let b = gpui::Rgba::from(b);
-    gpui::Rgba {
-        r: a.r * weight + b.r * (1.0 - weight),
-        g: a.g * weight + b.g * (1.0 - weight),
-        b: a.b * weight + b.b * (1.0 - weight),
-        a: a.a * weight + b.a * (1.0 - weight),
-    }
-    .into()
 }
 
 impl Palette {
     pub fn new(codex: bool) -> Self {
-        let accent: Hsla = rgb(if codex { 0x8cbbe8 } else { 0xd97757 }).into();
+        let ink = chrome_ink();
         Self {
-            accent,
-            accent_ink: chrome_color(
+            accent: rgb(if codex { 0x8cbbe8 } else { 0xd97757 }).into(),
+            accent_text: chrome_color(
                 if codex { 0x8cbbe8 } else { 0xd97757 },
                 if codex { 0x285b8c } else { 0x9c4328 },
             )
             .into(),
-            light_appearance: CHROME_LIGHT_APPEARANCE.load(std::sync::atomic::Ordering::Relaxed),
-            deep: mix(accent, 0.86, rgb(0).into()),
-            light: mix(accent, 0.78, rgb(0xffffff).into()),
-            soft: accent.opacity(0.14),
-            accent_line: accent.opacity(0.34),
-            line: mix(accent, 0.09, chrome_color(0x2b2a29, 0xdedbd8).into()),
-            strong: mix(accent, 0.12, chrome_color(0x363433, 0xd1ccc7).into()),
-            muted: mix(accent, 0.12, chrome_color(0xa09c98, 0x57534e).into()),
-            dim: mix(accent, 0.10, chrome_color(0x78746f, 0x68635e).into()),
-            raised: mix(accent, 0.04, chrome_color(0x201f1e, 0xeeebe8).into()),
-            outline: mix(accent, 0.16, chrome_color(0x4a4846, 0xb8b1aa).into()),
+            muted: ink.opacity(0.62).into(),
+            dim: ink.opacity(0.50).into(),
+            ink: ink.opacity(0.94).into(),
+            line: resource_card_border().into(),
+            track: ink.opacity(0.09).into(),
+            raised: if window_glass_active() {
+                resource_glass_washes().raised.into()
+            } else {
+                ink.opacity(0.055).into()
+            },
             codex,
         }
     }
 
+    /// The Notifications card: 6px corners, the resource card's thin edge and fill.
     pub fn card(self) -> gpui::Div {
         v_flex()
             .w_full()
             .flex_shrink_0()
-            .p(px(14.0))
-            .pt(px(13.0))
+            .px(px(CARD_PADDING_X))
+            .py(px(CARD_PADDING_Y))
+            .rounded(px(RESOURCE_CARD_RADIUS))
             .border_1()
             .border_color(self.line)
-            .rounded(px(12.0))
-            .bg(chrome_color(0x1a1918, 0xffffff).opacity(0.90))
-            .shadow(vec![
-                shadow(
-                    0.0,
-                    1.0,
-                    0.0,
-                    chrome_color(0xffffff, 0x181818).opacity(0.035).into(),
-                )
-                .inset(),
-                shadow(
-                    0.0,
-                    10.0,
-                    28.0,
-                    rgb(0)
-                        .opacity(if chrome_uses_light_appearance() {
-                            0.12
-                        } else {
-                            0.28
-                        })
-                        .into(),
-                ),
-            ])
+            .bg(resource_card_fill())
     }
 
-    pub fn tag(self, accent: bool) -> gpui::Div {
+    /// A small neutral control: the Resources metric chip's edge and fill.
+    pub fn control(self, id: impl Into<gpui::ElementId>) -> gpui::Stateful<gpui::Div> {
         h_flex()
+            .id(id)
             .flex_shrink_0()
-            .h(px(19.0))
-            .px(px(8.0))
-            .gap(px(5.0))
+            .h(px(CONTROL_HEIGHT))
+            .px(px(7.0))
             .items_center()
-            .rounded_full()
+            .gap(px(4.0))
+            .rounded(px(RESOURCE_CONTROL_RADIUS))
+            .border_1()
+            .border_color(chrome_ink().opacity(0.105))
+            .bg(chrome_ink().opacity(0.055))
+            .text_color(chrome_ink().opacity(0.88))
+            .text_size(px(12.0))
             .whitespace_nowrap()
-            .bg(if accent {
-                self.soft
-            } else {
-                chrome_color(0x222222, 0xe7e5e4).into()
-            })
-            .text_color(if accent {
-                self.accent_ink
-            } else {
-                chrome_color(0xb4b4b2, 0x57534e).into()
-            })
-            .text_size(px(10.0))
-            .line_height(px(14.5))
-            .font_weight(usage_font_weight(550.0))
+            .cursor_pointer()
+            .hover(|this| this.bg(chrome_ink().opacity(0.12)))
     }
 
+    /// A full-width button inside the reset confirmation.
     pub fn outline_button(self, id: &'static str) -> gpui::Stateful<gpui::Div> {
         h_flex()
             .id(id)
@@ -128,76 +101,22 @@ impl Palette {
             .items_center()
             .justify_center()
             .gap(px(5.0))
+            .rounded(px(RESOURCE_CONTROL_RADIUS))
             .border_1()
-            .border_color(self.line)
-            .rounded(px(8.0))
-            .bg(chrome_color(0x1a1918, 0xffffff).opacity(0.90))
-            .text_color(chrome_color(0xe2dfdc, 0x292524))
-            .text_size(px(11.5))
+            .border_color(chrome_ink().opacity(0.16))
+            .text_color(self.ink)
+            .text_size(px(12.0))
             .font_weight(FontWeight::MEDIUM)
-            .shadow(vec![
-                shadow(
-                    0.0,
-                    1.0,
-                    0.0,
-                    chrome_color(0xffffff, 0x181818).opacity(0.035).into(),
-                )
-                .inset(),
-            ])
             .cursor_pointer()
-            .hover(move |this| {
-                this.bg(self.raised)
-                    .border_color(mix(self.accent, 0.28, self.strong))
-                    .text_color(chrome_color(0xffffff, 0x181818))
-            })
-    }
-
-    // SVG is only the fixed decorative background. All text, layout, controls,
-    // scrolling and events are GPUI; there is no browser or rendered HTML.
-    pub fn background(self, width: f32, height: f32) -> Arc<gpui::Image> {
-        let color = |c: Hsla| {
-            let c = gpui::Rgba::from(c);
-            format!("rgb({:.3},{:.3},{:.3})", c.r * 255., c.g * 255., c.b * 255.)
-        };
-        let cx = width * 0.88;
-        let cy = height * -0.04;
-        let radius = cx.max(width - cx).hypot(cy.max(height - cy));
-        let radius2 = (width * 1.1).hypot(height * 1.1);
-        let top = color(mix(
-            self.accent,
-            0.30,
-            chrome_color(0x0e0e0e, 0xfafafa).into(),
-        ));
-        let middle = color(mix(
-            self.accent,
-            0.12,
-            chrome_color(0x0e0e0e, 0xfafafa).into(),
-        ));
-        let bottom = color(mix(
-            self.accent,
-            0.07,
-            chrome_color(0x0e0e0e, 0xfafafa).into(),
-        ));
-        let base = color(chrome_color(0x111111, 0xffffff).into());
-        let svg = format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"><defs><radialGradient id="a" gradientUnits="userSpaceOnUse" cx="{cx}" cy="{cy}" r="{radius}" color-interpolation="sRGB"><stop stop-color="{top}"/><stop offset=".22" stop-color="{middle}"/><stop offset=".46" stop-color="{middle}" stop-opacity="0"/></radialGradient><radialGradient id="b" gradientUnits="userSpaceOnUse" cx="{}" cy="{}" r="{radius2}" color-interpolation="sRGB"><stop stop-color="{bottom}"/><stop offset=".34" stop-color="{bottom}" stop-opacity="0"/></radialGradient></defs><path fill="{base}" d="M0 0H{width}V{height}H0Z"/><path fill="url(#b)" d="M0 0H{width}V{height}H0Z"/><path fill="url(#a)" d="M0 0H{width}V{height}H0Z"/></svg>"##,
-            -0.1 * width,
-            1.1 * height
-        );
-        Arc::new(gpui::Image::from_bytes(
-            gpui::ImageFormat::Svg,
-            svg.into_bytes(),
-        ))
+            .hover(|this| this.bg(chrome_ink().opacity(0.12)))
     }
 }
 
-pub(super) fn gradient(angle: f32, from: Hsla, to: Hsla) -> Background {
-    linear_gradient(
-        angle,
-        linear_color_stop(from, 0.0),
-        linear_color_stop(to, 1.0),
-    )
-}
+/// Inside a card.
+pub(super) const CARD_PADDING_X: f32 = 12.0;
+pub(super) const CARD_PADDING_Y: f32 = 10.0;
+/// The Rate limit resets control and the reset rows' Use button.
+pub(super) const CONTROL_HEIGHT: f32 = 22.0;
 
 pub(super) fn shadow(x: f32, y: f32, blur: f32, color: Hsla) -> BoxShadow {
     BoxShadow::new(px(x), px(y), color).blur_radius(px(blur))
@@ -213,23 +132,6 @@ pub(super) fn usage_font_weight(css_weight: f32) -> FontWeight {
     })
 }
 
-pub(super) fn heading(text: impl Into<SharedString>) -> gpui::Div {
-    div()
-        .text_size(px(12.5))
-        .line_height(px(18.125))
-        .font_weight(usage_font_weight(620.0))
-        .child(tracked(text, -0.05))
-}
-
-pub(super) fn section_heading() -> gpui::Div {
-    h_flex()
-        .w_full()
-        .items_center()
-        .justify_between()
-        .gap(px(8.0))
-        .mb(px(12.0))
-}
-
 pub(super) fn label(text: impl Into<SharedString>, size: f32, color: Hsla) -> gpui::Div {
     div()
         .text_size(px(size))
@@ -242,11 +144,9 @@ pub(super) fn tabular_numbers() -> gpui::FontFeatures {
     gpui::FontFeatures(Arc::new(vec![("tnum".into(), 1)]))
 }
 
-pub(super) fn focus_ring(palette: Palette) -> Vec<BoxShadow> {
-    vec![
-        shadow(0.0, 0.0, 0.0, palette.accent).spread_radius(px(4.0)),
-        shadow(0.0, 0.0, 0.0, chrome_color(0x1a1918, 0xffffff).into()).spread_radius(px(2.0)),
-    ]
+/// The keyboard focus ring, in ink rather than the provider colour.
+pub(super) fn focus_ring() -> Vec<BoxShadow> {
+    vec![shadow(0.0, 0.0, 0.0, chrome_ink().opacity(0.45).into()).spread_radius(px(2.0))]
 }
 
 pub(super) fn chevron(down: bool, up: bool, color: Hsla) -> AnyElement {
@@ -277,4 +177,9 @@ pub(super) fn chevron(down: bool, up: bool, color: Hsla) -> AnyElement {
     .size(px(10.0))
     .flex_shrink_0()
     .into_any_element()
+}
+
+/// The amber of a stale reading, a pace warning and the panel's notices.
+pub(super) fn amber() -> Hsla {
+    chrome_color(0xf0a94f, 0x986009).into()
 }

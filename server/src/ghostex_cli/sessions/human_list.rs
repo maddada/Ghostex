@@ -744,6 +744,54 @@ mod tests {
     }
 
     #[test]
+    fn mobile_summary_carries_the_unified_sidebar_choices_and_inputs() {
+        let result = json!({
+            "ok": true,
+            "projects": [{
+                "projectId": "P1",
+                "name": "Ghostex",
+                "path": "/x",
+                "gitRemoteOriginUrl": "git@github.com:o/Ghostex.git",
+            }],
+            "sessions": [{
+                "sessionId": "S1",
+                "projectId": "P1",
+                "workingStartedAt": "2026-10-30T10:00:00.000Z",
+                "modelSelectionFailure": "That model is not available",
+            }],
+        });
+        let unset = to_mobile_session_list(&result, &serde_json::Map::new());
+        assert!(unset.get("sidebarView").is_none());
+        assert!(unset.get("unifiedWorkingSection").is_none());
+        assert_eq!(
+            unset["projects"][0]["gitRemoteOriginUrl"],
+            "git@github.com:o/Ghostex.git"
+        );
+        assert_eq!(
+            unset["sessions"][0]["workingStartedAt"],
+            "2026-10-30T10:00:00.000Z"
+        );
+        assert_eq!(
+            unset["sessions"][0]["modelSelectionFailure"],
+            "That model is not available"
+        );
+        let mut settings = serde_json::Map::new();
+        settings.insert("sidebarView".to_string(), json!("project"));
+        settings.insert("unifiedWorkingSection".to_string(), json!(true));
+        let defaults = to_mobile_session_list(&result, &settings);
+        assert!(defaults.get("sidebarView").is_none());
+        assert!(defaults.get("unifiedWorkingSection").is_none());
+        assert!(defaults.get("enableSessionParking").is_none());
+        settings.insert("sidebarView".to_string(), json!("unified"));
+        settings.insert("unifiedWorkingSection".to_string(), json!(false));
+        settings.insert("enableSessionParking".to_string(), json!(false));
+        let picked = to_mobile_session_list(&result, &settings);
+        assert_eq!(picked["sidebarView"], "unified");
+        assert_eq!(picked["unifiedWorkingSection"], json!(false));
+        assert_eq!(picked["enableSessionParking"], json!(false));
+    }
+
+    #[test]
     fn mobile_summary_carries_new_session_agent_scope_only_when_not_per_project() {
         let result = json!({ "ok": true, "projects": [], "sessions": [] });
         let unset = to_mobile_session_list(&result, &serde_json::Map::new());

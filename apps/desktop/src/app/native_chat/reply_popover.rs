@@ -7,7 +7,7 @@
 //! It is a child window like the chat's menus because GPUI blurs only behind a whole window
 //! (frosted_overlay_window.rs), and floating cards take the frosted menu fill.
 
-use super::{appearance::ChatAppearance, state::NativeChatView};
+use super::{appearance::ChatAppearance, option_menu, state::NativeChatView};
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::{
     AnyElement, AppContext as _, Bounds, Context, Entity, FocusHandle, Focusable as _, FontWeight,
@@ -17,11 +17,15 @@ use gpui::{
 };
 use gpui_component::Root;
 use gpui_component::input::{InputEvent, Textarea, TextareaState};
+use std::time::Duration;
 
 /// The card's size before the chat's zoom.
 const WIDTH: f32 = 360.0;
 const HEIGHT: f32 = 132.0;
 const RADIUS: f32 = 12.0;
+/// How long the press on the Reply row still counts as "a press just now" once the card is open:
+/// a little over the 0.3s of `GhostexGpuiPointerPressedRecently`.
+const OPENING_PRESS: Duration = Duration::from_millis(350);
 
 /// The open popover's window, one per chat.
 #[derive(Default)]
@@ -45,6 +49,10 @@ struct ReplyPopover {
     appearance: ChatAppearance,
     closed: bool,
     was_active: bool,
+    /// True until the press that opened the card has aged out (`OPENING_PRESS`).
+    settling: bool,
+    /// How many times this card has taken key status back.
+    rekeys: u32,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -137,6 +145,11 @@ impl NativeChatView {
         });
     }
 
+    /// The popover's window, which counts as one of the chat's own child windows.
+    pub(super) fn reply_popover_window(&self) -> Option<gpui::WindowId> {
+        self.reply_popover.handle.map(|handle| handle.window_id())
+    }
+
     /// Takes the popover down without touching the chat box (the pane went away, a second Reply).
     pub(super) fn close_reply_popover(&mut self, cx: &mut Context<Self>) {
         if let Some(handle) = self.reply_popover.handle.take() {
@@ -189,6 +202,12 @@ fn popover_bounds(at: Point<Pixels>, within: Bounds<Pixels>, scale: f32) -> Boun
     Bounds::new(Point::new(x, y), size(width, height))
 }
 
+/// Whether losing key status closes the card. A press only counts once the one on the Reply row
+/// has aged out, and a window that keeps taking key status back wins after `MAX_REKEYS`.
+fn key_loss_closes(settling: bool, user_dismissed: bool, rekeys: u32) -> bool {
+    rekeys >= option_menu::MAX_REKEYS || (user_dismissed && !settling)
+}
+
 impl ReplyPopover {
     fn new(
         chat: WeakEntity<NativeChatView>,
@@ -219,6 +238,7 @@ impl ReplyPopover {
                     } else {
                         ReplyAction::AddToPrompt
                     }),
+                    true,
                     cx,
                 );
             }
@@ -233,14 +253,26 @@ impl ReplyPopover {
                     popover,
                     window,
                     cx,
-                    |popover, _, cx| popover.close(None, cx),
+                    |popover, window, cx| popover.key_lost(window, cx),
                 );
             }
         });
+        // A card that opened while the app was still being activated never became key, and so was
+        // never told it lost it (the same check as `ChatOptionMenu::settle_key`).
+        cx.spawn_in(window, async move |popover, cx| {
+            cx.background_executor().timer(OPENING_PRESS).await;
+            let _ = popover.update_in(cx, |popover, window, _| {
+                popover.settling = false;
+                if !window.is_window_active() && !option_menu::key_loss_is_dismissal() {
+                    popover.retake_key(window);
+                }
+            });
+        })
+        .detach();
         let press = crate::app::window::popup_dismissal::observe_main_window_press(
             window,
             cx,
-            |popover: &mut Self, _, cx| popover.close(None, cx),
+            |popover: &mut Self, _, cx| popover.close(None, false, cx),
         );
         Self {
             chat,
@@ -250,13 +282,39 @@ impl ReplyPopover {
             appearance,
             closed: false,
             was_active: window.is_window_active(),
+            settling: true,
+            rekeys: 0,
             _subscriptions: vec![activation, press, enter],
         }
     }
 
+    /// Key status went elsewhere. The user sent it there (a press since the card opened, or another
+    /// app) and the card closes, or something else took it and the card takes it back, as the
+    /// chat's menus do (CDXC:SessionChat 2026-09-22 on `ChatOptionMenu::check_active`).
+    fn key_lost(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        // GPUI reports activation from a queued task, so the report can be out of date already.
+        if self.closed || window.is_window_active() {
+            return;
+        }
+        if key_loss_closes(
+            self.settling,
+            option_menu::key_loss_is_dismissal(),
+            self.rekeys,
+        ) {
+            self.close(None, false, cx);
+        } else {
+            self.retake_key(window);
+        }
+    }
+
+    fn retake_key(&mut self, window: &mut Window) {
+        self.rekeys += 1;
+        window.activate_window();
+    }
+
     /// Closes the card, then hands the reply to the chat for `action` (none for Escape or a click
-    /// away), with the keyboard back in the chat box.
-    fn close(&mut self, action: Option<ReplyAction>, cx: &mut Context<Self>) {
+    /// away). `to_chat` gives the chat's window the keyboard back, which a click away already did.
+    fn close(&mut self, action: Option<ReplyAction>, to_chat: bool, cx: &mut Context<Self>) {
         if self.closed {
             return;
         }
@@ -277,7 +335,7 @@ impl ReplyPopover {
                 return;
             };
             let _ = main.update(cx, |_, window, cx| {
-                if action.is_some() {
+                if to_chat {
                     window.activate_window();
                 }
                 let _ = chat.update(cx, |chat, cx| {
@@ -295,7 +353,7 @@ impl ReplyPopover {
         if event.keystroke.key == "escape" {
             cx.stop_propagation();
             window.prevent_default();
-            self.close(None, cx);
+            self.close(None, true, cx);
         }
     }
 
@@ -324,7 +382,7 @@ impl ReplyPopover {
             .hover(move |row| row.bg(hover))
             .child(div().text_color(p.foreground).child(label))
             .child(div().text_color(p.muted).child(shortcut))
-            .on_click(cx.listener(move |popover, _, _, cx| popover.close(Some(action), cx)))
+            .on_click(cx.listener(move |popover, _, _, cx| popover.close(Some(action), true, cx)))
             .into_any_element()
     }
 }
@@ -400,4 +458,34 @@ fn menu_ink_washes(light: bool) -> (gpui::Hsla, gpui::Hsla) {
     let foreground: gpui::Hsla = gpui::rgb(if light { 0x292929 } else { 0xfcfcfc }).into();
     let border: gpui::Hsla = gpui::rgba(if light { 0x0000001f } else { 0xffffff1f }).into();
     (foreground.opacity(if light { 0.06 } else { 0.08 }), border)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{key_loss_closes, option_menu::MAX_REKEYS};
+
+    /// The bug: the press on the Reply row is still "recent" when the main window takes key status
+    /// back, and that closed the card before anything could be typed.
+    #[test]
+    fn the_press_that_opened_the_card_does_not_close_it() {
+        assert!(!key_loss_closes(true, true, 0));
+    }
+
+    #[test]
+    fn a_key_loss_nobody_caused_does_not_close_it() {
+        assert!(!key_loss_closes(false, false, 0));
+        assert!(!key_loss_closes(true, false, 0));
+    }
+
+    #[test]
+    fn a_press_after_it_opened_closes_it() {
+        assert!(key_loss_closes(false, true, 0));
+    }
+
+    #[test]
+    fn a_window_that_keeps_taking_key_status_wins_eventually() {
+        assert!(!key_loss_closes(false, false, MAX_REKEYS - 1));
+        assert!(key_loss_closes(false, false, MAX_REKEYS));
+        assert!(key_loss_closes(true, true, MAX_REKEYS));
+    }
 }

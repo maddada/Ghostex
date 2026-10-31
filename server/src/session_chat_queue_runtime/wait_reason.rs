@@ -22,6 +22,15 @@ pub(super) const INPUT_BOX_LAST_RESORT_AFTER_MS: i64 = 180_000;
 /// idle by every signal, is logged and handed to the same ladder's last resort.
 pub(super) const WATCHDOG_AFTER_MS: i64 = 300_000;
 
+/// CDXC:SessionChat 2026-10-30 WHY:
+/// A thread report waited seven hours behind Claude Code's rating survey with its row saying "trying to send anyway" the whole time, and nobody was told: the coordinator it was for was the session stuck, and the user was away. A held message keeps retrying for as long as the session lives (the 2026-10-11 DECISION in session_chat_send_wake.rs), so the retries stay; what changes after this long is the row's words, which say what the terminal shows and what to do, and one notification in the bell, so a stuck message is never silent.
+pub(super) const INPUT_BOX_STUCK_AFTER_MS: i64 = 300_000;
+
+/// Longest piece of one screen row quoted in a stuck row's words.
+const STUCK_SCREEN_ROW_CHARS: usize = 90;
+/// Screen rows quoted: the bottom of what the agent shows where its input box should be.
+const STUCK_SCREEN_ROWS: usize = 2;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum InputBoxStep {
     /// Fresh screen reads on the startup send's backoff.
@@ -134,6 +143,8 @@ pub(super) struct HeadWait {
     pub(super) kind: &'static str,
     pub(super) kind_since: DateTime<Utc>,
     pub(super) watchdog_logged: bool,
+    /// The row's stuck notification went out (once per row and kind of wait).
+    pub(super) stuck_reported: bool,
 }
 
 impl HeadWait {
@@ -154,12 +165,14 @@ impl HeadWait {
                 kind: reason.kind(),
                 kind_since: now,
                 watchdog_logged: false,
+                stuck_reported: false,
             }),
         };
         if wait.kind != reason.kind() {
             wait.kind = reason.kind();
             wait.kind_since = now;
             wait.watchdog_logged = false;
+            wait.stuck_reported = false;
         }
         (now.signed_duration_since(wait.first_seen)
             .num_milliseconds()
@@ -171,6 +184,74 @@ impl HeadWait {
         now.signed_duration_since(self.kind_since)
             .num_milliseconds()
     }
+
+    /// Minutes the row has waited on the input box once that is past
+    /// [`INPUT_BOX_STUCK_AFTER_MS`], `None` before then or for any other kind of wait.
+    pub(super) fn stuck_minutes(&self, reason: &WaitReason, now: DateTime<Utc>) -> Option<i64> {
+        let waited = self.kind_waited_ms(now);
+        (reason.is_input_box() && waited >= INPUT_BOX_STUCK_AFTER_MS).then_some(waited / 60_000)
+    }
+}
+
+/// The bottom of the screen the agent shows instead of its input box, quoted: its last rows that
+/// are not a right-aligned notice ("Update available! …") or a bare rule.
+fn screen_excerpt(screen_tail: &[String]) -> Option<String> {
+    let mut rows: Vec<String> = screen_tail
+        .iter()
+        .rev()
+        .filter(|line| {
+            let trimmed = line.trim();
+            let lead = line.len() - line.trim_start().len();
+            !trimmed.is_empty()
+                && lead * 3 < line.chars().count()
+                && !trimmed
+                    .chars()
+                    .all(|ch| matches!(ch, '─' | '━' | '═' | '-'))
+        })
+        .take(STUCK_SCREEN_ROWS)
+        .map(|line| {
+            let row = line.split_whitespace().collect::<Vec<_>>().join(" ");
+            if row.chars().count() <= STUCK_SCREEN_ROW_CHARS {
+                row
+            } else {
+                let mut cut: String = row.chars().take(STUCK_SCREEN_ROW_CHARS - 1).collect();
+                cut.push('…');
+                cut
+            }
+        })
+        .collect();
+    rows.reverse();
+    (!rows.is_empty()).then(|| rows.join(" / "))
+}
+
+fn minutes(count: i64) -> String {
+    if count == 1 {
+        "1 minute".to_string()
+    } else {
+        format!("{count} minutes")
+    }
+}
+
+/// What a row stuck on the input box says, instead of "trying to send anyway" for good.
+pub(super) fn stuck_input_box_text(waited_minutes: i64, screen_tail: &[String]) -> String {
+    let shows = screen_excerpt(screen_tail)
+        .map(|excerpt| format!(" The terminal shows: \u{201c}{excerpt}\u{201d}."))
+        .unwrap_or_default();
+    format!(
+        "Not sent yet: the agent's input box hasn't been on screen for {}.{shows} Open the terminal to clear what is in the way; Ghostex keeps trying and sends it once the box is back.",
+        minutes(waited_minutes)
+    )
+}
+
+/// The bell notification for a row stuck on the input box.
+pub(super) fn stuck_notification_body(waited_minutes: i64, screen_tail: &[String]) -> String {
+    let shows = screen_excerpt(screen_tail)
+        .map(|excerpt| format!(" The terminal shows: \u{201c}{excerpt}\u{201d}."))
+        .unwrap_or_default();
+    format!(
+        "A message has waited {} to reach this agent because its input box isn't on screen.{shows} Open the terminal to clear it.",
+        minutes(waited_minutes)
+    )
 }
 
 #[cfg(test)]
@@ -208,6 +289,43 @@ mod tests {
         assert_eq!(wait.as_ref().unwrap().kind_waited_ms(at(245)), 184_000);
         // The next head row starts its own minute.
         assert_eq!(HeadWait::observe(&mut wait, "Q2", &working, at(300)), None);
+    }
+
+    #[test]
+    fn a_row_stuck_on_the_input_box_says_what_the_terminal_shows() {
+        let mut wait = None;
+        let anyway = WaitReason::InputBox(InputBoxStep::SendingAnyway);
+        HeadWait::observe(&mut wait, "Q1", &anyway, at(0));
+        let head = wait.as_ref().unwrap();
+        assert_eq!(head.stuck_minutes(&anyway, at(299)), None);
+        assert_eq!(head.stuck_minutes(&anyway, at(300)), Some(5));
+        assert_eq!(
+            head.stuck_minutes(&WaitReason::Retrying, at(26_400)),
+            Some(440)
+        );
+        assert_eq!(head.stuck_minutes(&WaitReason::Working, at(26_400)), None);
+        // The tail the coordinator's screen showed on 2026-10-30.
+        let screen: Vec<String> = [
+            "✻ Cooked for 27s · done 6:43 AM",
+            "   … +24 completed",
+            "● How is Claude doing this session? (optional)",
+            "  1: Bad    2: Fine   3: Good   0: Dismiss",
+            &format!(
+                "{}Update available! Run: mise upgrade claude",
+                " ".repeat(150)
+            ),
+        ]
+        .iter()
+        .map(|line| line.to_string())
+        .collect();
+        assert_eq!(
+            stuck_input_box_text(440, &screen),
+            "Not sent yet: the agent's input box hasn't been on screen for 440 minutes. The terminal shows: \u{201c}● How is Claude doing this session? (optional) / 1: Bad 2: Fine 3: Good 0: Dismiss\u{201d}. Open the terminal to clear what is in the way; Ghostex keeps trying and sends it once the box is back."
+        );
+        assert_eq!(
+            stuck_notification_body(5, &[]),
+            "A message has waited 5 minutes to reach this agent because its input box isn't on screen. Open the terminal to clear it."
+        );
     }
 
     #[test]

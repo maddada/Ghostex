@@ -140,6 +140,14 @@ pub(super) fn repo_tile(
     }
 }
 
+/// Marks a card or a slim row as the open session: its fill, and an outline drawn over it.
+///
+/// CDXC:Sidebar 2026-10-30 DECISION:
+/// User: "when unified sidebar is enabled, when i activate a session in the sidebar then we're kind of shifting the elements in that session card in the sidebar which is bad please don't do this. the contents of that session in the sidebar have to stay static". The active card used to take a real 1px border, which moved everything inside it by that pixel and made it 2px taller, so the cards below moved too. The outline is now the Project sidebar's own overlay (`session_outline`, CDXC:Sidebar 2026-10-25 in decorations.rs), which takes no layout space, so activating a session changes the fill, the outline and the title's brightness and moves nothing.
+pub(super) fn mark_active<E: Styled + ParentElement>(row: E, fill: Hsla, outline: AnyElement) -> E {
+    row.bg(fill).child(outline)
+}
+
 impl GhostexGpuiApp {
     /// The click, right-click and hover a card and a slim row share with the classic row.
     pub(super) fn unified_row_interactions(
@@ -322,12 +330,8 @@ impl GhostexGpuiApp {
             .px(px(8.0 * scale))
             .py(px(7.0 * scale))
             .rounded(px(5.0 * scale))
+            .relative()
             .cursor_default()
-            .when(focused, |row| {
-                row.bg(appearance.session_selected)
-                    .border_1()
-                    .border_color(appearance.session_outline)
-            })
             .when(!focused, |row| {
                 row.hover(|row| row.bg(appearance.session_hover))
             })
@@ -422,6 +426,13 @@ impl GhostexGpuiApp {
                         }))
                         .child(agent()),
                 )
+            })
+            .when(focused, |row| {
+                mark_active(
+                    row,
+                    appearance.session_selected,
+                    crate::app::native_sidebar::decorations::session_outline(appearance),
+                )
             });
         let card_row = self.unified_row_interactions(card_row, card, cx);
         div()
@@ -448,5 +459,36 @@ impl GhostexGpuiApp {
                 card_row.into_any_element()
             })
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A row's frame, as the card and the slim row start theirs.
+    fn frame() -> gpui::Div {
+        div()
+            .w_full()
+            .flex()
+            .flex_col()
+            .gap(px(3.0))
+            .px(px(8.0))
+            .py(px(7.0))
+            .rounded(px(5.0))
+            .relative()
+    }
+
+    #[test]
+    fn opening_a_session_changes_its_rows_fill_and_no_layout() {
+        let mut inactive = frame();
+        let mut active = mark_active(
+            frame(),
+            rgb(0x333333).into(),
+            div().absolute().inset_0().into_any_element(),
+        );
+        assert!(active.style().background.is_some());
+        active.style().background = None;
+        assert_eq!(inactive.style(), active.style());
     }
 }

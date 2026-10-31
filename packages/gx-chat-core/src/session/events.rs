@@ -519,6 +519,7 @@ pub fn resubscribe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> 
     state.messages.history_epoch = None;
     state.messages.history_prefix_count = 0;
     state.messages.boundary_attempt = None;
+    state.messages.island_loaded = false;
     state.messages.loading_earlier = false;
     state.messages.resync = Default::default();
     state.messages.last_frame_at_ms = context.now_ms;
@@ -775,6 +776,12 @@ fn page_read_settled(
     // Grow the read window so a later resync answers with at least the history already on screen.
     state.messages.history_epoch = pending.epoch;
     state.messages.history_prefix_count += older.len();
+    if pending.island {
+        state.messages.island_loaded = true;
+        // A jump read leaves the "Load earlier" cursor where it was: the rows between this window
+        // and the tail are still to be loaded from there.
+        return Vec::new();
+    }
     state.messages.has_more = page_has_more(
         PageBoundary {
             message_count: read.messages.len(),

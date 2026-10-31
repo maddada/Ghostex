@@ -98,13 +98,31 @@ pub(crate) fn check_page_command(
             println!("  - {finding}");
         }
     }
+    // The Pick buttons do not depend on the width, so they are said once.
+    if let Some(result) = results.first() {
+        let picks = pick_findings(&result.report);
+        if !picks.is_empty() {
+            println!("Pick buttons:");
+            for finding in picks {
+                println!("  - {finding}");
+            }
+        }
+    }
     println!("Look at each screenshot before sending the page.");
     Ok(())
 }
 
+/// What the check `ghostex show` runs after publishing found: the phone fit and the questions left
+/// without Pick buttons.
+#[derive(Default)]
+pub(crate) struct ShowFindings {
+    pub(crate) phone: Vec<String>,
+    pub(crate) picks: Vec<String>,
+}
+
 /// The phone check `ghostex show` runs after publishing: what to fix, or nothing when the page fits
 /// or no Chrome is installed to look with.
-pub(crate) fn phone_findings_for_show(path: &Path) -> Vec<String> {
+pub(crate) fn findings_for_show(path: &Path) -> ShowFindings {
     let check = PageCheck {
         width: PHONE_WIDTH,
         light: false,
@@ -113,9 +131,12 @@ pub(crate) fn phone_findings_for_show(path: &Path) -> Vec<String> {
     match check_page(path, &[check]) {
         Ok(results) => results
             .first()
-            .map(|result| page_findings(result.width, &result.report))
+            .map(|result| ShowFindings {
+                phone: page_findings(result.width, &result.report),
+                picks: pick_findings(&result.report),
+            })
             .unwrap_or_default(),
-        Err(_) => Vec::new(),
+        Err(_) => ShowFindings::default(),
     }
 }
 
@@ -226,8 +247,8 @@ const PROBE: &str = r#"(function(){
 if(location.protocol!=="file:")return Promise.resolve({page:false});
 return new Promise(function(done){
   function settle(){setTimeout(function(){requestAnimationFrame(function(){requestAnimationFrame(function(){
-    var d=document.documentElement,fit=window.__ghostexFit||null;
-    done({page:true,fit:fit?JSON.parse(JSON.stringify(fit)):null,docWidth:d.scrollWidth,viewport:d.clientWidth,height:Math.max(d.scrollHeight,document.body?document.body.scrollHeight:0)});
+    var d=document.documentElement,fit=window.__ghostexFit||null,kit=window.__ghostexKit||null;
+    done({page:true,fit:fit?JSON.parse(JSON.stringify(fit)):null,kit:kit?JSON.parse(JSON.stringify(kit)):null,docWidth:d.scrollWidth,viewport:d.clientWidth,height:Math.max(d.scrollHeight,document.body?document.body.scrollHeight:0)});
   });});},300);}
   if(document.readyState==="complete")settle();else addEventListener("load",settle,{once:true});
 });
@@ -294,6 +315,46 @@ pub(crate) fn page_findings(width: u32, report: &Value) -> Vec<String> {
         ));
     }
     findings
+}
+
+/// The questions that sit under mockups although none of the mockups got a Pick button, from the
+/// kit's report (`window.__ghostexKit.untied`, visual_pages/kit.rs `autoTie`): the author ties them
+/// before sending, since the reader would have to scroll down to the question to pick.
+///
+/// CDXC:SessionChat 2026-10-30 DECISION:
+/// User: "PLEASE for inline htmls we must show the pick button on the top right so i can pick one easily instead of having to pick below". The kit ties untied variants itself where it can; when it cannot, `ghostex show` and `ghostex visual check` say so plainly (a warning, never a refusal), naming the question.
+pub(crate) fn pick_findings(report: &Value) -> Vec<String> {
+    report
+        .pointer("/kit/untied")
+        .and_then(Value::as_array)
+        .map(|questions| {
+            questions
+                .iter()
+                .map(|question| {
+                    let text = |key: &str| {
+                        question
+                            .get(key)
+                            .and_then(Value::as_str)
+                            .map(str::trim)
+                            .filter(|text| !text.is_empty())
+                    };
+                    let title = text("title");
+                    let tag = text("tag");
+                    let key = text("question").unwrap_or("a question");
+                    let name = match (tag, title) {
+                        (Some(tag), Some(title)) => format!("{tag} \"{title}\""),
+                        (None, Some(title)) => format!("\"{title}\""),
+                        (Some(tag), None) => tag.to_string(),
+                        (None, None) => format!("\"{key}\""),
+                    };
+                    let asked = tag.unwrap_or(key);
+                    format!(
+                        "{name} sits under mockups but none of them got a Pick button, so the reader has to scroll down to the question to choose. Put data-question=\"{asked}\" and data-choice=\"<the choice's letter or label>\" on each variant's section (the element holding its heading and mockup), or start each variant's heading with its choice's letter (\"A. Tabs\") or exactly its label."
+                    )
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn describe(item: &Value) -> String {
@@ -759,6 +820,275 @@ mod tests {
             "{computer}"
         );
         assert!(fit(1, "overflow").is_empty(), "{computer}");
+    }
+
+    /// Opens a page the way `ghostex show` would publish it in a headless Chrome at the computer's
+    /// width, then evaluates the expression there. `None` where no Chrome is installed.
+    fn eval_in_page(body: &str, expression: &str) -> Option<Value> {
+        let chrome = chrome_binary().or_else(|| {
+            eprintln!("skipped: no Chrome to check pages with");
+            None
+        })?;
+        let dir = tempfile::tempdir().expect("a scratch folder");
+        let html = format!(
+            "<!doctype html><html><head><meta name=\"ghostex-page\" content=\"v2\"><title>Pick</title></head><body>{body}</body></html>"
+        );
+        let prepared = prepare_page(&html, dir.path()).expect("a prepared page");
+        let page = dir.path().join("page.html");
+        std::fs::write(&page, prepared.html).expect("the page");
+        let browser = Browser::start(&chrome, &dir.path().join("profile")).expect("a browser");
+        let mut cdp = browser.connect().expect("a connection");
+        cdp.call(
+            "Emulation.setDeviceMetricsOverride",
+            json!({ "width": DESKTOP_WIDTH, "height": 900, "deviceScaleFactor": 1, "mobile": false }),
+        )
+        .expect("a window size");
+        cdp.call("Page.navigate", json!({ "url": file_url(&page) }))
+            .expect("the page opens");
+        let deadline = Instant::now() + CDP_TIMEOUT;
+        loop {
+            let answer = cdp
+                .call(
+                    "Runtime.evaluate",
+                    json!({ "expression": PROBE, "awaitPromise": true, "returnByValue": true }),
+                )
+                .expect("the probe");
+            if answer
+                .pointer("/result/value/page")
+                .and_then(Value::as_bool)
+                == Some(true)
+            {
+                break;
+            }
+            assert!(Instant::now() < deadline, "the page did not load");
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        let answer = cdp
+            .call(
+                "Runtime.evaluate",
+                json!({ "expression": expression, "returnByValue": true }),
+            )
+            .expect("the expression");
+        let text = answer
+            .pointer("/result/value")
+            .and_then(Value::as_str)
+            .unwrap_or_else(|| panic!("no answer: {answer}"));
+        Some(serde_json::from_str(text).expect("JSON"))
+    }
+
+    /// What the kit tied and what is on the page, as JSON text.
+    const PICKS: &str = r#"JSON.stringify({kit:window.__ghostexKit,picks:Array.prototype.map.call(document.querySelectorAll(".gx-pick"),function(p){var h=p.parentElement;return{text:h.textContent.replace(/Pick$/,"").trim(),tag:h.tagName,last:h.lastElementChild===p};})})"#;
+
+    fn question(tag: &str, title: &str, choices: &[&str]) -> String {
+        let choices = choices
+            .iter()
+            .map(|choice| format!("<gx-choice>{choice}</gx-choice>"))
+            .collect::<String>();
+        format!("<gx-question tag=\"{tag}\" title=\"{title}\">{choices}</gx-question>")
+    }
+
+    fn variants(headings: &[&str]) -> String {
+        let sections = headings
+            .iter()
+            .map(|heading| {
+                format!("<section><h3>{heading}</h3><div class=\"gx-frame\"><div style=\"width:300px;height:80px\">mockup</div></div></section>")
+            })
+            .collect::<String>();
+        format!("<gx-wide>{sections}</gx-wide>")
+    }
+
+    fn pairs(list: &Value) -> Vec<(String, String)> {
+        list.as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(|item| {
+                (
+                    item["question"].as_str().unwrap_or_default().to_string(),
+                    format!(
+                        "{}={}",
+                        item["heading"].as_str().unwrap_or_default(),
+                        item["choice"].as_str().unwrap_or_default()
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    /// The matching of untied variants to choices (visual_pages/kit.rs `autoTie`): by letter, by
+    /// label, never for an ambiguous or unmatched heading, never for a heading of an earlier
+    /// question, and not at all for a question that has tied variants.
+    #[test]
+    fn untied_variants_get_pick_buttons_only_where_the_match_is_certain() {
+        let body = format!(
+            "<gx-questions><header><h2>Header heading</h2></header>{q1v}{q1}{q2v}{q2}{q3v}{q3}{q4v}{q4}{q5v}{q5}{q6v}{q6}<h3>C. Stray after the last question</h3>{q7}</gx-questions>",
+            q1v = variants(&["A. Whatever the first looks like", "B. Something else again"]),
+            q1 = question("Q1", "Which layout?", &["Tabs", "One long page"]),
+            q2v = variants(&["Compact", "Roomy"]),
+            q2 = question("Q2", "How dense?", &["Compact", "Roomy"]),
+            q3v = variants(&["A. Red", "A. Green"]),
+            q3 = question("Q3", "Which colour?", &["Red", "Green"]),
+            q4v = variants(&["Alpha", "Alpha"]),
+            q4 = question("Q4", "Which name?", &["Alpha", "Beta"]),
+            q5v = variants(&["Unrelated heading"]),
+            q5 = question("Q5", "Which other?", &["One", "Two"]),
+            q6v = "<section data-question=\"Q6\" data-choice=\"x\"><h3>A. Already tied</h3><div class=\"gx-frame\">m</div></section><section><h3>B. Not tied</h3><div class=\"gx-frame\">m</div></section>",
+            q6 = question("Q6", "Which tied?", &["x", "y"]),
+            q7 = question("Q7", "Anything with no mockups?", &["Yes", "No"]),
+        );
+        let Some(page) = eval_in_page(&body, PICKS) else {
+            return;
+        };
+        let kit = &page["kit"];
+        assert_eq!(
+            pairs(&kit["auto"]),
+            vec![
+                (
+                    "Which layout?".into(),
+                    "A. Whatever the first looks like=a".into()
+                ),
+                ("Which layout?".into(), "B. Something else again=b".into()),
+                ("How dense?".into(), "Compact=a".into()),
+                ("How dense?".into(), "Roomy=b".into()),
+                ("Which colour?".into(), "A. Red=a".into()),
+            ],
+            "{page}"
+        );
+        let untied = kit["untied"]
+            .as_array()
+            .expect("untied")
+            .iter()
+            .map(|item| item["tag"].as_str().unwrap_or_default().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(untied, vec!["Q4", "Q5"], "{page}");
+        // Q6 is tied by its author: the kit leaves its other heading alone.
+        assert_eq!(kit["tied"], 1, "{page}");
+        let picks = page["picks"].as_array().expect("picks");
+        let texts = picks
+            .iter()
+            .map(|pick| pick["text"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            texts,
+            vec![
+                "A. Whatever the first looks like",
+                "B. Something else again",
+                "Compact",
+                "Roomy",
+                "A. Red",
+                "A. Already tied",
+            ],
+            "{page}"
+        );
+        // Each button is the last thing in its heading's row.
+        assert!(picks
+            .iter()
+            .all(|pick| pick["last"] == true && pick["tag"] == "H3"));
+        // The messages name the questions.
+        let report = json!({ "kit": kit });
+        let findings = pick_findings(&report);
+        assert_eq!(findings.len(), 2);
+        assert!(findings[0].contains("Q4 \"Which name?\""), "{findings:?}");
+        assert!(findings[1].contains("data-question=\"Q5\""), "{findings:?}");
+    }
+
+    /// A tied heading's Pick button picks its choice and shows it picked in both places; clicking
+    /// either one clears both.
+    #[test]
+    fn an_auto_tied_pick_and_its_choice_pick_and_clear_together() {
+        let body = format!(
+            "<gx-questions>{}{}</gx-questions>",
+            variants(&["A. Tabs", "B. One long page"]),
+            question("Q1", "Which layout?", &["Tabs", "One long page"])
+        );
+        let expression = r#"(function(){
+          var picks=document.querySelectorAll(".gx-pick"),radios=document.querySelectorAll(".gx-choice"),log=[];
+          function state(){return Array.prototype.map.call(picks,function(p){return p.getAttribute("aria-pressed")+":"+p.textContent;}).concat(Array.prototype.map.call(radios,function(r){return r.getAttribute("aria-checked");}));}
+          log.push(state());picks[1].click();log.push(state());picks[1].click();log.push(state());
+          radios[0].click();log.push(state());picks[1].click();log.push(state());radios[1].click();log.push(state());
+          return JSON.stringify(log);})()"#;
+        let Some(log) = eval_in_page(&body, expression) else {
+            return;
+        };
+        let log: Vec<Vec<String>> = serde_json::from_value(log).expect("states");
+        // Order: pick A, pick B, choice a, choice b, Other.
+        assert_eq!(
+            log[0],
+            ["false:Pick", "false:Pick", "false", "false", "false"]
+        );
+        assert_eq!(
+            log[1],
+            [
+                "false:Pick",
+                "true:\u{2713} Picked",
+                "false",
+                "true",
+                "false"
+            ]
+        );
+        assert_eq!(
+            log[2],
+            ["false:Pick", "false:Pick", "false", "false", "false"]
+        );
+        assert_eq!(
+            log[3],
+            [
+                "true:\u{2713} Picked",
+                "false:Pick",
+                "true",
+                "false",
+                "false"
+            ]
+        );
+        assert_eq!(
+            log[4],
+            [
+                "false:Pick",
+                "true:\u{2713} Picked",
+                "false",
+                "true",
+                "false"
+            ]
+        );
+        assert_eq!(
+            log[5],
+            ["false:Pick", "false:Pick", "false", "false", "false"]
+        );
+    }
+
+    /// Pages whose variants are tied by their author behave as before: the kit ties nothing more
+    /// and says nothing.
+    #[test]
+    fn variants_tied_by_the_author_are_left_exactly_as_they_were() {
+        let body = "<gx-questions><gx-wide><section data-question=\"Q1\" data-choice=\"a\"><h3>A. Tabs</h3><div class=\"gx-frame\">m</div></section><section data-question=\"Q1\" data-choice=\"One long page\"><h3>Second</h3><div class=\"gx-frame\">m</div></section></gx-wide>".to_string()
+            + &question("Q1", "Which layout?", &["Tabs", "One long page"])
+            + "</gx-questions>";
+        let Some(page) = eval_in_page(&body, PICKS) else {
+            return;
+        };
+        assert_eq!(page["kit"]["tied"], 2, "{page}");
+        assert!(page["kit"]["auto"].as_array().unwrap().is_empty(), "{page}");
+        assert!(
+            page["kit"]["untied"].as_array().unwrap().is_empty(),
+            "{page}"
+        );
+        assert_eq!(page["picks"].as_array().unwrap().len(), 2, "{page}");
+    }
+
+    #[test]
+    fn a_question_without_a_pick_is_named_and_a_tied_page_is_quiet() {
+        let report = json!({"page":true,"kit":{"tied":0,"auto":[],"untied":[
+            {"question":"Which layout?","tag":"Q1","title":"Which layout?"},
+            {"question":"Plain","tag":"","title":""}]}});
+        let findings = pick_findings(&report);
+        assert_eq!(findings.len(), 2);
+        assert!(findings[0].starts_with("Q1 \"Which layout?\" sits under mockups"));
+        assert!(findings[0].contains("data-question=\"Q1\""));
+        assert!(findings[1].starts_with("\"Plain\" sits under mockups"));
+        assert!(
+            pick_findings(&json!({"page":true,"kit":{"tied":1,"auto":[],"untied":[]}})).is_empty()
+        );
+        assert!(pick_findings(&json!({"page":true,"kit":null})).is_empty());
     }
 
     #[test]

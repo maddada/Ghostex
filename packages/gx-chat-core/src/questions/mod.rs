@@ -26,6 +26,8 @@ pub mod notice_state;
 pub mod notice_tail;
 pub mod notice_tone;
 pub mod open_questions;
+pub mod resource_index;
+pub mod resource_modal;
 pub mod permission_card;
 pub mod sync;
 pub mod terminal_dialog_copy;

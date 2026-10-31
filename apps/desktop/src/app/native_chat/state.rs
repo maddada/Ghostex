@@ -185,6 +185,15 @@ pub(crate) struct NativeChatView {
     /// The Files and links menu is about to open, or its close has been sent to the core and the
     /// document still says open: either way the next render must not open it again.
     pub(super) files_links_menu_pending: bool,
+    /// The Resources modal's text boxes, made in the modal's own window (`resource_modal.rs`).
+    pub(super) modal_form_inputs:
+        std::collections::HashMap<String, super::question_form::FormInput>,
+    /// The modal is being drawn, so a form's boxes are looked up in `modal_form_inputs`.
+    pub(super) form_in_modal: std::cell::Cell<bool>,
+    /// The modal's window was asked for and not yet open, or the reader closed it and the core has
+    /// not yet been told.
+    pub(super) resource_modal_pending: bool,
+    pub(super) resource_modal_closing: bool,
     /// The Session details panel: wanted, docked or floating (session_details/).
     pub(crate) session_details: super::session_details::SessionDetailsView,
     pub(super) files_links_closing: bool,
@@ -461,6 +470,10 @@ impl NativeChatView {
             files_links_subscription: None,
             files_links_input_window: None,
             files_links_menu_pending: false,
+            modal_form_inputs: Default::default(),
+            form_in_modal: Default::default(),
+            resource_modal_pending: false,
+            resource_modal_closing: false,
             session_details: Default::default(),
             files_links_closing: false,
             files_links_jump_revision: 0,

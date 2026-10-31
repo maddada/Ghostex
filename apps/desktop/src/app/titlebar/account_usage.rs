@@ -25,6 +25,37 @@ fn text<'a>(value: &'a Value, key: &str) -> &'a str {
     value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
+/// One entry per account across every machine, this computer's copy first.
+///
+/// CDXC:AgentProviders 2026-10-30 WHY:
+/// User: "why do i see accounts doubled up here in the sidebar". A provider login signed in on
+/// this computer and on a connected machine comes back from both gxservers under the same account
+/// id (the id is derived from the login, not the machine) with the same limits, but each machine's
+/// copy carries its own `titlebarKey`, so the sidebar drew it twice. The limits belong to the
+/// provider account, so it shows once: this computer's copy when it has one, else the first
+/// machine's in the published order. An account only another machine has still shows.
+fn distinct_accounts(accounts: &[Value]) -> Vec<&Value> {
+    let mut shown: Vec<&Value> = Vec::with_capacity(accounts.len());
+    for account in accounts {
+        let same = shown.iter().position(|seen| {
+            text(seen, "provider") == text(account, "provider")
+                && !text(account, "id").is_empty()
+                && text(seen, "id") == text(account, "id")
+        });
+        match same {
+            None => shown.push(account),
+            Some(index)
+                if text(account, "titlebarMachine") == "local"
+                    && text(shown[index], "titlebarMachine") != "local" =>
+            {
+                shown[index] = account;
+            }
+            Some(_) => {}
+        }
+    }
+    shown
+}
+
 fn titlebar_entry(account: &Value, machine: &str) -> Value {
     let mut account = account.clone();
     let key = machine
@@ -251,6 +282,59 @@ pub(crate) struct GpuiAccountUsageMeterRoute {
 }
 
 impl GhostexGpuiApp {
+    /// Re-places the open usage popup for its panel's measured `height`: above its tile, as tall
+    /// as the content or the room there (CDXC:AgentProviders 2026-10-30 on
+    /// `account_usage_popup_frame`). Moved where the platform can move a window, else resized.
+    pub(crate) fn fit_account_usage_popup(
+        &mut self,
+        id: ExtensionId,
+        height: f32,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let kind = GpuiTitlebarPopupKind::AccountUsage(id);
+        let (Some(state), Some(popup), Some(main)) = (
+            self.titlebar_popup_menu
+                .as_ref()
+                .filter(|state| state.kind == kind),
+            self.titlebar_popup_window,
+            self.main_window_handle,
+        ) else {
+            return;
+        };
+        let trigger = state.trigger_bounds;
+        let Ok((frame, parent)) = cx.update_window(main, |_, window, _| {
+            let screen = titlebar_popup_window_bounds_for_trigger_bounds(
+                kind,
+                trigger,
+                height,
+                titlebar_popup_menu_width(kind),
+                window,
+            );
+            let origin = window.bounds().origin;
+            (
+                Bounds::new(screen.origin - origin, screen.size),
+                crate::app::native_chat::child_window::window_native_view(window),
+            )
+        }) else {
+            return;
+        };
+        let current = popup.update(cx, |_, window, _| window.bounds().size).ok();
+        if current == Some(frame.size) {
+            return;
+        }
+        let moved = parent.is_some_and(|parent| {
+            crate::app::native_chat::child_window::move_child_window(
+                popup.into(),
+                parent,
+                frame,
+                cx,
+            )
+        });
+        if !moved {
+            let _ = popup.update(cx, |_, window, _| window.resize(frame.size));
+        }
+    }
+
     pub(crate) fn sync_titlebar_account_privacy(&self, cx: &mut gpui::Context<Self>) {
         let Some(GpuiTitlebarPopupKind::AccountUsage(id)) =
             self.titlebar_popup_menu.as_ref().map(|state| state.kind)
@@ -429,10 +513,10 @@ impl GhostexGpuiApp {
         }
     }
 
-    /// Every account the user asked to see, in the order gxserver publishes them.
+    /// Every account the user asked to see, in the order gxserver publishes them, once each.
     pub(crate) fn account_usage_meters(&self) -> Vec<GpuiAccountUsageMeter> {
-        self.titlebar_accounts
-            .iter()
+        distinct_accounts(&self.titlebar_accounts)
+            .into_iter()
             .filter_map(|account| {
                 let id = ExtensionId::new(text(account, "titlebarKey"))?;
                 let codex = text(account, "provider") == "codex";
@@ -727,5 +811,64 @@ impl GhostexGpuiApp {
             });
             cx.stop_propagation();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn account(machine: &str, provider: &str, id: &str, name: &str) -> Value {
+        titlebar_entry(
+            &json!({"provider": provider, "id": id, "name": name, "registered": true, "showInTitlebar": true}),
+            machine,
+        )
+    }
+
+    fn shown(accounts: &[Value]) -> Vec<(String, String)> {
+        distinct_accounts(accounts)
+            .into_iter()
+            .map(|account| {
+                (
+                    text(account, "titlebarMachine").to_string(),
+                    text(account, "name").to_string(),
+                )
+            })
+            .collect()
+    }
+
+    /// The user's sidebar on 2026-10-30: MS and ST are signed in here and on the Windows machine.
+    #[test]
+    fn an_account_signed_in_on_two_machines_shows_once() {
+        let windows = "remote-mvb5laq3-4aol2";
+        let accounts = vec![
+            account("local", "claude", "claude-sp", "SP"),
+            account("local", "claude", "claude-ms", "MS"),
+            account("local", "claude", "claude-st", "ST"),
+            account("local", "codex", "codex-sp", "SP"),
+            account(windows, "claude", "claude-ms", "MS"),
+            account(windows, "claude", "claude-st", "ST"),
+            account(windows, "claude", "claude-other", "OT"),
+        ];
+        assert_eq!(
+            shown(&accounts),
+            [
+                ("local", "SP"),
+                ("local", "MS"),
+                ("local", "ST"),
+                ("local", "SP"),
+                (windows, "OT"),
+            ]
+            .map(|(machine, name)| (machine.to_string(), name.to_string()))
+        );
+    }
+
+    #[test]
+    fn this_computers_copy_wins_whatever_the_order() {
+        let accounts = vec![
+            account("a-machine", "claude", "claude-ms", "MS remote"),
+            account("local", "claude", "claude-ms", "MS"),
+        ];
+        assert_eq!(shown(&accounts), [("local".to_string(), "MS".to_string())]);
     }
 }

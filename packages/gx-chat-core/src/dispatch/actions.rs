@@ -74,6 +74,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::QuestionForLater
         | ActionKind::QuestionRemove
         | ActionKind::QuestionListFilter
+        | ActionKind::OpenResource
+        | ActionKind::CloseResource
+        | ActionKind::GoToResource
         | ActionKind::QuestionListMore
         | ActionKind::QuestionListReset
         | ActionKind::AsyncQuestionToggle

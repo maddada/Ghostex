@@ -367,6 +367,7 @@ pub async fn run_gxserver_foreground(
         session_chat_queue_composer_reader(&state),
         session_chat_queue_compacting_refresher(&state),
         session_chat_queue_waker(&state),
+        crate::session_chat_queue_runtime::session_chat_queue_stuck_notifier(&state),
     )
     .start(shutdown_tx.subscribe());
     /*

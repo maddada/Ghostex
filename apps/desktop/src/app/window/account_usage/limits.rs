@@ -45,59 +45,34 @@ impl AccountUsagePanel {
             .collect();
         let mut bars = v_flex()
             .w_full()
-            .gap(px(13.0))
-            .child(self.render_bar(session, "5h limit".into(), 12.0))
-            .child(self.render_bar(weekly, "7d limit".into(), 12.0));
+            .gap(px(LIMIT_GAP))
+            .child(self.render_bar(session, "5h limit".into(), 13.0))
+            .child(self.render_bar(weekly, "7d limit".into(), 13.0));
         if let Some(fable) = fable {
             bars = bars.child(self.render_bar(
                 Some(fable),
                 format!("{} 7d limit", text(fable, "model")),
-                12.0,
+                13.0,
             ));
         }
-        // CDXC:AgentProviders 2026-10-11 DECISION:
-        // User: the usage card must not contradict itself. When gxserver marks the reading stale (refreshing has failed since it was taken), the pill says "Last known" in amber and the header says how long ago it was updated; "Live limits" shows only for a fresh reading.
-        let (dot, pill) = if self.account["usageStale"] == true {
-            (
-                gpui::Hsla::from(chrome_color(0xf0a94f, 0x986009)),
-                "Last known",
-            )
-        } else {
-            (p.accent, "Live limits")
-        };
-        let mut tag = p.tag(true);
-        if self.account["usageStale"] == true {
-            tag = tag.bg(dot.opacity(0.12)).text_color(dot);
-        }
-        let mut card = p
-            .card()
-            .child(
-                section_heading().child(heading("This account")).child(
-                    tag.child(div().size(px(6.0)).rounded_full().bg(dot).shadow(vec![
-                        shadow(0.0, 0.0, 0.0, dot.opacity(0.25)).spread_radius(px(2.0)),
-                        shadow(0.0, 0.0, 8.0, dot),
-                    ]))
-                    .child(pill),
-                ),
-            )
-            .child(bars);
+        let mut card = p.card().child(bars);
         if !other.is_empty() {
-            let mut models = v_flex().w_full().mt(px(12.0));
+            let mut models = v_flex().w_full().mt(px(LIMIT_GAP));
             models = models.child(
                 h_flex()
                     .id("account-usage-models-toggle")
                     .track_focus(&self.model_focus)
-                    .focus_visible(move |this| this.shadow(focus_ring(p)))
+                    .focus_visible(|this| this.shadow(focus_ring()))
                     .items_center()
                     .self_start()
                     .gap(px(6.0))
                     .py(px(3.0))
                     .rounded(px(4.0))
-                    .text_size(px(11.0))
-                    .line_height(px(15.95))
+                    .text_size(px(12.0))
+                    .line_height(px(16.0))
                     .text_color(p.muted)
                     .cursor_pointer()
-                    .hover(|this| this.text_color(chrome_color(0xe4e4e2, 0x292524)))
+                    .hover(move |this| this.text_color(p.ink))
                     .on_click(cx.listener(|this, _, _, cx| {
                         cx.stop_propagation();
                         this.toggle_models(cx);
@@ -116,33 +91,37 @@ impl AccountUsagePanel {
                     models.child(
                         v_flex()
                             .w_full()
-                            .mt(px(12.0))
-                            .pl(px(14.0))
-                            .border_l_2()
-                            .border_color(p.strong)
-                            .gap(px(13.0))
+                            .mt(px(LIMIT_GAP))
+                            .pl(px(12.0))
+                            .border_l_1()
+                            .border_color(p.line)
+                            .gap(px(LIMIT_GAP))
                             .children(other.into_iter().map(|w| {
-                                self.render_bar(Some(w), text(w, "label").to_string(), 11.0)
+                                self.render_bar(Some(w), text(w, "label").to_string(), 12.0)
                             })),
                     );
             }
             card = card.child(models);
         }
-        let footer = |top: bool, title: &'static str| {
+        let row = |title: &'static str| {
             h_flex()
                 .w_full()
-                .mt(px(if top { 13.0 } else { 9.0 }))
-                .when(top, |this| {
-                    this.pt(px(11.0)).border_t_1().border_color(p.line)
-                })
+                .min_h(px(KV_ROW_HEIGHT))
                 .items_center()
                 .justify_between()
                 .gap(px(8.0))
-                .text_size(px(11.0))
-                .line_height(px(15.95))
+                .text_size(px(12.5))
                 .text_color(p.muted)
                 .child(title)
         };
+        // CDXC:AgentProviders 2026-09-24 DECISION:
+        // User: Claude resets must be shown and usable like Codex resets. Claude keeps its Extra usage row and gains the same Rate limit resets row beneath it once Anthropic reports the reset program for the account.
+        let reports_resets = p.codex
+            || self.account["resetCredits"].is_u64()
+            || !text(&self.account, "resetCreditsError").is_empty();
+        if !p.codex || reports_resets {
+            card = card.child(separator(p));
+        }
         if !p.codex {
             let extra = windows
                 .iter()
@@ -150,43 +129,22 @@ impl AccountUsagePanel {
                 .and_then(|w| w["usedPercent"].as_f64())
                 .map(|n| format!("{}% used", n.round()))
                 .unwrap_or_else(|| "Not reported".into());
-            card = card.child(
-                footer(true, "Extra usage").child(
-                    label(extra, 11.0, chrome_color(0xe4e4e2, 0x292524).into())
-                        .font_weight(FontWeight::MEDIUM),
-                ),
-            );
+            card = card.child(row("Extra usage").child(label(
+                extra,
+                12.5,
+                chrome_ink().opacity(0.80).into(),
+            )));
         }
-        // CDXC:AgentProviders 2026-09-24 DECISION:
-        // User: Claude resets must be shown and usable like Codex resets. Claude keeps its Extra usage row and gains the same Rate limit resets row beneath it once Anthropic reports the reset program for the account.
-        let reports_resets = p.codex
-            || self.account["resetCredits"].is_u64()
-            || !text(&self.account, "resetCreditsError").is_empty();
         if reports_resets {
             let resets_text = self.account["resetCredits"]
                 .as_u64()
                 .map(|n| format!("{n} available"))
                 .unwrap_or_else(|| "Not reported".into());
             card = card.child(
-                footer(p.codex, "Rate limit resets").child(
-                    h_flex()
-                        .id("account-usage-reset-toggle")
+                row("Rate limit resets").child(
+                    p.control("account-usage-reset-toggle")
                         .track_focus(&self.reset_focus)
-                        .focus_visible(move |this| this.shadow(focus_ring(p)))
-                        .h(px(22.0))
-                        .pl(px(9.0))
-                        .pr(px(4.0))
-                        .items_center()
-                        .gap(px(6.0))
-                        .rounded_full()
-                        .border_1()
-                        .border_color(p.accent_line)
-                        .bg(p.soft)
-                        .text_color(p.accent_ink)
-                        .text_size(px(10.5))
-                        .font_weight(FontWeight::SEMIBOLD)
-                        .cursor_pointer()
-                        .hover(move |this| this.bg(p.accent.opacity(0.22)))
+                        .focus_visible(|this| this.shadow(focus_ring()))
                         .on_click(cx.listener(|this, _, _, cx| {
                             cx.stop_propagation();
                             this.toggle_resets(cx);
@@ -198,7 +156,11 @@ impl AccountUsagePanel {
                             }
                         }))
                         .child(resets_text)
-                        .child(chevron(true, self.resets_open, p.accent_ink)),
+                        .child(chevron(
+                            true,
+                            self.resets_open,
+                            chrome_ink().opacity(0.70).into(),
+                        )),
                 ),
             );
             if self.resets_open {
@@ -228,21 +190,21 @@ impl AccountUsagePanel {
             .items_baseline()
             .whitespace_nowrap()
             .font_features(tabular_numbers())
-            .text_size(px(10.5))
-            .line_height(px(15.225))
+            .text_size(px(12.0))
+            .line_height(px(LIMIT_LINE))
             .text_color(p.muted);
         if let Some(percent) = percent {
             meta = meta
                 .child(
-                    label(
-                        format!("{}%", percent.round()),
-                        11.5,
-                        chrome_color(0xf2f2f0, 0x1c1917).into(),
-                    )
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .mr(px(1.0)),
+                    div()
+                        .text_size(px(13.0))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(p.ink)
+                        .child(format!("{}%", percent.round())),
                 )
-                .when(!reset.is_empty(), |this| this.child(format!(" · {reset}")));
+                .when(!reset.is_empty(), |this| {
+                    this.child(div().ml(px(4.0)).child(format!("\u{b7} {reset}")))
+                });
         } else {
             meta = meta.child(if reset.is_empty() {
                 "Not reported".into()
@@ -250,20 +212,14 @@ impl AccountUsagePanel {
                 reset
             });
         }
-        let (from, to, glow) = if percent.unwrap_or(0.0) >= 95.0 {
-            (
-                rgb(0xd9463c).into(),
-                rgb(0xf5817a).into(),
-                rgb(0xee6b62).opacity(0.45).into(),
-            )
+        // Red near the limit and amber when it is close or on pace to run out; the provider's own
+        // colour otherwise.
+        let fill: Hsla = if percent.unwrap_or(0.0) >= 95.0 {
+            rgb(0xe5534b).into()
         } else if !warning.is_empty() || percent.unwrap_or(0.0) >= 80.0 {
-            (
-                rgb(0xd98a2b).into(),
-                rgb(0xf5b95c).into(),
-                chrome_color(0xf0a94f, 0x986009).opacity(0.45).into(),
-            )
+            amber()
         } else {
-            (p.deep, p.light, p.accent.opacity(0.45))
+            p.accent
         };
         v_flex()
             .w_full()
@@ -271,14 +227,14 @@ impl AccountUsagePanel {
             .child(
                 h_flex()
                     .w_full()
+                    .h(px(LIMIT_LINE))
                     .items_baseline()
                     .justify_between()
-                    .gap(px(10.0))
-                    .mb(px(6.0))
+                    .gap(px(8.0))
                     .child(
-                        label(title, label_size, chrome_color(0xe4e4e2, 0x292524).into())
+                        label(title, label_size, p.ink)
+                            .line_height(px(LIMIT_LINE))
                             .min_w_0()
-                            .font_weight(FontWeight::MEDIUM)
                             .whitespace_nowrap()
                             .overflow_hidden()
                             .text_ellipsis(),
@@ -288,35 +244,19 @@ impl AccountUsagePanel {
             .child(
                 div()
                     .w_full()
-                    .h(px(6.0))
-                    .rounded_full()
+                    .mt(px(LIMIT_BAR_GAP))
+                    .h(px(LIMIT_BAR_HEIGHT))
+                    .rounded(px(2.0))
                     .overflow_hidden()
-                    .bg(mix(p.accent, 0.07, chrome_color(0x2c2b2a, 0xe7e5e4).into()))
-                    // A hard black inset on a light track reads as a dent rather than depth.
-                    .shadow(vec![
-                        shadow(
-                            0.0,
-                            1.0,
-                            1.0,
-                            rgb(0)
-                                .opacity(if chrome_uses_light_appearance() {
-                                    0.10
-                                } else {
-                                    0.35
-                                })
-                                .into(),
-                        )
-                        .inset(),
-                    ])
+                    .bg(p.track)
                     .child(
                         div()
                             .h_full()
                             .w(gpui::relative(
                                 (percent.unwrap_or(0.0).clamp(0.0, 100.0) / 100.0) as f32,
                             ))
-                            .rounded_full()
-                            .bg(gradient(90.0, from, to))
-                            .shadow(vec![shadow(0.0, 0.0, 8.0, glow)]),
+                            .rounded(px(2.0))
+                            .bg(fill),
                     ),
             )
             .when(!warning.is_empty(), |this| {
@@ -325,15 +265,15 @@ impl AccountUsagePanel {
                         .mt(px(6.0))
                         .items_center()
                         .gap(px(5.0))
-                        .text_size(px(10.5))
-                        .line_height(px(15.225))
-                        .text_color(chrome_color(0xf0a94f, 0x986009))
+                        .text_size(px(11.0))
+                        .line_height(px(WARNING_LINE))
+                        .text_color(amber())
                         .child(
                             div()
                                 .size(px(6.0))
                                 .flex_shrink_0()
                                 .rounded_full()
-                                .bg(chrome_color(0xf0a94f, 0x986009)),
+                                .bg(amber()),
                         )
                         .child(warning),
                 )
@@ -341,3 +281,21 @@ impl AccountUsagePanel {
             .into_any_element()
     }
 }
+
+/// The hairline between the limits and the rows under them.
+fn separator(p: Palette) -> gpui::Div {
+    div()
+        .w_full()
+        .h(px(1.0))
+        .my(px(SEPARATOR_MARGIN))
+        .bg(p.line)
+}
+
+/// A limit's label line, the bar below it, and the gap between limits.
+pub(super) const LIMIT_LINE: f32 = 17.0;
+pub(super) const LIMIT_BAR_GAP: f32 = 5.0;
+pub(super) const LIMIT_BAR_HEIGHT: f32 = 4.0;
+pub(super) const LIMIT_GAP: f32 = 10.0;
+pub(super) const WARNING_LINE: f32 = 16.0;
+pub(super) const SEPARATOR_MARGIN: f32 = 10.0;
+pub(super) const KV_ROW_HEIGHT: f32 = 24.0;

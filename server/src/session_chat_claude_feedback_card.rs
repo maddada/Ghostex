@@ -66,7 +66,7 @@ const DIAGNOSTIC_SOURCE: &str = "claude-feedback-card";
 /// Non-blank rows with their indentation kept: Claude draws the card, the input box and its
 /// notices from the first column, and every transcript row (a reply, a quoted prompt, tool output)
 /// is indented, so a card quoted in the conversation never reads as the live one.
-fn screen_lines(screen_text: &str) -> Vec<String> {
+pub(crate) fn screen_lines(screen_text: &str) -> Vec<String> {
     screen_text
         .lines()
         .map(|line| {
@@ -143,7 +143,7 @@ fn input_box_follows(after: &[String]) -> bool {
 }
 
 /// `──────── title ─`: the input box's top rule, which may carry the session title.
-fn is_rule(line: &str) -> bool {
+pub(crate) fn is_rule(line: &str) -> bool {
     !line.contains(['│', '╭', '╰'])
         && line.ends_with('─')
         && line.chars().take_while(|&ch| ch == '─').count() >= 4

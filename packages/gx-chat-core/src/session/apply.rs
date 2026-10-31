@@ -78,6 +78,9 @@ pub fn apply_state_frame(
     if let Some(ids) = frame.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;
     }
+    if let Some(index) = frame.state.resource_index.clone() {
+        state.session.resource_index = index;
+    }
     apply_selected_options(state, frame.state.selected_options.as_ref());
     state.session.terminal_notice = frame.state.terminal_notice.clone();
     crate::session::terminal::apply_terminal_activity(
@@ -145,6 +148,7 @@ pub fn apply_agent_identity(state: &mut ChatState, patch: &AgentIdentity) {
         session.retired_async_question_ids = Vec::new();
         session.later_question_ids = Vec::new();
         session.removed_question_ids = Vec::new();
+        session.resource_index = Vec::new();
     }
     if patch.agent.is_some() {
         session.agent = patch.agent.clone();
@@ -337,6 +341,7 @@ pub fn apply_authoritative(
         state.messages.history_epoch = None;
         state.messages.history_prefix_count = 0;
         state.messages.boundary_attempt = None;
+        state.messages.island_loaded = false;
     }
     // Every result row is a new object, and so is its `deferredWork` unless it was carried over.
     for message in &result.messages {
@@ -409,6 +414,9 @@ pub fn apply_authoritative(
     if let Some(ids) = result.state.removed_question_ids.clone() {
         state.session.removed_question_ids = ids;
     }
+    if let Some(index) = result.state.resource_index.clone() {
+        state.session.resource_index = index;
+    }
     state.session.terminal_notice = result.state.terminal_notice.clone();
     // The status machine decides whether this becomes the working strip's activity, a transient
     // status row, the streaming bubble or the pending tool row.
@@ -463,7 +471,8 @@ pub fn apply_authoritative(
     // a cancelled response from completing a newer request in the same epoch.
     let cursor = state.messages.before_offset;
     if let Some(request) = state.messages.load_earlier_request.clone() {
-        if request.epoch != Some(result.epoch) || request.before_offset != cursor {
+        // A jump read asks for its own offset, so the cursor never matches it.
+        if request.epoch != Some(result.epoch) || (!request.island && request.before_offset != cursor) {
             state.messages.load_earlier_request = None;
             state.messages.boundary_attempt = None;
             state.messages.loading_earlier = false;

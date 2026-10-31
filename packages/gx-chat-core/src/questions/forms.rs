@@ -23,12 +23,18 @@ use crate::transcript::question_forms::{
 };
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
-fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
+/// Every form the chat can act on: the transcript's, and the one the Resources modal read back
+/// for an item older than the loaded rows (`questions/resource_modal.rs`).
+fn all_forms(state: &ChatState) -> impl Iterator<Item = &QuestionForm> {
     state
         .transcript_view
         .question_forms
         .iter()
-        .find(|form| form.id == id && form.error.is_empty())
+        .chain(crate::questions::resource_modal::fetched_form(state))
+}
+
+fn form<'a>(state: &'a ChatState, id: &str) -> Option<&'a QuestionForm> {
+    all_forms(state).find(|form| form.id == id && form.error.is_empty())
 }
 
 /// The answers the transcript already carries for this form.
@@ -38,6 +44,7 @@ fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
         .page_answers
         .iter()
         .find(|answers| answers.page_id == id)
+        .or_else(|| crate::questions::resource_modal::fetched_answers(state, id))
         .map(|answers| &answers.answers)
 }
 
@@ -47,6 +54,7 @@ fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
 fn open(state: &ChatState, id: &str) -> bool {
     received_answers(state, id).is_none()
         && !crate::questions::later::removed_ids(state).contains(id)
+        && !crate::questions::resource_modal::is_withdrawn(state, id)
         && state
             .questions
             .forms
@@ -408,6 +416,14 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         .page_answers
         .iter()
         .map(|answers| answers.page_id.clone())
+        .chain(
+            state
+                .questions
+                .resource_modal
+                .iter()
+                .filter(|modal| modal.answers.is_some())
+                .map(|modal| modal.id.clone()),
+        )
         .collect();
     for (id, entry) in state.questions.forms.iter_mut() {
         if !entry.cleared && answered.contains(id) {
@@ -419,10 +435,7 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
             });
         }
     }
-    let open_forms: Vec<(String, usize)> = state
-        .transcript_view
-        .question_forms
-        .iter()
+    let open_forms: Vec<(String, usize)> = all_forms(state)
         .filter(|form| form.error.is_empty() && received_answers(state, &form.id).is_none())
         .map(|form| (form.id.clone(), form.questions.len()))
         .collect();
@@ -501,10 +514,7 @@ fn notes_from_answers(form: &QuestionForm, answers: &Value) -> String {
 pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
     let later = crate::questions::open_questions::later_waiting(state);
     let removed = crate::questions::later::removed_ids(state);
-    state
-        .transcript_view
-        .question_forms
-        .iter()
+    all_forms(state)
         .map(|form| {
             let entry = state.questions.forms.get(&form.id);
             let fallback = FormState::default();
@@ -539,6 +549,9 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
             // takes no answer (`questions/later.rs`).
             let phase = if phase == "open" && removed.contains(&form.id) {
                 "canceled"
+            } else if phase == "open" && crate::questions::resource_modal::is_withdrawn(state, &form.id) {
+                // Only the modal's form reads Withdrawn: it opens to be read and takes no answer.
+                "withdrawn"
             } else {
                 phase
             };
@@ -550,7 +563,12 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                 // CDXC:SessionChat 2026-10-12 DECISION: User: "i see the answer twice fam" (the answered form showed the picks and "Sent to the agent" while the answer message below repeated them); picked option c of docs/2026-10-12/handover-colors-and-answers/index.html: once the transcript carries a form's answers it collapses to one line (a check, the title, "Answered", a chevron) that opens the full read-only form and closes it again, collapsed by default and after a reload; the "You answered" card below stays as the record.
                 object.insert(
                     "collapsed".to_string(),
-                    json!(phase == "answered" && !entry.expanded),
+                    // The Resources modal shows the answers: it never starts collapsed.
+                    json!(
+                        phase == "answered"
+                            && !entry.expanded
+                            && !crate::questions::resource_modal::is_open_for(state, &form.id)
+                    ),
                 );
                 object.insert("otherLabel".to_string(), json!(OTHER_CHOICE));
                 // Put off For later while it still waits (`questions/later.rs`).

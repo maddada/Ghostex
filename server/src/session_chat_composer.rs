@@ -889,6 +889,14 @@ pub fn detect_session_chat_composer_ready(
             )
         };
     }
+    if matches!(agent.as_str(), "claude" | "openclaude")
+        && crate::session_chat_claude_rating_survey::rating_survey_on_screen(screen_text)
+    {
+        return SessionChatComposerReadiness::not_ready_dismissible(
+            "Claude Code's rating survey has pushed its input box off the screen.".to_string(),
+            screen_tail,
+        );
+    }
     if matches!(agent.as_str(), "claude" | "openclaude") {
         if let Some(popup) =
             crate::session_chat_claude_popups::claude_escape_safe_popup(screen_text)

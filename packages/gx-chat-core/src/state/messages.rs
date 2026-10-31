@@ -44,6 +44,10 @@ pub struct MessagesState {
     pub history_prefix_count: usize,
     /// The cursor the automatic boundary fill already tried, so it runs once per cursor.
     pub boundary_attempt: Option<u64>,
+    /// A jump read merged a window of older history that is not contiguous with the rest
+    /// (`session::actions::load_window_ending_at`), so the first row is no longer the start of the
+    /// loaded history and the automatic boundary fill stays off.
+    pub island_loaded: bool,
     /// The page read in flight, if any.
     pub load_earlier_request: Option<LoadEarlierRequest>,
     /// The reads family a has asked for and not seen answered, oldest first.
@@ -233,4 +237,7 @@ pub struct LoadEarlierRequest {
     pub before_offset: u64,
     /// The generation that issued it.
     pub generation: u64,
+    /// A jump read (`session::actions::load_window_ending_at`): a window of history that ends at a
+    /// given offset, merged in without moving the "Load earlier" cursor.
+    pub island: bool,
 }

@@ -1240,4 +1240,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0047_session_presentation_kept_index",
         sql: include_str!("migrations/0047_session_presentation_kept_index.sql"),
     },
+    Migration {
+        id: "0048_session_chat_resources",
+        sql: include_str!("migrations/0048_session_chat_resources.sql"),
+    },
 ];

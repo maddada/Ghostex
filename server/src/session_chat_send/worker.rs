@@ -1022,41 +1022,64 @@ pub(super) async fn run_session_chat_send_worker(
                         {
                             break None;
                         }
-                        // The send's reading can be older than the screen: the panel may have
-                        // closed meanwhile (gxserver closes Claude's feedback card on its own), and
-                        // an Escape on Claude's idle input box starts its double-Escape rewind.
-                        if !codex
-                            && presses == 0
-                            && capture_session_terminal_text_vt(&zmx_name)
-                                .await
-                                .is_some_and(|screen| {
-                                    !crate::session_chat_composer::detect_session_chat_composer_ready(
-                                        agent.as_deref(),
-                                        &screen,
-                                    )
-                                    .should_dismiss()
-                                })
-                        {
-                            break None;
+                        let mut key = Some(if codex {
+                            SESSION_CHAT_CODEX_CLOSE_SIDE
+                        } else {
+                            SESSION_CHAT_INTERRUPT
+                        });
+                        if !codex {
+                            let screen = capture_session_terminal_text_vt(&zmx_name).await;
+                            // The send's reading can be older than the screen: the panel may have
+                            // closed meanwhile (gxserver closes Claude's feedback card on its own),
+                            // and an Escape on Claude's idle input box starts its double-Escape
+                            // rewind.
+                            if presses == 0 && screen.as_deref().is_some_and(|screen| {
+                                !crate::session_chat_composer::detect_session_chat_composer_ready(
+                                    agent.as_deref(),
+                                    screen,
+                                )
+                                .should_dismiss()
+                            }) {
+                                break None;
+                            }
+                            // Claude's rating survey closes on its own `0`, never on Escape, and
+                            // only once it has been up past its mount delay; a survey gone by then
+                            // gets no key (session_chat_claude_rating_survey.rs).
+                            if screen.as_deref().is_some_and(
+                                crate::session_chat_claude_rating_survey::rating_survey_on_screen,
+                            ) {
+                                tokio::time::sleep(
+                                    crate::session_chat_claude_rating_survey::SURVEY_SETTLE,
+                                )
+                                .await;
+                                key = capture_session_terminal_text_vt(&zmx_name)
+                                    .await
+                                    .is_some_and(|screen| {
+                                        crate::session_chat_claude_rating_survey::rating_survey_on_screen(
+                                            &screen,
+                                        )
+                                    })
+                                    .then_some(
+                                        crate::session_chat_claude_rating_survey::SURVEY_DISMISS_KEY,
+                                    );
+                            }
                         }
                         presses += 1;
-                        if let Err(error) = write_session_chat_payload(
-                            &project_id,
-                            &session_id,
-                            &zmx_name,
-                            &source,
-                            if codex {
-                                SESSION_CHAT_CODEX_CLOSE_SIDE
-                            } else {
-                                SESSION_CHAT_INTERRUPT
-                            },
-                        )
-                        .await
-                        {
-                            break Some(SessionChatSendError::new(
-                                SessionChatSendFailure::Write,
-                                error,
-                            ));
+                        if let Some(key) = key {
+                            if let Err(error) = write_session_chat_payload(
+                                &project_id,
+                                &session_id,
+                                &zmx_name,
+                                &source,
+                                key,
+                            )
+                            .await
+                            {
+                                break Some(SessionChatSendError::new(
+                                    SessionChatSendFailure::Write,
+                                    error,
+                                ));
+                            }
                         }
                         let wait = crate::session_chat_composer::wait_for_session_chat_composer(
                             &zmx_name,

@@ -100,6 +100,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
 
     into.question_forms = crate::questions::forms::project(state);
     into.open_questions = crate::questions::open_questions::project(state, context);
+    into.resource_modal = crate::questions::resource_modal::project(state, context);
     into.later_questions = crate::questions::open_questions::later_waiting(state);
 
     into.async_questions = async_controller::project(

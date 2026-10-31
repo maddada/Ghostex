@@ -101,10 +101,10 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         page_question_tags(&source).as_deref(),
     );
     let hint = old_layout_hint(&source);
-    let phone = if parsed.flags.contains("no-check") {
-        Vec::new()
+    let visual_page_check::ShowFindings { phone, picks } = if parsed.flags.contains("no-check") {
+        visual_page_check::ShowFindings::default()
     } else {
-        visual_page_check::phone_findings_for_show(&path)
+        visual_page_check::findings_for_show(&path)
     };
     if parsed.flags.truthy("json") {
         let hint = hint
@@ -116,8 +116,13 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         } else {
             format!(",\"phone\":{}", json!(phone))
         };
+        let picks = if picks.is_empty() {
+            String::new()
+        } else {
+            format!(",\"picks\":{}", json!(picks))
+        };
         println!(
-            "{{\"ok\":true,\"id\":{},\"title\":{},\"url\":{},\"block\":{}{hint}{phone}}}",
+            "{{\"ok\":true,\"id\":{},\"title\":{},\"url\":{},\"block\":{}{hint}{phone}{picks}}}",
             json_string(id),
             json_string(title),
             json_string(&url),
@@ -130,6 +135,9 @@ pub fn show_command(args: &[String]) -> CliResult<()> {
         );
         if !phone.is_empty() {
             println!("\n{}", phone_note(&phone, file));
+        }
+        if !picks.is_empty() {
+            println!("\n{}", picks_note(&picks, file));
         }
     }
     Ok(())
@@ -145,6 +153,19 @@ fn phone_note(findings: &[String], file: &str) -> String {
     let mut note = format!(
         "Phone check ({}px): the page needs work to read well on a phone. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block.",
         visual_page_check::PHONE_WIDTH
+    );
+    for finding in findings {
+        note.push_str("\n- ");
+        note.push_str(finding);
+    }
+    note
+}
+
+/// What the publishing agent is told when a question sits under mockups that have no Pick button
+/// (visual_page_check.rs `pick_findings`). A warning: the page is published and still works.
+fn picks_note(findings: &[String], file: &str) -> String {
+    let mut note = format!(
+        "Pick buttons: the reader can only choose below. Fix it, look with `ghostex visual check {file}`, then run ghostex show again and reply with the new block."
     );
     for finding in findings {
         note.push_str("\n- ");
