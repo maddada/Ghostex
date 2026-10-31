@@ -2852,8 +2852,8 @@ version of the Projects features in Cursor and Claude Code.
   from the Agent dropdown (Claude, Codex, ZCode, Cursor, Grok, Copilot,
   Antigravity, Pi, OMP or OpenCode, whichever you have set up), its model where the agent
   lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its
-  own default) and its effort: Medium, High or XHigh, High by default (an agent without
-  XHigh offers its levels from Medium up to its highest). Use a very good model: the coordinator
+  own default) and its effort: Low, Medium, High or XHigh, High by default (an agent without
+  XHigh offers its levels from Low up to its highest). Use a very good model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
   /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude
@@ -2864,10 +2864,10 @@ version of the Projects features in Cursor and Claude Code.
   sessions it is not renamed from your first message (Rename in the sidebar
   still changes it; left blank, it is named once from its first conversation).
   A project can have several coordinators, one per stream of work. In an
-  coordinator's chat the effort picker offers the same Medium, High and XHigh only.
-  To pick from every level the agent has, turn on **Every effort level in coordinator pickers**
-  (an advanced setting in Settings > Chat); anything below Medium
-  isn't recommended for a coordinator. From a terminal: `ghostex coordinator
+  coordinator's chat the effort picker offers the same Low, Medium, High and XHigh only.
+  To pick from every level the agent has (Max, Ultra and the like), turn on
+  **Every effort level in coordinator pickers** (an advanced setting in Settings > Chat);
+  a coordinator works best on High or XHigh. From a terminal: `ghostex coordinator
   create [--agent <id>] [--goal <text>] [--task <first request>]`.
 - **Turn a session into a coordinator**: right-click a session of one of
   those agents in the sidebar, open **Advanced** and choose **Make
@@ -4537,9 +4537,20 @@ Related settings: none; window positions and layouts are saved automatically.
 
 Theme colours, colourfulness, window glass, and active pane outline live on their
 own Settings page, Theme, right below General (`ghostex settings open --tab theme`).
-It has three groups, Colours, Transparency and Chat and terminal, each one card
-whose finer controls sit under its own More row, plus links to related settings
+It has four groups, Colours, Font, Transparency and Chat and terminal, each one
+card whose finer controls sit under its own More row, plus links to related settings
 on General; a search for a row inside a More row opens it.
+Font: App font lists the fonts installed on this computer, with a search field and
+each name drawn in its own font; monospaced fonts sit at the end of the list. The
+pick applies to the whole app (sidebar, chat, composer, menus, dialogs, Settings,
+tooltips and notifications), while terminals, code, diffs and other monospace text
+keep their own font. App default, at the top of the list, goes back to Ghostex's
+own fonts. A saved font that isn't on this computer stays listed as not installed,
+and the app uses its own fonts until it is. The phone keeps its own font. To make
+chat text stronger, use Settings > Chat > Text strength, from the standard colour
+(0%, the default) up to full white in dark mode or full black in light mode, on the
+computer and the phone; muted text, links, code blocks and status colours stay as they are.
+Settings: `sessionChatFontFamily`, `sessionChatTextStrengthPercent`.
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
 mode colour, each a row of sixteen small colour squares (Graphite, the default,
