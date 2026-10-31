@@ -39,6 +39,8 @@ pub(crate) fn session_model_selection_failure(session: &Value) -> Option<String>
 
 /// CDXC:SessionChat 2026-09-27 DECISION:
 /// User: "we shouldn't send on wrong model we must show a red dot on the session in the sidebar if we fail and log reason for failing and the terminal screen copy so we can fix this issue". A model change the agent refused for good, or one still failing after 30 seconds of retries, marks the session (the sidebar draws a red dot with the reason) and writes one `sessionChatModelSelectionFailed` line with the terminal screen to the send-failure log. Messages behind it stay held; picking a model again, or the change finally applying, clears the mark.
+/// CDXC:SessionChat 2026-10-31 DECISION:
+/// User, answering Q1 on GitHub #374: a refused mode gets no red dot and doesn't hold later messages, since the menu now explains it. This narrows the 2026-09-27 decision above to everything else: a mode the agent's own cycle leaves out ends quietly in session_chat_model_selection.rs (`mode_was_refused`) and is greyed with how to turn it on (session_chat_mode_availability.rs). Any other failed model change keeps the dot and the hold.
 /// SEE-ALSO: session_chat_queue_runtime/scheduler.rs (holds prompts behind a failed change), session_chat_send/send_http.rs (holds a new send behind a pending change), packages/gx-core/src/sidebar_view/rows.rs and apps/desktop/src/app/native_sidebar/status.rs (the red dot).
 pub(crate) async fn note_model_selection_failure(
     state: &AppState,

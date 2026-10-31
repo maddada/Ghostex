@@ -38,6 +38,11 @@ pub(crate) fn refusal_message(target: &str, cycle: &[String]) -> String {
     )
 }
 
+/// Whether a selection's error is that refusal.
+pub(crate) fn is_refusal(message: &str) -> bool {
+    parse_refusal(message).is_some()
+}
+
 fn parse_refusal(message: &str) -> Option<(String, Vec<String>)> {
     let rest = message.strip_prefix(REFUSAL_START)?;
     let (target, cycle) = rest.split_once(REFUSAL_MIDDLE)?;

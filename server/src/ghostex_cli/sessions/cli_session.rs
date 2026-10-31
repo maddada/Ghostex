@@ -164,6 +164,7 @@ pub(super) fn to_cli_session(
         "modelSelectionFailure",
         &[p("modelSelectionFailure")],
     );
+    insert_js(&mut map, "sendFailure", &[p("sendFailure")]);
     insert_js(
         &mut map,
         "closeAfterDoneDeadlineAt",

@@ -834,6 +834,7 @@ fn to_mobile_session_summary(session: &Value) -> Value {
         "modelSelectionFailure",
         &[s("modelSelectionFailure")],
     );
+    insert_js(&mut map, "sendFailure", &[s("sendFailure")]);
     insert_js(
         &mut map,
         "closeAfterDoneDeadlineAt",
