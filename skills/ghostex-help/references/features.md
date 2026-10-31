@@ -1220,24 +1220,31 @@ when you open it.
   resumes work. Close After Done closes a pane once its command exits.
 - Handoff / Export (the chat's ⋯ menu, a session's right-click menu, or picking
   another agent's model in the model picker) writes the conversation to a
-  Markdown file and offers three choices. **Handoff to an agent** starts a new
-  session in the same project. Its chat box starts with a line saying which
-  session and project it continues from, then a link to that file, with the
-  cursor two lines below the link; nothing is sent, so you write the first
-  message. **Advanced Handoff** does the same in another project: pick the agent,
-  the Computer and the Project. The session's own computer comes first, with its
-  other projects, and every other connected computer follows. The project with
-  the same Git repository is picked for you when there is one, and every other
-  project there is listed too. If another computer doesn't have the repository
-  yet, Clone it there opens Add Project on that computer with the repository
-  already filled in, so you only pick the folder; once it is cloned, Handoff /
-  Export comes back with the new project picked. When two checkouts of the
-  repository are on different branches, the dialog says so: only the conversation
-  moves, the branch over there is not switched. It works in every direction, from
-  this computer to a remote one, back, and between two remote ones; the old
-  session keeps running. **Export to Markdown** only saves the file and copies its
-  path. Commands & output, File changes and Reasoning choose what the file
-  includes.
+  Markdown file and offers two choices. **Handoff to an agent** starts a new
+  session. Its chat box starts with a line saying which session and project it
+  continues from, then a link to that file, with the cursor two lines below the
+  link; nothing is sent, so you write the first message, and the old session keeps
+  running. Pick the agent under Continue with. Destination says where the session
+  goes: this project on the same computer until you choose **Change…**, which opens
+  Computer and Project. The session's own computer comes first, starting on this
+  project, with every other connected computer after it. On another computer the
+  project with the same Git repository is picked for you, and every other project
+  there is listed too. If that computer doesn't have the repository yet, Clone it
+  there opens Add Project on that computer with the repository already filled in,
+  so you only pick the folder; once it is cloned, Handoff / Export comes back with
+  the new project picked. When two checkouts of the repository are on different
+  branches, the dialog says so: only the conversation moves, the branch over there
+  is not switched. It works in every direction, from this computer to a remote one,
+  back, and between two remote ones. The button says where it goes: Handoff to the
+  agent's name for this project, or Handoff to the project's name, with the computer
+  when it's another one. **Use this project** goes back. **Handoff to MD** only
+  saves the file and copies its path. Include, closed at first and with everything
+  off, chooses what else the file holds: Commands & output, File changes and
+  Reasoning. Handoff / Export remembers the card, Include, the agent you picked and
+  the destination for next time. A remembered destination opens showing where it
+  goes; one that's gone, or is the project you're handing off from, goes back to
+  this project. Picking another agent's model in the model picker always starts
+  from this project on that model's agent.
 - Drag a session onto another project in the Project sidebar to hand it over
   there: a session can't change project, so this starts a new session in that
   project with the conversation attached, the same way Handoff / Export does. The
@@ -1250,8 +1257,8 @@ when you open it.
   handed over and a message says why. A draft, a terminal, a browser tab, a
   coordinator and its threads can't be handed over, so they light nothing. Only
   the row you drag hands over, also when several are selected. In the Unified
-  sidebar, or for a project on another computer or in another Space, use Advanced
-  Handoff from the session's menu.
+  sidebar, or for a project on another computer or in another Space, use Handoff /
+  Export from the session's menu.
 
 Related settings: `autoSleep*`, `keepViewsLoaded`, `clickToWakeSleepingSessions`,
 `dimSleepingSessions`, `wakeSleepingSessionsOnSelect`,
@@ -2301,13 +2308,13 @@ not even at a usage limit. Keep such a profile in `~/.claude-profiles/<name>`
 Install hook for that agent in Settings > Agents. Ghostex's skills live in
 `~/.agents/skills`, which Codex profiles read on their own; for a Claude
 profile, link its `skills` folder to `~/.claude/skills` to use them.
-Under the account list, Settings > Accounts shows one line per account helper,
+Under the account list, Settings > Accounts shows one line per account tool,
 Claude Swap (cswap) and Codex Swap (xswap), with its version and an Update button
 when a newer release is out (otherwise Check for updates). Its ⋯ menu holds
 Reinstall and Uninstall, which asks first and keeps saved logins and shared
-conversations. Ghostex runs the update with the tool that installed the helper
+conversations. Ghostex runs the update with the tool that installed it
 (uv or pipx for cswap; Homebrew, Cargo or the Windows installer for xswap); for
-a helper installed some other way the buttons are off, so update it the way you
+one installed some other way the buttons are off, so update it the way you
 installed it.
 On Windows, Ghostex installs its own build of Claude Swap, because the released
 one can't share conversation history between accounts there yet. Install and
