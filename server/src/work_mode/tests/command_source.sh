@@ -48,6 +48,12 @@ bad-icon)
   "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><script>alert(1)</script><path d=\"M2 2h20v20H2z\"/></svg>" }
 EOF
 	;;
+icon-token)
+	printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [], "icon": "<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 24 24\\"><path d=\\"M2 2h20v20H2z\\" fill=\\"%s\\"/></svg>" }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+icon-token-tag)
+	printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [], "icon": "<%s></g>" }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
 bad-group)
 	printf '{ "tickets": [ { %s }, { "id": "ACM-13", "title": "Closed one", "state": { "group": "closed", "name": "Closed" } } ] }\n' "$good_ticket"
 	;;

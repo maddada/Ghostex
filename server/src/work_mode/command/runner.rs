@@ -29,6 +29,10 @@ const MASK: &str = "••••";
 /// (`WITHHELD`).
 const MIN_MASKED_IN_PLACE_CHARS: usize = 3;
 const WITHHELD: &str = "(message hidden: it could show a credential)";
+/// A refused icon's reason once a credential is set: the reason quotes the icon's text, cut, so a
+/// mask could not find a long value in it.
+const ICON_REFUSED: &str =
+    "it was refused; the reason is hidden because it could show a credential";
 
 /// Variables passed through from gxserver's environment when set. Everything else is left out,
 /// so tokens of other tools, the Linear keys and session variables never reach the command.
@@ -444,7 +448,14 @@ fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
 /// Runs `info` and reads its answer.
 pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, CommandFailure> {
     let answer = run_answer(call)?;
-    parse_info(&answer.value).map_err(|what| unreadable(call.env, &what, &answer.stdout))
+    let mut info =
+        parse_info(&answer.value).map_err(|what| unreadable(call.env, &what, &answer.stdout))?;
+    if call.env.holds_secrets() {
+        info.icon = info
+            .icon
+            .map(|icon| icon.map_err(|_| ICON_REFUSED.to_string()));
+    }
+    Ok(info)
 }
 
 /// Runs `list` (open or exact, as `call.input` asks) and reads its answer.

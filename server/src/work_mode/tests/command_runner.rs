@@ -420,13 +420,41 @@ fn a_command_that_reads_its_input_late_still_gets_it() {
 #[test]
 fn a_bad_icon_is_dropped_and_the_source_keeps_its_name() {
     let fixture = Fixture::new();
-    let info =
-        command_info(&fixture.call(CommandVerb::Info, None, &env("bad-icon"))).expect("info");
+    let env = fixture.without_credentials("bad-icon");
+    let info = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect("info");
     assert_eq!(info.name, "Fixture");
     assert_eq!(
         info.icon,
         Some(Err("it contains a <script> element".to_string()))
     );
+}
+
+#[test]
+fn a_refused_icon_says_only_that_once_a_credential_is_set() {
+    let fixture = Fixture::new();
+    let refused =
+        "it was refused; the reason is hidden because it could show a credential".to_string();
+    // Longer than an icon error's 40-character quote, so a mask could never find what it keeps.
+    let long_token = "tok-fixture-0123456789012345678901234567890123456789";
+    for (mode, token) in [
+        ("bad-icon", TOKEN),
+        ("icon-token", TOKEN),
+        ("icon-token", long_token),
+        ("icon-token-tag", TOKEN),
+    ] {
+        let env = CommandEnv {
+            credentials: vec![
+                ("mode".to_string(), mode.to_string()),
+                ("token".to_string(), token.to_string()),
+            ],
+            ..env(mode)
+        };
+        let info = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect("info");
+        assert_eq!(info.icon, Some(Err(refused.clone())), "{mode}");
+    }
+    // A good icon is kept with a credential set.
+    let info = command_info(&fixture.call(CommandVerb::Info, None, &env("good"))).expect("info");
+    assert!(matches!(info.icon, Some(Ok(_))), "{:?}", info.icon);
 }
 
 #[test]
