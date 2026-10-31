@@ -86,6 +86,15 @@ impl ActivityState {
             && self.is_acknowledged != Some(true)
             && self.attention_source.as_deref() == Some(TURN_COMPLETE_ATTENTION_SOURCE)
     }
+
+    /// CDXC:SessionStatus 2026-10-31 WHY:
+    /// An attention publishes the start of the stint it ended (`attention.workingStartedAt`). Only a state that is working now has a stint for it to end: an idle state's start belongs to an earlier, acknowledged or interrupted stint, and copied into the next bell, Stop or program attention it timed that turn from the earlier stint. Acknowledgements clear the start, but rows acknowledged before that rule still store it, so the attention takes the start only from a working state instead of trusting the stored field.
+    /// SEE-ALSO: `attention_state` in server/src/presentation/session_attributes.rs.
+    pub(super) fn ended_stint_start(&self) -> Option<String> {
+        (self.activity == "working")
+            .then(|| self.working_started_at.clone())
+            .flatten()
+    }
 }
 
 #[derive(Clone, Debug)]

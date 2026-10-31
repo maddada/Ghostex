@@ -181,6 +181,7 @@ fn snapshot_publishes_session_lifecycle_state_and_capability_flags() {
     assert_eq!(
         snapshot.get("capabilities"),
         Some(&json!({
+            "attentionNotificationId": true,
             "sessionGitStatus": true,
             "sessionSettlement": true,
             "sessionSnooze": true,
@@ -448,6 +449,7 @@ fn the_git_status_capability_follows_the_sidebar_version_gate() {
         assert_eq!(
             published_capabilities(&db),
             json!({
+                "attentionNotificationId": true,
                 "sessionGitStatus": expected_git_status,
                 "sessionSettlement": true,
                 "sessionSnooze": true,

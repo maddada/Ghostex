@@ -4247,7 +4247,9 @@ An agent that goes from working back to idle also counts as finished, unless
 you stopped it with Escape or the chat's Stop button. Hover the session to read
 the program's one-line message (and its progress when it reports one); on the
 phone, long-press the session to read it. `ghostex sessions --json --full` shows each session's
-reports under `programStatus`.
+reports under `programStatus`, and for a session waiting on you, under `attention`, whether its
+turn finished or needs your input, when that turn started working, and which notification it
+belongs to once that notification exists.
 
 With Show debug UI controls on, the Program status mismatches log on the
 Debugging page records each time detection and a program's report disagree.
