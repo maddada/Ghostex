@@ -6,6 +6,10 @@ use std::{
 use crate::platform::resources;
 use crate::protocol::ToolCapabilityStatus;
 
+#[cfg(windows)]
+#[path = "toolchain/windows.rs"]
+mod windows;
+
 #[derive(Clone, Copy)]
 enum ToolSource {
     DevSubmodule,
@@ -93,6 +97,10 @@ fn require_bundled_tool(tool: &str) -> Result<GxserverResolvedTool, String> {
 
 fn resolve_bundled_tool_status(tool: &str) -> ToolCapabilityStatus {
     let candidates = bundled_tool_candidates(tool);
+    #[cfg(windows)]
+    if tool == "zmx" {
+        return windows::resolve_wmx_status(&candidates);
+    }
     let inspected = candidates
         .iter()
         .find(|candidate| is_executable_file(&candidate.executable_path));

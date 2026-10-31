@@ -306,7 +306,7 @@ if ($RunCollect) {
     Remove-Item -Recurse -Force $CollectPackOutput
     $Collected = @(Get-ChildItem $CollectDir -Recurse -File)
     if ($Collected.Count -eq 0) { throw "The Velopack sign hook collected no files to sign" }
-    foreach ($required in @("Ghostex.exe", "ghostex-gpui-runtime.exe", "ghostex-gpui-cef-helper.exe", "GhostexEditor.exe", "Squirrel.exe")) {
+    foreach ($required in @("Ghostex.exe", "ghostex-gpui-runtime.exe", "ghostex-gpui-cef-helper.exe", "GhostexEditor.exe", "gxserver.exe", "wmx.exe", "Squirrel.exe")) {
         if (-not ($Collected | Where-Object { $_.Name -eq $required })) {
             throw "The Velopack sign hook did not collect $required"
         }
