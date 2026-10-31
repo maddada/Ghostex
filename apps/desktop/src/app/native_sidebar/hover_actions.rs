@@ -15,6 +15,11 @@ use gpui_component::{
 use serde_json::{Value, json};
 
 /// The buttons a hovered row draws, in order; empty when the user turned every hover button off, which is also when hovering must leave the row as it is (`ghostex_gx_core::hover_slots`).
+/// A session row's hover button and its icon, before the zoom. The Unified filter dropdown's X
+/// takes the same sizes.
+pub(super) const SESSION_HOVER_BUTTON: f32 = 20.0;
+pub(super) const SESSION_HOVER_ICON: f32 = 14.0;
+
 pub(crate) fn session_hover_items(session: &NativeSidebarSession, expanded: bool) -> Vec<Value> {
     let chevron = session.details.get("hoverChevron").and_then(Value::as_bool) == Some(true);
     let list = |key: &str| {
@@ -91,7 +96,7 @@ impl GhostexGpuiApp {
                     .id(format!("native-sidebar-hover-{id}-{index}"))
                     .role(gpui::Role::Button)
                     .aria_label(label.clone())
-                    .size(px(20.0 * scale))
+                    .size(px(SESSION_HOVER_BUTTON * scale))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -117,7 +122,7 @@ impl GhostexGpuiApp {
                     .child(
                         gpui::svg()
                             .path(gpui_sidebar_command_icon_asset_path(item["icon"].as_str()))
-                            .size(px(14.0 * scale))
+                            .size(px(SESSION_HOVER_ICON * scale))
                             .text_color(appearance.muted),
                     )
                     .when(

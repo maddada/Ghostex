@@ -50,6 +50,9 @@ pub(crate) fn menu_left_at_button(
 /// The height of a searchable menu's field row above its rows, before the zoom.
 pub(crate) const SIDEBAR_MENU_SEARCH_HEIGHT: f32 = 40.0;
 
+/// A sidebar menu row's height, before the zoom.
+pub(crate) const SIDEBAR_MENU_ROW_HEIGHT: f32 = 34.0;
+
 /// How long a row's armed Remove button waits for its second click.
 pub(crate) const SIDEBAR_MENU_ARM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
 
@@ -215,6 +218,29 @@ impl SidebarMenuPanel {
         self.selected = self.items.iter().position(|item| {
             item["separator"] != true && item["heading"] != true && item["disabled"] != true
         });
+    }
+
+    /// A selectable row's height, before the zoom. A searchable menu (the Unified filter dropdown)
+    /// lists like the sidebar's sessions, so it shares their height and gap and follows them. The
+    /// other sidebar menus keep their own, which only happens to be the same number today.
+    ///
+    /// CDXC:Sidebar 2026-10-31 DECISION:
+    /// User: "please make the height of the projects in the list here match the height of the sessions in the sidebar and make the buttons same height and width". This means the Project sidebar's one-line session rows and their hover buttons, not the Unified sidebar's tall cards. Headings, separators and the search field keep their own heights.
+    pub(crate) fn row_height(&self) -> f32 {
+        if self.search.is_some() {
+            super::session_list::SESSION_HEIGHT
+        } else {
+            SIDEBAR_MENU_ROW_HEIGHT
+        }
+    }
+
+    /// The gap between rows, before the zoom.
+    pub(crate) fn row_gap(&self) -> f32 {
+        if self.search.is_some() {
+            super::session_list::SESSION_SPACING
+        } else {
+            0.0
+        }
     }
 
     /// Whether this row's two-click button is waiting for its second click.
@@ -416,6 +442,7 @@ impl SidebarMenuPanel {
                         .search
                         .as_ref()
                         .map_or(0.0, |_| SIDEBAR_MENU_SEARCH_HEIGHT)
+                    + self.row_gap() * self.items.len().saturating_sub(1) as f32
                     + self
                         .items
                         .iter()
@@ -425,7 +452,7 @@ impl SidebarMenuPanel {
                             } else if item["heading"] == true {
                                 24.0
                             } else {
-                                34.0
+                                self.row_height()
                             }
                         })
                         .sum::<f32>())
@@ -909,6 +936,43 @@ mod tests {
         panel.drop_confirmed_row(&first);
         // The row that was under it moved up into its place.
         assert_eq!(panel.items[panel.selected.unwrap()]["label"], "my-apps");
+    }
+
+    #[test]
+    fn the_filter_dropdowns_rows_are_the_sessions_height_and_other_menus_keep_theirs() {
+        let panel = searchable();
+        assert_eq!(
+            panel.row_height(),
+            super::super::session_list::SESSION_HEIGHT
+        );
+        assert_eq!(panel.row_gap(), super::super::session_list::SESSION_SPACING);
+        let other = SidebarMenuPanel::new(
+            vec![serde_json::json!({"label": "Rename"})],
+            Point::default(),
+        );
+        assert_eq!(other.row_height(), SIDEBAR_MENU_ROW_HEIGHT);
+        assert_eq!(other.row_gap(), 0.0);
+    }
+
+    #[test]
+    fn the_panels_height_counts_the_field_the_rows_and_their_gaps() {
+        let mut panel = searchable();
+        panel.search_key(&typed("m"));
+        panel.search_key(&typed("y"));
+        // Spaces, My Apps, a separator, Projects, my-apps.
+        let session = super::super::session_list::SESSION_HEIGHT;
+        let rows = 24.0 + session + 13.0 + 24.0 + session;
+        let gaps = 4.0 * super::super::session_list::SESSION_SPACING;
+        let expected = 14.0 + SIDEBAR_MENU_SEARCH_HEIGHT + rows + gaps;
+        assert_eq!(
+            panel.bounds(sidebar(1000.0), 1.0, false).size.height,
+            px(expected)
+        );
+        // The zoom scales all of it.
+        assert_eq!(
+            panel.bounds(sidebar(1000.0), 1.5, false).size.height,
+            px(expected * 1.5)
+        );
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use super::{
     actions::NativeSidebarAction,
+    hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
     menu_state::{
         SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT, SidebarMenuPanel,
         SidebarMenuPlacement, SidebarMenuState,
@@ -779,6 +780,8 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .map_or(0.0, |_| SIDEBAR_MENU_SEARCH_HEIGHT);
             let searchable = panel.search.is_some();
+            let row_height = panel.row_height();
+            let row_gap = panel.row_gap();
             let mut content = v_flex()
                 .on_children_prepainted(measure_menu_panel(
                     view.clone(),
@@ -800,6 +803,7 @@ impl GhostexGpuiApp {
                 .track_scroll(&panel.scroll)
                 .occlude()
                 .p(px(6.0 * scale))
+                .gap(px(row_gap * scale))
                 .when(!searchable, |content| {
                     content
                         .rounded(px(8.0 * scale))
@@ -828,7 +832,7 @@ impl GhostexGpuiApp {
                                     .bg(titlebar_popup_menu_border_color()),
                             ),
                     );
-                    offset += 13.0;
+                    offset += 13.0 + row_gap;
                     continue;
                 }
                 let label = item["label"].as_str().unwrap_or_default().to_owned();
@@ -865,13 +869,13 @@ impl GhostexGpuiApp {
                 let confirm = item["secondary"]["confirm"] == true;
                 let row_bounds = Bounds {
                     origin: Point::new(bounds.left(), bounds.top() + px(offset * scale)),
-                    size: gpui::size(bounds.size.width, px(34.0 * scale)),
+                    size: gpui::size(bounds.size.width, px(row_height * scale)),
                 };
                 content = content.child(
                     h_flex()
                         .id(format!("native-menu-item-{panel_index}-{item_index}"))
                         .w_full()
-                        .min_h(px(if heading { 24.0 } else { 34.0 } * scale))
+                        .min_h(px(if heading { 24.0 } else { row_height } * scale))
                         .flex_shrink_0()
                         .px(px(10.0 * scale))
                         .gap(px(8.0 * scale))
@@ -987,13 +991,25 @@ impl GhostexGpuiApp {
                                     })
                                     .relative()
                                     .flex_shrink_0()
-                                    .h(px(28.0 * scale))
                                     .rounded(px(4.0 * scale))
                                     .hover(|button| button.bg(hover))
+                                    .map(|button| {
+                                        // A two-click button is a session row's hover button, its
+                                        // icon centred on the tick's column: half the difference
+                                        // between it and the 14px tick hangs past the row's padding.
+                                        if confirm {
+                                            button
+                                                .size(px(SESSION_HOVER_BUTTON * scale))
+                                                .justify_center()
+                                                .mr(px((14.0 - SESSION_HOVER_BUTTON) / 2.0 * scale))
+                                        } else {
+                                            button.h(px(28.0 * scale))
+                                        }
+                                    })
                                     // An icon-only button (the workspace menu's new-window button)
                                     // is a square whose icon centre lines up with the checkmark
                                     // other rows show at the same right edge (14px wide, flush).
-                                    .when(icon_only, |button| {
+                                    .when(icon_only && !confirm, |button| {
                                         button
                                             .w(px(22.0 * scale))
                                             .justify_center()
@@ -1007,8 +1023,10 @@ impl GhostexGpuiApp {
                                         button.bg(red).hover(move |button| button.bg(red))
                                     })
                                     .map(|button| {
+                                        let icon_size =
+                                            if confirm { SESSION_HOVER_ICON } else { 14.0 };
                                         let icon =
-                                            gpui::svg().path(icon_path).size(px(14.0 * scale));
+                                            gpui::svg().path(icon_path).size(px(icon_size * scale));
                                         if confirm {
                                             button
                                                 .when(item["checked"] == true, |button| {
@@ -1096,7 +1114,7 @@ impl GhostexGpuiApp {
                             );
                         })),
                 );
-                offset += if heading { 24.0 } else { 34.0 };
+                offset += if heading { 24.0 } else { row_height } + row_gap;
             }
             // The bar shows only while the rows scroll, like the agent picker's (new_thread_picker.rs).
             let scrollbar = Scrollbar::vertical(&panel.scroll)
@@ -1267,7 +1285,7 @@ impl GhostexGpuiApp {
                             if item["separator"] == true {
                                 13.0
                             } else {
-                                34.0
+                                panel.row_height()
                             }
                         })
                         .sum::<f32>();
@@ -1276,7 +1294,7 @@ impl GhostexGpuiApp {
                             bounds.left(),
                             bounds.top() + px((6.0 + y) * menu.scale),
                         ),
-                        size: gpui::size(bounds.size.width, px(34.0 * menu.scale)),
+                        size: gpui::size(bounds.size.width, px(panel.row_height() * menu.scale)),
                     };
                     app.activate_native_sidebar_menu_item(
                         panel_index,
