@@ -2310,6 +2310,10 @@ In the chat's More actions menu, and in the ⋯ menu of the bar under a Claude o
 Codex terminal view, click Switch Account to open its submenu of saved accounts
 with their usage; hovering over it does not open it. Open submenus stay open when you move the
 pointer across other menu items, so you can move into them without rushing.
+In the chat's Accounts & limits panel the account the session is on carries an Active tag,
+and a problem with it (a login that expired or needs signing in, a usage reading that
+failed, a limit reached, the account turned off) shows on that row, with Reconnect
+when signing in again fixes it.
 Switching a running Claude or Codex session to another account, from More
 actions > Switch Account, a terminal notice, or automatically when its account hits a usage limit,
 exits the CLI inside its own terminal and resumes the same conversation there,
