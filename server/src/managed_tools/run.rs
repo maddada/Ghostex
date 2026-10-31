@@ -130,34 +130,15 @@ pub(crate) enum Unfinished {
 /// Runs `command` with no input and at most `timeout`, then stops it and every process it started.
 /// The command leads its own process tree (`ProcessTree`), so a wrapper's children go too.
 pub(crate) fn output_within(command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
-    bounded(command, timeout, true)
+    bounded(command, timeout)
 }
 
-/// `output_within` for an interactive shell, which must stay in gxserver's process group: one in a
-/// group of its own stops itself (SIGTTIN) when the `ghostex` CLI runs it from a terminal. On Unix
-/// only the shell is stopped at the limit.
-pub(crate) fn output_within_caller_group(
-    command: Command,
-    timeout: Duration,
-) -> Result<Finished, Unfinished> {
-    bounded(command, timeout, false)
-}
-
-fn bounded(
-    mut command: Command,
-    timeout: Duration,
-    own_group: bool,
-) -> Result<Finished, Unfinished> {
+fn bounded(mut command: Command, timeout: Duration) -> Result<Finished, Unfinished> {
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let spawn = if own_group {
-        ProcessTree::spawn
-    } else {
-        ProcessTree::spawn_in_caller_group
-    };
-    let mut tree = spawn(&mut command).map_err(|_| Unfinished::Start)?;
+    let mut tree = ProcessTree::spawn(&mut command).map_err(|_| Unfinished::Start)?;
     let stdout = collect(tree.child().stdout.take());
     let stderr = collect(tree.child().stderr.take());
     let deadline = Instant::now() + timeout;

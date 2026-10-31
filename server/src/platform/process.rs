@@ -141,21 +141,6 @@ impl ProcessTree {
         }
     }
 
-    /// `spawn` for an interactive shell, which must stay in the caller's process group on Unix (one in a group of its own stops itself with SIGTTIN when run from a terminal), so there `end` stops only the shell. The same as `spawn` on Windows.
-    pub(crate) fn spawn_in_caller_group(command: &mut Command) -> std::io::Result<Self> {
-        #[cfg(unix)]
-        {
-            Ok(Self {
-                child: command.spawn()?,
-                leads_group: false,
-            })
-        }
-        #[cfg(windows)]
-        {
-            spawn_in_job(command)
-        }
-    }
-
     pub(crate) fn child(&mut self) -> &mut std::process::Child {
         &mut self.child
     }
