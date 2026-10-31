@@ -210,14 +210,6 @@ jobs:
             echo "SPARKLE_PRIVATE_KEY is required when update_sparkle is enabled" >&2
             exit 1
           fi
-      # CDXC:T3CodeDisabled ghostex-mzp9: Retain this dependency setup for a
-      # future re-enable; macOS packages intentionally omit T3 today.
-      # - name: Install embedded T3 Code dependencies
-      #   env:
-      #     GITHUB_TOKEN: ${{ github.token }}
-      #   run: |
-      #     npm install --global pnpm@10.24.0
-      #     pnpm --dir t3code install --frozen-lockfile
       - name: Import Developer ID certificate
         env:
           CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
