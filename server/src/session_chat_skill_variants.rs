@@ -7,7 +7,6 @@ use std::{
     time::SystemTime,
 };
 
-use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::session_chat_skills::SessionChatSkill;
@@ -63,32 +62,6 @@ pub(crate) fn collapse_session_chat_skill_variants(
         collapsed.append(&mut variations);
     }
     collapsed
-}
-
-/// Claude Code loads each plugin from the `installPath` recorded in `installed_plugins.json` and leaves superseded versions in the cache.
-pub(crate) fn read_claude_installed_plugin_roots(home_dir: &Path) -> Vec<PathBuf> {
-    let manifest_path = home_dir
-        .join(".claude")
-        .join("plugins")
-        .join("installed_plugins.json");
-    let Some(manifest) = fs::read(&manifest_path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-    else {
-        return Vec::new();
-    };
-    manifest
-        .get("plugins")
-        .and_then(Value::as_object)
-        .into_iter()
-        .flat_map(|plugins| plugins.values())
-        .filter_map(Value::as_array)
-        .flatten()
-        .filter_map(|install| install.get("installPath").and_then(Value::as_str))
-        .map(str::trim)
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .collect()
 }
 
 /// CDXC:AgentSkills 2026-09-19 WHY:

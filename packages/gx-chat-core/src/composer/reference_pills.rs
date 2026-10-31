@@ -191,13 +191,15 @@ pub fn path_noun(path: &str) -> &'static str {
     }
 }
 
-/// `/(?:^|[\\/])SKILL\.md$/i`.
+/// `/(?:^|[\\/])SKILL\.md$/i`, or a Claude Code command `/[\\/]commands[\\/][^\\/]+\.md$/i`.
 fn is_skill_file(path: &str) -> bool {
     let lowered = crate::transcript::jsstr::ascii_lower(path);
     if lowered == "skill.md" {
         return true;
     }
-    lowered.ends_with("/skill.md") || lowered.ends_with("\\skill.md")
+    lowered.ends_with("/skill.md")
+        || lowered.ends_with("\\skill.md")
+        || (lowered.ends_with(".md") && lowered.rsplit(['/', '\\']).nth(1) == Some("commands"))
 }
 
 /// `/^https?:\/\//i`.

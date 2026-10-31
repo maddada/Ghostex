@@ -225,8 +225,10 @@ impl Render for SuggestionPanel {
                                     text.flex_shrink_0()
                                 }
                             })
+                            // A long name (`/plugin:skill`) widens its own row up to the phone's 60%.
                             .when(!files && !sessions, |text| {
-                                text.w(px(spec.label_column_px * s))
+                                text.min_w(px(spec.label_column_px * s))
+                                    .max_w(gpui::relative(0.6))
                             })
                             .child(label),
                     )

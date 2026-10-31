@@ -57,7 +57,7 @@ fn description(skill_file: &Path) -> Option<String> {
 }
 
 fn read(paths: &GxserverPaths, agent: &str, folder: Option<&Path>) -> Option<Value> {
-    let listed = crate::session_chat_skills::read_session_chat_skills(paths, agent, folder);
+    let listed = crate::session_chat_skills::read_session_chat_skills(paths, agent, folder, None);
     let available: Vec<Value> = listed["skills"]
         .as_array()
         .into_iter()
