@@ -615,24 +615,38 @@ Working, Snoozed and Parked fold into shelves at the bottom. Working holds
 sessions whose agent works or still runs something in the background, while the
 Working section switch (`unifiedWorkingSection`, on by default, under the
 Sidebar switch) is on; a session leaves it for the top of the list when it needs
-you. Parked shows only while session parking is on. Hovering a card swaps its
-status for Snooze (1 Hour, 3 Hours, Tomorrow or Next Week) and Park; a snoozed
-or parked row offers Unsnooze or Unpark instead. The row at the top is a filter
-bar that always shows what is filtered: each pick is a chip with its own X, and
-those that don't fit become a count that opens the menu; with nothing picked it
+you. Parked shows only while session parking is on. A snoozed or parked row
+offers Unsnooze or Unpark when you hover it.
+
+The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
+by default Snooze, Park and Close always show on a hovered card and the chevron
+brings out Tag and Sleep, and opening the chevron opens it on every card. Settings
+shows the strip of the sidebar you are using, and the button beside it copies the
+other sidebar's. Group by Project (`unifiedGroupByProject`, in Settings and Sort &
+Filter) puts every machine's sessions of one repository under one header, with
+that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
+Drag a header to arrange the groups; the order is saved per repository across
+machines, and a new project lands after the arranged ones, A to Z. The "+" on a
+header starts a session there. A project you hid in the Project sidebar leaves this
+list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
+Filter offers Show Hidden, Group by Project and Working Section here, and Collapse
+All folds the project groups while they are on.
+
+The row at the top is a filter bar that shows each pick as a chip with its own X.
+Chips that do not fit become a count that opens the menu; with nothing picked it
 reads All sessions. The filter button narrows the list to projects, machines or
 Spaces in a dropdown that scrolls when long. Type in it to find a Space or project
 on any machine, or to search sessions: its first row, Search sessions for, makes
-what you typed a chip that narrows the list by title, project, branch or machine
-(picks are kept across restarts, the search text isn't). A project row shows
-an X on its right while you're on it: click it once and it turns red, click again to remove
-that project from the list on every machine that has it. That is Close Project:
-the project goes to Recent Projects, where Quick Access > Projects reopens it, and
-its sessions keep running out of sight until you reopen it. Picking a project in
-Quick Access > Projects also filters to it. Next to
-the filter are Add project and New session, which opens the new-session picker
-(agents, Browser, Terminal) in the filtered project when the filter is one
-project. Cards show the project's own icon when it has one, and right-clicking
+what you typed a chip that narrows the list by title, project, branch or machine.
+The filter, open shelves and folded groups come back after a restart; search text
+does not. A project row shows an X on its right while you hover it: click once
+and it turns red, then click again to remove that project from the list on every
+machine that has it. The project goes to Recent Projects, where Quick Access >
+Projects reopens it; its sessions keep running out of sight until then. Picking
+a project in Quick Access > Projects also filters to it. Next to the filter are
+Add project and New session, which opens the new-session picker (agents,
+Browser, Terminal) in the filtered project when the filter is one project.
+Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
 The sidebar lists projects and their sessions. Project headers carry the git
@@ -711,6 +725,15 @@ its heading shows the count. A session goes back to Sessions on its own when
 its agent stops. The session you have open, and a working session with an
 unanswered question (pink), stay in Sessions. Pinned, draft, parked and snoozed
 sessions keep their own sections (`groupWorkingSessions`).
+
+**Hide projects without sessions** (same two places, off by default,
+`sidebarHideProjectsWithoutSessions`) leaves projects with no session in any state
+out of the Project sidebar. The open project always stays, and a Show all projects
+row at the end of the list brings the rest back in their places until you press it
+again. On the same Sort & Filter page, the tag rows sit under the heading "Show only
+sessions tagged"; when nothing matches, the list says "No sessions tagged X.
+Right-click a session > Tag As" with a Clear filter button.
+
 Workspaces keep different parts of your work apart, for example one per company
 you work for and a Personal one. Workspaces is a built-in extension, off by
 default: turn it on with its switch in Settings > Extensions (Features). It also
@@ -1198,19 +1221,37 @@ when you open it.
 - Handoff / Export (the chat's ⋯ menu, a session's right-click menu, or picking
   another agent's model in the model picker) writes the conversation to a
   Markdown file and offers three choices. **Handoff to an agent** starts a new
-  session in the same project with a link to that file typed into its chat box,
-  unsent, so you write the first message. **Handoff to Remote** does the same on
-  another connected computer: pick the agent, the Computer and the Project there.
-  The project with the same Git repository is picked for you, and every other
-  project there is listed too. If that computer doesn't have the repository yet,
-  Clone it there opens Add Project on that computer with the repository already
-  filled in, so you only pick the folder; once it is cloned, Handoff / Export
-  comes back with the new project picked. When the two checkouts are on
-  different branches, the dialog says so: only the conversation moves, the
-  branch over there is not switched. It works in every direction, from this
-  computer to a remote one, back, and between two remote ones; the old session
-  keeps running. **Export to Markdown** only saves the file and copies its path.
-  Commands & output, File changes and Reasoning choose what the file includes.
+  session in the same project. Its chat box starts with a line saying which
+  session and project it continues from, then a link to that file, with the
+  cursor two lines below the link; nothing is sent, so you write the first
+  message. **Advanced Handoff** does the same in another project: pick the agent,
+  the Computer and the Project. The session's own computer comes first, with its
+  other projects, and every other connected computer follows. The project with
+  the same Git repository is picked for you when there is one, and every other
+  project there is listed too. If another computer doesn't have the repository
+  yet, Clone it there opens Add Project on that computer with the repository
+  already filled in, so you only pick the folder; once it is cloned, Handoff /
+  Export comes back with the new project picked. When two checkouts of the
+  repository are on different branches, the dialog says so: only the conversation
+  moves, the branch over there is not switched. It works in every direction, from
+  this computer to a remote one, back, and between two remote ones; the old
+  session keeps running. **Export to Markdown** only saves the file and copies its
+  path. Commands & output, File changes and Reasoning choose what the file
+  includes.
+- Drag a session onto another project in the Project sidebar to hand it over
+  there: a session can't change project, so this starts a new session in that
+  project with the conversation attached, the same way Handoff / Export does. The
+  project's header lights up while you drag (or the session group's, and the new
+  session joins that group), and letting go opens a message, **Handoff to**
+  followed by the project's name. Pick the agent under Continue with. **Close
+  source session**, on by default, closes the old session once the new one has
+  started; turn it off to keep it. If the agent is still working, the message says
+  so and handing off stops its turn first; if it can't be stopped, nothing is
+  handed over and a message says why. A draft, a terminal, a browser tab, a
+  coordinator and its threads can't be handed over, so they light nothing. Only
+  the row you drag hands over, also when several are selected. In the Unified
+  sidebar, or for a project on another computer or in another Space, use Advanced
+  Handoff from the session's menu.
 
 Related settings: `autoSleep*`, `keepViewsLoaded`, `clickToWakeSleepingSessions`,
 `dimSleepingSessions`, `wakeSleepingSessionsOnSelect`,
@@ -3792,6 +3833,14 @@ names a ticket, issue or PR (`SPX-123`, `#123`, `owner/repo#123` or their links,
 using the title when Ghostex already knows it), else its first words. If the
 worktree cannot be made, nothing is sent and the message stays in the box with
 the reason and Try again. Each project remembers the last choice.
+
+The bar also starts with the project chip, in any folder: it names the project,
+and the machine for a chat on another computer. It opens a search over every
+project on every machine, one row per repository with a chip per machine; arrows
+move through the rows, left and right change the machine, and a row starts on the
+machine you last used for it. A machine that isn't connected keeps its chip, dimmed.
+Picking moves the draft: the same agent starts there with what you typed, and the
+empty draft closes.
 
 Issues Workflow (called Work mode before) ties your sessions to the tickets they
 work on. There is no switch: it is on for every project once it is set up. Its
