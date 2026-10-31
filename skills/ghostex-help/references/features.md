@@ -1274,6 +1274,10 @@ image paste and Ctrl+G rich prompt editor, a prompt queue that sends when the
 agent stops, transcript with thinking, tool, and edit cards, subagent
 transcripts, question and approval cards, rewind, and a note per session (with
 the Session notes extension on).
+On the computer, Ghostex saves pasted images at up to 32 MiB; it converts BMP
+and TIFF to PNG and reduces very large pictures when needed. OpenCode reduces large
+images further when sending them to its service. If an image still cannot fit,
+the chat box shows its size and the limit.
 Type `@` in the chat box to mention a project file, `$` to pick one of the
 agent's skills, and `+` (at the start or after a space) to mention another agent
 session of the same project: the list shows each session's logo, title and
@@ -1663,9 +1667,15 @@ without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
 for anything else you want the agent to know. Send (or Ctrl+Enter, Cmd+Enter
-on macOS, from anywhere in the form or page) delivers your answers to the agent as a message (when the agent is
-busy, they wait in the chat's queue and go as soon as it is free; the card says what it waits for and its Remove takes them back so the form can be answered again), the chat
-shows them as a card, and the form then reads Answered. If a card or message left the queue but the conversation never shows it, it says so instead of spinning, and Remove clears it. Questions that need a picture,
+on macOS, from anywhere in the form or page) delivers your answers to the agent
+as a message; the chat shows them as a card, and the form then reads Answered.
+Answers from question forms and chat pages send like normal chat messages; a busy
+agent receives them after its current tool call when supported. Turn on **Wait
+for turn end before sending form answers** to queue them until the turn ends.
+A queued card says what it waits for, and Remove takes your answers back so the
+form can be answered again. If a card or message left the queue but the
+conversation never shows it, it says so instead of spinning, and Remove clears
+it. Questions that need a picture,
 such as choosing between two mockups, come as a page instead, where you can
 also pick an option right at its mockup with the Pick button at the right end of its title. A
 page works the same way: its card reads Answered once you send, and opening it
