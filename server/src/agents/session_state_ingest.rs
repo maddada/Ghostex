@@ -4,7 +4,7 @@ use serde_json::{json, Map, Value};
 
 use super::*;
 use crate::domain::{DomainRepository, DomainStateError};
-use crate::presentation::project_session_title_projection;
+use crate::presentation::{project_session_title_projection, DEFAULT_TERMINAL_SESSION_TITLE};
 use crate::session_status::compute_activity_update;
 
 /// `current` is the caller's already-loaded row for `project_id`/`session_id`;
@@ -395,7 +395,7 @@ pub(crate) fn repair_session_working_directory_title(
             let project = repository.get_project(&lifecycle.project_id)?;
             project_agent_session_default_title(project.as_ref().unwrap_or(&Value::Null), &session)
         } else {
-            "Terminal Session".to_string()
+            DEFAULT_TERMINAL_SESSION_TITLE.to_string()
         };
         runtime_settings.insert("titleSource".to_string(), json!("placeholder"));
         let mut update = lifecycle_update(lifecycle);
@@ -514,6 +514,27 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         reason = Some("keeps-its-given-title".to_string());
     }
     let mut update = lifecycle_update(lifecycle);
+    let is_terminal_session = current.get("kind").and_then(Value::as_str) == Some("terminal");
+    let title_came_only_from_terminal = is_terminal_session
+        && read_text_from_map(&runtime_settings, "titleSource").as_deref() == Some("terminal-auto")
+        && read_text_from_map(&runtime_settings, "titleMetadataSource").is_none();
+    if title_came_only_from_terminal
+        && reason.as_deref().is_some_and(|r| {
+            matches!(
+                r,
+                "terminal-title-not-visible" | "terminal-title-is-working-directory"
+            )
+        })
+        && is_terminal_prompt_or_directory_title(&current, raw_title.as_deref())
+    {
+        let default_title = DEFAULT_TERMINAL_SESSION_TITLE.to_string();
+        if read_text_value(&current, "title").as_deref() != Some(&default_title) {
+            runtime_settings.insert("titleSource".to_string(), json!("placeholder"));
+            update.insert("title".to_string(), json!(default_title));
+            decision_changed = true;
+            reason = Some("terminal-title-returned-to-prompt".to_string());
+        }
+    }
     if reason.is_none() {
         if let Some(title) = visible_title.clone() {
             let previous_title_source = session_title_source(&current, &runtime_settings);
@@ -607,14 +628,15 @@ pub(crate) fn ingest_terminal_title_event_with_home(
             &mut runtime_settings,
             activity_update.last_active_at.as_deref(),
         );
+        let mut activity_db_update = lifecycle_update(lifecycle);
         if let Some(last_active_at) = activity_update.last_active_at.clone() {
-            update.insert("lastActiveAt".to_string(), json!(last_active_at));
+            activity_db_update.insert("lastActiveAt".to_string(), json!(last_active_at));
         }
-        update.insert(
+        activity_db_update.insert(
             "runtimeSettings".to_string(),
             Value::Object(runtime_settings),
         );
-        session = repository.update_session(&update)?;
+        session = repository.update_session(&activity_db_update)?;
     }
     /*
     CDXC:SessionTitles 2026-08-04:
