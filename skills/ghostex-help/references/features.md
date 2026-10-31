@@ -3777,6 +3777,18 @@ deleted from the sidebar. When a worktree's folder is deleted, the sessions that
 worked in it continue in the project's folder with the same conversation, so a
 finished session or thread still opens and can be messaged.
 
+A new chat in a Git project shows a bar on top of its message box: **This
+folder** (the project's own checkout, the default), **New worktree** (from a
+base branch you pick, the project's current branch first) or **Existing** (a
+worktree the project already has). With a worktree picked, sending the first
+message creates it (Add Worktree's folder and setup command) and starts the chat
+there; the sidebar shows the worktree under its project with the chat inside. The
+branch is named for you from the message: `spx-123-fix-copy-link` when it
+names a ticket, issue or PR (`SPX-123`, `#123`, `owner/repo#123` or their links,
+using the title when Ghostex already knows it), else its first words. If the
+worktree cannot be made, nothing is sent and the message stays in the box with
+the reason and Try again. Each project remembers the last choice.
+
 Issues Workflow (called Work mode before) ties your sessions to the tickets they
 work on. There is no switch: it is on for every project once it is set up. Its
 Linear parts (Create Linear Ticket, Linear statuses, Link to Linear issue or
