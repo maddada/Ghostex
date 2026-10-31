@@ -19,6 +19,9 @@ mod branch;
 mod candidates;
 mod cleanup;
 mod cloud_work;
+/// Nothing calls it outside tests until the command source is registered as a `WorkSource`.
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
+mod command;
 mod credentials;
 mod details_share;
 mod feeds;
@@ -52,6 +55,8 @@ pub(crate) use branch::*;
 pub(crate) use candidates::*;
 pub(crate) use cleanup::*;
 pub(crate) use cloud_work::*;
+#[cfg_attr(not(test), allow(unused_imports))]
+pub(crate) use command::*;
 pub(crate) use credentials::*;
 pub(crate) use details_share::*;
 pub(crate) use feeds::*;

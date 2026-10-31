@@ -28,6 +28,10 @@ ghostex-gx-chat-core = { path = "../packages/gx-chat-core" }
 # clients use, and paints it to a PNG with resvg (the renderer the desktop's diagrams use).
 ghostex-gx-visual = { path = "../packages/gx-visual" }
 resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
+# CDXC:WorkMode 2026-10-28 WHY:
+# A command ticket source's SVG icon is parsed with the XML reader resvg already compiles in and
+# rebuilt from an allowlist (work_mode/command/icon.rs). Keep it at usvg's version.
+roxmltree = "0.21.2"
 # PNG encoding for the check's picture (tiny-skia's `png-format`, on by default).
 tiny-skia = "0.11"
 ghostex-agent-sync = { path = "../packages/agent-sync" }
