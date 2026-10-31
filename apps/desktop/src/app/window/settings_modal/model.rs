@@ -195,6 +195,9 @@ impl SettingsTabId {
         if id == "settings" {
             return Some(SettingsTabId::Chat);
         }
+        if id == "interface" {
+            return Some(SettingsTabId::Theme);
+        }
         Self::RAIL_ORDER.into_iter().find(|tab| tab.id() == id)
     }
 
@@ -207,7 +210,8 @@ impl SettingsTabId {
             SettingsTabId::Notifications => "Notifications",
             SettingsTabId::FilesLinks => "Files & Links",
             SettingsTabId::PowerSleep => "Power & Sleep",
-            SettingsTabId::Theme => "Theme",
+            // CDXC:Settings 2026-10-31 DECISION: User: "let's also rename the theme page in settings to Interface". Only its name changed: its stored id stays `theme`, so saved navigation, `ghostex settings open --tab theme` and old deep links keep working, and `interface` opens it too.
+            SettingsTabId::Theme => "Interface",
             SettingsTabId::Integrations => "Integrations",
             SettingsTabId::CloudBoxes => "Cloud Boxes",
             SettingsTabId::Extensions => "Extensions",

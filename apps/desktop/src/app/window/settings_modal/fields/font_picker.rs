@@ -1,16 +1,18 @@
-//! The app font's list: the fonts installed on this computer, searchable, each row drawn in its
-//! own face. It opens the shared searchable dropdown around a virtualized list, because a computer
+//! The app font's and the monospace font's lists: the fonts installed on this computer, searchable,
+//! each row drawn in its own face. It opens the shared searchable dropdown around a virtualized list, because a computer
 //! can have hundreds of families and only the rows on screen should load their fonts.
 use super::super::super::native_modal_kit::{capture_child_bounds, hsla, rgba_of};
 use super::super::palette::SettingsPalette;
+use super::controls::{ButtonVariant, settings_button};
 use super::row::{CONTROL_HEIGHT, PageAction, RowSpec, SELECT_WIDTH, setting_row, settings_icon};
 use super::searchable_dropdown::{
     DropdownAlign, DropdownState, searchable_dropdown_shell, toggle_dropdown,
 };
 use super::{CHECK_ICON, SettingsPage, icon};
 use crate::ui_fonts::{
-    FontRow, draws_its_own_name, exact_family, font_rows, installed_families, picked_family,
-    read_installed_families,
+    FontRow, TERMINAL_CONFIG_LABEL, draws_its_own_name, exact_family, font_rows,
+    installed_families, monospace_default_face, monospace_font_rows, monospace_label,
+    picked_family, read_installed_families,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -25,8 +27,43 @@ const ROW_HEIGHT: f32 = 32.0;
 const LIST_HEIGHT: f32 = 8.0 + ROW_HEIGHT * 9.0;
 const DEFAULT_LABEL: &str = "App default";
 
+/// Which font setting a list picks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FontList {
+    /// Every installed family, for the app font.
+    App,
+    /// Only monospaced families, for the monospace font, whose value may be a Ghostty list.
+    Monospace,
+}
+
+impl FontList {
+    fn rows(self, installed: Option<&[(String, bool)]>, value: &str, query: &str) -> Vec<FontRow> {
+        match self {
+            FontList::App => font_rows(installed, value, query),
+            FontList::Monospace => monospace_font_rows(installed, value, query),
+        }
+    }
+
+    fn label(self, value: &str, installed: Option<&[(String, bool)]>) -> String {
+        match self {
+            FontList::App => font_picker_label(value, installed),
+            FontList::Monospace => monospace_label(value, installed),
+        }
+    }
+
+    /// The row a saved `value` selects.
+    fn selected_index(self, rows: &[FontRow], value: &str) -> Option<usize> {
+        let saved = match self {
+            FontList::App => picked_family(value).unwrap_or_default(),
+            FontList::Monospace => value.trim(),
+        };
+        rows.iter()
+            .position(|row| row.value().eq_ignore_ascii_case(saved))
+    }
+}
+
 /// What the closed control reads for the saved `value`.
-pub(crate) fn font_picker_label(value: &str, installed: Option<&[(String, bool)]>) -> String {
+fn font_picker_label(value: &str, installed: Option<&[(String, bool)]>) -> String {
     let Some(family) = picked_family(value) else {
         return DEFAULT_LABEL.to_string();
     };
@@ -42,24 +79,77 @@ pub(crate) fn font_picker_label(value: &str, installed: Option<&[(String, bool)]
     }
 }
 
-/// A setting row with the installed fonts' list. `on_change` gets the family to save, empty for the
-/// app's default.
+/// What a pick leaves waiting for Apply: `None` when it is what is saved already.
+fn pending_pick(picked: String, saved: &str) -> Option<String> {
+    (picked.trim() != saved.trim()).then_some(picked)
+}
+
+/// A setting row with the installed fonts' list and its Apply button. A pick only waits in
+/// `pending`, which the list and its closed control show, until Apply hands it to `on_apply`: the
+/// value to save, empty for the app's default or for the monospace list's terminal config.
+///
+/// CDXC:DesignSystem 2026-10-31 DECISION:
+/// User: "we need to refresh the app after changing the app's font (we need apply button there for this)". The refresh turned out to be a stale text measurement in gpui, now fixed where it was kept (`TextMeasureInputs::fonts_generation`), so Apply redraws every window in place: no relaunch, and no agent or session is touched. The Apply button stays so trying fonts in the list does not redraw the whole app, or reflow every terminal for a monospace font, on each pick.
+/// SEE-ALSO: .dependencies/zed/crates/gpui/src/fast/text.rs.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn font_picker_field<V: SettingsPage>(
     page: &mut V,
     p: &SettingsPalette,
     id: &'static str,
+    list: FontList,
     spec: RowSpec,
     on_reset: Option<PageAction<V>>,
     value: &str,
     state: fn(&mut V) -> &mut DropdownState,
-    on_change: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + 'static,
+    pending: fn(&mut V) -> &mut Option<String>,
+    on_apply: impl Fn(&mut V, String, &mut Window, &mut Context<V>) + 'static,
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> AnyElement {
+    let saved = value.to_string();
+    // A pick the setting has since reached by another way (`ghostex settings set`) is not waiting.
+    if pending(page)
+        .as_deref()
+        .is_some_and(|pick| pick.trim() == saved.trim())
+    {
+        *pending(page) = None;
+    }
+    let waiting = pending(page).clone();
+    let value = waiting.as_deref().unwrap_or(value);
+    let on_reset = on_reset.map(|reset| -> PageAction<V> {
+        Rc::new(
+            move |page: &mut V, window: &mut Window, cx: &mut Context<V>| {
+                *pending(page) = None;
+                reset(page, window, cx);
+            },
+        )
+    });
+    let on_change = {
+        let saved = saved.clone();
+        move |page: &mut V, picked: String, _: &mut Window, cx: &mut Context<V>| {
+            *pending(page) = pending_pick(picked, &saved);
+            cx.notify();
+        }
+    };
+    let apply = settings_button(
+        p,
+        SharedString::from(format!("{id}-apply")),
+        "Apply",
+        None,
+        ButtonVariant::Default,
+        waiting.is_none(),
+        None,
+        move |page: &mut V, window: &mut Window, cx: &mut Context<V>| {
+            if let Some(pick) = pending(page).take() {
+                on_apply(page, pick, window, cx);
+            }
+            cx.notify();
+        },
+        cx,
+    );
     let installed = installed_families();
     let installed = installed.as_ref().map(|families| families.as_slice());
-    let label = font_picker_label(value, installed);
+    let label = list.label(value, installed);
     let (open, bounds) = {
         let dropdown = state(page);
         (dropdown.open, dropdown.trigger_bounds.clone())
@@ -70,12 +160,12 @@ pub(crate) fn font_picker_field<V: SettingsPage>(
         let value = value.clone();
         move || {
             let installed = installed_families();
-            let rows = font_rows(
+            let rows = list.rows(
                 installed.as_ref().map(|families| families.as_slice()),
                 &value,
                 "",
             );
-            selected_index(&rows, &value)
+            list.selected_index(&rows, &value)
         }
     };
     let trigger = div()
@@ -137,30 +227,28 @@ pub(crate) fn font_picker_field<V: SettingsPage>(
     let on_change = Rc::new(on_change);
     let popup = if open {
         let query = state(page).query(cx);
-        let rows = Rc::new(font_rows(installed, &value, &query));
-        popup(p, id, state, page, rows, &value, on_change, window, cx)
+        let rows = Rc::new(list.rows(installed, &value, &query));
+        popup(
+            p, id, list, state, page, rows, &value, on_change, window, cx,
+        )
     } else {
         None
     };
-    let control = div()
+    let control = h_flex()
         .flex_shrink_0()
-        .child(trigger)
-        .children(popup)
+        .gap(px(8.0))
+        .items_center()
+        .child(div().flex_shrink_0().child(trigger).children(popup))
+        .child(apply)
         .into_any_element();
     setting_row(p, id, spec, on_reset, control, cx)
-}
-
-/// The row a saved `value` selects.
-fn selected_index(rows: &[FontRow], value: &str) -> Option<usize> {
-    let family = picked_family(value).unwrap_or_default();
-    rows.iter()
-        .position(|row| row.value().eq_ignore_ascii_case(family))
 }
 
 #[allow(clippy::too_many_arguments)]
 fn popup<V: SettingsPage>(
     p: &SettingsPalette,
     id: &'static str,
+    list: FontList,
     state: fn(&mut V) -> &mut DropdownState,
     page: &mut V,
     rows: Rc<Vec<FontRow>>,
@@ -180,7 +268,7 @@ fn popup<V: SettingsPage>(
     let count = rows.len();
     let list_height = (8.0 + count as f32 * ROW_HEIGHT).min(LIST_HEIGHT);
     let palette = *p;
-    let selected = selected_index(&rows, value);
+    let selected = list.selected_index(&rows, value);
     let highlight = state(page).highlight;
     let scroll = state(page).list_scroll.clone();
     let row_choose = on_choose.clone();
@@ -202,6 +290,7 @@ fn popup<V: SettingsPage>(
                                 Some(font_row(
                                     &palette,
                                     id,
+                                    list,
                                     state,
                                     index,
                                     row,
@@ -241,6 +330,7 @@ fn popup<V: SettingsPage>(
 fn font_row<V: SettingsPage>(
     p: &SettingsPalette,
     id: &'static str,
+    list: FontList,
     state: fn(&mut V) -> &mut DropdownState,
     index: usize,
     row: &FontRow,
@@ -252,10 +342,19 @@ fn font_row<V: SettingsPage>(
     let row_highlight = rgba_of(p.foreground, 0.08);
     let (label, hint, face) = match row {
         FontRow::AppDefault => (DEFAULT_LABEL.to_string(), None, None),
+        FontRow::MonospaceDefault => (
+            row.value().to_string(),
+            Some("Default"),
+            Some(monospace_default_face()),
+        ),
+        FontRow::TerminalConfig => (TERMINAL_CONFIG_LABEL.to_string(), None, None),
         FontRow::NotInstalled(name) => (name.clone(), Some("Not installed"), None),
+        FontRow::Custom(name) => (name.clone(), Some("Custom"), None),
+        FontRow::UseTyped(name) => (format!("Use \"{name}\""), Some("Custom"), None),
         FontRow::Family { name, monospaced } => (
             name.clone(),
-            monospaced.then_some("Monospace"),
+            // Every row of the monospace list is one, so only the app font's list says so.
+            (*monospaced && list == FontList::App).then_some("Monospace"),
             draws_its_own_name(name).then(|| exact_family(name)),
         ),
     };
@@ -305,4 +404,25 @@ fn font_row<V: SettingsPage>(
                 .child(settings_icon(CHECK_ICON, 16.0, p.foreground)),
         )
         .into_any_element()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pick_waits_until_it_differs_from_what_is_saved() {
+        assert_eq!(
+            pending_pick("Menlo".into(), "Monaco").as_deref(),
+            Some("Menlo")
+        );
+        // Apply stays disabled for the font already in use.
+        assert_eq!(pending_pick("Menlo".into(), "Menlo"), None);
+        assert_eq!(pending_pick(" Menlo ".into(), "Menlo"), None);
+    }
+
+    #[test]
+    fn a_pick_of_the_default_waits_like_any_other() {
+        assert_eq!(pending_pick(String::new(), "Georgia").as_deref(), Some(""));
+    }
 }

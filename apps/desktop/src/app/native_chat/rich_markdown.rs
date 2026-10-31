@@ -27,9 +27,9 @@ use serde_json::{Value, json};
 
 /// The transcript's prose size at 100% zoom, which the text inside a visual block takes too
 /// (`gxv::Theme::text_size`, `visual.rs`).
-pub(super) const PROSE_SIZE: f32 = 14.0;
+pub(super) const PROSE_SIZE: f32 = super::chat_text_look::PROSE_SIZE;
 /// The transcript's prose line height, which a fenced block's code lines take too.
-pub(super) const PROSE_LINE_HEIGHT: f32 = 22.75;
+pub(super) const PROSE_LINE_HEIGHT: f32 = super::chat_text_look::PROSE_LINE_HEIGHT;
 /// The padding a fenced block's code sits in under its header (GPUI Kit's `p_3`).
 const CODE_PADDING: f32 = 12.0;
 

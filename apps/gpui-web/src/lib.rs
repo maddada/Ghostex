@@ -199,7 +199,7 @@ pub fn run() -> Result<(), JsValue> {
         Theme::sync_base(cx);
         // A page has no system fonts: `?settings=` can only pick one of the faces it bundles, and
         // any other name leaves it on its default fonts.
-        ui_fonts::apply_app_font(
+        ui_fonts::apply_fonts(
             shared_settings::shared_sidebar_settings_snapshot().object(),
             cx,
         );

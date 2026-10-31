@@ -96,7 +96,7 @@ fn ghostty_family_for_preset(preset: &str) -> String {
 /// `normalizeGhosttyFontFamily`: blank stays blank; a value that is exactly a preset name (such
 /// as `Cross Platform Mono`) becomes that preset's Ghostty family (`Consolas`); anything else is
 /// the trimmed text.
-pub(super) fn normalize_ghostty_font_family(value: &str) -> String {
+pub(in super::super) fn normalize_ghostty_font_family(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return String::new();

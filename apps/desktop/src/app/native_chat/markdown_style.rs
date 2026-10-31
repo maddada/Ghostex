@@ -182,7 +182,7 @@ pub(super) fn inline_code(p: &ChatAppearance) -> InlineCodeStyle {
         padding_y: px(visual.padding_y * p.scale),
         border_width: px(visual.border_width * p.scale),
         radius: px(visual.radius * p.scale),
-        background: rgb(if p.light { 0xefeff0 } else { 0x272727 }).into(),
+        background: super::chat_text_look::inline_code_fill(p.light),
         border_color: p.foreground.opacity(if p.light { 0.16 } else { 0.18 }),
         swatches: true,
         swatch: None,

@@ -19,9 +19,9 @@ pub(crate) fn defaults() -> Section {
                 "Make Ghostex the default editor for supported file types.",
             ),
             row(
-                "setTerminalLinks",
-                "Set Terminal Links",
-                "Make Ghostex the handler for ghostex:// terminal links.",
+                "setGhostexLinks",
+                "Set Ghostex Links",
+                "Make Ghostex the handler for ghostex:// links, which open a session from a browser or another app.",
             ),
             row(
                 "setScriptRunner",
@@ -31,7 +31,7 @@ pub(crate) fn defaults() -> Section {
             row(
                 "setAll",
                 "Set All",
-                "Set Ghostex as default editor, terminal-link handler, and script runner.",
+                "Set Ghostex as default editor, ghostex:// link handler, and script runner.",
             ),
         ],
     )

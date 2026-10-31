@@ -41,7 +41,7 @@ pub(super) fn transparency_rows(
     if g.visible(s, "terminalBackgroundOpacity") {
         if glass_on {
             let description = format!(
-                "How much of the work area's glass tint terminals keep. 100% matches the rest of the work area; lower shows more of what is behind the window. Applies while transparency is on (Settings > Theme > Transparency){}.{note}",
+                "How much of the work area's glass tint terminals keep. 100% matches the rest of the work area; lower shows more of what is behind the window. Applies while transparency is on (Settings > Interface > Transparency){}.{note}",
                 if glass == "auto" {
                     ", which is dark mode only"
                 } else {
@@ -70,7 +70,7 @@ pub(super) fn transparency_rows(
                     "terminalBackgroundOpacity",
                     "Background opacity (%)",
                     &format!(
-                        "Terminals can only be see-through while the window is. Turn on transparency to show what is behind the window through them; it picks Dark only, which you can change under Settings > Theme > Transparency.{restart}"
+                        "Terminals can only be see-through while the window is. Turn on transparency to show what is behind the window through them; it picks Dark only, which you can change under Settings > Interface > Transparency.{restart}"
                     ),
                 )
                 .readout("Needs transparency");
@@ -97,6 +97,6 @@ pub(super) fn transparency_rows(
         }
     }
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q15): the Background blur row is gone from this page; the
-    // window has one blur, set under Settings > Theme > Transparency.
+    // window has one blur, set under Settings > Interface > Transparency.
     rows
 }

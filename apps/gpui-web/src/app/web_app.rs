@@ -138,7 +138,15 @@ impl GhostexGpuiApp {
             new_thread_picker_agents: None,
             agents_terminal_action_bar_account_page: None,
             remote_gxserver_connections: HashMap::new(),
-            sidebar_runtime_settings_snapshot: Default::default(),
+            // `?settings=` (lib.rs) stands in for the saved settings, so the HUD composes from it too;
+            // without this a setting the sidebar reads off the HUD (its zoom) never reached the page.
+            sidebar_runtime_settings_snapshot: crate::cef::SidebarRuntimeSettingsSnapshot {
+                saved_settings_json: serde_json::to_string(
+                    crate::shared_settings::shared_sidebar_settings_snapshot().object(),
+                )
+                .unwrap_or_default(),
+                ..Default::default()
+            },
             latest_sidebar_project_snapshot: None,
             project_switch_pending_requests: Vec::new(),
             quick_access: Default::default(),
@@ -175,7 +183,7 @@ impl GhostexGpuiApp {
 
     pub(crate) fn render_sidebar_collapse_button(
         &self,
-        _icon_color: Option<Hsla>,
+        _in_sidebar: Option<&SidebarAppearance>,
         _cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()
@@ -184,7 +192,7 @@ impl GhostexGpuiApp {
     /// The Agents Panel toggle folds the panel behind an open view; the browser build opens no views.
     pub(crate) fn render_workarea_header_agents_toggle(
         &self,
-        _icon_color: Option<Hsla>,
+        _in_sidebar: Option<&SidebarAppearance>,
         _cx: &mut Context<Self>,
     ) -> impl IntoElement {
         div()

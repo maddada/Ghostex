@@ -5,6 +5,7 @@
 //! CDXC:Theming 2026-10-16 DECISION:
 //! User: "doesn't look so good … can we please make this look nicer? … don't copy everything", then picked direction A (Calm rows) of the mockups in docs/2026-10-16/theme-page. Supersedes the 2026-09-25 layout. The Theme page's rows carry an icon tile (this page only; other pages keep their rows). Appearance is three preview cards (System, Light, Dark). Each group is one card whose rare rows fold under a More row: Colours (Dark mode colour and Light mode colour as two rows of squares, Colourfulness; More: the sidebar and work area set apart, the active pane outline), Transparency (one Off / Dark only / Always control replacing Enable transparency and Use transparency, Strength, Blur, Behind the glass with its pictures or Live gallery; More: picture position, Live speed and brightness, play only when plugged in, the four tints, menu blur) and Chat and terminal (the two themes; More: the terminal palettes), then Related on General. The three-way choices keep the existing row control ("same as what we have now dont change this") and Blur stays as it was ("dont change this"). Custom colour is a "+" square after the squares that opens the Pick Color dialog right at it; no rows open under the colour row (2026-10-17, User: "very bad to have the same colors twice here why??? pls fix no need for these 2 rows that appear when i click on the + option in the colors pls"). The custom colour's depth has no control of its own: Colourfulness sets it (2026-10-17, the user's pick: "Remove it: Colourfulness alone sets how deep the custom colour is"). The squares are "smaller and simpler": 20px, one flat colour, today's ring drawn thinner. A search hit inside a group's More opens it.
 mod art;
+mod chat_preview;
 mod colours;
 mod controls;
 mod font;
@@ -127,6 +128,9 @@ pub(crate) struct ThemeTab {
     palette_dark_dropdown: DropdownState,
     palette_light_dropdown: DropdownState,
     font_dropdown: DropdownState,
+    pending_font: Option<String>,
+    monospace_font_dropdown: DropdownState,
+    pending_monospace_font: Option<String>,
 }
 
 fn palette_dark_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
@@ -140,6 +144,7 @@ fn palette_light_dropdown(page: &mut ThemeTab) -> &mut DropdownState {
 impl ThemeTab {
     fn new(store: Entity<SettingsStore>, window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |_, _, cx| cx.notify()).detach();
+        chat_preview::register_preview_fonts(cx);
         cx.subscribe(
             &store,
             |page: &mut Self, store, event: &SettingsStoreEvent, cx| {
@@ -191,6 +196,9 @@ impl ThemeTab {
             palette_dark_dropdown: DropdownState::with_max_height(320.0),
             palette_light_dropdown: DropdownState::with_max_height(320.0),
             font_dropdown: DropdownState::default(),
+            pending_font: None,
+            monospace_font_dropdown: DropdownState::default(),
+            pending_monospace_font: None,
         };
         page.apply_preview_state(window, cx);
         page

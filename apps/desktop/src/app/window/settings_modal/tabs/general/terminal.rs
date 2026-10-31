@@ -10,7 +10,6 @@ use super::super::super::fields::{
 use super::super::super::page::PageBlock;
 use super::super::super::palette::SettingsPalette;
 use super::super::super::store::SettingsStore;
-use super::terminal_font::normalize_ghostty_font_family;
 use super::{GeneralCx, GeneralTab, save};
 use gpui::{
     AnyElement, App, ClickEvent, Context, Entity, InteractiveElement as _, IntoElement as _,
@@ -401,29 +400,6 @@ fn terminal_section(
             "Blend the background image toward the terminal background color.",
             (0.0, 1.0, 0.05),
             true,
-            window,
-            cx,
-        ));
-    }
-    if g.visible(s, "terminalFontFamily") {
-        let spec = g.spec(
-            "terminalFontFamily",
-            "Font family",
-            "Type a Ghostty font-family name. Leave blank to use Ghostex's terminal config or the platform default.",
-        );
-        // The draft React shows is `normalizeghostexSettings(settings)`, so a legacy preset name
-        // reads as the family it saves as.
-        let value = normalize_ghostty_font_family(&g.values.string("terminalFontFamily"));
-        rows.push(text_field(
-            page,
-            &p,
-            "terminalFontFamily",
-            spec,
-            Some(reset_key::<GeneralTab>("terminalFontFamily")),
-            &value,
-            Some("Ghostty default"),
-            Some(normalize_ghostty_font_family),
-            None,
             window,
             cx,
         ));

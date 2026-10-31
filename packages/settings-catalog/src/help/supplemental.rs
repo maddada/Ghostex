@@ -8,8 +8,9 @@ use crate::json::{opt, Opt};
 /// A Settings page as the Help files name it: its id and title.
 pub(crate) type Tab = (&'static str, &'static str);
 
-/// The Theme page renders the `appearance` group's sections (Theme, App Icon) on its own tab.
-pub(crate) const THEME: Tab = ("theme", "Theme");
+/// The Interface page renders the `appearance` group's sections (Interface, App Icon) on its own
+/// tab. Its id stays `theme`.
+pub(crate) const THEME: Tab = ("theme", "Interface");
 /// The Terminal page, one of the pages General split into (layout.rs).
 const TERMINAL: Tab = ("terminal", "Terminal");
 const CHAT: Tab = ("chat", "Chat");
@@ -684,7 +685,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Theme",
+        section_title: "Interface",
         title: "Pane gap",
         subtitle: "Gap in pixels between split panes in the Agents view.",
         options: &[],
@@ -695,7 +696,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Theme",
+        section_title: "Interface",
         title: "Custom dark mode depth (set by Colourfulness)",
         subtitle: "How deep the custom dark mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
         options: &[],
@@ -706,7 +707,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Theme",
+        section_title: "Interface",
         title: "Custom light mode depth (set by Colourfulness)",
         subtitle: "How deep the custom light mode colour is. Colourfulness sets it whenever it moves; it has no control of its own.",
         options: &[],
@@ -717,7 +718,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Theme",
+        section_title: "Interface",
         title: "Sidebar foreground color (derived)",
         subtitle: "Derived from Background Contrast and Background Tint; change those instead.",
         options: &[],
@@ -728,7 +729,7 @@ pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
         tab: THEME,
         group: Some("appearance"),
         section: "theming",
-        section_title: "Theme",
+        section_title: "Interface",
         title: "Sidebar background color (derived)",
         subtitle: "Derived from Background Contrast and Background Tint; change those instead.",
         options: &[],

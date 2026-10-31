@@ -21,14 +21,13 @@ pub(crate) fn terminal(platform: Platform) -> Section {
         row("ghosttySettingsActions", "Ghostty settings actions", "Recommended terminal settings, Import from Ghostty (fonts and cursor, not the theme), the Ghostty app's config, Ghostex's own terminal config, Ghostty docs, and defaults.").options(&[opt("Open Ghostex config", "openGhostexTerminalConfigFile"), opt("Open Ghostty config", "openGhosttyConfigFile"), opt("Import from Ghostty", "importGhosttyConfig"), opt("Apply recommended", "applyRecommendedGhosttySettings"), opt("Reset to defaults", "resetGhosttySettingsToDefault"), opt("Ghostty docs", "openGhosttySettingsDocs")]),
         row("terminalBackgroundMode", "Terminal background", "Only changes the terminal panes. Black / white is pure black in dark mode and pure white in light mode.").options(&[opt("Black / white", "pure"), opt("Follow theme", "theme"), opt("Custom color", "custom")]),
         row("workspaceBackgroundColor", "Terminal background color", "Custom terminal background, painted behind terminal text in dark mode."),
-        row("terminalBackgroundOpacity", "Background opacity (%)", "How much of the work area's glass tint terminals keep while transparency is on (Settings > Theme > Transparency). 100% matches the rest of the work area; lower shows more of what is behind the window. Off while transparency is off."),
+        row("terminalBackgroundOpacity", "Background opacity (%)", "How much of the work area's glass tint terminals keep while transparency is on (Settings > Interface > Transparency). 100% matches the rest of the work area; lower shows more of what is behind the window. Off while transparency is off."),
         // CDXC:Settings 2026-10-29 DECISION (cleanup Q15, Q16, Q18): Background blur (Theme's Blur slider) and
         // Background Image Fit (the image always covers the pane) left this page; Show notification on
         // terminal bell moved to Notifications. Terminal width is one slider (100% is the full pane) with a
         // Match chat switch, and Padding is one slider that sets both axes.
         row("terminalBackgroundImage", "Background image", "Absolute path to an image drawn behind terminal panes."),
         row("terminalBackgroundImageOpacity", "Background image opacity", "Blend the background image toward the terminal background color."),
-        row("terminalFontFamily", "Font family", "Type a Ghostty font-family name."),
         row("terminalFontSize", "Font size", "Set terminal text size."),
         row("terminalFontWeight", "Font weight", "Set terminal text weight."),
         row("terminalBoldUsesHeavierFont", "Bold text uses a heavier font", "Draw bold terminal text in a heavier weight. Turn off to keep bold text at your normal font weight, so it stands out by color only. A font-style-bold or font-variation-bold line in Ghostex's terminal config takes priority."),

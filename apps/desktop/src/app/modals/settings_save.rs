@@ -291,7 +291,7 @@ impl GhostexGpuiApp {
             cx,
         );
         apply_gpui_component_theme(cx);
-        crate::ui_fonts::apply_app_font(settings_snapshot.object(), cx);
+        crate::ui_fonts::apply_fonts(settings_snapshot.object(), cx);
         self.native_kanban_notify_appearance(cx);
         self.native_automate_notify_appearance(cx);
         self.native_bot_feed_notify_appearance(cx);

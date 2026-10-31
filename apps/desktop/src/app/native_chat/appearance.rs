@@ -1,3 +1,4 @@
+use super::chat_text_look::{CHAT_BODY_FONT, ChatTextColors, INPUT_STEP_DARK, INPUT_STEP_LIGHT};
 use crate::app::helpers::{
     gpui_session_chat_uses_light_theme, sidebar_titlebar_pack_rgb, sidebar_titlebar_rgb_channels,
     work_area_background_for_variant,
@@ -128,11 +129,7 @@ impl ChatAppearance {
     /// CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." With `sessionChatMutedThinking` on, thinking takes the theme's muted text colour (`muted`) and an agent's replies its full foreground (`reply_lane`), so the pair reads apart in dark and light themes; off keeps the unified look.
     /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/MessageRow.tsx (`thinkingTone`, the reply's `proseColor`), packages/settings-catalog/src/data/defaults.rs.
     pub(crate) fn thinking_lane(&self) -> Self {
-        let tone = if self.muted_thinking || self.light {
-            self.muted
-        } else {
-            self.primary
-        };
+        let tone = self.text_colors().thinking(self.muted_thinking);
         let mut lane = self.clone();
         lane.prose = tone;
         lane.code_text = tone;
@@ -148,11 +145,13 @@ impl ChatAppearance {
     pub(crate) fn reply_lane(&self) -> Option<Self> {
         (self.muted_thinking || self.text_strength > 0).then(|| {
             let mut lane = self.clone();
-            let (prose, primary) = if self.muted_thinking {
-                // A reply's headings stay at least as bright as its prose.
-                (self.foreground, self.foreground)
+            let text = self.text_colors();
+            let prose = text.reply_base(self.muted_thinking);
+            // A reply's headings stay at least as bright as its prose.
+            let primary = if self.muted_thinking {
+                self.foreground
             } else {
-                (self.prose, self.primary)
+                self.primary
             };
             lane.code_text = prose;
             lane.prose = self.strengthened(prose);
@@ -164,16 +163,18 @@ impl ChatAppearance {
     /// A body text colour at this chat's Text strength (CDXC:SessionChat 2026-10-31 in
     /// packages/gx-chat-core/src/transcript/text_strength.rs).
     pub(crate) fn strengthened(&self, color: Hsla) -> Hsla {
-        if self.text_strength == 0 {
-            return color;
+        self.text_colors().strengthened(color, self.text_strength)
+    }
+
+    /// This chat's body text colours (`chat_text_look.rs`, which the Settings preview draws from).
+    fn text_colors(&self) -> ChatTextColors {
+        ChatTextColors {
+            foreground: self.foreground,
+            primary: self.primary,
+            prose: self.prose,
+            muted: self.muted,
+            light: self.light,
         }
-        let base = gpui::Rgba::from(color);
-        let [r, g, b] = ghostex_gx_chat_core::transcript::text_strength::strengthened_channels(
-            [base.r, base.g, base.b],
-            self.text_strength,
-            self.light,
-        );
-        gpui::Rgba { r, g, b, a: base.a }.into()
     }
 
     pub(crate) fn current(state: &serde_json::Value) -> Self {
@@ -191,6 +192,7 @@ impl ChatAppearance {
         let snapshot = crate::shared_settings::shared_sidebar_settings_snapshot();
         let settings = snapshot.object();
         let color = |dark, light_color| rgb(if light { light_color } else { dark }).into();
+        let text = ChatTextColors::for_variant(light);
         let enabled = |name| settings.get(name).and_then(serde_json::Value::as_bool) == Some(true);
         // CDXC:SessionChat 2026-10-29 DECISION (Settings cleanup Q11, gx-chat-core transcript/actions.rs):
         // the detail level is per chat (`simpleOverride` and `verboseOverride`; a new chat follows
@@ -256,8 +258,8 @@ impl ChatAppearance {
                 ),
             )
             .into(),
-            foreground: color(0xfcfcfc, 0x27272a),
-            primary: color(0xb4b8c0, 0x27272a),
+            foreground: text.foreground,
+            primary: text.primary,
             control_primary: color(0xe5e5e5, 0x18181b),
             control_border: if light {
                 toward(0.0, 0.095)
@@ -284,13 +286,13 @@ impl ChatAppearance {
             },
             card_row: lifted(0.015, 0.032),
             ring: color(0x737373, 0x9f9fa9),
-            prose: color(0xb4b8c0, 0x4d4d50),
-            code_text: color(0xb4b8c0, 0x4d4d50),
+            prose: text.prose,
+            code_text: text.prose,
             // CDXC:SessionChat 2026-09-13 DECISION: User: fix unreadable chat cards in light mode through the shared theme. Dark mode keeps #fcfcfc titles and actions (`foreground`) and #b4b8bf content (`card_muted`); light mode uses the light palette; sizes and weights stay the same; card actions are filled (CDXC:AppModal 2026-10-14 on `neutral_button_fills`).
             card_muted: color(0xb4b8bf, 0x71717b),
-            muted: color(0x9e9e9e, 0x71717b),
+            muted: text.muted,
             border: lifted(0.062, 0.095),
-            input: lifted(0.03, 0.032),
+            input: lifted(INPUT_STEP_DARK, INPUT_STEP_LIGHT),
             composer_border: lifted(0.08, 0.067),
             composer_background: if light {
                 raised(0.3)
@@ -300,7 +302,7 @@ impl ChatAppearance {
             scale: super::zoom::chat_zoom_percent(settings) / 100.0,
             // A picked app font replaces this through `crate::ui_fonts`, and a saved font that
             // is not installed leaves the chat on it.
-            font: "DM Sans".to_string(),
+            font: CHAT_BODY_FONT.to_string(),
             light,
             verbose,
             simple,

@@ -11,7 +11,7 @@ mod powershell;
 mod sidebar;
 mod system;
 mod terminal;
-mod terminal_font;
+pub(super) mod terminal_font;
 mod terminal_transparency;
 
 use super::super::catalog::{SettingOption, module, settings_catalog};

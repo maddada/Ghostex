@@ -6,7 +6,7 @@ use crate::rows::{row, section, Section};
 pub(crate) fn theming() -> Section {
     section(
         "theming",
-        "Theme",
+        "Interface",
         vec![
             row("sidebarTheme", "Appearance", "Follow the system appearance by default, or choose Light or Dark.").options(SIDEBAR_THEME_SETTING_OPTIONS),
             row("darkThemePreset", "Dark mode colour", "The colour of the sidebar and window in dark mode: one of sixteen colour squares, or the + square for a custom colour.").options(DARK_THEME_PRESET_OPTIONS),
@@ -15,7 +15,10 @@ pub(crate) fn theming() -> Section {
             row("themeSidebarContrast", "Sidebar colourfulness", "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, where dark mode shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is."),
             row("themeWorkAreaContrast", "Work area colourfulness", "How much of the theme colour shows in the work area (chat, terminals and views), from Subtle to Full. Colourfulness sets the sidebar and work area together."),
             row("customSidebarTitlebarLightBackgroundTintColor", "Custom light mode tint", "The custom light mode colour, chosen in the colour picker the + square opens."),
-            row("sessionChatFontFamily", "App font", "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings. Terminals and code keep their monospace font. App default keeps Ghostex's own fonts."),
+            row("sessionChatFontFamily", "App font", "Pick one of the fonts installed on this computer for the whole app: sidebar, chat, menus, dialogs and Settings, then press Apply. App default keeps Ghostex's own fonts. Terminals and code use the Monospace font."),
+            row("terminalFontFamily", "Monospace font", "Font family for terminals, code in the Files view, diffs, code blocks and tool output in chat. Pick an installed monospace font, or type a Ghostty font-family name, then press Apply."),
+            row("sessionChatTextStrengthPercent", "Text strength", "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are."),
+            row("sessionChatMutedThinking", "Show thinking in grey", "Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart."),
             row("sessionChatTheme", "Chat theme", "Follow the app theme by default, or override chat with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
             row("terminalColorScheme", "Terminal theme", "Follow the app theme by default, or override terminals with Light, Dark, or System.").options(SESSION_CHAT_THEME_OPTIONS),
             row("terminalGhosttyLightTheme", "Terminal palette in light mode", "Uses the light theme set in Ghostex's terminal config, or GitHub Light when none is set.").options(&ghostty_themes_without_unmanaged()),

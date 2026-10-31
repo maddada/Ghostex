@@ -616,3 +616,43 @@ pub(crate) fn general_group_of(scroll_target: &str) -> String {
         .unwrap_or(scroll_target)
         .to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn finds_row(query: &str, section: &str, key: &str) -> bool {
+        GeneralSearch::new(query, true, Vec::new()).setting_visible(section, key)
+    }
+
+    #[test]
+    fn the_monospace_font_is_found_by_its_name_and_its_old_one() {
+        for query in ["monospace", "monospace font", "font family", "ghostty font"] {
+            assert!(finds_row(query, "theming", "terminalFontFamily"), "{query}");
+        }
+    }
+
+    #[test]
+    fn the_moved_chat_rows_are_found_on_the_interface_page() {
+        assert!(finds_row(
+            "text strength",
+            "theming",
+            "sessionChatTextStrengthPercent"
+        ));
+        assert!(finds_row(
+            "thinking in grey",
+            "theming",
+            "sessionChatMutedThinking"
+        ));
+    }
+
+    #[test]
+    fn the_interface_page_is_found_by_its_new_name_and_its_old_one() {
+        for query in ["interface", "theme"] {
+            assert!(
+                GeneralSearch::new(query, true, Vec::new()).subsection_visible("theming", true),
+                "{query}"
+            );
+        }
+    }
+}

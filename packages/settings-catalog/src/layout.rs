@@ -29,9 +29,9 @@ pub struct NavItem {
 
 /// Which search sections each General page renders, in rendered order. Single-section pages
 /// keep using that section's own search result (no separate page-title match). `appearance` is
-/// the Theme page, which has its own tab.
+/// the Interface page, which has its own tab.
 pub const GENERAL_GROUPS: &[GeneralGroup] = &[
-    group("appearance", "Theme", &["theming"]),
+    group("appearance", "Interface", &["theming"]),
     group("chat", "Chat", &["chat", "markedHandovers"]),
     group(
         "sidebar",

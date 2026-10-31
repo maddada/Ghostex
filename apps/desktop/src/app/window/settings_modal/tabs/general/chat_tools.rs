@@ -57,7 +57,6 @@ fn chat_section(
         window,
         cx,
     ));
-    rows.extend(page.text_strength_rows(g, s, window, cx));
     // CDXC:Settings 2026-10-29 DECISION (cleanup Q20): Custom transcript width and Transcript
     // width are one slider. It reads Auto (the transcript matches the prompt composer) until it is
     // dragged, which turns the custom width on; its reset goes back to Auto.
@@ -148,7 +147,6 @@ fn chat_section(
         ));
     }
     rows.extend(page.toggle(g, s, "sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts.", false, cx));
-    rows.extend(page.toggle(g, s, "sessionChatMutedThinking", "Show thinking in grey", "Show the agent's thinking in grey and its replies in the full text colour, so the two are easy to tell apart.", false, cx));
     rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one card: it counts the calls, says what each one is doing and then did, with its result and time, explains a failure, and folds to one line once the agent writes again. Off keeps the current look.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));

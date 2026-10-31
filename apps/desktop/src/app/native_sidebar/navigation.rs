@@ -42,7 +42,7 @@ const SIDEBAR_TOP_ROW_GAP: f32 = 4.0;
 /// The row's side padding, in unscaled points.
 const SIDEBAR_TOP_ROW_PADDING: f32 = 5.0;
 
-/// The two leading toggles (Toggle sidebar, Agents Panel) in the docked row, unscaled: each is its
+/// The two leading toggles (Toggle sidebar, Agents Panel) in the docked row, before the zoom: each is its
 /// 18pt icon, its 1.5pt left offset and 7pt of padding either side (`header_panel_toggle_button`),
 /// 4pt apart.
 const SIDEBAR_TOP_ROW_TOGGLES_WIDTH: f32 = 2.0
@@ -50,6 +50,20 @@ const SIDEBAR_TOP_ROW_TOGGLES_WIDTH: f32 = 2.0
         + TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE
         + TITLEBAR_SIDEBAR_COLLAPSE_ICON_LEFT_OFFSET)
     + 4.0;
+
+/// The y the window corner's controls centre on, on every OS: the macOS traffic lights'
+/// (`traffic_light_position` at 11.5pt, 14pt tall) and the workarea header's toggles.
+const WINDOW_CORNER_CENTER_Y: f32 = 18.5;
+
+/// The docked row's top padding at this sidebar zoom, which keeps its buttons on
+/// `WINDOW_CORNER_CENTER_Y`. It is the row's usual 5pt at 100% and runs out at a zoom so large the
+/// buttons would have to start above the window.
+///
+/// CDXC:Sidebar 2026-10-31 WHY:
+/// GitHub #375: the sidebar zoom shrinks this row, so at 90% a padding that scaled with it put the buttons 1.85pt above the traffic lights and the workarea header's own buttons, whatever their size. The lights and the header do not zoom, so this row holds their centre line instead of scaling away from it.
+fn corner_row_top_padding(scale: f32) -> f32 {
+    (WINDOW_CORNER_CENTER_Y - TITLEBAR_CONTROL_HEIGHT * scale / 2.0).max(0.0)
+}
 
 /// Whether `button_count` right-aligned buttons all fit in the top row at their narrowest
 /// (`SIDEBAR_TOP_ROW_BUTTON_MIN_WIDTH`). The docked row (`owns_window_corner`) also holds the
@@ -75,7 +89,7 @@ fn sidebar_top_row_fits(
     let (reserved, toggles) = if owns_window_corner {
         (
             SIDEBAR_TOGGLE_LEADING_X + SIDEBAR_TOP_ROW_PADDING * scale,
-            SIDEBAR_TOP_ROW_TOGGLES_WIDTH + gap,
+            SIDEBAR_TOP_ROW_TOGGLES_WIDTH * scale + gap,
         )
     } else {
         (2.0 * SIDEBAR_TOP_ROW_PADDING * scale, 0.0)
@@ -192,11 +206,21 @@ impl GhostexGpuiApp {
             _ => label.into(),
         };
         let tooltip_delay = appearance.tooltip_delay;
+        let bottom_padding = (if footer { 6.0 } else { 3.0 }) * scale;
+        let (row_height, top_padding) = if owns_window_corner {
+            let top_padding = corner_row_top_padding(scale);
+            (
+                top_padding + TITLEBAR_CONTROL_HEIGHT * scale + bottom_padding,
+                top_padding,
+            )
+        } else {
+            ((if footer { 39.0 } else { 35.0 }) * scale, 5.0 * scale)
+        };
         h_flex()
             .w_full()
-            .h(px((if footer { 39.0 } else { 35.0 }) * scale))
-            .pt(px(5.0 * scale))
-            .pb(px((if footer { 6.0 } else { 3.0 }) * scale))
+            .h(px(row_height))
+            .pt(px(top_padding))
+            .pb(px(bottom_padding))
             .px(px(5.0 * scale))
             .gap(px(4.0 * scale))
             /*
@@ -230,18 +254,20 @@ impl GhostexGpuiApp {
             sidebar's icon grey rather than the header's bright one (since 2026-10-29 that grey is the header's own icon colour, see `SidebarAppearance::chrome_icon`).
             */
             .when(owns_window_corner, |row| {
-                // The row's unscaled leading padding puts the button on the header's x. The spacer
+                // The row's unscaled leading padding puts the button on the header's x, whatever
+                // the zoom; from there it scales like the rest of the row (GitHub #375). The spacer
                 // keeps it left of the row's other buttons, which align right.
                 row.child(
-                    div().flex_shrink_0().child(
-                        self.render_sidebar_collapse_button(Some(appearance.chrome_icon), cx),
-                    ),
+                    div()
+                        .flex_shrink_0()
+                        .child(self.render_sidebar_collapse_button(Some(appearance), cx)),
                 )
-                // Right of Toggle sidebar, as in the collapsed header (workarea_header/breadcrumb.rs),
-                // which puts it 4pt after that button: the margin tops the scaled row gap up to it.
-                .child(div().flex_shrink_0().ml(px(4.0 - 4.0 * scale)).child(
-                    self.render_workarea_header_agents_toggle(Some(appearance.chrome_icon), cx),
-                ))
+                // Right of Toggle sidebar, as in the collapsed header (workarea_header/breadcrumb.rs).
+                .child(
+                    div()
+                        .flex_shrink_0()
+                        .child(self.render_workarea_header_agents_toggle(Some(appearance), cx)),
+                )
                 // The negative margin cancels the row gap this zero-width spacer adds, so the
                 // buttons right of it keep their even 38px slots.
                 .child(div().flex_1().mr(px(-4.0 * scale)))
@@ -553,6 +579,35 @@ mod tests {
         // With the bell (or Hermes) it needs a wider sidebar, and then it gives way.
         assert!(!sidebar_top_row_fits(DEFAULT_WIDTH, 1.0, true, 4));
         assert!(sidebar_top_row_fits(256.0, 1.0, true, 4));
+    }
+
+    #[test]
+    fn zooming_keeps_the_docked_row_on_the_window_corner_centre_line() {
+        for scale in [0.5, 0.8, 0.9, 1.0, 1.1, 1.25] {
+            let centre = corner_row_top_padding(scale) + TITLEBAR_CONTROL_HEIGHT * scale / 2.0;
+            assert!((centre - WINDOW_CORNER_CENTER_Y).abs() < 0.001, "{scale}");
+        }
+    }
+
+    #[test]
+    fn the_docked_row_is_unchanged_at_full_size() {
+        assert_eq!(corner_row_top_padding(1.0), 5.0);
+    }
+
+    #[test]
+    fn a_very_large_zoom_keeps_the_docked_row_inside_the_window() {
+        assert_eq!(corner_row_top_padding(2.0), 0.0);
+    }
+
+    #[test]
+    fn the_toggles_room_scales_with_the_zoom() {
+        // Three buttons and the toggles fit a sidebar that is wide enough at 80% and not at 125%.
+        let at_80 = narrowest_fitting(0.8, true, 3);
+        let at_125 = narrowest_fitting(1.25, true, 3);
+        let reserve = SIDEBAR_TOGGLE_LEADING_X;
+        let unscaled = narrowest_fitting(1.0, true, 3) - reserve;
+        assert!((at_80 - reserve - unscaled * 0.8).abs() <= 1.0);
+        assert!((at_125 - reserve - unscaled * 1.25).abs() <= 1.0);
     }
 
     #[test]

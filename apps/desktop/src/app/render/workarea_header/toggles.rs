@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::app::consts::*;
 use crate::app::helpers::*;
 use crate::app::model::*;
+use crate::app::native_sidebar::appearance::SidebarAppearance;
 use crate::*;
 
 /// The panel toggles' width as last laid out, which is how much of the band's trailing edge they
@@ -31,6 +32,7 @@ pub(crate) fn header_panel_toggle_button(
     size_reduction: f32,
     enabled: bool,
     icon_color: Option<gpui::Hsla>,
+    scale: f32,
 ) -> gpui::Stateful<gpui::Div> {
     // One shape on every OS, so the sidebar's Search row can reserve the same width for its two
     // leading toggles everywhere (native_sidebar/navigation.rs).
@@ -39,11 +41,11 @@ pub(crate) fn header_panel_toggle_button(
         .relative()
         .flex()
         .flex_shrink_0()
-        .h(px(TITLEBAR_CONTROL_HEIGHT - size_reduction))
+        .h(px((TITLEBAR_CONTROL_HEIGHT - size_reduction) * scale))
         .items_center()
         .justify_center()
-        .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING))
-        .rounded(px(TITLEBAR_BUTTON_RADIUS))
+        .px(px(TITLEBAR_BUTTON_HORIZONTAL_PADDING * scale))
+        .rounded(px(TITLEBAR_BUTTON_RADIUS * scale))
         .cursor_default()
         // Windows: occlude the ancestor Drag hitbox so WM_NCHITTEST keeps the button in the client
         // area (see the CDXC:PlatformSupport note in action_buttons.rs).
@@ -54,13 +56,13 @@ pub(crate) fn header_panel_toggle_button(
         .child(
             div()
                 .flex()
-                .ml(px(TITLEBAR_SIDEBAR_COLLAPSE_ICON_LEFT_OFFSET))
-                .mt(px(TITLEBAR_SIDEBAR_COLLAPSE_ICON_TOP_OFFSET))
+                .ml(px(TITLEBAR_SIDEBAR_COLLAPSE_ICON_LEFT_OFFSET * scale))
+                .mt(px(TITLEBAR_SIDEBAR_COLLAPSE_ICON_TOP_OFFSET * scale))
                 .items_center()
                 .justify_center()
                 .child(titlebar_svg_icon(
                     icon,
-                    TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE - size_reduction,
+                    (TITLEBAR_SIDEBAR_COLLAPSE_ICON_SIZE - size_reduction) * scale,
                     if enabled {
                         icon_color.unwrap_or_else(titlebar_active_text_color)
                     } else {
@@ -146,9 +148,11 @@ impl GhostexGpuiApp {
             .max(0.0)
     }
 
+    /// `in_sidebar` is the sidebar's look while its top row hosts the button; the header passes
+    /// `None`.
     pub(crate) fn render_sidebar_collapse_button(
         &self,
-        icon_color: Option<gpui::Hsla>,
+        in_sidebar: Option<&SidebarAppearance>,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         /*
@@ -163,7 +167,8 @@ impl GhostexGpuiApp {
             TITLEBAR_ICON_LAYOUT_SIDEBAR,
             0.0,
             true,
-            icon_color,
+            in_sidebar.map(|appearance| appearance.chrome_icon),
+            in_sidebar.map_or(1.0, |appearance| appearance.scale),
         )
         .on_mouse_down(
             MouseButton::Left,
@@ -176,7 +181,7 @@ impl GhostexGpuiApp {
         )
         .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, {
             let tooltip = titlebar_tooltip_label("Toggle sidebar", "toggleSidebarCollapsed");
-            let in_sidebar = icon_color.is_some();
+            let in_sidebar = in_sidebar.is_some();
             move |window, cx| panel_toggle_tooltip(&tooltip, in_sidebar, window, cx)
         })
     }
@@ -195,7 +200,7 @@ impl GhostexGpuiApp {
     /// "Open a view" picker counts as open (see `view_panel_maximized`).
     pub(crate) fn render_workarea_header_agents_toggle(
         &self,
-        icon_color: Option<gpui::Hsla>,
+        in_sidebar: Option<&SidebarAppearance>,
         cx: &mut gpui::Context<Self>,
     ) -> impl IntoElement {
         let enabled = self.view_panel_open();
@@ -209,7 +214,8 @@ impl GhostexGpuiApp {
             TITLEBAR_ICON_MESSAGE,
             0.0,
             enabled,
-            icon_color,
+            in_sidebar.map(|appearance| appearance.chrome_icon),
+            in_sidebar.map_or(1.0, |appearance| appearance.scale),
         )
         .when(enabled, |this| {
             this.on_mouse_down(
@@ -222,7 +228,7 @@ impl GhostexGpuiApp {
             )
         })
         .managed_tooltip_with_placement(ManagedTooltipPlacement::Right, {
-            let in_sidebar = icon_color.is_some();
+            let in_sidebar = in_sidebar.is_some();
             move |window, cx| panel_toggle_tooltip(&tooltip, in_sidebar, window, cx)
         })
     }
@@ -242,6 +248,7 @@ impl GhostexGpuiApp {
             0.0,
             true,
             None,
+            1.0,
         )
         .when(expanded, |this| this.bg(titlebar_active_segment_color()))
         .on_mouse_down(
@@ -279,6 +286,7 @@ impl GhostexGpuiApp {
             0.0,
             true,
             None,
+            1.0,
         )
         .when(open, |this| this.bg(titlebar_active_segment_color()))
         .on_mouse_down(
