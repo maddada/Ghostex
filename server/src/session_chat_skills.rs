@@ -610,10 +610,11 @@ fn is_ignored_directory(name: &str) -> bool {
 
 /// The plugins the session's Claude Code loads, `(plugin name, install folder)`: each entry of
 /// `installed_plugins.json` that applies to the session's folder and that `enabledPlugins` turns
-/// on (local settings over project settings over the user's). A plugin none of them names is off.
+/// on (local settings over project settings over the user's). A plugin none of them names is off,
+/// and its name is the one in its manifest, falling back to the `installed_plugins.json` key.
 ///
 /// CDXC:AgentSkills 2026-10-29 WHY:
-/// Claude Code loads a plugin's skills and commands only from the `installPath` of an enabled plugin and names them `/plugin:name`. Walking all of `plugins/cache` listed superseded versions, disabled plugins and leftover clone folders under bare names that two plugins can share, and never listed `commands/*.md`. Plugins are installed per config folder (`CLAUDE_CONFIG_DIR`), so the session's own folder is read. Checked against Claude Code 2.1.312's own list: a plugin missing from `enabledPlugins` stays unloaded even when its manifest says `defaultEnabled` (that key only matters when it is installed), so it may not be listed.
+/// Claude Code loads a plugin's skills and commands only from the `installPath` of an enabled plugin and names them `/plugin:name`. Walking all of `plugins/cache` listed superseded versions, disabled plugins and leftover clone folders under bare names that two plugins can share, and never listed `commands/*.md`. Plugins are installed per config folder (`CLAUDE_CONFIG_DIR`), so the session's own folder is read. Checked against Claude Code 2.1.312's own list: a plugin missing from `enabledPlugins` stays unloaded even when its manifest says `defaultEnabled` (that key only matters when it is installed), and `/key-name:skill` for a plugin whose manifest names it differently reaches the model as plain text, so neither may be listed.
 fn enabled_claude_plugins(
     claude_home: &Path,
     project_path: Option<&Path>,
@@ -649,8 +650,14 @@ fn enabled_claude_plugins(
                 .flatten()
                 .find_map(|settings| settings["enabledPlugins"][key.as_str()].as_bool())
                 .unwrap_or(false);
-            let name = key.split('@').next()?.to_string();
-            enabled.then_some((name, install))
+            if !enabled {
+                return None;
+            }
+            let name = read(install.join(".claude-plugin").join("plugin.json"))
+                .and_then(|manifest| manifest["name"].as_str().map(str::to_string))
+                .filter(|name| !name.is_empty())
+                .or_else(|| key.split('@').next().map(str::to_string))?;
+            Some((name, install))
         })
         .collect()
 }
@@ -939,6 +946,19 @@ mod tests {
             Some(project.path()),
         );
         assert_eq!(rows, vec!["on:a", "project-on:e"]);
+    }
+
+    #[test]
+    fn a_claude_plugin_row_uses_the_name_in_its_manifest() {
+        let rows = claude_plugin_rows(
+            &[
+                ("listed-key", &["a"], json!({"name": "manifest-name"})),
+                ("no-name", &["b"], json!({})),
+            ],
+            json!({"listed-key@market": true, "no-name@market": true}),
+            None,
+        );
+        assert_eq!(rows, vec!["manifest-name:a", "no-name:b"]);
     }
 }
 
