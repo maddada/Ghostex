@@ -188,8 +188,8 @@ pub fn quick_actions_usage() -> String {
             "Create or replace a Browser quick action",
         ),
         format_help_command(
-            "run-action <commandId> --project-id id",
-            "Start a Terminal action or return a Browser action URL",
+            "run-action <commandId> --project-id id [--scope project|global]",
+            "Start a Terminal action or return a Browser action URL; --scope global runs a Global Action",
         ),
         format_help_command(
             "state",
@@ -206,6 +206,7 @@ Usage:
   gx quick-actions --help
   ghostex save-command --command-id <id> --name <name> --command <shell-command> [project flags]
   ghostex save-command --type browser --command-id <id> --name <name> --url <url> [project flags]
+  ghostex run-action <commandId> --project-id <id> [--scope project|global]
 
 Commands:
 {commands}
@@ -228,6 +229,7 @@ Examples:
   ghostex save-command --command-id dev --name \"Dev Server\" --command \"npm run dev\" --path /path/to/project
   ghostex save-command --type browser --command-id app --name \"Open App\" --url http://localhost:5173 --path /path/to/project
   ghostex run-action dev --project-id P1n8o
+  ghostex run-action docs --project-id P1n8o --scope global
 
 Behavior:
   save-command writes to the live gxserver project store and refreshes normal project state.
@@ -235,6 +237,10 @@ Behavior:
   Do not edit workspace-state.json or the Ghostex state database directly.
   Terminal and Browser quick actions are project customCommands, not agent buttons.
   Use run-action to execute them; run-command and click-button are renderer-only legacy paths.
+  save-command saves project actions only; Global Actions are made in Settings > Actions.
+  run-action looks the id up among the project's actions; --scope global looks it up among the
+  Global Actions instead and never falls back to the project's list. A Global Terminal action runs
+  as a session in the --project-id project, in that project's folder. Any other --scope value is an error.
 
 Inspect:
   ghostex state

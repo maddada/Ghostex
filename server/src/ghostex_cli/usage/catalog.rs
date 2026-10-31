@@ -266,11 +266,11 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "run-command <commandId>",
-            "Trigger a renderer command button; use run-action for project quick actions",
+            "Trigger a renderer command button; use run-action for project and Global quick actions",
         ),
         format_help_command(
             "click-button <agent|command> <id>",
-            "Trigger a renderer sidebar button; use run-action for project quick actions",
+            "Trigger a renderer sidebar button; use run-action for project and Global quick actions",
         ),
         format_help_command(
             "switch-project (--project-id|--path|--name) <value>",
@@ -362,8 +362,8 @@ pub fn usage() -> String {
             "Create or update a Browser quick action through gxserver",
         ),
         format_help_command(
-            "run-action <commandId> --project-id id",
-            "Run a Terminal action in a session or return a Browser action URL",
+            "run-action <commandId> --project-id id [--scope project|global]",
+            "Run a Terminal action in a session or return a Browser action URL; --scope global runs a Global Action in that project",
         ),
         format_help_command(
             "run-in-terminal --project-id id [--session-id id|--cwd path] [--paste] [--json] (--command text | -- command...)",
