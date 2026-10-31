@@ -20,10 +20,12 @@ use crate::app::helpers::workspace_tab_agent_icon_path;
 use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, div, img, px, rgb,
+    AnyElement, Bounds, Context, ElementId, HitboxBehavior, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
+    canvas, div, img, point, px, rgb, size,
 };
 use serde_json::{Value, json};
+use web_time::Instant;
 
 fn hue(p: &ChatAppearance, dark: u32, light: u32) -> Hsla {
     rgb(if p.light { light } else { dark }).into()
@@ -59,6 +61,106 @@ struct AgentCard<'a> {
 const CARD_PILL_PAD: f32 = 3.0;
 /// The width of a word space in the chat font, in ems.
 const WORD_SPACE_EM: f32 = 0.27;
+/// How strong a session name's dotted underline is at rest; under the pointer it is full strength.
+const NAME_UNDERLINE_REST: f32 = 0.3;
+/// One dot of that underline, and the distance from one dot to the next (unscaled).
+const NAME_UNDERLINE_DOT: f32 = 1.0;
+const NAME_UNDERLINE_PERIOD: f32 = 3.0;
+
+/// Where a session name's underline is in its fade: 0 at rest, 1 under the pointer. Kept per name
+/// in the window's element state, so a fade reversed halfway carries on from where it got to.
+#[derive(Clone, Copy, Default)]
+struct NameUnderlineFade {
+    hovered: bool,
+    from: f32,
+    started: Option<Instant>,
+}
+
+impl NameUnderlineFade {
+    fn at(&self, now: Instant) -> f32 {
+        let target = if self.hovered { 1.0 } else { 0.0 };
+        let Some(started) = self.started else {
+            return target;
+        };
+        let t = now.duration_since(started).as_secs_f32()
+            / crate::app::consts::SIDEBAR_DIVIDER_HOVER_FADE_DURATION.as_secs_f32();
+        self.from + (target - self.from) * gpui::ease_out_quint()(t.min(1.0))
+    }
+
+    /// Follows the pointer and answers the fade's value and whether it is still moving.
+    fn advance(&mut self, hovered: bool, now: Instant, reduce_motion: bool) -> (f32, bool) {
+        if hovered != self.hovered {
+            self.from = self.at(now);
+            self.hovered = hovered;
+            self.started = (!reduce_motion).then_some(now);
+        }
+        if self.started.is_some_and(|started| {
+            now.duration_since(started) >= crate::app::consts::SIDEBAR_DIVIDER_HOVER_FADE_DURATION
+        }) {
+            self.started = None;
+        }
+        (self.at(now), self.started.is_some())
+    }
+}
+
+/// The dotted line under a clickable session name, as a child of the element the click is on, which
+/// must have a `.hover()` style: that is what redraws the row when the pointer crosses it. `left`
+/// and `right` are how far the name sits inside that element.
+///
+/// CDXC:SessionChat 2026-10-31 DECISION: User, of the name on a "Message to <session>" card: "please make the name of the other session have faint dotted underline to indicate that it's clickable (the underline gets undimmed when i hover on it (animated fade between colors)". Only the underline's colour moves, over the app's hover fade (the resize rails' 180ms, `SIDEBAR_DIVIDER_HOVER_FADE_DURATION`), both ways; the name's own colour, size and place do not. A name that opens nothing (its session is gone, or the card has no session) has no underline.
+/// CDXC:SessionChat 2026-10-31 WHY: GPUI text underlines are solid or wavy (`UnderlineStyle`), so the dots are painted one by one on device pixels, at the height GPUI would put an underline. The fade runs in paint with the pointer read from a hit-test probe that takes no input, because a hover change only reaches a row's render through the row's cached view and the fade must not depend on anything else being redrawn.
+fn session_name_underline(
+    key: String,
+    left: f32,
+    right: f32,
+    color: Hsla,
+    scale: f32,
+) -> impl IntoElement {
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |bounds, hitbox, window, _| {
+            let hovered = hitbox.is_hovered(window);
+            let reduce_motion = crate::app::helpers::gpui_macos_reduce_motion_enabled();
+            let (fade, moving) =
+                window.with_global_id(ElementId::Name(key.into()), |id, window| {
+                    window.with_element_state::<NameUnderlineFade, _>(id, |fade, _| {
+                        let mut fade = fade.unwrap_or_default();
+                        (fade.advance(hovered, Instant::now(), reduce_motion), fade)
+                    })
+                });
+            let style = window.text_style();
+            let font_size = style.font_size.to_pixels(window.rem_size());
+            let system = window.text_system();
+            let font = system.resolve_font(&style.font());
+            let (ascent, descent) = (
+                system.ascent(font, font_size),
+                system.descent(font, font_size).abs(),
+            );
+            let device = window.scale_factor();
+            let snap = |value: f32| (value * device).round() / device;
+            let dot = snap(NAME_UNDERLINE_DOT * scale).max(1.0 / device);
+            let period = snap(NAME_UNDERLINE_PERIOD * scale).max(2.0 / device);
+            let y = snap(f32::from(
+                bounds.origin.y + gpui::underline_y_offset(bounds.size.height, ascent, descent),
+            ));
+            let color = color.opacity(NAME_UNDERLINE_REST + (1.0 - NAME_UNDERLINE_REST) * fade);
+            let end = f32::from(bounds.origin.x + bounds.size.width) - right;
+            let mut x = snap(f32::from(bounds.origin.x) + left);
+            while x + dot <= end {
+                window.paint_quad(gpui::fill(
+                    Bounds::new(point(px(x), px(y)), size(px(dot), px(dot))),
+                    color,
+                ));
+                x += period;
+            }
+            if moving {
+                window.request_animation_frame();
+            }
+        },
+    )
+    .absolute()
+    .inset_0()
+}
 
 impl NativeChatView {
     /// A message another agent sent this session.
@@ -356,6 +458,7 @@ impl NativeChatView {
                     } else {
                         div()
                             .id(SharedString::from(format!("{row_key}:name")))
+                            .relative()
                             .min_w_0()
                             .truncate()
                             .text_color(p.foreground)
@@ -369,11 +472,18 @@ impl NativeChatView {
                                 name.role(gpui::Role::Button)
                                     .aria_label("Go to session")
                                     .chat_cursor_pointer()
-                                    .hover(|style| style.underline())
+                                    .hover(|style| style)
                                     .on_click(cx.listener(move |this, _, _, cx| {
                                         cx.stop_propagation();
                                         this.invoke(command.clone(), cx)
                                     }))
+                                    .child(session_name_underline(
+                                        format!("{row_key}:underline"),
+                                        0.0,
+                                        0.0,
+                                        p.foreground,
+                                        s,
+                                    ))
                             })
                             .into_any_element()
                     };
@@ -394,7 +504,7 @@ impl NativeChatView {
 
     /// The other session's name on a message card (gx-chat-core `transcript/session_mentions.rs`):
     /// the session's title in the line's own type, a faint fill under the pointer (the decision
-    /// below). A pill the core marks `logo: false` sits beside the card's own agent tile and leaves
+    /// below) and a faint dotted underline (`session_name_underline`). A pill the core marks `logo: false` sits beside the card's own agent tile and leaves
     /// the logo to it (CDXC:SessionChat 2026-10-28 on `card_pill`). A click switches to the
     /// session; a session that is gone draws muted and opens nothing. Its own click never opens or
     /// closes the card.
@@ -424,8 +534,10 @@ impl NativeChatView {
         let hint = SharedString::from(text(pill, "title"));
         let hover = p.foreground.opacity(0.06);
         // CDXC:SessionChat 2026-10-29 DECISION: User, of the "Message from" card's pill (2026-10-28): "make this pill look like [the chat box's session pill] after removing the +", then of "Message to" followed by a wide gap and a smaller grey title: "make font size equal and let's not have this extra space there please. also no need to change the color of text of the session name like that". The card's session name (the header's, and each recipient row's on a "Message to N sessions" card) has no frame and takes the line's own size, weight and colour, so it reads as one title with the words before it, a word space away; it is still a pill: a faint fill under the pointer and a click switches to the session. The fill reaches past the name through a negative margin, so at rest it adds no space. Pills in a message's text and in the chat box keep their own look. The title's `+` went in gx-chat-core `pill_label`. Supersedes the reference colour of the 2026-10-28 decision.
+        let name_left = if shows_logo { 16.0 * s } else { 0.0 } + CARD_PILL_PAD * s;
         div()
             .id(SharedString::from(key.to_string()))
+            .relative()
             .flex()
             .items_center()
             .min_w_0()
@@ -465,6 +577,13 @@ impl NativeChatView {
                         cx.stop_propagation();
                         this.invoke(command.clone(), cx)
                     }))
+                    .child(session_name_underline(
+                        format!("{key}:underline"),
+                        name_left,
+                        CARD_PILL_PAD * s,
+                        p.foreground,
+                        s,
+                    ))
             })
             .when(missing, |pill| {
                 pill.on_click(|_, _, cx| cx.stop_propagation())
