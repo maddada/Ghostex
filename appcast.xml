@@ -8,6 +8,27 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>10.42.1</title>
+            <pubDate>Sat, 31 Oct 2026 23:11:13 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.42.1</sparkle:fullReleaseNotesLink>
+            <sparkle:version>104201</sparkle:version>
+            <sparkle:shortVersionString>10.42.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.42.1
+
+## 10.42.1 - 2026-11-01
+
+**Ghostex 10.42.1 is out.** Larger pasted images work in chat, and answers from forms and pages reach a busy agent sooner.
+
+### 💬 Chat
+
+- **Paste images up to 32 MiB on the computer and web.** BMP and TIFF images are sent as PNG, very large pictures are reduced when needed, and the chat box shows the image size and limit if one still cannot fit. OpenCode reduces large images further when sending them.
+- **Answers from question forms and chat pages send like normal messages,** reaching a busy agent after its current tool call when supported, on the computer and phone. Turn on the Advanced setting **Wait for turn end before sending form answers** to keep the previous wait.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.42.1/ghostex-10.42.1-arm64.dmg" length="50247840" type="application/octet-stream" sparkle:edSignature="7zkLZ2RiF/1y9yZi1F3Gb8d60/ZBWKse7c+nMAjWnpl0C0Yr1npD6DKDTxeu5tU/IsYR2nt2cBHoSxjvthYaBA=="/>
+        </item>
+        <item>
             <title>10.42.0</title>
             <pubDate>Sat, 31 Oct 2026 21:36:25 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.42.0</sparkle:fullReleaseNotesLink>
@@ -284,70 +305,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.38.1/ghostex-10.38.1-arm64.dmg" length="48942994" type="application/octet-stream" sparkle:edSignature="GrtS/DUbL7HSJJrHDGPTfUUgcOWtQunM35lJvjOCVYBW/s1SdnSx7+jAY+pTV5JdsHP2dkIpZSlqRL+9yjY2AA=="/>
         </item>
         <item>
-            <title>10.38.0</title>
-            <pubDate>Tue, 27 Oct 2026 18:21:20 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.38.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>103800</sparkle:version>
-            <sparkle:shortVersionString>10.38.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.38.0
-
-## 10.38.0 - 2026-10-27
-
-**Ghostex 10.38.0 is out.** Codex sessions get a Mode button, the chat's ? pill becomes Chat Resources with every page, form and chart, session links stop picking up unrelated tickets and take links you add by hand, approval cards show one hotkey per row, Claude cloud sessions open as a chat, and Linux gets signed, self-updating AppImages and a working mouse wheel in the Browser.
-
-### 💬 Chat
-
-- **Codex sessions get a Mode button like Claude's** that switches the running session between Ask for approval, Approve for me, Full Access and Read Only, on the computer and the phone.
-- **The ? pill opens Chat Resources:** every page, question form and chart in the chat, with a dropdown for All, Html, Q&A or Charts, and a row jumps to its card. A form or page can be put off For later, so it stops counting as unanswered.
-- **Summary mode keeps messages with pages, forms and charts open,** and folds other agents' messages and thread reports into Agent reply.
-- **Approval and dialog cards show each row's number as the only hotkey hint,** without the extra buttons under the rows, and Show terminal output opens the lines above the prompt on the card itself. On the phone, a dialog with no No row keeps Cancel.
-- **A tool call reads as done only once it ran:** one waiting for approval, declined or failed reads "Create", "Run" or "Edit".
-- **A code block's Wrap, Run and Copy buttons are icon-only, with tooltips.**
-- **Copy Report states the same input-box verdict as the Terminal View light above it.**
-
-### 🔗 Session links
-
-- **Only your own words link a Linear ticket:** IDs in thread reports, other agents' messages, tool output or the agent's replies no longer link unrelated tickets. Ones the session's agent mentions show under Suggested, and an orchestrator's own replies suggest nothing.
-- **A suggestion's × dismisses it for good, and + adds a PR, issue or Linear ticket by hand:** type `SPX-123`, `#123` or paste a link.
-- **Suggested shows the 5 newest, with Show all for the rest.**
-- **Remote sessions show their links in the sidebar card and the top bar.** The sidebar shows a badge by default, on the title's line and gray once every link is merged, and Settings > General > Chat > Show session links in the chat's top bar can hide them.
-
-### ☁️ Claude cloud
-
-- **A Claude cloud session opens as an empty chat:** pick its account, send the first message, and its claude.ai page appears in the chat pane. A Cloud button in the header switches to the terminal, opens or copies the claude.ai link, and starts a copy on another account.
-
-### 🧭 Views and pages
-
-- **Changes: one button on the right of the header picks Whole branch or Uncommitted only,** and picking a file unfolds it and centres it.
-- **Settings > Extensions opens the extension catalog from the sidebar,** its pages fold under it, and About moves up with the top rows.
-- **Terminal extensions like Lazygit are easy to open:** an Open row in Quick Access, pinned on install, and Install with Homebrew when the command is missing.
-- **Inline HTML pages get a centred design that works in dark and light,** with a Dark / Light switch, and their tooltips look like the app's, with your platform's shortcut keys.
-
-### 🐧 Linux
-
-- **The mouse wheel scrolls Browser pages under xfwm4 and other window managers that grab mouse buttons,** and touchpads stay pixel-precise (#338).
-- **A leftover libcef.so beside the app no longer crashes Ghostex at launch:** it's skipped for the downloaded CEF, and a mismatched CEF shows an error instead (#339).
-- **AppImages are signed and carry update information,** so AppImage managers such as AppManager show the update link and web page and can update Ghostex. ghostex.dev's Linux downloads add Install with AppManager.
-
-### 🌐 Remote computers
-
-- **Open Folder on a remote project opens it in Files,** and Open In opens VS Code-family editors and Zed over SSH.
-
-### 📱 On the phone
-
-- **The Sessions screen is drawn like the desktop sidebar,** with Voice, Search, Web and Machines in a bottom bar.
-
-### 🩹 Fixes and polish
-
-- **A tool whose version check never answers no longer stalls Settings > Integrations:** it's stopped after 5 seconds and the rest of the list shows (#336).
-- **Restoring a Space or workspace keeps sleeping sessions asleep,** thanks to @suatkocar.
-- **Anonymous usage stats (Settings' existing opt-out) now include which built-in and official extensions are on and which views are opened.**
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.38.0/ghostex-10.38.0-arm64.dmg" length="48953234" type="application/octet-stream" sparkle:edSignature="JHC5Gr5MLAxCqkfUold5KojSKkdw44QQjXPoEz5RRhrwvlUPnOKujGedEcF51iwuU/k4AJr50ov04ZGhnk7wCQ=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -359,6 +316,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: Qy6SXwPPu1dusPOwstibGdMWaYWJQLpZ7iCtNEPjG2YtRA+zc5V8hcWG1OjeEsHPASVmVly3py/OKX3rTkrWAg==
-length: 33938
+edSignature: 173+Q3NdDNYlUzSLBwIhc1dhWIrZ4KN4U+hScbkoNDC3w+AIcUkLknkzBHEfuQBlhH0dhfHSsmmwKjMLMEweCQ==
+length: 30165
 -->
