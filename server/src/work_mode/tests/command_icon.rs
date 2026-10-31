@@ -34,6 +34,21 @@ fn an_icon_is_rebuilt_from_the_allowlist() {
             r#"<title>Lific &amp; co</title><path d="M2 2h20v20H2z" fill="red"/>"#,
             r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>Lific &amp; co</title><path d="M2 2h20v20H2z" fill="red"></path></svg>"#,
         ),
+        (
+            "a quote in a value stays inside the attribute",
+            r#"<path d="M2 2h20v20H2z&quot; onload=&quot;x" fill="red"/>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2h20v20H2z&quot; onload=&quot;x" fill="red"></path></svg>"#,
+        ),
+        (
+            "markup in a title stays text",
+            r#"<title>&lt;script&gt;alert(1)&lt;/script&gt;</title><path d="M2 2h20v20H2z"/>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>&lt;script&gt;alert(1)&lt;/script&gt;</title><path d="M2 2h20v20H2z"></path></svg>"#,
+        ),
+        (
+            "a rejected element inside a dropped one is dropped with it",
+            r#"<metadata><script>alert(1)</script></metadata><path d="M2 2h20v20H2z"/>"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 2h20v20H2z"></path></svg>"#,
+        ),
     ] {
         assert_eq!(sanitize_icon(&svg(body)).as_deref(), Ok(kept), "{name}");
     }
@@ -82,6 +97,22 @@ fn an_icon_that_could_reach_outside_itself_is_dropped() {
         ("nested too deep", svg(&format!("{}{SQUARE}{}", "<g>".repeat(17), "</g>".repeat(17))), "it nests elements deeper than 16"),
         ("no viewBox", r#"<svg xmlns="http://www.w3.org/2000/svg"><path d="M2 2h20v20H2z"/></svg>"#.to_string(), "it has no usable viewBox"),
         ("an empty viewBox", r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 24"><path d="M2 2h20v20H2z"/></svg>"#.to_string(), "it has no usable viewBox"),
+        ("a viewBox with more than numbers", r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24 junk"><path d="M2 2h20v20H2z"/></svg>"#.to_string(), "it has no usable viewBox"),
+        (
+            "an outside clip path",
+            svg(r#"<path d="M2 2h20v20H2z" clip-path="url(https://x#a)"/>"#),
+            "its clip-path is \"url(https://x#a)\", which an icon can't use",
+        ),
+        (
+            "an id that isn't a name",
+            svg(r#"<path id="a b" d="M2 2h20v20H2z"/>"#),
+            "its id is \"a b\", which an icon can't use",
+        ),
+        (
+            "a long refused value quoted short",
+            svg(&format!(r#"<path d="M2 2h20v20H2z" fill="expression({})"/>"#, "a".repeat(5000))),
+            "its fill is \"expression(aaaaaaaaaaaaaaaaaaaaaaaaaaaaa…\", which an icon can't use",
+        ),
         ("not SVG", r#"<html viewBox="0 0 24 24"/>"#.to_string(), "its root element isn't an SVG <svg>"),
         ("no namespace", r#"<svg viewBox="0 0 24 24"><path d="M2 2h20v20H2z"/></svg>"#.to_string(), "its root element isn't an SVG <svg>"),
         ("nothing drawn", svg("<g><path d=\"\"/></g>"), "it draws nothing"),

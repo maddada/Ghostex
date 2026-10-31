@@ -2,11 +2,13 @@
 //! client sees it.
 //!
 //! CDXC:WorkMode 2026-10-31 WHY:
-//! Clients draw the icon as an SVG data URL, and an SVG can carry scripts, external fetches,
-//! entity bombs and CSS. So the text is parsed (no DTD), every element and attribute outside a
-//! small drawing allowlist is dropped, anything that could reach outside the icon fails it
-//! outright, and what is left is written out again rather than passed through. `currentColor`
-//! stays allowed so an icon can follow the client's light or dark text color.
+//! Clients draw the icon, and an SVG can carry scripts, external fetches, entity bombs and CSS.
+//! So the text is parsed (no DTD), every element and attribute outside a small drawing
+//! allowlist is dropped with everything inside it, anything that could reach outside the icon
+//! fails it where it would be drawn, and what is left is written out again rather than passed
+//! through. `currentColor` stays allowed so an icon can follow the client's light or dark text
+//! color: an SVG loaded as an image (a data URL) inherits nothing, so a client draws the icon
+//! inline, or puts its own text color in place of `currentColor` before it encodes the icon.
 
 /// The icon text a command may send.
 const MAX_ICON_BYTES: usize = 16 * 1024;
@@ -14,6 +16,9 @@ const MAX_ELEMENTS: usize = 500;
 const MAX_DEPTH: usize = 16;
 
 const SVG_NAMESPACE: &str = "http://www.w3.org/2000/svg";
+
+/// How much of a refused attribute value an error quotes: Settings shows it.
+const MAX_SHOWN_VALUE_CHARS: usize = 40;
 
 /// Elements kept (with their allowed attributes); any other SVG element is dropped with
 /// everything inside it.
@@ -35,8 +40,9 @@ const ELEMENTS: [&str; 15] = [
     "title",
 ];
 
-/// Elements that fail the icon wherever they appear: they run code, load something or restyle
-/// the page around the icon.
+/// Elements that fail the icon where it would draw them: they run code, load something or
+/// restyle the page around the icon. Inside an element that is dropped, one is dropped with it,
+/// since nothing of it is written.
 const REJECTED_ELEMENTS: [&str; 7] = [
     "script",
     "foreignObject",
@@ -191,7 +197,8 @@ fn write_attributes(node: roxmltree::Node, out: &mut String, skip: &[&str]) -> R
         };
         if !allowed {
             return Err(format!(
-                "its {name} is \"{value}\", which an icon can't use"
+                "its {name} is \"{}\", which an icon can't use",
+                crate::work_mode::cut(value, MAX_SHOWN_VALUE_CHARS)
             ));
         }
         out.push_str(&format!(" {name}=\"{}\"", escape(value)));
@@ -199,12 +206,16 @@ fn write_attributes(node: roxmltree::Node, out: &mut String, skip: &[&str]) -> R
     Ok(())
 }
 
+/// Four finite numbers, the last two positive, and nothing else.
 fn valid_view_box(view_box: &str) -> bool {
-    let numbers: Vec<f64> = view_box
+    let Ok(numbers) = view_box
         .split(|c: char| c.is_ascii_whitespace() || c == ',')
         .filter(|part| !part.is_empty())
-        .map_while(|part| part.parse().ok())
-        .collect();
+        .map(str::parse::<f64>)
+        .collect::<Result<Vec<f64>, _>>()
+    else {
+        return false;
+    };
     numbers.len() == 4
         && numbers.iter().all(|number| number.is_finite())
         && numbers[2] > 0.0

@@ -649,7 +649,8 @@ fn team_flow_facts(
     }
 }
 
-fn cut(text: &str, limit: usize) -> String {
+/// `text` cut to `limit` characters, with an ellipsis when it was longer.
+pub(crate) fn cut(text: &str, limit: usize) -> String {
     match text.char_indices().nth(limit) {
         Some((index, _)) => format!("{}…", &text[..index]),
         None => text.to_string(),
