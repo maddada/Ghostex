@@ -115,16 +115,79 @@ fn gone_soon(pid: i32) -> bool {
     false
 }
 
+/// The processes a test's command started, killed if the test fails, so a test that catches a
+/// process left running doesn't leave it running for the tests after it. The command writes their
+/// pids to the guard's file in one step (`write_pids`); reading it never panics. A pid the test
+/// has seen exit is taken off (`gone`), so the guard doesn't kill whatever reuses it later.
+struct Leftovers {
+    file: std::path::PathBuf,
+    gone: Vec<i32>,
+}
+
+impl Leftovers {
+    fn new(dir: &std::path::Path) -> Self {
+        Self {
+            file: dir.join("pids"),
+            gone: Vec::new(),
+        }
+    }
+
+    /// Shell that writes `pids` to the file whole: a reader never sees a number half written.
+    fn write_pids(&self, pids: &str) -> String {
+        let file = self.file.display();
+        format!("echo {pids} > '{file}.tmp' && mv '{file}.tmp' '{file}'")
+    }
+
+    /// The pids written so far: none for a missing file, without a token that isn't a pid.
+    fn pids(&self) -> Vec<i32> {
+        std::fs::read_to_string(&self.file)
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter_map(|pid| pid.parse().ok())
+            .filter(|pid| *pid > 0)
+            .collect()
+    }
+
+    fn gone(&mut self, pid: i32) {
+        self.gone.push(pid);
+    }
+}
+
+impl Drop for Leftovers {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            return;
+        }
+        for pid in self.pids() {
+            if !self.gone.contains(&pid) && unsafe { libc::kill(pid, 0) } == 0 {
+                unsafe {
+                    libc::kill(pid, libc::SIGKILL);
+                }
+            }
+        }
+    }
+}
+
+/// Checks each pid the command wrote is gone, taking it off the guard once it is.
+fn assert_all_gone(leftovers: &mut Leftovers, what: &str) {
+    let pids = leftovers.pids();
+    assert!(!pids.is_empty(), "the command never wrote its pids");
+    for pid in pids {
+        assert!(gone_soon(pid), "{what} {pid} is still running");
+        leftovers.gone(pid);
+    }
+}
+
 #[test]
 fn a_child_left_holding_the_input_is_ended_at_the_deadline() {
     let dir = tempfile::tempdir().expect("tempdir");
-    let pid_file = dir.path().join("pid");
+    let mut leftovers = Leftovers::new(dir.path());
     // More input than a pipe holds, so the write waits on the child that never reads it.
     let input = vec![b'x'; MIB];
     let output = run_bounded(
         shell(&format!(
-            "sleep 600 <&0 >/dev/null 2>&1 &\necho $! > '{}'\nexit 0",
-            pid_file.display()
+            "sleep 600 <&0 >/dev/null 2>&1 &\n{}\nexit 0",
+            leftovers.write_pids("$!")
         )),
         RunLimits {
             timeout: Duration::from_secs(2),
@@ -133,13 +196,46 @@ fn a_child_left_holding_the_input_is_ended_at_the_deadline() {
     )
     .expect("the command exited, so it finished");
     assert!(output.status.success());
-    let pid: i32 = std::fs::read_to_string(&pid_file)
-        .expect("pid")
-        .trim()
-        .parse()
-        .expect("pid");
-    assert!(
-        gone_soon(pid),
-        "the child holding the input {pid} is still running"
+    assert_all_gone(&mut leftovers, "the child holding the input");
+}
+
+#[test]
+fn an_answer_still_held_open_at_the_deadline_fails_instead_of_passing_cut_short() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut leftovers = Leftovers::new(dir.path());
+    // It prints the start of an answer and exits, while a child it left behind keeps stdout open.
+    let answer = run_bounded(
+        shell(&format!(
+            "printf '{{\"a\":'\nsleep 600 &\n{}\nexit 0",
+            leftovers.write_pids("$!")
+        )),
+        RunLimits {
+            timeout: Duration::from_secs(2),
+            ..limits(None, Keep::AtMost(MIB), Keep::Tail(8192))
+        },
     );
+    assert!(
+        matches!(answer, Err(Unfinished::TimedOut(limit)) if limit == Duration::from_secs(2)),
+        "{answer:?}"
+    );
+    assert_all_gone(&mut leftovers, "the child holding the answer");
+}
+
+#[test]
+fn passing_the_cap_ends_the_whole_tree() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut leftovers = Leftovers::new(dir.path());
+    // It ignores the closed pipe, so only ending the tree stops it and the child it started.
+    let answer = run_bounded(
+        shell(&format!(
+            "trap '' PIPE\nsleep 600 >/dev/null 2>&1 &\n{}\nwhile :; do echo 0123456789abcdef; done 2>/dev/null",
+            leftovers.write_pids("\"$$ $!\"")
+        )),
+        limits(None, Keep::AtMost(64 * 1024), Keep::Tail(8192)),
+    );
+    assert!(
+        matches!(answer, Err(Unfinished::TooLarge(cap)) if cap == 64 * 1024),
+        "{answer:?}"
+    );
+    assert_all_gone(&mut leftovers, "the command or its child");
 }

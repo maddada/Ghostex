@@ -24,8 +24,10 @@ pub(crate) enum Keep {
     Head(usize),
     /// The last `n` bytes.
     Tail(usize),
-    /// Up to `n` bytes. One more ends the command with everything it started and fails the run
-    /// with `Unfinished::TooLarge`, so a cut answer can never pass for a whole one.
+    /// Up to `n` bytes, read to its end. One more byte fails the run with `Unfinished::TooLarge`,
+    /// and a stream still open at the time limit (a child the command left behind holds it)
+    /// fails it with `Unfinished::TimedOut`; either ends the command with everything it started.
+    /// So a cut answer can never pass for a whole one.
     AtMost(usize),
 }
 
@@ -53,7 +55,8 @@ pub(crate) struct RunOutput {
 pub(crate) enum Unfinished {
     /// It could not start at all (missing, not executable).
     Start(std::io::Error),
-    /// It ran past its time limit and was stopped with everything it started.
+    /// It ran past its time limit, or a `Keep::AtMost` stream was still open then, and was
+    /// stopped with everything it started.
     TimedOut(Duration),
     /// A stream kept with `Keep::AtMost(n)` passed `n` bytes; it was stopped with everything it
     /// started.
@@ -63,7 +66,8 @@ pub(crate) enum Unfinished {
 /// Runs `command` within `limits.timeout`, then stops it and every process it started. The
 /// command leads its own process tree (`ProcessTree`), so a wrapper's children go too. A child
 /// the command left behind holding its output open gets what is left of the time limit, then is
-/// ended (one still holding its input too); what was printed until then is kept.
+/// ended (one still holding its input too); what was printed until then is kept, except from a
+/// `Keep::AtMost` stream, whose answer is then cut short and fails the run.
 pub(crate) fn run_bounded(
     mut command: Command,
     limits: RunLimits,
@@ -109,7 +113,11 @@ pub(crate) fn run_bounded(
     // the time limit, then the tree is ended so no reader or writer thread is left waiting.
     while !(stdout.finished() && stderr.finished() && writer_finished()) {
         if overran().is_some() || Instant::now() >= deadline {
+            let cut_short = stdout.cut_short() || stderr.cut_short();
             tree.end();
+            if overran().is_none() && cut_short {
+                return Err(Unfinished::TimedOut(limits.timeout));
+            }
             break;
         }
         std::thread::sleep(Duration::from_millis(20));
@@ -185,6 +193,12 @@ impl Collected {
 
     fn finished(&self) -> bool {
         self.reader.is_finished()
+    }
+
+    /// Whether it is kept whole (`Keep::AtMost`) and has not reached its end, so what it holds
+    /// may be only the start of an answer.
+    fn cut_short(&self) -> bool {
+        matches!(self.keep, Keep::AtMost(_)) && !self.finished()
     }
 
     fn bytes(&self) -> Vec<u8> {
