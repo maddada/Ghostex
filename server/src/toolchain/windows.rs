@@ -4,6 +4,9 @@ use super::{ToolCandidate, ToolCapabilityStatus};
 
 const RECOVERY_GUIDANCE: &str = "Check Windows Security > Virus & threat protection > Protection history, or your antivirus's quarantine, for wmx.exe. Review any detection with the Ghostex maintainers before restoring the file. If no security product blocked it, repair or reinstall Ghostex from the official release.";
 
+/// Reports wmx.exe availability from its readable executable header, preserving
+/// OS errors and recovery guidance when a candidate is missing or blocked.
+///
 /// CDXC:PlatformSupport 2026-10-31 WHY:
 /// Defender removed the packaged wmx.exe while gxserver stayed healthy (GitHub #367). Native Windows uses wmx, so sending users to install zmx cannot repair it. Metadata can still succeed for a file whose contents Defender blocks; read its header without launching a helper on every health request.
 pub(super) fn resolve_wmx_status(candidates: &[ToolCandidate]) -> ToolCapabilityStatus {

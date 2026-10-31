@@ -95,6 +95,9 @@ fn require_bundled_tool(tool: &str) -> Result<GxserverResolvedTool, String> {
     Err(status.message)
 }
 
+/// Resolves a bundled session tool for health reporting and session operations.
+/// Native Windows checks wmx.exe readability; other platforms inspect their
+/// pinned executable candidates. All platforms retain the zmx wire identifiers.
 fn resolve_bundled_tool_status(tool: &str) -> ToolCapabilityStatus {
     let candidates = bundled_tool_candidates(tool);
     #[cfg(windows)]
