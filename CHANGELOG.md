@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 10.42.1 - 2026-11-01
+
+**Ghostex 10.42.1 is out.** Larger pasted images work in chat, and answers from forms and pages reach a busy agent sooner.
+
+### 💬 Chat
+
+- **Paste images up to 32 MiB on the computer and web.** BMP and TIFF images are sent as PNG, very large pictures are reduced when needed, and the chat box shows the image size and limit if one still cannot fit. OpenCode reduces large images further when sending them.
+- **Answers from question forms and chat pages send like normal messages,** reaching a busy agent after its current tool call when supported, on the computer and phone. Turn on the Advanced setting **Wait for turn end before sending form answers** to keep the previous wait.
+
 ## 10.42.0 - 2026-11-01
 
 **Ghostex 10.42.0 is out.** The Unified sidebar is easier to filter and organize, chats show failed sends where they happened, sessions have shareable links, and the new Interface page lets you preview and apply your fonts. Update Ghostex on remote computers too so session links and handoff work across them.
