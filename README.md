@@ -19,25 +19,25 @@
 <h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a>  &nbsp;·&nbsp; <a href="https://www.youtube.com/watch?v=cJgogrS4mao">Watch the Demo</a></h3>
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/74906504-c9b1-42e8-aa06-04f2f0439045">
+  <a href="media/readme/gx-hero-1.webp">
     <picture>
-      <img width="960" src="https://github.com/user-attachments/assets/74906504-c9b1-42e8-aa06-04f2f0439045" />
+      <img width="960" src="media/readme/gx-hero-1.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/d4914393-4e5c-4fbf-b5b3-9d3ab4dbcc9d">
+  <a href="media/readme/gx-hero-2.webp">
     <picture>
-          <img width="960" src="https://github.com/user-attachments/assets/d4914393-4e5c-4fbf-b5b3-9d3ab4dbcc9d" />
+          <img width="960" src="media/readme/gx-hero-2.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/user-attachments/assets/fc9b2632-51dd-444e-a113-6936e498fa06">
+  <a href="media/readme/gx-hero-3.webp">
     <picture>
-      <img width="960" src="https://github.com/user-attachments/assets/fc9b2632-51dd-444e-a113-6936e498fa06" />
+      <img width="960" src="media/readme/gx-hero-3.webp" />
     </picture>
   </a>
 </p>
