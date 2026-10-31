@@ -224,7 +224,7 @@ fn os_integration_status(state: &str) -> Value {
             { "target": "editor", "extension": "ts", "reason": "launchServicesRejected" },
             { "target": "editor", "extension": "md", "reason": "launchServicesRejected" },
             { "target": "scriptRunner", "extension": "sh", "reason": "contentTypeUnavailable" },
-            { "target": "terminalLinks", "scheme": "ghostex", "reason": "launchServicesRejected" },
+            { "target": "ghostexLinks", "scheme": "ghostex", "reason": "launchServicesRejected" },
             { "target": "bundleRegistration", "operation": "registerBundle", "reason": "bundleRegistrationFailed" },
             { "target": "editor", "extension": "rs", "reason": "launchServicesRejected" },
             { "target": "editor", "extension": "py", "reason": "launchServicesRejected" }

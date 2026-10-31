@@ -95,6 +95,13 @@ pub(crate) fn session_mention_text(row: &SessionRow, group: &DetailsGroup<'_>) -
     ))
 }
 
+/// What Copy Link copies: the https page that opens this session in Ghostex from anywhere a link
+/// can be pasted; `None` without a ref.
+pub(crate) fn session_link_text(row: &SessionRow, group: &DetailsGroup<'_>) -> Option<String> {
+    let global_ref = session_global_ref(row, group)?;
+    Some(ghostex_gx_protocol::session_page_url(&global_ref))
+}
+
 /// `pickFirstNonEmpty`: the first value with non-whitespace in it, trimmed, else `Session`.
 fn first_non_empty(values: &[Option<&str>]) -> String {
     for value in values.iter().flatten() {

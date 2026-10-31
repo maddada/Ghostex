@@ -1017,6 +1017,10 @@ impl Drop for GhostexGpuiApp {
             unregister_gpui_sparkle_updater_callback_target();
             unregister_gpui_os_integration_callback_target();
         }
+        #[cfg(not(target_os = "macos"))]
+        if lead {
+            unregister_gpui_os_integration_callback_target();
+        }
         #[cfg(target_os = "macos")]
         unregister_gpui_first_responder_callback_target(self.parent_ns_view);
         #[cfg(target_os = "macos")]

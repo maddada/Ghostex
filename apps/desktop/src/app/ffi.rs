@@ -95,11 +95,14 @@ thread_local! {
     pub(crate) static GPUI_ACCESSIBILITY_DISPLAY_OPTIONS_CALLBACK_TARGET: RefCell<Option<GpuiAccessibilityDisplayOptionsCallbackTarget>> = const { RefCell::new(None) };
     pub(crate) static GPUI_WORKSPACE_POWER_EVENTS_CALLBACK_TARGET: RefCell<Option<GpuiWorkspacePowerEventsCallbackTarget>> = const { RefCell::new(None) };
     pub(crate) static GPUI_SPARKLE_UPDATER_CALLBACK_TARGET: RefCell<Option<GpuiSparkleUpdaterCallbackTarget>> = const { RefCell::new(None) };
-    pub(crate) static GPUI_OS_INTEGRATION_CALLBACK_TARGET: RefCell<Option<GpuiOsIntegrationCallbackTarget>> = const { RefCell::new(None) };
     pub(crate) static GPUI_FIRST_RESPONDER_CALLBACK_TARGETS: RefCell<HashMap<usize, GpuiFirstResponderCallbackTarget>> = RefCell::new(HashMap::new());
     pub(crate) static GPUI_KEYBOARD_ROUTER_TARGETS: RefCell<HashMap<usize, GpuiKeyboardRouterCallbackTarget>> = RefCell::new(HashMap::new());
     pub(crate) static GPUI_KEYBOARD_PRESSED_WINDOW_OWNERS: RefCell<HashMap<u32, usize>> = RefCell::new(HashMap::new());
     pub(crate) static GPUI_FIRST_RESPONDER_PROGRAMMATIC_DEPTHS: RefCell<HashMap<usize, u32>> = RefCell::new(HashMap::new());
+}
+
+thread_local! {
+    pub(crate) static GPUI_OS_INTEGRATION_CALLBACK_TARGET: RefCell<Option<GpuiOsIntegrationCallbackTarget>> = const { RefCell::new(None) };
     // Launch-time ghostex:// / file-open URLs can arrive before the app entity
     // exists (macOS `pendingOSIntegrationCommands` parity); buffer them until
     // the callback target registers.
@@ -148,7 +151,6 @@ pub(crate) struct GpuiSparkleUpdaterCallbackTarget {
     pub(crate) async_app: gpui::AsyncApp,
 }
 
-#[cfg(target_os = "macos")]
 #[derive(Clone)]
 pub(crate) struct GpuiOsIntegrationCallbackTarget {
     pub(crate) app: gpui::WeakEntity<GhostexGpuiApp>,

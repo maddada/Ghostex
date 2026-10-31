@@ -142,6 +142,7 @@ Terminal=false
 Categories=Development;TerminalEmulator;
 StartupNotify=true
 StartupWMClass=ghostex
+MimeType=x-scheme-handler/ghostex;
 EOF
 
 printf 'Staged Linux %s package root in %s\n' "$LINUX_ARCH" "$PACKAGE_ROOT"

@@ -102,8 +102,8 @@ impl GhostexGpuiApp {
     /// (`application(_:open:)` → `handleOSIntegrationURL` +
     /// `dispatchOSIntegrationFileOpenPaths`, AppDelegate.swift). URLs arrive
     /// through gpui's `application:openURLs:` delegate (`cx.on_open_urls`):
-    /// `ghostex://terminal|open|edit` actions plus Finder Open-With file://
-    /// opens. `.command/.tool/.sh` files never execute without the
+    /// `ghostex://open|edit|session` actions plus Finder Open-With
+    /// file:// opens. `.command/.tool/.sh` files never execute without the
     /// Run/Edit/Cancel consent dialog.
     #[cfg(target_os = "macos")]
     pub(crate) fn receive_gpui_os_integration_urls(
@@ -114,6 +114,9 @@ impl GhostexGpuiApp {
     ) {
         let mut file_paths = Vec::new();
         for raw_url in urls {
+            if self.receive_gpui_link_on_every_platform(raw_url.trim(), window, cx) {
+                continue;
+            }
             let Ok(parsed) = gpui::http_client::Url::parse(raw_url.trim()) else {
                 continue;
             };
@@ -132,6 +135,43 @@ impl GhostexGpuiApp {
         }
     }
 
+    /// The links every platform answers, read as the OS gave them: parsing would normalize what the
+    /// session route refuses. Returns whether it was one of them.
+    fn receive_gpui_link_on_every_platform(
+        &mut self,
+        link: &str,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) -> bool {
+        if ghostex_gx_protocol::is_session_link_route(link) {
+            self.open_session_deep_link(link, window, cx);
+            return true;
+        }
+        if ghostex_gx_protocol::is_terminal_link_route(link) {
+            cx.activate(true);
+            window.activate_window();
+            let notice = ghostex_gx_core::terminal_link_gone_notice();
+            self.dispatch_gpui_app_modal_toast("warning", &notice.title, &notice.description, cx);
+            return true;
+        }
+        false
+    }
+
+    /// Windows and Linux answer those links and nothing else (session_link_handoff.rs):
+    /// `ghostex://open` registers a project, which a web page must not reach on the platforms that
+    /// never had that route.
+    #[cfg(not(target_os = "macos"))]
+    pub(crate) fn receive_gpui_os_integration_urls(
+        &mut self,
+        urls: Vec<String>,
+        window: &mut Window,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        for raw_url in urls {
+            self.receive_gpui_link_on_every_platform(raw_url.trim(), window, cx);
+        }
+    }
+
     #[cfg(target_os = "macos")]
     pub(crate) fn handle_gpui_os_integration_ghostex_url(
         &mut self,
@@ -147,15 +187,6 @@ impl GhostexGpuiApp {
                 .find(|(key, _)| key == name)
                 .map(|(_, value)| value.into_owned())
         };
-        if action == "terminal" {
-            self.open_gpui_os_integration_quick_terminal(
-                query_value("command"),
-                query_value("cwd"),
-                query_value("title"),
-                cx,
-            );
-            return;
-        }
         if action == "open" || action == "edit" {
             // macOS accepts both `path` and legacy `file`; line/column are
             // parsed by macOS but GPUI's Source URL gate has no file-target
@@ -247,8 +278,7 @@ impl GhostexGpuiApp {
         .detach();
     }
 
-    /// `ghostex://terminal?command&cwd&title` → a terminal session in the
-    /// project registered at cwd. macOS creates a client-side projectless
+    /// A script's Run: a terminal session in the project registered at cwd. macOS creates a client-side projectless
     /// Quick project; GPUI's sidebar is daemon-derived, so the runtime
     /// registers/reuses the daemon project for that folder instead (delta
     /// recorded in deferred-out-of-scope.md).

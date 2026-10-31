@@ -16,6 +16,9 @@ mod windows_cli_link;
 #[cfg(target_os = "windows")]
 #[path = "../windows_updater.rs"]
 mod windows_updater;
+#[cfg(target_os = "windows")]
+#[path = "../windows_url_scheme.rs"]
+mod windows_url_scheme;
 
 #[cfg(target_os = "linux")]
 #[path = "../cef_component_window.rs"]

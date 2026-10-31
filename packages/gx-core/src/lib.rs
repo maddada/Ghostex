@@ -29,7 +29,6 @@ pub mod git_menu;
 mod handoff_fixture_tests;
 pub mod handoff_prefs;
 pub mod handoff_target;
-pub mod session_handoff;
 pub mod hud;
 pub mod indicators;
 mod keys;
@@ -45,6 +44,8 @@ mod refetch;
 mod renderer_commands;
 mod selectors;
 mod session_create;
+mod session_deep_link;
+pub mod session_handoff;
 mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_command_run;
@@ -138,6 +139,7 @@ pub use crate::selectors::{
     QUICK_AUTOMATIONS_PROJECT_ID, TAB_SESSION_TITLE_MAX_UTF16,
 };
 pub use crate::session_create::*;
+pub use crate::session_deep_link::*;
 pub use crate::sidebar_accounts::{
     account_headline_windows, account_session_working, account_usage_detail, account_usage_label,
     agent_accounts_http_answer, group_accounts_target, is_five_hour_window, is_weekly_window,
@@ -195,12 +197,11 @@ pub use crate::sidebar_command_run::{
     SIDEBAR_COMMAND_ACTION_MESSAGE_VERSION,
 };
 pub use crate::sidebar_drag::{
-    owns_order_write_message, owns_project_move_command, owns_project_order_message,
-    check_session_handoff, owns_session_drop_command, owns_session_move_command,
-    plan_added_project_placement,
-    plan_added_project_space_membership, plan_order_write, plan_project_move,
-    plan_project_order_write, plan_section_move, plan_session_drop, plan_session_move,
-    project_body_drop_command, project_drop_command, project_drop_landing,
+    check_session_handoff, owns_order_write_message, owns_project_move_command,
+    owns_project_order_message, owns_session_drop_command, owns_session_move_command,
+    plan_added_project_placement, plan_added_project_space_membership, plan_order_write,
+    plan_project_move, plan_project_order_write, plan_section_move, plan_session_drop,
+    plan_session_move, project_body_drop_command, project_drop_command, project_drop_landing,
     sidebar_group_membership, sidebar_project_group_order, AddedProjectPlacement, OrderWrite,
     OrderWritePlan, ProjectMovePlan, ProjectWrite, SessionDrop, SessionHandoffCheck,
     SessionHandoffDrop, SessionMovePlan, ORDER_WRITE_MESSAGE_TYPES, PROJECT_MOVE_COMMAND_TYPES,
@@ -230,20 +231,19 @@ pub use crate::sidebar_view::{
     armed_actions_by_session, close_project_group_is_active, close_project_successor_candidates,
     close_project_successor_group_order, first_awake_successor_session_id, is_awake_successor_row,
     link_chips_that_fit, machine_state_copy, machine_state_is_busy, machine_state_is_failure,
-    plan_space_sleep, plan_space_switch_restore, project_slot_plan, rename_shake_key,
-    rendered_session_ids, reveal_plan, session_is_snoozed, session_slot_plan,
-    space_for_focused_row, space_landing_project_ids, ArmedAction, BrowserTabInput,
-    CloseAfterDoneInput, Collection, CollectionView, CollectionsState, CoordinatorBadge,
-    CoordinatorBadgeTone, DelayedSendInput, DelayedSendView, DropLanding, DropWrites, EmptyState,
-    ShowAllProjectsRow, machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view,
-    MachineTabLayout,
-    FocusedRowSpace, FoldedStatus, GroupCore, GroupSummary, GroupView, LabelDeadline,
-    MachineNotice, MachineSummary, MachineTabInput, MachineTabView, NeedsYou, OrderItem, OrderKind,
-    ProjectContextView, ProjectDiffStats, ProjectDropLanding, ProjectDropRow, ProjectSlotPlan,
-    RemoteMachineView, RowNesting, SectionCollapse, SectionId, SectionView, SessionLink,
-    SessionLinkGlyph, SessionLinkKind, SessionLinkTone, SessionLinks, SessionLinksBadge,
-    SessionLinksChatPill, SessionLinksDisplay, SessionLinksRow, SessionMenuFacts, SessionRow,
-    SessionSlotPlan, SessionSortMode, SessionTiming, SessionView, SessionWork,
+    machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view, plan_space_sleep,
+    plan_space_switch_restore, project_slot_plan, rename_shake_key, rendered_session_ids,
+    reveal_plan, session_is_snoozed, session_slot_plan, space_for_focused_row,
+    space_landing_project_ids, ArmedAction, BrowserTabInput, CloseAfterDoneInput, Collection,
+    CollectionView, CollectionsState, CoordinatorBadge, CoordinatorBadgeTone, DelayedSendInput,
+    DelayedSendView, DropLanding, DropWrites, EmptyState, FocusedRowSpace, FoldedStatus, GroupCore,
+    GroupSummary, GroupView, LabelDeadline, MachineNotice, MachineSummary, MachineTabInput,
+    MachineTabLayout, MachineTabView, NeedsYou, OrderItem, OrderKind, ProjectContextView,
+    ProjectDiffStats, ProjectDropLanding, ProjectDropRow, ProjectSlotPlan, RemoteMachineView,
+    RowNesting, SectionCollapse, SectionId, SectionView, SessionLink, SessionLinkGlyph,
+    SessionLinkKind, SessionLinkTone, SessionLinks, SessionLinksBadge, SessionLinksChatPill,
+    SessionLinksDisplay, SessionLinksRow, SessionMenuFacts, SessionRow, SessionSlotPlan,
+    SessionSortMode, SessionTiming, SessionView, SessionWork, ShowAllProjectsRow,
     SidebarCollapseState, SidebarHiddenItems, SidebarHostInputs, SidebarInputs, SidebarMode,
     SidebarRevealPlan, SidebarSettings, SidebarUiState, SidebarUpdateWork, SidebarView,
     SidebarViewModel, Space, SpaceSleepPlan, SpaceSleepPlans, SpaceSleepScope, SpaceSwitchFocus,

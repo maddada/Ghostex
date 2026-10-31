@@ -99,6 +99,7 @@ mod renderer_commands;
 mod rpc;
 mod rpc_types;
 mod runtime_facts;
+mod session_deep_link;
 mod session_links;
 mod session_walk;
 mod sidebar_accounts;
@@ -171,4 +172,5 @@ pub(crate) use primary_launcher::{
 pub(crate) use rpc::{gx_rpc, gx_rpc_with_timeout};
 #[allow(unused_imports)]
 pub(crate) use rpc_types::GxRpcError;
+pub(crate) use session_deep_link::note_app_started_for_session_links;
 pub(crate) use workspace_groups::note_native_host_message_dropped;

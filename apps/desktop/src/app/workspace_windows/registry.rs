@@ -556,6 +556,9 @@ impl GhostexGpuiApp {
             register_gpui_sparkle_updater_callback_target(cx.weak_entity(), cx.to_async());
             register_gpui_os_integration_callback_target(cx.weak_entity(), cx.to_async());
         }
+        crate::app::gx_store::note_app_started_for_session_links();
+        #[cfg(not(target_os = "macos"))]
+        register_gpui_os_integration_callback_target(cx.weak_entity(), cx.to_async());
         #[cfg(target_os = "windows")]
         register_gpui_windows_notification_click_target(cx);
         #[cfg(target_os = "linux")]

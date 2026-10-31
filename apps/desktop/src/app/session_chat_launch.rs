@@ -84,7 +84,7 @@ impl GhostexGpuiApp {
     }
 
     /// CDXC:SessionChat 2026-09-30 DECISION:
-    /// User: when the Default Agent View is Chat, open chat right away wherever the app opens a session, not only for a sidebar agent launch ("check for other cases where we can open chat right away"). An open that names no view (Find's resume and fork, a Ghostex Capture send, a Project Board start or jump, reopening a stashed prompt's conversation, a `ghostex://terminal` command, a fork, a Previous Sessions restore) arms the Chat launch intent at once, so the chat is on screen while the terminal starts behind it instead of after the agent is recognised. Which agent the session runs is only known once gxserver's attach metadata or the attach plan names it, so the intent is dropped there when that agent's view is Terminal (`chat_launch_intent_declined_by_default_view`).
+    /// User: when the Default Agent View is Chat, open chat right away wherever the app opens a session, not only for a sidebar agent launch ("check for other cases where we can open chat right away"). An open that names no view (Find's resume and fork, a Ghostex Capture send, a Project Board start or jump, reopening a stashed prompt's conversation, a fork, a Previous Sessions restore) arms the Chat launch intent at once, so the chat is on screen while the terminal starts behind it instead of after the agent is recognised. Which agent the session runs is only known once gxserver's attach metadata or the attach plan names it, so the intent is dropped there when that agent's view is Terminal (`chat_launch_intent_declined_by_default_view`).
     pub(crate) fn arm_default_view_chat_launch_intent(
         &mut self,
         key: GpuiWorkspaceTerminalSessionKey,

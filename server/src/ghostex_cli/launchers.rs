@@ -554,6 +554,20 @@ fn resolve_linux_desktop_launch_from_cli(executable: &Path) -> CliResult<Launch>
     })
 }
 
+/// Starts the desktop app with the link as its only argument. A running Ghostex takes the link from
+/// that process, which then exits (apps/desktop/src/session_link_handoff.rs).
+#[cfg(any(target_os = "linux", test))]
+fn linux_session_link_launch(executable: &Path, link: &str) -> CliResult<Launch> {
+    let mut launch = resolve_linux_desktop_launch_from_cli(executable)?;
+    launch.args.push(link.to_string());
+    Ok(launch)
+}
+
+#[cfg(target_os = "linux")]
+pub fn open_session_link_command(link: &str) -> CliResult<()> {
+    spawn_detached_desktop(&linux_session_link_launch(&current_cli_executable(), link)?)
+}
+
 #[cfg(any(target_os = "linux", test))]
 fn is_wsl() -> bool {
     std::env::var_os("WSL_INTEROP").is_some()
@@ -1361,6 +1375,26 @@ mod tests {
         assert!(script.contains("SetForegroundWindow"));
         assert!(script.contains("$env:ProgramW6432"));
         assert!(script.contains("Start-Process -FilePath $executable"));
+    }
+
+    #[test]
+    fn linux_session_link_starts_the_app_with_the_link_alone() {
+        let root = std::env::temp_dir().join(format!("gx-link-launch-{}", std::process::id()));
+        let app = root.join("Ghostex");
+        let cli = root.join("gxserver/bin/ghostex");
+        std::fs::create_dir_all(cli.parent().expect("a folder")).expect("folders");
+        std::fs::write(&app, "#!/bin/sh\n").expect("the app");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&app, std::fs::Permissions::from_mode(0o755))
+                .expect("permissions");
+        }
+        let link = "ghostex://session/S1:P2:G3";
+        let launch = linux_session_link_launch(&cli, link).expect("a launch");
+        assert_eq!(launch.args, vec![link.to_string()]);
+        assert!(launch.command.ends_with("Ghostex"), "{}", launch.command);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

@@ -154,6 +154,15 @@ fn dispatch(argv: &[String]) -> CliResult<i32> {
         println!("{}", usage::usage());
         return Ok(0);
     }
+    // A Linux desktop entry runs this CLI with the link a click opened (CDXC:OsIntegration
+    // 2026-10-31 in apps/desktop/src/session_link_handoff.rs).
+    #[cfg(target_os = "linux")]
+    if ghostex_gx_protocol::is_session_link_route(command_name)
+        || ghostex_gx_protocol::is_terminal_link_route(command_name)
+    {
+        launchers::open_session_link_command(command_name)?;
+        return Ok(exit_code());
+    }
     if !is_known_command(command_name) {
         if launchers::is_existing_bare_path_argument(command_name) {
             actions::run_bridge_action(

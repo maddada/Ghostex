@@ -219,7 +219,8 @@ pub fn command_terminal_create_params(
     Value::Object(params)
 }
 
-/// `/api/createAgentSession` of `ghostex://terminal` with a command: the command IS the launch.
+/// `/api/createAgentSession` of an OS integration terminal with a command (a script's Run, Find's
+/// resume): the command IS the launch.
 pub fn os_integration_command_params(command: &str, project_id: &str, title: &str) -> Value {
     json!({
         "agentId": "os-integration-terminal",

@@ -177,6 +177,8 @@ windows-sys = { version = "0.61", features = [
     "Win32_Security_Cryptography",
     "Win32_Security_Credentials",
     "Win32_Storage_FileSystem",
+    # ConnectNamedPipe takes an OVERLAPPED: a running Ghostex's session link pipe (windows_single_instance.rs).
+    "Win32_System_IO",
     "Win32_System_LibraryLoader",
     # The attach control pipe of a Windows terminal viewer (terminal_model/zmx_control.rs).
     "Win32_System_Pipes",

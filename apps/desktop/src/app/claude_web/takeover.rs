@@ -218,7 +218,7 @@ pub(crate) enum OpenedSession {
     /// itself (native_sidebar/sessions.rs).
     Focused { keeps_view: bool },
     /// This window created a session and opened it (`gx_store_focus_created_session`): a new agent
-    /// or terminal, a `ghostex://terminal` link, Find's resume and fork, a board start, a Linear
+    /// or terminal, Find's resume and fork, a board start, a Linear
     /// ticket or feedback agent.
     Created,
 }
@@ -625,7 +625,7 @@ mod tests {
 
     #[test]
     fn a_session_this_window_creates_turns_claude_off() {
-        // A new agent or terminal, a ghostex://terminal link, Find's resume and fork, a board start.
+        // A new agent or terminal, Find's resume and fork, a board start.
         assert!(OpenedSession::Created.turns_claude_off());
     }
 

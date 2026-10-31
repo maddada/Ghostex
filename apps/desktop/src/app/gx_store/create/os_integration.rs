@@ -1,5 +1,5 @@
-//! The OS integration commands: `ghostex://terminal` and the Finder or Services "New Terminal",
-//! `ghostex://open` and Open With, and the Help menu's questions, performed in Rust
+//! The OS integration commands: a script's Run and Find's resume, the Finder or Services "New
+//! Terminal", `ghostex://open` and Open With, and the Help menu's questions, performed in Rust
 //! (`handleGpuiOsIntegrationCommand`, `createOsIntegrationTerminal`, `openOsIntegrationProjectPaths`,
 //! `createGhostexHelpChat` in the old runtime).
 //!
@@ -9,7 +9,7 @@
 //! runtime's calls (`/api/addProjectPath`, `/api/createSession` or `/api/createAgentSession`) and
 //! toasts.
 //!
-//! `ghostex://terminal` parity note: macOS creates a client-side projectless Quick project per
+//! Terminal parity note: macOS creates a client-side projectless Quick project per
 //! invocation; GPUI's sidebar is daemon-derived, so the terminal lands in the daemon project
 //! registered (or reused) at the resolved cwd. A provided command launches the session with it
 //! (the Search-by-Text `gx f` launcher contract) instead of macOS's typed `command\r` into a shell.
@@ -102,7 +102,7 @@ impl GhostexGpuiApp {
             self.gx_store_create_toast(
                 "warning",
                 "Open Terminal failed",
-                Some("ghostex://terminal needs the local gxserver."),
+                Some("Opening a terminal needs the local gxserver."),
                 cx,
             );
             return;
@@ -139,7 +139,7 @@ impl GhostexGpuiApp {
             let title = title
                 .or_else(|| Some(name.clone()).filter(|name| !name.trim().is_empty()))
                 .unwrap_or_else(|| ghostex_gx_core::DEFAULT_TERMINAL_SESSION_TITLE.to_string());
-            // A command may start an agent (Find's resume, `ghostex://terminal claude`), whose view
+            // A command may start an agent (Find's resume), whose view
             // gxserver's metadata decides; a plain shell has none to follow.
             let view = command.is_none().then_some("terminal");
             let created = match command {

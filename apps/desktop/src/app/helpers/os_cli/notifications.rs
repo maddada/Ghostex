@@ -674,7 +674,6 @@ pub(crate) fn gpui_sparkle_updater_callback_target() -> Option<GpuiSparkleUpdate
     GPUI_SPARKLE_UPDATER_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn register_gpui_os_integration_callback_target(
     app: gpui::WeakEntity<GhostexGpuiApp>,
     async_app: gpui::AsyncApp,
@@ -688,14 +687,12 @@ pub(crate) fn register_gpui_os_integration_callback_target(
     }
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn unregister_gpui_os_integration_callback_target() {
     GPUI_OS_INTEGRATION_CALLBACK_TARGET.with(|target| {
         *target.borrow_mut() = None;
     });
 }
 
-#[cfg(target_os = "macos")]
 pub(crate) fn gpui_os_integration_callback_target() -> Option<GpuiOsIntegrationCallbackTarget> {
     GPUI_OS_INTEGRATION_CALLBACK_TARGET.with(|target| target.borrow().clone())
 }

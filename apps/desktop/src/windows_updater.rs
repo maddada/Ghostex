@@ -38,6 +38,7 @@ pub(crate) fn run_startup_hooks() {
         .set_auto_apply_on_startup(false)
         .on_after_install_fast_callback(|_| crate::windows_cli_link::link_installed_cli())
         .on_after_update_fast_callback(|_| crate::windows_cli_link::link_installed_cli())
+        .on_before_uninstall_fast_callback(|_| crate::windows_url_scheme::unregister_if_ours())
         .run();
     crate::windows_cli_link::link_installed_cli();
     adopt_release_app_user_model_id();
