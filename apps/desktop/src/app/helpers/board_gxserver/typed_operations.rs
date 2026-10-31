@@ -129,14 +129,18 @@ fn gxserver_post_typed_operation_once(
         "POST {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\n{GPUI_GXSERVER_PROTOCOL_HEADER}: {GPUI_GXSERVER_PROTOCOL_VERSION}\r\nContent-Length: {}\r\n\r\n{body}",
         body.len()
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|_| "Could not send gxserver request.".to_string())?;
+    let write_error = stream.write_all(request.as_bytes()).err();
 
     let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|error| gxserver_read_failure_message(&address, timeout, &error))?;
+    let read_error = stream.read_to_string(&mut response).err();
+    if !response.contains("\r\n\r\n") {
+        if let Some(error) = write_error {
+            return Err(format!("Could not send gxserver request: {error}"));
+        }
+        if let Some(error) = read_error {
+            return Err(gxserver_read_failure_message(&address, timeout, &error));
+        }
+    }
     let (headers, body) = response
         .split_once("\r\n\r\n")
         .ok_or_else(|| "gxserver returned an invalid HTTP response.".to_string())?;

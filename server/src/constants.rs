@@ -8,13 +8,10 @@ pub const GXSERVER_REMOTE_API_HOST: &str = "0.0.0.0";
 pub const GXSERVER_REMOTE_API_PORT: u16 = 58745;
 pub const GXSERVER_JSON_BODY_LIMIT_BYTES: usize = 1024 * 1024;
 /*
-CDXC:Clipboard 2026-08-01:
-saveSessionChatImage carries a pasted image as base64 inside the JSON body.
-The terminal paste path caps images at 12 MiB on disk; base64 inflates that
-by 4/3, so 20 MiB leaves headroom for the JSON envelope without opening the
-general RPC surface to oversized bodies.
+CDXC:Clipboard 2026-11-01 DECISION:
+User chose a 32 MiB raw image limit after measuring agent image support. saveSessionChatImage carries base64 in JSON, so its 44 MiB body limit includes the 4/3 expansion and envelope headroom; the general RPC limit stays small.
 */
-pub const GXSERVER_IMAGE_BODY_LIMIT_BYTES: usize = 20 * 1024 * 1024;
+pub const GXSERVER_IMAGE_BODY_LIMIT_BYTES: usize = 44 * 1024 * 1024;
 /*
 Chat attachments cap at 32 MiB on disk (saveSessionChatAttachment); the same
 4/3 base64 inflation plus envelope headroom lands at 44 MiB.

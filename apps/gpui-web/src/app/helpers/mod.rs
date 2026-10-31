@@ -1,5 +1,6 @@
 //! Same module paths as the desktop's `helpers/`. `chrome_palette`, `clipboard_read`, `indicator_animation` and `markdown_table_csv` are the desktop files; the others hold only the items `build.rs` lifts out of the desktop files of the same name (see `extracted-items.txt`), because the rest of those files is native-only.
 pub(crate) mod chrome_palette;
+pub(crate) mod clipboard_image;
 /// The web reads through GPUI Kit fields only, so `gpui_read_clipboard` has no caller here.
 #[allow(dead_code)]
 pub(crate) mod clipboard_read;

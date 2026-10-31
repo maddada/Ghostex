@@ -92,14 +92,18 @@ pub(crate) async fn read_json_body(
     body: Body,
     limit_bytes: usize,
 ) -> std::result::Result<Value, ReadBodyError> {
-    if content_length(headers).map(|length| length > limit_bytes as u64) == Some(true) {
-        return Err(ReadBodyError::TooLarge);
+    if let Some(length) = content_length(headers).filter(|length| *length > limit_bytes as u64) {
+        return Err(ReadBodyError::TooLarge {
+            size_bytes: Some(length),
+        });
     }
     let bytes = to_bytes(body, limit_bytes + 1)
         .await
-        .map_err(|_| ReadBodyError::TooLarge)?;
+        .map_err(|_| ReadBodyError::TooLarge { size_bytes: None })?;
     if bytes.len() > limit_bytes {
-        return Err(ReadBodyError::TooLarge);
+        return Err(ReadBodyError::TooLarge {
+            size_bytes: Some(bytes.len() as u64),
+        });
     }
     let text = std::str::from_utf8(&bytes)
         .map_err(|_| ReadBodyError::InvalidJson)?
@@ -112,7 +116,19 @@ pub(crate) async fn read_json_body(
 
 pub(crate) enum ReadBodyError {
     InvalidJson,
-    TooLarge,
+    TooLarge { size_bytes: Option<u64> },
+}
+
+#[derive(Clone)]
+pub(crate) struct BodySizeLimit {
+    pub(crate) size_bytes: Option<u64>,
+    pub(crate) limit_bytes: usize,
+}
+
+#[derive(Clone)]
+pub(crate) struct ImageSizeLimit {
+    pub(crate) size_bytes: usize,
+    pub(crate) limit_bytes: usize,
 }
 
 pub(crate) fn content_length(headers: &HeaderMap) -> Option<u64> {

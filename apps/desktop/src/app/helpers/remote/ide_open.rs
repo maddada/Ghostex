@@ -59,23 +59,29 @@ fn gpui_remote_gxserver_post_typed_operation_once(
         target.token.as_str(),
         body.len()
     );
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|_| "Could not send remote gxserver request.".to_string())?;
+    let write_error = stream.write_all(request.as_bytes()).err();
 
     let mut response = String::new();
-    stream.read_to_string(&mut response).map_err(|error| {
-        // Say which layer failed (GitHub #361): silence past the timeout is a slow link, not a
-        // broken tunnel, and the chat treats both as "not answering" and retries.
-        if matches!(
-            error.kind(),
-            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-        ) {
-            "Remote gxserver did not answer in time over a slow connection.".to_string()
-        } else {
-            "Could not read remote gxserver response.".to_string()
+    let read_error = stream.read_to_string(&mut response).err();
+    if !response.contains("\r\n\r\n") {
+        if let Some(error) = write_error {
+            return Err(format!("Could not send remote gxserver request: {error}"));
         }
-    })?;
+        if let Some(error) = read_error {
+            return Err({
+                // Say which layer failed (GitHub #361): silence past the timeout is a slow link, not a
+                // broken tunnel, and the chat treats both as "not answering" and retries.
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) {
+                    "Remote gxserver did not answer in time over a slow connection.".to_string()
+                } else {
+                    "Could not read remote gxserver response.".to_string()
+                }
+            });
+        }
+    }
     if !response.is_empty() {
         // Any answer through the tunnel proves it to the watchdog (tunnel_liveness.rs).
         gpui_remote_tunnel_note_answer(target.local_port);

@@ -254,7 +254,7 @@ the returned absolute path is what the client interpolates into
 the stored file name is always generated, so no caller-controlled path
 segments touch the filesystem.
 */
-pub(crate) const SESSION_CHAT_IMAGE_MAX_BYTES: usize = 12 * 1024 * 1024;
+pub(crate) const SESSION_CHAT_IMAGE_MAX_BYTES: usize = 32 * 1024 * 1024;
 
 pub(crate) fn session_chat_image_extension(
     base64_bytes: &[u8],
@@ -367,17 +367,37 @@ pub(crate) fn handle_save_session_chat_image_http(
             );
         }
     };
-    if bytes.is_empty() || bytes.len() > SESSION_CHAT_IMAGE_MAX_BYTES {
+    if bytes.is_empty() {
         return domain_error_response(
             endpoint_path,
             request_id,
             DomainStateError {
-                code: "invalidParams",
-                message: format!(
-                    "saveSessionChatImage image must be between 1 byte and {SESSION_CHAT_IMAGE_MAX_BYTES} bytes."
-                ),
+                code: "badRequest",
+                message: "saveSessionChatImage requires a nonempty image.".to_string(),
             },
         );
+    }
+    if bytes.len() > SESSION_CHAT_IMAGE_MAX_BYTES {
+        let mut response = routed_json(
+            Some(endpoint_path),
+            StatusCode::PAYLOAD_TOO_LARGE,
+            crate::protocol::rpc_error(
+                "payloadTooLarge",
+                format!(
+                    "Image too large: {:.1} MB. Limit: 32 MiB. Try a smaller capture.",
+                    bytes.len() as f64 / 1_000_000.0
+                ),
+                Some(request_id),
+            ),
+        );
+        response
+            .response
+            .extensions_mut()
+            .insert(crate::server::ImageSizeLimit {
+                size_bytes: bytes.len(),
+                limit_bytes: SESSION_CHAT_IMAGE_MAX_BYTES,
+            });
+        return response;
     }
     let suggested_name = params.get("suggestedName").and_then(Value::as_str);
     let extension = session_chat_image_extension(&bytes, suggested_name);
@@ -682,7 +702,7 @@ so chat-log thumbnails and image links can render: the path lives on THIS
 machine (clients call over their per-machine RPC) and only files whose magic
 bytes or extension identify an image are returned.
 */
-pub(crate) const SESSION_CHAT_IMAGE_READ_MAX_BYTES: u64 = 20 * 1024 * 1024;
+pub(crate) const SESSION_CHAT_IMAGE_READ_MAX_BYTES: u64 = SESSION_CHAT_IMAGE_MAX_BYTES as u64;
 
 pub(crate) fn session_chat_image_media_type(
     bytes: &[u8],

@@ -108,10 +108,16 @@ impl NativeChatView {
             }
             let mut paths = Vec::new();
             for (index, image) in images.into_iter().enumerate() {
+                let prepared = match crate::app::helpers::clipboard_image::prepare_clipboard_image(
+                    image.bytes(), image.format(),
+                ) {
+                    Ok(prepared) => prepared,
+                    Err(error) => return (paths, Some(error)),
+                };
                 let result = super::rpc::request(config.remote.clone(), "/api/saveSessionChatImage", &json!({
                     "projectId":config.project_id, "sessionId":config.session_id,
-                    "base64Data":base64::engine::general_purpose::STANDARD.encode(image.bytes()),
-                    "suggestedName":format!("clipboard-image-{}.{}", index+1, image.format().extension()),
+                    "base64Data":base64::engine::general_purpose::STANDARD.encode(prepared.bytes),
+                    "suggestedName":format!("clipboard-image-{}.{}", index+1, prepared.extension),
                 })).await;
                 match result {
                     Ok(value) if value["path"].is_string() => paths.push(value["path"].clone()),

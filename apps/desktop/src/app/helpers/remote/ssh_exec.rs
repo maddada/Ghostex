@@ -283,29 +283,75 @@ pub(crate) fn gpui_upload_terminal_clipboard_image_to_remote(
         TerminalClipboardImagePayload::FilePaths(paths) => paths
             .iter()
             .map(|path| {
-                gpui_upload_terminal_attachment_to_remote(config, execution_target, path.as_path())
+                let format = match path
+                    .extension()
+                    .and_then(|value| value.to_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "bmp" => Some(gpui::ImageFormat::Bmp),
+                    "tif" | "tiff" => Some(gpui::ImageFormat::Tiff),
+                    "png" => Some(gpui::ImageFormat::Png),
+                    "jpg" | "jpeg" => Some(gpui::ImageFormat::Jpeg),
+                    "webp" => Some(gpui::ImageFormat::Webp),
+                    "gif" => Some(gpui::ImageFormat::Gif),
+                    _ => None,
+                };
+                if let Some(format) = format {
+                    let bytes = fs::read(path)
+                        .map_err(|_| "Could not read the pasted image.".to_string())?;
+                    let prepared = crate::app::helpers::clipboard_image::prepare_clipboard_image(
+                        &bytes, format,
+                    )?;
+                    gpui_upload_prepared_terminal_image_to_remote(
+                        config,
+                        execution_target,
+                        &prepared.bytes,
+                        prepared.extension,
+                    )
+                } else {
+                    gpui_upload_terminal_attachment_to_remote(
+                        config,
+                        execution_target,
+                        path.as_path(),
+                    )
+                }
             })
             .collect(),
         TerminalClipboardImagePayload::Bytes { bytes, extension } => {
-            let unique_id = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
-            let staged_image = env::temp_dir().join(format!(
-                "ghostex-gpui-clipboard-image-{}-{unique_id}.{extension}",
-                std::process::id()
-            ));
-            fs::write(staged_image.as_path(), &bytes)
-                .map_err(|_| "Could not stage the pasted image for upload.".to_string())?;
-            let result = gpui_upload_terminal_attachment_to_remote(
+            gpui_upload_prepared_terminal_image_to_remote(
                 config,
                 execution_target,
-                staged_image.as_path(),
-            );
-            let _ = fs::remove_file(staged_image.as_path());
-            result.map(|reference| vec![reference])
+                &bytes,
+                extension,
+            )
+            .map(|reference| vec![reference])
         }
     }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
+fn gpui_upload_prepared_terminal_image_to_remote(
+    config: &GpuiRemoteMachineConfig,
+    execution_target: &GpuiRemoteExecutionTarget,
+    bytes: &[u8],
+    extension: &str,
+) -> Result<GpuiTerminalAttachmentReference, String> {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let staged_image = env::temp_dir().join(format!(
+        "ghostex-gpui-clipboard-image-{}-{unique_id}.{extension}",
+        std::process::id()
+    ));
+    fs::write(staged_image.as_path(), bytes)
+        .map_err(|_| "Could not stage the pasted image for upload.".to_string())?;
+    let result =
+        gpui_upload_terminal_attachment_to_remote(config, execution_target, staged_image.as_path());
+    let _ = fs::remove_file(staged_image.as_path());
+    result
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]

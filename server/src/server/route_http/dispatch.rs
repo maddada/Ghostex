@@ -216,18 +216,24 @@ pub(in crate::server) async fn route_http(
         let body_limit_bytes = json_body_limit_bytes(&endpoint.path);
         match read_json_body(&parts.headers, body, body_limit_bytes).await {
             Ok(value) => value,
-            Err(ReadBodyError::TooLarge) => {
-                return routed_json(
+            Err(ReadBodyError::TooLarge { size_bytes }) => {
+                let mut response = routed_json(
                     Some(endpoint.path),
                     StatusCode::PAYLOAD_TOO_LARGE,
                     rpc_error(
-                        "badRequest",
-                        format!(
-                            "Request body exceeds the gxserver JSON RPC limit of {body_limit_bytes} bytes."
-                        ),
+                        "payloadTooLarge",
+                        match size_bytes {
+                            Some(size) => format!("Request body is {size} bytes; the limit is {body_limit_bytes} bytes."),
+                            None => format!("Request body exceeds the {body_limit_bytes} byte limit."),
+                        },
                         Some(request_id),
                     ),
                 );
+                response.response.extensions_mut().insert(BodySizeLimit {
+                    size_bytes,
+                    limit_bytes: body_limit_bytes,
+                });
+                return response;
             }
             Err(ReadBodyError::InvalidJson) => {
                 return routed_json(

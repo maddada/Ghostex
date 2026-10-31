@@ -355,7 +355,6 @@ pub(crate) const MANAGE_ROOT_ARTIFACT_FILE_EXTENSIONS: &[&str] = &[
     "mdown",
     "mkdn",
 ];
-pub(crate) const PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES: usize = 12 * 1024 * 1024;
 pub(crate) const GPUI_GXSERVER_LOCAL_API_HOST: &str = "127.0.0.1";
 pub(crate) const GPUI_GXSERVER_LOCAL_API_PORT: u16 = 58_744;
 /// CDXC:ServerDaemon 2026-09-13 WHY:

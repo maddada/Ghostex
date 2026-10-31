@@ -90,7 +90,7 @@ tree-sitter = "0.26"
 tree-sitter-containerfile = "0.9"
 tree-sitter-hcl = "1.1"
 tree-sitter-powershell = "0.26"
-image = { version = "0.25", default-features = false, features = ["png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg", "gif", "bmp", "tiff"] }
 # CDXC:SessionTitles 2026-09-15 WHY: the native Rename Session dialog ports `normalizeSessionRenameTitle` (NFKC + a Unicode-class glyph filter); both crates were already in the graph through gpui and url, so this is a direct-dependency promotion, not a new download.
 icu_normalizer = "2"
 libc = "0.2"

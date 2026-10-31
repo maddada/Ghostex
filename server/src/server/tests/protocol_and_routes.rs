@@ -5,6 +5,60 @@ use crate::{
 };
 use std::fs;
 
+#[tokio::test]
+async fn image_body_limit_reports_actual_request_size() {
+    use crate::constants::GXSERVER_IMAGE_BODY_LIMIT_BYTES;
+    let size = GXSERVER_IMAGE_BODY_LIMIT_BYTES as u64 + 1;
+    let mut headers = HeaderMap::new();
+    headers.insert(header::CONTENT_LENGTH, size.to_string().parse().unwrap());
+    assert!(matches!(
+        read_json_body(&headers, Body::empty(), GXSERVER_IMAGE_BODY_LIMIT_BYTES).await,
+        Err(ReadBodyError::TooLarge { size_bytes: Some(actual) }) if actual == size
+    ));
+    assert_eq!(
+        json_body_limit_bytes("/api/saveSessionChatImage"),
+        44 * 1024 * 1024
+    );
+}
+
+#[test]
+fn decoded_image_over_32_mib_returns_413() {
+    use base64::Engine as _;
+    let temp = tempfile::tempdir().unwrap();
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths);
+    let bytes = vec![0u8; crate::session_chat_files::SESSION_CHAT_IMAGE_MAX_BYTES + 1];
+    let response = crate::session_chat_files::handle_save_session_chat_image_http(
+        &state,
+        "/api/saveSessionChatImage".to_string(),
+        "image-limit-test".to_string(),
+        &json!({"params":{"base64Data":base64::engine::general_purpose::STANDARD.encode(&bytes)}}),
+    );
+    assert_eq!(response.response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let limit = response
+        .response
+        .extensions()
+        .get::<ImageSizeLimit>()
+        .unwrap();
+    assert_eq!(limit.size_bytes, bytes.len());
+    assert_eq!(limit.limit_bytes, 32 * 1024 * 1024);
+}
+
+#[test]
+fn saved_image_above_old_preview_limit_can_be_read() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("preview.png");
+    let mut bytes = vec![0u8; 25_000_000];
+    bytes[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+    fs::write(&path, bytes).unwrap();
+    let response = crate::session_chat_files::handle_read_session_chat_image_http(
+        "/api/readSessionChatImage".to_string(),
+        "preview-limit-test".to_string(),
+        &json!({"params":{"path":path}}),
+    );
+    assert_eq!(response.response.status(), StatusCode::OK);
+}
+
 #[test]
 fn typed_operation_scope_rejection_details_match_private_typescript_shape() {
     let mut params = Map::new();

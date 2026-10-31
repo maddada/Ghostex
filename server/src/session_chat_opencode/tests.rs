@@ -2,6 +2,29 @@ use super::*;
 use crate::session_chat::{SessionChatBlock, SessionChatInteractivePrompt, SessionChatRole};
 use serde_json::{json, Value};
 
+#[test]
+fn large_opencode_image_is_shrunk_to_send_budget() {
+    let image = image::RgbImage::from_fn(1800, 1800, |x, y| {
+        let value = x
+            .wrapping_mul(747_796_405)
+            .wrapping_add(y.wrapping_mul(2_891_336_453));
+        image::Rgb([value as u8, (value >> 8) as u8, (value >> 16) as u8])
+    });
+    let mut original = Vec::new();
+    image::DynamicImage::ImageRgb8(image)
+        .write_to(
+            &mut std::io::Cursor::new(&mut original),
+            image::ImageFormat::Png,
+        )
+        .unwrap();
+    assert!(original.len() > OPENCODE_IMAGE_TARGET_BYTES);
+    let (prepared, encoding) = opencode_image_bytes(original).unwrap();
+    assert!(prepared.len() <= OPENCODE_IMAGE_TARGET_BYTES);
+    assert!(matches!(encoding, "png" | "jpg"));
+    let decoded = image::load_from_memory(&prepared).unwrap();
+    assert_eq!((decoded.width(), decoded.height()), (1800, 1800));
+}
+
 fn form(fields: Value) -> Snapshot {
     Snapshot {
         info: json!({}),

@@ -125,16 +125,15 @@ pub(crate) fn terminal_clipboard_string_image_file_paths(item: &ClipboardItem) -
 pub(crate) fn terminal_clipboard_saved_image_markdown_text(item: &ClipboardItem) -> Option<String> {
     for entry in item.entries() {
         if let ClipboardEntry::Image(image) = entry {
-            let bytes = image.bytes();
-            if bytes.is_empty() || bytes.len() > PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES {
-                return None;
-            }
+            let prepared = crate::app::helpers::clipboard_image::prepare_clipboard_image(
+                image.bytes(),
+                image.format(),
+            )
+            .ok()?;
 
-            let path =
-                unique_project_board_image_path(project_board_image_extension(image.format()))
-                    .ok()?;
+            let path = unique_project_board_image_path(prepared.extension).ok()?;
             let path = terminal_clipboard_absolute_path(path)?;
-            fs::write(&path, bytes).ok()?;
+            fs::write(&path, prepared.bytes).ok()?;
             return Some(terminal_clipboard_markdown_image_reference(&path, 1));
         }
     }
@@ -170,14 +169,15 @@ pub(crate) fn terminal_clipboard_image_payload(
 
     for entry in item.entries() {
         if let ClipboardEntry::Image(image) = entry {
-            let bytes = image.bytes();
-            if bytes.is_empty() || bytes.len() > PROJECT_BOARD_CLIPBOARD_IMAGE_MAX_BYTES {
-                return None;
-            }
+            let prepared = crate::app::helpers::clipboard_image::prepare_clipboard_image(
+                image.bytes(),
+                image.format(),
+            )
+            .ok()?;
 
             return Some(TerminalClipboardImagePayload::Bytes {
-                bytes: bytes.to_vec(),
-                extension: project_board_image_extension(image.format()),
+                bytes: prepared.bytes,
+                extension: prepared.extension,
             });
         }
     }
