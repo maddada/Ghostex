@@ -16,6 +16,8 @@ pub(crate) mod powershell;
 #[cfg(all(test, unix))]
 mod probe_tests;
 pub(crate) mod run;
+#[cfg(all(test, unix))]
+mod run_tests;
 pub(crate) mod system_tools;
 pub(crate) mod tools;
 pub(crate) mod uv;
