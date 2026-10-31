@@ -4470,10 +4470,13 @@ Indigo, Teal, Green, Forest, Olive, Amber, Orange, Red, Rose, Pink and Purple;
 picking a dark colour gives light mode the same colour until you pick one there
 yourself, and the light row says when it still follows) and a + square for a
 custom colour, which opens a colour picker (with HEX, R, G and B boxes) right at
-the square; and Colourfulness, a fine-grained slider from Subtle to Vivid (Soft is the default;
-the name of the nearest of Subtle, Soft, Balanced, Rich and Vivid shows beside it)
+the square; and Colourfulness, a fine-grained slider from Subtle to Full (Soft is the default;
+the name of the nearest of Subtle, Soft, Balanced, Rich, Vivid and Full shows beside it)
 that sets how much of the colour shows in the sidebar and work area at once, with a small
-sidebar and work area preview. Colourfulness also sets how deep a custom colour
+sidebar and work area preview. Past Vivid, dark mode fades toward the colour you picked
+itself and is exactly that colour at Full, so a flat theme such as Monokai Pro Machine
+(#273136) can colour the whole window; a colour too light for the sidebar's text is
+deepened just enough to stay readable, and light mode stays at Vivid past that point. Colourfulness also sets how deep a custom colour
 is; it has no control of its own. More colour options can set the sidebar and
 work area colourfulness separately, and show the active pane outline and its
 colour.
