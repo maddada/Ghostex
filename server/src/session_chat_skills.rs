@@ -691,9 +691,10 @@ fn discover_claude_plugin_skills(plugin: &str, install: &Path, skills: &mut Vec<
                 continue;
             };
             let name = format!("{plugin}:{name}");
+            // A hidden skill leaves the name free, so a command of that name still lists.
             if !skill_file_path.is_file()
-                || !names.insert(name.clone())
                 || !user_invocable(&skill_file_path)
+                || !names.insert(name.clone())
             {
                 continue;
             }
@@ -709,18 +710,28 @@ fn discover_claude_plugin_skills(plugin: &str, install: &Path, skills: &mut Vec<
     }
 }
 
-/// False when the file's front matter sets `user-invocable: false`, which keeps a skill out of
-/// Claude Code's `/` menu.
+/// Whether Claude Code's `/` menu lists the file: yes without a `user-invocable` key in its front
+/// matter, and with one only for a value Claude reads as true, so `no`, `False` and an empty value
+/// hide it as `false` does.
 fn user_invocable(skill_file: &Path) -> bool {
     let Ok(text) = fs::read_to_string(skill_file) else {
         return false;
     };
     let mut lines = text.lines();
-    lines.next().map(str::trim) != Some("---")
-        || !lines
-            .take_while(|line| line.trim() != "---")
-            .filter_map(|line| line.strip_prefix("user-invocable:"))
-            .any(|value| value.trim().trim_matches(['"', '\'']) == "false")
+    if lines.next().map(str::trim) != Some("---") {
+        return true;
+    }
+    lines
+        .take_while(|line| line.trim() != "---")
+        .find_map(|line| {
+            let (key, value) = line.split_once(':')?;
+            (key.trim_end() == "user-invocable").then_some(value)
+        })
+        .is_none_or(|value| {
+            let value = value.split(" #").next().unwrap_or_default().trim();
+            let value = value.trim_matches(['"', '\'']).to_ascii_lowercase();
+            matches!(value.as_str(), "true" | "yes" | "on" | "1")
+        })
 }
 
 fn skill_to_value(skill: SessionChatSkill, agent_id: &str) -> Value {
@@ -773,7 +784,7 @@ mod tests {
     use serde_json::{json, Value};
     use tempfile::tempdir;
 
-    use super::read_session_chat_skills;
+    use super::{discover_claude_plugin_skills, read_session_chat_skills};
     use crate::paths::get_gxserver_paths;
 
     fn add_skill(root: &Path, name: &str) {
@@ -959,6 +970,59 @@ mod tests {
             None,
         );
         assert_eq!(rows, vec!["manifest-name:a", "no-name:b"]);
+    }
+
+    #[test]
+    fn user_invocable_hides_what_claude_hides_and_frees_the_name_for_a_command() {
+        let home = tempdir().expect("home");
+        let install = home.path().join("install");
+        let front_matter = |folder: &str, value: &str| {
+            let directory = install.join("skills").join(folder);
+            fs::create_dir_all(&directory).expect("skill folder");
+            fs::write(
+                directory.join("SKILL.md"),
+                format!("---\nuser-invocable:{value}\n---\nbody\n"),
+            )
+            .expect("skill");
+        };
+        for (folder, value) in [
+            ("hidden", " false"),
+            ("hidden-comment", " false # not for people"),
+            ("hidden-capital", " False"),
+            ("hidden-no", " no"),
+            ("hidden-empty", ""),
+            ("shown", " true"),
+            ("shown-yes", " yes"),
+            ("shown-capital", " True"),
+        ] {
+            front_matter(folder, value);
+        }
+        add_skill(&install.join("skills"), "plain");
+        fs::create_dir_all(install.join("commands")).expect("commands");
+        fs::write(install.join("commands/hidden.md"), "# command\n").expect("command");
+
+        let mut skills = Vec::new();
+        discover_claude_plugin_skills("tools", &install, &mut skills);
+        let mut rows = skills
+            .iter()
+            .map(|skill| {
+                (
+                    skill.name.as_str(),
+                    skill.skill_file_path.ends_with("hidden.md"),
+                )
+            })
+            .collect::<Vec<_>>();
+        rows.sort();
+        assert_eq!(
+            rows,
+            vec![
+                ("tools:hidden", true),
+                ("tools:plain", false),
+                ("tools:shown", false),
+                ("tools:shown-capital", false),
+                ("tools:shown-yes", false),
+            ]
+        );
     }
 }
 
