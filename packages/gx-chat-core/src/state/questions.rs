@@ -114,21 +114,25 @@ pub struct FormState {
     pub cleared: bool,
     /// The send in flight: its call, what it drew, and the answers it carries.
     pub send: Option<FormSend>,
-    /// The answers that were queued, which the form shows until the transcript carries them.
+    /// The answers accepted for delivery, which the form shows until the transcript carries them.
     pub sent: Option<serde_json::Value>,
+    /// Whether an accepted answer is still held in gxserver's queue.
+    pub sent_waiting_for_idle: bool,
     /// Why the last send was refused.
     pub error: Option<String>,
     /// The reader opened the answered form again (`formToggle`); answered forms start collapsed.
     pub expanded: bool,
 }
 
-/// A question form's answers on their way into the session's chat queue.
+/// A question form's answers on their way to the agent.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FormSend {
     pub request_id: u64,
     pub answers: serde_json::Value,
     /// The call's parameters, sent again unchanged (same `sendRequestId`) while gxserver is away.
     pub params: serde_json::Value,
+    /// Keep the selected delivery path if an unreachable call needs a retry after Settings change.
+    pub queue_until_idle: bool,
     /// See [`crate::questions::unreachable_retry`].
     pub retry: crate::questions::unreachable_retry::Retry,
 }

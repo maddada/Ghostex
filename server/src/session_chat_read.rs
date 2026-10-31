@@ -601,6 +601,15 @@ pub(crate) async fn handle_read_session_chat_http(
             "chatSendOnPick"
         )),
     );
+    // The phone reads the computer's answer delivery choice from this optional field; older
+    // clients ignore it, and an older daemon leaves the core's default (normal send) in place.
+    result.insert(
+        "answersWaitForIdle".to_string(),
+        json!(crate::session_chat_catch_up::chat_setting_enabled(
+            &state.paths,
+            "chatAnswersWaitForIdle"
+        )),
+    );
     // Show all effort levels rides every read too, so an orchestrator's pickers on the phone follow
     // the computer's value (CDXC:Coordinators 2026-10-20 in packages/gx-chat-core/src/menus/orchestrator_effort.rs).
     result.insert(

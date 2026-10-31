@@ -60,6 +60,8 @@ pub struct CoreState {
     /// The Send when you pick an answer setting (`chatSendOnPick`), from the chat settings or the
     /// latest read; off by default.
     pub send_on_pick_enabled: bool,
+    /// Form and page answers use the old queue-until-idle path when enabled.
+    pub answers_wait_for_idle: bool,
     /// The Show all effort levels setting (`orchestratorAllEfforts`), from the chat settings or the
     /// latest read; off by default, which narrows an orchestrator's effort pickers.
     pub all_orchestrator_efforts_enabled: bool,

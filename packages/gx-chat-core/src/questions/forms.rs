@@ -5,9 +5,9 @@
 //! picked, clicking a pick again clears it, one of N replaces the pick while many of N toggles, and
 //! "Other / none of these" (the row after the last choice) is a pick of its own whose note says
 //! what instead. A question left blank when the form is sent goes to the agent as `"skipped"`, and
-//! Skip all (`skip_all`) sends at once. The answers go into the session's chat queue as the
-//! `<ghostex-page-answers>` message, which gxserver types once the agent is idle; the form reads Queued until then and
-//! Answered once the transcript carries the message.
+//! Skip all (`skip_all`) sends at once. The `<ghostex-page-answers>` message uses the normal chat
+//! send unless the Advanced setting asks to wait for the turn to end. The form reads Answered once
+//! the transcript carries the message.
 
 use std::collections::BTreeMap;
 
@@ -73,6 +73,7 @@ pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &st
         .and_then(|entry| crate::transcript::page_answers::answers_page_id(&entry.text));
     if let Some(entry) = page.and_then(|page| state.questions.forms.get_mut(&page)) {
         entry.sent = None;
+        entry.sent_waiting_for_idle = false;
         state.core.request_publish();
     }
 }
@@ -292,6 +293,8 @@ pub fn send(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effec
 
 /// Sends the form: the reader's answers, or with `skip_everything` (Skip all) every question as
 /// `"skipped"` and no notes, never a pick.
+///
+/// CDXC:SessionChat 2026-11-01 DECISION: User: "No we shouldn't send right away, we should just send normally, it'll send the message after tool call finishes". This supersedes the 2026-10-11 queue-until-idle rule; the Advanced toggle keeps it available.
 fn send_answers(
     state: &mut ChatState,
     context: &ChatContext,
@@ -325,8 +328,7 @@ fn send_answers(
         draft.skipped = true;
     }
     let answers = answers(&form, &drafts, &notes);
-    // See the SessionChat 2026-10-11 DECISION in server/src/visual_pages/answers.rs: answers go
-    // into the session's chat queue, which types them once the agent is idle, like a page's.
+    let queue_until_idle = state.core.answers_wait_for_idle;
     let request_id = state.core.allocate_request_id();
     let params = json!({
         "text": answers_message(&form, &answers),
@@ -334,7 +336,11 @@ fn send_answers(
     });
     let effect = Effect::SendRpc {
         request_id,
-        method: ChatRpcMethod::QueueSessionChatPrompt,
+        method: if queue_until_idle {
+            ChatRpcMethod::QueueSessionChatPrompt
+        } else {
+            ChatRpcMethod::SendSessionChatMessage
+        },
         params: Box::new(params.clone()),
     };
     if let Some(entry) = state.questions.forms.get_mut(id) {
@@ -343,6 +349,7 @@ fn send_answers(
             request_id,
             answers,
             params,
+            queue_until_idle,
             retry: Default::default(),
         });
     }
@@ -377,11 +384,25 @@ pub fn rpc_settled(
         return Some(Vec::new());
     }
     match outcome {
-        // Queued: the saved picks stay until the transcript carries the answers (`sync`), so a
-        // queued message the user removes again leaves the form as it was after a reload.
+        // The saved picks stay until the transcript carries the answers (`sync`).
         RpcOutcome::Ok { result } => {
+            if !sent.queue_until_idle {
+                // The normal send may reach a busy agent's own input before its transcript
+                // records it. Keep the optimistic answers card through that interval.
+                if let Some(echo) = state
+                    .pending
+                    .sends
+                    .iter_mut()
+                    .find(|echo| echo.id == format!("answers:{id}"))
+                {
+                    if let Some(delivery) = echo.startup_delivery.as_mut() {
+                        delivery.state = "sending".to_string();
+                    }
+                }
+            }
             if let Some(entry) = state.questions.forms.get_mut(&id) {
                 entry.sent = Some(sent.answers);
+                entry.sent_waiting_for_idle = sent.queue_until_idle;
             }
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
@@ -542,7 +563,21 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
                     notes_from_answers(form, answers),
                 ),
                 (Some(answers), _) => (
-                    "queued",
+                    if entry.sent_waiting_for_idle
+                        || state.session.queue_prompts.as_ref().is_some_and(|queue| {
+                            queue.iter().any(|prompt| {
+                                prompt
+                                    .get("text")
+                                    .and_then(Value::as_str)
+                                    .and_then(crate::transcript::page_answers::answers_page_id)
+                                    == Some(form.id.clone())
+                            })
+                        })
+                    {
+                        "queued"
+                    } else {
+                        "sending"
+                    },
                     drafts_from_answers(form, answers),
                     notes_from_answers(form, answers),
                 ),
@@ -652,7 +687,11 @@ pub fn resend_unreachable(state: &mut ChatState) -> Vec<Effect> {
         send.retry.in_flight = true;
         effects.push(Effect::SendRpc {
             request_id,
-            method: ChatRpcMethod::QueueSessionChatPrompt,
+            method: if send.queue_until_idle {
+                ChatRpcMethod::QueueSessionChatPrompt
+            } else {
+                ChatRpcMethod::SendSessionChatMessage
+            },
             params: Box::new(send.params.clone()),
         });
     }
@@ -707,5 +746,136 @@ mod canceled_tests {
         assert!(skip_all(&mut state, &context, &id).is_empty());
         assert!(state.questions.forms[&id].send.is_none());
         assert!(!state.questions.forms[&id].touched, "no pick landed");
+    }
+
+    #[test]
+    fn form_answers_use_normal_send_and_keep_one_echo_until_recorded() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::SendSessionChatMessage,
+                params,
+            }] => {
+                assert!(params["text"]
+                    .as_str()
+                    .unwrap()
+                    .contains("ghostex-page-answers"));
+                assert!(params["sendRequestId"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("question-form-"));
+                *request_id
+            }
+            other => panic!("expected normal send, got {other:?}"),
+        };
+        assert!(
+            send(&mut state, &context, &id).is_empty(),
+            "one answer in flight"
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(state.pending.sends.len(), 1);
+        let answer_text = state.pending.sends[0].text.clone();
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(
+            state.pending.sends.len(),
+            1,
+            "accepted send keeps its answers card"
+        );
+        assert_eq!(project(&state)[&id]["state"], "sending");
+        assert!(
+            send(&mut state, &context, &id).is_empty(),
+            "accepted answer cannot send twice"
+        );
+        let recorded = serde_json::from_value(json!({
+            "id": "recorded", "role": "user", "source": "transcript",
+            "blocks": [{"type": "text", "text": answer_text}],
+        }))
+        .unwrap();
+        crate::session::answer_echoes::settle(&mut state, &context, &[recorded]);
+        assert!(
+            state.pending.sends.is_empty(),
+            "transcript replaces the card"
+        );
+    }
+
+    #[test]
+    fn advanced_setting_keeps_queue_delivery_across_a_retry() {
+        let (mut state, id) = state_with_form();
+        state.core.answers_wait_for_idle = true;
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::QueueSessionChatPrompt,
+                ..
+            }] => *request_id,
+            other => panic!("expected queue send, got {other:?}"),
+        };
+        state.core.answers_wait_for_idle = false;
+        assert!(
+            state.questions.forms[&id]
+                .send
+                .as_ref()
+                .unwrap()
+                .queue_until_idle
+        );
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        assert_eq!(project(&state)[&id]["state"], "queued");
+    }
+
+    #[test]
+    fn normal_send_reply_before_echo_still_draws_one_answers_card() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("expected one send, got {other:?}"),
+        };
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        crate::session::answer_echoes::settle(&mut state, &context, &[]);
+        assert_eq!(state.pending.sends.len(), 1);
+        assert_eq!(state.pending.sends[0].id, format!("answers:{id}"));
+    }
+
+    #[test]
+    fn normal_send_that_falls_back_to_queue_reads_queued() {
+        let (mut state, id) = state_with_form();
+        let context = ChatContext::default();
+        let effects = send(&mut state, &context, &id);
+        let request_id = match &effects[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("expected one send, got {other:?}"),
+        };
+        let answer_text = state.questions.forms[&id].send.as_ref().unwrap().params["text"].clone();
+        rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok {
+                result: json!({"queuedPromptId": "q"}),
+            },
+        );
+        state.session.queue_prompts = Some(vec![
+            json!({"id": "q", "text": answer_text, "state": "queued"}),
+        ]);
+        assert_eq!(project(&state)[&id]["state"], "queued");
     }
 }

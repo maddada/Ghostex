@@ -277,6 +277,9 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
     if let Some(send_on_pick) = result.send_on_pick {
         state.core.send_on_pick_enabled = send_on_pick;
     }
+    if let Some(wait) = result.answers_wait_for_idle {
+        state.core.answers_wait_for_idle = wait;
+    }
     if let Some(all_efforts) = result.all_orchestrator_efforts {
         state.core.all_orchestrator_efforts_enabled = all_efforts;
     }

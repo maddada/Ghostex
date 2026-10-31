@@ -1,10 +1,10 @@
-//! Answers a reader sent (from a question page's popup window or a ```questions form) shown in the
-//! transcript the moment they leave, as an echo of the message gxserver will type: the "You
-//! answered" card with its delivery state, while the form or page already reads Answered.
+//! Answers a reader sent from a ```questions form are shown at once as an optimistic "You answered"
+//! card. A page's answers use a queue echo when the Advanced wait setting is on, or the transcript
+//! message when a normal send records it. The form or page already reads Answered.
 //!
-//! The answers travel through the session's chat queue (server/src/visual_pages/answers.rs), which
-//! types them once the agent has been idle for a moment, so the recorded message arrives seconds
-//! later. A queued answers row becomes an echo the way a startup send does
+//! With the Advanced wait setting, answers travel through the session's chat queue. Otherwise
+//! they use a normal chat send, which a busy agent can take after its current tool call. A queued
+//! answers row becomes an echo the way a startup send does
 //! (`session/startup_sends.rs`), so it keeps its card through the gap between delivery and the
 //! transcript, and a form's own send draws one before gxserver has even answered. The echo goes
 //! when the transcript carries that page's answers.
@@ -19,7 +19,7 @@ use crate::state::{ChatContext, ChatState, PendingSend};
 use crate::transcript::page_answers::{answers_page_id, page_answers_in};
 use crate::transcript::question_forms::answers_message;
 
-/// The id prefix of the echo a form's own send draws before its queue row exists.
+/// The id prefix of the echo a form's own send draws before its queue row or transcript exists.
 const FORM_ECHO_PREFIX: &str = "answers:";
 
 /// Whether [`settle`] has anything to do: a pending send that carries a page's answers, or a form
@@ -34,7 +34,7 @@ pub fn waiting(state: &ChatState) -> bool {
             .questions
             .forms
             .values()
-            .any(|form| form.send.is_some())
+            .any(|form| form.send.is_some() || (form.sent.is_some() && !form.sent_waiting_for_idle))
 }
 
 /// Keeps the answer echoes in step: one for each form send in flight, none for answers the
@@ -64,18 +64,26 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatMe
         {
             return false;
         }
-        // A form's echo lives while its send is in flight, and on as the queue row it became.
+        // A form's echo lives through an in-flight send and, for normal sends, until the
+        // transcript records it. A queued send instead becomes its queue row.
         match entry.id.strip_prefix(FORM_ECHO_PREFIX) {
             Some(form) if entry.queued_prompt_id.is_none() => state
                 .questions
                 .forms
                 .get(form)
-                .is_some_and(|form| form.send.is_some()),
+                .is_some_and(|form| form.send.is_some() || form.sent.is_some()),
             _ => true,
         }
     });
     for (id, form_state) in &state.questions.forms {
-        let Some(send) = form_state.send.as_ref() else {
+        let answers = if let Some(send) = form_state.send.as_ref() {
+            &send.answers
+        } else if !form_state.sent_waiting_for_idle {
+            let Some(sent) = form_state.sent.as_ref() else {
+                continue;
+            };
+            sent
+        } else {
             continue;
         };
         if confirmed.contains(id) {
@@ -85,14 +93,19 @@ pub fn settle(state: &mut ChatState, context: &ChatContext, transcript: &[ChatMe
             .transcript_view
             .question_forms
             .iter()
+            .chain(crate::questions::resource_modal::fetched_form(state))
             .find(|form| &form.id == id)
         else {
             continue;
         };
-        let text = answers_message(form, &send.answers);
+        let text = answers_message(form, answers);
         let key = normalize_pending_text(&text);
         // While gxserver is away the echo says it is reconnecting (`questions/unreachable_retry.rs`).
-        let delivery = if send.retry.reconnecting {
+        let delivery = if form_state
+            .send
+            .as_ref()
+            .is_some_and(|send| send.retry.reconnecting)
+        {
             "reconnecting"
         } else {
             "sending"

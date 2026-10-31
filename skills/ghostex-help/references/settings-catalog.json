@@ -142,6 +142,19 @@
       "agentWritable": true
     },
     {
+      "key": "chatAnswersWaitForIdle",
+      "title": "Wait for turn end before sending form answers",
+      "subtitle": "Send answers from question forms and chat pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "chatPageOpenTarget",
       "title": "Open chat pages in",
       "subtitle": "Where a page an agent shows in chat (a mockup, a question form, a comparison) opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer.",

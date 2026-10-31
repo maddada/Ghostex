@@ -277,6 +277,9 @@ pub struct ChatSettings {
     /// The Send when you pick an answer setting (`chatSendOnPick`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub send_on_pick: Option<bool>,
+    /// Whether answers wait for the agent's turn to end; the phone learns this from each read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answers_wait_for_idle: Option<bool>,
     /// The Show all effort levels setting (`orchestratorAllEfforts`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub all_orchestrator_efforts: Option<bool>,

@@ -75,10 +75,21 @@ fn loaded(state: &ChatState, id: &str) -> bool {
 /// an event settles, so a window that was just read in is found by reading the loaded messages
 /// themselves.
 fn holder_message(state: &ChatState, id: &str) -> Option<String> {
-    if let Some(asker) = state.transcript_view.askers.iter().find(|asker| asker.id == id) {
+    if let Some(asker) = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| asker.id == id)
+    {
         return Some(asker.message_id.clone());
     }
-    if let Some(item) = state.questions.content.items.iter().find(|item| item.id == id) {
+    if let Some(item) = state
+        .questions
+        .content
+        .items
+        .iter()
+        .find(|item| item.id == id)
+    {
         return Some(item.message_id.clone());
     }
     state
@@ -94,13 +105,21 @@ fn holder_message(state: &ChatState, id: &str) -> Option<String> {
 }
 
 /// Scrolls the chat to the item's loaded reply, and closes the modal.
-fn scroll_to(state: &mut ChatState, context: &ChatContext, id: &str, message_id: &str) -> Vec<Effect> {
+fn scroll_to(
+    state: &mut ChatState,
+    context: &ChatContext,
+    id: &str,
+    message_id: &str,
+) -> Vec<Effect> {
     close(state);
     state.questions.resource_go = None;
     crate::questions::open_questions::jump_to_row(state, context, message_id, id, None)
 }
 
-fn entry_of(state: &ChatState, id: &str) -> Option<crate::questions::resource_index::ResourceEntry> {
+fn entry_of(
+    state: &ChatState,
+    id: &str,
+) -> Option<crate::questions::resource_index::ResourceEntry> {
     crate::questions::open_questions::indexed(state)
         .into_iter()
         .find(|entry| entry.id == id)
@@ -108,7 +127,12 @@ fn entry_of(state: &ChatState, id: &str) -> Option<crate::questions::resource_in
 
 /// A chart's source, from a loaded reply.
 fn loaded_chart_source(state: &ChatState, id: &str) -> Option<String> {
-    let item = state.questions.content.items.iter().find(|item| item.id == id)?;
+    let item = state
+        .questions
+        .content
+        .items
+        .iter()
+        .find(|item| item.id == id)?;
     let message = state
         .messages
         .composed
@@ -153,7 +177,8 @@ pub fn open(state: &mut ChatState, id: &str) -> Vec<Effect> {
     if kind == "chart" {
         modal.source = loaded_chart_source(state, id);
     }
-    let needs_read = (kind == "form" && !loaded_form(state, id)) || (kind == "chart" && modal.source.is_none());
+    let needs_read =
+        (kind == "form" && !loaded_form(state, id)) || (kind == "chart" && modal.source.is_none());
     if needs_read {
         let request_id = state.core.allocate_request_id();
         modal.loading = true;
@@ -202,7 +227,9 @@ pub fn rpc_settled(
                 .unwrap_or_default();
             let id = modal.id.clone();
             if modal.kind == "chart" {
-                modal.source = messages.iter().find_map(|message| chart_source(message, &id));
+                modal.source = messages
+                    .iter()
+                    .find_map(|message| chart_source(message, &id));
                 modal.missing = modal
                     .source
                     .is_none()
@@ -214,10 +241,9 @@ pub fn rpc_settled(
                 modal.answers = page_answers_in(&messages)
                     .into_iter()
                     .find(|answers| answers.page_id == id);
-                modal.missing = modal
-                    .form
-                    .is_none()
-                    .then(|| "Ghostex could not find those questions in the transcript.".to_string());
+                modal.missing = modal.form.is_none().then(|| {
+                    "Ghostex could not find those questions in the transcript.".to_string()
+                });
             }
         }
         RpcOutcome::Err { message, .. } => {
@@ -251,7 +277,12 @@ pub fn is_withdrawn(state: &ChatState, id: &str) -> bool {
     {
         return false;
     }
-    if let Some(asker) = state.transcript_view.askers.iter().find(|asker| asker.id == id) {
+    if let Some(asker) = state
+        .transcript_view
+        .askers
+        .iter()
+        .find(|asker| asker.id == id)
+    {
         return asker.obsolete && !asker.answered;
     }
     entry_of(state, id).is_some_and(|entry| entry.status == "withdrawn")
@@ -316,7 +347,9 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         state.core.request_publish();
         return vec![Effect::Toast {
             level: "info".to_string(),
-            message: "Ghostex has not recorded where that sits in the chat yet. Try again in a moment.".to_string(),
+            message:
+                "Ghostex has not recorded where that sits in the chat yet. Try again in a moment."
+                    .to_string(),
         }];
     };
     if let Some(waiting) = state.questions.resource_go.as_mut() {
@@ -333,7 +366,10 @@ pub fn after_refresh(state: &mut ChatState, context: &ChatContext) {
     let Some(go) = state.questions.resource_go.clone() else {
         return;
     };
-    if !go.read_issued || state.messages.loading_earlier || state.messages.load_earlier_request.is_some() {
+    if !go.read_issued
+        || state.messages.loading_earlier
+        || state.messages.load_earlier_request.is_some()
+    {
         return;
     }
     if let Some(message_id) = holder_message(state, &go.id) {
@@ -341,7 +377,12 @@ pub fn after_refresh(state: &mut ChatState, context: &ChatContext) {
         return;
     }
     state.questions.resource_go = None;
-    if let Some(modal) = state.questions.resource_modal.as_mut().filter(|modal| modal.id == go.id) {
+    if let Some(modal) = state
+        .questions
+        .resource_modal
+        .as_mut()
+        .filter(|modal| modal.id == go.id)
+    {
         modal.missing = Some("Ghostex could not bring that part of the chat in.".to_string());
     }
     state.core.request_publish();
@@ -396,7 +437,9 @@ mod tests {
     const FORM: &str = "```questions\n{\"title\":\"Pick\",\"questions\":[{\"tag\":\"Q1\",\"title\":\"Which?\",\"choices\":[\"A\",\"B\"]}]}\n```";
 
     fn form_id() -> String {
-        crate::transcript::question_forms::question_forms(&[reply("m", FORM)])[0].id.clone()
+        crate::transcript::question_forms::question_forms(&[reply("m", FORM)])[0]
+            .id
+            .clone()
     }
 
     #[test]
@@ -406,7 +449,11 @@ mod tests {
         state.session.resource_index = vec![index_entry(&id, "form", Some(100))];
         let effects = open(&mut state, &id);
         let request_id = match &effects[..] {
-            [Effect::SendRpc { request_id, method: ChatRpcMethod::ReadSessionChatResource, params }] => {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::ReadSessionChatResource,
+                params,
+            }] => {
                 assert_eq!(params["id"], id.as_str());
                 *request_id
             }
@@ -415,11 +462,15 @@ mod tests {
         let modal = state.questions.resource_modal.as_ref().unwrap();
         assert!(modal.loading && modal.form.is_none());
         // The reply arrives (the server sends the reply as the chat wire carries it).
-        let result = json!({"id": id, "messages": [serde_json::to_value(reply("m", FORM)).unwrap()]});
+        let result =
+            json!({"id": id, "messages": [serde_json::to_value(reply("m", FORM)).unwrap()]});
         assert!(rpc_settled(&mut state, request_id, &RpcOutcome::Ok { result }).is_some());
         let modal = state.questions.resource_modal.as_ref().unwrap();
         assert!(!modal.loading && modal.missing.is_none());
-        assert_eq!(modal.form.as_ref().map(|form| form.id.as_str()), Some(id.as_str()));
+        assert_eq!(
+            modal.form.as_ref().map(|form| form.id.as_str()),
+            Some(id.as_str())
+        );
         // The modal's form is what the forms code answers from.
         assert!(fetched_form(&state).is_some());
         let projected = crate::questions::forms::project(&state);
@@ -442,9 +493,15 @@ mod tests {
         };
         rpc_settled(&mut state, request_id, &outcome);
         let modal = state.questions.resource_modal.as_ref().unwrap();
-        assert_eq!(modal.missing.as_deref(), Some("Ghostex has not recorded where that sits yet."));
+        assert_eq!(
+            modal.missing.as_deref(),
+            Some("Ghostex has not recorded where that sits yet.")
+        );
         let view = project(&state, &ChatContext::default());
-        assert_eq!(view["missing"], "Ghostex has not recorded where that sits yet.");
+        assert_eq!(
+            view["missing"],
+            "Ghostex has not recorded where that sits yet."
+        );
         assert_eq!(view["loading"], false);
     }
 
@@ -452,14 +509,19 @@ mod tests {
     fn a_loaded_form_opens_at_once_and_the_chat_does_not_move() {
         let id = form_id();
         let mut state = ChatState::default();
-        state
-            .transcript_view
-            .question_forms
-            .push(crate::transcript::question_forms::question_forms(&[reply("m", FORM)])[0].clone());
-        assert!(open(&mut state, &id).is_empty(), "no read for a loaded form");
+        state.transcript_view.question_forms.push(
+            crate::transcript::question_forms::question_forms(&[reply("m", FORM)])[0].clone(),
+        );
+        assert!(
+            open(&mut state, &id).is_empty(),
+            "no read for a loaded form"
+        );
         let modal = state.questions.resource_modal.as_ref().unwrap();
         assert!(!modal.loading);
-        assert!(state.questions.open_questions.jump.is_none(), "nothing scrolled");
+        assert!(
+            state.questions.open_questions.jump.is_none(),
+            "nothing scrolled"
+        );
         close(&mut state);
         assert!(state.questions.resource_modal.is_none());
     }
@@ -476,13 +538,20 @@ mod tests {
         state.messages.before_offset = 90_000;
         let effects = go_to(&mut state, &context, &id);
         match &effects[..] {
-            [Effect::SendRpc { method: ChatRpcMethod::ReadSessionChat, params, .. }] => {
+            [Effect::SendRpc {
+                method: ChatRpcMethod::ReadSessionChat,
+                params,
+                ..
+            }] => {
                 assert_eq!(params["beforeOffset"], 5_900, "where the reply's turn ends");
             }
             other => panic!("{other:?}"),
         }
         assert!(state.messages.loading_earlier, "the chat shows it loading");
-        assert_eq!(state.messages.before_offset, 90_000, "the Load earlier cursor stays where it was");
+        assert_eq!(
+            state.messages.before_offset, 90_000,
+            "the Load earlier cursor stays where it was"
+        );
         // Waiting on the read: nothing else is issued.
         assert!(advance(&mut state, &context).is_empty());
         assert!(state.questions.resource_go.is_some());
@@ -526,28 +595,44 @@ mod tests {
         (state, id)
     }
 
-    /// Answering in the modal is the card's own path: the same pick and send, the same queue call,
-    /// and the form reads Sending, then Queued, as its card does.
+    /// Answering in the modal is the card's own path: the same pick and normal send.
     #[test]
     fn a_fetched_form_is_answered_in_the_modal_by_the_cards_own_path() {
         let (mut state, id) = fetched_state(None);
         let context = ChatContext::default();
-        assert_eq!(crate::questions::forms::project(&state)[&id]["canSend"], true);
+        assert_eq!(
+            crate::questions::forms::project(&state)[&id]["canSend"],
+            true
+        );
         let _ = crate::questions::forms::pick(&mut state, &context, &id, 0, 1);
         let effects = crate::questions::forms::send(&mut state, &context, &id);
         let request_id = match &effects[..] {
-            [Effect::SendRpc { request_id, method: ChatRpcMethod::QueueSessionChatPrompt, params }] => {
+            [Effect::SendRpc {
+                request_id,
+                method: ChatRpcMethod::SendSessionChatMessage,
+                params,
+            }] => {
                 let text = params["text"].as_str().unwrap();
-                assert!(text.contains("ghostex-page-answers") && text.contains(&id), "{text}");
+                assert!(
+                    text.contains("ghostex-page-answers") && text.contains(&id),
+                    "{text}"
+                );
                 assert!(text.contains("\"B\""), "the pick went with it: {text}");
                 *request_id
             }
             other => panic!("{other:?}"),
         };
-        assert_eq!(crate::questions::forms::project(&state)[&id]["state"], "sending");
-        crate::questions::forms::rpc_settled(&mut state, request_id, &RpcOutcome::Ok { result: json!({}) });
+        assert_eq!(
+            crate::questions::forms::project(&state)[&id]["state"],
+            "sending"
+        );
+        crate::questions::forms::rpc_settled(
+            &mut state,
+            request_id,
+            &RpcOutcome::Ok { result: json!({}) },
+        );
         let view = &crate::questions::forms::project(&state)[&id];
-        assert_eq!(view["state"], "queued");
+        assert_eq!(view["state"], "sending");
         assert_eq!(view["canSend"], false);
         // A second answer is refused: it already went.
         assert!(crate::questions::forms::send(&mut state, &context, &id).is_empty());
@@ -565,7 +650,11 @@ mod tests {
         assert_eq!(view["state"], "answered");
         assert_eq!(view["canSend"], false);
         assert_eq!(view["collapsed"], false, "the modal shows the answers open");
-        assert_eq!(view["drafts"][0]["indices"], json!([0]), "the answer it carries is picked");
+        assert_eq!(
+            view["drafts"][0]["indices"],
+            json!([0]),
+            "the answer it carries is picked"
+        );
         let context = ChatContext::default();
         assert!(crate::questions::forms::pick(&mut state, &context, &id, 0, 1).is_empty());
         assert!(crate::questions::forms::send(&mut state, &context, &id).is_empty());
@@ -577,12 +666,18 @@ mod tests {
         let (mut state, id) = fetched_state(None);
         state.session.resource_index[0]["status"] = json!("withdrawn");
         let view = crate::questions::forms::project(&state)[&id].clone();
-        assert_eq!((view["state"].as_str(), view["canSend"].as_bool()), (Some("withdrawn"), Some(false)));
+        assert_eq!(
+            (view["state"].as_str(), view["canSend"].as_bool()),
+            (Some("withdrawn"), Some(false))
+        );
         let modal = project(&state, &ChatContext::default());
         assert_eq!(modal["status"], "withdrawn");
         assert!(crate::questions::forms::send(&mut state, &ChatContext::default(), &id).is_empty());
         state.session.removed_question_ids = vec![id.clone()];
-        assert_eq!(crate::questions::forms::project(&state)[&id]["state"], "canceled");
+        assert_eq!(
+            crate::questions::forms::project(&state)[&id]["state"],
+            "canceled"
+        );
     }
 
     /// The jump read merges the window that ends at the old form without moving the Load earlier
@@ -605,20 +700,39 @@ mod tests {
         });
         let effects = crate::session::events::handle(
             &mut state,
-            &crate::event::Event::RpcSettled { request_id, outcome: Box::new(RpcOutcome::Ok { result }) },
+            &crate::event::Event::RpcSettled {
+                request_id,
+                outcome: Box::new(RpcOutcome::Ok { result }),
+            },
             &context,
         );
         let _ = effects;
-        assert!(state.messages.list.iter().any(|message| message.id == "old-form"), "the reply is a loaded row");
-        assert_eq!(state.messages.before_offset, 90_000, "the cursor did not move");
+        assert!(
+            state
+                .messages
+                .list
+                .iter()
+                .any(|message| message.id == "old-form"),
+            "the reply is a loaded row"
+        );
+        assert_eq!(
+            state.messages.before_offset, 90_000,
+            "the cursor did not move"
+        );
         assert!(!state.messages.loading_earlier);
         // The seam composes and refreshes the transcript, then advances the jump.
         crate::session::composition::compose_cached(&mut state, &[], None, false);
         crate::transcript::refresh(&mut state, &context);
-        assert!(loaded(&state, &id), "the form is found among the loaded rows");
+        assert!(
+            loaded(&state, &id),
+            "the form is found among the loaded rows"
+        );
         after_refresh(&mut state, &context);
         assert!(state.questions.resource_go.is_none(), "the jump is done");
-        assert!(state.questions.open_questions.jump.is_some(), "the chat was told to scroll");
+        assert!(
+            state.questions.open_questions.jump.is_some(),
+            "the chat was told to scroll"
+        );
     }
 
     /// Answering an old form from the modal moves it to Answered in the list and the count at once,
@@ -632,14 +746,23 @@ mod tests {
         crate::questions::forms::send(&mut state, &context, &id);
         let after = crate::questions::open_questions::project(&state, &context);
         assert_eq!(after.count, 0, "it no longer waits");
-        let row = after.sections.iter().flat_map(|s| &s.rows).find(|row| row.id == id).unwrap();
+        let row = after
+            .sections
+            .iter()
+            .flat_map(|s| &s.rows)
+            .find(|row| row.id == id)
+            .unwrap();
         assert_eq!(row.status, "answered");
 
         // A fresh chat with only an old waiting question: the pill goes to it.
         let mut state = ChatState::default();
         state.session.resource_index = vec![index_entry(&id, "form", Some(7_000))];
         match &crate::questions::open_questions::previous(&mut state, &context)[..] {
-            [Effect::SendRpc { method: ChatRpcMethod::ReadSessionChat, params, .. }] => {
+            [Effect::SendRpc {
+                method: ChatRpcMethod::ReadSessionChat,
+                params,
+                ..
+            }] => {
                 assert_eq!(params["beforeOffset"], 7_000 + JUMP_CONTEXT_BYTES);
             }
             other => panic!("{other:?}"),

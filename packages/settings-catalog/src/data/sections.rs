@@ -54,6 +54,7 @@ use crate::json::J;
 pub const ADVANCED_MAIN_SETTING_KEYS: &[&str] = &[
     "closeEmptySessionsOnNew",
     "chatSendOnPick",
+    "chatAnswersWaitForIdle",
     "sessionCardHoverButtons",
     "unifiedSessionCardHoverButtons",
     "showSessionCardHoverButtonsInContextMenu",
@@ -417,6 +418,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "sessionChatConfirmEscapeInterrupt",
             "chatCatchMeUp",
             "chatSendOnPick",
+            "chatAnswersWaitForIdle",
             "chatPageOpenTarget",
             "orchestratorAllEfforts",
             "orchestratorPlaybook",
@@ -805,6 +807,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "sessionChatConfirmEscapeInterrupt",
             "chatCatchMeUp",
             "chatSendOnPick",
+            "chatAnswersWaitForIdle",
             "chatPageOpenTarget",
             "orchestratorAllEfforts",
             "orchestratorPlaybook",

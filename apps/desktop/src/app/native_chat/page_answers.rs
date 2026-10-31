@@ -134,7 +134,7 @@ impl NativeChatView {
                 // Why gxserver still holds the answers, once they have waited about a minute.
                 reason.into()
             } else if delivery["state"] == "queued" {
-                "Waiting for the agent to be free…".into()
+                "Waiting for the agent to finish its turn…".into()
             } else if delivery["state"] == "reconnecting" {
                 "Reconnecting to Ghostex… your answers go out as soon as it's back.".into()
             } else {

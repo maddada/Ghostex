@@ -572,6 +572,7 @@ fn empty_result() -> ReadSessionChatResult {
         catch_up: None,
         session_details: None,
         send_on_pick: None,
+        answers_wait_for_idle: None,
         all_orchestrator_efforts: None,
         marked_heading_strength: None,
         chat_text_strength: None,
