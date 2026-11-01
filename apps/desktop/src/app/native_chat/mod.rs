@@ -141,7 +141,7 @@ mod workflow_card;
 mod working_card;
 mod working_spark;
 
-mod zoom;
+pub(crate) mod zoom;
 
 mod save_markdown;
 

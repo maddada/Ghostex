@@ -35,6 +35,7 @@ impl Render for ChangesView {
         let Some(s) = self.style else {
             return div().into_any_element();
         };
+        self.sync_files_zoom();
         let view = cx.entity();
         let body = self.render_body(&s, window, cx);
         v_flex()

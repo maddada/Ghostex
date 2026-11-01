@@ -582,6 +582,13 @@ view from the strip.
   buttons, opens it in the chat's full-window picture viewer: click to zoom in
   steps, drag to pan, and Escape or a click beside the picture closes it. Every
   picture opens at its opening size; the zoom isn't kept for the next one.
+  To make the text of a Markdown, text or code file bigger, press Cmd+= and
+  Cmd+- (Ctrl on Windows and Linux) with the file open in Files; Cmd+0 goes
+  back to 100%. This steps Default files zoom (%) in Settings > Interface >
+  Text (70% to 200%, 5% steps), the same way the chat's zoom works: every open
+  file and the Changes diff change size together, the line numbers grow with
+  the text, and the level is saved (`filesZoomPercent`). Terminals, browser
+  pages and the chat keep their own zoom.
 - **Terminal**: a command terminal in the view panel that works like the
   Commands pane, only on the right beside your sessions instead of below them.
   It has its own tab bar with a **+** for new terminals, Cmd+Shift+T for another
@@ -594,7 +601,7 @@ view from the strip.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
 `documentFileOpenTarget`, `otherFileOpenTarget`, `videoFileOpenTarget`,
-`audioFileOpenTarget`, `docsOpenFilesAsTabs`, the Auto Sleep rows
+`audioFileOpenTarget`, `docsOpenFilesAsTabs`, `filesZoomPercent`, the Auto Sleep rows
 (`autoSleep*IdleMinutes`, `keepViewsLoaded`), the Search in Files hotkey (`searchProjectFiles`), and
 Settings > Extensions.
 
@@ -4618,7 +4625,9 @@ and the app uses its own fonts until it is. The phone keeps its own font. To mak
 chat text stronger, use Settings > Interface > Text strength, from the standard colour
 (0%, the default) up to full white in dark mode or full black in light mode, on the
 computer and the phone; muted text, links, code blocks and status colours stay as they are.
-Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatZoomPercent`, `sessionChatTextStrengthPercent`.
+Default files zoom (%) sets the size of a file's text in the Files view and of the
+Changes diff, from 70% to 200%, the way Default chat zoom sets the chat's.
+Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatZoomPercent`, `filesZoomPercent`, `sessionChatTextStrengthPercent`.
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
 mode colour, each a row of sixteen small colour squares (Graphite, the default,

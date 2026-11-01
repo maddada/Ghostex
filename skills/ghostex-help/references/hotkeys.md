@@ -135,9 +135,9 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Find | `cmd+f` |  | `cmd+f` | `cmd+shift+f` | Find text in the focused terminal, browser page, chat or file. On Windows and Linux, Ctrl+F also finds anywhere but in a terminal. | `findInFocusedView` |
 | Find Next | `cmd+g` |  | none |  | Go to the next match of Find in a browser page. | `findNextInBrowser` |
 | Find Previous | `cmd+shift+g` |  | none |  | Go to the previous match of Find in a browser page. | `findPreviousInBrowser` |
-| Zoom In | `cmd+=` |  | `cmd+=` |  | Make the focused terminal, browser page or picture bigger. | `zoomInFocusedView` |
-| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make the focused terminal, browser page or picture smaller. | `zoomOutFocusedView` |
-| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Return the focused terminal, browser page or picture to its normal size. | `resetFocusedViewZoom` |
+| Zoom In | `cmd+=` |  | `cmd+=` |  | Make the focused terminal, browser page, picture or Files document bigger. | `zoomInFocusedView` |
+| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make the focused terminal, browser page, picture or Files document smaller. | `zoomOutFocusedView` |
+| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Return the focused terminal, browser page, picture or Files document to its normal size. | `resetFocusedViewZoom` |
 | Close Tab | `cmd+w` |  | `cmd+w` | `cmd+shift+w` | Close the focused terminal tab, browser tab or view tab. | `closeFocusedSurface` |
 | New Window | `cmd+shift+n` |  | `cmd+shift+n` |  | Open another Ghostex window. | `openNewWindow` |
 | Focus Mode | `cmd+ctrl+f` |  | `cmd+ctrl+f` |  | Show only the focused pane of the Agents view, or bring the other panes back. | `toggleAgentsFocusMode` |

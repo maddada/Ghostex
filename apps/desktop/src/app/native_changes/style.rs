@@ -4,20 +4,37 @@
 use crate::app::window::native_modal_kit::{ModalPalette, css_mix, modal_rgba, rgba_of};
 use gpui::{Rgba, rgb};
 
-use crate::ui_fonts::{FILES_LINE_NUMBER_SIZE, FILES_NAME_SIZE, FILES_TEXT_SIZE};
+use crate::ui_fonts::{FILES_NAME_SIZE, FILES_TEXT_SIZE, files_line_number_size, files_text_size};
 
 /// CDXC:Changes 2026-10-25 DECISION: User: "please make the font for everything here bigger to match font in files tab". Diff lines use the Files editor's text size, line numbers the size of its line numbers, and file headers, paths, counts and the toolbar the size of its file list's names; every row height, gutter and control below is measured from those three.
 pub(crate) const CODE_SIZE: f32 = FILES_TEXT_SIZE;
-pub(crate) const NUMBER_SIZE: f32 = FILES_LINE_NUMBER_SIZE;
 pub(crate) const UI_SIZE: f32 = FILES_NAME_SIZE;
 /// Secondary text: branch names, hints, comment labels, small buttons.
 pub(crate) const SMALL_SIZE: f32 = CODE_SIZE - 1.0;
 pub(crate) const ICON_SIZE: f32 = CODE_SIZE + 1.0;
-pub(crate) const ROW_HEIGHT: f32 = CODE_SIZE * 5.0 / 3.0;
 pub(crate) const FILE_HEADER_HEIGHT: f32 = UI_SIZE * 2.4;
-pub(crate) const HUNK_HEIGHT: f32 = ROW_HEIGHT + 4.0;
-pub(crate) const NUMBER_WIDTH: f32 = NUMBER_SIZE * 3.75;
-pub(crate) const MARKER_WIDTH: f32 = CODE_SIZE * 4.0 / 3.0;
+
+/// The diff's lines, line numbers and hunk headers follow the Files zoom (Settings > Interface >
+/// Default files zoom, `native_docs/text_zoom.rs`), so they keep matching the Files editor; file
+/// headers, the toolbar and the commit bar stay at their own size.
+pub(crate) fn diff_code_size() -> f32 {
+    files_text_size()
+}
+pub(crate) fn diff_number_size() -> f32 {
+    files_line_number_size()
+}
+pub(crate) fn diff_row_height() -> f32 {
+    diff_code_size() * 5.0 / 3.0
+}
+pub(crate) fn diff_hunk_height() -> f32 {
+    diff_row_height() + 4.0
+}
+pub(crate) fn diff_number_width() -> f32 {
+    diff_number_size() * 3.75
+}
+pub(crate) fn diff_marker_width() -> f32 {
+    diff_code_size() * 4.0 / 3.0
+}
 /// The toolbar's segmented control and icon toggles.
 pub(crate) const CONTROL_HEIGHT: f32 = UI_SIZE * 2.0;
 /// Text buttons inside rows (Viewed, Revert, Copy, Comment).

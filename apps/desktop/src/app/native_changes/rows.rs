@@ -200,12 +200,12 @@ pub(crate) fn number_cell(
 ) -> AnyElement {
     div()
         .flex_none()
-        .w(px(NUMBER_WIDTH))
+        .w(px(diff_number_width()))
         .h_full()
         .pr(px(6.0))
         .flex()
         .justify_end()
-        .text_size(px(NUMBER_SIZE))
+        .text_size(px(diff_number_size()))
         .text_color(hsla(color))
         .when_some(background, |this, bg| this.bg(hsla(bg)))
         .child(number.map(|n| n.to_string()).unwrap_or_default())
@@ -220,7 +220,7 @@ pub(crate) fn marker_cell(s: &ChangesStyle, kind: LineKind) -> AnyElement {
     };
     div()
         .flex_none()
-        .w(px(MARKER_WIDTH))
+        .w(px(diff_marker_width()))
         .flex()
         .justify_center()
         .text_color(hsla(color))
@@ -536,14 +536,18 @@ impl ChangesView {
             )))
             .group(group.clone())
             .w_full()
-            .h(px(HUNK_HEIGHT))
+            .h(px(diff_hunk_height()))
             .bg(hsla(s.hunk_row))
             .when(on_cursor, |this| {
                 this.border_l_2().border_color(hsla(s.accent))
             })
             .font_family(MODAL_MONO_FONT)
-            .text_size(px(CODE_SIZE - 1.0))
-            .child(div().flex_none().w(px(NUMBER_WIDTH * 2.0 + MARKER_WIDTH)))
+            .text_size(px(diff_code_size() - 1.0))
+            .child(
+                div()
+                    .flex_none()
+                    .w(px(diff_number_width() * 2.0 + diff_marker_width())),
+            )
             .child(
                 div()
                     .flex_1()
@@ -714,10 +718,10 @@ impl ChangesView {
             .group(group.clone())
             .relative()
             .w_full()
-            .min_h(px(ROW_HEIGHT))
+            .min_h(px(diff_row_height()))
             .font_family(MODAL_MONO_FONT)
-            .text_size(px(CODE_SIZE))
-            .line_height(px(ROW_HEIGHT))
+            .text_size(px(diff_code_size()))
+            .line_height(px(diff_row_height()))
             .bg(hsla(s.code_bg))
             .on_mouse_down(
                 MouseButton::Left,
@@ -756,8 +760,8 @@ impl ChangesView {
                         .id(SharedString::from(format!("changes-plus-{index}")))
                         .absolute()
                         .top(px(2.0))
-                        .left(px(NUMBER_WIDTH * 2.0 - 2.0))
-                        .size(px(ROW_HEIGHT - 4.0))
+                        .left(px(diff_number_width() * 2.0 - 2.0))
+                        .size(px(diff_row_height() - 4.0))
                         .rounded(px(4.0))
                         .flex()
                         .items_center()
@@ -775,7 +779,7 @@ impl ChangesView {
                                 this.open_editor(window, cx);
                             }),
                         )
-                        .child(modal_icon(ICON_PLUS, CODE_SIZE, gpui::rgb(0xffffff))),
+                        .child(modal_icon(ICON_PLUS, diff_code_size(), gpui::rgb(0xffffff))),
                 )
             })
             // CDXC:Changes 2026-10-25 DECISION: User: "make the copy button and comment button both have same bg and both have less height so they fit within that row and they should just be icon buttons. don't make their bg fully transparent make it have frosting so they're visible". Both are icon buttons of one size on the sidebar tooltip bubble's in-window fill, inside the row's height.
@@ -785,7 +789,7 @@ impl ChangesView {
                     div()
                         .id(id)
                         .flex_none()
-                        .size(px(ROW_HEIGHT - 4.0))
+                        .size(px(diff_row_height() - 4.0))
                         .rounded(px(5.0))
                         .flex()
                         .items_center()
@@ -859,7 +863,7 @@ impl ChangesView {
             .w_full()
             .items_start()
             .gap(px(8.0))
-            .pl(px(NUMBER_WIDTH * 2.0 + MARKER_WIDTH))
+            .pl(px(diff_number_width() * 2.0 + diff_marker_width()))
             .pr(px(8.0))
             .py(px(6.0))
             .bg(hsla(rgba_of(edge, if open { 0.07 } else { 0.04 })))
@@ -940,7 +944,7 @@ impl ChangesView {
         v_flex()
             .w_full()
             .gap(px(6.0))
-            .pl(px(NUMBER_WIDTH * 2.0 + MARKER_WIDTH))
+            .pl(px(diff_number_width() * 2.0 + diff_marker_width()))
             .pr(px(10.0))
             .py(px(8.0))
             .bg(hsla(s.header_bg))
@@ -961,7 +965,7 @@ impl ChangesView {
             .child(modal_text_area(
                 &s.p,
                 &editor.input,
-                Some(ROW_HEIGHT * 3.0),
+                Some(diff_row_height() * 3.0),
                 false,
                 window,
                 cx,

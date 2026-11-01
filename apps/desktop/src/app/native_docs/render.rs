@@ -14,6 +14,7 @@ use super::picture_zoom::DocsPictureHost as _;
 use super::state::DocsProjectKey;
 use crate::GhostexGpuiApp;
 use crate::app::model::TitlebarMode;
+use crate::app::native_chat::zoom::ZoomStep;
 
 /// CDXC:Docs 2026-09-25 DECISION:
 /// User: "please make the set width for it 260px". The Docs files list is not resizable and keeps this one width (it was 292px since the 2026-09-19 decision that replaced the resizable 230-560px range).
@@ -117,6 +118,9 @@ impl GhostexGpuiApp {
         }
         self.native_docs_refresh_highlights(cx);
         self.native_docs_sync_browser_area(cx);
+        crate::ui_fonts::sync_files_zoom(
+            crate::shared_settings::shared_sidebar_settings_snapshot().object(),
+        );
         let p = self.native_docs_palette(window, cx);
         self.native_docs_build_data_views(&p, window, cx);
         let focus = self.native_docs.focus.clone()?;
@@ -187,13 +191,14 @@ impl GhostexGpuiApp {
                 // through, and here, below the root, Files claims the chord (CDXC:Docs 2026-10-25
                 // DECISION in packages/settings-catalog/src/hotkey_definitions.rs).
                 .on_action(cx.listener(Self::native_docs_claim_hotkey))
-                // CDXC:Docs 2026-10-24 WHY: Cmd+= / Cmd+- / Cmd+0 (Ctrl on Windows and Linux) are bound app-wide to zoom the focused surface (main.rs), and a matched binding is dispatched before any key-down listener, so an open picture answers those actions here, below the root, and lets them go on when no picture is showing.
+                // CDXC:Docs 2026-10-24 WHY: Cmd+= / Cmd+- / Cmd+0 (Ctrl on Windows and Linux) are bound app-wide to zoom the focused surface (main.rs), and a matched binding is dispatched before any key-down listener, so an open picture, or a document shown as text (`text_zoom.rs`), answers those actions here, below the root, and lets them go on otherwise.
                 .on_action(cx.listener(
                     |this, _: &crate::app::actions::ZoomInFocusedSurface, _, cx| {
                         if !this.native_docs_zoom_picture(
                             super::picture_zoom::PictureZoomCommand::In,
                             cx,
-                        ) {
+                        ) && !this.native_docs_step_text_zoom(ZoomStep::In, cx)
+                        {
                             cx.propagate();
                         }
                     },
@@ -203,7 +208,8 @@ impl GhostexGpuiApp {
                         if !this.native_docs_zoom_picture(
                             super::picture_zoom::PictureZoomCommand::Out,
                             cx,
-                        ) {
+                        ) && !this.native_docs_step_text_zoom(ZoomStep::Out, cx)
+                        {
                             cx.propagate();
                         }
                     },
@@ -213,7 +219,8 @@ impl GhostexGpuiApp {
                         if !this.native_docs_zoom_picture(
                             super::picture_zoom::PictureZoomCommand::Opening,
                             cx,
-                        ) {
+                        ) && !this.native_docs_step_text_zoom(ZoomStep::Reset, cx)
+                        {
                             cx.propagate();
                         }
                     },

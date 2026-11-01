@@ -70,13 +70,20 @@ pub(crate) fn gutter_width(numbers: bool) -> f32 {
     numbers_width(numbers) + STRIPE_W + FOLD_W
 }
 
+/// The line numbers' column widens with the Files zoom, so a four-digit number still fits.
 fn numbers_width(numbers: bool) -> f32 {
-    if numbers { NUMBERS_W } else { 2. }
+    if numbers {
+        NUMBERS_W * crate::ui_fonts::files_zoom_scale()
+    } else {
+        2.
+    }
 }
 
-/// The Docs page's line-number row: the base 14px text line (1.7 line height), so a tall heading
-/// row keeps its number at the top.
-const NUMBER_ROW_H: f32 = 14. * 1.7;
+/// The Docs page's line-number row: the base text line (1.7 line height), so a tall heading row
+/// keeps its number at the top.
+fn number_row_height() -> f32 {
+    crate::ui_fonts::files_text_size() * 1.7
+}
 
 /// CDXC:Docs 2026-09-28 WHY: the former React Docs page's gutter order is line numbers, git
 /// stripe, fold lane (47px in all), so the fold chevrons sit right before the text; the native
@@ -139,13 +146,13 @@ pub(crate) fn render(
                     .absolute()
                     .top(*top)
                     .left(px(0.))
-                    .w(px(NUMBERS_W))
-                    .h((*row_height).min(px(NUMBER_ROW_H)))
+                    .w(px(numbers_width(true)))
+                    .h((*row_height).min(px(number_row_height())))
                     .pr(px(4.))
                     .flex()
                     .items_center()
                     .justify_end()
-                    .text_size(px(crate::ui_fonts::FILES_LINE_NUMBER_SIZE))
+                    .text_size(px(crate::ui_fonts::files_line_number_size()))
                     .text_color(if current { body } else { muted })
                     .child((index + 1).to_string())
             })

@@ -3596,6 +3596,23 @@
       "agentWritable": true
     },
     {
+      "key": "filesZoomPercent",
+      "title": "Default files zoom (%)",
+      "subtitle": "Scale the text of a file open in the Files view (Markdown, text and code, with its line numbers) and the Changes diff, from 70% to 200% in 5% steps. Cmd+= and Cmd+- (Ctrl on Windows and Linux) in an open file change it too, and Cmd+0 sets 100%. Default: 100%.",
+      "tab": "theme",
+      "tabTitle": "Interface",
+      "group": "appearance",
+      "groupTitle": "Interface",
+      "section": "theming",
+      "sectionTitle": "Interface",
+      "type": "number",
+      "default": 100,
+      "min": 70,
+      "max": 200,
+      "step": 5,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatTextStrengthPercent",
       "title": "Text strength",
       "subtitle": "How strong agents' replies and your messages read in chat, on the computer and the phone. 0% is the standard colour; 100% is full white in dark mode and full black in light mode. Muted text, links, code blocks and status colours stay as they are.",
@@ -13006,21 +13023,21 @@
     {
       "id": "zoomInFocusedView",
       "title": "Zoom In",
-      "description": "Make the focused terminal, browser page or picture bigger.",
+      "description": "Make the focused terminal, browser page, picture or Files document bigger.",
       "defaultKey": "cmd+=",
       "terminalDefaultKey": "cmd+="
     },
     {
       "id": "zoomOutFocusedView",
       "title": "Zoom Out",
-      "description": "Make the focused terminal, browser page or picture smaller.",
+      "description": "Make the focused terminal, browser page, picture or Files document smaller.",
       "defaultKey": "cmd+-",
       "terminalDefaultKey": "cmd+-"
     },
     {
       "id": "resetFocusedViewZoom",
       "title": "Reset Zoom",
-      "description": "Return the focused terminal, browser page or picture to its normal size.",
+      "description": "Return the focused terminal, browser page, picture or Files document to its normal size.",
       "defaultKey": "cmd+0",
       "terminalDefaultKey": "cmd+0"
     },

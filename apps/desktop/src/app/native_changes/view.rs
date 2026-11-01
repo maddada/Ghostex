@@ -193,6 +193,8 @@ pub(crate) struct ChangesView {
     pub(crate) viewed: HashMap<String, u64>,
     pub(crate) rows: Vec<Row>,
     pub(crate) list: ListState,
+    /// The Files zoom the diff rows were last measured at (`sync_files_zoom`).
+    drawn_files_zoom: Option<f32>,
     pub(crate) comments: Vec<ChangesComment>,
     next_comment_id: u64,
     pub(crate) show_resolved: bool,
@@ -273,6 +275,7 @@ impl ChangesView {
             viewed: HashMap::new(),
             rows: Vec::new(),
             list: ListState::new(0, ListAlignment::Top, px(800.0)),
+            drawn_files_zoom: None,
             comments: Vec::new(),
             next_comment_id: 1,
             show_resolved: false,
@@ -1285,5 +1288,23 @@ mod tests {
     #[test]
     fn a_header_taller_than_the_view_goes_to_the_top() {
         assert_eq!(center_scroll_delta(40.0, 700.0, 600.0, 400.0, None), 40.0);
+    }
+}
+
+impl ChangesView {
+    /// Reads the Files zoom the diff draws at and, when it changed since the last draw (a zoom
+    /// chord in Files or Settings), drops the rows' measured heights: `ListState` only re-measures
+    /// when its width changes, which a zoom does not.
+    pub(crate) fn sync_files_zoom(&mut self) {
+        let zoom = crate::ui_fonts::sync_files_zoom(
+            crate::shared_settings::shared_sidebar_settings_snapshot().object(),
+        );
+        if self
+            .drawn_files_zoom
+            .replace(zoom)
+            .is_some_and(|drawn| drawn != zoom)
+        {
+            self.list.remeasure();
+        }
     }
 }

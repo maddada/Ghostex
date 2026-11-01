@@ -538,6 +538,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-10-31 DECISION: User: "add a slider to pick the color of the text how strong it is (color of text in the chat now is not full white, i have user wanting it to be full white". 0% is today's colour, so nobody's look changes until they move it; 100% is full white in dark mode and full black in light mode.
     ("sessionChatTextStrengthPercent", J::Num(0.0)),
     ("sessionChatZoomPercent", J::Num(100.0)),
+    ("filesZoomPercent", J::Num(100.0)),
     ("sessionChatCustomTranscriptWidthEnabled", J::Bool(false)),
     ("sessionChatTranscriptWidthPercent", J::Num(75.0)),
     ("sessionChatVerboseMode", J::Bool(false)),

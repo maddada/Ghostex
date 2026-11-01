@@ -5,12 +5,67 @@ use std::sync::{Arc, Mutex};
 /// User: Windows should render with the same quality, type sizes and spacing as macOS.
 pub(crate) const UI_FONT: &str = "Inter";
 
-/// The Files view's type sizes: its editor text, its line numbers and its file list names. The
-/// Changes view draws its diff with the same three, so both views read at one size.
+/// The Files view's type sizes at 100%: its editor text, its line numbers and its file list names.
+/// The Changes view draws its diff with the same three, so both views read at one size. Draw the
+/// text and line numbers with `files_text_size()` and `files_line_number_size()`, which apply the
+/// Files zoom.
 pub(crate) const FILES_TEXT_SIZE: f32 = 14.0;
 pub(crate) const FILES_LINE_NUMBER_SIZE: f32 = 12.0;
 /// `.manage-file-name`: 15.55px at weight 300.
 pub(crate) const FILES_NAME_SIZE: f32 = 15.55;
+
+/// Settings > Interface > Default files zoom (%).
+pub(crate) const FILES_ZOOM_SETTING: &str = "filesZoomPercent";
+/// The range Settings offers for it, the same as Default chat zoom's.
+const FILES_ZOOM_RANGE: (f32, f32) = (70.0, 200.0);
+
+thread_local! {
+    /// The zoom the Files and Changes views paint at, set by `sync_files_zoom` as they draw.
+    static FILES_ZOOM_PERCENT: std::cell::Cell<f32> = const { std::cell::Cell::new(100.0) };
+    /// A zoom chord's value the debounced save has not written yet (`native_docs/text_zoom.rs`);
+    /// it wins over the saved setting so the next press steps from what is on screen.
+    static PENDING_FILES_ZOOM_PERCENT: std::cell::Cell<Option<f32>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// Reads the Files zoom (a chord's pending value, else the saved `filesZoomPercent`) into the
+/// value the sizes below scale by, and returns it. The Files and Changes views call it at the top
+/// of their draw, so every size read during that draw is one lock-free lookup.
+pub(crate) fn sync_files_zoom(settings: &serde_json::Map<String, serde_json::Value>) -> f32 {
+    let percent = PENDING_FILES_ZOOM_PERCENT
+        .with(std::cell::Cell::get)
+        .unwrap_or_else(|| {
+            settings
+                .get(FILES_ZOOM_SETTING)
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(100.0) as f32
+        })
+        .clamp(FILES_ZOOM_RANGE.0, FILES_ZOOM_RANGE.1);
+    FILES_ZOOM_PERCENT.with(|cell| cell.set(percent));
+    percent
+}
+
+pub(crate) fn set_pending_files_zoom_percent(percent: Option<f32>) {
+    PENDING_FILES_ZOOM_PERCENT.with(|cell| cell.set(percent));
+}
+
+pub(crate) fn take_pending_files_zoom_percent() -> Option<f32> {
+    PENDING_FILES_ZOOM_PERCENT.with(std::cell::Cell::take)
+}
+
+/// The Files zoom as a factor (1.0 at 100%), for sizes measured from the text: row heights,
+/// gutters, the reading column.
+pub(crate) fn files_zoom_scale() -> f32 {
+    FILES_ZOOM_PERCENT.with(std::cell::Cell::get) / 100.0
+}
+
+pub(crate) fn files_text_size() -> f32 {
+    FILES_TEXT_SIZE * files_zoom_scale()
+}
+
+pub(crate) fn files_line_number_size() -> f32 {
+    FILES_LINE_NUMBER_SIZE * files_zoom_scale()
+}
 
 /// CDXC:DesignSystem 2026-09-26 WHY:
 /// The bundled static faces identify as Inter, not Inter Variable. Register them before the first window so chrome and Docs use the same metrics without relying on fonts installed on the host.

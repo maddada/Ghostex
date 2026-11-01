@@ -14,6 +14,7 @@ use gpui::{AnyElement, Context, IntoElement, Window};
 use serde_json::json;
 
 const CHAT_ZOOM_KEY: &str = "sessionChatZoomPercent";
+const FILES_ZOOM_KEY: &str = crate::ui_fonts::FILES_ZOOM_SETTING;
 const TEXT_STRENGTH_KEY: &str = "sessionChatTextStrengthPercent";
 const MUTED_THINKING_KEY: &str = "sessionChatMutedThinking";
 
@@ -116,6 +117,28 @@ impl ThemeTab {
                     step: number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
                 },
                 t.values.f64(CHAT_ZOOM_KEY),
+                window,
+                cx,
+            ));
+        }
+        // Default files zoom shares Default chat zoom's range and step (`native_docs/text_zoom.rs`).
+        if t.visible(FILES_ZOOM_KEY) {
+            rows.push(slider_number_field(
+                self,
+                &p,
+                t.spec(
+                    FILES_ZOOM_KEY,
+                    "Default files zoom (%)",
+                    "Scale the text of a file open in the Files view, with its line numbers, and the Changes diff, from 70% to 200% in 5% steps. Zoom In and Zoom Out in an open file change it too, and Reset Zoom sets 100%.",
+                ),
+                Some(reset_key::<Self>(FILES_ZOOM_KEY)),
+                SliderBinding {
+                    key: FILES_ZOOM_KEY,
+                    min: number("MIN_SESSION_CHAT_ZOOM_PERCENT"),
+                    max: number("MAX_SESSION_CHAT_ZOOM_PERCENT"),
+                    step: number("SESSION_CHAT_ZOOM_PERCENT_STEP"),
+                },
+                t.values.f64(FILES_ZOOM_KEY),
                 window,
                 cx,
             ));
