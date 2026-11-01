@@ -16,6 +16,17 @@ pub(crate) fn rebind_exhausted(
         refuse_turned_off(repository, project, &session)?;
         return Ok(session);
     };
+    // A conversation the account with room cannot read stays on its saved account (conversation_link.rs).
+    if account.provider == Provider::Claude
+        && launch::home()
+            .and_then(|home| {
+                super::conversation_link::bring_claude_conversation(&home, &session, &account)
+            })
+            .is_err()
+    {
+        refuse_turned_off(repository, project, &session)?;
+        return Ok(session);
+    }
     let runtime = &session["runtimeSettings"];
     let current = runtime["accountId"].as_str().unwrap_or_default();
     let provider = account.provider;

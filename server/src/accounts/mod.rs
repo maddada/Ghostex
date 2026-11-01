@@ -8,6 +8,7 @@ mod codex_blockers;
 mod codex_identity;
 mod codex_identity_migration;
 pub(crate) mod continuation;
+mod conversation_link;
 pub(crate) mod default_account;
 pub(crate) mod default_login;
 pub(crate) mod disabled;

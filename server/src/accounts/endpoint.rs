@@ -694,6 +694,14 @@ pub(crate) fn select(
                 "This account needs to be reconnected first.",
             ));
         }
+        // The resumed conversation has to be where the new account's Claude reads it; see conversation_link.rs.
+        if provider == Provider::Claude {
+            super::conversation_link::bring_claude_conversation(
+                &state.paths.home_dir,
+                session,
+                account,
+            )?;
+        }
         let command = launch::launch_command(&state.paths.home_dir, account)?;
         launch::assign(&mut runtime, account, command)?;
     } else {
