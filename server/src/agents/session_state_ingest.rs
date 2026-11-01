@@ -502,9 +502,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
         captured_agent_session_id.is_some() || repaired_working_directory_title;
     let mut reason = terminal_title_skip_reason(
         &current,
-        params,
         visible_title.as_deref(),
-        &runtime_settings,
         captured_agent_session_id.as_deref(),
     );
     // CDXC:Coordinators 2026-10-05 SEE-ALSO: keeps_its_given_title in server/src/coordinators/title.rs (the user's no-auto-rename decisions for coordinators and their threads).
@@ -697,9 +695,7 @@ pub(crate) fn ingest_terminal_title_event_with_home(
 /// A resumed fork's CLI puts the parent's name in its terminal title seconds after launch, often before its composer is ready. Taking it replaced the provisional `Fork:` name, which cancels the initial rename, and a Claude fork writes its own transcript only when that rename (or the first prompt) lands, so every chat client showed the fork empty while its terminal showed the history. Only the inherited name is refused; any other title is the fork's own and still applies.
 pub(crate) fn terminal_title_skip_reason(
     session: &Value,
-    params: &Map<String, Value>,
     visible_title: Option<&str>,
-    runtime_settings: &Map<String, Value>,
     captured_agent_session_id: Option<&str>,
 ) -> Option<String> {
     if !matches!(
@@ -723,14 +719,6 @@ pub(crate) fn terminal_title_skip_reason(
     }
     if is_ellipsized_terminal_window_title(visible_title) {
         return Some("terminal-title-already-ellipsized".to_string());
-    }
-    if params
-        .get("protectStoredTitleFromAutomation")
-        .and_then(Value::as_bool)
-        == Some(true)
-        && trusted_resume_title_with_runtime(session, runtime_settings).is_some()
-    {
-        return Some("protected-stored-title".to_string());
     }
     if session
         .get("title")
@@ -795,20 +783,6 @@ pub(crate) fn session_title_source(
             .and_then(Value::as_str)
             .unwrap_or_default(),
     )
-}
-
-pub(crate) fn trusted_resume_title_with_runtime(
-    session: &Value,
-    runtime_settings: &Map<String, Value>,
-) -> Option<String> {
-    let title = read_text_value(session, "title")?;
-    if session_title_source(session, runtime_settings) == "placeholder"
-        || is_temporary_title(&title)
-    {
-        return None;
-    }
-    let visible = get_visible_terminal_title(&title)?;
-    (!is_rejected_resume_title(&visible)).then_some(visible)
 }
 
 pub(crate) fn read_agent_metadata_settled_title(session: &Value) -> Option<String> {
