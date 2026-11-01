@@ -328,7 +328,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         } else if hook_state != ThreadState::Working
             && hook_state != ThreadState::Sleeping
             && thread.observed_working
+            && coordinators::thread_prompt(&session).is_none()
         {
+            // CDXC:Coordinators 2026-11-02 WHY: A question or permission prompt keeps the asking turn open in the transcript, so the transcript check read a Claude thread stuck on a permission prompt as working and its orchestrator got no "waiting for an answer" until someone's screen read recorded a screen wait (tester report, 2026-11-02). The stored card the hook wrote is the stronger evidence, so the transcript is not asked while one is shown.
             // Only a thread about to be reported pays for the transcript read.
             let working = memory
                 .transcript_gates

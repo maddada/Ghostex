@@ -3737,7 +3737,8 @@ short sound when copying from a terminal, a chat message, the chat composer
 (including its right-click Copy menu), a copy button, or a menu (`copySound`).
 
 The Notifications bell sits in the sidebar's top row, just before the sidebar
-menu button, and shows how many notifications are unread. Click it to open the Notifications
+menu button, and shows how many notifications are unread; the badge turns red while a
+permission or approval request waits for your answer. Click it to open the Notifications
 panel: one row per session, newest first, saying whether the agent finished a
 turn or needs your input, with the last thing it said. Click a row to jump to
 that session and mark it read; hover a row to dismiss it; the header has Next
@@ -3747,8 +3748,11 @@ Cmd+Shift+U jumps to the latest unread notification, and Cmd+Ctrl+U pushes the
 current session to the back of the unread queue and jumps to the next one.
 Clearing a session's attention by selecting it in the sidebar, focusing its
 terminal, or pressing Escape also marks its notification read, including one
-you previously moved to the back of the unread queue. It works the other way
-too: marking a notification read, or using Mark all read, clears the
+you previously moved to the back of the unread queue. A permission or approval
+request stays unread and red in the Notifications panel, with a red dot on its
+sidebar row, until it is answered in the agent. Opening or focusing it, reading
+its screen, or using Mark all read or Clear all does not remove it while it waits.
+For other notifications, marking one read or using Mark all read clears the
 finished or needs-input mark on its session in the sidebar.
 Scripts and agent hooks can post their own rows with
 `ghostex notify --title <text> [--body <text>]`.

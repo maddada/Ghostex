@@ -106,6 +106,9 @@ fn normalize_item(value: &Value) -> Option<Value> {
     item.insert("createdAt".into(), Value::from(created_at));
     item.insert("id".into(), Value::from(id));
     item.insert("kind".into(), Value::from(kind));
+    if raw.get("awaitingApproval") == Some(&Value::Bool(true)) {
+        item.insert("awaitingApproval".into(), Value::Bool(true));
+    }
     item.insert("projectId".into(), Value::from(project_id));
     item.insert(
         "read".into(),

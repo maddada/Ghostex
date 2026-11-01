@@ -123,7 +123,7 @@ impl GpuiTitlebarReadingPanel {
             && let Some(index) = feed.items.iter().position(|item| item.key() == key)
         {
             let machine = feed.items[index].machine.clone();
-            if !feed.items[index].read {
+            if !feed.items[index].read && !feed.items[index].awaiting_approval {
                 feed.items[index].read = true;
                 feed.note_read(&machine);
             }
@@ -160,6 +160,9 @@ impl GpuiTitlebarReadingPanel {
         if let Some(feed) = self.notifications_feed_mut()
             && let Some(index) = feed.items.iter().position(|item| item.key() == key)
         {
+            if feed.items[index].awaiting_approval {
+                return;
+            }
             let removed = feed.items.remove(index);
             if !removed.read {
                 feed.note_read(&removed.machine);
@@ -196,6 +199,9 @@ impl GpuiTitlebarReadingPanel {
         let Some(index) = feed.items.iter().position(|item| item.key() == key) else {
             return;
         };
+        if feed.items[index].awaiting_approval && !feed.items[index].read {
+            return;
+        }
         let machine = feed.items[index].machine.clone();
         let was_read = feed.items[index].read;
         feed.items[index].read = !was_read;
@@ -228,12 +234,9 @@ impl GpuiTitlebarReadingPanel {
         let tab = self.notifications_tab();
         if let Some(feed) = self.notifications_feed_mut() {
             for item in &mut feed.items {
-                if tab.includes(&item.machine) {
+                if tab.includes(&item.machine) && !item.awaiting_approval {
                     item.read = true;
                 }
-            }
-            if tab.includes(&feed.next_unread_machine) {
-                feed.next_unread_id = None;
             }
             reset_tab_unread_counts(feed, tab);
         }
@@ -245,10 +248,8 @@ impl GpuiTitlebarReadingPanel {
     fn clear_all_notifications(&mut self, cx: &mut gpui::Context<Self>) {
         let tab = self.notifications_tab();
         if let Some(feed) = self.notifications_feed_mut() {
-            feed.items.retain(|item| !tab.includes(&item.machine));
-            if tab.includes(&feed.next_unread_machine) {
-                feed.next_unread_id = None;
-            }
+            feed.items
+                .retain(|item| item.awaiting_approval || !tab.includes(&item.machine));
             reset_tab_unread_counts(feed, tab);
         }
         self.send_notification_feed_command("clearAll", None, cx);
@@ -599,7 +600,7 @@ impl GpuiTitlebarReadingPanel {
     }
 
     /// CDXC:Notifications 2026-09-11 DECISION:
-    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for unread cards.
+    /// User: notification cards look like the Tips dropdown cards (square icon tile, bold title, muted body, check mark bottom right, UNREAD and READ groups), keeping the blue accents for ordinary unread cards. The 2026-11-02 approval decision in server/src/notification_feed/store.rs supersedes blue for an approval card, which uses the sidebar's approval red.
     /// User: no dismiss gutter; the X floats where the time is and, while the card is hovered, replaces the time in that same right-aligned slot.
     fn render_notification_row(
         &self,
@@ -616,8 +617,16 @@ impl GpuiTitlebarReadingPanel {
         let dismiss_id = key;
         let time_label = notification_feed_relative_time(item.created_at_epoch_secs);
         let unread = !item.read;
-        let accent = item.kind.accent();
-        let accent_text_light = item.kind.accent_text_light();
+        let accent = if item.awaiting_approval {
+            crate::app::native_sidebar::status::APPROVAL_COLOR
+        } else {
+            item.kind.accent()
+        };
+        let accent_text_light = if item.awaiting_approval {
+            crate::notification_feed::NOTIFICATION_URGENT_RED_TEXT_LIGHT
+        } else {
+            item.kind.accent_text_light()
+        };
         let title = if item.title.is_empty() {
             "Session".to_string()
         } else {
@@ -632,7 +641,7 @@ impl GpuiTitlebarReadingPanel {
         // CDXC:Notifications 2026-09-11 DECISION:
         // User: one square check button per card in the bottom-right corner, shown on hover only, no X and no separate column for it.
         // On an unread card it marks the card read; on a read card it dismisses the card from history.
-        let check_button: Option<AnyElement> = hovered.then(|| {
+        let check_button: Option<AnyElement> = (hovered && !item.awaiting_approval).then(|| {
             div()
                 .id(format!("ghostex-gpui-titlebar-notification-check-{index}"))
                 .absolute()
@@ -926,15 +935,31 @@ impl GpuiTitlebarReadingPanel {
     }
 }
 
-/// The tab's unread rows were all read or cleared: its counts drop to zero, and All loses them.
+/// The tab's unread rows were all read or cleared, except approvals still waiting for an answer
+/// (they stay unread): its counts drop to those, and the jump target goes unless it is one of them.
 fn reset_tab_unread_counts(feed: &mut GpuiNotificationFeedState, tab: NotificationFeedTab) {
+    let waiting = |local: bool| {
+        feed.items
+            .iter()
+            .filter(|item| item.machine.is_local() == local && !item.read)
+            .count()
+    };
+    let (local_waiting, remote_waiting) = (waiting(true), waiting(false));
     match tab {
         NotificationFeedTab::All => {
-            feed.local_unread_count = 0;
-            feed.remote_unread_count = 0;
+            feed.local_unread_count = local_waiting;
+            feed.remote_unread_count = remote_waiting;
         }
-        NotificationFeedTab::ThisComputer => feed.local_unread_count = 0,
-        NotificationFeedTab::Remote => feed.remote_unread_count = 0,
+        NotificationFeedTab::ThisComputer => feed.local_unread_count = local_waiting,
+        NotificationFeedTab::Remote => feed.remote_unread_count = remote_waiting,
     }
     feed.unread_count = feed.local_unread_count + feed.remote_unread_count;
+    let next_still_unread = feed.items.iter().any(|item| {
+        !item.read
+            && item.machine == feed.next_unread_machine
+            && feed.next_unread_id.as_deref() == Some(item.id.as_str())
+    });
+    if tab.includes(&feed.next_unread_machine) && !next_still_unread {
+        feed.next_unread_id = None;
+    }
 }
