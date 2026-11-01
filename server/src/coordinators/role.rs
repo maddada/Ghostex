@@ -40,6 +40,11 @@ pub const ORCHESTRATOR_SKILL_NAME: &str = "ghostex-orchestrator";
 pub const COORDINATOR_ROLE_SETTING: &str = "coordinatorRole";
 pub const COORDINATOR_ROLE_SKILL: &str = "skill";
 
+/// The session runtime setting `true` on an orchestrator whose first message is only the skill
+/// line (a handoff stages its message as a draft instead, an unnamed `create` may carry no task).
+/// See `keeps_its_given_title` in title.rs.
+pub const COORDINATOR_SKILL_ONLY_START_SETTING: &str = "coordinatorSkillOnlyStart";
+
 /// True when the session takes its orchestrator role from the skill.
 pub fn coordinator_role_is_skill(session: &serde_json::Value) -> bool {
     session
