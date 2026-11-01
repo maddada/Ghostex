@@ -219,6 +219,21 @@ fn detects_codex_fast_modifier_regardless_of_case() {
     }
 }
 
+/// The whole screen as Codex 0.165 paints it, with the capitalised modifier newer Codex prints.
+#[test]
+fn detects_a_capitalised_fast_on_a_whole_codex_screen() {
+    for (footer, plan) in [
+        ("GPT-6.1-Sol xhigh Fast \u{b7} 01a19974-8c6a-7b23-92bc-813feb1712aa \u{b7} Ghostex \u{b7} main \u{b7} Context 0% used \u{b7} weekly 5% left", false),
+        ("GPT-6.1-Sol xhigh Fast \u{b7} Ghostex \u{b7} main \u{b7} Context 0% used        Plan mode (\u{21e7}tab to cycle)", true),
+    ] {
+        let screen = format!("\u{203a} Ask Codex to do anything\n\n  {footer}\n  ? for shortcuts\n");
+        let selection = codex(&screen).expect(footer);
+        assert_eq!(pair(&selection), (Some("gpt-6.1-sol"), Some("xhigh")), "{footer}");
+        assert_eq!(selection.fast, Some(true), "{footer}");
+        assert_eq!(selection.mode.is_some(), plan, "{footer}");
+    }
+}
+
 #[test]
 fn detects_codex_xhigh_effort() {
     let selection = codex(CODEX_XHIGH).expect("codex footer detected");

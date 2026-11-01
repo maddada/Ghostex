@@ -173,6 +173,30 @@ fn a_damaged_command_store_blocks_changes_without_losing_other_pins() {
 }
 
 #[test]
+fn a_missing_or_empty_command_store_reads_as_empty_and_every_written_one_reads_back() {
+    let store = Store::new();
+    assert_eq!(store.sources(), WorkSources::default(), "no row yet");
+    write_work_sources(&store.db, &WorkSources::default()).expect("write empty");
+    assert_eq!(store.sources(), WorkSources::default(), "an empty row");
+    // A refused icon is kept as its reason; retired ids keep their format, name and icon.
+    store.answer("bad-icon");
+    let refused_icon = store.set("ws-a", false).expect("pinned");
+    assert!(matches!(refused_icon.info.icon, Some(Err(_))));
+    let mut written = store.sources();
+    assert_eq!(written.workspaces[&store.ws("ws-a")], refused_icon);
+    written.retired = vec![
+        retired(0),
+        RetiredSource {
+            format: IdFormat::KeyNumber,
+            icon: Some("<svg/>".to_string()),
+            ..retired(1)
+        },
+    ];
+    write_work_sources(&store.db, &written).expect("write back");
+    assert_eq!(store.sources(), written);
+}
+
+#[test]
 fn a_command_that_now_calls_itself_otherwise_waits_for_a_switch() {
     let store = Store::new();
     store.answer("good");
