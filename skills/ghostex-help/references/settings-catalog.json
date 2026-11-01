@@ -1455,7 +1455,7 @@
     {
       "key": "workspaceBackgroundColor",
       "title": "Terminal background color",
-      "subtitle": "Custom terminal background, painted behind terminal text in dark mode.",
+      "subtitle": "Custom terminal background, painted behind terminal text in dark and light mode.",
       "tab": "terminal",
       "tabTitle": "Terminal",
       "section": "terminal",
@@ -3603,7 +3603,7 @@
     {
       "key": "themeSidebarContrast",
       "title": "Sidebar colourfulness",
-      "subtitle": "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, where dark mode shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is.",
+      "subtitle": "How much of the theme colour shows in the sidebar, from Subtle (deeper, nearly neutral) through Vivid (lighter, more colourful) to Full, which shows the colour you picked itself. Colourfulness sets the sidebar and work area together, and how deep a custom colour is.",
       "tab": "theme",
       "tabTitle": "Interface",
       "group": "appearance",
@@ -4484,6 +4484,86 @@
         {
           "label": "Galizur",
           "value": "Galizur"
+        },
+        {
+          "label": "Ghostex Alucard",
+          "value": "Ghostex Alucard"
+        },
+        {
+          "label": "Ghostex Catppuccin Frappé",
+          "value": "Ghostex Catppuccin Frappe"
+        },
+        {
+          "label": "Ghostex Catppuccin Latte",
+          "value": "Ghostex Catppuccin Latte"
+        },
+        {
+          "label": "Ghostex Catppuccin Macchiato",
+          "value": "Ghostex Catppuccin Macchiato"
+        },
+        {
+          "label": "Ghostex Catppuccin Mocha",
+          "value": "Ghostex Catppuccin Mocha"
+        },
+        {
+          "label": "Ghostex Dracula",
+          "value": "Ghostex Dracula"
+        },
+        {
+          "label": "Ghostex Everforest Dark",
+          "value": "Ghostex Everforest Dark"
+        },
+        {
+          "label": "Ghostex Everforest Light",
+          "value": "Ghostex Everforest Light"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Dark",
+          "value": "Ghostex Gruvbox Material Dark"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Light",
+          "value": "Ghostex Gruvbox Material Light"
+        },
+        {
+          "label": "Ghostex Kanagawa Dragon",
+          "value": "Ghostex Kanagawa Dragon"
+        },
+        {
+          "label": "Ghostex Kanagawa Lotus",
+          "value": "Ghostex Kanagawa Lotus"
+        },
+        {
+          "label": "Ghostex Kanagawa Wave",
+          "value": "Ghostex Kanagawa Wave"
+        },
+        {
+          "label": "Ghostex Nord",
+          "value": "Ghostex Nord"
+        },
+        {
+          "label": "Ghostex Solarized Dark",
+          "value": "Ghostex Solarized Dark"
+        },
+        {
+          "label": "Ghostex Solarized Light",
+          "value": "Ghostex Solarized Light"
+        },
+        {
+          "label": "Ghostex Tokyo Night Day",
+          "value": "Ghostex Tokyo Night Day"
+        },
+        {
+          "label": "Ghostex Tokyo Night Moon",
+          "value": "Ghostex Tokyo Night Moon"
+        },
+        {
+          "label": "Ghostex Tokyo Night Night",
+          "value": "Ghostex Tokyo Night Night"
+        },
+        {
+          "label": "Ghostex Tokyo Night Storm",
+          "value": "Ghostex Tokyo Night Storm"
         },
         {
           "label": "Ghostty Default Style Dark",
@@ -6448,6 +6528,86 @@
         {
           "label": "Galizur",
           "value": "Galizur"
+        },
+        {
+          "label": "Ghostex Alucard",
+          "value": "Ghostex Alucard"
+        },
+        {
+          "label": "Ghostex Catppuccin Frappé",
+          "value": "Ghostex Catppuccin Frappe"
+        },
+        {
+          "label": "Ghostex Catppuccin Latte",
+          "value": "Ghostex Catppuccin Latte"
+        },
+        {
+          "label": "Ghostex Catppuccin Macchiato",
+          "value": "Ghostex Catppuccin Macchiato"
+        },
+        {
+          "label": "Ghostex Catppuccin Mocha",
+          "value": "Ghostex Catppuccin Mocha"
+        },
+        {
+          "label": "Ghostex Dracula",
+          "value": "Ghostex Dracula"
+        },
+        {
+          "label": "Ghostex Everforest Dark",
+          "value": "Ghostex Everforest Dark"
+        },
+        {
+          "label": "Ghostex Everforest Light",
+          "value": "Ghostex Everforest Light"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Dark",
+          "value": "Ghostex Gruvbox Material Dark"
+        },
+        {
+          "label": "Ghostex Gruvbox Material Light",
+          "value": "Ghostex Gruvbox Material Light"
+        },
+        {
+          "label": "Ghostex Kanagawa Dragon",
+          "value": "Ghostex Kanagawa Dragon"
+        },
+        {
+          "label": "Ghostex Kanagawa Lotus",
+          "value": "Ghostex Kanagawa Lotus"
+        },
+        {
+          "label": "Ghostex Kanagawa Wave",
+          "value": "Ghostex Kanagawa Wave"
+        },
+        {
+          "label": "Ghostex Nord",
+          "value": "Ghostex Nord"
+        },
+        {
+          "label": "Ghostex Solarized Dark",
+          "value": "Ghostex Solarized Dark"
+        },
+        {
+          "label": "Ghostex Solarized Light",
+          "value": "Ghostex Solarized Light"
+        },
+        {
+          "label": "Ghostex Tokyo Night Day",
+          "value": "Ghostex Tokyo Night Day"
+        },
+        {
+          "label": "Ghostex Tokyo Night Moon",
+          "value": "Ghostex Tokyo Night Moon"
+        },
+        {
+          "label": "Ghostex Tokyo Night Night",
+          "value": "Ghostex Tokyo Night Night"
+        },
+        {
+          "label": "Ghostex Tokyo Night Storm",
+          "value": "Ghostex Tokyo Night Storm"
         },
         {
           "label": "Ghostty Default Style Dark",

@@ -238,7 +238,7 @@ cp -R "$GPUI_DIR/dist/sidebar" "$APP_DIR/dist/sidebar"
 # and the macOS asset list in build-macos-app.sh.
 mkdir -p "$APP_DIR/resources/sounds"
 cp "$REPO_ROOT"/media/sounds/*.mp3 "$APP_DIR/resources/sounds/"
-# The licence notices of the bundled third-party parts.
+# The licence notices of the bundled third-party parts (the theme preset palettes among them).
 cp "$REPO_ROOT/THIRD_PARTY_NOTICES.md" "$APP_DIR/resources/"
 
 # 5) Bundle the local gxserver package (bin/gxserver + zmx + node runtime),

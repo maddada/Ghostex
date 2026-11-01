@@ -1,0 +1,22 @@
+# Everforest Light (medium): sainnhe/everforest 85a86eb62409e3ec88713bff3d1b9d7374e112e4, the terminal colours colors/everforest.vim sets with its default options (background medium), Normal text and Visual selection; cursor is the text colour.
+# Written in Ghostty theme format for Ghostex from the values named above; MIT, Copyright (c) 2019 sainnhe.
+palette = 0=#5c6a72
+palette = 1=#f85552
+palette = 2=#8da101
+palette = 3=#dfa000
+palette = 4=#3a94c5
+palette = 5=#df69ba
+palette = 6=#35a77c
+palette = 7=#e6e2cc
+palette = 8=#5c6a72
+palette = 9=#f85552
+palette = 10=#8da101
+palette = 11=#dfa000
+palette = 12=#3a94c5
+palette = 13=#df69ba
+palette = 14=#35a77c
+palette = 15=#e6e2cc
+background = #fdf6e3
+foreground = #5c6a72
+cursor-color = #5c6a72
+selection-background = #eaedc8

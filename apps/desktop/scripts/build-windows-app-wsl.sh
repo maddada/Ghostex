@@ -479,7 +479,7 @@ windows_robocopy "$GPUI_DIR/dist/sidebar" "$APP_DIR/dist/sidebar" /MIR
 # Keep in step with build-windows-app.ps1, build-linux-app.sh and the macOS asset list in build-macos-app.sh.
 mkdir -p "$APP_DIR/resources/sounds"
 cp "$REPO_ROOT"/media/sounds/*.mp3 "$APP_DIR/resources/sounds/"
-# The licence notices of the bundled third-party parts.
+# The licence notices of the bundled third-party parts (the theme preset palettes among them).
 cp "$REPO_ROOT/THIRD_PARTY_NOTICES.md" "$APP_DIR/resources/"
 
 COMPONENT_ROOT="${GHOSTEX_ON_DEMAND_COMPONENT_ROOT:-$REPO_ROOT/build/on-demand-components}"

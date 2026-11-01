@@ -9,6 +9,7 @@ use super::super::super::store::SettingsValues;
 use ghostex_settings_catalog::dark_chrome::{
     MIN_CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARKNESS_PERCENT, THEME_CONTRAST_FULL_POINTS,
     THEME_CONTRAST_VIVID_POINTS, dark_chrome_toward_full, full_colour_fade,
+    light_chrome_toward_full,
 };
 use serde_json::{Map, Value, json};
 
@@ -30,6 +31,7 @@ const CONTRAST_MAX_POINTS: f64 = 4.0;
 ///
 /// CDXC:Theming 2026-10-31 DECISION:
 /// Issue #357, user (Q837): "Lower the limit and make the far end reach the exact colour you picked." Colourfulness runs on past Vivid to Full: in dark mode the sidebar and work area fade from their Vivid colour toward the picked colour (a preset's own tint) and are that colour at Full; light mode stays at Vivid past it. The rule and the depth limit live once in packages/settings-catalog/src/dark_chrome.rs.
+/// Since 2026-11-01 light mode fades to its own Full end too, so "light mode stays at Vivid past it" no longer holds (CDXC:Theming 2026-11-01 WHY in packages/settings-catalog/src/dark_chrome.rs).
 ///
 /// CDXC:Theming 2026-10-10 DECISION:
 /// User asked to make the Colourfulness sliders more granular and picked 33 positions: half-point steps from Subtle (+4) to Vivid (-12), with the five names still sitting exactly at their points and the label beside the slider showing the nearest name. This supersedes the five steps of 2026-09-25 (User: "You can switch it between more colorful and less colorful"); Colourfulness still sets the sidebar and work area contrast together, and More colour options can set the two areas apart.
@@ -196,8 +198,14 @@ pub(super) fn dark_chrome(darkness: f64, tint: &str) -> Rgb {
                 "CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_CALIBRATION_COLOR",
                 "#040607",
             );
+            // An uncalibrated grey draws as Graphite (`CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_NEUTRAL_RGB`
+            // in helpers/titlebar/chrome_tints.rs).
             if is_neutral(color) {
-                return calibration;
+                return calibrated(
+                    "CUSTOM_SIDEBAR_TITLEBAR_BACKGROUND_DARK_TINTS",
+                    DEFAULT_TINT,
+                )
+                .unwrap_or(calibration);
             }
             let direction = tint_direction(color);
             Rgb([
@@ -221,6 +229,17 @@ pub(super) fn dark_chrome_full(darkness: f64, tint: &str, fade: f64) -> Rgb {
     }
     let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
     Rgb(dark_chrome_toward_full(vivid.0, picked.0, fade).map(channel))
+}
+
+/// `light_chrome` faded `fade` of the way toward the tint itself
+/// (`sidebar_titlebar_light_background_toward_full`).
+pub(super) fn light_chrome_full(lightness: f64, tint: &str, fade: f64) -> Rgb {
+    let vivid = light_chrome(lightness, tint);
+    if fade <= 0.0 {
+        return vivid;
+    }
+    let picked = parse_hex(&normalize_hex(tint, DEFAULT_TINT));
+    Rgb(light_chrome_toward_full(vivid.0, picked.0, fade).map(channel))
 }
 
 /// `getSidebarTitlebarLightBackgroundForLightness`.
@@ -378,7 +397,11 @@ fn preset_chrome_at_points(dark: bool, preset: &str, points: f64) -> Rgb {
             full_colour_fade(points),
         )
     } else {
-        light_chrome(clamp_lightness(percent + clamp_contrast(points)), &tint)
+        light_chrome_full(
+            clamp_lightness(percent + clamp_contrast(points)),
+            &tint,
+            full_colour_fade(points),
+        )
     }
 }
 
@@ -489,8 +512,9 @@ pub(super) fn contrast_points(values: &SettingsValues, key: &str) -> f64 {
     values.f64(key)
 }
 
-/// `resolveDarkChromeControls` / `resolveLightChromeControls`: the preset shifted by the sidebar
-/// contrast, or the Custom controls.
+/// `resolveDarkChromeControls` / `resolveLightChromeControls` before their final clamp: the preset
+/// shifted by the sidebar contrast, or the Custom controls (`dark_chrome_raw_controls` /
+/// `light_chrome_raw_controls` in helpers/titlebar/chrome_tints.rs).
 fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
     let preset_key = if dark {
         "darkThemePreset"
@@ -501,13 +525,10 @@ fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
     if preset != "custom"
         && let Some((percent, tint)) = preset_controls(dark, &preset)
     {
-        let points = contrast_points(values, "themeSidebarContrast");
-        let percent = if dark {
-            clamp_darkness(percent + points)
-        } else {
-            clamp_lightness(percent + points)
-        };
-        return (percent, tint);
+        return (
+            percent + contrast_points(values, "themeSidebarContrast"),
+            tint,
+        );
     }
     if dark {
         (
@@ -519,10 +540,8 @@ fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
         )
     } else {
         (
-            clamp_lightness(
-                values.f64("customSidebarTitlebarLightBackgroundLightnessPercent")
-                    + CUSTOM_LIGHT_THEME_DEPTH_SHIFT,
-            ),
+            clamp_lightness(values.f64("customSidebarTitlebarLightBackgroundLightnessPercent"))
+                + CUSTOM_LIGHT_THEME_DEPTH_SHIFT,
             normalize_hex(
                 &values.string("customSidebarTitlebarLightBackgroundTintColor"),
                 DEFAULT_TINT,
@@ -531,30 +550,38 @@ fn chrome_controls(values: &SettingsValues, dark: bool) -> (f64, String) {
     }
 }
 
+/// The appearance the Colourfulness preview shows: the saved Appearance when it is Light or Dark,
+/// otherwise `system_dark` (the window's own appearance).
+///
+/// CDXC:Theming 2026-11-01 WHY:
+/// The preview used to keep the appearance it had when the page opened, so after a preset (or a
+/// click on an Appearance card) switched to light, it went on showing the dark colours. It now
+/// follows the saved Appearance on every render.
+pub(super) fn preview_scheme_dark(sidebar_theme: &str, system_dark: bool) -> bool {
+    match sidebar_theme {
+        "system" => system_dark,
+        theme => theme.starts_with("dark"),
+    }
+}
+
 /// `ColourfulnessPreview`: the sidebar chrome and the work area colour of one appearance, and the
 /// foreground its divider is drawn with.
 pub(super) fn preview_colours(values: &SettingsValues, dark: bool) -> (Rgb, Rgb, Rgb) {
     let (percent, tint) = chrome_controls(values, dark);
+    let sidebar_fade = full_colour_fade(values.f64("themeSidebarContrast"));
     let chrome = if dark {
-        dark_chrome_full(
-            percent,
-            &tint,
-            full_colour_fade(values.f64("themeSidebarContrast")),
-        )
+        dark_chrome_full(clamp_darkness(percent), &tint, sidebar_fade)
     } else {
-        light_chrome(percent, &tint)
+        light_chrome_full(clamp_lightness(percent), &tint, sidebar_fade)
     };
     // `getWorkAreaBackgroundForSettings`.
     let delta = contrast_points(values, "themeWorkAreaContrast")
         - contrast_points(values, "themeSidebarContrast");
+    let work_fade = full_colour_fade(values.f64("themeWorkAreaContrast"));
     let work_chrome = if dark {
-        dark_chrome_full(
-            clamp_darkness(percent + delta),
-            &tint,
-            full_colour_fade(values.f64("themeWorkAreaContrast")),
-        )
+        dark_chrome_full(clamp_darkness(percent + delta), &tint, work_fade)
     } else {
-        light_chrome(clamp_lightness(percent + delta), &tint)
+        light_chrome_full(clamp_lightness(percent + delta), &tint, work_fade)
     };
     (
         chrome,
@@ -621,6 +648,26 @@ pub(super) fn colourfulness_patch(position: usize) -> Map<String, Value> {
         "customSidebarTitlebarLightBackgroundLightnessPercent".into(),
         js_number(clamp_lightness(light_default + clamp_contrast(points))),
     );
+    patch
+}
+
+/// What one of the two separate Colourfulness sliders saves: the sidebar's moves its contrast and
+/// the custom colours' depths together (Colourfulness without the work area), the work area's
+/// moves only its own contrast.
+///
+/// CDXC:Theming 2026-11-01 WHY:
+/// A custom colour's depth is what moves its sidebar, and the sidebar slider used to save only
+/// `themeSidebarContrast`, so with a custom colour it left the sidebar where it was and shifted
+/// the work area (which follows the difference between the two contrasts) instead. The work area
+/// slider still writes no depth: its contrast alone moves the work area.
+pub(super) fn area_colourfulness_patch(key: &str, position: usize) -> Map<String, Value> {
+    if key == "themeSidebarContrast" {
+        let mut patch = colourfulness_patch(position);
+        patch.remove("themeWorkAreaContrast");
+        return patch;
+    }
+    let mut patch = Map::new();
+    patch.insert(key.into(), js_number(colourfulness_points(position)));
     patch
 }
 
@@ -818,8 +865,18 @@ mod tests {
         assert_eq!(full.1.hex(), "#293338");
     }
 
+    fn light_values(tint: &str, position: usize) -> SettingsValues {
+        let mut map = colourfulness_patch(position);
+        map.insert("lightThemePreset".into(), json!("custom"));
+        map.insert(
+            "customSidebarTitlebarLightBackgroundTintColor".into(),
+            json!(tint),
+        );
+        SettingsValues::from_map(map)
+    }
+
     #[test]
-    fn past_vivid_only_dark_mode_moves() {
+    fn past_vivid_both_modes_fade_while_the_saved_depths_stay() {
         let vivid = colourfulness_patch(32);
         let full = colourfulness_patch(COLOURFULNESS_LAST_POSITION);
         assert_eq!(full["themeSidebarContrast"], json!(-24));
@@ -829,17 +886,133 @@ mod tests {
         ] {
             assert_eq!(full[key], vivid[key], "{key}");
         }
-        let light = |position| {
-            preview_colours(&dark_values("custom", "#273136", position), false)
-                .0
-                .hex()
-        };
-        assert_eq!(light(32), light(COLOURFULNESS_LAST_POSITION));
+        // Light mode draws what it drew before from Subtle to Vivid: the custom colour one point
+        // deeper than the depth Colourfulness saves.
+        for position in 0..=32 {
+            let saved = clamp_lightness(96.0 + colourfulness_points(position));
+            assert_eq!(
+                preview_colours(&light_values("#eee6a6", position), false)
+                    .0
+                    .hex(),
+                light_chrome(saved - 1.0, "#eee6a6").hex(),
+                "{position}"
+            );
+        }
+        // At Full it is the picked colour, and the work area is a quarter toward white from it.
+        let at_full = preview_colours(&light_values("#eee6a6", COLOURFULNESS_LAST_POSITION), false);
+        assert_eq!(at_full.0.hex(), "#eee6a6");
+        assert_eq!(at_full.1.hex(), "#f2ecbc");
         assert_eq!(colourfulness_name(colourfulness_points(32)), "Vivid");
         assert_eq!(
             colourfulness_name(colourfulness_points(COLOURFULNESS_LAST_POSITION)),
             "Full"
         );
+    }
+
+    #[test]
+    fn a_custom_neutral_grey_previews_like_graphite() {
+        // Soft (position 8) saves depth 96, where Graphite draws #0b0b0b.
+        for grey in ["#777777", "#7f7f7f", "#808080", "#3a3a3a"] {
+            assert_eq!(
+                preview_colours(&dark_values("custom", grey, 8), true)
+                    .0
+                    .hex(),
+                "#0b0b0b",
+                "{grey}"
+            );
+        }
+        // Black and the calibrated colours keep their own base.
+        assert_eq!(
+            preview_colours(&dark_values("custom", "#000000", 8), true)
+                .0
+                .hex(),
+            "#000000"
+        );
+        assert_eq!(
+            preview_colours(&dark_values("custom", "#336699", 8), true)
+                .0
+                .hex(),
+            dark_chrome(96.0, "#336699").hex()
+        );
+    }
+
+    #[test]
+    fn a_preset_work_area_ignores_where_the_sidebar_is_clamped() {
+        let apart = |sidebar: f64, work: f64| {
+            let mut map = Map::new();
+            map.insert("darkThemePreset".into(), json!("gray"));
+            map.insert("themeSidebarContrast".into(), js_number(sidebar));
+            map.insert("themeWorkAreaContrast".into(), js_number(work));
+            preview_colours(&SettingsValues::from_map(map), true)
+                .1
+                .hex()
+        };
+        // Graphite's sidebar at Vivid computes depth 84, cut to 85; its work area at Soft is
+        // still depth 96, the same as with both areas at Soft.
+        assert_eq!(apart(-12.0, 0.0), "#0d0d0d");
+        assert_eq!(apart(0.0, 0.0), "#0d0d0d");
+    }
+
+    #[test]
+    fn a_custom_light_work_area_moves_from_the_unclamped_depth() {
+        let mut map = Map::new();
+        map.insert("lightThemePreset".into(), json!("custom"));
+        map.insert(
+            "customSidebarTitlebarLightBackgroundTintColor".into(),
+            json!("#336699"),
+        );
+        map.insert(
+            "customSidebarTitlebarLightBackgroundLightnessPercent".into(),
+            json!(60),
+        );
+        map.insert("themeSidebarContrast".into(), json!(-4));
+        map.insert("themeWorkAreaContrast".into(), json!(0));
+        let (sidebar, work, _) = preview_colours(&SettingsValues::from_map(map), false);
+        // Saved 60 draws one point deeper (59), cut to 60 for the sidebar; the work area is 59
+        // plus its 4 points: 63.
+        assert_eq!(sidebar.hex(), light_chrome(60.0, "#336699").hex());
+        assert_eq!(
+            work.hex(),
+            chat_background_for_chrome(light_chrome(63.0, "#336699")).hex()
+        );
+    }
+
+    #[test]
+    fn the_separate_sliders_move_their_own_area_of_a_custom_colour() {
+        let keys = |patch: &Map<String, Value>| {
+            let mut keys: Vec<String> = patch.keys().cloned().collect();
+            keys.sort_unstable();
+            keys
+        };
+        assert_eq!(
+            keys(&area_colourfulness_patch("themeSidebarContrast", 16)),
+            [
+                "customSidebarTitlebarBackgroundDarknessPercent",
+                "customSidebarTitlebarLightBackgroundLightnessPercent",
+                "themeSidebarContrast",
+            ]
+        );
+        assert_eq!(
+            keys(&area_colourfulness_patch("themeWorkAreaContrast", 16)),
+            ["themeWorkAreaContrast"]
+        );
+        // Turning the split off sets both areas from one Colourfulness again.
+        assert_eq!(colourfulness_patch(16).len(), 4);
+
+        // A custom colour at Soft for both areas, then each slider moved on its own.
+        let start = dark_values("custom", "#336699", 8);
+        let moved = |key: &str, position: usize| {
+            let mut map = start.map().clone();
+            map.extend(area_colourfulness_patch(key, position));
+            preview_colours(&SettingsValues::from_map(map), true)
+        };
+        let (sidebar, work, _) = preview_colours(&start, true);
+        let (sidebar_after, work_after, _) = moved("themeSidebarContrast", 24);
+        assert_ne!(sidebar_after.hex(), sidebar.hex());
+        assert_eq!(work_after.hex(), work.hex());
+        let (sidebar_after, work_after, _) = moved("themeWorkAreaContrast", 24);
+        assert_eq!(sidebar_after.hex(), sidebar.hex());
+        assert_ne!(work_after.hex(), work.hex());
     }
 
     #[test]

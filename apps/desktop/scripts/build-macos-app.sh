@@ -1364,7 +1364,7 @@ prepare_gpui_app_bundle_path
 mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources" "$APP_PATH/Contents/Frameworks"
 stage_file_if_changed "$GPUI_DIR/target/release/ghostex-gpui" "$APP_PATH/Contents/MacOS/$APP_NAME" 0755
 stage_gpui_app_icon
-# The licence notices of the bundled third-party parts.
+# The licence notices of the bundled third-party parts (the theme preset palettes among them).
 stage_file_if_changed "$REPO_ROOT/THIRD_PARTY_NOTICES.md" "$APP_PATH/Contents/Resources/THIRD_PARTY_NOTICES.md" 0644
 if [[ "$GHOSTEX_ON_DEMAND_ASSETS" != "1" ]]; then
 	stage_cef_framework_if_changed

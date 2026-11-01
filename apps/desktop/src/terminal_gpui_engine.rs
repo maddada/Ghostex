@@ -122,7 +122,7 @@ impl GpuiTerminalEngineConfig {
     /// User: terminals can follow the system with a separate light theme. Only light mode replaces the finalized color palette; returning to dark restores the existing Ghostty config palette.
     ///
     /// CDXC:Theming 2026-09-28 DECISION:
-    /// User: "allow us to set terminal background color to full black/white and make it black by default not the background color from the theme". The palette still comes from the Ghostty config or the light theme; the background is the Terminal background choice: Black / white (the default) paints pure black behind dark terminals and pure white behind light ones, Follow theme paints the theme's content colour (`theme_background`), and Custom replaces it in dark mode only. It never colours the work area (SEE-ALSO `refresh_gpui_visual_settings` in app/helpers/project/colors.rs, `normalizeTerminalBackgroundMode` in packages/shared/ghostex-settings/normalize-fields.ts (deleted 2026-10-01)). Supersedes the 2026-09-23 decision that the background follows the theme by default.
+    /// User: "allow us to set terminal background color to full black/white and make it black by default not the background color from the theme". The palette still comes from the Ghostty config or the light theme; the background is the Terminal background choice: Black / white (the default) paints pure black behind dark terminals and pure white behind light ones, Follow theme paints the theme's content colour (`theme_background`), and Custom replaces it (in dark mode only until 2026-11-01, in both appearances since: CDXC:Theming 2026-11-01 on `SharedTerminalBackground::Custom` in shared_settings/types.rs). It never colours the work area (SEE-ALSO `refresh_gpui_visual_settings` in app/helpers/project/colors.rs, `normalizeTerminalBackgroundMode` in packages/shared/ghostex-settings/normalize-fields.ts (deleted 2026-10-01)). Supersedes the 2026-09-23 decision that the background follows the theme by default.
     ///
     /// CDXC:Theming 2026-09-30 WHY:
     /// Shader input pixels and iBackgroundColor must agree, or background-sensitive effects change brightness. The opt-in chain therefore retains the finalized Ghostty background (or selected light palette); disabling it restores the ordinary Terminal background choice. This proposed exception leaves the work area theme unchanged.
@@ -288,9 +288,17 @@ fn custom_ghostty_theme_source(name: &str) -> Option<String> {
         .find_map(|path| std::fs::read_to_string(path).ok())
 }
 
+/// A theme colour: six hex digits, with or without a leading `#`, as Ghostty itself reads them.
+///
+/// CDXC:Theming 2026-11-01 WHY:
+/// Theme projects' own Ghostty files (the Catppuccin and Kanagawa palettes the theme presets
+/// bundle) write `background = 1e1e2e` without the `#`, which Ghostty accepts; requiring it would
+/// drop those palettes wherever this parser reads them (light mode, Windows and Linux). Anything
+/// but exactly six ASCII hex digits is still refused, so a stray sign or a multi-byte character
+/// never reaches the byte slicing below.
 fn parse_theme_rgb(value: &str) -> Option<Rgb> {
-    let hex = value.strip_prefix('#')?;
-    if hex.len() != 6 {
+    let hex = value.strip_prefix('#').unwrap_or(value);
+    if hex.len() != 6 || !hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return None;
     }
     Some(Rgb {
@@ -671,4 +679,241 @@ fn login_shell_invocation(shell_command: &str) -> (String, Vec<String>) {
         "/bin/sh".to_string(),
         vec!["-c".to_string(), shell_command.to_string()],
     )
+}
+
+#[cfg(test)]
+mod theme_preset_palette_tests {
+    use super::*;
+
+    /// Background, foreground, cursor, selection background and ANSI 0 to 15 of every theme
+    /// preset palette, as the theme projects define them.
+    const CANONICAL: [(&str, &str); 20] = [
+        (
+            "Ghostex Catppuccin Mocha",
+            "1e1e2e cdd6f4 f5e0dc 353749 45475a f38ba8 a6e3a1 f9e2af 89b4fa f5c2e7 94e2d5 a6adc8 585b70 f38ba8 a6e3a1 f9e2af 89b4fa f5c2e7 94e2d5 bac2de",
+        ),
+        (
+            "Ghostex Catppuccin Macchiato",
+            "24273a cad3f5 f4dbd6 3a3e53 494d64 ed8796 a6da95 eed49f 8aadf4 f5bde6 8bd5ca a5adcb 5b6078 ed8796 a6da95 eed49f 8aadf4 f5bde6 8bd5ca b8c0e0",
+        ),
+        (
+            "Ghostex Catppuccin Frappe",
+            "303446 c6d0f5 f2d5cf 44495d 51576d e78284 a6d189 e5c890 8caaee f4b8e4 81c8be a5adce 626880 e78284 a6d189 e5c890 8caaee f4b8e4 81c8be b5bfe2",
+        ),
+        (
+            "Ghostex Catppuccin Latte",
+            "eff1f5 4c4f69 dc8a78 d8dae1 5c5f77 d20f39 40a02b df8e1d 1e66f5 ea76cb 179299 acb0be 6c6f85 d20f39 40a02b df8e1d 1e66f5 ea76cb 179299 bcc0cc",
+        ),
+        (
+            "Ghostex Dracula",
+            "282a36 f8f8f2 f8f8f2 44475a 21222c ff5555 50fa7b f1fa8c bd93f9 ff79c6 8be9fd f8f8f2 6272a4 ff6e6e 69ff94 ffffa5 d6acff ff92df a4ffff ffffff",
+        ),
+        (
+            "Ghostex Alucard",
+            "fffbeb 1f1f1f 1f1f1f cfcfde fffbeb cb3a2a 14710a 846e15 644ac9 a3144d 036a96 1f1f1f 6c664b d74c3d 198d0c 9e841a 7862d0 bf185a 047fb4 2c2b31",
+        ),
+        (
+            "Ghostex Solarized Dark",
+            "002b36 839496 839496 073642 073642 dc322f 859900 b58900 268bd2 d33682 2aa198 eee8d5 002b36 cb4b16 586e75 657b83 839496 6c71c4 93a1a1 fdf6e3",
+        ),
+        (
+            "Ghostex Solarized Light",
+            "fdf6e3 657b83 657b83 eee8d5 073642 dc322f 859900 b58900 268bd2 d33682 2aa198 eee8d5 002b36 cb4b16 586e75 657b83 839496 6c71c4 93a1a1 fdf6e3",
+        ),
+        (
+            "Ghostex Tokyo Night Night",
+            "1a1b26 c0caf5 c0caf5 283457 15161e f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff a9b1d6 414868 ff899d 9fe044 faba4a 8db0ff c7a9ff a4daff c0caf5",
+        ),
+        (
+            "Ghostex Tokyo Night Storm",
+            "24283b c0caf5 c0caf5 2e3c64 1d202f f7768e 9ece6a e0af68 7aa2f7 bb9af7 7dcfff a9b1d6 414868 ff899d 9fe044 faba4a 8db0ff c7a9ff a4daff c0caf5",
+        ),
+        (
+            "Ghostex Tokyo Night Moon",
+            "222436 c8d3f5 c8d3f5 2d3f76 1b1d2b ff757f c3e88d ffc777 82aaff c099ff 86e1fc 828bb8 444a73 ff8d94 c7fb6d ffd8ab 9ab8ff caabff b2ebff c8d3f5",
+        ),
+        (
+            "Ghostex Tokyo Night Day",
+            "e1e2e7 3760bf 3760bf b7c1e3 b4b5b9 f52a65 587539 8c6c3e 2e7de9 9854f1 007197 6172b0 a1a6c5 ff4774 5c8524 a27629 358aff a463ff 007ea8 3760bf",
+        ),
+        (
+            "Ghostex Nord",
+            "2e3440 d8dee9 d8dee9 4c566a 3b4252 bf616a a3be8c ebcb8b 81a1c1 b48ead 88c0d0 e5e9f0 4c566a bf616a a3be8c ebcb8b 81a1c1 b48ead 8fbcbb eceff4",
+        ),
+        (
+            "Ghostex Kanagawa Wave",
+            "1f1f28 dcd7ba c8c093 2d4f67 16161d c34043 76946a c0a36e 7e9cd8 957fb8 6a9589 c8c093 727169 e82424 98bb6c e6c384 7fb4ca 938aa9 7aa89f dcd7ba",
+        ),
+        (
+            "Ghostex Kanagawa Dragon",
+            "181616 c5c9c5 c8c093 2d4f67 0d0c0c c4746e 8a9a7b c4b28a 8ba4b0 a292a3 8ea4a2 c8c093 a6a69c e46876 87a987 e6c384 7fb4ca 938aa9 7aa89f c5c9c5",
+        ),
+        (
+            "Ghostex Kanagawa Lotus",
+            "f2ecbc 545464 43436c c9cbd1 1f1f28 c84053 6f894e 77713f 4d699b b35b79 597b75 545464 8a8980 d7474b 6e915f 836f4a 6693bf 624c83 5e857a 43436c",
+        ),
+        (
+            "Ghostex Everforest Dark",
+            "2d353b d3c6aa d3c6aa 543a48 475258 e67e80 a7c080 dbbc7f 7fbbb3 d699b6 83c092 d3c6aa 475258 e67e80 a7c080 dbbc7f 7fbbb3 d699b6 83c092 d3c6aa",
+        ),
+        (
+            "Ghostex Everforest Light",
+            "fdf6e3 5c6a72 5c6a72 eaedc8 5c6a72 f85552 8da101 dfa000 3a94c5 df69ba 35a77c e6e2cc 5c6a72 f85552 8da101 dfa000 3a94c5 df69ba 35a77c e6e2cc",
+        ),
+        (
+            "Ghostex Gruvbox Material Dark",
+            "282828 d4be98 d4be98 45403d 5a524c ea6962 a9b665 d8a657 7daea3 d3869b 89b482 d4be98 5a524c ea6962 a9b665 d8a657 7daea3 d3869b 89b482 d4be98",
+        ),
+        (
+            "Ghostex Gruvbox Material Light",
+            "fbf1c7 654735 654735 eee0b7 654735 c14a4a 6c782e b47109 45707a 945e80 4c7a5d ddccab 654735 c14a4a 6c782e b47109 45707a 945e80 4c7a5d ddccab",
+        ),
+    ];
+
+    fn hex(color: Rgb) -> String {
+        format!("{:02x}{:02x}{:02x}", color.r, color.g, color.b)
+    }
+
+    #[test]
+    fn every_theme_preset_palette_reads_its_projects_colours() {
+        for (name, expected) in CANONICAL {
+            let theme = gpui_terminal_theme(name).unwrap_or_else(|| panic!("{name} is missing"));
+            let mut read = vec![
+                hex(theme.background),
+                hex(theme.foreground),
+                theme.cursor.map(hex).unwrap_or_default(),
+                theme.selection_background.map(hex).unwrap_or_default(),
+            ];
+            read.extend(theme.palette[..16].iter().copied().map(hex));
+            assert_eq!(read.join(" "), expected, "{name}");
+        }
+    }
+
+    #[test]
+    fn theme_colours_read_with_or_without_the_hash_and_refuse_anything_else() {
+        let rgb = |value: &str| parse_theme_rgb(value).map(hex);
+        assert_eq!(rgb("1e1e2e").as_deref(), Some("1e1e2e"));
+        assert_eq!(rgb("#1E1E2E").as_deref(), Some("1e1e2e"));
+        for malformed in [
+            "",
+            "#",
+            "1e1e2",
+            "#1e1e2e2",
+            "+1e1e2",
+            "1e1e2g",
+            "##1e1e2e",
+            "a\u{e9}aaa",
+        ] {
+            assert_eq!(rgb(malformed), None, "{malformed:?}");
+        }
+    }
+
+    #[test]
+    fn every_preset_names_a_bundled_palette_and_shows_its_colours() {
+        let presets = crate::app::window::settings_modal::tabs::theme::presets::theme_presets();
+        assert_eq!(presets.len(), CANONICAL.len());
+        for preset in presets {
+            assert!(
+                CANONICAL.iter().any(|(name, _)| *name == preset.palette),
+                "{}: {}",
+                preset.id,
+                preset.palette
+            );
+            assert!(
+                ghostty_theme_source(&preset.palette).is_some(),
+                "{}",
+                preset.id
+            );
+            let theme = gpui_terminal_theme(&preset.palette).unwrap();
+            let shown: Vec<String> = theme.palette[1..5]
+                .iter()
+                .map(|color| format!("#{}", hex(*color)))
+                .collect();
+            assert_eq!(shown, preset.swatch, "{}", preset.id);
+        }
+    }
+
+    /// The phone's copy of the presets (`src/theme/presets/<id>.json` in the ghostex-mobile
+    /// checkout) must match the host's: the same presets, colours, palettes and the settings each
+    /// one writes, with light mode following and with light mode picked on purpose. Run it with
+    /// the phone checkout at hand:
+    /// `GHOSTEX_MOBILE_DIR=<ghostex-mobile> cargo test theme_preset_parity -- --ignored`
+    /// (without the variable it reads the `apps/mobile/app` submodule).
+    #[test]
+    #[ignore = "reads the phone checkout; set GHOSTEX_MOBILE_DIR and run with --ignored"]
+    fn theme_preset_parity_with_the_phone() {
+        use crate::app::window::settings_modal::tabs::theme::presets::{
+            theme_preset_choice, theme_presets,
+        };
+        use serde_json::{Value, json};
+        let mobile = std::env::var_os("GHOSTEX_MOBILE_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../mobile/app"));
+        let dir = mobile.join("src/theme/presets");
+        assert!(
+            dir.is_dir(),
+            "no phone presets at {}: set GHOSTEX_MOBILE_DIR to a ghostex-mobile checkout that has them",
+            dir.display()
+        );
+        let presets = theme_presets();
+        let mut phone_ids: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| {
+                let name = entry.ok()?.file_name().into_string().ok()?;
+                name.strip_suffix(".json").map(str::to_string)
+            })
+            .collect();
+        phone_ids.sort();
+        let mut host_ids: Vec<String> = presets.iter().map(|preset| preset.id.clone()).collect();
+        host_ids.sort();
+        assert_eq!(
+            phone_ids, host_ids,
+            "the phone and the host offer different presets"
+        );
+        for preset in &presets {
+            let path = dir.join(format!("{}.json", preset.id));
+            let phone: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap())
+                .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+            let theme = gpui_terminal_theme(&preset.palette).unwrap();
+            let colour = |color: Rgb| format!("#{}", hex(color));
+            let mut palette = json!({
+                "background": colour(theme.background),
+                "foreground": colour(theme.foreground),
+                "cursor": theme.cursor.map(colour),
+                "selectionBackground": theme.selection_background.map(colour),
+                "ansi": theme.palette[..16].iter().copied().map(colour).collect::<Vec<_>>(),
+            });
+            if let Some(cursor_text) = theme.cursor_text {
+                palette["cursorText"] = json!(colour(cursor_text));
+            }
+            let entry = settings_catalog_preset(&preset.id);
+            let expected = json!({
+                "id": preset.id,
+                "name": preset.name,
+                "mode": if preset.dark { "dark" } else { "light" },
+                "partner": preset.partner,
+                "background": entry["background"],
+                "tintColor": preset.tint,
+                "terminalPalette": preset.palette,
+                "palette": palette,
+                "patches": {
+                    "lightFollows": theme_preset_choice(&preset.id, false).unwrap().1,
+                    "lightPickedOnPurpose": theme_preset_choice(&preset.id, true).unwrap().1,
+                },
+            });
+            assert_eq!(phone, expected, "{} differs from the host", path.display());
+        }
+    }
+
+    fn settings_catalog_preset(id: &str) -> serde_json::Value {
+        crate::app::window::settings_modal::catalog::settings_catalog()
+            .module_value(
+                crate::app::window::settings_modal::catalog::module::SETTINGS,
+                "THEME_PRESETS",
+            )
+            .and_then(serde_json::Value::as_array)
+            .and_then(|presets| presets.iter().find(|preset| preset["id"] == id))
+            .cloned()
+            .unwrap()
+    }
 }

@@ -1,0 +1,22 @@
+# Gruvbox Material Dark (medium): sainnhe/gruvbox-material 11d779b26a9ab2b3db8c22c6ac9fb6e8ed4fea79, the terminal colours colors/gruvbox-material.vim sets with its default options (background medium, foreground material, grey visual background), Normal text and Visual selection; cursor is the text colour.
+# Written in Ghostty theme format for Ghostex from the values named above; MIT, Copyright (c) 2020 sainnhe.
+palette = 0=#5a524c
+palette = 1=#ea6962
+palette = 2=#a9b665
+palette = 3=#d8a657
+palette = 4=#7daea3
+palette = 5=#d3869b
+palette = 6=#89b482
+palette = 7=#d4be98
+palette = 8=#5a524c
+palette = 9=#ea6962
+palette = 10=#a9b665
+palette = 11=#d8a657
+palette = 12=#7daea3
+palette = 13=#d3869b
+palette = 14=#89b482
+palette = 15=#d4be98
+background = #282828
+foreground = #d4be98
+cursor-color = #d4be98
+selection-background = #45403d

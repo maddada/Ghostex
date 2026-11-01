@@ -1,0 +1,22 @@
+# Dracula Alucard: dracula/cursor 21e4edd687bdd5f38e1607c69f19f30cbde22c36 dev/src/alucard.yml (background, foreground, cursor, ANSI 0-15); selection background is the Alucard "Selection" colour from dracula/dracula-theme 8d33e5492b56740c4857c5ebe7c5d5ab4040caf1 README.md, because the terminal's own selection is translucent.
+# Written in Ghostty theme format for Ghostex from the values named above; MIT, Copyright (c) 2023 Dracula Theme.
+palette = 0=#fffbeb
+palette = 1=#cb3a2a
+palette = 2=#14710a
+palette = 3=#846e15
+palette = 4=#644ac9
+palette = 5=#a3144d
+palette = 6=#036a96
+palette = 7=#1f1f1f
+palette = 8=#6c664b
+palette = 9=#d74c3d
+palette = 10=#198d0c
+palette = 11=#9e841a
+palette = 12=#7862d0
+palette = 13=#bf185a
+palette = 14=#047fb4
+palette = 15=#2c2b31
+background = #fffbeb
+foreground = #1f1f1f
+cursor-color = #1f1f1f
+selection-background = #cfcfde

@@ -2975,7 +2975,8 @@ inactive projects. The appearance override and light palette apply to Ghostex on
 
 Terminal background (Settings, Terminal) is Black / white by default: pure black
 behind dark terminals and pure white behind light ones. Choose Follow theme to use
-the theme's background color instead, or Custom color to pick your own for dark mode.
+the theme's background color instead, or Custom color to pick your own for both
+dark and light mode. A theme preset (Settings > Interface > Presets) sets Follow theme.
 
 Terminals are see-through only while the window is: set Transparency to Dark only
 or Always (Settings, Interface, Transparency; it starts Off on Windows and Dark only on
@@ -5415,7 +5416,7 @@ Settings > Updates.
 
 Theme colours, colourfulness, the work area frame, window glass, and active pane outline live on the
 Interface page in Settings, right below General (`ghostex settings open --tab theme`).
-It has Text, Interface scale, Colours and Transparency sections, with Advanced controls and links
+It has Text, Interface scale, Presets, Colours and Transparency sections, with Advanced controls and links
 to related settings on General; a search for a row inside More opens it.
 Text: App font lists the fonts installed on this computer, with a search field and
 each name drawn in its own font; monospaced fonts sit at the end of the list. The
@@ -5440,6 +5441,22 @@ are in (in a terminal, only that terminal until it restarts). If you had changed
 of those sizes before Interface scale existed, the switch starts on, so nothing
 changes size. The Terminal page's Font size row links here.
 Settings: `interfaceScalePercent`, `interfaceScaleAreasSeparately`, `agentManagerZoomPercent`, `sessionChatZoomPercent`, `filesZoomPercent`, `terminalFontSize`.
+Presets, right above Colours, are twenty theme cards grouped by family: Catppuccin
+(Mocha, Macchiato, Frappé, Latte), Dracula and Alucard, Solarized Dark and Light,
+Tokyo Night (Night, Storm, Moon, Day), Nord, Kanagawa (Wave, Dragon, Lotus),
+Everforest Dark and Light, and Gruvbox Material Dark and Light; a moon or sun marks
+dark and light ones. Clicking one makes Ghostex look like that theme in one step: it
+switches Appearance to the preset's mode, sets that mode's colour to a custom colour
+and Colourfulness to Full so the work area, chat and terminals show the theme's own
+background, picks the theme's terminal palette, and sets Terminal background to
+Follow theme. The same family's preset for the other mode comes along: a light preset
+always brings its dark partner, a dark preset brings its light partner unless you
+picked a light colour yourself since opening Settings (Nord has no light partner).
+Chat theme, Terminal theme, transparency, fonts and text strength stay as they are,
+and every value stays editable afterwards; a card shows as picked while the settings
+still match it. Solarized Dark's work area is a shade redder than the theme's
+#002b36, the nearest the dark work area can draw. The palettes come from the themes'
+own projects (licences in the app's third-party notices).
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
 mode colour, each a row of sixteen small colour squares (Graphite, the default,
@@ -5451,15 +5468,16 @@ custom colour, which opens a colour picker (with HEX, R, G and B boxes) right at
 the square; and Colourfulness, a fine-grained slider from Subtle to Full (Soft is the default;
 the name of the nearest of Subtle, Soft, Balanced, Rich, Vivid and Full shows beside it)
 that sets how much of the colour shows in the sidebar and work area at once, with a small
-sidebar and work area preview. Past Vivid, dark mode fades toward the colour you picked
+sidebar and work area preview. Past Vivid, the colour fades toward the colour you picked
 itself and is exactly that colour at Full, so a flat theme such as Monokai Pro Machine
-(#273136) can colour the whole window; a colour too light for the sidebar's text is
-deepened just enough to stay readable, and light mode stays at Vivid past that point. Colourfulness also sets how deep a custom colour
+(#273136) can colour the whole window; in dark mode a colour too light for the
+sidebar's text is deepened just enough to stay readable, and in light mode a colour too
+dark for the dark text is lightened just enough. Colourfulness also sets how deep a custom colour
 is; it has no control of its own. More colour options can set the sidebar and
 work area colourfulness separately, and show the active pane outline and its
 colour.
-A preset never overwrites the custom values, so picking the + square again
-restores them.
+Picking a colour square never overwrites the custom values, so picking the + square again
+restores them (a theme preset does set them).
 Frame the work area (macOS, off by default) shows the work area as a card inside the
 window: a thin margin all around it, a hairline border and, without window glass, a light
 shadow. It stays on with the sidebar hidden and in full screen, web pages in the work area

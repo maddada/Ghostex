@@ -162,9 +162,11 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
    */
   { pathspec: 'agent-model-catalog.json' },
   /*
-   * The licence notices every desktop package ships beside the app. Purely additive and desktop-only, so
+   * The theme presets' terminal palettes, embedded by apps/desktop/build.rs, and the licence
+   * notices every desktop package ships beside the app. Purely additive and desktop-only, so
    * FINGERPRINT_ALGORITHM_REVISION is not bumped (same reasoning as the android product's note below).
    */
+  { pathspec: '.dependencies/theme-presets/**' },
   { pathspec: 'THIRD_PARTY_NOTICES.md' },
   { pathspec: '.dependencies/ghostty/**' },
   { pathspec: ':(exclude).dependencies/ghostty/.zig-cache' },
