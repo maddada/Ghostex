@@ -245,3 +245,7 @@ pub(crate) fn apply_settings_theme_colours() {
         Ordering::Relaxed,
     );
 }
+/// The browser has no remote machine settings to name in a hook-install toast.
+pub(crate) fn gpui_remote_machine_name_from_settings(_machine_id: &str) -> Option<String> {
+    None
+}

@@ -21,6 +21,8 @@ use crate::*;
 /// rejected answers with its gxserver's own `message` instead (`gpui_gxserver_rejection_message`);
 /// no transport error, raw body, host, port or token crosses this boundary.
 pub(crate) const GPUI_REMOTE_GXSERVER_REQUEST_FAILED: &str = "Remote gxserver request failed.";
+pub(crate) const GPUI_REMOTE_HOOKS_UPDATE_REQUIRED: &str = "Remote Ghostex needs an update.";
+pub(crate) const GPUI_REMOTE_HOOKS_TIMED_OUT: &str = "The remote computer did not answer in time.";
 
 /// What a waited caller's failure toast says: the machine's own reason when it rejected the
 /// request, else the caller's `fallback`, which names what did not happen.
@@ -110,8 +112,23 @@ impl GhostexGpuiApp {
                         &params,
                         timeout,
                     )
-                    .map_err(|_| failed())?;
+                    .map_err(|error| {
+                        if path == "/api/installAgentHooks"
+                            && error.contains("did not answer in time")
+                        {
+                            GPUI_REMOTE_HOOKS_TIMED_OUT.to_string()
+                        } else {
+                            failed()
+                        }
+                    })?;
                     if !(200..300).contains(&status_code) {
+                        if matches!(
+                            path.as_str(),
+                            "/api/readAgentHookStatus" | "/api/installAgentHooks"
+                        ) && matches!(status_code, 404 | 426)
+                        {
+                            return Err(GPUI_REMOTE_HOOKS_UPDATE_REQUIRED.to_string());
+                        }
                         return Err(gpui_gxserver_rejection_message(&body).unwrap_or_else(failed));
                     }
                     parse_gpui_gxserver_rpc_result(&body).map_err(|_| failed())
