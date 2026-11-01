@@ -509,6 +509,7 @@ pub(crate) fn is_path_like_terminal_title(title: &str) -> bool {
         || trimmed.starts_with("\u{2026}\\")
         || trimmed.starts_with(".../")
         || trimmed.starts_with("...\\")
+        || is_windows_absolute_terminal_path(trimmed)
 }
 
 pub(crate) fn is_session_working_directory_title(session: &Value, title: &str) -> bool {
@@ -553,6 +554,30 @@ pub(crate) fn is_terminal_auto_working_directory_title(session: &Value) -> bool 
         && read_text_value(session, "title")
             .as_deref()
             .is_some_and(|title| is_session_working_directory_title(session, title))
+}
+
+pub(crate) fn is_terminal_prompt_or_directory_title(session: &Value, title: Option<&str>) -> bool {
+    let Some(title) = title else {
+        return false;
+    };
+    if title.trim().is_empty() {
+        return true;
+    }
+    let Some(normalized) = normalize_terminal_title(title) else {
+        return false;
+    };
+    if is_generic_agent_title(&normalized)
+        || is_status_word_title(&normalized)
+        || get_codex_session_id_from_title(&normalized).is_some()
+    {
+        return false;
+    }
+    let lower = normalized.to_ascii_lowercase();
+    is_path_like_terminal_title(&normalized)
+        || is_shell_location_terminal_title(&normalized)
+        || is_session_working_directory_title(session, title)
+        || is_windows_console_default_title(&normalized)
+        || is_ignored_placeholder_session_title_text(&lower)
 }
 
 pub(crate) fn is_shell_location_terminal_title(title: &str) -> bool {

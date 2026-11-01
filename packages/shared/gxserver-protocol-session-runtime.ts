@@ -74,7 +74,6 @@ export interface GxserverSelectSessionChatModelResult {
 export interface GxserverTerminalTitleEventParams extends GxserverSessionLifecycleParams {
   agentName?: string;
   previousTerminalTitle?: string;
-  protectStoredTitleFromAutomation?: boolean;
   rawTitle?: string;
   sessionPersistenceProvider?: 'off' | 'tmux' | 'zellij' | 'zmx';
 }
