@@ -234,6 +234,13 @@ pub(crate) fn discover(home: &Path, provider: Provider) -> Result<Vec<Discovered
     let mut data = json_command(home, provider.helper(), &["list", "--json"])?;
     if provider == Provider::Claude {
         reread_signed_out_default_account(home, &mut data);
+        // A slot whose login was put back from this computer's newer copy lists again (restore.rs).
+        if super::restore::heal_listed(home, &data) {
+            if let Ok(listed) = json_command(home, provider.helper(), &["list", "--json"]) {
+                data = listed;
+                reread_signed_out_default_account(home, &mut data);
+            }
+        }
     } else {
         fill_codex_members(&mut data);
     }
@@ -281,14 +288,25 @@ fn fill_codex_members(data: &mut Value) {
 
 /// CDXC:AgentProviders 2026-10-14 WHY:
 /// cswap marks the account the default `claude` profile (`~/.claude.json`) names as `active` and judges that row by the default profile's own live login instead of the slot's saved one. With the default profile signed out, that row read `no_credentials` however often the account signed in again (the sign-in refreshes only the saved login, from a temporary profile), so "Sign in again" ended with "Sign in to this account before adding it." Ghostex starts every account from its saved login (`cswap run`), so that one row is read again with an empty Claude profile, where no slot is active and cswap judges it by its saved login. Only a signed-out default profile is read again: with a live default login the saved and live tokens can share one refresh-token family, and only cswap's active path refreshes that safely.
+/// CDXC:AgentProviders 2026-11-01 WHY:
+/// A default login cswap quarantined (`relogin_required`) is read again too when the slot's saved copy is a newer generation than it (restore.rs): starts then run in the slot's own profile seeded from that copy (default_login.rs), so the row says what those starts will meet, and the dead default login has no family left to protect.
 fn reread_signed_out_default_account(home: &Path, data: &mut Value) {
     let Some(rows) = data.get_mut("accounts").and_then(Value::as_array_mut) else {
         return;
     };
-    let Some(row) = rows
-        .iter_mut()
-        .find(|row| row["active"] == true && row["usageStatus"] == "no_credentials")
-    else {
+    let Some(row) = rows.iter_mut().find(|row| {
+        row["active"] == true
+            && (row["usageStatus"] == "no_credentials"
+                || row["usageStatus"] == "relogin_required"
+                    && row["number"]
+                        .as_u64()
+                        .and_then(|number| {
+                            super::claude_resets::ClaudeSlot::read(home, &number.to_string()).ok()
+                        })
+                        .is_some_and(|slot| {
+                            super::restore::saved_copy_newer_than_default(home, &slot)
+                        }))
+    }) else {
         return;
     };
     let Ok(profile) = tempfile::Builder::new().prefix("ghostex-cswap-").tempdir() else {
@@ -379,6 +397,17 @@ fn discover_row(home: &Path, provider: Provider, row: &Value) -> Option<Discover
         {
             account.status = "loginRequired".into();
             account.usage_error = Some(super::login_expired::NOTICE.into());
+        }
+        // Whether this computer held a copy of the login to restore (restore.rs).
+        if account.status == "loginRequired" {
+            if let Some(sentence) =
+                super::restore::last_plan(&account.selector).and_then(super::restore::notice)
+            {
+                account.usage_error = Some(match account.usage_error.take() {
+                    Some(notice) => format!("{notice} {sentence}"),
+                    None => sentence.to_string(),
+                });
+            }
         }
         account.usage_stale = !row["usage"].is_object() && usage.is_object();
         if let Some(w) = window("fiveHour", "5h", &usage["fiveHour"], "pct", None) {

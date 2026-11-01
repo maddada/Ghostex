@@ -134,7 +134,13 @@ pub(crate) fn rebind_target(
         .accounts
         .iter()
         .find(|d| endpoint::account_id(d) == current);
-    let unusable = account_unusable(&registry, reading, current);
+    // A Needs sign-in Claude account whose login this computer still holds is restored and kept (restore.rs).
+    let restored = provider == Provider::Claude
+        && reading.is_some_and(|d| {
+            d.status == "loginRequired"
+                && launch::home().is_ok_and(|home| super::restore::before_start(&home, &d.selector))
+        });
+    let unusable = !restored && account_unusable(&registry, reading, current);
     if !unusable && (!policy.enabled || policy.at_limit != LimitAction::Switch) {
         return Ok(None);
     }

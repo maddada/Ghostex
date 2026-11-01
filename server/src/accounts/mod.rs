@@ -31,6 +31,7 @@ mod reset_credits;
 pub(crate) mod reset_watch;
 pub(crate) mod restart;
 pub(crate) mod restart_verification;
+pub(crate) mod restore;
 pub(crate) mod runtime;
 pub(crate) mod session_identity;
 pub(crate) mod setup;

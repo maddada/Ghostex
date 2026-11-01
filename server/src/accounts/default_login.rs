@@ -95,10 +95,14 @@ pub(crate) fn signed_out_default_config_dir(slot: &str) -> Option<String> {
     signed_out_default_profile(&super::launch::home().ok()?, slot)
 }
 
-/// The slot's session profile when `cswap run <slot>` would start Claude on a default login that names the slot's account but holds no credential.
+/// The slot's session profile when `cswap run <slot>` would start Claude on a default login that names the slot's account but holds no credential, or one cswap reads signed out while the slot's saved copy is newer (restore.rs). Every start, wake, resume and account switch on a slot passes here first, so a slot that reads Needs sign-in gets its login restored from this computer's newer copy before cswap runs (`restore::before_start`).
 fn signed_out_default_profile(home: &Path, slot: &str) -> Option<String> {
+    super::restore::before_start(home, slot);
     let slot = ClaudeSlot::read(home, slot).ok()?;
-    (slot.names_default_login(home) && default_login_signed_out(home)).then(|| slot.session_dir())
+    (slot.names_default_login(home)
+        && (default_login_signed_out(home)
+            || super::restore::default_login_behind_saved_copy(home, &slot)))
+    .then(|| slot.session_dir())
 }
 
 /// Whether the default login certainly holds no working credential: no credential material at all, read the way Claude Swap reads a profile's (no non-empty `~/.claude/.credentials.json` and, on macOS, a Keychain miss), or material Claude itself reports signed out. A Keychain or a Claude that cannot answer counts as signed in, which leaves cswap's own choice alone.

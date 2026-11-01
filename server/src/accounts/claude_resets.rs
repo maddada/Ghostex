@@ -73,6 +73,14 @@ impl ClaudeSlot {
         &self.organization
     }
 
+    pub(crate) fn selector(&self) -> &str {
+        &self.slot
+    }
+
+    pub(crate) fn email(&self) -> &str {
+        &self.email
+    }
+
     /// Whether the default login's `~/.claude.json` names this slot's account, which is when `cswap run` starts plain `claude` on it.
     pub(crate) fn names_default_login(&self, home: &Path) -> bool {
         default_login_matches(home, &self.email, &self.organization)
@@ -190,7 +198,7 @@ fn default_login_matches(home: &Path, email: &str, organization: &str) -> bool {
 }
 
 /// The Keychain service Claude Code derives for a `CLAUDE_CONFIG_DIR`: the first eight hex digits of its SHA-256.
-fn hashed_service(config_dir: &str) -> String {
+pub(super) fn hashed_service(config_dir: &str) -> String {
     use sha2::{Digest, Sha256};
     let digest = hex::encode(Sha256::digest(config_dir.as_bytes()));
     format!("Claude Code-credentials-{}", &digest[..8])

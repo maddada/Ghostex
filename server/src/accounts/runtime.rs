@@ -15,6 +15,13 @@ static SNAPSHOT: RwLock<Snapshot> = RwLock::new(Snapshot {
 pub(crate) fn current_snapshot() -> Snapshot {
     SNAPSHOT.read().unwrap_or_else(|e| e.into_inner()).clone()
 }
+/// Makes the next accounts read discover again, for callers without an `AccountRuntime`.
+pub(crate) fn invalidate_snapshot() {
+    SNAPSHOT
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .fetched_at = None;
+}
 #[derive(Default)]
 pub(crate) struct AccountRuntime {
     pub setup_jobs: super::setup::SetupJobs,
