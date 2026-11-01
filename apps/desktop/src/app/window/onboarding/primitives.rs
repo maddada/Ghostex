@@ -185,6 +185,8 @@ pub(crate) fn popping_icon(
 }
 
 /// The Ghostex logo (`<GhostexLogo size glow>`).
+///
+/// CDXC:Icons 2026-11-02 DECISION: User approved "Replace the six-petal logo on the computer's onboarding screens with the new seven-petal icon? Yes, in this release". `packages/core-ui/onboarding/assets/ghostex-logo.webp` is the squircle tile of `apps/desktop/resources/AppIcon.png`, and the phone mock screenshots under `apps/desktop/assets/onboarding/` (`phone/` and `intro-video.webp`) carry the same icon patched in.
 pub(crate) fn ghostex_logo(s: S, logo_size: f32, glow: bool) -> AnyElement {
     let image = img("onboarding/logo.webp")
         .size(s.px(logo_size))
