@@ -169,7 +169,7 @@ pub(crate) fn suppress_account_usage_notice(
         notices.insert(session_chat_notice_key(project_id, session_id), since);
     }
 }
-/// The switch time usage-limit notices have been hidden since, when a switch is being hidden.
+/// The switch time the previous login's notices have been hidden since, when a switch is being hidden.
 pub(crate) fn account_usage_notice_suppression(
     project_id: &str,
     session_id: &str,
@@ -188,13 +188,18 @@ pub(crate) fn lift_account_usage_notice_suppression(project_id: &str, session_id
         notices.remove(&session_chat_notice_key(project_id, session_id));
     }
 }
-/// Whether an account switch is hiding this notice: only usage limits and a disabled account's error are hidden, the two notices a resumed CLI repaints from the previous login, and only while the switch suppression is in place.
+/// Whether an account switch is hiding this notice: usage limits, a disabled account's error and a sign-in error, the notices a resumed CLI repaints from the previous login, and only while the switch suppression is in place.
+///
+/// CDXC:AgentProviders 2026-11-01 DECISION:
+/// User: "when i switch accounts DONT SHOW THIS NOTICE until you're 100% sure it's still applicable". A sign-in error ("Login expired · Please run /login") is hidden from the switch on like a usage limit, and with it the pause on automatic queued delivery; it comes back only when the transcript records a sign-in error after the switch time (`session_chat_notice_progress::refresh`), which is the new login failing. On 2026-11-01 a coordinator switched from account 2 to account 4 six seconds after account 2's "Login expired", and the resumed CLI's repaint of that line showed as account 4's sign-in error.
 pub(crate) fn account_usage_notice_suppressed(
     project_id: &str,
     session_id: &str,
     notice: &SessionChatTerminalNotice,
 ) -> bool {
-    (notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT || notice.account_disabled())
+    (notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT
+        || notice.account_disabled()
+        || notice.sign_in_error())
         && account_usage_notice_suppression(project_id, session_id).is_some()
 }
 

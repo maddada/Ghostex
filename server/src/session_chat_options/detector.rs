@@ -462,7 +462,7 @@ impl SessionChatOptionDetector {
         if let Some(notice) = detected
             .notice
             .as_ref()
-            .filter(|notice| crate::accounts::recovery::retryable(notice))
+            .filter(|notice| crate::accounts::recovery::retryable(notice) || notice.sign_in_error())
         {
             if let Ok(db) = open_gxserver_database(&self.paths) {
                 let repository = DomainRepository::new(&db, self.server_id.as_str());

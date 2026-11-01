@@ -59,9 +59,16 @@ pub(super) async fn heal_refused_send(
         notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_AGENT_EXITED
     });
     // A login screen, a usage limit or a dialog explains itself, and neither a retry nor a restart
-    // answers it; the card that names it is the useful outcome.
+    // answers it; the card that names it is the useful outcome. One an account switch is hiding is
+    // the previous login's repaint, not something to give up on.
     if notice.as_ref().is_some_and(|notice| {
-        !agent_exited_on_screen && (notice.is_answerable() || notice.blocks_queued_delivery())
+        !agent_exited_on_screen
+            && (notice.is_answerable() || notice.blocks_queued_delivery())
+            && !crate::session_chat_notice::session_chat_notice_hidden(
+                &target.project_id,
+                &target.session_id,
+                notice,
+            )
     }) {
         record(
             state,

@@ -69,7 +69,7 @@ pub(crate) fn refresh(
     agent: Option<&str>,
     notice: &SessionChatTerminalNotice,
 ) {
-    if !crate::accounts::recovery::retryable(notice)
+    if !(crate::accounts::recovery::retryable(notice) || notice.sign_in_error())
         || (notice.is_answerable()
             && notice.kind != crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT)
     {
@@ -117,42 +117,28 @@ pub(crate) fn refresh(
         mut error_at,
         usage_limit_error_at,
         account_disabled_error_at,
+        sign_in_error_at,
     } = scan;
     // CDXC:AgentProviders 2026-09-11 WHY:
     // A limit the transcript records after the account switch is the new login running out, whatever the screen says: the resumed CLI repaints the old limit with other glyphs and wording, so the screen text cannot tell old from new. Only a transcript error written after the switch time lifts the suppression, in memory and in the row, so the notice can show and the switch pass can act on it.
     if notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_USAGE_LIMIT {
-        if let Some(since) =
-            crate::session_chat_notice::account_usage_notice_suppression(project, session)
-        {
-            if usage_limit_error_at.is_some_and(|error| error > since.timestamp_millis()) {
-                crate::session_chat_notice::lift_account_usage_notice_suppression(project, session);
-                let mut runtime = row["runtimeSettings"]
-                    .as_object()
-                    .cloned()
-                    .unwrap_or_default();
-                runtime.remove("accountSuppressedUsageNotice");
-                runtime.remove("accountSuppressedUsageNoticeAt");
-                let _ = crate::accounts::endpoint::update_session(repository, &row, runtime);
-            }
-        }
+        lift_switch_suppression_after(repository, &row, project, session, usage_limit_error_at);
     }
     // A disabled account's error repainted after a switch is the previous login's; one the transcript records after the switch is the new login refusing too, so it lifts the suppression the same way a new usage limit does and the recovery pass can move on to the next account.
     if notice.account_disabled() {
-        if let Some(since) =
-            crate::session_chat_notice::account_usage_notice_suppression(project, session)
-        {
-            if account_disabled_error_at.is_some_and(|error| error > since.timestamp_millis()) {
-                crate::session_chat_notice::lift_account_usage_notice_suppression(project, session);
-                let mut runtime = row["runtimeSettings"]
-                    .as_object()
-                    .cloned()
-                    .unwrap_or_default();
-                runtime.remove("accountSuppressedUsageNotice");
-                runtime.remove("accountSuppressedUsageNoticeAt");
-                let _ = crate::accounts::endpoint::update_session(repository, &row, runtime);
-            }
-        }
+        lift_switch_suppression_after(
+            repository,
+            &row,
+            project,
+            session,
+            account_disabled_error_at,
+        );
         error_at = account_disabled_error_at.or(error_at);
+    }
+    // A sign-in error works the same way: the repaint of the previous login's "Login expired" stays hidden, and only one the transcript records after the switch is the new login failing (see `account_usage_notice_suppressed`).
+    if notice.sign_in_error() {
+        lift_switch_suppression_after(repository, &row, project, session, sign_in_error_at);
+        error_at = sign_in_error_at.or(error_at);
     }
     // The limit chooser's body contains options, not the transcript's error
     // text. Its quota error still anchors progress and lifts switch suppression.
@@ -181,13 +167,41 @@ pub(crate) fn refresh(
     }
 }
 
-/// What one transcript tail says about a notice: when the agent last answered, and when it last recorded this error, a usage limit or a disabled account.
+/// Lifts an account switch's suppression, in memory and in the row, when the transcript recorded
+/// the error after the switch time: the new login failing, not the previous one's repaint.
+fn lift_switch_suppression_after(
+    repository: &DomainRepository<'_>,
+    row: &Value,
+    project: &str,
+    session: &str,
+    recorded_at: Option<i64>,
+) {
+    let Some(since) =
+        crate::session_chat_notice::account_usage_notice_suppression(project, session)
+    else {
+        return;
+    };
+    if !recorded_at.is_some_and(|error| error > since.timestamp_millis()) {
+        return;
+    }
+    crate::session_chat_notice::lift_account_usage_notice_suppression(project, session);
+    let mut runtime = row["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    runtime.remove("accountSuppressedUsageNotice");
+    runtime.remove("accountSuppressedUsageNoticeAt");
+    let _ = crate::accounts::endpoint::update_session(repository, row, runtime);
+}
+
+/// What one transcript tail says about a notice: when the agent last answered, and when it last recorded this error, a usage limit, a disabled account or a sign-in error.
 #[derive(Clone, Copy)]
 struct TranscriptScan {
     response_at: Option<i64>,
     error_at: Option<i64>,
     usage_limit_error_at: Option<i64>,
     account_disabled_error_at: Option<i64>,
+    sign_in_error_at: Option<i64>,
 }
 
 /// `detail` is the notice's detail text, which an error record must quote to count as this error.
@@ -196,6 +210,7 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
     let mut error_at = None;
     let mut usage_limit_error_at = None;
     let mut account_disabled_error_at = None;
+    let mut sign_in_error_at = None;
     for line in text.lines() {
         let Ok(record) = serde_json::from_str::<Value>(line) else {
             continue;
@@ -228,8 +243,13 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
         };
         if crate::accounts::disabled::transcript_record_disabled(&record) {
             account_disabled_error_at = Some(timestamp);
+        } else if crate::accounts::login_expired::transcript_record_login_expired(&record) {
+            sign_in_error_at = Some(timestamp);
         }
         if let Some(message) = error_message {
+            if record["type"] == "event_msg" && codex_sign_in_error_message(&message) {
+                sign_in_error_at = Some(timestamp);
+            }
             if detail.is_some_and(|detail| detail.contains(message.trim()))
                 && !message.trim().is_empty()
             {
@@ -260,7 +280,16 @@ fn scan_transcript(text: &str, detail: Option<&str>) -> TranscriptScan {
         error_at,
         usage_limit_error_at,
         account_disabled_error_at,
+        sign_in_error_at,
     }
+}
+
+/// Whether a Codex error event is the sign-in failure its screen shows as "Codex reported a sign-in
+/// error" (the same wordings the screen rule matches).
+fn codex_sign_in_error_message(message: &str) -> bool {
+    let text = message.to_lowercase();
+    text.contains("access token could not be refreshed")
+        || (text.contains("login expired") && text.contains("/login"))
 }
 
 struct CachedScan {
