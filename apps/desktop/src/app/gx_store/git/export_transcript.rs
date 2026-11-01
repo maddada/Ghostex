@@ -39,6 +39,35 @@ pub(crate) struct HandoffTarget {
     pub(crate) effort: Option<String>,
 }
 
+/// The coordinator role and standing context carried across a coordinator handoff.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct HandoffCoordinator {
+    pub(crate) goal: String,
+    pub(crate) instructions: String,
+}
+
+impl HandoffCoordinator {
+    pub(crate) fn from_export_answer(
+        answer: &Value,
+        fallback_is_coordinator: bool,
+    ) -> Option<Self> {
+        if let Some(coordinator) = answer.get("coordinator").and_then(Value::as_object) {
+            let text = |key: &str| {
+                coordinator
+                    .get(key)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            return Some(Self {
+                goal: text("goal"),
+                instructions: text("instructions"),
+            });
+        }
+        fallback_is_coordinator.then(Self::default)
+    }
+}
+
 /// The session the open dialog is about.
 #[derive(Clone, Debug)]
 pub(super) struct ExportRequest {
@@ -46,6 +75,7 @@ pub(super) struct ExportRequest {
     pub(super) session: SessionKey,
     agent_id: Option<String>,
     session_title: String,
+    is_coordinator: bool,
     handoff_target: Option<HandoffTarget>,
     /// The `open` message, sent again when the dialog reopens after Add Project.
     pub(super) open_message: Value,
@@ -59,6 +89,7 @@ pub(super) struct ExportedTranscript {
     agent_id: Option<String>,
     pub(super) path: String,
     pub(super) session_title: String,
+    pub(super) coordinator: Option<HandoffCoordinator>,
     pub(super) handoff_target: Option<HandoffTarget>,
     /// The file's text, when the dialog asked for it (a handoff to another computer).
     pub(super) markdown: Option<String>,
@@ -113,6 +144,9 @@ impl GhostexGpuiApp {
             .and_then(|loaded| loaded.server_session(&session.project_id, &session.session_id))
             .cloned();
         let remote = !session.machine.is_local();
+        let is_coordinator = row
+            .as_ref()
+            .is_some_and(|row| row.coordinator_role.as_deref() == Some("coordinator"));
         let (agent_id, session_title) = match (&row, remote) {
             (Some(row), _) => (
                 row.agent_id.clone().filter(|id| !id.trim().is_empty()),
@@ -166,6 +200,7 @@ impl GhostexGpuiApp {
             session,
             agent_id,
             session_title,
+            is_coordinator,
             handoff_target,
             open_message: message.clone(),
         });
@@ -332,11 +367,12 @@ impl GhostexGpuiApp {
                             .get("agent")
                             .and_then(Value::as_str)
                             .map(str::to_string),
+                        HandoffCoordinator::from_export_answer(&answer, request.is_coordinator),
                         markdown,
                     ))
                 });
                 match answer {
-                    Ok((path, agent, markdown)) => {
+                    Ok((path, agent, coordinator, markdown)) => {
                         let agent_id = request
                             .agent_id
                             .clone()
@@ -350,6 +386,7 @@ impl GhostexGpuiApp {
                             agent_id: agent_id.clone(),
                             path: path.clone(),
                             session_title: request.session_title.clone(),
+                            coordinator,
                             handoff_target: request.handoff_target.clone(),
                             markdown,
                         });
@@ -521,6 +558,7 @@ impl GhostexGpuiApp {
                 &exported.session_title,
                 &source_title,
             ),
+            exported.coordinator.clone(),
             exported.handoff_target.as_ref(),
             cx,
         );
@@ -560,13 +598,19 @@ impl GhostexGpuiApp {
         scope: &GitScope,
         agent: super::prompt_agent::HudAgent,
         draft: String,
+        coordinator: Option<HandoffCoordinator>,
         handoff_target: Option<&HandoffTarget>,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Task<Result<SessionKey, String>> {
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
         let object = settings.object();
-        let open_in_chat =
-            crate::app::helpers::gpui_preferred_agent_interface_override_from_settings(
+        let coordinator_launch = coordinator.and_then(|coordinator| {
+            agent
+                .coordinator_family()
+                .map(|family| (family, coordinator))
+        });
+        let open_in_chat = coordinator_launch.is_some()
+            || crate::app::helpers::gpui_preferred_agent_interface_override_from_settings(
                 object,
                 &agent.agent_id,
             )
@@ -579,14 +623,29 @@ impl GhostexGpuiApp {
             matches!(target.provider.as_str(), "claude" | "codex" | "antigravity")
                 && model_picker_provider(agent.icon.as_deref()) == Some(target.provider.as_str())
         });
+        let agent_model = launch_model.map(|target| target.model.clone()).or_else(|| {
+            coordinator_launch
+                .as_ref()
+                .filter(|(family, _)| *family == "claude")
+                .map(|_| crate::app::window::DEFAULT_CLAUDE_COORDINATOR_MODEL.to_string())
+        });
+        let agent_effort = launch_model
+            .and_then(|target| target.effort.clone())
+            .or_else(|| {
+                coordinator_launch.as_ref().and_then(|(family, _)| {
+                    matches!(*family, "claude" | "codex" | "antigravity")
+                        .then(|| "high".to_string())
+                })
+            });
         self.git_start_prompt_agent(
             scope,
             agent,
             PromptAgentLaunch {
                 first_user_input_draft: Some(draft),
-                agent_model: launch_model.map(|target| target.model.clone()),
-                agent_effort: launch_model.and_then(|target| target.effort.clone()),
+                agent_model,
+                agent_effort,
                 open_in_chat,
+                coordinator: coordinator_launch.map(|(_, coordinator)| coordinator),
                 missing_session_message: Some("Could not create the new agent session."),
                 ..PromptAgentLaunch::default()
             },

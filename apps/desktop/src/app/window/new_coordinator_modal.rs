@@ -41,7 +41,7 @@ const LOCK_ICON: &str = "titlebar/lock.svg";
 /// CDXC:Coordinators 2026-10-01 DECISION:
 /// User: a coordinator on a Claude launcher starts on Opus 5.5 ("my preferences should be the preferences for this feature for customers using the same setup, since that's what I tested"). `opus[1m]` is Opus 5.5's row in the Claude lineup; a Codex lineup has no such row and keeps its own default model. Its effort is High since 2026-10-29 (Low is offered too since 2026-10-31) (`orchestrator_efforts` in gx-chat-core; XHigh from 2026-10-17 until then).
 /// SEE-ALSO: DEFAULT_CLAUDE_COORDINATOR_MODEL in server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator create` keeps the same default).
-const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
+pub(crate) const DEFAULT_CLAUDE_COORDINATOR_MODEL: &str = "opus[1m]";
 const FIELD_GOAL: &str = "Goal (optional)";
 const GOAL_PLACEHOLDER: &str = "One line it works toward, e.g. Ship the new checkout by Friday";
 const CANCEL: &str = "Cancel";

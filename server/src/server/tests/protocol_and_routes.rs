@@ -565,3 +565,138 @@ async fn agent_hook_conflict_response_strips_private_log_metadata() {
     assert!(!logs.contains("Wrong Codex Thread"));
     assert!(!logs.contains("Target Codex Thread"));
 }
+
+#[tokio::test]
+async fn export_session_transcript_includes_coordinator_goal_and_instructions() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("coordinator-transcript.jsonl");
+    fs::write(
+        &transcript_path,
+        concat!(
+            "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Ship the coordinator handoff\"}}\n",
+            "{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Kicked off thread 1.\"}]}}\n"
+        ),
+    )
+    .expect("write transcript");
+
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({
+                "name": "Ghostex",
+                "path": temp.path(),
+            })
+            .as_object()
+            .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let coordinator_session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                    "coordinatorRole": "skill",
+                },
+                "title": "Coordinator",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("coordinator session created");
+    let coordinator_session_id = coordinator_session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    crate::coordinators::insert_coordinator(
+        &db,
+        &project_id,
+        &coordinator_session_id,
+        "Finish remote coordinator handoff",
+        "Keep every thread scoped to one module.",
+    )
+    .expect("insert coordinator");
+
+    let plain_session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Plain Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("plain session created");
+    let plain_session_id = plain_session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    drop(db);
+
+    let exported_coordinator = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "includeMarkdown": true,
+                    "projectId": project_id,
+                    "sessionId": coordinator_session_id,
+                }
+            }),
+        ),
+        "export-coordinator".to_string(),
+    )
+    .await;
+    assert_eq!(exported_coordinator.response.status(), StatusCode::OK);
+    let body = response_json(exported_coordinator.response).await;
+    assert_eq!(
+        body["result"]["coordinator"],
+        json!({
+            "goal": "Finish remote coordinator handoff",
+            "instructions": "Keep every thread scoped to one module.",
+        })
+    );
+    assert!(body["result"]["markdown"]
+        .as_str()
+        .is_some_and(|markdown| markdown.contains("Ship the coordinator handoff")));
+
+    let exported_plain = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "projectId": project_id,
+                    "sessionId": plain_session_id,
+                }
+            }),
+        ),
+        "export-plain".to_string(),
+    )
+    .await;
+    assert_eq!(exported_plain.response.status(), StatusCode::OK);
+    let plain_body = response_json(exported_plain.response).await;
+    assert!(plain_body["result"].get("coordinator").is_none());
+}
