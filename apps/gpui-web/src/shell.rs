@@ -335,14 +335,28 @@ impl Render for GhostexGpuiApp {
                     .map(|(_, view)| view.clone().into_any_element())
             }
         });
-        // CDXC:Workarea 2026-10-09 DECISION: User: "top border here should have 1px blue line when the session here has \"attention\" status". The work area's top edge turns the sidebar dot's blue while the open session's row has it; the 1px edge is always there, transparent otherwise, so the line never moves the header.
-        let attention = open.as_ref().is_some_and(|session| {
-            self.gx_store
-                .core
-                .presentation()
-                .session(session)
-                .is_some_and(|session| session.activity.as_str() == "attention")
+        // CDXC:Notifications 2026-11-01 DECISION: User (Q929): the finished-work border is a setting, "disabled by default for new users too", with its own colour; off, the edge stays transparent (the desktop's rule is `show_finished_work_border` in helpers/project/colors.rs). This supersedes the 2026-10-09 Workarea decision that always drew the 1px attention line; when on, the work area's top edge takes the chosen colour while the open session has attention, and the 1px edge is always there, transparent otherwise, so the line never moves the header.
+        let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
+        let border_rgb = (settings.object().get("showFinishedWorkBorder")
+            == Some(&serde_json::Value::Bool(true)))
+        .then(|| {
+            settings
+                .object()
+                .get("finishedWorkBorderColor")
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value.trim().trim_start_matches('#'))
+                .filter(|hex| hex.len() == 6)
+                .and_then(|hex| u32::from_str_radix(hex, 16).ok())
+                .unwrap_or(0x95d7f6)
         });
+        let attention = border_rgb.is_some()
+            && open.as_ref().is_some_and(|session| {
+                self.gx_store
+                    .core
+                    .presentation()
+                    .session(session)
+                    .is_some_and(|session| session.activity.as_str() == "attention")
+            });
         // The Session details panel belongs to the chat the page shows, while its button is on.
         let anchor = self.session_details_button_bounds.clone();
         for (key, (_, view)) in &self.native_chats {
@@ -395,8 +409,8 @@ impl Render for GhostexGpuiApp {
                     .flex()
                     .flex_col()
                     .border_t_1()
-                    .border_color(if attention {
-                        rgb(0x95d7f6).into()
+                    .border_color(if let Some(border_rgb) = border_rgb.filter(|_| attention) {
+                        rgb(border_rgb).into()
                     } else {
                         gpui::transparent_black()
                     })

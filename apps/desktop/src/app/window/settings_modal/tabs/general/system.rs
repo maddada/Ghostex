@@ -3,7 +3,7 @@
 use super::super::super::catalog::SettingOption;
 use super::super::super::fields::{
     Chip, PageAction, RowSpec, action_buttons_field, chips_field, reset_key, select_field,
-    settings_section, sound_field, toggle_field_with,
+    settings_section, sound_field, toggle_color_field, toggle_field_with,
 };
 use super::super::super::page::PageBlock;
 use super::{GeneralCx, GeneralTab, save};
@@ -383,6 +383,31 @@ fn sounds_section(
                     post(page, "requestMacOSNotificationPermission", cx);
                 }
             },
+            cx,
+        ));
+    }
+    // CDXC:Notifications 2026-11-01 DECISION: User (Q929): "keep the color and the switch in same row in settings. only show color picker if toggled on."
+    if g.visible(s, "showFinishedWorkBorder") || g.visible(s, "finishedWorkBorderColor") {
+        let spec = g
+            .spec(
+                "showFinishedWorkBorder",
+                "Finished-work border",
+                "Outline a session's pane in a colour when its agent finishes work or needs you, until you look at it. The sidebar dot, sounds and notifications stay either way.",
+            )
+            .modified(
+                g.values.is_modified("showFinishedWorkBorder")
+                    || g.values.is_modified("finishedWorkBorderColor"),
+            );
+        let color = g.values.string("finishedWorkBorderColor");
+        rows.push(toggle_color_field(
+            page,
+            &p,
+            "showFinishedWorkBorder",
+            "finishedWorkBorderColor",
+            spec,
+            g.values.bool("showFinishedWorkBorder"),
+            &color,
+            window,
             cx,
         ));
     }

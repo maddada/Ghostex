@@ -64,6 +64,8 @@ pub(crate) fn sounds() -> Section {
             row("showNotificationOnTerminalBell", "Show notification on terminal bell", "Treat terminal bell events as session attention."),
             row("completionSound", "Agent finished sound", "The sound when an agent finishes a task or needs you, or Off.").options(&[opt("Off", "off")]).options_of(COMPLETION_SOUND_OPTIONS, "label", "value"),
             row("showMacOSAttentionNotifications", "System notification when a session needs you", "Show a system notification when a session needs attention."),
+            row("showFinishedWorkBorder", "Finished-work border", "Outline a session's pane in a colour when its agent finishes work or needs you, until you look at it. The sidebar dot, sounds and notifications stay either way."),
+            row("finishedWorkBorderColor", "Finished-work border colour", "The colour of the border a session's pane gets when its agent finishes work or needs you. Shown while Finished-work border is on."),
             row("resetExpirySystemNotifications", "Warn before a banked usage reset expires", "Show a system notification when a banked Claude or Codex usage reset expires within 3 days and again within 24 hours. The red notification in the bell stays either way."),
             row("attentionNotificationActions", "Test alerts", "Play the agent finished sound and show the notification as they are set now, or open the system's notification settings for Ghostex."),
             row("actionCompletionSound", "Command finished sound", "The sound when a command run from the Commands pane finishes.").options_of(COMPLETION_SOUND_OPTIONS, "label", "value"),

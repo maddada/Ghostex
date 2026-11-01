@@ -481,6 +481,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:Notifications 2026-10-05 DECISION:
     // User: a banked reset that expires within 3 days, and again within 24 hours, also gets a system notification, which "can be switched off for the system" while the red bell row stays.
     ("resetExpirySystemNotifications", J::Bool(true)),
+    // CDXC:Notifications 2026-11-01 DECISION:
+    // User (Q929) on a switch and a colour for the light-blue border a session's pane gets when it finishes work: "Yes, add both", "make it disabled by default for new users too pls. keep the color and the switch in same row in settings. only show color picker if toggled on."
+    ("showFinishedWorkBorder", J::Bool(false)),
+    ("finishedWorkBorderColor", J::Str("#95d7f6")),
     // CDXC:Workarea 2026-05-23-00:50:
     // The session-id pane overlay preference is configurable, and the
     // native label itself must still render only for terminal panes that carry

@@ -2122,6 +2122,30 @@
       "agentWritable": true
     },
     {
+      "key": "showFinishedWorkBorder",
+      "title": "Finished-work border",
+      "subtitle": "Outline a session's pane in a colour when its agent finishes work or needs you, until you look at it. The sidebar dot, sounds and notifications stay either way.",
+      "tab": "notifications",
+      "tabTitle": "Notifications",
+      "section": "sounds",
+      "sectionTitle": "Sounds",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "finishedWorkBorderColor",
+      "title": "Finished-work border colour",
+      "subtitle": "The colour of the border a session's pane gets when its agent finishes work or needs you. Shown while Finished-work border is on.",
+      "tab": "notifications",
+      "tabTitle": "Notifications",
+      "section": "sounds",
+      "sectionTitle": "Sounds",
+      "type": "string",
+      "default": "#95d7f6",
+      "agentWritable": true
+    },
+    {
       "key": "resetExpirySystemNotifications",
       "title": "Warn before a banked usage reset expires",
       "subtitle": "Show a system notification when a banked Claude or Codex usage reset expires within 3 days and again within 24 hours. The red notification in the bell stays either way.",

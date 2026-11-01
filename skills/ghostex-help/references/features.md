@@ -3774,8 +3774,14 @@ reports under `programStatus`.
 With Show debug UI controls on, the Program status mismatches log on the
 Debugging page records each time detection and a program's report disagree.
 
+A session's pane can also get a coloured outline when its agent finishes work or
+needs you, until you look at it: turn on Finished-work border under Settings >
+Notifications (off by default) and pick its colour from the swatch beside the
+switch (`showFinishedWorkBorder`, `finishedWorkBorderColor`).
+
 Related settings: `completionSound`, `actionCompletionSound`, `copySound`,
 `showMacOSAttentionNotifications`, `resetExpirySystemNotifications`,
+`showFinishedWorkBorder`, `finishedWorkBorderColor`,
 `showNotificationOnTerminalBell` (Settings > Notifications),
 `notificationsTitlebarButtonHidden`.
 
