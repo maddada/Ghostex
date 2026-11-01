@@ -30,9 +30,11 @@ fn text_block(text: &str) -> Vec<SessionChatBlock> {
     }
 }
 
+/// CDXC:SessionChat 2026-11-02 DECISION: User: "make opencode match how Claude Code's chat transcript works". OpenCode writes a short reasoning part for almost every step, so the chat keeps one growing Thought row for the user turn and lets the shared chat core group the calls under it, live and after the turn settles. A reply sentence ends that row, so a thought written after it starts a new row below it instead of joining a row drawn above it.
 pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
     let mut result = Vec::new();
     let mut turn: Option<String> = None;
+    let mut reasoning_row: Option<usize> = None;
     for message in messages {
         let Some(id) = message["id"].as_str() else {
             continue;
@@ -41,6 +43,7 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
         match message["type"].as_str().unwrap_or("") {
             "user" => {
                 turn = Some(id.into());
+                reasoning_row = None;
                 let text = message["text"].as_str().unwrap_or("");
                 let references = super::attachments::image_references(text);
                 let mut blocks = text_block(text);
@@ -82,16 +85,41 @@ pub(crate) fn decode_messages(messages: &[Value]) -> Vec<SessionChatMessage> {
                 {
                     let part_id = format!("{id}:part:{index}");
                     match part["type"].as_str().unwrap_or("") {
-                        "text" | "reasoning" => {
-                            let blocks = text_block(part["text"].as_str().unwrap_or(""));
-                            if !blocks.is_empty() {
+                        "reasoning" => {
+                            let text = part["text"].as_str().unwrap_or("");
+                            if text.is_empty() {
+                                continue;
+                            }
+                            if let Some(index) = reasoning_row {
+                                if let SessionChatBlock::Text { text: combined } =
+                                    &mut result[index].blocks[0]
+                                {
+                                    if !combined.ends_with("\n\n") {
+                                        if !combined.ends_with('\n') {
+                                            combined.push('\n');
+                                        }
+                                        combined.push('\n');
+                                    }
+                                    combined.push_str(text.trim_start_matches('\n'));
+                                }
+                            } else {
+                                reasoning_row = Some(result.len());
                                 result.push(row(
                                     part_id,
-                                    if part["type"] == "reasoning" {
-                                        SessionChatRole::Reasoning
-                                    } else {
-                                        SessionChatRole::Assistant
-                                    },
+                                    SessionChatRole::Reasoning,
+                                    text_block(text),
+                                    timestamp,
+                                    turn.as_deref(),
+                                ));
+                            }
+                        }
+                        "text" => {
+                            let blocks = text_block(part["text"].as_str().unwrap_or(""));
+                            if !blocks.is_empty() {
+                                reasoning_row = None;
+                                result.push(row(
+                                    part_id,
+                                    SessionChatRole::Assistant,
                                     blocks,
                                     timestamp,
                                     turn.as_deref(),
