@@ -362,3 +362,279 @@ fn terminal_title_status_bookkeeping_does_not_schedule_presentation_delta() {
         Some(&json!("Search by Text"))
     );
 }
+
+#[test]
+fn terminal_title_prompt_return_resets_auto_command_title_to_default() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let project_dir = std::env::temp_dir();
+    let project_path = project_dir.to_str().expect("project path").to_string();
+    let project = repository
+        .create_project(
+            json!({ "name": "Prompt Reset", "path": &project_path })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .expect("project id")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "cwd": &project_path,
+                "kind": "terminal",
+                "projectId": project_id,
+                "runtimeSettings": { "titleSource": "terminal-auto" },
+                "title": "top"
+            })
+            .as_object()
+            .expect("session params"),
+            false,
+        )
+        .expect("create session");
+    let lifecycle = LifecycleParams {
+        project_id,
+        session_id: session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .expect("session id")
+            .to_string(),
+    };
+
+    let output = ingest_terminal_title_event(
+        &repository,
+        &lifecycle,
+        json!({
+            "rawTitle": &project_path,
+            "sessionPersistenceProvider": "zmx"
+        })
+        .as_object()
+        .expect("terminal title params"),
+    )
+    .expect("terminal title result");
+    let result = output.result;
+
+    assert!(output.schedule_presentation_delta);
+    assert_eq!(result.get("changed"), Some(&json!(true)));
+    assert_eq!(
+        result.get("reason"),
+        Some(&json!("terminal-title-returned-to-prompt"))
+    );
+    let session = result.get("session").expect("result session");
+    assert_eq!(session.get("title"), Some(&json!("Terminal Session")));
+    assert_eq!(
+        session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .and_then(|settings| settings.get("titleSource")),
+        Some(&json!("placeholder"))
+    );
+}
+
+#[test]
+fn terminal_title_prompt_return_preserves_user_title() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let project_dir = std::env::temp_dir();
+    let project_path = project_dir.to_str().expect("project path").to_string();
+    let project = repository
+        .create_project(
+            json!({ "name": "User Title Preserve", "path": &project_path })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .expect("project id")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "cwd": &project_path,
+                "kind": "terminal",
+                "projectId": project_id,
+                "runtimeSettings": { "titleSource": "user" },
+                "title": "My Custom Terminal"
+            })
+            .as_object()
+            .expect("session params"),
+            false,
+        )
+        .expect("create session");
+    let lifecycle = LifecycleParams {
+        project_id,
+        session_id: session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .expect("session id")
+            .to_string(),
+    };
+
+    let output = ingest_terminal_title_event(
+        &repository,
+        &lifecycle,
+        json!({
+            "rawTitle": &project_path,
+            "sessionPersistenceProvider": "zmx"
+        })
+        .as_object()
+        .expect("terminal title params"),
+    )
+    .expect("terminal title result");
+    let result = output.result;
+    assert_eq!(result.get("changed"), Some(&json!(false)));
+    let session = result.get("session").expect("result session");
+    assert_eq!(session.get("title"), Some(&json!("My Custom Terminal")));
+    assert_eq!(
+        session
+            .get("runtimeSettings")
+            .and_then(Value::as_object)
+            .and_then(|settings| settings.get("titleSource")),
+        Some(&json!("user"))
+    );
+}
+
+#[test]
+fn terminal_title_prompt_return_does_not_reset_agent_session() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let project_dir = std::env::temp_dir();
+    let project_path = project_dir.to_str().expect("project path").to_string();
+    let project = repository
+        .create_project(
+            json!({ "name": "Agent Session Preserve", "path": &project_path })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .expect("project id")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "cwd": &project_path,
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "titleSource": "terminal-auto"
+                },
+                "title": "Claude Working Title"
+            })
+            .as_object()
+            .expect("session params"),
+            false,
+        )
+        .expect("create session");
+    let lifecycle = LifecycleParams {
+        project_id,
+        session_id: session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .expect("session id")
+            .to_string(),
+    };
+
+    let output = ingest_terminal_title_event(
+        &repository,
+        &lifecycle,
+        json!({
+            "agentName": "claude",
+            "rawTitle": &project_path,
+            "sessionPersistenceProvider": "zmx"
+        })
+        .as_object()
+        .expect("terminal title params"),
+    )
+    .expect("terminal title result");
+    let result = output.result;
+
+    let session = result.get("session").expect("result session");
+    assert_eq!(session.get("title"), Some(&json!("Claude Working Title")));
+}
+
+#[test]
+fn terminal_title_prompt_return_does_not_reset_cursor_placeholder() {
+    let (_temp, db) = open_test_database();
+    let repository = DomainRepository::new(&db, "test-server");
+    let project_dir = std::env::temp_dir();
+    let project_path = project_dir.to_str().expect("project path").to_string();
+    let project = repository
+        .create_project(
+            json!({ "name": "Cursor Preserve", "path": &project_path })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("create project");
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .expect("project id")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "cwd": &project_path,
+                "kind": "terminal",
+                "projectId": project_id,
+                "runtimeSettings": { "titleSource": "terminal-auto" },
+                "title": "Running Task"
+            })
+            .as_object()
+            .expect("session params"),
+            false,
+        )
+        .expect("create session");
+    let lifecycle = LifecycleParams {
+        project_id,
+        session_id: session
+            .get("sessionId")
+            .and_then(Value::as_str)
+            .expect("session id")
+            .to_string(),
+    };
+
+    let output = ingest_terminal_title_event(
+        &repository,
+        &lifecycle,
+        json!({
+            "rawTitle": "Cursor Agent",
+            "sessionPersistenceProvider": "zmx"
+        })
+        .as_object()
+        .expect("terminal title params"),
+    )
+    .expect("terminal title result");
+    let result = output.result;
+    let session = result.get("session").expect("result session");
+    assert_eq!(session.get("title"), Some(&json!("Running Task")));
+    assert_ne!(
+        result.get("reason"),
+        Some(&json!("terminal-title-returned-to-prompt"))
+    );
+}
+
+#[test]
+fn terminal_title_prompt_or_directory_matches_windows_absolute_paths() {
+    let session = json!({
+        "cwd": "C:\\Users\\test\\my-project",
+        "kind": "terminal"
+    });
+    assert!(is_terminal_prompt_or_directory_title(
+        &session,
+        Some("C:\\Users\\test\\my-project")
+    ));
+    assert!(is_terminal_prompt_or_directory_title(
+        &session,
+        Some("\\\\wsl$\\Ubuntu\\home\\user")
+    ));
+}
