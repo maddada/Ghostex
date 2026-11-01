@@ -2143,14 +2143,17 @@ comes with a 1M or a 200K context window: picking it from another model always
 starts on 1M, and the pill only names the window when it is 200K
 ("Opus 5.5 High · 200K"). Click it to open the model picker: a row of agent tabs
 with a starred Favorites tab first, the models of the chosen tab (starred ones
-first, in their usual order),
+first, in alphabetical order, then the rest in their usual order),
 and along the bottom a button each for the reasoning level (brain), the context
 window (chart bars) and Fast mode (bolt). Clicking the context window or Fast
 mode button switches it; the reasoning button opens a short list to the side. A
 button the current model has no choice for is dimmed: reasoning and context
 window read Default, and Fast mode reads Off. Grok Build's fast model (Grok 4.7
 Fast) is not its own row: pick Grok 4.7 and switch Fast mode on or off. Auto, where an agent offers it,
-always sits at the top of that agent's list. Older versions of a model (GPT 6 Sol
+sits at the top of that agent's list, below any starred models. A tab with more
+than six models (OpenCode, Pi and Cursor, for example) has a search field above
+the list: type part of a model's name or id ("sonnet", "gpt 6") to narrow it,
+with matching starred models still first. Older versions of a model (GPT 6 Sol
 once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
 the tab; click it to show them, or star one to keep it at the top. Codex,
 Cursor, Grok Build and Antigravity's lists come from the CLI installed on that computer, so
@@ -2169,8 +2172,10 @@ shows; the letter on each bottom button's icon uses it (R Reasoning, C Context,
 F Fast mode, A Account); Tab and Shift+Tab move through the Favorites and agent tabs. Enter applies the highlighted model and level and
 saves them as the agent's default, Option+Enter uses them in this session only and
 leaves the default alone (either one closes the picker, as does clicking a model), and Option+1 to Option+9
-jump the highlight to one of the first nine rows without applying it. Escape closes it
-without changing anything. The key reminder along the bottom lists these.
+jump the highlight to one of the first nine rows without applying it. On a tab
+with a search field, typing goes into the field (so the bottom buttons' letters
+type instead) and the arrows, Tab and Enter still work on the filtered list.
+Escape clears the search, then closes the picker without changing anything. The key reminder along the bottom lists these.
 
 New Claude Code and Codex sessions start on the model and reasoning level you
 last saved as that agent's default, so the pill names it as soon as the chat
