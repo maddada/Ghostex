@@ -217,6 +217,7 @@ fn codex_footer_model(segment: &str) -> Option<(String, String, std::str::Split<
 /// names no effort, so none is reported and the model's own default stands.
 const CODEX_DEFAULT_EFFORT_WORD: &str = "default";
 
+/// CDXC:AgentScreenDetection 2026-11-02 DECISION: User: "Fix the Codex footer matcher so it accepts 'Fast' in any case." Apply the same case-insensitive reading to effort and default words so their casing cannot discard the model either.
 pub(super) fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
     let (model, label, mut tokens) = codex_footer_model(segment)?;
     let mut selection = SessionChatDetectedSelection {
@@ -228,17 +229,22 @@ pub(super) fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSe
         ..SessionChatDetectedSelection::default()
     };
     let mut next = tokens.next();
-    if let Some(effort) = next.filter(|token| CODEX_EFFORTS.contains(token)) {
+    if let Some(effort) = next.and_then(|token| {
+        CODEX_EFFORTS
+            .iter()
+            .copied()
+            .find(|effort| token.eq_ignore_ascii_case(effort))
+    }) {
         selection.effort = Some(SessionChatDetectedChoice {
             value: effort.to_string(),
             label: effort.to_string(),
             source: SessionChatOptionEvidence::Terminal,
         });
         next = tokens.next();
-    } else if next == Some(CODEX_DEFAULT_EFFORT_WORD) {
+    } else if next.is_some_and(|token| token.eq_ignore_ascii_case(CODEX_DEFAULT_EFFORT_WORD)) {
         next = tokens.next();
     }
-    if next == Some("fast") {
+    if next.is_some_and(|token| token.eq_ignore_ascii_case("fast")) {
         selection.fast = Some(true);
         next = tokens.next();
     }

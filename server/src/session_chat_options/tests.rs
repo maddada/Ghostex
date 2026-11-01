@@ -196,6 +196,30 @@ fn detects_codex_fast_modifier() {
 }
 
 #[test]
+fn detects_codex_fast_modifier_regardless_of_case() {
+    for segment in [
+        "GPT-6.1-Sol xhigh Fast",
+        "GPT-6.1-Sol xhigh fast",
+        "GPT-6.1-Sol XHIGH FAST",
+        "GPT-6.1-Sol DEFAULT Fast",
+    ] {
+        let selection = agent_matchers::match_codex_segment(segment).expect(segment);
+        assert_eq!(
+            selection.model.as_ref().map(|choice| choice.value.as_str()),
+            Some("gpt-6.1-sol")
+        );
+        assert_eq!(
+            selection
+                .effort
+                .as_ref()
+                .map(|choice| choice.value.as_str()),
+            (!segment.contains("DEFAULT")).then_some("xhigh")
+        );
+        assert_eq!(selection.fast, Some(true));
+    }
+}
+
+#[test]
 fn detects_codex_xhigh_effort() {
     let selection = codex(CODEX_XHIGH).expect("codex footer detected");
     assert_eq!(pair(&selection), (Some("gpt-5.6-sol"), Some("xhigh")));
