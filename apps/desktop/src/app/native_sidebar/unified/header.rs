@@ -64,6 +64,9 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
             if let Some(detail) = &option.detail {
                 item["detail"] = Value::String(detail.clone());
             }
+            if row_has_menu(unified, kind, &option.key) {
+                item["rowMenu"] = json!({"kind": kind, "key": option.key, "label": option.label});
+            }
             if !option.project_group_ids.is_empty() {
                 item["secondary"] = json!({
                     "icon": "x",
@@ -94,6 +97,20 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
     // A single project is no filter, but its row is the way to remove it.
     section("Projects", "repo", &unified.options.repos, &filter.repos, 1);
     Value::Array(items)
+}
+
+/// Whether a row opens a menu (its ⋯ and a right-click): a project, a remote machine, and a Space
+/// of the machine the Project sidebar has selected, whose menu acts there. This computer's machine
+/// row has none, as its tab has none.
+fn row_has_menu(unified: &UnifiedSidebarSnapshot, kind: &str, key: &str) -> bool {
+    match kind {
+        "repo" => unified.repo_menu_groups.contains_key(key),
+        "machine" => key != ghostex_gx_core::LOCAL_MACHINE_ID,
+        "space" => key
+            .split_once('|')
+            .is_some_and(|(machine, _)| machine == unified.space_menu_machine),
+        _ => false,
+    }
 }
 
 /// How much of the window the filter menu may take.
@@ -136,6 +153,28 @@ fn filter_label(unified: &UnifiedSidebarSnapshot) -> String {
 }
 
 impl GhostexGpuiApp {
+    /// What a filter row's ⋯ and right-click open: the menu the Project sidebar shows for the same
+    /// project, machine or Space, from the same builders, so its rows run the same actions.
+    ///
+    /// CDXC:Sidebar 2026-11-01 DECISION:
+    /// User: "please show 3 dots to the left of the x button that we show here" and "allow right clicking on one of these options here to show the same context menu we show for it in the projects sidebar". A project row opens its Project sidebar header's menu (a repository on several machines: its main checkout here, else elsewhere), a remote machine row its tab's menu, and a Space row the Space icon's menu while that Space is on the machine the Project sidebar has selected, which is where its Edit and Sleep act. The menu opens beside the dropdown, which stays open under it.
+    pub(in crate::app::native_sidebar) fn unified_filter_row_menu(
+        &mut self,
+        row_menu: &Value,
+    ) -> Option<Value> {
+        let unified = self.native_sidebar.unified.clone()?;
+        let (kind, key) = (row_menu["kind"].as_str()?, row_menu["key"].as_str()?);
+        if !row_has_menu(&unified, kind, key) {
+            return None;
+        }
+        match kind {
+            "repo" => self.gx_store_unified_project_menu(unified.repo_menu_groups.get(key)?),
+            "machine" => Some(self.native_machine_tab_menu(key)),
+            "space" => Some(self.native_space_menu(key.split_once('|')?.1)),
+            _ => None,
+        }
+    }
+
     /// CDXC:Sidebar 2026-10-31 DECISION:
     /// User (2026-10-30): "please make the sidebar filter in unified sidebar mode not take all the height like it does now". The filter menu is a dropdown: hung under the filter button with its left edge on the button's, shrinking to fit a short list, and its rows scroll inside it with the bar showing only while they scroll. Pressing the button again closes it. With a hundred projects the app's usual dropdown height showed too few of them, so its tallest is three quarters of the window (`filter_menu_max_height`): still not all of it, and never past the room left below it. This supersedes `TITLEBAR_POPUP_MENU_MAX_HEIGHT` for this menu.
     pub(super) fn show_unified_filter_menu(
@@ -367,6 +406,27 @@ mod tests {
         let items = filter_menu_items(&snapshot(vec![repo]));
         assert_eq!(row(&items, "ghostex")["detail"], "Local, Windows");
         assert!(row(&items, "ghostex").get("suffix").is_none());
+    }
+
+    #[test]
+    fn projects_remote_machines_and_the_selected_machines_spaces_open_a_menu() {
+        let mut unified = snapshot(vec![
+            option("ghostex", &["project:a"]),
+            option("a-group", &[]),
+        ]);
+        unified
+            .repo_menu_groups
+            .insert("ghostex".to_string(), "project:a".to_string());
+        unified.options.machines = vec![option("local", &[]), option("w", &[])];
+        unified.options.spaces = vec![option("local|s1", &[]), option("w|s2", &[])];
+        unified.space_menu_machine = "local".to_string();
+        let items = filter_menu_items(&unified);
+        assert_eq!(row(&items, "ghostex")["rowMenu"]["kind"], "repo");
+        assert!(row(&items, "a-group").get("rowMenu").is_none());
+        assert!(row(&items, "local").get("rowMenu").is_none());
+        assert_eq!(row(&items, "w")["rowMenu"]["kind"], "machine");
+        assert_eq!(row(&items, "local|s1")["rowMenu"]["kind"], "space");
+        assert!(row(&items, "w|s2").get("rowMenu").is_none());
     }
 
     #[test]

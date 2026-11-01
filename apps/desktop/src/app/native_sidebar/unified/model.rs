@@ -63,6 +63,11 @@ pub(crate) struct UnifiedSidebarSnapshot {
     pub(crate) has_projects: bool,
     /// The icons of the picked repositories that have one, for their chips.
     pub(crate) repo_icons: std::collections::HashMap<String, Arc<gpui::Image>>,
+    /// The project whose Project sidebar menu each repository's row opens: its main checkout, on
+    /// this computer when it has one, as a sidebar group id.
+    pub(crate) repo_menu_groups: std::collections::HashMap<String, String>,
+    /// The machine whose Spaces the Project sidebar's Space menu acts on (its selected machine).
+    pub(crate) space_menu_machine: String,
 }
 
 impl UnifiedSidebarSnapshot {

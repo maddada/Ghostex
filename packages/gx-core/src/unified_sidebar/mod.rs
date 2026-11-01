@@ -31,7 +31,7 @@ pub use choices::{
     UnifiedNewSessionTarget, UnifiedProjectChoice,
 };
 pub use grouping::{group_unified_sidebar, move_unified_project, ordered_repo_keys, UnifiedGroup};
-pub use lanes::unified_lane_inputs;
+pub use lanes::{unified_lane_inputs, unified_lane_menu_inputs};
 pub use repo::{normalize_git_remote, repo_identity, RepoIdentity};
 pub use saved::{UnifiedSavedState, UNIFIED_SAVED_STATE_KEY};
 pub use spaces::unified_machine_spaces;

@@ -465,6 +465,74 @@ impl GhostexGpuiApp {
         cx.notify();
     }
 
+    /// A row's own menu (its `rowMenu`: the Unified filter dropdown's ⋯ and right-click), opened
+    /// as a panel beside the row, under it or above it when there is no room, with the dropdown
+    /// still open under it. `pointer_x` is a right-click's: the menu's left edge goes there; the ⋯
+    /// lines its right edge up with the row's. The ⋯ pressed again closes it.
+    fn open_native_sidebar_row_menu(
+        &mut self,
+        panel_index: usize,
+        item_index: usize,
+        row: Bounds<Pixels>,
+        pointer_x: Option<Pixels>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(row_menu) = self
+            .native_sidebar
+            .menu
+            .as_ref()
+            .and_then(|menu| menu.panels.get(panel_index))
+            .and_then(|panel| panel.items.get(item_index))
+            .and_then(|item| item.get("rowMenu"))
+            .cloned()
+        else {
+            return;
+        };
+        let items = self
+            .unified_filter_row_menu(&row_menu)
+            .and_then(|items| items.as_array().cloned())
+            .filter(|items| !items.is_empty());
+        let Some(menu) = self.native_sidebar.menu.as_mut() else {
+            return;
+        };
+        if pointer_x.is_none() && menus_open_beside(&menu.panels, panel_index, item_index) {
+            close_child_panel(menu, panel_index, item_index);
+            cx.notify();
+            return;
+        }
+        let Some(items) = items else {
+            return;
+        };
+        truncate_panels(menu, panel_index + 1);
+        let scale = menu.scale;
+        let Some(panel) = menu.panels.get_mut(panel_index) else {
+            return;
+        };
+        panel.child_item = Some(item_index);
+        panel.armed = None;
+        let from = match pointer_x {
+            Some(x) => Bounds {
+                origin: Point::new(x, row.top()),
+                size: gpui::size(px(0.0), row.size.height),
+            },
+            None => row,
+        };
+        let on_open = items.first().and_then(|item| item.get("onOpen")).cloned();
+        menu.panels.push(SidebarMenuPanel {
+            placement: SidebarMenuPlacement::Attached {
+                owner: row,
+                from,
+                align_right: pointer_x.is_none(),
+                gap: px(SIDEBAR_MENU_OWNER_GAP * scale),
+            },
+            ..SidebarMenuPanel::new(items, Point::new(row.left(), row.bottom()))
+        });
+        if let Some(command) = on_open {
+            self.dispatch_native_sidebar_ui(command, cx);
+        }
+        cx.notify();
+    }
+
     /// Stands an armed row down. `only` keeps a later arming armed, for an earlier one's timer.
     fn disarm_native_sidebar_menu_row(
         &mut self,
@@ -753,6 +821,13 @@ impl GhostexGpuiApp {
                 continue;
             }
             let bounds = panel.bounds(sidebar, scale, panel_index > 0);
+            // A frosted host window starts at its panel's left edge; a pointer in it is measured
+            // from there.
+            let window_origin_x = if only.is_some() {
+                bounds.left()
+            } else {
+                px(0.0)
+            };
             let relative = if only.is_some() {
                 Point::default()
             } else {
@@ -864,10 +939,17 @@ impl GhostexGpuiApp {
                 let heading = item["heading"] == true;
                 let selected = panel.selected == Some(item_index);
                 let confirm = item["secondary"]["confirm"] == true;
+                let row_menu = item.get("rowMenu").is_some();
+                let row_menu_open = menus_open_beside(&panels, panel_index, item_index);
                 let row_height = panel.item_height(item);
                 let row_bounds = Bounds {
                     origin: Point::new(bounds.left(), bounds.top() + px(offset * scale)),
                     size: gpui::size(bounds.size.width, px(row_height * scale)),
+                };
+                // Where the row is now, the list's scroll included, for a menu hung from it.
+                let row_on_screen = Bounds {
+                    origin: row_bounds.origin + Point::new(px(0.0), panel.scroll.offset().y),
+                    size: row_bounds.size,
                 };
                 content = content.child(
                     h_flex()
@@ -959,6 +1041,59 @@ impl GhostexGpuiApp {
                                     .text_color(foreground.opacity(0.5)),
                             )
                         })
+                        .when(row_menu, |row| {
+                            let revealed = selected || row_menu_open;
+                            row.child(
+                                div()
+                                    .id(format!("native-menu-more-{panel_index}-{item_index}"))
+                                    .role(gpui::Role::Button)
+                                    .aria_label(format!(
+                                        "More for {}",
+                                        item["rowMenu"]["label"].as_str().unwrap_or_default()
+                                    ))
+                                    .flex_shrink_0()
+                                    .size(px(SESSION_HOVER_BUTTON * scale))
+                                    // Beside the X as a session row's hover buttons sit together.
+                                    .mr(px(-6.0 * scale))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(4.0 * scale))
+                                    .when(row_menu_open, |button| button.bg(hover))
+                                    .hover(|button| button.bg(hover))
+                                    .when(!revealed, |button| button.opacity(0.0))
+                                    .group_hover(MENU_ROW_GROUP, |button| button.opacity(1.0))
+                                    .child(
+                                        gpui::svg()
+                                            .path("titlebar/dots.svg")
+                                            .size(px(SESSION_HOVER_ICON * scale))
+                                            .text_color(foreground.opacity(0.55)),
+                                    )
+                                    .on_click(cx.listener(move |app, _, _, cx| {
+                                        cx.stop_propagation();
+                                        app.open_native_sidebar_row_menu(
+                                            panel_index,
+                                            item_index,
+                                            row_on_screen,
+                                            None,
+                                            cx,
+                                        );
+                                    })),
+                            )
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(move |app, event: &gpui::MouseDownEvent, _, cx| {
+                                    cx.stop_propagation();
+                                    app.open_native_sidebar_row_menu(
+                                        panel_index,
+                                        item_index,
+                                        row_on_screen,
+                                        Some(event.position.x + window_origin_x),
+                                        cx,
+                                    );
+                                }),
+                            )
+                        })
                         .when_some(item.get("secondary"), |row, secondary| {
                             let label = secondary["label"].as_str().unwrap_or_default().to_owned();
                             let icon_only = label.is_empty();
@@ -967,7 +1102,7 @@ impl GhostexGpuiApp {
                             let armed = panel.row_is_armed(item);
                             // Painted over its column rather than added and removed, so no row
                             // changes size as it appears.
-                            let revealed = !confirm || armed || selected;
+                            let revealed = !confirm || armed || selected || row_menu_open;
                             let overlay = || {
                                 div()
                                     .absolute()
@@ -1072,6 +1207,7 @@ impl GhostexGpuiApp {
                         })
                         // A button that takes two clicks stands down as the pointer leaves, and
                         // shows while the pointer is on its row.
+                        .when(row_menu && !confirm, |row| row.group(MENU_ROW_GROUP))
                         .when(confirm, |row| {
                             row.group(MENU_ROW_GROUP).on_hover(cx.listener(
                                 move |app, hovered: &bool, _, cx| {
@@ -1307,6 +1443,15 @@ impl GhostexGpuiApp {
         cx.stop_propagation();
         cx.notify();
     }
+}
+
+/// Whether the row `item_index` of panel `panel_index` has a menu of its own open beside it.
+fn menus_open_beside(panels: &[SidebarMenuPanel], panel_index: usize, item_index: usize) -> bool {
+    panels.len() > panel_index + 1
+        && panels[panel_index].child_item == Some(item_index)
+        && panels[panel_index].items[item_index]
+            .get("rowMenu")
+            .is_some()
 }
 
 /// Drops the panel that `item_index` opened on top of `panel_index`, and everything stacked above

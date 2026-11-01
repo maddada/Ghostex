@@ -11,7 +11,8 @@ use std::sync::Arc;
 use ghostex_gx_core::unified_sidebar::{
     UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput, UnifiedRow,
     UnifiedSavedState, UnifiedSettings, UnifiedShelf, build_unified_sidebar, group_unified_sidebar,
-    move_unified_project, repo_of_project, unified_lane_inputs, unified_machine_spaces,
+    move_unified_project, repo_of_project, unified_lane_inputs, unified_lane_menu_inputs,
+    unified_machine_spaces,
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, SessionKey,
@@ -122,6 +123,34 @@ impl UnifiedSidebarHost {
         })
     }
 
+    /// A project's menu as its Project sidebar header shows it, from the machine list that holds
+    /// it, with that machine's Spaces (`unified_lane_menu_inputs`).
+    pub(crate) fn project_menu(
+        &self,
+        core: &Core,
+        menu_host: &MenuHost,
+        group_id: &str,
+        now_ms: u64,
+    ) -> Option<Vec<Value>> {
+        self.lanes.values().find_map(|lane| {
+            let group = lane
+                .model
+                .view()
+                .groups
+                .iter()
+                .find(|group| group.core.group_id == group_id)?;
+            let inputs = unified_lane_menu_inputs(&lane.inputs);
+            let menus = SidebarMenus::new(core, lane.model.view(), &inputs, menu_host, now_ms);
+            Some(
+                menus
+                    .project_menu(group)
+                    .iter()
+                    .map(MenuItem::to_json)
+                    .collect(),
+            )
+        })
+    }
+
     /// Brings every machine's list up to date with `changes` and builds the Unified list.
     #[allow(clippy::too_many_arguments)]
     fn update(
@@ -227,6 +256,7 @@ impl UnifiedSidebarHost {
             view = build_unified_sidebar(&inputs, settings, &filter, now_ms);
         }
         self.all_repos.clone_from(&view.options.repos);
+        let repo_menu_groups = repo_menu_groups(&view.options.repos, &groups);
         // One icon per repository: the first of its projects, on any machine, that has one.
         let mut icons: HashMap<String, Arc<gpui::Image>> = HashMap::new();
         for row in view
@@ -346,6 +376,8 @@ impl UnifiedSidebarHost {
             total: view.total,
             has_projects,
             repo_icons,
+            repo_menu_groups,
+            space_menu_machine: list_inputs.ui.selected_machine_id.clone(),
         }
     }
 }
@@ -396,6 +428,19 @@ impl GhostexGpuiApp {
         );
         self.native_sidebar.unified = Some(Arc::new(snapshot));
         cx.notify();
+    }
+
+    /// A filter row's project menu (`UnifiedSidebarHost::project_menu`).
+    pub(crate) fn gx_store_unified_project_menu(&mut self, group_id: &str) -> Option<Value> {
+        let menu_host = self.gx_store_menu_host();
+        let now_ms = web_time::SystemTime::now()
+            .duration_since(web_time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_millis() as u64)
+            .unwrap_or_default();
+        self.gx_store
+            .unified_sidebar
+            .project_menu(&self.gx_store.core, &menu_host, group_id, now_ms)
+            .map(Value::Array)
     }
 
     /// A project picked in Quick Access › Projects: while the Unified sidebar is on, its filter
@@ -598,6 +643,38 @@ impl GhostexGpuiApp {
         #[cfg(target_arch = "wasm32")]
         let _ = (order, cx);
     }
+}
+
+/// The project whose menu each repository's filter row opens: the main checkout rather than a
+/// worktree, on this computer when it has one there.
+fn repo_menu_groups(
+    repos: &[UnifiedFilterOption],
+    groups: &HashMap<(MachineId, String), Arc<NativeSidebarGroup>>,
+) -> HashMap<String, String> {
+    repos
+        .iter()
+        .filter_map(|repo| {
+            let group = repo
+                .project_group_ids
+                .iter()
+                .filter_map(|group_id| {
+                    let machine =
+                        ghostex_gx_core::ProjectKey::parse_sidebar_group_id(group_id)?.machine;
+                    groups
+                        .get(&(machine.clone(), group_id.clone()))
+                        .map(|group| (machine, group))
+                })
+                .min_by_key(|(machine, group)| {
+                    let worktree = group
+                        .project_context
+                        .as_ref()
+                        .is_some_and(|project| !project["worktree"].is_null());
+                    (!machine.is_local(), worktree)
+                })?
+                .1;
+            Some((repo.key.clone(), group.group_id.clone()))
+        })
+        .collect()
 }
 
 /// The project's own icon, as its Project sidebar header draws it: the one set for it, else the
