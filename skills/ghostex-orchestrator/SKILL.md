@@ -95,8 +95,16 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
   - Small, contained work (a one-file fix, a copy change, a quick investigation): Sonnet 5.5 at
     high effort (`--model sonnet --effort high`).
   - A Codex thread keeps its configured model: high effort for substantial work, medium otherwise.
-  - A thread on any other agent keeps its configured model too: start it without `--model` or
-    `--effort` unless the user asks for one.
+  - A thread on any other agent runs on your own agent and your own model: high effort for
+    complex or substantial work, medium for less complex work, never low. Read your model and
+    effort first: `ghostex agents whoami` prints your Session ID, and
+    `ghostex read-session-chat <your Session ID> --limit 1 --json` shows them under
+    `selectedOptions.model.value` and `selectedOptions.effort.value`. Then start the thread
+    without `--agent` (it defaults to your agent) and with `--model <your model> --effort high`
+    (or `medium`). Pi takes a thinking level as its effort. When `start-thread` refuses `--model`
+    or `--effort` for your agent (OpenCode, Cursor, Grok, Copilot, OMP and ZCode do today), start
+    it without them: the thread then starts on your agent's configured model. When no model is
+    shown, start it without `--model`.
   - Pick the model when starting the thread and never change it afterwards: switching a running
     session's model throws away its prompt cache. When a follow-up needs a stronger model, start a
     new thread instead.

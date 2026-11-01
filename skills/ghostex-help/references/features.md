@@ -2987,8 +2987,11 @@ version of the Projects features in Cursor and Claude Code.
   and sends it again, so work handed out is never silently dropped.
 - **Thread models**: the coordinator picks each Claude thread's model when it
   starts it: Opus 5.5 at high effort for substantial work, Opus 5.5 at medium
-  for hard but small changes, Sonnet 5.5 at high for small contained fixes. It
-  never switches a running thread's model (that throws away its prompt cache);
+  for hard but small changes, Sonnet 5.5 at high for small contained fixes. A
+  coordinator on another agent starts its threads on its own agent and model,
+  at high effort for substantial work and medium otherwise (OpenCode, Cursor,
+  Grok, Copilot, OMP and ZCode threads start on the agent's configured model).
+  It never switches a running thread's model (that throws away its prompt cache);
   a follow-up that needs a stronger model gets a new thread.
 - **Worktrees**: threads that need the same files run one after another; when
   running them in parallel matters, the coordinator gives a thread its own git
