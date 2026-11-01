@@ -651,7 +651,8 @@ fn a_credential_sent_with_spaces_around_it_never_shows() {
     );
     // A contract complaint that quotes the field the credential was sent in.
     let env = env_with(&[("mode", "info-padded"), ("token", " Padded-Secret ")]);
-    let failure = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("bad id");
+    let InfoFailure { failure, .. } =
+        command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("bad id");
     let shown = format!("{} {failure:?}", failure.message("Fixture"));
     assert!(!shown.contains("Padded-Secret"), "{shown}");
     // An id is structural: one that contains a credential is refused before its form is checked.
@@ -737,10 +738,17 @@ fn a_field_declared_secret_in_an_unacceptable_info_is_still_masked() {
     let fixture = Fixture::new();
     for mode in ["flip-secret-invalid", "flip-secret-bad-label"] {
         let env = env_with_open_token(mode);
-        let failure = command_info(&fixture.call(CommandVerb::Info, None, &env))
+        let InfoFailure {
+            failure,
+            masked_secret,
+            declared_secret,
+        } = command_info(&fixture.call(CommandVerb::Info, None, &env))
             .expect_err("the contract refuses it");
         let shown = format!("{} {failure:?}", failure.message("Fixture"));
         assert!(!shown.contains(TOKEN), "{mode}: {shown}");
+        // The fields it was masked as secret with come out with the failure.
+        assert_eq!(masked_secret, ["token"], "{mode}");
+        assert_eq!(declared_secret, ["token"], "{mode}");
         assert!(
             shown.contains("hidden because they could show a credential"),
             "{mode}: {shown}"
@@ -749,11 +757,17 @@ fn a_field_declared_secret_in_an_unacceptable_info_is_still_masked() {
     // Stdout that isn't JSON declares nothing: the accepted flags apply, and with no secret set
     // the excerpt is shown.
     let env = env_with_open_token("invalid-json");
-    let failure = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("no JSON");
+    let InfoFailure {
+        failure,
+        masked_secret,
+        declared_secret,
+    } = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("no JSON");
     assert!(
         format!("{failure:?}").contains("tickets: none"),
         "{failure:?}"
     );
+    assert!(masked_secret.is_empty(), "{masked_secret:?}");
+    assert!(declared_secret.is_empty(), "{declared_secret:?}");
 }
 
 #[test]
@@ -854,6 +868,39 @@ fn a_failing_info_masks_a_field_it_declares_secret_in_its_error_object() {
 exit 1"#,
     );
     let env = env_with_open_token("unused");
+    let InfoFailure {
+        failure,
+        masked_secret,
+        declared_secret,
+    } = command_info(&call_of(
+        &program,
+        dir.path(),
+        CommandVerb::Info,
+        None,
+        &env,
+    ))
+    .expect_err("it exited 1");
+    assert_eq!(masked_secret, ["token"]);
+    assert_eq!(declared_secret, ["token"]);
+    let shown = format!("{} {failure:?}", failure.message("Fixture"));
+    assert!(!shown.contains(TOKEN), "{shown}");
+    assert_eq!(
+        failure.message("Fixture"),
+        "Fixture: rejected ••••. Check its credentials in Settings."
+    );
+}
+
+/// A failing `info` can declare a field named like a stored secret: the name counts among those
+/// it declares secret, and the failure's `Debug` never prints it.
+#[test]
+fn a_declared_name_spelling_a_secret_never_prints() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let program = script_of(
+        dir.path(),
+        r#"printf '{"credentials":[{"name":"abcsecret","label":"Odd"}]}\n'
+exit 1"#,
+    );
+    let env = env_with(&[("token", "abcsecret")]);
     let failure = command_info(&call_of(
         &program,
         dir.path(),
@@ -862,12 +909,9 @@ exit 1"#,
         &env,
     ))
     .expect_err("it exited 1");
-    let shown = format!("{} {failure:?}", failure.message("Fixture"));
-    assert!(!shown.contains(TOKEN), "{shown}");
-    assert_eq!(
-        failure.message("Fixture"),
-        "Fixture: rejected ••••. Check its credentials in Settings."
-    );
+    assert_eq!(failure.declared_secret, ["abcsecret"]);
+    let printed = format!("{failure:?}");
+    assert!(!printed.contains("abcsecret"), "{printed}");
 }
 
 #[test]
@@ -880,7 +924,11 @@ echo "can't reach the server with $GHOSTEX_CREDENTIAL_TOKEN" >&2
 exit 3"#,
     );
     let env = env_with_open_token("unused");
-    let failure = command_info(&call_of(
+    let InfoFailure {
+        failure,
+        masked_secret,
+        declared_secret,
+    } = command_info(&call_of(
         &program,
         dir.path(),
         CommandVerb::Info,
@@ -888,6 +936,8 @@ exit 3"#,
         &env,
     ))
     .expect_err("it exited 3");
+    assert_eq!(masked_secret, ["token"]);
+    assert_eq!(declared_secret, ["token"]);
     let shown = format!("{} {failure:?}", failure.message("Fixture"));
     assert!(!shown.contains(TOKEN), "{shown}");
     assert!(

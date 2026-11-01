@@ -91,26 +91,26 @@ fn ticket_titled(title: &str) -> Value {
 #[test]
 fn a_structural_field_holding_a_secret_refuses_its_row() {
     let env = env_holding("acm");
-    assert_eq!(
-        list_of(ticket(json!({ "projectId": "p-acm" })), &env).skipped,
-        1
-    );
-    assert_eq!(
-        list_of(ticket(json!({ "repo": "acme/app" })), &env).skipped,
-        1
-    );
+    assert!(refused_for_secret(&list_of(
+        ticket(json!({ "projectId": "p-acm" })),
+        &env
+    )));
+    assert!(refused_for_secret(&list_of(
+        ticket(json!({ "repo": "acme/app" })),
+        &env
+    )));
     // The id, padded or not, and a number source's team are structural.
     let env = env_holding("CM-1");
-    assert_eq!(list_of(ticket(json!({})), &env).skipped, 1);
-    assert_eq!(
-        list_of(ticket(json!({ "id": "  ACM-12  " })), &env).skipped,
-        1
-    );
+    assert!(refused_for_secret(&list_of(ticket(json!({})), &env)));
+    assert!(refused_for_secret(&list_of(
+        ticket(json!({ "id": "  ACM-12  " })),
+        &env
+    )));
     let team = number_list_of(
         ticket(json!({ "id": "12", "team": format!("t-{SECRET}") })),
         &env_holding(SECRET),
     );
-    assert_eq!(team.skipped, 1);
+    assert!(refused_for_secret(&team));
     let not_found = parse_list(
         &json!({ "tickets": [], "notFound": ["ACM-7", format!("ACM-{SECRET}")] }),
         IdFormat::KeyNumber,
@@ -276,6 +276,75 @@ fn a_secret_straddling_a_cut_never_leaks_its_prefix() {
     assert_eq!(padded.skipped, 1);
 }
 
+/// One row, left out only because a secret's value is in a field Ghostex can't mask.
+fn refused_for_secret(list: &CommandList) -> bool {
+    list.tickets.is_empty() && list.skipped == 0 && list.skipped_for_secret == 1
+}
+
+const NOT_SECRET_HINT: &str =
+    "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
+
+#[test]
+fn rows_a_secret_alone_refuses_are_counted_apart_and_say_how_to_fix_it() {
+    // A team number left secret by default refuses every ticket id containing it.
+    let env = env_holding("7");
+    let closed = json!({ "group": "closed", "name": "Closed" });
+    let list = parse_list(
+        &json!({ "tickets": [
+            ticket(json!({})),
+            ticket(json!({ "id": "ACM-17" })),
+            ticket(json!({ "id": "ACM-71" })),
+            ticket(json!({ "state": closed })),
+            // Unreadable even without the secret: an unknown shape, which marking it not secret
+            // would not fix.
+            ticket(json!({ "id": "ACM-27", "state": closed })),
+        ] }),
+        IdFormat::KeyNumber,
+        &[],
+        &AnswerGuard::new(&env),
+    )
+    .unwrap();
+    assert_eq!(list.tickets.len(), 1);
+    assert_eq!((list.skipped, list.skipped_for_secret), (2, 2));
+    let errors = list.errors("Acme");
+    assert_eq!(
+        errors,
+        [
+            "Acme: skipped 2 tickets it sent in an unknown shape".to_string(),
+            format!("Acme: skipped 2 tickets whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}"),
+        ]
+    );
+    let one = list_of(ticket(json!({ "id": "ACM-17" })), &env).errors("Acme");
+    assert_eq!(
+        one,
+        [format!("Acme: skipped 1 ticket whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}")]
+    );
+}
+
+#[test]
+fn a_single_ticket_a_secret_alone_refuses_says_how_to_fix_it() {
+    let guard_env = env_holding("7");
+    let guard = AnswerGuard::new(&guard_env);
+    let hinted = format!("id contains a credential; {NOT_SECRET_HINT}");
+    let detail = |row: Value| parse_detail(&row, IdFormat::KeyNumber, &[], &guard).err();
+    assert_eq!(
+        detail(ticket(json!({ "id": "ACM-17" }))),
+        Some(hinted.clone())
+    );
+    // Unreadable without the secret too: no hint, which would point the wrong way.
+    assert_eq!(
+        detail(ticket(json!({ "id": "ACM-17", "title": "" }))),
+        Some("id contains a credential".to_string())
+    );
+    let created = |id: &str| parse_created(&json!({ "id": id }), IdFormat::KeyNumber, &guard).err();
+    assert_eq!(created("ACM-17"), Some(hinted));
+    assert_eq!(
+        created("acm-17"),
+        Some("id contains a credential".to_string())
+    );
+    assert_eq!(created("ACM-12"), None);
+}
+
 #[test]
 fn a_display_field_keeps_its_own_cap_while_a_secret_is_set() {
     let env = env_holding(SECRET);
@@ -293,7 +362,7 @@ fn a_display_field_keeps_its_own_cap_while_a_secret_is_set() {
 }
 
 #[test]
-fn only_a_valid_known_name_marks_its_field_secret() {
+fn only_a_valid_name_declared_secret_counts() {
     let answer = json!({ "credentials": [
         { "name": "token", "label": "API\ntoken" },
         { "name": "mode", "secret": false },
@@ -302,11 +371,9 @@ fn only_a_valid_known_name_marks_its_field_secret() {
         { "name": "unknown" },
         "not an object",
     ] });
-    assert_eq!(
-        credential_secrecy(&answer, &["token", "mode", "url", "Bad-Name"]),
-        ["token", "url"]
-    );
-    assert!(credential_secrecy(&json!({ "credentials": "none" }), &["token"]).is_empty());
+    // A field without a value counts too (`unknown`): the record keeps its declaration.
+    assert_eq!(declared_secret(&answer), ["token", "url", "unknown"]);
+    assert!(declared_secret(&json!({ "credentials": "none" })).is_empty());
 }
 
 #[test]

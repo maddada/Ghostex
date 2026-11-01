@@ -9,6 +9,8 @@ mod command_limits;
 mod command_masking;
 #[cfg(unix)]
 mod command_runner;
+#[cfg(unix)]
+mod command_store;
 mod fixtures;
 mod identity;
 mod link_add;
