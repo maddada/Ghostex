@@ -172,6 +172,7 @@ fn handle(event: &Value) {
         return;
     };
     let data = &event["data"];
+    crate::hookless_activity::observe_opencode_stream_event(kind, data);
     let Some(session) = data["sessionID"].as_str() else {
         return;
     };

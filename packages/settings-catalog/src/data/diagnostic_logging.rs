@@ -70,4 +70,9 @@ pub const DIAGNOSTIC_LOGGING_SCENARIOS: J = J::Arr(&[
         ("id", J::Str("gxserver.sessionLinks")),
         ("label", J::Str("Session links")),
     ]),
+    J::Obj(&[
+        ("description", J::Str("Watches Claude, Codex and OpenCode through the state they write themselves and compares it with their hooks: which activity changes both saw, which only one saw, and how far apart.")),
+        ("id", J::Str("gxserver.hooklessActivity")),
+        ("label", J::Str("Hook-free activity comparison")),
+    ]),
 ]);

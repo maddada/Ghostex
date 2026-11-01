@@ -8207,6 +8207,10 @@
         {
           "label": "Session links",
           "value": "gxserver.sessionLinks"
+        },
+        {
+          "label": "Hook-free activity comparison",
+          "value": "gxserver.hooklessActivity"
         }
       ],
       "agentWritable": false

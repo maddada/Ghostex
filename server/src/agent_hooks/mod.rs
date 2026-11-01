@@ -26,6 +26,7 @@ pub(crate) mod windows;
 mod zcode;
 
 pub(crate) use ancestor_session::adopt_ancestor_session_routing;
+pub(crate) use ancestor_session::zmx_session_owning_agent;
 pub use api::{
     install_agent_hooks, read_agent_hook_status, repair_installed_agent_hook_paths,
     uninstall_agent_hooks,

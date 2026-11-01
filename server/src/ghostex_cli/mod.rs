@@ -22,6 +22,7 @@ pub mod editors;
 pub mod extensions;
 mod feedback;
 pub mod guide;
+mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
 pub mod notify;
@@ -402,6 +403,7 @@ fn is_known_command(name: &str) -> bool {
         "wait-for",
         "screenshot",
         "logs",
+        "hookless-activity",
         "bundle",
         "help",
         "voice",
@@ -966,6 +968,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "wait-for" => run_bridge_action("waitFor", Parser::WaitFor, assert_ok, args),
         "screenshot" => diagnostics::screenshot_command(args),
         "logs" => diagnostics::logs_command(args),
+        "hookless-activity" => hookless_activity::hookless_activity_command(args),
         "bundle" => diagnostics::bundle_command(args),
         "help" => {
             println!("{}", usage::usage());

@@ -41,6 +41,7 @@ pub(crate) mod freebuff_activity;
 pub mod ghostex_cli;
 pub mod git_ship_workflow;
 pub mod global_project_defaults;
+pub(crate) mod hookless_activity;
 pub(crate) mod http_agent;
 pub mod http_client;
 pub mod identity;

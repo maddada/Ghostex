@@ -686,6 +686,10 @@ pub fn usage() -> String {
             "bundle [output-dir] [--lines n]",
             "Save state, logs, and a screenshot",
         ),
+        format_help_command(
+            "hookless-activity [--reset]",
+            "Compare Claude, Codex and OpenCode activity seen by their hooks and by their own state files (needs the Hook-free activity comparison Diagnostic logs area)",
+        ),
     ]
     .join("\n");
 

@@ -907,6 +907,8 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         "/api/readAgentHookStatus"
         | "/api/installAgentHooks"
         | "/api/uninstallAgentHooks"
+        // The hook-free activity comparison (`ghostex hookless-activity`), a local debugging read.
+        | "/api/readHooklessActivityComparison"
         /*
         CDXC:ServerDaemon 2026-06-24-13:30:
         Pinned Prompts can carry user-authored bodies, so their shared gxserver

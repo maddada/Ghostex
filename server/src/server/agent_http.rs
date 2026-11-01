@@ -91,6 +91,7 @@ pub(crate) fn dispatch_agent_http_blocking(
             let fork_initial_rename = fork_initial_rename_target(&endpoint_path, &result);
             log_agent_hook_passive_identity_conflict(state, &endpoint_path, &params, &result);
             log_agent_activity_transition(state, &endpoint_path, &params, &result);
+            crate::hookless_activity::observe_hook_event(state, &endpoint_path, &params, &result);
             crate::accounts::api_errors::observe_agent_hook(state, &endpoint_path, &params);
             crate::notification_feed::observe_agent_activity_result(
                 state,

@@ -54,6 +54,18 @@ pub(super) async fn route_agents_http(
         "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             handle_agent_hook_http(&state, endpoint.path, request_id, &body_json)
         }
+        "/api/readHooklessActivityComparison" => {
+            let params = match read_domain_rpc_params(&body_json) {
+                Ok(params) => params,
+                Err(error) => return Ok(domain_error_response(endpoint.path, request_id, error)),
+            };
+            let result = crate::hookless_activity::read_comparison(&state, &params);
+            routed_json(
+                Some(endpoint.path),
+                StatusCode::OK,
+                rpc_success(request_id, result),
+            )
+        }
         "/api/createWorkspaceTerminal"
         | "/api/attachSessionMetadata"
         | "/api/startSessionProvider"
