@@ -95,6 +95,7 @@ fn row_text<'a>(row: &'a Value, key: &str) -> &'a str {
 
 /// The orchestrator family of a launcher row from `/api/readSidebarHud`
 /// (`COORDINATOR_AGENT_FAMILIES`): by its icon, its agent id, or the executable its command runs.
+/// SEE-ALSO: packages/gx-core/src/session_create/agents.rs (`coordinator_launcher_family`, the clients' copy a handoff reads).
 pub fn coordinator_launcher_family(row: &Value) -> Option<&'static str> {
     let by_icon =
         crate::agents::default_agent_icon_to_id(row_text(row, "icon")).map(str::to_string);

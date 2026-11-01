@@ -160,9 +160,9 @@ pub(crate) async fn handle_export_session_transcript_http(
                 code: "notFound",
                 message: "The session no longer exists.".to_string(),
             })?;
-        let coordinator = crate::coordinators::read_coordinator(&db, &project_id, &session_id)
-            .ok()
-            .flatten();
+        // A failed read fails the export: answering without `coordinator` would read as "not an
+        // orchestrator" and hand it off as a plain session.
+        let coordinator = crate::coordinators::read_coordinator(&db, &project_id, &session_id)?;
         Ok::<_, DomainStateError>((
             session_chat_agent_for_session(&session),
             read_runtime_text(&session, "agentSessionId"),

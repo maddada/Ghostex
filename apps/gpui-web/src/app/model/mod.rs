@@ -41,6 +41,13 @@ pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) token: String,
 }
 
+impl GpuiRemoteGxserverRequestTarget {
+    /// The desktop reads this from the daemon's health answer; no page target exists to ask.
+    pub(crate) fn stages_coordinator_handoff_draft(&self) -> bool {
+        false
+    }
+}
+
 /// Only the identity counter of the desktop's chat page state, which the chat view uses for draft ids.
 pub(crate) struct SessionChatPageState;
 

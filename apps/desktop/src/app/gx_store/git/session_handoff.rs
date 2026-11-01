@@ -327,8 +327,7 @@ async fn export_transcript(
         .filter(|path| !path.trim().is_empty())
         .map(str::to_string)
         .ok_or_else(|| "gxserver did not return the exported file.".to_string())?;
-    Ok((
-        path,
-        HandoffCoordinator::from_export_answer(&answer, is_coordinator),
-    ))
+    let coordinator =
+        super::export_transcript::handoff_coordinator(None, &answer, is_coordinator, session).await;
+    Ok((path, coordinator))
 }

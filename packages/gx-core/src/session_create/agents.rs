@@ -168,6 +168,75 @@ pub fn built_in_agent_id_for_command(command: &str) -> Option<&'static str> {
     })
 }
 
+/// The orchestrator family a launcher runs as (`COORDINATOR_AGENT_FAMILIES`): by its icon, its
+/// agent id, or the executable its command runs, the first of those an orchestrator supports.
+///
+/// CDXC:Coordinators 2026-11-02 WHY: A custom launcher added with Works like "Nothing (plain command)" and the command `codex` has no icon and a `custom-codex-…` id, so reading only the icon and the id handed an orchestrator off as a plain session while gxserver (which also reads the command) would have run it as an orchestrator.
+/// SEE-ALSO: server/src/coordinators/create.rs (`coordinator_launcher_family`, gxserver's copy of the same order).
+pub fn coordinator_launcher_family(
+    agent_id: &str,
+    icon: Option<&str>,
+    command: Option<&str>,
+) -> Option<&'static str> {
+    let agent_id = js_trim(agent_id);
+    let by_icon = default_agent_id_for_icon(icon);
+    let by_id = default_agent_id_for_icon(Some(agent_id)).or(Some(agent_id));
+    let by_command = command.and_then(built_in_agent_id_for_command);
+    [by_icon, by_id, by_command]
+        .into_iter()
+        .flatten()
+        .find_map(|family| {
+            ghostex_gx_protocol::coordinator::COORDINATOR_AGENT_FAMILIES
+                .into_iter()
+                .find(|supported| *supported == family)
+        })
+}
+
+#[cfg(test)]
+mod coordinator_family_tests {
+    use super::coordinator_launcher_family;
+
+    #[test]
+    fn a_plain_command_launcher_runs_as_the_orchestrator_family_its_command_starts() {
+        assert_eq!(
+            coordinator_launcher_family("custom-codex-70-abc", None, Some("codex --yolo")),
+            Some("codex")
+        );
+        assert_eq!(
+            coordinator_launcher_family("custom-c-1", None, Some("FOO=1 /opt/bin/claude")),
+            Some("claude")
+        );
+    }
+
+    #[test]
+    fn icon_and_id_still_name_the_family() {
+        assert_eq!(
+            coordinator_launcher_family("custom-x-1", Some("claude"), Some("./run.sh")),
+            Some("claude")
+        );
+        assert_eq!(
+            coordinator_launcher_family("codex", None, None),
+            Some("codex")
+        );
+        assert_eq!(
+            coordinator_launcher_family("cursor-cli", None, None),
+            Some("cursor")
+        );
+    }
+
+    #[test]
+    fn a_launcher_no_orchestrator_runs_on_has_no_family() {
+        assert_eq!(
+            coordinator_launcher_family("custom-g-1", Some("gemini"), Some("gemini")),
+            None
+        );
+        assert_eq!(
+            coordinator_launcher_family("custom-my-1", None, Some("./run.sh")),
+            None
+        );
+    }
+}
+
 #[cfg(test)]
 mod remote_launch_tests {
     use super::*;

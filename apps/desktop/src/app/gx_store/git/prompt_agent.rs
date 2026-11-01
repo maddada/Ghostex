@@ -39,16 +39,13 @@ impl HudAgent {
     }
 
     /// The coordinator agent family (`COORDINATOR_AGENT_FAMILIES`), when this agent can run as a
-    /// coordinator.
+    /// coordinator: by its icon, its id, or the executable its command runs.
     pub(crate) fn coordinator_family(&self) -> Option<&'static str> {
-        let icon = self.icon.as_deref();
-        let id = Some(self.agent_id.as_str());
-        let family = ghostex_gx_core::default_agent_id_for_icon(icon)
-            .or_else(|| ghostex_gx_core::default_agent_id_for_icon(id))
-            .or(id)?;
-        ghostex_gx_chat_core::protocol::COORDINATOR_AGENT_FAMILIES
-            .into_iter()
-            .find(|supported| *supported == family)
+        ghostex_gx_core::coordinator_launcher_family(
+            &self.agent_id,
+            self.icon.as_deref(),
+            self.command.as_deref(),
+        )
     }
 }
 
@@ -248,13 +245,14 @@ impl GhostexGpuiApp {
             launch.first_user_input_draft.as_deref(),
         );
         if let Some(coordinator) = &launch.coordinator {
-            params.insert(
-                "coordinator".into(),
-                json!({
-                    "goal": coordinator.goal,
-                    "instructions": coordinator.instructions,
-                }),
-            );
+            let mut fields = json!({
+                "goal": coordinator.goal,
+                "instructions": coordinator.instructions,
+            });
+            if let Some(first_request) = &coordinator.first_request {
+                fields["firstRequest"] = json!(first_request);
+            }
+            params.insert("coordinator".into(), fields);
             if launch.title.is_none() {
                 params.insert("title".into(), json!("Coordinator"));
                 runtime_settings["titleSource"] = json!("placeholder");
