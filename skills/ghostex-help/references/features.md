@@ -619,7 +619,10 @@ sessions whose agent works or still runs something in the background, while the
 Working section switch (`unifiedWorkingSection`, on by default, under the
 Sidebar switch) is on; a session leaves it for the top of the list when it needs
 you. Parked shows only while session parking is on. A snoozed or parked row
-offers Unsnooze or Unpark when you hover it.
+offers Unsnooze or Unpark when you hover it. The phone picks its own layout in
+its Settings > Sessions list (Unified or Project, starting from the computer's
+choice), with its own Group by project and Show Working section switches: Unified
+there lists every computer's sessions together, Project one computer at a time.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
