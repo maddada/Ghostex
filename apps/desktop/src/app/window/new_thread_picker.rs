@@ -2,7 +2,7 @@
 //! packages/core-ui/new-thread-palette.tsx, was deleted with the React web app on 2026-09-24.
 //!
 //! CDXC:AgentLauncher 2026-09-09 DECISION:
-//! User: the desktop New Thread picker (Cmd+Shift+T) is drawn natively in GPUI so it opens instantly and is sized to its rows (up to twelve agents plus the Browser and Terminal rows, then it scrolls).
+//! User: the desktop New Thread picker (Cmd+Shift+T) is drawn natively in GPUI so it opens instantly and is sized to its rows (up to twelve agents plus the Coordinator, Browser and Terminal rows, then it scrolls).
 //! It mirrors the project-header agent dropdown: every agent with its account count and chat badge, the last-used agent first and preselected, typing filters, Up/Down move, Enter starts, Tab or Right on Claude or Codex opens that provider's account list (Left, Backspace on an empty query, or Esc goes back), Esc closes. The highlighted row uses the sidebar's focused-session chrome and is never bolded.
 //!
 //! CDXC:AppModal 2026-09-16 DECISION:
@@ -31,8 +31,12 @@ pub(crate) use run_on::*;
 
 /*
 CDXC:AgentLauncher 2026-09-09 DECISION:
-User: the native New Thread picker is sized to its rows: the search field, the key-hint row, one row per agent up to twelve, the divider, and the Browser and Terminal rows; more agents scroll. The chrome height is the 6px top inset, 36px search field, 32px hint row, 2px list inset, 9px divider, two 36px rows, the 6px bottom inset, and the 2px frame border.
+User: the native New Thread picker is sized to its rows: the search field, the key-hint row, one row per agent up to twelve, the divider, and the Browser and Terminal rows; more agents scroll. The chrome height is the 6px top inset, 36px search field, 32px hint row, 2px list inset, 9px divider, three 36px rows (Coordinator, Browser, Terminal), the 6px bottom inset, and the 2px frame border.
 SEE-ALSO: the 30px Run on row is added only when agentbox is installed and the project is on this computer (CDXC:AgentBox in new_thread_picker_run_on.rs); otherwise the picker is exactly this. Its width is the user's 2026-10-29 decision below (420px became 460px so the key hints keep one line).
+*/
+/*
+CDXC:Coordinators 2026-11-01 DECISION:
+User: "please add new coordinator option here" (the picker's bottom section). A Coordinator row sits above Browser and Terminal, with the users-group icon the project launcher's "New Coordinator…" row uses, and typing "coord" finds it. Choosing it opens the existing New Coordinator dialog for the project the picker would have started a session in (the same `coordinator` project action the launcher sends), so there is one create flow. The chrome grows by that third 36px row (165px became 201px).
 */
 /*
 CDXC:AgentLauncher 2026-10-29 DECISION:
@@ -42,7 +46,7 @@ pub(crate) const NEW_THREAD_PICKER_WIDTH: f32 = 460.0;
 pub(crate) const NEW_THREAD_PICKER_SEARCH_HEIGHT: f32 = 36.0;
 pub(crate) const NEW_THREAD_PICKER_ROW_HEIGHT: f32 = 36.0;
 pub(crate) const NEW_THREAD_PICKER_MAX_AGENT_ROWS: usize = 12;
-pub(crate) const NEW_THREAD_PICKER_CHROME_HEIGHT: f32 = 165.0;
+pub(crate) const NEW_THREAD_PICKER_CHROME_HEIGHT: f32 = 201.0;
 
 /// `.quick-access-surface`: Inter at 14px over 20px.
 const PICKER_FONT: &str = crate::ui_fonts::UI_FONT;
@@ -50,7 +54,7 @@ const ROW_TEXT_SIZE: f32 = 14.0;
 const ROW_LINE_HEIGHT: f32 = 20.0;
 const SCROLLBAR_WIDTH: f32 = 5.0;
 
-const PLACEHOLDER_AGENTS: &str = "Search agents, browser, terminal...";
+const PLACEHOLDER_AGENTS: &str = "Search agents, coordinator, browser, terminal...";
 const PLACEHOLDER_ACCOUNTS: &str = "Search accounts...";
 /// Above a Claude (cloud) account list.
 const CLOUD_ACCOUNT_NOTE: &str =
@@ -60,6 +64,7 @@ const HINT_START: &str = "Start";
 const HINT_BACK: &str = "Back";
 const HINT_ACCOUNTS: &str = "Accounts";
 const HINT_CLOSE: &str = "Close";
+const ROW_COORDINATOR: &str = "Coordinator";
 const ROW_BROWSER: &str = "Browser";
 const ROW_TERMINAL: &str = "Terminal";
 const ROW_CLI_LOGIN: &str = "Current CLI login";
@@ -76,14 +81,15 @@ const ADD_ACCOUNT_HINT: &str = "Add your account to see usage and reset times in
 const ICON_CODE: &str = "modals/new-thread-picker/code.svg";
 const ICON_ACCOUNTS: &str = "modals/new-thread-picker/user.svg";
 const ICON_CHAT: &str = "modals/new-thread-picker/message-circle.svg";
+const ICON_COORDINATOR: &str = "titlebar/users-group.svg";
 const ICON_BROWSER: &str = "modals/new-thread-picker/world.svg";
 const ICON_TERMINAL: &str = "modals/new-thread-picker/terminal-2.svg";
 const ICON_BACK: &str = "modals/new-thread-picker/chevron-left.svg";
 const ICON_SEARCH: &str = "modals/new-thread-picker/search.svg";
 const ICON_CLEAR: &str = "modals/new-thread-picker/x.svg";
 
-/// Search field, key hints, list insets, the divider, and the Browser and
-/// Terminal rows, plus one row per agent up to the visible maximum; longer
+/// Search field, key hints, list insets, the divider, and the Coordinator,
+/// Browser and Terminal rows, plus one row per agent up to the visible maximum; longer
 /// agent lists scroll inside that frame. `run_on` adds the Run on row.
 pub(crate) fn new_thread_picker_window_height(agent_count: usize, run_on: bool) -> f32 {
     NEW_THREAD_PICKER_CHROME_HEIGHT
@@ -299,6 +305,8 @@ pub(crate) enum NewThreadPickerCommand {
         /// A box's `runLocation`; `None` runs on this computer.
         run_location: Option<String>,
     },
+    /// The New Coordinator dialog (`projectAction` `coordinator`).
+    NewCoordinator,
     /// `openBrowserPaneInGroup`.
     OpenBrowser,
     /// `createSession`.
@@ -318,6 +326,7 @@ pub(crate) type NewThreadPickerHost = Rc<dyn Fn(NewThreadPickerCommand, &mut App
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PickerRow {
     Agent(usize),
+    Coordinator,
     Browser,
     Terminal,
     Account(usize),
@@ -597,7 +606,7 @@ impl GpuiNewThreadPickerWindow {
         let query = self.normalized_query();
         match self.scope_agent() {
             None => {
-                // A box runs only agentbox's agents, and a browser or a terminal never runs in one.
+                // A box runs only agentbox's agents; a coordinator, a browser or a terminal never runs in one.
                 let in_box = self.run_on.in_box();
                 let mut rows: Vec<PickerRow> = self
                     .agents
@@ -607,6 +616,9 @@ impl GpuiNewThreadPickerWindow {
                     .filter(|(_, agent)| matches_query(&agent.name, &query))
                     .map(|(index, _)| PickerRow::Agent(index))
                     .collect();
+                if !in_box && matches_query(ROW_COORDINATOR, &query) {
+                    rows.push(PickerRow::Coordinator);
+                }
                 if !in_box && matches_query(ROW_BROWSER, &query) {
                     rows.push(PickerRow::Browser);
                 }
@@ -647,7 +659,7 @@ impl GpuiNewThreadPickerWindow {
     }
 
     /// Child index inside the scroll container, which also holds the divider
-    /// between the agents and the Browser and Terminal rows.
+    /// between the agents and the Coordinator, Browser and Terminal rows.
     fn scroll_child_index(&self, rows: &[PickerRow], selected: usize) -> usize {
         let agent_rows = rows
             .iter()
@@ -814,6 +826,9 @@ impl GpuiNewThreadPickerWindow {
                 self.accounts_error = None;
                 (self.host)(NewThreadPickerCommand::RetryAccounts, cx);
                 cx.notify();
+            }
+            PickerRow::Coordinator => {
+                self.finish(NewThreadPickerCommand::NewCoordinator, window, cx);
             }
             PickerRow::Browser => {
                 self.finish(NewThreadPickerCommand::OpenBrowser, window, cx);
@@ -1327,6 +1342,14 @@ impl GpuiNewThreadPickerWindow {
                     }
                     children.push(match *row {
                         PickerRow::Agent(index) => self.render_agent_row(index, selected, cx),
+                        PickerRow::Coordinator => self.render_plain_row(
+                            "new-thread-coordinator",
+                            PickerRow::Coordinator,
+                            ICON_COORDINATOR,
+                            ROW_COORDINATOR,
+                            selected,
+                            cx,
+                        ),
                         PickerRow::Browser => self.render_plain_row(
                             "new-thread-browser",
                             PickerRow::Browser,

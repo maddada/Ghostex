@@ -258,8 +258,9 @@ view from the strip.
   (the one its agent button shows, see Sidebar),
   in your default view (Chat or Terminal), like ChatGPT's New Chat. Cmd+N opens
   the New Thread picker instead: type to filter the configured agents (that
-  project's agent first), Browser, or Terminal, press Enter to start it in the active project,
-  and press Tab on Claude or Codex to pick an account. Cmd+Shift+T opens a new
+  project's agent first), Coordinator, Browser, or Terminal, press Enter to start it in the active project,
+  and press Tab on Claude or Codex to pick an account. Coordinator opens the
+  same New Coordinator dialog as the project's agent launcher. Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
   focused session, and Cmd+D splits. Cmd+R renames the focused session,
   Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)

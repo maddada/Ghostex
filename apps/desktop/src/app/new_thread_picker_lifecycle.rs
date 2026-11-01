@@ -507,6 +507,26 @@ impl GhostexGpuiApp {
                 self.release_gpui_new_thread_picker_window(cx);
                 self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
             }
+            // The launcher's "New Coordinator…" action, so the dialog opens the way it does there.
+            NewThreadPickerCommand::NewCoordinator => {
+                let group_id = self
+                    .gx_store
+                    .unified_sidebar
+                    .picker_target
+                    .take()
+                    .or_else(|| self.gx_store_active_group_id());
+                self.release_gpui_new_thread_picker_window(cx);
+                if let Some(group_id) = group_id {
+                    self.dispatch_gpui_sidebar_host_message(
+                        json!({
+                            "type": "projectAction",
+                            "action": "coordinator",
+                            "groupId": group_id,
+                        }),
+                        cx,
+                    );
+                }
+            }
             NewThreadPickerCommand::OpenBrowser => {
                 let mut message = json!({ "type": "openBrowserPaneInGroup" });
                 if let Some(group_id) = self.gx_store.unified_sidebar.picker_target.take() {

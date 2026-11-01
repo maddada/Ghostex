@@ -155,6 +155,10 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             eprintln!("open Settings > Cloud Boxes");
             cx.quit();
         }
+        NewThreadPickerCommand::NewCoordinator => {
+            eprintln!("new coordinator");
+            cx.quit();
+        }
         NewThreadPickerCommand::OpenBrowser => {
             eprintln!("open browser");
             cx.quit();

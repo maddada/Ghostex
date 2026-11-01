@@ -29,7 +29,7 @@ pub(super) const REMOTE_TIMEOUT: Duration = Duration::from_secs(20);
 impl GhostexGpuiApp {
     /// The group a create names when the message names none: the runtime's `activeGroupId`, which
     /// the store's focus mirrors.
-    pub(super) fn gx_store_active_group_id(&self) -> Option<String> {
+    pub(crate) fn gx_store_active_group_id(&self) -> Option<String> {
         self.gx_store
             .core
             .focus()
