@@ -10,6 +10,7 @@ if [ "$verb" != info ] && [ "$mode" != late-stdin ]; then
 	cat >stdin.txt
 fi
 
+# Its `team` is not read: a key-number ticket's team is its id's key.
 good_ticket='"id": "ACM-12", "title": "Spec the contract", "url": "https://tracker.example/ACM-12",
   "state": { "group": "progress", "name": "In progress", "type": "active" },
   "updatedAt": "2026-10-28T09:12:00Z",

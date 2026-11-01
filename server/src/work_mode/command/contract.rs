@@ -4,6 +4,9 @@
 //! required and unreadable fails the whole answer (`info`, `detail`, `create`) or skips one row
 //! (`list`). Each `Err` names what could not be read, for "<Name> answered something Ghostex
 //! can't read (<what>)".
+//!
+//! A ticket's `team`: a key-number ticket's team is the key of its id (`ACM` of `ACM-12`), and the
+//! JSON `team` is read only for number sources.
 
 use serde_json::{json, Map, Value};
 
@@ -39,6 +42,12 @@ const MAX_STATE_CHARS: usize = 40;
 /// An RFC 3339 time: `2026-10-28T09:12:00.123456789+05:30` is 35 bytes. A longer text is dropped
 /// before it is parsed, since the format allows a fraction of a second of any length.
 const MAX_TIME_BYTES: usize = 40;
+/// Added where a row or an answer was refused only because a field Ghostex can't mask holds a
+/// secret credential's value: a short credential (a team number such as `7`) declared without
+/// `"secret": false` is secret, and would refuse every ticket id containing it.
+const NOT_SECRET_HINT: &str =
+    "if that credential isn't secret, such as a team number, the command's info should mark it \"secret\": false";
+
 /// What an error message from the command is cut to.
 pub(crate) const MAX_MESSAGE_CHARS: usize = 300;
 /// Create ticket's title, as for GitHub issues.
@@ -128,6 +137,8 @@ pub(crate) struct CommandTicket {
     pub(crate) branch_name: Option<String>,
     /// Only GitHub PR URLs.
     pub(crate) pull_request_urls: Vec<String>,
+    /// A key-number ticket's team is its id's key (`ACM` of `ACM-12`), whatever the JSON
+    /// `team` says; a number source's is the JSON `team`.
     pub(crate) team: Option<String>,
     /// The request's project it belongs to: its `projectId` when that is one of them, else the
     /// one whose repo its `repo` names.
@@ -142,6 +153,10 @@ pub(crate) struct CommandList {
     pub(crate) not_found: Vec<String>,
     /// Rows left out because their id, title or state could not be read.
     pub(crate) skipped: usize,
+    /// Rows that read well but were left out because a field Ghostex can't mask (the id, the
+    /// state group, `projectId`, `repo`, a number source's `team`) holds a secret credential's
+    /// value. Not counted in `skipped`.
+    pub(crate) skipped_for_secret: usize,
     /// Whether rows past `MAX_LISTED_TICKETS` were left out.
     pub(crate) truncated: bool,
 }
@@ -164,6 +179,17 @@ impl CommandList {
             errors.push(format!(
                 "{name}: skipped {} {tickets} it sent in an unknown shape",
                 self.skipped
+            ));
+        }
+        if self.skipped_for_secret > 0 {
+            let tickets = if self.skipped_for_secret == 1 {
+                "ticket"
+            } else {
+                "tickets"
+            };
+            errors.push(format!(
+                "{name}: skipped {} {tickets} whose id or another field Ghostex can't mask contains a secret credential's value; {NOT_SECRET_HINT}",
+                self.skipped_for_secret
             ));
         }
         errors
@@ -412,6 +438,9 @@ pub(crate) fn parse_list(
     for row in rows.iter().take(MAX_LISTED_TICKETS) {
         match parse_ticket(row, format, projects, guard) {
             Ok(ticket) => list.tickets.push(ticket),
+            Err(_) if parse_ticket(row, format, projects, &AnswerGuard::NONE).is_ok() => {
+                list.skipped_for_secret += 1
+            }
             Err(_) => list.skipped += 1,
         }
     }
@@ -433,7 +462,11 @@ pub(crate) fn parse_detail(
     projects: &[CommandProject],
     guard: &AnswerGuard,
 ) -> Result<CommandDetail, String> {
-    let ticket = parse_ticket(answer, format, projects, guard)?;
+    let ticket = parse_ticket(answer, format, projects, guard).map_err(|what| {
+        hinted(what, || {
+            parse_ticket(answer, format, projects, &AnswerGuard::NONE).is_ok()
+        })
+    })?;
     let detail = object(answer)?;
     let mut comments: Vec<Value> = detail
         .get("comments")
@@ -483,7 +516,11 @@ pub(crate) fn parse_created(
 ) -> Result<CommandCreated, String> {
     let created = object(answer)?;
     Ok(CommandCreated {
-        id: canonical_id(created, format, guard)?,
+        id: canonical_id(created, format, guard).map_err(|what| {
+            hinted(what, || {
+                canonical_id(created, format, &AnswerGuard::NONE).is_ok()
+            })
+        })?,
         url: kept_text(created, "url", guard).and_then(web_url),
         branch_name: branch_name(created, guard),
     })
@@ -524,7 +561,8 @@ fn parse_ticket(
                 .find(|project| project.repo.as_deref() == Some(repo))
         })
         .map(|project| project.id.clone());
-    // A key-number id names its team; only a number source says which team in the answer.
+    // A key-number id names its team, so its JSON `team` is not read; only a number source says
+    // which team in the answer.
     let team = match format {
         IdFormat::KeyNumber => id.split_once('-').map(|(team, _)| team.to_string()),
         IdFormat::Number => checked_text(ticket, "team", guard)?.map(|team| cut(team, 32)),
@@ -565,6 +603,16 @@ fn parse_ticket(
         project_id,
         id,
     })
+}
+
+/// A single ticket's refusal, with `NOT_SECRET_HINT` when it reads well without the guard, so only
+/// a secret's value refused it.
+fn hinted(what: String, reads_unguarded: impl FnOnce() -> bool) -> String {
+    if reads_unguarded() {
+        format!("{what}; {NOT_SECRET_HINT}")
+    } else {
+        what
+    }
 }
 
 /// The answer's `id`, which must already be in the format's canonical form.
