@@ -5,12 +5,12 @@
 //! CDXC:WorkMode 2026-10-29 DECISION:
 //! The repository owner: "Pass ticket ids on stdin, never as an argument: they can come from branch names and `ghostex link add`, so `-x` must never read as a flag. Refuse `.bat`/`.cmd`." So argv is only the verb and `--json`, and `detail` reads its id from stdin like `list` and `create` read theirs.
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::paths::GxserverPaths;
 use crate::platform::process::{run_bounded, Keep, RunLimits, Unfinished};
@@ -31,12 +31,12 @@ const MIN_MASKED_IN_PLACE_CHARS: usize = 3;
 const WITHHELD: &str = "(message hidden: it could show a credential)";
 /// A refused icon's reason once a credential is set: the reason quotes the icon's text, cut, so a
 /// mask could not find a long value in it.
-const ICON_REFUSED: &str =
+pub(crate) const ICON_REFUSED: &str =
     "it was refused; the reason is hidden because it could show a credential";
 
 /// Variables passed through from gxserver's environment when set. Everything else is left out,
 /// so tokens of other tools, the Linear keys and session variables never reach the command.
-const INHERITED_VARS: [&str; 16] = [
+pub(crate) const INHERITED_VARS: [&str; 16] = [
     "HOME",
     "USER",
     "LOGNAME",
@@ -54,13 +54,17 @@ const INHERITED_VARS: [&str; 16] = [
     "https_proxy",
     "no_proxy",
 ];
-#[cfg(windows)]
-const INHERITED_WINDOWS_VARS: [&str; 11] = [
+/// Also passed through on Windows. Compiled everywhere so its tests run on every platform.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub(crate) const INHERITED_WINDOWS_VARS: [&str; 14] = [
     "SystemRoot",
     "windir",
     "ComSpec",
     "PATHEXT",
     "USERPROFILE",
+    "USERNAME",
+    "HOMEDRIVE",
+    "HOMEPATH",
     "APPDATA",
     "LOCALAPPDATA",
     "TEMP",
@@ -125,23 +129,48 @@ pub(crate) struct CommandEnv {
     pub(crate) workspace_id: String,
     /// The project a `detail` or `create` is about.
     pub(crate) project: Option<CommandProject>,
-    /// Each declared credential field's name and value.
-    pub(crate) credentials: Vec<(String, String)>,
+    /// The declared credential fields that have a value.
+    pub(crate) credentials: Vec<CommandCredential>,
 }
 
+/// One credential the command gets: a declared field and its stored value.
+#[derive(Clone)]
+pub(crate) struct CommandCredential {
+    pub(crate) name: String,
+    pub(crate) value: String,
+    /// Declared secret (the default when `info` says nothing): masked wherever it would surface,
+    /// and while one is set the command's raw stdout and stderr never leave the runner. A value
+    /// declared not secret is shown in Settings anyway, so it is neither masked nor hidden.
+    pub(crate) secret: bool,
+}
+
+/// Every text through `shown`, and each credential as its name and `MASK`, so a credential that
+/// equals or sits inside an id, a path or a name never prints.
 impl std::fmt::Debug for CommandEnv {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let shown = |text: &str| self.shown(text);
         formatter
             .debug_struct("CommandEnv")
-            .field("source_id", &self.source_id)
-            .field("workspace_id", &self.workspace_id)
-            .field("project", &self.project)
+            .field("source_id", &self.source_id.as_deref().map(shown))
+            .field("workspace_id", &shown(&self.workspace_id))
+            .field(
+                "project",
+                &self.project.as_ref().map(|project| {
+                    [
+                        Some(project.id.as_str()),
+                        Some(project.name.as_str()),
+                        project.path.as_deref(),
+                        project.repo.as_deref(),
+                    ]
+                    .map(|text| text.map(shown))
+                }),
+            )
             .field(
                 "credentials",
                 &self
                     .credentials
                     .iter()
-                    .map(|(name, _)| (name.as_str(), MASK))
+                    .map(|credential| (shown(&credential.name), MASK))
                     .collect::<Vec<_>>(),
             )
             .finish()
@@ -149,6 +178,53 @@ impl std::fmt::Debug for CommandEnv {
 }
 
 impl CommandEnv {
+    /// The environment for a source whose accepted `info` declared `declared`: one credential per
+    /// declared field with a stored value, trimmed, empty ones left out. Fields the info no longer
+    /// declares are never passed.
+    pub(crate) fn new(
+        source_id: Option<&str>,
+        workspace_id: &str,
+        project: Option<CommandProject>,
+        declared: &[CredentialField],
+        stored: Option<&Map<String, Value>>,
+    ) -> Self {
+        let credentials = declared
+            .iter()
+            .filter_map(|field| {
+                let value = stored?.get(&field.name)?.as_str()?.trim();
+                (!value.is_empty()).then(|| CommandCredential {
+                    name: field.name.clone(),
+                    value: value.to_string(),
+                    secret: field.secret,
+                })
+            })
+            .collect();
+        Self {
+            source_id: source_id.map(str::to_string),
+            workspace_id: workspace_id.to_string(),
+            project,
+            credentials,
+        }
+    }
+
+    /// This environment with `names` secret too: an `info` being checked may declare secret a
+    /// field the accepted info did not, and it is masked in that very answer (the union of both).
+    pub(crate) fn with_secret(&self, names: &[String]) -> Self {
+        let mut widened = self.clone();
+        for credential in &mut widened.credentials {
+            credential.secret |= names.contains(&credential.name);
+        }
+        widened
+    }
+
+    /// The names of the fields that have a value, which a candidate `info` may declare secret.
+    pub(crate) fn credential_names(&self) -> Vec<&str> {
+        self.credentials
+            .iter()
+            .map(|credential| credential.name.as_str())
+            .collect()
+    }
+
     /// The command's whole environment: the inherited variables `inherited` finds, `PATH` as
     /// gxserver gives `gh`, and the `GHOSTEX_*` ones.
     pub(crate) fn vars(
@@ -177,31 +253,42 @@ impl CommandEnv {
                 set("GHOSTEX_PROJECT_REPO", repo);
             }
         }
-        for (name, value) in &self.credentials {
+        for credential in &self.credentials {
             set(
-                &format!("GHOSTEX_CREDENTIAL_{}", name.to_ascii_uppercase()),
-                value,
+                &format!(
+                    "GHOSTEX_CREDENTIAL_{}",
+                    credential.name.to_ascii_uppercase()
+                ),
+                &credential.value,
             );
         }
         vars
     }
 
-    /// The credential values that are set.
+    /// The secret values that are set, trimmed: a value stored with spaces around it is still
+    /// found where the command echoes it without them.
     fn secrets(&self) -> impl Iterator<Item = &str> {
         self.credentials
             .iter()
-            .map(|(_, value)| value.as_str())
+            .filter(|credential| credential.secret)
+            .map(|credential| credential.value.trim())
             .filter(|value| !value.is_empty())
     }
 
-    /// Whether any credential is set: the command's own stdout and stderr then never leave the
-    /// runner (`CommandFailure::Exited`, `CommandFailure::Unreadable`).
-    fn holds_secrets(&self) -> bool {
+    /// Whether a secret is set: the command's own stdout and stderr then never leave the runner
+    /// (`CommandFailure::Exited`, `CommandFailure::Unreadable`), nor does a refused icon's reason.
+    pub(crate) fn holds_secrets(&self) -> bool {
         self.secrets().next().is_some()
     }
 
-    /// `text` with every credential value masked, or `WITHHELD` when it contains a value too
-    /// short to mask in place. Every place any value appears is found in the original text and
+    /// Whether `text` contains a secret value, however short.
+    pub(crate) fn reveals_secret(&self, text: &str) -> bool {
+        self.secrets().any(|value| text.contains(value))
+    }
+
+    /// `text` with every secret value masked, or `WITHHELD` when it contains a value too
+    /// short to mask in place. Not cut: `shown` cuts a message, `AnswerGuard::display` cuts an
+    /// answer's field to its own cap. Every place any value appears is found in the original text and
     /// overlapping places are masked as one, so two values that share characters both go. Cut a
     /// text only after this, so a cut never keeps part of a value.
     pub(crate) fn redact(&self, text: &str) -> String {
@@ -245,7 +332,6 @@ impl CommandEnv {
 }
 
 /// One run of the command.
-#[derive(Debug)]
 pub(crate) struct CommandCall<'a> {
     /// The resolved path the user set.
     pub(crate) program: &'a Path,
@@ -255,16 +341,71 @@ pub(crate) struct CommandCall<'a> {
     /// Where it runs (`command_work_dir`).
     pub(crate) work_dir: &'a Path,
     pub(crate) env: &'a CommandEnv,
-    pub(crate) timeout: Duration,
+    /// Always the verb's own limit, except in tests.
+    timeout: Duration,
 }
 
-/// Why a run gave no answer. Every text in it has the credentials masked.
+impl<'a> CommandCall<'a> {
+    pub(crate) fn new(
+        program: &'a Path,
+        verb: CommandVerb,
+        input: Option<&'a Value>,
+        work_dir: &'a Path,
+        env: &'a CommandEnv,
+    ) -> Self {
+        Self {
+            program,
+            verb,
+            input,
+            work_dir,
+            env,
+            timeout: verb.timeout(),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_timeout(self, timeout: Duration) -> Self {
+        Self { timeout, ..self }
+    }
+
+    pub(crate) fn timeout(&self) -> Duration {
+        self.timeout
+    }
+}
+
+/// The program and folder through `shown`, the input only as its size.
+impl std::fmt::Debug for CommandCall<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CommandCall")
+            .field(
+                "program",
+                &self.env.shown(&self.program.display().to_string()),
+            )
+            .field("verb", &self.verb)
+            .field(
+                "input_bytes",
+                &self.input.map(|input| input.to_string().len()),
+            )
+            .field(
+                "work_dir",
+                &self.env.shown(&self.work_dir.display().to_string()),
+            )
+            .field("env", self.env)
+            .field("timeout", &self.timeout)
+            .finish()
+    }
+}
+
+/// Why a run gave no answer. Every string in it went through `CommandEnv::shown` where the runner
+/// built it (the paths too), so its `Debug` and `message` never show a credential.
 #[derive(Debug)]
 pub(crate) enum CommandFailure {
-    NotFound(PathBuf),
-    NotExecutable(PathBuf),
+    /// The program's path, shown.
+    NotFound(String),
+    NotExecutable(String),
     /// A `.bat` or `.cmd` file, which Ghostex refuses to run.
-    BatchFile(PathBuf),
+    BatchFile(String),
     /// It could not start for another reason.
     Start(String),
     TimedOut {
@@ -287,14 +428,18 @@ pub(crate) enum CommandFailure {
         /// stderr can spell a credential in ways no mask finds (JSON escapes, URL encoding), so
         /// only its size is kept.
         stderr_line: Option<String>,
+        /// Whether a line was held back because a credential is set (else it wrote only blanks).
+        stderr_hidden: bool,
         /// How much of stderr was kept (at most `STDERR_TAIL`).
         stderr_bytes: usize,
         /// Whether it wrote more than `STDERR_TAIL`, so only the end was kept.
         stderr_truncated: bool,
     },
     /// Its answer was not readable JSON of the verb's shape. `what` names what could not be read,
-    /// with credentials masked. `stdout` is its first `MAX_MESSAGE_CHARS` characters, for the
-    /// log, or only its size when a credential is set, for the same reason as stderr.
+    /// with credentials masked. `stdout` is its first `MAX_MESSAGE_CHARS` characters, or only its
+    /// size while a secret is set, for the same reason as stderr. It goes to the person checking
+    /// the command (the Settings or CLI check's answer), never to the log, which keeps no command
+    /// output.
     Unreadable {
         what: String,
         stdout: String,
@@ -302,14 +447,14 @@ pub(crate) enum CommandFailure {
 }
 
 impl CommandFailure {
-    /// What the user sees, naming the source by `name`.
+    /// What the user sees, naming the source by `name`, which the caller passes through
+    /// `CommandEnv::shown`.
     pub(crate) fn message(&self, name: &str) -> String {
         match self {
-            Self::NotFound(path) => format!("{name}: can't find {}", path.display()),
-            Self::NotExecutable(path) => format!("{name}: {} isn't executable", path.display()),
+            Self::NotFound(path) => format!("{name}: can't find {path}"),
+            Self::NotExecutable(path) => format!("{name}: {path} isn't executable"),
             Self::BatchFile(path) => format!(
-                "{name}: Ghostex doesn't run .bat or .cmd files ({}); use an .exe or a .ps1 script",
-                path.display()
+                "{name}: Ghostex doesn't run .bat or .cmd files ({path}); use an .exe or a .ps1 script"
             ),
             Self::Start(error) => format!("{name}: couldn't start ({error})"),
             Self::TimedOut {
@@ -340,6 +485,15 @@ impl CommandFailure {
                 stderr_bytes: 0,
                 ..
             } => format!("{name}: exited with {status}"),
+            Self::Exited {
+                verb,
+                status,
+                stderr_hidden: false,
+                ..
+            } => format!(
+                "{name}: {} exited with {status}; its error output was blank.",
+                verb.word()
+            ),
             Self::Exited {
                 verb,
                 status,
@@ -401,22 +555,18 @@ pub(crate) fn run_command(call: &CommandCall) -> Result<Value, CommandFailure> {
 struct Answer {
     value: Value,
     stdout: Vec<u8>,
+    /// For `info`: the environment widened with the secrets the answer itself declares.
+    info_env: Option<CommandEnv>,
 }
 
 fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
     // Not `metadata`: a Windows app execution alias launches fine but fails a followed `stat`.
     if !ghostex_paths::powershell::launchable(call.program) {
-        return Err(CommandFailure::NotFound(call.program.to_path_buf()));
+        return Err(CommandFailure::NotFound(shown_path(call.env, call.program)));
     }
-    let mut command = program_command(call.program)?;
-    command
-        .arg(call.verb.word())
-        .arg("--json")
-        .current_dir(call.work_dir)
-        .env_clear()
-        .envs(call.env.vars(|name| std::env::var_os(name)));
+    let command = command_for(call)?;
     let limits = RunLimits {
-        timeout: call.timeout,
+        timeout: call.timeout(),
         stdin: call.input.map(|input| input.to_string().into_bytes()),
         stdout: Keep::AtMost(call.verb.stdout_cap()),
         // One byte past the tail tells an error output of exactly `STDERR_TAIL` from a longer one.
@@ -424,7 +574,7 @@ fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
     };
     let output = run_bounded(command, limits).map_err(|unfinished| match unfinished {
         Unfinished::Start(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-            CommandFailure::NotExecutable(call.program.to_path_buf())
+            CommandFailure::NotExecutable(shown_path(call.env, call.program))
         }
         Unfinished::Start(error) => CommandFailure::Start(call.env.shown(&error.to_string())),
         Unfinished::TimedOut(limit) => CommandFailure::TimedOut {
@@ -433,24 +583,44 @@ fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
         },
         Unfinished::TooLarge(cap) => CommandFailure::TooLarge(cap),
     })?;
+    // An `info` answer may declare secret a field the accepted info had as not secret. Its own
+    // declarations widen the mask before anything it printed is read, whatever its exit status, so
+    // a failing `info` can't show that value in its error object or on stderr either.
+    let info_env = (call.verb == CommandVerb::Info).then(|| info_env(call.env, &output.stdout));
+    let env = info_env.as_ref().unwrap_or(call.env);
     if !output.status.success() {
-        return Err(exit_failure(&output, call.verb, call.env));
+        return Err(exit_failure(&output, call.verb, env));
     }
     match parse_answer(&output.stdout) {
         Ok(value) => Ok(Answer {
             value,
             stdout: output.stdout,
+            info_env,
         }),
-        Err(what) => Err(unreadable(call.env, &what, &output.stdout)),
+        Err(what) => Err(unreadable(env, &what, &output.stdout)),
     }
 }
 
-/// Runs `info` and reads its answer.
+/// `env` with every field that has a value and that `info`'s stdout declares secret (the union of
+/// both); `env` as it is when stdout isn't JSON, which declares nothing.
+fn info_env(env: &CommandEnv, stdout: &[u8]) -> CommandEnv {
+    match parse_answer(stdout) {
+        Ok(answer) => env.with_secret(&credential_secrecy(&answer, &env.credential_names())),
+        Err(_) => env.clone(),
+    }
+}
+
+/// Runs `info` and reads its answer in two phases. First, which fields with a value the answer
+/// declares secret, read before anything else in it is checked, whatever the exit status
+/// (`run_answer`): a field the accepted info had as not secret is then masked in this very answer,
+/// even when the rest of it is refused or the command failed. Then the whole answer, with the
+/// secrets of both. Stdout that isn't JSON declares nothing, so the accepted flags apply to it.
 pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, CommandFailure> {
     let answer = run_answer(call)?;
-    let mut info =
-        parse_info(&answer.value).map_err(|what| unreadable(call.env, &what, &answer.stdout))?;
-    if call.env.holds_secrets() {
+    let env = answer.info_env.as_ref().unwrap_or(call.env);
+    let mut info = parse_info(&answer.value, &AnswerGuard::new(env))
+        .map_err(|what| unreadable(env, &what, &answer.stdout))?;
+    if env.holds_secrets() {
         info.icon = info
             .icon
             .map(|icon| icon.map_err(|_| ICON_REFUSED.to_string()));
@@ -465,7 +635,7 @@ pub(crate) fn command_list(
     projects: &[CommandProject],
 ) -> Result<CommandList, CommandFailure> {
     let answer = run_answer(call)?;
-    parse_list(&answer.value, format, projects)
+    parse_list(&answer.value, format, projects, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
 
@@ -476,7 +646,7 @@ pub(crate) fn command_detail(
     projects: &[CommandProject],
 ) -> Result<CommandDetail, CommandFailure> {
     let answer = run_answer(call)?;
-    parse_detail(&answer.value, format, projects)
+    parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
 
@@ -486,7 +656,8 @@ pub(crate) fn command_create(
     format: IdFormat,
 ) -> Result<CommandCreated, CommandFailure> {
     let answer = run_answer(call)?;
-    parse_created(&answer.value, format).map_err(|what| unreadable(call.env, &what, &answer.stdout))
+    parse_created(&answer.value, format, &AnswerGuard::new(call.env))
+        .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
 
 /// `what` is built from decoded JSON values, which the mask matches; the raw stdout is kept only
@@ -500,19 +671,42 @@ fn unreadable(env: &CommandEnv, what: &str, stdout: &[u8]) -> CommandFailure {
                 stdout.len()
             )
         } else {
-            cut(&String::from_utf8_lossy(stdout), MAX_MESSAGE_CHARS)
+            env.shown(&String::from_utf8_lossy(stdout))
         },
     }
 }
 
-/// How the program is started: directly, or a `.ps1` script through PowerShell.
-fn program_command(program: &Path) -> Result<Command, CommandFailure> {
-    let extension = program
-        .extension()
-        .and_then(OsStr::to_str)
-        .map(str::to_ascii_lowercase);
-    match extension.as_deref() {
-        Some("bat" | "cmd") => Err(CommandFailure::BatchFile(program.to_path_buf())),
+/// The process for a call: the program (directly, or a `.ps1` script through PowerShell), then
+/// only the verb and `--json`, in the call's folder, with the cleared environment.
+pub(crate) fn command_for(call: &CommandCall) -> Result<Command, CommandFailure> {
+    let mut command = program_command(call.program)
+        .ok_or_else(|| CommandFailure::BatchFile(shown_path(call.env, call.program)))?;
+    command
+        .arg(call.verb.word())
+        .arg("--json")
+        .current_dir(call.work_dir)
+        .env_clear()
+        .envs(call.env.vars(|name| std::env::var_os(name)));
+    Ok(command)
+}
+
+/// The extension Windows goes by: it drops trailing dots and spaces from a file name, so
+/// `run.cmd.` and `run.bat ` open as `run.cmd` and `run.bat`.
+fn launch_extension(program: &Path) -> Option<String> {
+    let name = program.file_name()?.to_str()?;
+    let (_, extension) = name.trim_end_matches(['.', ' ']).rsplit_once('.')?;
+    Some(extension.to_ascii_lowercase())
+}
+
+fn shown_path(env: &CommandEnv, path: &Path) -> String {
+    env.shown(&path.display().to_string())
+}
+
+/// How the program is started: directly, or a `.ps1` script through PowerShell. `None` for a
+/// `.bat` or `.cmd` file, which is never run.
+fn program_command(program: &Path) -> Option<Command> {
+    match launch_extension(program).as_deref() {
+        Some("bat" | "cmd") => None,
         Some("ps1") => {
             let mut command = Command::new(powershell());
             command
@@ -525,9 +719,9 @@ fn program_command(program: &Path) -> Result<Command, CommandFailure> {
                     "-File",
                 ])
                 .arg(program);
-            Ok(command)
+            Some(command)
         }
-        _ => Ok(Command::new(program)),
+        _ => Some(Command::new(program)),
     }
 }
 
@@ -581,12 +775,11 @@ fn exit_failure(
         0
     };
     let stderr = String::from_utf8_lossy(&tail[start..]);
-    let stderr_line = stderr
-        .lines()
-        .map(str::trim)
-        .rfind(|line| !line.is_empty())
-        .filter(|_| !env.holds_secrets())
-        .map(|line| cut(line, MAX_MESSAGE_CHARS));
+    let last_line = stderr.lines().map(str::trim).rfind(|line| !line.is_empty());
+    let stderr_hidden = last_line.is_some() && env.holds_secrets();
+    let stderr_line = last_line
+        .filter(|_| !stderr_hidden)
+        .map(|line| env.shown(line));
     CommandFailure::Exited {
         verb,
         status: match output.status.code() {
@@ -594,6 +787,7 @@ fn exit_failure(
             None => output.status.to_string(),
         },
         stderr_line,
+        stderr_hidden,
         stderr_bytes: tail.len(),
         stderr_truncated,
     }

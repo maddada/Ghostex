@@ -36,9 +36,9 @@ const MAX_PULL_REQUESTS: usize = 20;
 const MAX_ID_CHARS: usize = 64;
 /// A state's name and its raw state word.
 const MAX_STATE_CHARS: usize = 40;
-/// A branch name: git's longest file name. A longer one is dropped rather than cut, since a cut
-/// name would name another branch.
-const MAX_BRANCH_BYTES: usize = 255;
+/// An RFC 3339 time: `2026-10-28T09:12:00.123456789+05:30` is 35 bytes. A longer text is dropped
+/// before it is parsed, since the format allows a fraction of a second of any length.
+const MAX_TIME_BYTES: usize = 40;
 /// What an error message from the command is cut to.
 pub(crate) const MAX_MESSAGE_CHARS: usize = 300;
 /// Create ticket's title, as for GitHub issues.
@@ -220,9 +220,9 @@ pub(crate) fn reported_error(answer: &Value) -> Option<(ErrorCode, String)> {
     Some((code, message.to_string()))
 }
 
-pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
+pub(crate) fn parse_info(answer: &Value, guard: &AnswerGuard) -> Result<CommandInfo, String> {
     let info = object(answer)?;
-    let id = required(info, "id")?;
+    let id = checked_required(info, "id", guard)?;
     if !valid_source_id(id) {
         return Err(format!(
             "id \"{}\" isn't 2 to 32 lowercase letters, digits or dashes starting with a letter",
@@ -236,11 +236,12 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
     if name.chars().count() > 40 {
         return Err("name is longer than 40 characters".to_string());
     }
+    one_line(name, "name")?;
     let ids = info
         .get("ids")
         .and_then(Value::as_object)
         .ok_or("ids is missing")?;
-    let id_format = match text(ids, "format") {
+    let id_format = match checked_text(ids, "format", guard)? {
         Some("key-number") => IdFormat::KeyNumber,
         Some("number") => IdFormat::Number,
         _ => return Err("ids.format isn't key-number or number".to_string()),
@@ -252,6 +253,9 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
             }
             keys.iter()
                 .map(|key| {
+                    if let Some(key) = key.as_str() {
+                        guard.structural("ids.keys", key)?;
+                    }
                     key.as_str()
                         .filter(|key| valid_id_key(key))
                         .map(str::to_ascii_uppercase)
@@ -269,7 +273,7 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
     let credentials = match info.get("credentials") {
         Some(Value::Array(fields)) if fields.len() <= MAX_CREDENTIAL_FIELDS => fields
             .iter()
-            .map(credential_field)
+            .map(|field| credential_field(field, guard))
             .collect::<Result<Vec<_>, _>>()?,
         Some(Value::Array(_)) => {
             return Err(format!(
@@ -288,8 +292,13 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
     }
     Ok(CommandInfo {
         id: id.to_string(),
-        name: name.to_string(),
-        icon: text(info, "icon").map(sanitize_icon),
+        name: guard
+            .display(as_sent(info, "name"), 40)
+            .ok_or("name is missing")?,
+        icon: text(info, "icon").map(|icon| match guard.droppable(icon) {
+            Some(icon) => sanitize_icon(icon),
+            None => Err(ICON_REFUSED.to_string()),
+        }),
         id_format,
         id_keys,
         credentials,
@@ -300,30 +309,63 @@ pub(crate) fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
     })
 }
 
-fn credential_field(field: &Value) -> Result<CredentialField, String> {
+fn credential_field(field: &Value, guard: &AnswerGuard) -> Result<CredentialField, String> {
     let field = object(field)?;
+    guard.structural("a credential name", as_sent(field, "name"))?;
     let name = required(field, "name")?;
-    let valid_name = name.len() <= 32
-        && name.starts_with(|c: char| c.is_ascii_lowercase())
-        && name
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
-    if !valid_name {
+    if !valid_credential_name(name) {
         return Err(format!(
             "credential name \"{}\" isn't lowercase letters, digits or underscores",
             as_sent(field, "name")
         ));
     }
+    let label = required(field, "label")?;
+    one_line(label, "a credential label")?;
+    let placeholder = text(field, "placeholder");
+    if let Some(placeholder) = placeholder {
+        one_line(placeholder, "a credential placeholder")?;
+    }
     Ok(CredentialField {
         name: name.to_string(),
-        label: cut(required(field, "label")?, 40),
+        label: guard
+            .display(as_sent(field, "label"), 40)
+            .ok_or("label is missing")?,
         secret: field.get("secret").and_then(Value::as_bool).unwrap_or(true),
         required: field
             .get("required")
             .and_then(Value::as_bool)
             .unwrap_or(false),
-        placeholder: text(field, "placeholder").map(|placeholder| cut(placeholder, 80)),
+        placeholder: placeholder.and_then(|_| guard.display(as_sent(field, "placeholder"), 80)),
     })
+}
+
+/// Which of `known` (the fields that have a value) an `info` answer declares secret, read before
+/// the rest of the answer, or even the rest of each declaration, is checked: a declaration with a
+/// valid name counts with its `secret` (`true` when absent or not a boolean), whatever its label
+/// or placeholder say. The runner masks those fields in this very answer, so a field turning
+/// secret is never shown in the complaint that refuses the answer.
+pub(crate) fn credential_secrecy(answer: &Value, known: &[&str]) -> Vec<String> {
+    answer
+        .get("credentials")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_object)
+        .filter_map(|field| {
+            let name = text(field, "name")?;
+            let secret = field.get("secret").and_then(Value::as_bool).unwrap_or(true);
+            (secret && valid_credential_name(name) && known.contains(&name))
+                .then(|| name.to_string())
+        })
+        .collect()
+}
+
+fn valid_credential_name(name: &str) -> bool {
+    name.len() <= 32
+        && name.starts_with(|c: char| c.is_ascii_lowercase())
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// `list`'s input: every work-mode project of the workspace, and the ids of an exact read.
@@ -357,6 +399,7 @@ pub(crate) fn parse_list(
     answer: &Value,
     format: IdFormat,
     projects: &[CommandProject],
+    guard: &AnswerGuard,
 ) -> Result<CommandList, String> {
     let rows = answer
         .get("tickets")
@@ -367,7 +410,7 @@ pub(crate) fn parse_list(
         ..CommandList::default()
     };
     for row in rows.iter().take(MAX_LISTED_TICKETS) {
-        match parse_ticket(row, format, projects) {
+        match parse_ticket(row, format, projects, guard) {
             Ok(ticket) => list.tickets.push(ticket),
             Err(_) => list.skipped += 1,
         }
@@ -377,7 +420,8 @@ pub(crate) fn parse_list(
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|id| id.as_str().and_then(|id| format.parse_ref(id)))
+        .filter_map(|id| id.as_str().and_then(|id| guard.droppable(id)))
+        .filter_map(|id| format.parse_ref(id))
         .take(MAX_EXACT_IDS)
         .collect();
     Ok(list)
@@ -387,8 +431,9 @@ pub(crate) fn parse_detail(
     answer: &Value,
     format: IdFormat,
     projects: &[CommandProject],
+    guard: &AnswerGuard,
 ) -> Result<CommandDetail, String> {
-    let ticket = parse_ticket(answer, format, projects)?;
+    let ticket = parse_ticket(answer, format, projects, guard)?;
     let detail = object(answer)?;
     let mut comments: Vec<Value> = detail
         .get("comments")
@@ -398,10 +443,10 @@ pub(crate) fn parse_detail(
         .filter_map(Value::as_object)
         .filter_map(|comment| {
             Some(json!({
-                "author": cut(text(comment, "author")?, 64),
-                "avatarUrl": text(comment, "avatarUrl").and_then(https_url),
-                "body": cut(text(comment, "body").unwrap_or_default(), MAX_TEXT_CHARS),
-                "createdAt": time(comment, "createdAt"),
+                "author": shown_text(comment, "author", 64, guard)?,
+                "avatarUrl": kept_text(comment, "avatarUrl", guard).and_then(https_url),
+                "body": shown_text(comment, "body", MAX_TEXT_CHARS, guard).unwrap_or_default(),
+                "createdAt": time(comment, "createdAt", guard),
             }))
         })
         .collect();
@@ -413,18 +458,17 @@ pub(crate) fn parse_detail(
     comments.drain(..comments.len().saturating_sub(MAX_COMMENTS));
     let fields = json!({
         "updatedAt": ticket.updated_at,
-        "createdAt": time(detail, "createdAt"),
+        "createdAt": time(detail, "createdAt", guard),
         "branchName": ticket.branch_name,
-        "priority": text(detail, "priority").map(|priority| cut(priority, 40)),
+        "priority": shown_text(detail, "priority", 40, guard),
         "assignee": ticket.assignee,
-        "author": text(detail, "author").map(|author| cut(author, 64)),
+        "author": shown_text(detail, "author", 64, guard),
         "cycle": ticket.cycle,
         "labels": ticket.labels,
         "pullRequestUrls": ticket.pull_request_urls,
     });
     Ok(CommandDetail {
-        description: text(detail, "description")
-            .map(|description| cut(description, MAX_TEXT_CHARS)),
+        description: shown_text(detail, "description", MAX_TEXT_CHARS, guard),
         comments,
         comment_count,
         fields: fields.as_object().cloned().unwrap_or_default(),
@@ -432,12 +476,16 @@ pub(crate) fn parse_detail(
     })
 }
 
-pub(crate) fn parse_created(answer: &Value, format: IdFormat) -> Result<CommandCreated, String> {
+pub(crate) fn parse_created(
+    answer: &Value,
+    format: IdFormat,
+    guard: &AnswerGuard,
+) -> Result<CommandCreated, String> {
     let created = object(answer)?;
     Ok(CommandCreated {
-        id: canonical_id(created, format)?,
-        url: text(created, "url").and_then(web_url),
-        branch_name: branch_name(created),
+        id: canonical_id(created, format, guard)?,
+        url: kept_text(created, "url", guard).and_then(web_url),
+        branch_name: branch_name(created, guard),
     })
 }
 
@@ -445,14 +493,15 @@ fn parse_ticket(
     row: &Value,
     format: IdFormat,
     projects: &[CommandProject],
+    guard: &AnswerGuard,
 ) -> Result<CommandTicket, String> {
     let ticket = object(row)?;
-    let id = canonical_id(ticket, format)?;
+    let id = canonical_id(ticket, format, guard)?;
     let state = ticket
         .get("state")
         .and_then(Value::as_object)
         .ok_or("state is missing")?;
-    let group = required(state, "group")?;
+    let group = checked_required(state, "group", guard)?;
     let group = STATE_GROUPS
         .into_iter()
         .find(|known| *known == group)
@@ -463,56 +512,68 @@ fn parse_ticket(
                 STATE_GROUPS.join(", ")
             )
         })?;
-    let state_name = cut(required(state, "name")?, MAX_STATE_CHARS);
-    let project_id = text(ticket, "projectId")
+    let state_name = shown_text(state, "name", MAX_STATE_CHARS, guard).ok_or("name is missing")?;
+    let wanted_project = checked_text(ticket, "projectId", guard)?;
+    let repo = checked_text(ticket, "repo", guard)?.map(str::to_ascii_lowercase);
+    let project_id = wanted_project
         .and_then(|wanted| projects.iter().find(|project| project.id == wanted))
         .or_else(|| {
-            let repo = text(ticket, "repo")?.to_ascii_lowercase();
+            let repo = repo.as_deref()?;
             projects
                 .iter()
-                .find(|project| project.repo.as_deref() == Some(repo.as_str()))
+                .find(|project| project.repo.as_deref() == Some(repo))
         })
         .map(|project| project.id.clone());
+    // A key-number id names its team; only a number source says which team in the answer.
+    let team = match format {
+        IdFormat::KeyNumber => id.split_once('-').map(|(team, _)| team.to_string()),
+        IdFormat::Number => checked_text(ticket, "team", guard)?.map(|team| cut(team, 32)),
+    };
     Ok(CommandTicket {
-        id,
-        title: cut(required(ticket, "title")?, 500),
-        url: text(ticket, "url").and_then(web_url),
-        state: text(state, "type")
-            .map_or_else(|| state_name.clone(), |word| cut(word, MAX_STATE_CHARS)),
+        title: shown_text(ticket, "title", 500, guard).ok_or("title is missing")?,
+        url: kept_text(ticket, "url", guard).and_then(web_url),
+        state: shown_text(state, "type", MAX_STATE_CHARS, guard)
+            .unwrap_or_else(|| state_name.clone()),
         status: WorkItemStatus {
             group,
             name: state_name,
         },
-        updated_at: time(ticket, "updatedAt"),
+        updated_at: time(ticket, "updatedAt", guard),
         assignee: ticket
             .get("assignee")
             .and_then(Value::as_object)
             .and_then(|person| {
                 Some(WorkItemPerson {
-                    name: cut(text(person, "name")?, 64),
-                    avatar_url: text(person, "avatarUrl").and_then(https_url),
+                    name: shown_text(person, "name", 64, guard)?,
+                    avatar_url: kept_text(person, "avatarUrl", guard).and_then(https_url),
                     is_me: person.get("isMe").and_then(Value::as_bool).unwrap_or(false),
                 })
             }),
         labels: strings(ticket, "labels")
             .take(MAX_LABELS)
-            .map(|label| cut(label, 64))
+            .map(|label| guard.display_as_sent(label, 64))
             .collect(),
-        cycle: text(ticket, "cycle").map(|cycle| cut(cycle, 64)),
-        branch_name: branch_name(ticket),
+        cycle: shown_text(ticket, "cycle", 64, guard),
+        branch_name: branch_name(ticket, guard),
         pull_request_urls: strings(ticket, "pullRequestUrls")
+            .filter_map(|url| guard.droppable(url))
             .filter(|url| is_canonical_github_pull_request_url(url))
             .take(MAX_PULL_REQUESTS)
             .map(str::to_string)
             .collect(),
-        team: text(ticket, "team").map(|team| cut(team, 32)),
+        team,
         project_id,
+        id,
     })
 }
 
 /// The answer's `id`, which must already be in the format's canonical form.
-fn canonical_id(answer: &Map<String, Value>, format: IdFormat) -> Result<String, String> {
-    let id = required(answer, "id")?;
+fn canonical_id(
+    answer: &Map<String, Value>,
+    format: IdFormat,
+    guard: &AnswerGuard,
+) -> Result<String, String> {
+    let id = checked_required(answer, "id", guard)?;
     match format.parse_ref(id) {
         Some(canonical) if canonical == id => Ok(canonical),
         _ => Err(format!(
@@ -571,17 +632,68 @@ fn strings<'a>(object: &'a Map<String, Value>, key: &str) -> impl Iterator<Item 
         .filter_map(Value::as_str)
 }
 
-/// An RFC 3339 time, as sent.
-fn time(object: &Map<String, Value>, key: &str) -> Option<String> {
-    text(object, key)
+/// An RFC 3339 time, as sent; dropped when it contains a secret.
+fn time(object: &Map<String, Value>, key: &str, guard: &AnswerGuard) -> Option<String> {
+    kept_text(object, key, guard)
+        .filter(|time| time.len() <= MAX_TIME_BYTES)
         .filter(|time| chrono::DateTime::parse_from_rfc3339(time).is_ok())
         .map(str::to_string)
 }
 
-fn branch_name(object: &Map<String, Value>) -> Option<String> {
-    text(object, "branchName")
-        .filter(|branch| branch.len() <= MAX_BRANCH_BYTES)
+/// A branch Start work can create a worktree on; any other name is dropped (never cut, which
+/// would name another branch), so the source falls back to the name Ghostex makes.
+fn branch_name(object: &Map<String, Value>, guard: &AnswerGuard) -> Option<String> {
+    kept_text(object, "branchName", guard)
+        .filter(|branch| crate::server::is_allowed_worktree_branch(branch))
         .map(str::to_string)
+}
+
+/// Display text: the decoded value masked whole, then trimmed and cut (`AnswerGuard::display`).
+fn shown_text(
+    object: &Map<String, Value>,
+    key: &str,
+    cap: usize,
+    guard: &AnswerGuard,
+) -> Option<String> {
+    guard.display(object.get(key)?.as_str()?, cap)
+}
+
+/// A structural field (`text`), refused when its decoded value contains a secret.
+fn checked_text<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    guard: &AnswerGuard,
+) -> Result<Option<&'a str>, String> {
+    guard.structural(key, as_sent(object, key))?;
+    Ok(text(object, key))
+}
+
+fn checked_required<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    guard: &AnswerGuard,
+) -> Result<&'a str, String> {
+    checked_text(object, key, guard)?.ok_or_else(|| format!("{key} is missing"))
+}
+
+/// A link (`text`), dropped when its decoded value contains a secret.
+fn kept_text<'a>(
+    object: &'a Map<String, Value>,
+    key: &str,
+    guard: &AnswerGuard,
+) -> Option<&'a str> {
+    guard.droppable(as_sent(object, key))?;
+    text(object, key)
+}
+
+/// Text Settings shows on one line: a newline or another control character in it is refused.
+fn one_line(text: &str, what: &str) -> Result<(), String> {
+    if text.chars().any(char::is_control) {
+        return Err(format!(
+            "{what} has a line break or another control character"
+        ));
+    }
+    Ok(())
 }
 
 /// An `http` or `https` link: clients open these.

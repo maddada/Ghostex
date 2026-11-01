@@ -56,14 +56,7 @@ fn call_of<'a>(
     input: Option<&'a Value>,
     env: &'a CommandEnv,
 ) -> CommandCall<'a> {
-    CommandCall {
-        program,
-        verb,
-        input,
-        work_dir,
-        env,
-        timeout: verb.timeout(),
-    }
+    CommandCall::new(program, verb, input, work_dir, env)
 }
 
 fn env(mode: &str) -> CommandEnv {
@@ -72,8 +65,8 @@ fn env(mode: &str) -> CommandEnv {
         workspace_id: "ws-cmd".to_string(),
         project: Some(app_project()),
         credentials: vec![
-            ("mode".to_string(), mode.to_string()),
-            ("token".to_string(), TOKEN.to_string()),
+            credential("mode", mode, false),
+            credential("token", TOKEN, true),
         ],
     }
 }
@@ -355,10 +348,11 @@ fn a_command_that_hangs_is_stopped_at_its_time_limit() {
     let env = env("hang");
     let input = detail_input("ACM-12");
     let started = Instant::now();
-    let failure = run_command(&CommandCall {
-        timeout: Duration::from_secs(1),
-        ..fixture.call(CommandVerb::Detail, Some(&input), &env)
-    })
+    let failure = run_command(
+        &fixture
+            .call(CommandVerb::Detail, Some(&input), &env)
+            .with_timeout(Duration::from_secs(1)),
+    )
     .expect_err("it hangs");
     assert!(started.elapsed() < Duration::from_secs(5));
     assert_eq!(
@@ -381,14 +375,13 @@ fn an_answer_a_left_behind_child_still_holds_open_is_not_read() {
     let ids = vec!["ACM-9".to_string()];
     let input = list_input(&[app_project()], Some(&ids));
     let failure = command_list(
-        &CommandCall {
-            timeout: Duration::from_secs(1),
-            ..fixture.call(
+        &fixture
+            .call(
                 CommandVerb::ExactList,
                 Some(&input),
                 &env("answer-held-open"),
             )
-        },
+            .with_timeout(Duration::from_secs(1)),
         IdFormat::KeyNumber,
         &[],
     )
@@ -444,8 +437,8 @@ fn a_refused_icon_says_only_that_once_a_credential_is_set() {
     ] {
         let env = CommandEnv {
             credentials: vec![
-                ("mode".to_string(), mode.to_string()),
-                ("token".to_string(), token.to_string()),
+                credential("mode", mode, false),
+                credential("token", token, true),
             ],
             ..env(mode)
         };
@@ -520,13 +513,22 @@ fn a_command_env_never_prints_a_credential() {
     assert!(printed.contains("token"), "{printed}");
 }
 
+/// Every credential secret.
 fn env_with(credentials: &[(&str, &str)]) -> CommandEnv {
     CommandEnv {
         credentials: credentials
             .iter()
-            .map(|(name, value)| (name.to_string(), value.to_string()))
+            .map(|(name, value)| credential(name, value, true))
             .collect(),
         ..env("unused")
+    }
+}
+
+fn credential(name: &str, value: &str, secret: bool) -> CommandCredential {
+    CommandCredential {
+        name: name.to_string(),
+        value: value.to_string(),
+        secret,
     }
 }
 
@@ -570,8 +572,8 @@ fn a_short_credential_in_an_error_object_never_shows() {
     let fixture = Fixture::new();
     let env = CommandEnv {
         credentials: vec![
-            ("mode".to_string(), "error-pin".to_string()),
-            ("pin".to_string(), "abc".to_string()),
+            credential("mode", "error-pin", false),
+            credential("pin", "abc", true),
         ],
         ..env("unused")
     };
@@ -652,7 +654,38 @@ fn a_credential_sent_with_spaces_around_it_never_shows() {
     let failure = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("bad id");
     let shown = format!("{} {failure:?}", failure.message("Fixture"));
     assert!(!shown.contains("Padded-Secret"), "{shown}");
-    assert!(shown.contains(r#"id "••••" isn't"#), "{shown}");
+    // An id is structural: one that contains a credential is refused before its form is checked.
+    assert!(shown.contains("(id contains a credential)"), "{shown}");
+}
+
+#[test]
+fn a_credential_stored_with_spaces_is_masked_where_it_is_echoed_without_them() {
+    let fixture = Fixture::new();
+    let env = env_with(&[("mode", "error-token"), ("token", "  stored-padded  ")]);
+    let failure =
+        run_command(&fixture.call(CommandVerb::Info, None, &env)).expect_err("it exited 1");
+    let shown = format!("{} {failure:?}", failure.message("Fixture"));
+    assert!(!shown.contains("stored-padded"), "{shown}");
+    assert!(shown.contains("••••"), "{shown}");
+}
+
+#[test]
+fn blank_error_output_without_a_credential_says_it_was_blank() {
+    let fixture = Fixture::new();
+    let env = fixture.without_credentials("blank-stderr");
+    let failure =
+        run_command(&fixture.call(CommandVerb::Info, None, &env)).expect_err("it exited 3");
+    assert_eq!(
+        failure.message("Fixture"),
+        "Fixture: info exited with status 3; its error output was blank."
+    );
+    let env = env_with(&[("mode", "blank-stderr"), ("token", TOKEN)]);
+    let failure =
+        run_command(&fixture.call(CommandVerb::Info, None, &env)).expect_err("it exited 3");
+    assert_eq!(
+        failure.message("Fixture"),
+        "Fixture: info exited with status 3; its error output was blank."
+    );
 }
 
 #[test]
@@ -673,5 +706,209 @@ fn hidden_output_is_counted_in_the_bytes_the_command_wrote() {
     assert_eq!(
         failure.message("Fixture"),
         "Fixture: info exited with status 7; its error output (8192 bytes) is hidden because it could show a credential."
+    );
+}
+
+/// What the runner had as accepted: `token` set and declared not secret.
+fn env_with_open_token(mode: &str) -> CommandEnv {
+    CommandEnv {
+        credentials: vec![
+            credential("mode", mode, false),
+            credential("token", TOKEN, false),
+        ],
+        ..env("unused")
+    }
+}
+
+#[test]
+fn a_field_turning_secret_is_masked_in_that_same_info() {
+    let fixture = Fixture::new();
+    let env = env_with_open_token("flip-secret");
+    let info = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect("info");
+    assert_eq!(info.name, "Fixture ••••");
+    assert!(info
+        .credentials
+        .iter()
+        .any(|field| field.name == "token" && field.secret));
+}
+
+#[test]
+fn a_field_declared_secret_in_an_unacceptable_info_is_still_masked() {
+    let fixture = Fixture::new();
+    for mode in ["flip-secret-invalid", "flip-secret-bad-label"] {
+        let env = env_with_open_token(mode);
+        let failure = command_info(&fixture.call(CommandVerb::Info, None, &env))
+            .expect_err("the contract refuses it");
+        let shown = format!("{} {failure:?}", failure.message("Fixture"));
+        assert!(!shown.contains(TOKEN), "{mode}: {shown}");
+        assert!(
+            shown.contains("hidden because they could show a credential"),
+            "{mode}: {shown}"
+        );
+    }
+    // Stdout that isn't JSON declares nothing: the accepted flags apply, and with no secret set
+    // the excerpt is shown.
+    let env = env_with_open_token("invalid-json");
+    let failure = command_info(&fixture.call(CommandVerb::Info, None, &env)).expect_err("no JSON");
+    assert!(
+        format!("{failure:?}").contains("tickets: none"),
+        "{failure:?}"
+    );
+}
+
+#[test]
+fn a_non_secret_credential_leaves_stderr_shown_and_a_secret_hides_it() {
+    let fixture = Fixture::new();
+    let shown = env_with_open_token("error-stderr");
+    let failure =
+        run_command(&fixture.call(CommandVerb::Info, None, &shown)).expect_err("it exited 3");
+    assert_eq!(
+        failure.message("Fixture"),
+        format!("Fixture: can't reach the server with {TOKEN}")
+    );
+    let failure =
+        run_command(&fixture.call(CommandVerb::Info, None, &env("error-stderr"))).expect_err("3");
+    assert!(
+        failure
+            .message("Fixture")
+            .ends_with("is hidden because it could show a credential."),
+        "{}",
+        failure.message("Fixture")
+    );
+}
+
+#[test]
+fn a_secret_equal_to_or_inside_any_path_id_or_name_never_prints() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // Short, overlapping and three-character secrets, each also inside the texts below.
+    for secrets in [
+        vec!["b"],
+        vec!["bi"],
+        vec!["bin"],
+        vec!["fixt", "xture"],
+        vec!["ws-cmd"],
+        vec!["acme/app"],
+        vec!["token"],
+    ] {
+        let mut env = CommandEnv {
+            source_id: Some("fixture".to_string()),
+            workspace_id: "ws-cmd".to_string(),
+            project: Some(app_project()),
+            credentials: secrets
+                .iter()
+                .enumerate()
+                .map(|(index, value)| credential(&format!("token{index}"), value, true))
+                .collect(),
+        };
+        env.credentials
+            .push(credential("token", "the-token-value", true));
+        let missing = dir.path().join("usr/bin/fixture-token");
+        let input = detail_input("ACM-12");
+        let call = call_of(
+            &missing,
+            dir.path(),
+            CommandVerb::Detail,
+            Some(&input),
+            &env,
+        );
+        let failure = run_command(&call).expect_err("not found");
+        let batch = dir.path().join("bin/fixture.cmd");
+        let batch_failure =
+            command_for(&call_of(&batch, dir.path(), CommandVerb::Info, None, &env))
+                .expect_err("refused");
+        let printed = format!(
+            "{} {failure:?} {} {batch_failure:?} {call:?} {env:?}",
+            failure.message(&env.shown("Fixture")),
+            batch_failure.message(&env.shown("Fixture")),
+        );
+        for secret in &secrets {
+            let withheld = printed.contains("(message hidden: it could show a credential)");
+            let masked_everywhere = !printed.contains(secret);
+            assert!(masked_everywhere || withheld, "{secrets:?}: {printed}");
+            if secret.chars().count() >= 3 {
+                assert!(masked_everywhere, "{secrets:?}: {printed}");
+            }
+        }
+        assert!(!printed.contains("the-token-value"), "{printed}");
+        assert!(
+            !printed.contains("ACM-12\""),
+            "the input prints only as its size: {printed}"
+        );
+    }
+}
+
+/// A one-off program for a failing `info`: `script` is the shell after the shebang.
+fn script_of(dir: &Path, script: &str) -> PathBuf {
+    let program = dir.join("failing-info.sh");
+    std::fs::write(&program, format!("#!/bin/sh\n{script}\n")).expect("write script");
+    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    program
+}
+
+#[test]
+fn a_failing_info_masks_a_field_it_declares_secret_in_its_error_object() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let program = script_of(
+        dir.path(),
+        r#"printf '{"error":{"code":"auth","message":"rejected %s"},"credentials":[{"name":"token","label":"Token"}]}\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+exit 1"#,
+    );
+    let env = env_with_open_token("unused");
+    let failure = command_info(&call_of(
+        &program,
+        dir.path(),
+        CommandVerb::Info,
+        None,
+        &env,
+    ))
+    .expect_err("it exited 1");
+    let shown = format!("{} {failure:?}", failure.message("Fixture"));
+    assert!(!shown.contains(TOKEN), "{shown}");
+    assert_eq!(
+        failure.message("Fixture"),
+        "Fixture: rejected ••••. Check its credentials in Settings."
+    );
+}
+
+#[test]
+fn a_failing_info_hides_its_stderr_once_it_declares_a_field_secret() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let program = script_of(
+        dir.path(),
+        r#"printf '{"credentials":[{"name":"token","label":"Token"}]}\n'
+echo "can't reach the server with $GHOSTEX_CREDENTIAL_TOKEN" >&2
+exit 3"#,
+    );
+    let env = env_with_open_token("unused");
+    let failure = command_info(&call_of(
+        &program,
+        dir.path(),
+        CommandVerb::Info,
+        None,
+        &env,
+    ))
+    .expect_err("it exited 3");
+    let shown = format!("{} {failure:?}", failure.message("Fixture"));
+    assert!(!shown.contains(TOKEN), "{shown}");
+    assert!(
+        failure
+            .message("Fixture")
+            .ends_with("is hidden because it could show a credential."),
+        "{shown}"
+    );
+    // A `list` is not `info`: its stdout declares nothing, so the accepted flags apply.
+    let input = list_input(&[], None);
+    let list = run_command(&call_of(
+        &program,
+        dir.path(),
+        CommandVerb::OpenList,
+        Some(&input),
+        &env,
+    ))
+    .expect_err("it exited 3");
+    assert!(
+        list.message("Fixture").contains(TOKEN),
+        "{}",
+        list.message("Fixture")
     );
 }

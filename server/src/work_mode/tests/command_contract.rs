@@ -5,6 +5,31 @@ use serde_json::{json, Value};
 
 use super::*;
 
+// The parser with no secret set; the guarded paths are tested in `command_masking.rs`.
+fn parse_info(answer: &Value) -> Result<CommandInfo, String> {
+    super::parse_info(answer, &AnswerGuard::NONE)
+}
+
+fn parse_list(
+    answer: &Value,
+    format: IdFormat,
+    projects: &[CommandProject],
+) -> Result<CommandList, String> {
+    super::parse_list(answer, format, projects, &AnswerGuard::NONE)
+}
+
+fn parse_detail(
+    answer: &Value,
+    format: IdFormat,
+    projects: &[CommandProject],
+) -> Result<CommandDetail, String> {
+    super::parse_detail(answer, format, projects, &AnswerGuard::NONE)
+}
+
+fn parse_created(answer: &Value, format: IdFormat) -> Result<CommandCreated, String> {
+    super::parse_created(answer, format, &AnswerGuard::NONE)
+}
+
 fn info(changes: Value) -> Value {
     let mut info = json!({
         "id": "lific",
@@ -403,8 +428,10 @@ fn a_state_word_is_cut_and_a_branch_name_or_id_past_its_cap_is_dropped() {
     .unwrap();
     assert_eq!(parsed.state.chars().count(), 41, "40 and an ellipsis");
     assert_eq!(parsed.branch_name, None);
-    let kept = one_ticket(ticket(json!({ "branchName": "b".repeat(255) })), &[]).unwrap();
-    assert_eq!(kept.branch_name.map(|branch| branch.len()), Some(255));
+    let kept = one_ticket(ticket(json!({ "branchName": "b".repeat(200) })), &[]).unwrap();
+    assert_eq!(kept.branch_name.map(|branch| branch.len()), Some(200));
+    let too_long = one_ticket(ticket(json!({ "branchName": "b".repeat(201) })), &[]).unwrap();
+    assert_eq!(too_long.branch_name, None);
 
     let created = parse_created(
         &json!({ "id": "ACM-41", "branchName": "b".repeat(64 * 1024) }),
@@ -418,4 +445,79 @@ fn a_state_word_is_cut_and_a_branch_name_or_id_past_its_cap_is_dropped() {
     assert_eq!(IdFormat::KeyNumber.parse_ref(&long_id), None);
     let longest_id = format!("ACM-{}", "1".repeat(60));
     assert!(one_ticket(ticket(json!({ "id": longest_id })), &[]).is_ok());
+}
+
+#[test]
+fn a_branch_name_start_work_would_refuse_is_dropped() {
+    for refused in [
+        "--upload-pack=x",
+        "-b",
+        "café",
+        "a..b",
+        "a//b",
+        "a/",
+        "a b",
+        ".hidden",
+    ] {
+        let parsed = one_ticket(ticket(json!({ "branchName": refused })), &[]).unwrap();
+        assert_eq!(parsed.branch_name, None, "{refused}");
+        assert!(
+            !crate::server::is_allowed_worktree_branch(refused),
+            "{refused}"
+        );
+    }
+    let kept = one_ticket(ticket(json!({ "branchName": "ana/acm-12-spec" })), &[]).unwrap();
+    assert_eq!(kept.branch_name.as_deref(), Some("ana/acm-12-spec"));
+    let created = parse_created(
+        &json!({ "id": "ACM-41", "branchName": "--upload-pack=x" }),
+        IdFormat::KeyNumber,
+    )
+    .unwrap();
+    assert_eq!(created.branch_name, None);
+}
+
+#[test]
+fn a_time_longer_than_any_real_one_is_dropped_before_it_is_parsed() {
+    let longest = "2026-10-28T09:12:00.123456789+05:30";
+    let kept = one_ticket(ticket(json!({ "updatedAt": longest })), &[]).unwrap();
+    assert_eq!(kept.updated_at.as_deref(), Some(longest));
+    // Valid RFC 3339, with a fraction of a second a megabyte long.
+    let huge = format!("2026-10-28T09:12:00.{}Z", "1".repeat(1024 * 1024));
+    assert!(chrono::DateTime::parse_from_rfc3339(&huge).is_ok());
+    let dropped = one_ticket(ticket(json!({ "updatedAt": huge })), &[]).unwrap();
+    assert_eq!(dropped.updated_at, None);
+    let detail = parse_detail(
+        &ticket(json!({ "createdAt": format!("2026-10-28T09:12:00.{}Z", "1".repeat(64)) })),
+        IdFormat::KeyNumber,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(detail.fields["createdAt"], Value::Null);
+}
+
+#[test]
+fn a_name_label_or_placeholder_with_a_control_character_is_refused() {
+    for name in ["Two\nlines", "Tab\there", "Bell\u{7}"] {
+        assert_eq!(
+            parse_info(&info(json!({ "name": name }))),
+            Err("name has a line break or another control character".to_string()),
+            "{name:?}"
+        );
+    }
+    let field = |label: &str, placeholder: &str| {
+        info(json!({ "credentials": [
+            { "name": "token", "label": label, "placeholder": placeholder }
+        ] }))
+    };
+    assert_eq!(
+        parse_info(&field("API\ntoken", "x")),
+        Err("a credential label has a line break or another control character".to_string())
+    );
+    assert_eq!(
+        parse_info(&field("API token", "paste\rit")),
+        Err("a credential placeholder has a line break or another control character".to_string())
+    );
+    assert!(parse_info(&field("API token", "paste it here")).is_ok());
+    // Spaces around a value are trimmed, not refused.
+    assert!(parse_info(&info(json!({ "name": "  Fixture\n" }))).is_ok());
 }

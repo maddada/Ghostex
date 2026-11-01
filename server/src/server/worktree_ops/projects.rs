@@ -683,7 +683,7 @@ pub(crate) fn normalize_project_worktree_git_ref(
         .ok_or_else(|| {
             DomainStateError::bad_request(format!("{field} must be a non-empty string."))
         })?;
-    if value.len() <= 200 && is_allowed_project_git_ref(value) {
+    if is_allowed_worktree_branch(value) {
         Ok(value.to_string())
     } else {
         Err(DomainStateError::bad_request(format!(
@@ -749,6 +749,16 @@ pub(crate) fn normalize_project_slug_label(
         )));
     }
     Ok(normalized)
+}
+
+/// Longest Git ref a worktree is created on.
+const MAX_WORKTREE_REF_BYTES: usize = 200;
+
+/// Whether a worktree can be created on this branch or base ref: the rule Start work's branch
+/// meets when it creates the worktree, and the one a ticket source's `branchName` must meet to be
+/// kept, so a refused name never reaches Start work and the source can fall back to another one.
+pub(crate) fn is_allowed_worktree_branch(value: &str) -> bool {
+    value.len() <= MAX_WORKTREE_REF_BYTES && is_allowed_project_git_ref(value)
 }
 
 pub(crate) fn is_allowed_project_git_ref(value: &str) -> bool {

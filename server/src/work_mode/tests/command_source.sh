@@ -100,6 +100,30 @@ error-padded)
 	printf '{ "error": { "code": "auth", "message": "%s" } }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
 	exit 1
 	;;
+error-token)
+	# The credential without the spaces it was stored with.
+	token=$(printf '%s' "$GHOSTEX_CREDENTIAL_TOKEN" | sed 's/^ *//; s/ *$//')
+	printf 'rejected %s\n' "$token" >&2
+	printf '{ "error": { "code": "auth", "message": "rejected %s" } }\n' "$token"
+	exit 1
+	;;
+flip-secret)
+	# `token`, which the accepted info had as not secret, is declared secret by default now, and
+	# its value is in the name.
+	printf '{ "id": "fixture", "name": "Fixture %s", "ids": { "format": "number" }, "credentials": [ { "name": "token", "label": "API token" }, { "name": "mode", "label": "Mode", "secret": false } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+flip-secret-invalid)
+	# The same, in an answer the contract refuses: it has no `ids`.
+	printf '{ "id": "fixture", "name": "Fixture %s", "credentials": [ { "name": "token", "label": "API token" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+flip-secret-bad-label)
+	# The same, with a declaration whose label the contract refuses.
+	printf '{ "id": "fixture", "name": "Fixture %s", "ids": { "format": "number" }, "credentials": [ { "name": "token", "label": "API\\ntoken" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+blank-stderr)
+	printf '   \n\n' >&2
+	exit 3
+	;;
 info-padded)
 	printf '{ "id": "%s", "name": "X", "ids": { "format": "number" }, "credentials": [] }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
 	;;
