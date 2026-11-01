@@ -365,12 +365,12 @@ fn credential_field(field: &Value, guard: &AnswerGuard) -> Result<CredentialFiel
     })
 }
 
-/// Which of `known` (the fields that have a value) an `info` answer declares secret, read before
-/// the rest of the answer, or even the rest of each declaration, is checked: a declaration with a
-/// valid name counts with its `secret` (`true` when absent or not a boolean), whatever its label
-/// or placeholder say. The runner masks those fields in this very answer, so a field turning
-/// secret is never shown in the complaint that refuses the answer.
-pub(crate) fn credential_secrecy(answer: &Value, known: &[&str]) -> Vec<String> {
+/// Every field an `info` answer declares secret, with a value or without, read before the rest of
+/// the answer, or even the rest of each declaration, is checked: a declaration with a valid name
+/// counts with its `secret` (`true` when absent or not a boolean), whatever its label or
+/// placeholder say. The runner masks those that have a value in this very answer, so a field
+/// turning secret is never shown in the complaint that refuses the answer.
+pub(crate) fn declared_secret(answer: &Value) -> Vec<String> {
     answer
         .get("credentials")
         .and_then(Value::as_array)
@@ -380,8 +380,7 @@ pub(crate) fn credential_secrecy(answer: &Value, known: &[&str]) -> Vec<String> 
         .filter_map(|field| {
             let name = text(field, "name")?;
             let secret = field.get("secret").and_then(Value::as_bool).unwrap_or(true);
-            (secret && valid_credential_name(name) && known.contains(&name))
-                .then(|| name.to_string())
+            (secret && valid_credential_name(name)).then(|| name.to_string())
         })
         .collect()
 }

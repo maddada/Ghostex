@@ -27,7 +27,7 @@ const MASK: &str = "••••";
 /// A credential at least this long is masked where it appears. A shorter one is too: masking
 /// every `a` or `ab` would leave nothing readable, so a text that contains it is withheld whole
 /// (`WITHHELD`).
-const MIN_MASKED_IN_PLACE_CHARS: usize = 3;
+pub(crate) const MIN_MASKED_IN_PLACE_CHARS: usize = 3;
 const WITHHELD: &str = "(message hidden: it could show a credential)";
 /// A refused icon's reason once a credential is set: the reason quotes the icon's text, cut, so a
 /// mask could not find a long value in it.
@@ -217,11 +217,12 @@ impl CommandEnv {
         widened
     }
 
-    /// The names of the fields that have a value, which a candidate `info` may declare secret.
-    pub(crate) fn credential_names(&self) -> Vec<&str> {
+    /// The names of the fields with a value that are secret.
+    pub(crate) fn secret_names(&self) -> Vec<String> {
         self.credentials
             .iter()
-            .map(|credential| credential.name.as_str())
+            .filter(|credential| credential.secret)
+            .map(|credential| credential.name.clone())
             .collect()
     }
 
@@ -548,21 +549,88 @@ pub(crate) fn command_work_dir(
 
 /// Runs the call and returns its JSON answer.
 pub(crate) fn run_command(call: &CommandCall) -> Result<Value, CommandFailure> {
-    run_answer(call).map(|answer| answer.value)
+    Ok(run_answer(call)?.value)
 }
 
 /// A JSON answer and the stdout it was read from.
 struct Answer {
     value: Value,
     stdout: Vec<u8>,
-    /// For `info`: the environment widened with the secrets the answer itself declares.
-    info_env: Option<CommandEnv>,
+    /// For `info`: what the answer itself declares secret.
+    info: Option<InfoSecrecy>,
 }
 
-fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
+/// What an `info` answer declares secret, read before anything else in it is checked.
+struct InfoSecrecy {
+    /// The mask for this answer: the call's environment, with each field that has a value and
+    /// that the answer declares secret made secret too (the union of both).
+    env: CommandEnv,
+    /// Every field the answer declares secret, with a value or without.
+    declared_secret: Vec<String>,
+}
+
+/// A run that failed, and for `info` what its answer declares secret.
+struct RunFailure {
+    failure: CommandFailure,
+    info: Option<InfoSecrecy>,
+}
+
+impl From<CommandFailure> for RunFailure {
+    fn from(failure: CommandFailure) -> Self {
+        Self {
+            failure,
+            info: None,
+        }
+    }
+}
+
+impl From<RunFailure> for CommandFailure {
+    fn from(failed: RunFailure) -> Self {
+        failed.failure
+    }
+}
+
+/// A failed `info`, and the two sets of fields its answer makes secret (`run_answer`). Nothing
+/// that has a value turns secret after the failure's texts are built and cut. Its `Debug` prints
+/// the sets' sizes, never their names: a declared name can spell a credential.
+pub(crate) struct InfoFailure {
+    pub(crate) failure: CommandFailure,
+    /// The fields with a value its texts were masked as secret with: the accepted flags, plus
+    /// each field with a value that this answer declares secret.
+    pub(crate) masked_secret: Vec<String>,
+    /// Every field this answer declares secret, with a value or without; none when its stdout
+    /// isn't JSON. It may name fields the accepted info doesn't have; the store keeps only those
+    /// it has (`check_info`), and makes them secret.
+    pub(crate) declared_secret: Vec<String>,
+}
+
+impl std::fmt::Debug for InfoFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("InfoFailure")
+            .field("failure", &self.failure)
+            .field("masked_secret", &self.masked_secret.len())
+            .field("declared_secret", &self.declared_secret.len())
+            .finish()
+    }
+}
+
+impl InfoFailure {
+    fn new(failure: CommandFailure, call_env: &CommandEnv, info: Option<&InfoSecrecy>) -> Self {
+        Self {
+            failure,
+            masked_secret: info.map_or(call_env, |info| &info.env).secret_names(),
+            declared_secret: info
+                .map(|info| info.declared_secret.clone())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+fn run_answer(call: &CommandCall) -> Result<Answer, RunFailure> {
     // Not `metadata`: a Windows app execution alias launches fine but fails a followed `stat`.
     if !ghostex_paths::powershell::launchable(call.program) {
-        return Err(CommandFailure::NotFound(shown_path(call.env, call.program)));
+        return Err(CommandFailure::NotFound(shown_path(call.env, call.program)).into());
     }
     let command = command_for(call)?;
     let limits = RunLimits {
@@ -586,27 +654,34 @@ fn run_answer(call: &CommandCall) -> Result<Answer, CommandFailure> {
     // An `info` answer may declare secret a field the accepted info had as not secret. Its own
     // declarations widen the mask before anything it printed is read, whatever its exit status, so
     // a failing `info` can't show that value in its error object or on stderr either.
-    let info_env = (call.verb == CommandVerb::Info).then(|| info_env(call.env, &output.stdout));
-    let env = info_env.as_ref().unwrap_or(call.env);
-    if !output.status.success() {
-        return Err(exit_failure(&output, call.verb, env));
-    }
-    match parse_answer(&output.stdout) {
-        Ok(value) => Ok(Answer {
-            value,
-            stdout: output.stdout,
-            info_env,
-        }),
-        Err(what) => Err(unreadable(env, &what, &output.stdout)),
-    }
+    let info = (call.verb == CommandVerb::Info).then(|| info_secrecy(call.env, &output.stdout));
+    let env = info.as_ref().map_or(call.env, |info| &info.env);
+    let failure = if !output.status.success() {
+        exit_failure(&output, call.verb, env)
+    } else {
+        match parse_answer(&output.stdout) {
+            Ok(value) => {
+                return Ok(Answer {
+                    value,
+                    stdout: output.stdout,
+                    info,
+                })
+            }
+            Err(what) => unreadable(env, &what, &output.stdout),
+        }
+    };
+    Err(RunFailure { failure, info })
 }
 
-/// `env` with every field that has a value and that `info`'s stdout declares secret (the union of
-/// both); `env` as it is when stdout isn't JSON, which declares nothing.
-fn info_env(env: &CommandEnv, stdout: &[u8]) -> CommandEnv {
-    match parse_answer(stdout) {
-        Ok(answer) => env.with_secret(&credential_secrecy(&answer, &env.credential_names())),
-        Err(_) => env.clone(),
+/// What `info`'s stdout declares secret; nothing when it isn't JSON, so `env` stays as it is.
+fn info_secrecy(env: &CommandEnv, stdout: &[u8]) -> InfoSecrecy {
+    let declared_secret = parse_answer(stdout)
+        .map(|answer| declared_secret(&answer))
+        .unwrap_or_default();
+    InfoSecrecy {
+        // Only fields with a value are in `env`, so a declared field without one changes nothing.
+        env: env.with_secret(&declared_secret),
+        declared_secret,
     }
 }
 
@@ -615,11 +690,15 @@ fn info_env(env: &CommandEnv, stdout: &[u8]) -> CommandEnv {
 /// (`run_answer`): a field the accepted info had as not secret is then masked in this very answer,
 /// even when the rest of it is refused or the command failed. Then the whole answer, with the
 /// secrets of both. Stdout that isn't JSON declares nothing, so the accepted flags apply to it.
-pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, CommandFailure> {
-    let answer = run_answer(call)?;
-    let env = answer.info_env.as_ref().unwrap_or(call.env);
-    let mut info = parse_info(&answer.value, &AnswerGuard::new(env))
-        .map_err(|what| unreadable(env, &what, &answer.stdout))?;
+/// A failure carries out what its answer makes secret (`InfoFailure`).
+pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, InfoFailure> {
+    let answer = run_answer(call)
+        .map_err(|failed| InfoFailure::new(failed.failure, call.env, failed.info.as_ref()))?;
+    let secrecy = answer.info.as_ref();
+    let env = secrecy.map_or(call.env, |info| &info.env);
+    let mut info = parse_info(&answer.value, &AnswerGuard::new(env)).map_err(|what| {
+        InfoFailure::new(unreadable(env, &what, &answer.stdout), call.env, secrecy)
+    })?;
     if env.holds_secrets() {
         info.icon = info
             .icon

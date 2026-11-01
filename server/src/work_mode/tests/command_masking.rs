@@ -362,7 +362,7 @@ fn a_display_field_keeps_its_own_cap_while_a_secret_is_set() {
 }
 
 #[test]
-fn only_a_valid_known_name_marks_its_field_secret() {
+fn only_a_valid_name_declared_secret_counts() {
     let answer = json!({ "credentials": [
         { "name": "token", "label": "API\ntoken" },
         { "name": "mode", "secret": false },
@@ -371,11 +371,9 @@ fn only_a_valid_known_name_marks_its_field_secret() {
         { "name": "unknown" },
         "not an object",
     ] });
-    assert_eq!(
-        credential_secrecy(&answer, &["token", "mode", "url", "Bad-Name"]),
-        ["token", "url"]
-    );
-    assert!(credential_secrecy(&json!({ "credentials": "none" }), &["token"]).is_empty());
+    // A field without a value counts too (`unknown`): the record keeps its declaration.
+    assert_eq!(declared_secret(&answer), ["token", "url", "unknown"]);
+    assert!(declared_secret(&json!({ "credentials": "none" })).is_empty());
 }
 
 #[test]

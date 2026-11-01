@@ -43,6 +43,12 @@ EOF
 	create) printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "leandro/acm-41" }\n' ;;
 	esac
 	;;
+info-number)
+	printf '{ "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
+	;;
+info-renamed)
+	printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false } ] }\n'
+	;;
 bad-icon)
 	cat <<'EOF'
 { "id": "fixture", "name": "Fixture", "ids": { "format": "number" }, "credentials": [],
@@ -120,6 +126,11 @@ flip-secret-invalid)
 flip-secret-bad-label)
 	# The same, with a declaration whose label the contract refuses.
 	printf '{ "id": "fixture", "name": "Fixture %s", "ids": { "format": "number" }, "credentials": [ { "name": "token", "label": "API\\ntoken" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+mode-secret-invalid)
+	# `mode`, which the accepted info had as not secret, declared secret in an answer the contract
+	# refuses: it has no `ids`.
+	printf '{ "id": "fixture", "name": "Fixture", "credentials": [ { "name": "mode", "label": "Mode" } ] }\n'
 	;;
 blank-stderr)
 	printf '   \n\n' >&2
