@@ -18,6 +18,7 @@ use ghostex_gx_core::git_menu::DEFAULT_PROMPT_AGENT_ID;
 use serde_json::{Map, Value, json};
 
 use super::calls::{self, Remote};
+use super::export_transcript::HandoffCoordinator;
 use super::scope::GitScope;
 use crate::GhostexGpuiApp;
 use crate::app::gx_store::GxRpcError;
@@ -36,6 +37,19 @@ impl HudAgent {
             .as_deref()
             .is_some_and(|command| !command.trim().is_empty())
     }
+
+    /// The coordinator agent family (`COORDINATOR_AGENT_FAMILIES`), when this agent can run as a
+    /// coordinator.
+    pub(crate) fn coordinator_family(&self) -> Option<&'static str> {
+        let icon = self.icon.as_deref();
+        let id = Some(self.agent_id.as_str());
+        let family = ghostex_gx_core::default_agent_id_for_icon(icon)
+            .or_else(|| ghostex_gx_core::default_agent_id_for_icon(id))
+            .or(id)?;
+        ghostex_gx_chat_core::protocol::COORDINATOR_AGENT_FAMILIES
+            .into_iter()
+            .find(|supported| *supported == family)
+    }
 }
 
 /// What a started agent is for.
@@ -50,6 +64,7 @@ pub(crate) struct PromptAgentLaunch {
     pub(crate) agent_model: Option<String>,
     pub(crate) agent_effort: Option<String>,
     pub(crate) open_in_chat: bool,
+    pub(crate) coordinator: Option<HandoffCoordinator>,
     /// What the failure says when gxserver creates no session.
     pub(crate) missing_session_message: Option<&'static str>,
 }
@@ -190,6 +205,7 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Task<Result<SessionKey, String>> {
         let has_prompt = !launch.prompt.trim().is_empty();
+        let is_coordinator = launch.coordinator.is_some();
         let rename_title = if scope.is_remote() {
             None
         } else {
@@ -199,13 +215,25 @@ impl GhostexGpuiApp {
         if let Some(effort) = &launch.agent_effort {
             params.insert("agentEffort".into(), json!(effort));
         }
-        params.insert("agentId".into(), json!(agent.agent_id));
+        let launch_agent_id = match scope.is_remote() {
+            true => ghostex_gx_core::remote_launch_agent_id(
+                self.gx_store
+                    .runtime_facts
+                    .hud()
+                    .map(std::ops::Deref::deref),
+                &agent.agent_id,
+            ),
+            false => agent.agent_id.clone(),
+        };
+        params.insert("agentId".into(), json!(launch_agent_id));
         if let Some(model) = &launch.agent_model {
             params.insert("agentModel".into(), json!(model));
         }
         // CDXC:Drafts 2026-09-23 WHY: an initial prompt is still unsent until the durable startup
         // queue delivers it, so the new session is a draft while its input box starts.
-        if has_prompt || launch.first_user_input_draft.is_some() {
+        // A coordinator is never a draft (gx_store/create/coordinator.rs): `/ghostex-orchestrator`
+        // is queued on create, and a draft could switch agents before its first prompt.
+        if !is_coordinator && (has_prompt || launch.first_user_input_draft.is_some()) {
             params.insert("draft".into(), json!(true));
         }
         params.insert("projectId".into(), json!(scope.project_id()));
@@ -215,13 +243,24 @@ impl GhostexGpuiApp {
             true => None,
             false => Some(launch.prompt.as_str()),
         };
-        params.insert(
-            "runtimeSettings".into(),
-            self.git_first_prompt_title_runtime_settings(
-                first_message,
-                launch.first_user_input_draft.as_deref(),
-            ),
+        let mut runtime_settings = self.git_first_prompt_title_runtime_settings(
+            first_message,
+            launch.first_user_input_draft.as_deref(),
         );
+        if let Some(coordinator) = &launch.coordinator {
+            params.insert(
+                "coordinator".into(),
+                json!({
+                    "goal": coordinator.goal,
+                    "instructions": coordinator.instructions,
+                }),
+            );
+            if launch.title.is_none() {
+                params.insert("title".into(), json!("Coordinator"));
+                runtime_settings["titleSource"] = json!("placeholder");
+            }
+        }
+        params.insert("runtimeSettings".into(), runtime_settings);
         params.insert("surface".into(), json!("workspace"));
         if scope.is_remote() {
             params.insert("requireLaunchCommand".into(), json!(true));
@@ -257,6 +296,10 @@ impl GhostexGpuiApp {
             )
             .await
             .map_err(|error| error.message)?;
+            let role_error = created
+                .get("coordinatorRoleError")
+                .and_then(Value::as_str)
+                .map(str::to_string);
             let session_id = created
                 .pointer("/session/sessionId")
                 .and_then(Value::as_str)
@@ -278,12 +321,22 @@ impl GhostexGpuiApp {
             if key.machine.is_local() {
                 let focused = session.clone();
                 let _ = this.update(cx, |this, cx| {
+                    if let Some(message) = role_error.as_deref() {
+                        this.git_toast(
+                            ghostex_gx_core::git_menu::GitToastLevel::Warning,
+                            "Coordinator's skill not set up",
+                            super::toasts::ToastOptions::described(message),
+                            cx,
+                        );
+                    }
                     this.git_select_created_session(&focused, open_in_chat, cx);
                 });
                 // A promptless local create (Handoff / Export's follow-up) leaves the provider to
-                // the attach, as the old runtime did. A page has no attach.
+                // the attach, as the old runtime did. A coordinator starts here for its queued
+                // `/ghostex-orchestrator` prompt, and a page has no attach.
                 if !prompt.trim().is_empty()
                     || rename_command.is_some()
+                    || is_coordinator
                     || cfg!(target_arch = "wasm32")
                 {
                     start_and_send(remote, &session, rename_command, &prompt)
@@ -294,6 +347,14 @@ impl GhostexGpuiApp {
                 let started = start_and_send(remote, &session, None, &prompt).await;
                 let focused = session.clone();
                 let _ = this.update(cx, |this, cx| {
+                    if let Some(message) = role_error.as_deref() {
+                        this.git_toast(
+                            ghostex_gx_core::git_menu::GitToastLevel::Warning,
+                            "Coordinator's skill not set up",
+                            super::toasts::ToastOptions::described(message),
+                            cx,
+                        );
+                    }
                     if started.is_err() {
                         this.git_toast(
                             ghostex_gx_core::git_menu::GitToastLevel::Warning,

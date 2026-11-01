@@ -1255,7 +1255,9 @@ when you open it.
   the destination for next time. A remembered destination opens showing where it
   goes; one that's gone, or is the project you're handing off from, goes back to
   this project. Picking another agent's model in the model picker always starts
-  from this project on that model's agent.
+  from this project on that model's agent. Handing off an orchestrator starts the
+  new session as an orchestrator with the same Goal and Standing instructions when
+  the chosen agent supports orchestrators.
 - Drag a session onto another project in the Project sidebar to hand it over
   there: a session can't change project, so this starts a new session in that
   project with the conversation attached, the same way Handoff / Export does. The

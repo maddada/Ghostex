@@ -168,7 +168,42 @@ impl GhostexGpuiApp {
     ) {
         let session = SessionKey::local(message.project_id.as_str(), message.session_id.as_str());
         let terminal = self.web_surface_is_terminal(&session, message.preferred_interface);
-        self.web_open_session_in_work_area(session, terminal, cx);
+        self.web_open_session_in_work_area(session.clone(), terminal, cx);
+        if !terminal {
+            self.web_claim_session_chat_launch_draft(session, cx);
+        }
+    }
+
+    /// Claims a staged first-input draft (`firstUserInputDraft` from Handoff / Export) into the
+    /// session's chat box when the session opens in Chat (`request_session_chat_launch_draft` on
+    /// the desktop).
+    fn web_claim_session_chat_launch_draft(&mut self, session: SessionKey, cx: &mut Context<Self>) {
+        let params = serde_json::json!({
+            "projectId": session.project_id,
+            "sessionId": session.session_id,
+        });
+        cx.spawn(async move |this, cx| {
+            let Ok(result) =
+                crate::app::gx_store::gx_rpc(None, "/api/claimSessionChatLaunchDraft", params)
+                    .await
+            else {
+                return;
+            };
+            let content = result
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if content.is_empty() {
+                return;
+            }
+            let _ = this.update(cx, |this, cx| {
+                if let Some((_, view)) = this.native_chats.get(&session).cloned() {
+                    view.update(cx, |view, cx| view.append_prompt(&content, cx));
+                }
+            });
+        })
+        .detach();
     }
 
     /// Which surface a focused session opens on: a plain terminal has no chat to show; a known agent keeps the surface the page is on unless the focus asks for its chat; a session whose row has not arrived yet (a create) opens where the focus prefers.

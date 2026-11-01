@@ -22,6 +22,7 @@ use serde_json::{Value, json};
 use web_time::Instant;
 
 use super::calls;
+use super::export_transcript::HandoffCoordinator;
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
 use crate::app::window::{ExportTranscriptIncludeOptions, load_export_transcript_modal_prefs};
@@ -42,6 +43,7 @@ pub(crate) struct SessionHandoffRequest {
     pub(crate) agent_id: Option<String>,
     session_title: String,
     source_title: String,
+    is_coordinator: bool,
 }
 
 impl GhostexGpuiApp {
@@ -74,6 +76,7 @@ impl GhostexGpuiApp {
                 .filter(|title| !title.is_empty())
                 .unwrap_or_else(|| row.title.clone()),
             source_title: self.git_export_project_title(&drop.session.project_key()),
+            is_coordinator: row.coordinator_role.as_deref() == Some("coordinator"),
             session: drop.session,
             target: drop.target,
             target_title: drop.target_title,
@@ -133,6 +136,7 @@ impl GhostexGpuiApp {
         cx.spawn(async move |this, cx| {
             let session = &request.session;
             let mut exported = None;
+            let mut exported_coordinator = None;
             let mut created = None;
             let mut step = next_session_handoff_step(options, SessionHandoffOutcome::Confirmed);
             loop {
@@ -179,9 +183,10 @@ impl GhostexGpuiApp {
                         }
                     }
                     SessionHandoffStep::ExportTranscript => {
-                        match export_transcript(session, include).await {
-                            Ok(path) => {
+                        match export_transcript(session, include, request.is_coordinator).await {
+                            Ok((path, coordinator)) => {
                                 exported = Some(path);
+                                exported_coordinator = coordinator;
                                 SessionHandoffOutcome::Exported
                             }
                             Err(why) => SessionHandoffOutcome::ExportFailed(why),
@@ -189,8 +194,15 @@ impl GhostexGpuiApp {
                     }
                     SessionHandoffStep::StartSession => {
                         let path = exported.clone().unwrap_or_default();
+                        let coordinator = exported_coordinator.clone();
                         let started = this.update(cx, |this, cx| {
-                            this.git_start_session_handoff(&request, &agent_id, &path, cx)
+                            this.git_start_session_handoff(
+                                &request,
+                                &agent_id,
+                                &path,
+                                coordinator,
+                                cx,
+                            )
                         });
                         let started = match started {
                             Ok(Ok(task)) => task.await,
@@ -264,6 +276,7 @@ impl GhostexGpuiApp {
         request: &SessionHandoffRequest,
         agent_id: &str,
         path: &str,
+        coordinator: Option<HandoffCoordinator>,
         cx: &mut gpui::Context<Self>,
     ) -> Result<gpui::Task<Result<SessionKey, String>>, String> {
         let agent = self
@@ -281,6 +294,7 @@ impl GhostexGpuiApp {
                 &request.session_title,
                 &request.source_title,
             ),
+            coordinator,
             None,
             cx,
         ))
@@ -291,7 +305,8 @@ impl GhostexGpuiApp {
 async fn export_transcript(
     session: &SessionKey,
     include: ExportTranscriptIncludeOptions,
-) -> Result<String, String> {
+    is_coordinator: bool,
+) -> Result<(String, Option<HandoffCoordinator>), String> {
     let answer = calls::call(
         None,
         "/api/exportSessionTranscript",
@@ -306,10 +321,14 @@ async fn export_transcript(
     )
     .await
     .map_err(|error| error.message)?;
-    answer
+    let path = answer
         .get("path")
         .and_then(Value::as_str)
         .filter(|path| !path.trim().is_empty())
         .map(str::to_string)
-        .ok_or_else(|| "gxserver did not return the exported file.".to_string())
+        .ok_or_else(|| "gxserver did not return the exported file.".to_string())?;
+    Ok((
+        path,
+        HandoffCoordinator::from_export_answer(&answer, is_coordinator),
+    ))
 }

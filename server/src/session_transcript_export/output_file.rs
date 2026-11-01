@@ -160,14 +160,18 @@ pub(crate) async fn handle_export_session_transcript_http(
                 code: "notFound",
                 message: "The session no longer exists.".to_string(),
             })?;
+        let coordinator = crate::coordinators::read_coordinator(&db, &project_id, &session_id)
+            .ok()
+            .flatten();
         Ok::<_, DomainStateError>((
             session_chat_agent_for_session(&session),
             read_runtime_text(&session, "agentSessionId"),
             read_runtime_text(&session, "agentSessionPath"),
             read_session_text(&session, "title"),
+            coordinator,
         ))
     })();
-    let (agent, agent_session_id, agent_session_path, title) = match resolved {
+    let (agent, agent_session_id, agent_session_path, title, coordinator) = match resolved {
         Ok(resolved) => resolved,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
@@ -238,6 +242,15 @@ pub(crate) async fn handle_export_session_transcript_http(
     result.insert("parsedEntries".to_string(), json!(outcome.parsed_entries));
     if let Some(agent) = response_agent.as_deref() {
         result.insert("agent".to_string(), json!(agent));
+    }
+    if let Some(coordinator) = coordinator {
+        result.insert(
+            "coordinator".to_string(),
+            json!({
+                "goal": coordinator.goal,
+                "instructions": coordinator.instructions,
+            }),
+        );
     }
     if include_markdown {
         let path = outcome.path.clone();
