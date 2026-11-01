@@ -232,6 +232,7 @@ impl NativeChatView {
                         choice,
                         shortcut,
                         snapshot["questionCard"]["busy"] == true,
+                        rate_limit,
                         Some(json!({"type":"answer","answer":choice["answer"]})),
                         None,
                         p,
@@ -269,6 +270,7 @@ impl NativeChatView {
                     &json!({"title": notice["more"]["label"], "detail": notice["more"]["detail"]}),
                     None,
                     false,
+                    rate_limit,
                     None,
                     Some(Box::new(move |this: &mut Self, cx: &mut Context<Self>| {
                         this.expanded.insert(toggle_key.clone());

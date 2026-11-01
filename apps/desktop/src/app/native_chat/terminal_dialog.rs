@@ -58,6 +58,7 @@ impl NativeChatView {
         choice: &Value,
         shortcut: Option<String>,
         disabled: bool,
+        regular_label: bool,
         answer: Option<Value>,
         on_more: Option<Box<dyn Fn(&mut Self, &mut Context<Self>)>>,
         p: &ChatAppearance,
@@ -160,7 +161,12 @@ impl NativeChatView {
                                     .truncate()
                                     .text_size(px(14.0 * s))
                                     .line_height(px(19.25 * s))
-                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    // CDXC:SessionChat 2026-11-01 DECISION: User wants the usage limit choices at normal chat weight while the card title stays bold. Other numbered dialog choices keep their weight.
+                                    .font_weight(if regular_label {
+                                        gpui::FontWeight::NORMAL
+                                    } else {
+                                        gpui::FontWeight::SEMIBOLD
+                                    })
                                     .child(title.clone()),
                             )
                             .when(!suffix.is_empty(), |line| {
