@@ -1497,7 +1497,8 @@ fn build_after(
         false,
     );
     let worked_turn = latest_worked_turn(&projection.items, working);
-    let minimap = if minimap_shows(settled.summary_turns() + projection.summary_turns.len()) {
+    // The rail counts its dashes, not the turns: a turn the user did not open gets none.
+    let minimap = {
         let turns: Vec<_> = projection
             .summary_turns
             .iter()
@@ -1512,9 +1513,11 @@ fn build_after(
             &turns,
             &item_index(&items, settled.item_count()),
         ));
-        rows
-    } else {
-        Vec::new()
+        if minimap_shows(rows.len()) {
+            rows
+        } else {
+            Vec::new()
+        }
     };
     // The call an approval waits on is the newest one: in the stretch, or the prefix has to be
     // built with the mark.
