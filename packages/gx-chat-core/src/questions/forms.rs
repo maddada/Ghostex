@@ -17,7 +17,7 @@ use crate::document::QuestionDraft;
 use crate::effect::Effect;
 use crate::event::StorageKey;
 use crate::questions::drafts::{decode_drafts, encode_drafts, form_drafts_key, AnswerDrafts};
-use crate::state::{ChatContext, ChatState, FormSend, FormState};
+use crate::state::{ChatContext, ChatState, FormSend, FormState, PendingSend};
 use crate::transcript::question_forms::{
     answers_message, notes_key, takes_notes, QuestionForm, NOTE_SUFFIX, OTHER_CHOICE, SKIPPED,
 };
@@ -46,6 +46,18 @@ fn received_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a Value> {
         .find(|answers| answers.page_id == id)
         .or_else(|| crate::questions::resource_modal::fetched_answers(state, id))
         .map(|answers| &answers.answers)
+        .or_else(|| {
+            let entry = state
+                .questions
+                .forms
+                .get(id)
+                .filter(|entry| entry.confirmed)?;
+            entry
+                .send
+                .as_ref()
+                .map(|send| &send.answers)
+                .or(entry.sent.as_ref())
+        })
 }
 
 /// Whether the reader can still change the form. It never waits for the saved picks: the rows
@@ -74,6 +86,8 @@ pub fn reopen_after_removed_answers(state: &mut ChatState, queued_prompt_id: &st
     if let Some(entry) = page.and_then(|page| state.questions.forms.get_mut(&page)) {
         entry.sent = None;
         entry.sent_waiting_for_idle = false;
+        entry.confirmation_boundary = None;
+        entry.confirmed = false;
         state.core.request_publish();
     }
 }
@@ -343,8 +357,31 @@ fn send_answers(
         },
         params: Box::new(params.clone()),
     };
+    let last_message = state.messages.list.last();
+    let boundary = PendingSend {
+        sent_at_ms: context.now_millis(),
+        after_message_id: last_message.map(|message| message.id.clone()),
+        after_message_timestamp: last_message.map_or(Some(i64::MIN), |message| message.timestamp),
+        // A bounded replacement can bring an earlier confirmed answer back after the boundary
+        // row has left; it must not hide an identical, genuinely new send.
+        matching_occurrence: state.questions.forms.get(id).and_then(|form| {
+            let used = form.confirmed_message_ids.len()
+                + form
+                    .confirmed_queue_answers
+                    .iter()
+                    .filter(|(_, value, row)| {
+                        *value == answers && !form.confirmed_message_ids.contains(row)
+                    })
+                    .count();
+            (used != 0).then(|| u32::try_from(used).unwrap_or(u32::MAX).saturating_add(1))
+        }),
+        ..PendingSend::default()
+    };
     if let Some(entry) = state.questions.forms.get_mut(id) {
         entry.error = None;
+        entry.confirmation_boundary = Some(boundary);
+        entry.confirmed = false;
+        entry.queued_prompt_id = None;
         entry.send = Some(FormSend {
             request_id,
             answers,
@@ -386,6 +423,15 @@ pub fn rpc_settled(
     match outcome {
         // The saved picks stay until the transcript carries the answers (`sync`).
         RpcOutcome::Ok { result } => {
+            let queued_prompt_id = result
+                .get("queuedPromptId")
+                .and_then(Value::as_str)
+                .or_else(|| {
+                    sent.queue_until_idle
+                        .then(|| result.pointer("/prompt/id").and_then(Value::as_str))
+                        .flatten()
+                })
+                .filter(|prompt_id| !prompt_id.is_empty());
             if !sent.queue_until_idle {
                 // The normal send may reach a busy agent's own input before its transcript
                 // records it. Keep the optimistic answers card through that interval.
@@ -403,6 +449,44 @@ pub fn rpc_settled(
             if let Some(entry) = state.questions.forms.get_mut(&id) {
                 entry.sent = Some(sent.answers);
                 entry.sent_waiting_for_idle = sent.queue_until_idle;
+                if let Some(prompt_id) = queued_prompt_id {
+                    entry.queued_prompt_id = Some(prompt_id.to_string());
+                    crate::session::answer_echoes::remember_current_receipt(entry);
+                }
+            }
+            if let Some(prompt_id) = queued_prompt_id {
+                let mut detached = None;
+                if let Some(echo) = state.pending.sends.iter_mut().find(|echo| {
+                    echo.id == format!("answers:{id}")
+                        && echo.queued_prompt_id.as_deref() != Some(prompt_id)
+                }) {
+                    // The queue broadcast may have paired an identical, different send first.
+                    // Keep its receipt even if it has already left the queue.
+                    if let Some(other_id) = echo.queued_prompt_id.as_deref() {
+                        let mut other = echo.clone();
+                        other.id = format!("startup:{other_id}");
+                        other.matching_occurrence =
+                            Some(other.matching_occurrence.unwrap_or(1).saturating_add(1));
+                        detached = Some(other);
+                    }
+                    echo.queued_prompt_id = Some(prompt_id.to_string());
+                    echo.left_queue_at_ms = None;
+                    if let Some(delivery) = echo.startup_delivery.as_mut() {
+                        delivery.prompt_id = prompt_id.to_string();
+                        delivery.state = "sending".to_string();
+                        delivery.error_message = None;
+                        delivery.wait_reason = None;
+                    }
+                }
+                if let Some(other) = detached.filter(|other| {
+                    !state
+                        .pending
+                        .sends
+                        .iter()
+                        .any(|entry| entry.queued_prompt_id == other.queued_prompt_id)
+                }) {
+                    state.pending.sends.push(other);
+                }
             }
             // The queue answers with its whole new strip, which carries the answers' row: the card
             // the send drew keeps its place instead of waiting for the queue's broadcast.
@@ -799,7 +883,8 @@ mod canceled_tests {
             "blocks": [{"type": "text", "text": answer_text}],
         }))
         .unwrap();
-        crate::session::answer_echoes::settle(&mut state, &context, &[recorded]);
+        state.messages.replace_list(&[recorded]);
+        crate::session::settle::before_compose(&mut state, &context);
         assert!(
             state.pending.sends.is_empty(),
             "transcript replaces the card"

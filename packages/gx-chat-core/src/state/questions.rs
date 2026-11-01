@@ -10,6 +10,7 @@
 use crate::document::QuestionDraft;
 use crate::questions::drafts::AnswerDrafts;
 use crate::questions::notice_state::DismissedNotice;
+use crate::state::PendingSend;
 
 /// What the question and notice surfaces remember between frames.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -84,6 +85,8 @@ pub struct QuestionsState {
     // ---- question forms ---------------------------------------------------
     /// The reader's side of each ```questions form, by form id (`crate::questions::forms`).
     pub forms: std::collections::BTreeMap<String, FormState>,
+    /// The real answer rows and send boundaries in the current loaded transcript.
+    pub form_answer_index: crate::session::answer_echoes::AnswerIndex,
 
     // ---- unanswered questions --------------------------------------------
     /// The Previous question pill's place and the last jump (`crate::questions::open_questions`).
@@ -116,6 +119,19 @@ pub struct FormState {
     pub send: Option<FormSend>,
     /// The answers accepted for delivery, which the form shows until the transcript carries them.
     pub sent: Option<serde_json::Value>,
+    /// The transcript boundary frozen at the start of the current send.
+    pub confirmation_boundary: Option<PendingSend>,
+    /// The current send's answers appeared in the transcript.
+    pub confirmed: bool,
+    /// Rows used by earlier confirmations, so a new send needs its own transcript row.
+    pub confirmed_message_ids: Vec<String>,
+    /// The queue receipt returned for the current send, when it took the queue path.
+    pub queued_prompt_id: Option<String>,
+    /// Confirmed queue receipts: queue id, answers, and the real transcript row that recorded them.
+    pub confirmed_queue_answers: Vec<(String, serde_json::Value, String)>,
+    /// Per receipt: latest queue update time, failure state, retry occurrence, and answer text.
+    pub queue_receipt_versions:
+        std::collections::BTreeMap<String, (i64, bool, Option<u32>, String)>,
     /// Whether an accepted answer is still held in gxserver's queue.
     pub sent_waiting_for_idle: bool,
     /// Why the last send was refused.

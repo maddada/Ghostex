@@ -41,7 +41,10 @@ pub fn match_key(entry: &PendingSend) -> String {
     )
 }
 
-fn message_is_after_pending_timestamp(message: &ChatMessage, pending: &PendingSend) -> bool {
+pub(crate) fn message_is_after_pending_timestamp(
+    message: &ChatMessage,
+    pending: &PendingSend,
+) -> bool {
     let Some(stamp) = message.timestamp else {
         // Some transcripts (Grok) never carry timestamps; excluding them would strand a
         // rank-pinned bubble at the list tail forever.

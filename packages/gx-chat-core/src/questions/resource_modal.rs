@@ -245,6 +245,11 @@ pub fn rpc_settled(
                     "Ghostex could not find those questions in the transcript.".to_string()
                 });
             }
+            crate::session::answer_echoes::observe_rows(
+                &mut state.questions.forms,
+                &messages,
+                &state.pending.sends,
+            );
         }
         RpcOutcome::Err { message, .. } => {
             modal.missing = Some(if message.trim().is_empty() {
