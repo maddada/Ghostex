@@ -60,7 +60,7 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
                 "checked": picked.contains(&option.key),
                 "command": {"type": "unifiedFilter", "kind": kind, "key": option.key},
             });
-            // On its own line: the rows are tall enough, and the machines' names no longer get cut.
+            // On its own line, in a row just tall enough for both, so the machines' names don't get cut.
             if let Some(detail) = &option.detail {
                 item["detail"] = Value::String(detail.clone());
             }
@@ -137,7 +137,7 @@ fn filter_label(unified: &UnifiedSidebarSnapshot) -> String {
 
 impl GhostexGpuiApp {
     /// CDXC:Sidebar 2026-10-31 DECISION:
-    /// User (2026-10-30): "please make the sidebar filter in unified sidebar mode not take all the height like it does now". The filter menu is a dropdown: hung under the filter button with its left edge on the button's, shrinking to fit a short list, and its rows scroll inside it with the bar showing only while they scroll. Pressing the button again closes it. Its rows have since grown to a session card's height, which leaves about four at the app's usual dropdown height, so its tallest is three quarters of the window (`filter_menu_max_height`): still not all of it, and never past the room left below it. This supersedes `TITLEBAR_POPUP_MENU_MAX_HEIGHT` for this menu.
+    /// User (2026-10-30): "please make the sidebar filter in unified sidebar mode not take all the height like it does now". The filter menu is a dropdown: hung under the filter button with its left edge on the button's, shrinking to fit a short list, and its rows scroll inside it with the bar showing only while they scroll. Pressing the button again closes it. With a hundred projects the app's usual dropdown height showed too few of them, so its tallest is three quarters of the window (`filter_menu_max_height`): still not all of it, and never past the room left below it. This supersedes `TITLEBAR_POPUP_MENU_MAX_HEIGHT` for this menu.
     pub(super) fn show_unified_filter_menu(
         menu: &Value,
         owner: Option<gpui::Bounds<gpui::Pixels>>,

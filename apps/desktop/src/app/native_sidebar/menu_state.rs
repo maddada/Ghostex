@@ -52,6 +52,10 @@ pub(crate) const SIDEBAR_MENU_SEARCH_HEIGHT: f32 = 40.0;
 
 /// A sidebar menu row's height, before the zoom.
 pub(crate) const SIDEBAR_MENU_ROW_HEIGHT: f32 = 34.0;
+/// A searchable menu's row with a detail line under its label: the two lines and a little room.
+pub(crate) const SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT: f32 = 44.0;
+pub(crate) const SIDEBAR_MENU_HEADING_HEIGHT: f32 = 24.0;
+pub(crate) const SIDEBAR_MENU_SEPARATOR_HEIGHT: f32 = 13.0;
 
 /// How long a row's armed Remove button waits for its second click.
 pub(crate) const SIDEBAR_MENU_ARM_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(4);
@@ -221,26 +225,23 @@ impl SidebarMenuPanel {
         });
     }
 
-    /// A selectable row's height, before the zoom. A searchable menu (the Unified filter dropdown)
-    /// lists like the Unified sidebar's session cards, so it shares their height and gap and
-    /// follows them. The other sidebar menus keep their own.
+    /// A row's height, before the zoom: a separator's, a heading's, or a selectable row's.
     ///
-    /// CDXC:Sidebar 2026-10-31 DECISION:
-    /// User: "please make the height of the projects in the list here match the height of the sessions in the sidebar and make the buttons same height and width", then, asked which sessions: "Match Unified's tall cards". Rows take the height of a full card (`UNIFIED_CARD_HEIGHT`, the most common one), and the X the size of a card's hover buttons. Headings, separators and the search field keep their own heights.
-    pub(crate) fn row_height(&self) -> f32 {
-        if self.search.is_some() {
-            super::unified::UNIFIED_CARD_HEIGHT
+    /// CDXC:Sidebar 2026-11-01 DECISION:
+    /// User, after the Unified filter dropdown's rows were made as tall as a session card: "wtf did you do with the height of the filter buttons here??? please fix! Each button's height needs to fit". Each row fits its own content: a one-line row is a compact menu row, as in the sidebar's other menus, and a row with a detail line (a project's machines, a remote Space's machine) gets just the height of its two lines. The X keeps a session row's hover button size. This supersedes the 2026-10-31 rule that matched rows to a Unified card. Other sidebar menus keep their rows as they were.
+    pub(crate) fn item_height(&self, item: &Value) -> f32 {
+        if item["separator"] == true {
+            SIDEBAR_MENU_SEPARATOR_HEIGHT
+        } else if item["heading"] == true {
+            SIDEBAR_MENU_HEADING_HEIGHT
+        } else if self.search.is_some()
+            && item["detail"]
+                .as_str()
+                .is_some_and(|detail| !detail.is_empty())
+        {
+            SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT
         } else {
             SIDEBAR_MENU_ROW_HEIGHT
-        }
-    }
-
-    /// The gap between rows, before the zoom.
-    pub(crate) fn row_gap(&self) -> f32 {
-        if self.search.is_some() {
-            super::unified::UNIFIED_CARD_GAP
-        } else {
-            0.0
         }
     }
 
@@ -443,19 +444,10 @@ impl SidebarMenuPanel {
                         .search
                         .as_ref()
                         .map_or(0.0, |_| SIDEBAR_MENU_SEARCH_HEIGHT)
-                    + self.row_gap() * self.items.len().saturating_sub(1) as f32
                     + self
                         .items
                         .iter()
-                        .map(|item| {
-                            if item["separator"] == true {
-                                13.0
-                            } else if item["heading"] == true {
-                                24.0
-                            } else {
-                                self.row_height()
-                            }
-                        })
+                        .map(|item| self.item_height(item))
                         .sum::<f32>())
                     * scale,
             )
@@ -940,34 +932,31 @@ mod tests {
     }
 
     #[test]
-    fn the_filter_dropdowns_rows_are_a_cards_height_and_other_menus_keep_theirs() {
+    fn a_row_fits_its_content_and_other_menus_keep_theirs() {
         let panel = searchable();
+        let one_line = row_labelled(&panel, "My Apps");
+        let two_lines = row_labelled(&panel, "Ghostex");
+        assert_eq!(panel.item_height(&one_line), SIDEBAR_MENU_ROW_HEIGHT);
         assert_eq!(
-            panel.row_height(),
-            crate::app::native_sidebar::unified::UNIFIED_CARD_HEIGHT
-        );
-        assert_eq!(
-            panel.row_gap(),
-            crate::app::native_sidebar::unified::UNIFIED_CARD_GAP
+            panel.item_height(&two_lines),
+            SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT
         );
         let other = SidebarMenuPanel::new(
-            vec![serde_json::json!({"label": "Rename"})],
+            vec![serde_json::json!({"label": "Agent", "detail": "Account"})],
             Point::default(),
         );
-        assert_eq!(other.row_height(), SIDEBAR_MENU_ROW_HEIGHT);
-        assert_eq!(other.row_gap(), 0.0);
+        assert_eq!(other.item_height(&other.items[0]), SIDEBAR_MENU_ROW_HEIGHT);
     }
 
     #[test]
-    fn the_panels_height_counts_the_field_the_rows_and_their_gaps() {
+    fn the_panels_height_counts_the_field_and_each_rows_own_height() {
         let mut panel = searchable();
-        panel.search_key(&typed("m"));
-        panel.search_key(&typed("y"));
-        // Spaces, My Apps, a separator, Projects, my-apps.
-        let card = crate::app::native_sidebar::unified::UNIFIED_CARD_HEIGHT;
-        let rows = 24.0 + card + 13.0 + 24.0 + card;
-        let gaps = 4.0 * crate::app::native_sidebar::unified::UNIFIED_CARD_GAP;
-        let expected = 14.0 + SIDEBAR_MENU_SEARCH_HEIGHT + rows + gaps;
+        panel.search_key(&typed("a"));
+        panel.search_key(&typed("c"));
+        panel.search_key(&typed("t"));
+        // Spaces, then Active with its machine on a second line.
+        let rows = SIDEBAR_MENU_HEADING_HEIGHT + SIDEBAR_MENU_TWO_LINE_ROW_HEIGHT;
+        let expected = 14.0 + SIDEBAR_MENU_SEARCH_HEIGHT + rows;
         assert_eq!(
             panel.bounds(sidebar(1000.0), 1.0, false).size.height,
             px(expected)

@@ -118,16 +118,7 @@ const CARD_TITLE_LINE: f32 =
     crate::app::native_sidebar::appearance::SIDEBAR_TEXT_SIZE * std::f32::consts::GOLDEN_RATIO;
 const CARD_META_LINE: f32 = 17.0;
 /// The space under a card, before the next one.
-pub(crate) const UNIFIED_CARD_GAP: f32 = 2.0;
-/// A card with its project, title and branch lines, before the zoom. Most cards are this one; a
-/// card with no branch or pull request drops the last line, and one under a project's header in
-/// Group by Project drops the first.
-pub(crate) const UNIFIED_CARD_HEIGHT: f32 = CARD_PADDING_Y * 2.0
-    + CARD_PROJECT_LINE
-    + CARD_LINE_GAP
-    + CARD_TITLE_LINE
-    + CARD_LINE_GAP
-    + CARD_META_LINE;
+const CARD_GAP: f32 = 2.0;
 
 /// Whether project icons show, as the Project sidebar's headers follow it.
 pub(super) fn show_project_icons(hud: &Value) -> bool {
@@ -473,7 +464,7 @@ impl GhostexGpuiApp {
         let card_row = self.unified_row_interactions(card_row, card, cx);
         div()
             .w_full()
-            .pb(px(UNIFIED_CARD_GAP * scale))
+            .pb(px(CARD_GAP * scale))
             .px(px(3.0 * scale))
             .child(if tooltips {
                 card_row
@@ -495,17 +486,6 @@ impl GhostexGpuiApp {
                 card_row.into_any_element()
             })
             .into_any_element()
-    }
-}
-
-#[cfg(test)]
-mod height_tests {
-    use super::*;
-
-    #[test]
-    fn a_full_card_is_its_three_lines_with_their_gaps_and_padding() {
-        // 14 padding, 18 project, 25.16 title, 17 branch, 6 gaps. The list draws these at 80px.
-        assert!((UNIFIED_CARD_HEIGHT - 80.16).abs() < 0.01);
     }
 }
 

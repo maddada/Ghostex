@@ -2,8 +2,8 @@ use super::{
     actions::NativeSidebarAction,
     hover_actions::{SESSION_HOVER_BUTTON, SESSION_HOVER_ICON},
     menu_state::{
-        SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT, SidebarMenuPanel,
-        SidebarMenuPlacement, SidebarMenuState,
+        SIDEBAR_MENU_ARM_TIMEOUT, SIDEBAR_MENU_SEARCH_HEIGHT, SIDEBAR_MENU_SEPARATOR_HEIGHT,
+        SidebarMenuPanel, SidebarMenuPlacement, SidebarMenuState,
     },
 };
 use crate::app::window::native_modal_kit::modal_typed_filter_field;
@@ -780,8 +780,6 @@ impl GhostexGpuiApp {
                 .as_ref()
                 .map_or(0.0, |_| SIDEBAR_MENU_SEARCH_HEIGHT);
             let searchable = panel.search.is_some();
-            let row_height = panel.row_height();
-            let row_gap = panel.row_gap();
             let mut content = v_flex()
                 .on_children_prepainted(measure_menu_panel(
                     view.clone(),
@@ -803,7 +801,6 @@ impl GhostexGpuiApp {
                 .track_scroll(&panel.scroll)
                 .occlude()
                 .p(px(6.0 * scale))
-                .gap(px(row_gap * scale))
                 .when(!searchable, |content| {
                     content
                         .rounded(px(8.0 * scale))
@@ -832,7 +829,7 @@ impl GhostexGpuiApp {
                                     .bg(titlebar_popup_menu_border_color()),
                             ),
                     );
-                    offset += 13.0 + row_gap;
+                    offset += SIDEBAR_MENU_SEPARATOR_HEIGHT;
                     continue;
                 }
                 let label = item["label"].as_str().unwrap_or_default().to_owned();
@@ -867,6 +864,7 @@ impl GhostexGpuiApp {
                 let heading = item["heading"] == true;
                 let selected = panel.selected == Some(item_index);
                 let confirm = item["secondary"]["confirm"] == true;
+                let row_height = panel.item_height(item);
                 let row_bounds = Bounds {
                     origin: Point::new(bounds.left(), bounds.top() + px(offset * scale)),
                     size: gpui::size(bounds.size.width, px(row_height * scale)),
@@ -875,7 +873,7 @@ impl GhostexGpuiApp {
                     h_flex()
                         .id(format!("native-menu-item-{panel_index}-{item_index}"))
                         .w_full()
-                        .min_h(px(if heading { 24.0 } else { row_height } * scale))
+                        .min_h(px(row_height * scale))
                         .flex_shrink_0()
                         .px(px(10.0 * scale))
                         .gap(px(8.0 * scale))
@@ -1114,7 +1112,7 @@ impl GhostexGpuiApp {
                             );
                         })),
                 );
-                offset += if heading { 24.0 } else { row_height } + row_gap;
+                offset += row_height;
             }
             // The bar shows only while the rows scroll, like the agent picker's (new_thread_picker.rs).
             let scrollbar = Scrollbar::vertical(&panel.scroll)
@@ -1281,20 +1279,17 @@ impl GhostexGpuiApp {
                         panel.bounds(app.native_sidebar.bounds, menu.scale, panel_index > 0);
                     let y = panel.items[..index]
                         .iter()
-                        .map(|item| {
-                            if item["separator"] == true {
-                                13.0
-                            } else {
-                                panel.row_height()
-                            }
-                        })
+                        .map(|item| panel.item_height(item))
                         .sum::<f32>();
                     let row_bounds = Bounds {
                         origin: Point::new(
                             bounds.left(),
                             bounds.top() + px((6.0 + y) * menu.scale),
                         ),
-                        size: gpui::size(bounds.size.width, px(panel.row_height() * menu.scale)),
+                        size: gpui::size(
+                            bounds.size.width,
+                            px(panel.item_height(&panel.items[index]) * menu.scale),
+                        ),
                     };
                     app.activate_native_sidebar_menu_item(
                         panel_index,
