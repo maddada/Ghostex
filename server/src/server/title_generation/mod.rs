@@ -11,6 +11,7 @@ mod manual_title;
 mod project_status_titles;
 mod rename_confirmation;
 mod title_command;
+mod title_preview;
 
 pub(crate) use codex_fallback::*;
 pub(crate) use first_input_draft::*;
@@ -21,5 +22,6 @@ pub(crate) use manual_title::*;
 pub(crate) use project_status_titles::*;
 pub(crate) use rename_confirmation::*;
 pub(crate) use title_command::*;
+pub(crate) use title_preview::*;
 
 use super::*;

@@ -61,7 +61,7 @@ pub(crate) fn chat_setting_number(paths: &GxserverPaths, key: &str) -> Option<f6
     read_settings(paths).get(key).and_then(Value::as_f64)
 }
 
-fn read_settings(paths: &GxserverPaths) -> Value {
+pub(crate) fn read_settings(paths: &GxserverPaths) -> Value {
     crate::shared_settings_file::read_shared_settings(paths).unwrap_or(Value::Null)
 }
 
@@ -272,7 +272,10 @@ async fn catch_up(state: &AppState, body: &Value) -> Result<Value, DomainStateEr
 /// The Title Generation Agent and its command: the setting first, then what the session was
 /// created with; a session's own resolved command (a wrapper, a profile) is kept when it is for
 /// the same agent.
-fn summary_agent(settings: &Value, session: &Value) -> Result<(String, String), DomainStateError> {
+pub(crate) fn summary_agent(
+    settings: &Value,
+    session: &Value,
+) -> Result<(String, String), DomainStateError> {
     let session_agent = read_runtime_text(session, "firstPromptTitleGenerationAgent");
     let agent = normalize_title_generation_agent(
         settings

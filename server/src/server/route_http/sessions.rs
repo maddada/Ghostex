@@ -666,6 +666,9 @@ pub(super) async fn route_sessions_http(
         "/api/generateSessionTitle" => {
             handle_generate_session_title_http(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/previewSessionTitle" => {
+            handle_preview_session_title_http(&state, endpoint.path, request_id, &body_json).await
+        }
         _ => {
             return Err(RouteHttpRequest {
                 state,

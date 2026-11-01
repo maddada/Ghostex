@@ -1086,6 +1086,11 @@ Pi uses the Title Generation Agent for first-prompt names. OMP names its own
 sessions once a prompt says enough to name, and Ghostex syncs that name; renaming
 an OMP session from Ghostex sends OMP's own `/rename <name>`, which OMP keeps.
 Manual Generate Name and `/rename` in chat remain available for Claude and Codex.
+In the Rename dialog, a name of up to 70 characters renames directly. Paste
+longer text, or leave the box empty, and Generate name turns that text (or,
+when empty, the session's recent prompts) into a short name in the box, which
+you can still edit before pressing Rename. It uses the Title Generation Agent
+(`sessionTitleGenerationAgent`); the dialog's "Set it in settings" link opens it.
 In a Hermes chat, `/rename <name>` is sent as Hermes' own `/title <name>`.
 A renamed agent session shows its new name right away, on the computer and the
 phone, while the agent saves it. If the agent has not taken the name within 8

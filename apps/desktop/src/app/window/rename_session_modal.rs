@@ -1,37 +1,45 @@
 //! Native GPUI Rename Session dialog, the desktop twin of the React
 //! `SessionRenameModal` in packages/core-ui/session-rename-modal.tsx (deleted 2026-10-01).
 //!
-//! CDXC:SessionTitles 2026-09-15 DECISION:
-//! User: "make sure the new gpui modal is EXACTLY 1 to 1 matching the react one": the same layout, copy, colors, states, keyboard behaviour and `renameSession` command as the React dialog, in both appearances. The React twin is pinned to the child window's full height (`.rename-session-modal-shadcn` at 100vh), so this dialog keeps its 570 x 440 frame and stretches the name editor between the header and the footer instead of fitting the window to its content.
-//! SEE-ALSO: packages/core-ui/session-rename-modal.tsx (deleted 2026-10-01) and the `.session-rename-modal-shadcn` rules in packages/core-ui/styles/modals.css (the React twin), packages/shared/session-grid-contract-session.ts (`normalizeSessionRenameTitle`, ported below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/rename_session_modal_lifecycle.rs (open, close, the `renameSession` command), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
+//! CDXC:SessionTitles 2026-11-01 DECISION:
+//! User (picking option A of the rename mockup): Generate only when it applies. Text of 1 to 70 characters is a plain rename (Cancel, Rename). Longer text, or an empty box ("longer than 70 and empty input also"), turns the counter amber, steps Rename back and makes "Generate name" the main button; the generated name lands in the box and the dialog is back to a plain rename. "dont show the dropdown to select what to use to generate the name. show text on the left saying \"Using <agent name> - Set it in settings.\"": the generator is the Title Generation Agent setting and the link opens that row. This supersedes the 2026-09-15 decision that kept the React dialog's fixed 570 x 440 frame and Generate-with dropdown; the window now fits its content.
+//! SEE-ALSO: apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/rename_session_modal_lifecycle.rs (open, close, the `renameSession` command, the name generator), server/src/server/title_generation/title_preview.rs (`/api/previewSessionTitle`), apps/desktop/src/bin/native_modal_demo/rename_session.rs (standalone preview).
 use super::native_modal_kit::*;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _,
-    IntoElement, KeyDownEvent, ParentElement as _, Render, Styled as _, Subscription, Window, div,
-    px,
+    IntoElement, KeyDownEvent, ParentElement as _, Render, StatefulInteractiveElement as _,
+    Styled as _, Subscription, Task, Window, div, px,
 };
 use gpui_component::input::{Enter, Escape, InputEvent, TextareaState};
 use gpui_component::{h_flex, v_flex};
-use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::OnceLock;
 
-/// `APP_MODAL_HOST_RENAME_SESSION_WINDOW_WIDTH` / `_HEIGHT`: the fixed frame the React dialog fills.
 pub(crate) const RENAME_SESSION_MODAL_WIDTH: f32 = 570.0;
-pub(crate) const RENAME_SESSION_MODAL_INITIAL_HEIGHT: f32 = 440.0;
+/// The window fits its content after the first paint; this is only the size it opens at.
+pub(crate) const RENAME_SESSION_MODAL_INITIAL_HEIGHT: f32 = 240.0;
 
-/// `SESSION_RENAME_GENERATE_NAME_THRESHOLD`: longer typed text becomes a Generate Name submit.
+/// `SESSION_RENAME_GENERATE_NAME_THRESHOLD`: longer text is a description to generate a name from.
 const GENERATE_NAME_THRESHOLD: usize = 70;
+/// The name box grows with its text up to this many lines, then scrolls.
+const NAME_MAX_ROWS: usize = 6;
 
 const TITLE: &str = "Rename Session";
-const DESCRIPTION_WITH_HISTORY: &str = "Rename directly, or Generate Name from longer text; leave the name unchanged to generate from the session's recent messages.";
-const DESCRIPTION: &str = "Rename directly or generate a name from longer text.";
-const FIELD_SESSION_NAME: &str = "Session name";
-const FIELD_GENERATE_WITH: &str = "Generate with";
-const SELECT_AGENT_PLACEHOLDER: &str = "Select agent";
+const DESCRIPTION_WITH_HISTORY: &str = "Type a name, or paste longer text to generate one. Leave it empty to name it from this session.";
+const DESCRIPTION: &str = "Type a name, or paste longer text to generate one.";
+const CANCEL: &str = "Cancel";
 const RENAME: &str = "Rename";
-const GENERATE_NAME: &str = "Generate Name";
+const GENERATE_NAME: &str = "Generate name";
+const GENERATING: &str = "Generating…";
+const TOO_LONG: &str = "too long for a name";
+const EMPTY_WITH_HISTORY: &str = "generate one from this session";
+const EMPTY: &str = "type a name";
+const SET_IT_IN_SETTINGS: &str = "Set it in settings";
+
+/// The counter's amber once the text is not a name (the mockup's `--d-warn`).
+const WARNING_DARK: u32 = 0xe0b04a;
+const WARNING_LIGHT: u32 = 0xa8740c;
 
 /// `SESSION_RENAME_UNSUPPORTED_GLYPH_PATTERN`: everything that is not a letter,
 /// a number, a space, or ASCII punctuation is dropped from a direct rename.
@@ -58,72 +66,9 @@ fn js_length(text: &str) -> usize {
     text.encode_utf16().count()
 }
 
-/// A configured agent that can generate the name (the React modal only
-/// offers agents whose HUD button carries a launch command).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RenameSessionAgent {
-    pub(crate) agent_id: String,
-    pub(crate) name: String,
-}
-
-/// Port of `resolvePromptAgentModalSelection`: the remembered choice, else the
-/// Settings default prompt agent, else the first agent with a command.
-pub(crate) fn resolve_prompt_agent_modal_selection(
-    agents: &[RenameSessionAgent],
-    saved_agent_id: Option<&str>,
-    default_agent_id: Option<&str>,
-) -> Option<String> {
-    let find = |wanted: Option<&str>| {
-        let wanted = wanted?;
-        agents
-            .iter()
-            .find(|agent| agent.agent_id == wanted)
-            .map(|agent| agent.agent_id.clone())
-    };
-    find(saved_agent_id)
-        .or_else(|| find(default_agent_id))
-        .or_else(|| agents.first().map(|agent| agent.agent_id.clone()))
-}
-
-/// The remembered Generate-with choice, the GPUI replacement for the React
-/// host's `ghostex.promptAgent.renameSession` localStorage override. The host
-/// cleared that override whenever the Settings default prompt agent changed,
-/// so the file also records the default it was chosen under and only counts
-/// while that default is still current.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RenameSessionModalPrefs {
-    pub(crate) agent_id: String,
-    pub(crate) default_prompt_agent_id: Option<String>,
-}
-
-pub(crate) fn load_rename_session_modal_prefs(path: &Path) -> Option<RenameSessionModalPrefs> {
-    let value = std::fs::read_to_string(path)
-        .ok()
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())?;
-    let text = |key: &str| {
-        value
-            .get(key)
-            .and_then(serde_json::Value::as_str)
-            .map(str::trim)
-            .filter(|text| !text.is_empty())
-            .map(str::to_string)
-    };
-    Some(RenameSessionModalPrefs {
-        agent_id: text("agentId")?,
-        default_prompt_agent_id: text("defaultPromptAgentId"),
-    })
-}
-
-pub(crate) fn persist_rename_session_modal_prefs(path: &Path, prefs: &RenameSessionModalPrefs) {
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let payload = serde_json::json!({
-        "agentId": prefs.agent_id,
-        "defaultPromptAgentId": prefs.default_prompt_agent_id,
-    });
-    let _ = std::fs::write(path, payload.to_string());
-}
+/// Generates a name from the text (empty: from the session's own prompts) without applying it.
+pub(crate) type RenameSessionGenerator =
+    Rc<dyn Fn(String, &mut App) -> Task<Result<String, String>>>;
 
 /// What the dialog asks its host to do. The dialog removes its own window
 /// before sending any of these.
@@ -132,42 +77,44 @@ pub(crate) enum RenameSessionModalCommand {
     Rename {
         title: String,
     },
-    /// `renameSession { agentId?, sessionId, shouldGenerateTitle: true, title }`:
-    /// summarize `title` (or, when empty, the session's recent messages) into a name.
-    GenerateName {
-        title: String,
-        agent_id: Option<String>,
-    },
+    /// Settings › Agents at the Title Generation Agent row.
+    OpenGeneratorSettings,
     Cancel,
 }
 
 pub(crate) type RenameSessionModalHost = Rc<dyn Fn(RenameSessionModalCommand, &mut App)>;
 
 pub(crate) struct RenameSessionModalConfig {
-    /// Already filtered to the agents with a launch command.
-    pub(crate) agents: Vec<RenameSessionAgent>,
-    /// `hud.settings.defaultPromptAgentId`.
-    pub(crate) default_prompt_agent_id: Option<String>,
     pub(crate) initial_title: String,
     /// `canGenerateNameFromSessionHistory`: the session's agent can name it from its transcript.
     pub(crate) can_generate_from_history: bool,
+    /// The Title Generation Agent setting's label ("Codex", "Claude", ...).
+    pub(crate) generator_name: String,
+    pub(crate) generate: RenameSessionGenerator,
     pub(crate) palette: ModalPalette,
-    pub(crate) prefs_path: Option<PathBuf>,
+}
+
+/// Which button is the main one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RenameMode {
+    Rename,
+    /// Longer than a name, or empty.
+    Generate,
 }
 
 pub(crate) struct GpuiRenameSessionModalWindow {
     host: RenameSessionModalHost,
+    generate: RenameSessionGenerator,
     palette: ModalPalette,
-    prefs_path: Option<PathBuf>,
-    agents: Vec<RenameSessionAgent>,
-    default_prompt_agent_id: Option<String>,
-    initial_title: String,
+    generator_name: String,
     can_generate_from_history: bool,
     input: Entity<TextareaState>,
     /// Mirror of the editor's text, refreshed on every change.
     title: String,
-    selected_agent_id: Option<String>,
-    agent_select: ModalSelect,
+    generating: bool,
+    generate_error: Option<String>,
+    _generate_task: Option<Task<()>>,
+    mode: RenameMode,
     fit: ModalFit,
     focus_handle: FocusHandle,
     _subscriptions: Vec<Subscription>,
@@ -180,25 +127,19 @@ impl GpuiRenameSessionModalWindow {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let saved_agent_id = config
-            .prefs_path
-            .as_deref()
-            .and_then(load_rename_session_modal_prefs)
-            .filter(|prefs| prefs.default_prompt_agent_id == config.default_prompt_agent_id)
-            .map(|prefs| prefs.agent_id);
-        let selected_agent_id = resolve_prompt_agent_modal_selection(
-            &config.agents,
-            saved_agent_id.as_deref(),
-            config.default_prompt_agent_id.as_deref(),
-        );
-        let input =
-            cx.new(|cx| TextareaState::new(window, cx).default_value(config.initial_title.clone()));
+        let input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .auto_grow(1, NAME_MAX_ROWS)
+                .default_value(config.initial_title.clone())
+        });
         let change_subscription = cx.subscribe_in(
             &input,
             window,
             |this: &mut Self, input, event: &InputEvent, _window, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.title = input.read(cx).value().to_string();
+                    this.generate_error = None;
+                    this.sync_mode();
                     cx.notify();
                 }
             },
@@ -212,20 +153,21 @@ impl GpuiRenameSessionModalWindow {
         });
         let mut this = Self {
             host,
+            generate: config.generate,
             palette: config.palette,
-            prefs_path: config.prefs_path,
-            agents: config.agents,
-            default_prompt_agent_id: config.default_prompt_agent_id,
-            title: config.initial_title.clone(),
-            initial_title: config.initial_title,
+            generator_name: config.generator_name,
             can_generate_from_history: config.can_generate_from_history,
             input,
-            selected_agent_id,
-            agent_select: ModalSelect::new(),
-            fit: ModalFit::fixed(),
+            title: config.initial_title,
+            generating: false,
+            generate_error: None,
+            _generate_task: None,
+            mode: RenameMode::Rename,
+            fit: ModalFit::new(),
             focus_handle: cx.focus_handle(),
             _subscriptions: vec![change_subscription],
         };
+        this.mode = this.current_mode();
         this._subscriptions
             .extend(super::popup_dismissal::close_app_modal_on_click_away(
                 window, cx,
@@ -237,28 +179,34 @@ impl GpuiRenameSessionModalWindow {
         self.title.trim()
     }
 
-    /// Entered text longer than 70 characters is summarized instead of applied.
-    fn can_generate_title(&self) -> bool {
-        js_length(self.trimmed_title()) > GENERATE_NAME_THRESHOLD
+    fn current_mode(&self) -> RenameMode {
+        let length = js_length(self.trimmed_title());
+        if length == 0 || length > GENERATE_NAME_THRESHOLD {
+            RenameMode::Generate
+        } else {
+            RenameMode::Rename
+        }
     }
 
-    /// An empty or unchanged name means "generate from the session's recent messages".
-    fn can_generate_title_from_session_history(&self) -> bool {
-        let trimmed = self.trimmed_title();
-        self.can_generate_from_history
-            && (trimmed.is_empty() || trimmed == self.initial_title.trim())
+    /// The footer changes shape between the modes, so the window fits it again.
+    fn sync_mode(&mut self) {
+        let mode = self.current_mode();
+        if mode != self.mode {
+            self.mode = mode;
+            self.fit.refit();
+        }
     }
 
-    fn selected_agent_index(&self) -> Option<usize> {
-        let selected = self.selected_agent_id.as_deref()?;
-        self.agents
-            .iter()
-            .position(|agent| agent.agent_id == selected)
+    fn can_rename(&self) -> bool {
+        self.mode == RenameMode::Rename
+            && !self.generating
+            && normalize_session_rename_title(&self.title).is_some()
     }
 
-    fn selected_agent_name(&self) -> Option<String> {
-        self.selected_agent_index()
-            .map(|index| self.agents[index].name.clone())
+    fn can_generate(&self) -> bool {
+        self.mode == RenameMode::Generate
+            && !self.generating
+            && (!self.trimmed_title().is_empty() || self.can_generate_from_history)
     }
 
     fn close_window_and_send(
@@ -275,101 +223,58 @@ impl GpuiRenameSessionModalWindow {
         self.close_window_and_send(RenameSessionModalCommand::Cancel, window, cx);
     }
 
-    fn confirm_generate_from_session_history(
-        &mut self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let agent_id = self.selected_agent_id.clone();
-        self.close_window_and_send(
-            RenameSessionModalCommand::GenerateName {
-                title: String::new(),
-                agent_id,
-            },
-            window,
-            cx,
-        );
-    }
-
-    fn confirm_title(
-        &mut self,
-        next_title: &str,
-        should_generate_title: bool,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        let normalized = if should_generate_title {
-            Some(next_title.trim().to_string()).filter(|title| !title.is_empty())
-        } else {
-            normalize_session_rename_title(next_title)
-        };
-        let Some(title) = normalized else {
-            return;
-        };
-        let command = if should_generate_title {
-            RenameSessionModalCommand::GenerateName {
-                title,
-                agent_id: self.selected_agent_id.clone(),
-            }
-        } else {
-            RenameSessionModalCommand::Rename { title }
-        };
-        self.close_window_and_send(command, window, cx);
-    }
-
     fn rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let title = self.title.clone();
-        self.confirm_title(&title, false, window, cx);
+        if !self.can_rename() {
+            return;
+        }
+        let Some(title) = normalize_session_rename_title(&self.title) else {
+            return;
+        };
+        self.close_window_and_send(RenameSessionModalCommand::Rename { title }, window, cx);
     }
 
+    fn open_generator_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_window_and_send(RenameSessionModalCommand::OpenGeneratorSettings, window, cx);
+    }
+
+    /// Asks for a name and puts it in the box; the user still presses Rename.
     fn generate_name(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.can_generate_title_from_session_history() {
-            self.confirm_generate_from_session_history(window, cx);
+        if !self.can_generate() {
             return;
         }
-        let title = self.title.clone();
-        self.confirm_title(&title, true, window, cx);
-    }
-
-    /// Enter in the name field: generate from history when the field is
-    /// empty and that is allowed, otherwise rename, or summarize long text.
-    fn submit_from_editor(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.can_generate_title_from_session_history() && self.trimmed_title().is_empty() {
-            self.confirm_generate_from_session_history(window, cx);
-            return;
-        }
-        let title = self.title.clone();
-        let should_generate = self.can_generate_title();
-        self.confirm_title(&title, should_generate, window, cx);
-    }
-
-    fn toggle_agent_menu(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.agents.is_empty() {
-            return;
-        }
-        // The React trigger is a button that takes focus from the textarea;
-        // the frame plays that role here so the menu's keys reach `on_key_down`.
-        self.focus_handle.focus(window, cx);
-        let selected = self.selected_agent_index();
-        self.agent_select.toggle(selected);
+        self.generating = true;
+        self.generate_error = None;
+        let pending = (self.generate)(self.trimmed_title().to_string(), cx);
+        self._generate_task = Some(cx.spawn_in(window, async move |this, cx| {
+            let result = pending.await;
+            let _ = this.update_in(cx, |this, window, cx| {
+                this.generating = false;
+                match result {
+                    Ok(title) => {
+                        this.input.update(cx, |input, cx| {
+                            input.set_value(title.clone(), window, cx);
+                            input.focus(window, cx);
+                            // Selected like the opening title, so typing replaces it.
+                            let end = input.value().len();
+                            input.set_selected_range(0..end, cx);
+                        });
+                        this.title = title;
+                        this.sync_mode();
+                    }
+                    Err(message) => this.generate_error = Some(message),
+                }
+                cx.notify();
+            });
+        }));
         cx.notify();
     }
 
-    fn choose_agent(&mut self, index: usize, cx: &mut Context<Self>) {
-        if let Some(agent) = self.agents.get(index) {
-            self.selected_agent_id = Some(agent.agent_id.clone());
-            if let Some(path) = &self.prefs_path {
-                persist_rename_session_modal_prefs(
-                    path,
-                    &RenameSessionModalPrefs {
-                        agent_id: agent.agent_id.clone(),
-                        default_prompt_agent_id: self.default_prompt_agent_id.clone(),
-                    },
-                );
-            }
+    /// Enter does the main button of the current mode.
+    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        match self.mode {
+            RenameMode::Rename => self.rename(window, cx),
+            RenameMode::Generate => self.generate_name(window, cx),
         }
-        self.agent_select.close();
-        cx.notify();
     }
 
     /// Enter from inside the name field: plain Enter submits, Shift+Enter
@@ -382,160 +287,176 @@ impl GpuiRenameSessionModalWindow {
             return;
         }
         cx.stop_propagation();
-        self.submit_from_editor(window, cx);
+        self.submit(window, cx);
     }
 
     fn on_escape_action(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.agent_select.open {
-            self.agent_select.close();
-            cx.notify();
-            return;
-        }
         self.cancel(window, cx);
     }
 
-    /// Keys while the frame holds focus (after the Generate-with trigger was used).
+    /// Keys while the frame holds focus (the name field lost it to a click elsewhere).
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
-        let key = event.keystroke.key.as_str();
-        match self.agent_select.handle_key(key, self.agents.len()) {
-            ModalSelectKey::Consumed => {
-                cx.notify();
-                cx.stop_propagation();
-                return;
-            }
-            ModalSelectKey::Choose(index) => {
-                self.choose_agent(index, cx);
-                cx.stop_propagation();
-                return;
-            }
-            ModalSelectKey::Ignored => {}
-        }
-        match key {
+        match event.keystroke.key.as_str() {
             "escape" => self.cancel(window, cx),
-            // The focused React trigger opens its menu on Enter.
-            "enter" if !event.is_held => self.toggle_agent_menu(window, cx),
+            "enter" if !event.is_held => self.submit(window, cx),
             _ => return,
         }
         cx.stop_propagation();
     }
 
-    /// `[data-slot='field-description']`: 14px muted copy at line-height 1.5.
-    fn render_field_description(&self, text: String) -> AnyElement {
+    fn warning_color(&self) -> gpui::Rgba {
+        modal_rgba(
+            if self.palette.light {
+                WARNING_LIGHT
+            } else {
+                WARNING_DARK
+            },
+            1.0,
+        )
+    }
+
+    /// `14 / 70`, or in amber with the reason the text is not a name.
+    fn render_counter(&self) -> AnyElement {
+        let length = js_length(self.trimmed_title());
+        let reason = match self.mode {
+            RenameMode::Rename => None,
+            RenameMode::Generate if length > 0 => Some(TOO_LONG),
+            RenameMode::Generate if self.can_generate_from_history => Some(EMPTY_WITH_HISTORY),
+            RenameMode::Generate => Some(EMPTY),
+        };
+        let text = match reason {
+            Some(reason) => format!("{length} / {GENERATE_NAME_THRESHOLD} · {reason}"),
+            None => format!("{length} / {GENERATE_NAME_THRESHOLD}"),
+        };
+        let color = if reason.is_some() {
+            self.warning_color()
+        } else {
+            self.palette.muted
+        };
         div()
-            .text_size(px(14.0))
-            .line_height(px(21.0))
-            .text_color(hsla(self.palette.muted))
+            .text_size(px(13.0))
+            .line_height(px(18.0))
+            .text_color(hsla(color))
             .child(text)
             .into_any_element()
     }
 
-    fn render_name_field(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
+    fn render_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
-        let count = format!(
-            "{} / {} characters",
-            js_length(self.trimmed_title()),
-            GENERATE_NAME_THRESHOLD
-        );
         v_flex()
             .w_full()
-            .flex_1()
-            .min_h_0()
-            .gap(px(12.0))
+            .gap(px(8.0))
             // `.session-rename-modal-shadcn [data-slot='textarea']`: 14px at line-height 1.45.
             .line_height(px(20.3))
-            .child(modal_section_title(&p, FIELD_SESSION_NAME))
-            .child(modal_text_area(&p, &self.input, None, false, window, cx))
-            .child(self.render_field_description(count))
-            .into_any_element()
-    }
-
-    fn render_agent_field(&self, cx: &mut Context<Self>) -> AnyElement {
-        let p = self.palette;
-        v_flex()
-            .w_full()
-            .gap(px(12.0))
-            .child(modal_section_title(&p, FIELD_GENERATE_WITH))
-            .child(
-                h_flex()
-                    .w_full()
-                    .on_children_prepainted(capture_child_bounds(
-                        self.agent_select.trigger_bounds.clone(),
-                        0,
-                    ))
-                    .child(modal_select_trigger(
-                        &p,
-                        &self.agent_select,
-                        "rename-session-agent-select",
-                        self.selected_agent_name(),
-                        SELECT_AGENT_PLACEHOLDER,
-                        false,
-                        |this, window, cx| this.toggle_agent_menu(window, cx),
-                        cx,
-                    )),
-            )
-            .into_any_element()
-    }
-
-    /// `.session-rename-field-group`: the fields 16px apart, the first one
-    /// taking the height between the header and the footer.
-    fn render_body(&self, window: &Window, cx: &mut Context<Self>) -> AnyElement {
-        v_flex()
-            .w_full()
-            .flex_1()
-            .min_h_0()
-            .gap(px(16.0))
-            .child(self.render_name_field(window, cx))
-            .when(!self.agents.is_empty(), |this| {
-                this.child(self.render_agent_field(cx))
+            .child(modal_text_area(
+                &p,
+                &self.input,
+                Some(0.0),
+                self.generating,
+                window,
+                cx,
+            ))
+            .child(self.render_counter())
+            .when_some(self.generate_error.clone(), |this, error| {
+                this.child(modal_error(&p, error))
             })
+            .into_any_element()
+    }
+
+    /// "Using Codex - Set it in settings.", the link opening the Title Generation Agent row.
+    fn render_generator_note(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        h_flex()
+            .flex_1()
+            .min_w_0()
+            .flex_wrap()
+            .text_size(px(13.0))
+            .line_height(px(18.0))
+            .text_color(hsla(p.muted))
+            .child(format!("Using {} - ", self.generator_name))
+            .child(
+                div()
+                    .id("rename-session-generator-settings")
+                    .role(gpui::Role::Link)
+                    .aria_label(SET_IT_IN_SETTINGS)
+                    .text_color(hsla(p.foreground))
+                    .underline()
+                    .cursor_pointer()
+                    .on_click(
+                        cx.listener(|this, _, window, cx| this.open_generator_settings(window, cx)),
+                    )
+                    .child(SET_IT_IN_SETTINGS),
+            )
+            .child(".")
             .into_any_element()
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
         let p = self.palette;
+        let cancel = modal_action_button(
+            &p,
+            "rename-session-cancel",
+            CANCEL,
+            None,
+            ModalButtonTone::Neutral,
+            false,
+            |this, window, cx| this.cancel(window, cx),
+            cx,
+        );
+        let rename_tone = match self.mode {
+            RenameMode::Rename => ModalButtonTone::Primary,
+            RenameMode::Generate => ModalButtonTone::Neutral,
+        };
         let rename = modal_action_button(
             &p,
             "rename-session-rename",
             RENAME,
             None,
-            ModalButtonTone::Neutral,
-            normalize_session_rename_title(&self.title).is_none(),
+            rename_tone,
+            !self.can_rename(),
             |this, window, cx| this.rename(window, cx),
             cx,
         );
+        if self.mode == RenameMode::Rename {
+            return modal_footer(vec![cancel, rename]);
+        }
         let generate = modal_action_button(
             &p,
             "rename-session-generate",
-            GENERATE_NAME,
-            None,
-            ModalButtonTone::Neutral,
-            !self.can_generate_title() && !self.can_generate_title_from_session_history(),
+            if self.generating {
+                GENERATING
+            } else {
+                GENERATE_NAME
+            },
+            self.generating.then(|| modal_spinner(p.primary_foreground)),
+            ModalButtonTone::Primary,
+            !self.can_generate(),
             |this, window, cx| this.generate_name(window, cx),
             cx,
         );
-        modal_footer(vec![generate, rename])
+        let sized =
+            |width: f32, button: AnyElement| h_flex().flex_none().w(px(width)).child(button);
+        h_flex()
+            .w_full()
+            .gap(px(12.0))
+            .items_center()
+            .child(self.render_generator_note(cx))
+            .child(
+                h_flex()
+                    .flex_none()
+                    .gap(px(8.0))
+                    .child(sized(80.0, cancel))
+                    .child(sized(80.0, rename))
+                    .child(sized(136.0, generate)),
+            )
+            .into_any_element()
     }
 }
 
 impl Render for GpuiRenameSessionModalWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let p = self.palette;
-        let names: Vec<String> = self.agents.iter().map(|agent| agent.name.clone()).collect();
-        let menu = modal_select_menu(
-            &p,
-            &self.agent_select,
-            "rename-session-agent-menu",
-            &names,
-            self.selected_agent_index(),
-            |this, index, _window, cx| this.choose_agent(index, cx),
-            |this, _window, cx| {
-                this.agent_select.close();
-                cx.notify();
-            },
-            window,
-            cx,
-        );
         let description = if self.can_generate_from_history {
             DESCRIPTION_WITH_HISTORY
         } else {
@@ -554,7 +475,7 @@ impl Render for GpuiRenameSessionModalWindow {
             Self::on_key_down,
             content,
             footer,
-            menu,
+            None,
             cx,
         )
         .capture_action(cx.listener(Self::on_enter_action))

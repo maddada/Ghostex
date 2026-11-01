@@ -417,6 +417,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
         | "/api/generateSessionTitle"
+        | "/api/previewSessionTitle"
         | "/api/cancelFirstPromptAutoTitle"
         | "/api/ingestTerminalTitleEvent"
         | "/api/updateAgentActivity"
