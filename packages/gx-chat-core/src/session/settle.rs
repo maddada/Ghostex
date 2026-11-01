@@ -26,6 +26,13 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
         .map(|name| (*name).to_string())
         .collect();
     refresh_boundaried(state, &catalog);
+    crate::session::answer_echoes::observe_queue_updates(state);
+    crate::session::answer_echoes::apply_queue_receipts(
+        &state.questions.forms,
+        &mut state.pending.sends,
+    );
+    // A queued answer can be pruned before its form's confirmation is observed.
+    crate::session::answer_echoes::observe_loaded(state);
     // The list the echoes reconcile against is built only when something waits on it: it copies
     // the whole transcript, and doing that on every event made each keystroke on a long chat pay
     // for the full history.
@@ -49,7 +56,7 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
                     .find_map(|message| message.timestamp)
             })
             .flatten();
-        let hydrated = settle_rows_gone_from_queue(
+        let mut hydrated = settle_rows_gone_from_queue(
             pending_with_startup_sends(
                 &state.pending.sends,
                 &queue,
@@ -59,6 +66,7 @@ pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
             context.now_millis(),
             oldest_loaded,
         );
+        crate::session::answer_echoes::apply_queue_receipts(&state.questions.forms, &mut hydrated);
         state.pending.sends = if hydrated.is_empty() {
             hydrated
         } else {
