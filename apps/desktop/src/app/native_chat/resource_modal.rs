@@ -12,7 +12,6 @@
 
 use super::side_question::side_button;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
-use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, Context, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, Window, div, px, svg,
@@ -25,30 +24,99 @@ pub(super) const RESOURCE_MODAL_TRIGGER: &str = "chat-resource-modal";
 
 /// Wide enough for a form's choices to read, narrow enough to stay a card over the chat, and never
 /// taller than this (unscaled px); a longer form scrolls inside.
+///
+/// CDXC:SessionChat 2026-11-01 DECISION: User: "also make it's height more by 20% please". The modal is sized to its whole form, footer buttons included, and its cap went from 560 to 672, so a question form shows in full before it scrolls; this supersedes a flat 20% on the old estimate, which still left the footer below the fold and would only add blank space under a right-sized form.
 pub(super) const RESOURCE_MODAL_WIDTH: f32 = 540.0;
-const MAX_HEIGHT: f32 = 560.0;
+const MAX_HEIGHT: f32 = 672.0;
 const HEADER_HEIGHT: f32 = 36.0;
 const GAP: f32 = 8.0;
 
-/// A rough height for the modal's content (unscaled px), so the window opens about the size of its
-/// form; the form scrolls inside when the estimate is short.
+/// The form card's measures (question_form.rs, ask_card.rs), unscaled: the card's head down to
+/// the first question, and from the last question to the card's bottom past the footer buttons.
+const CARD_HEAD: f32 = 60.0;
+const CARD_FOOT: f32 = 68.0;
+/// The gap between a question's parts, and the rule and padding that set off each later question
+/// and the form's own notes box.
+const ITEM_GAP: f32 = 8.0;
+const QUESTION_RULE: f32 = 33.0;
+const TITLE_LINE: f32 = 22.0;
+const DETAIL_LINE: f32 = 19.0;
+/// A choice row with one label line, and a note box with one line.
+const CHOICE_ROW: f32 = 40.0;
+const NOTE_BOX: f32 = 34.0;
+/// The widths the card's texts wrap in, and their average character widths, slightly generous so
+/// a long line is counted as wrapping rather than cut off.
+const TITLE_WIDTH: f32 = 430.0;
+const TEXT_WIDTH: f32 = 490.0;
+const CHOICE_WIDTH: f32 = 400.0;
+const TITLE_CHAR: f32 = 7.4;
+const DETAIL_CHAR: f32 = 6.4;
+
+/// How many lines `text` takes at `char_width` per character in `width`.
+fn lines(text: &str, char_width: f32, width: f32) -> f32 {
+    text.split('\n')
+        .map(|line| {
+            (line.chars().count() as f32 * char_width / width)
+                .ceil()
+                .max(1.0)
+        })
+        .sum()
+}
+
+/// The question form's card height (unscaled px), counted from what the card draws: each
+/// question's wrapped title and detail, its choices with their details, the Other row and the note
+/// box, the rules between questions, the form's notes box, and the card's head and footer.
+fn form_height(form: &serde_json::Value) -> f32 {
+    let open = form["state"] == "open";
+    let questions: f32 = form["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(index, question)| {
+            let mut height = if index > 0 { QUESTION_RULE } else { 0.0 };
+            height += TITLE_LINE * lines(&text(question, "title"), TITLE_CHAR, TITLE_WIDTH);
+            let detail = text(question, "detail");
+            if !detail.is_empty() {
+                height += ITEM_GAP + DETAIL_LINE * lines(&detail, DETAIL_CHAR, TEXT_WIDTH);
+            }
+            if question["text"] != true {
+                if question["multiple"] == true {
+                    height += ITEM_GAP + DETAIL_LINE;
+                }
+                for choice in question["choices"].as_array().into_iter().flatten() {
+                    let detail = text(choice, "detail");
+                    height += ITEM_GAP + CHOICE_ROW;
+                    if !detail.is_empty() {
+                        height += DETAIL_LINE * lines(&detail, DETAIL_CHAR, CHOICE_WIDTH);
+                    }
+                }
+                // Other / none of these.
+                height += ITEM_GAP + CHOICE_ROW;
+            }
+            if open {
+                height += ITEM_GAP + NOTE_BOX;
+            }
+            height
+        })
+        .sum();
+    let notes = if open && form["takesNotes"] == true {
+        QUESTION_RULE + NOTE_BOX
+    } else {
+        0.0
+    };
+    CARD_HEAD + questions + notes + CARD_FOOT
+}
+
+/// The modal's content height (unscaled px), so the window opens the size of its form; a form
+/// taller than the cap scrolls inside.
 fn estimated_height(modal: &serde_json::Value, form: &serde_json::Value) -> f32 {
     let body = if modal["loading"] == true || !text(modal, "missing").is_empty() {
         90.0
     } else if modal["kind"] == "chart" {
         360.0
     } else {
-        let questions: f32 = form["questions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|question| {
-                let choices = question["choices"].as_array().map_or(0, Vec::len) as f32;
-                52.0 + choices * 40.0 + if question["text"] == true { 56.0 } else { 80.0 }
-            })
-            .sum();
-        // The card's own head and its footer buttons.
-        questions + 120.0
+        form_height(form)
     };
     (HEADER_HEIGHT + GAP + body).clamp(160.0, MAX_HEIGHT)
 }
@@ -139,6 +207,10 @@ impl NativeChatView {
         if !modal.is_object() {
             return None;
         }
+        // The form sits on the popup's frosted menu tone, not on the chat: it takes the light
+        // washes it takes over window glass, since the chat's own solid card fills draw it as a
+        // black slab (as the Session details cards, session_details/mod.rs).
+        let p = &p.clone().on_window_glass(true);
         let s = p.scale;
         let id = text(&modal, "id");
         let kind = text(&modal, "kind");
