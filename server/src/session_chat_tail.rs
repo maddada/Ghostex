@@ -43,6 +43,9 @@ pub struct SessionChatTailFileResult {
     snapshot. `None` for every agent whose transcript is not a tree.
     */
     pub newest_tree_row_id: Option<String>,
+    /// A Codex rollout's Thought row still open at the end of the window, for the append stream
+    /// to keep adding to (`session_chat_codex_thoughts.rs`); `None` for every other transcript.
+    pub(crate) codex_thoughts: Option<crate::session_chat_codex_thoughts::CodexThoughtStretch>,
 }
 
 pub(crate) struct TailLineAccumulator {
@@ -363,6 +366,15 @@ pub fn read_session_chat_transcript_tail_file(
     };
     let has_more = limit > 0 && chronological.len() > limit;
     let before_offset = selected.first().map(|(_, offset)| *offset).unwrap_or(end);
+    // Joined after the page is cut, so a summary is never folded into a row outside the page.
+    let mut messages: Vec<SessionChatMessage> =
+        selected.into_iter().map(|(message, _)| message).collect();
+    let mut codex_thoughts = None;
+    if codex {
+        let (joined, stretch) = crate::session_chat_codex_thoughts::join_codex_thoughts(messages);
+        messages = joined;
+        codex_thoughts = Some(stretch);
+    }
     if let Some(version) = version.as_ref() {
         remember_session_chat_branch_boundary(
             file_path,
@@ -373,7 +385,7 @@ pub fn read_session_chat_transcript_tail_file(
     }
     Ok(SessionChatTailFileResult {
         codex_stats,
-        messages: selected.into_iter().map(|(message, _)| message).collect(),
+        messages,
         lifecycle,
         consumed_to,
         has_more,
@@ -382,6 +394,7 @@ pub fn read_session_chat_transcript_tail_file(
         oversized_record_count,
         outstanding_queued_prompts,
         newest_tree_row_id: branch.newest_kept_row_id(),
+        codex_thoughts,
     })
 }
 
@@ -547,6 +560,7 @@ pub(crate) fn read_pi_session_chat_transcript_tail_file(
         outstanding_queued_prompts: Vec::new(),
         // Pi's tree is resolved by its own reader above.
         newest_tree_row_id: None,
+        codex_thoughts: None,
     })
 }
 

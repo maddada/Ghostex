@@ -1,7 +1,9 @@
 //! A thought drawn as one slim line shaped like a tool row, instead of the open thinking lane
 //! (`thinking.rs`): a brain tile, "Thinking…" while the thought is being written or "Thought" once
 //! the agent moved on, and the thought's line (its newest finished line while it streams, its first
-//! line after). One click opens or closes the full thought below it. gx-chat-core marks the rows
+//! line after). One click opens or closes the full thought below it. A running thought that owns
+//! the calls it made ends its line with "N tool calls" and a chevron that folds them, as a reply's
+//! sentence folds its calls (`thinkingCard.calls`). gx-chat-core marks the rows
 //! (`thinkingCard` for the running turn, `thinkingRow` for every thought; the user's decision is in
 //! its `transcript/thinking_card.rs`). The phone's `ThinkingLine` in `MessageRow.tsx` is the same
 //! row.
@@ -23,14 +25,15 @@ const OPEN_CAP: f32 = 288.0;
 
 impl NativeChatView {
     /// The thought as one closed line. `message["thinkingCard"]` (the running turn) supplies the
-    /// live flag and the newest finished line; any other thought reads its `thinkingRow`.
+    /// live flag, the newest finished line and the label of the calls it folds; any other thought
+    /// reads its `thinkingRow`.
     pub(super) fn thinking_card(
-        &self,
+        &mut self,
         id: &str,
         message: &Value,
         body: String,
         p: &ChatAppearance,
-        cx: &Context<Self>,
+        cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
         let card = &message["thinkingCard"];
@@ -47,6 +50,12 @@ impl NativeChatView {
         let expandable = running || row["expandable"] != false;
         let lane = p.thinking_lane();
         let title = if live { "Thinking…" } else { "Thought" };
+        // The calls it folds open on a sentence's default: in detailed or verbose mode, or while
+        // one of them waits on an approval.
+        let calls = card["calls"].as_str().map(str::to_string);
+        let calls_key = format!("reasoning:{id}");
+        let calls_open = calls.is_some()
+            && self.is_expanded(&calls_key, p.work_open || message["toolsOpen"] == true);
 
         let header = div()
             .id(SharedString::from(format!("{key}:header")))
@@ -97,6 +106,9 @@ impl NativeChatView {
                     .text_color(p.prose.opacity(DESCRIBED_LABEL_OPACITY))
                     .child(if expanded { String::new() } else { preview }),
             )
+            .when_some(calls.clone(), |this, calls| {
+                this.child(self.folded_calls_toggle(&calls_key, calls, calls_open, p, cx))
+            })
             .when(expandable, |this| {
                 let key = key.clone();
                 this.chat_cursor_pointer()
@@ -145,10 +157,81 @@ impl NativeChatView {
                 cx,
             )));
         }
+        if calls.is_some() {
+            let motion = self.disclosure_frame(&calls_key, calls_open, cx);
+            if calls_open || motion.is_some() {
+                let rows = self.tool_rows(message, p, cx);
+                if !rows.is_empty() {
+                    let body = disclosure_body(
+                        p,
+                        DisclosureRail::Marker,
+                        8.0,
+                        calls_key.clone(),
+                        "Collapse tool calls",
+                        rows,
+                        cx,
+                    );
+                    column = column.child(
+                        div()
+                            .pl(px(ROW_PAD_X * s))
+                            .child(self.disclosure_body_motion(&calls_key, motion, 4.0 * s, body)),
+                    );
+                }
+            }
+        }
         div()
             .w_full()
             .pb(px(6.0 * s))
             .child(column)
+            .into_any_element()
+    }
+
+    /// "N tool calls" and the chevron at the end of a running thought's line, which open or close
+    /// the calls it made without opening the thought's text.
+    fn folded_calls_toggle(
+        &self,
+        key: &str,
+        label: String,
+        open: bool,
+        p: &ChatAppearance,
+        cx: &Context<Self>,
+    ) -> AnyElement {
+        let s = p.scale;
+        let key = key.to_string();
+        div()
+            .id(SharedString::from(format!("{key}:toggle")))
+            .role(gpui::Role::Button)
+            .aria_label(if open {
+                format!("Hide {label}")
+            } else {
+                format!("Show {label}")
+            })
+            .aria_expanded(open)
+            .flex()
+            .items_center()
+            .flex_shrink_0()
+            .gap(px(2.0 * s))
+            .px(px(4.0 * s))
+            .rounded(px(4.0 * s))
+            .text_size(px(12.5 * s))
+            .text_color(p.muted)
+            .chat_cursor_pointer()
+            .hover(|style| style.bg(p.foreground.opacity(0.05)))
+            .child(label)
+            .child(
+                gpui::svg()
+                    .path(if open {
+                        "titlebar/chevron-down.svg"
+                    } else {
+                        "titlebar/chevron-right.svg"
+                    })
+                    .size(px(13.0 * s))
+                    .text_color(p.muted),
+            )
+            .on_click(cx.listener(move |view, _, _, cx| {
+                view.toggle_marker_disclosure(key.clone(), open, cx);
+                cx.stop_propagation();
+            }))
             .into_any_element()
     }
 }

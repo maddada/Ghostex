@@ -69,6 +69,9 @@ fn follower_snapshot_drain(
         state
             .incremental
             .seed_leaf_row_id(tail.newest_tree_row_id.clone());
+        state
+            .incremental
+            .seed_codex_thoughts(tail.codex_thoughts.clone());
         state.incremental.seed_last_message_timestamp(
             tail.messages
                 .iter()

@@ -110,6 +110,7 @@ pub mod session_chat_codex_picker;
 pub mod session_chat_codex_question_align;
 pub mod session_chat_codex_side;
 pub(crate) mod session_chat_codex_stats;
+pub(crate) mod session_chat_codex_thoughts;
 pub(crate) mod session_chat_codex_update;
 pub mod session_chat_compacting;
 pub mod session_chat_composer;

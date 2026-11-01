@@ -512,9 +512,11 @@ impl NativeChatView {
             // mode that owns no calls (gx-chat-core `transcript/thinking_card.rs`).
             let card = reasoning && (message["thinkingCard"].is_object() || (p.simple && !tools));
             if card {
-                // The calls the thought made stay in view below its card, drawn by the run below
-                // as a reply's flat calls are.
+                // A running thought folds the calls it made behind its line, as a reply's sentence
+                // does (gx-chat-core `thinkingCard.calls`); any other card leaves them to the run
+                // below.
                 row = row.child(self.thinking_card(&id, message, body.clone(), p, cx));
+                tools_rendered = message["thinkingCard"]["calls"].is_string();
             } else if reasoning && tools {
                 let key = format!("reasoning:{id}");
                 // A running summary turn's newest row opens its tools (gx-chat-core `summary_mode_turns`).
