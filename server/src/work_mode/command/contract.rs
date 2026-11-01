@@ -246,6 +246,20 @@ pub(crate) fn reported_error(answer: &Value) -> Option<(ErrorCode, String)> {
     Some((code, message.to_string()))
 }
 
+/// The longest `info.name` the contract accepts.
+pub(crate) const MAX_NAME_CHARS: usize = 40;
+
+/// A masked name within `MAX_NAME_CHARS`, its ellipsis included. Masking can lengthen a name the
+/// contract accepted (`••••` over a 3-character value, or a withheld text), and the record reads
+/// its info back through `parse_info`, which refuses a longer one.
+pub(crate) fn fit_name(name: &str) -> String {
+    if name.chars().count() <= MAX_NAME_CHARS {
+        name.to_string()
+    } else {
+        cut(name, MAX_NAME_CHARS - 1)
+    }
+}
+
 pub(crate) fn parse_info(answer: &Value, guard: &AnswerGuard) -> Result<CommandInfo, String> {
     let info = object(answer)?;
     let id = checked_required(info, "id", guard)?;
@@ -259,8 +273,8 @@ pub(crate) fn parse_info(answer: &Value, guard: &AnswerGuard) -> Result<CommandI
         return Err(format!("id \"{}\" is reserved", as_sent(info, "id")));
     }
     let name = required(info, "name")?;
-    if name.chars().count() > 40 {
-        return Err("name is longer than 40 characters".to_string());
+    if name.chars().count() > MAX_NAME_CHARS {
+        return Err(format!("name is longer than {MAX_NAME_CHARS} characters"));
     }
     one_line(name, "name")?;
     let ids = info
@@ -319,7 +333,8 @@ pub(crate) fn parse_info(answer: &Value, guard: &AnswerGuard) -> Result<CommandI
     Ok(CommandInfo {
         id: id.to_string(),
         name: guard
-            .display(as_sent(info, "name"), 40)
+            .display(as_sent(info, "name"), MAX_NAME_CHARS)
+            .map(|name| fit_name(&name))
             .ok_or("name is missing")?,
         icon: text(info, "icon").map(|icon| match guard.droppable(icon) {
             Some(icon) => sanitize_icon(icon),

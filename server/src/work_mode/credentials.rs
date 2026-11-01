@@ -26,6 +26,8 @@ const CREDENTIALS_FILE_NAME: &str = "work-mode-credentials.json";
 /// `workspaceSourceCredentials.<workspaceId>.<sourceId>.<field>`: a ticket command's credential
 /// values, kept by source id so changing the command's path (same id) keeps them.
 const SOURCE_CREDENTIALS_KEY: &str = "workspaceSourceCredentials";
+/// `teamSync.<workspaceId>`: crate::team_sync's connections.
+pub(crate) const TEAM_CONNECTIONS_KEY: &str = "teamSync";
 
 fn credentials_path(paths: &GxserverPaths) -> PathBuf {
     paths.auth_dir.join(CREDENTIALS_FILE_NAME)
@@ -40,8 +42,73 @@ pub(crate) fn read_credentials(paths: &GxserverPaths) -> Map<String, Value> {
         .unwrap_or_default()
 }
 
+/// The whole file, read for a change: a missing file is empty, and a file that is there but can't
+/// be read, isn't a JSON object, or holds a container a change writes into that isn't one
+/// (`misshapen_container`), is an error, so a change never writes over what it couldn't read
+/// (the Linear keys and team connections in it).
+pub(crate) fn read_credentials_strictly(
+    paths: &GxserverPaths,
+) -> std::io::Result<Map<String, Value>> {
+    let unreadable = |detail: String| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("{CREDENTIALS_FILE_NAME} can't be read ({detail}); fix it or remove it, and try again"),
+        )
+    };
+    let text = match fs::read_to_string(credentials_path(paths)) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
+        Err(error) => return Err(unreadable(error.to_string())),
+    };
+    let file = match serde_json::from_str::<Value>(&text) {
+        Ok(Value::Object(file)) => file,
+        Ok(_) => return Err(unreadable("it isn't a JSON object".to_string())),
+        Err(error) => return Err(unreadable(error.to_string())),
+    };
+    match misshapen_container(&file) {
+        Some(problem) => Err(unreadable(problem)),
+        None => Ok(file),
+    }
+}
+
+/// What is wrong with the first container a change writes into that isn't a JSON object: a change
+/// would take it for empty and replace it. It names the container's level in fixed words, never a
+/// key read from the file, which in a damaged file can be any text, a credential among them. Each team connection is replaced whole, so only `teamSync`
+/// itself is checked; keys Ghostex doesn't know are left alone.
+fn misshapen_container(file: &Map<String, Value>) -> Option<String> {
+    let maps = [
+        "projectLinearApiKeys",
+        "workspaceLinearApiKeys",
+        TEAM_CONNECTIONS_KEY,
+    ];
+    if let Some(key) = maps
+        .into_iter()
+        .find(|key| file.get(*key).is_some_and(|value| !value.is_object()))
+    {
+        return Some(format!("{key} isn't a JSON object"));
+    }
+    let workspaces = file.get(SOURCE_CREDENTIALS_KEY)?;
+    let Some(workspaces) = workspaces.as_object() else {
+        return Some(format!("{SOURCE_CREDENTIALS_KEY} isn't a JSON object"));
+    };
+    for sources in workspaces.values() {
+        let Some(sources) = sources.as_object() else {
+            return Some(format!(
+                "{SOURCE_CREDENTIALS_KEY} has a workspace that isn't a JSON object"
+            ));
+        };
+        if sources.values().any(|fields| !fields.is_object()) {
+            return Some(format!(
+                "{SOURCE_CREDENTIALS_KEY} has a source that isn't a JSON object"
+            ));
+        }
+    }
+    None
+}
+
 /// Changes the file under one lock across read, change, write and rename: every writer goes
-/// through here, so two writers at once never lose one's change. Readers need no lock, since the
+/// through here, so two writers at once never lose one's change. A file it can't read is left as
+/// it is (`read_credentials_strictly`). Readers need no lock, since the
 /// rename makes each read see a whole file. A ticket command's credentials are written while the
 /// work-source store's writer lock is held too (store first, then this, never the reverse).
 pub(crate) fn mutate_credentials<T>(
@@ -49,7 +116,7 @@ pub(crate) fn mutate_credentials<T>(
     change: impl FnOnce(&mut Map<String, Value>) -> T,
 ) -> std::io::Result<T> {
     let _guard = credentials_lock();
-    let mut credentials = read_credentials(paths);
+    let mut credentials = read_credentials_strictly(paths)?;
     let changed = change(&mut credentials);
     write_credentials(paths, &credentials)?;
     Ok(changed)
@@ -62,7 +129,7 @@ pub(crate) fn mutate_credentials_when<T>(
     change: impl FnOnce(&mut Map<String, Value>) -> Option<T>,
 ) -> std::io::Result<Option<T>> {
     let _guard = credentials_lock();
-    let mut credentials = read_credentials(paths);
+    let mut credentials = read_credentials_strictly(paths)?;
     let Some(changed) = change(&mut credentials) else {
         return Ok(None);
     };
@@ -258,20 +325,13 @@ fn store_linear_api_key_in(
 }
 
 /// A workspace's stored values for every ticket command source (`sourceId → field → value`), a
-/// cleared command's among them. Unlike `read_credentials`, a file that is there but can't be read
-/// or parsed is an error, never "nothing stored".
+/// cleared command's among them, read as a change reads the file (`read_credentials_strictly`): a
+/// file that is there but can't be read is an error, never "nothing stored".
 pub(crate) fn read_workspace_source_credentials(
     paths: &GxserverPaths,
     workspace_id: &str,
 ) -> std::io::Result<Map<String, Value>> {
-    let text = match fs::read_to_string(credentials_path(paths)) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Map::new()),
-        Err(error) => return Err(error),
-    };
-    let file: Value = serde_json::from_str(&text)
-        .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
-    Ok(file
+    Ok(read_credentials_strictly(paths)?
         .get(SOURCE_CREDENTIALS_KEY)
         .and_then(|workspaces| workspaces.get(workspace_id))
         .and_then(Value::as_object)

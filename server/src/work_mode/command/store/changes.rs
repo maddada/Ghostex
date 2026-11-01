@@ -552,8 +552,11 @@ fn credential_save_mask(
         .map_err(|_| unreadable())?
         .workspaces
         .remove(workspace_id);
-    let stored =
-        read_workspace_source_credentials(paths, workspace_id).map_err(|_| unreadable())?;
+    let stored = read_workspace_source_credentials(paths, workspace_id).map_err(|error| {
+        WorkSourceError::Refused(format!(
+            "Ghostex couldn't read the credentials already stored, so it saved nothing: {error}"
+        ))
+    })?;
     let mut mask = proposed_values_mask(values);
     for (source_id, fields) in &stored {
         for (name, value) in fields.as_object().into_iter().flatten() {
@@ -842,7 +845,7 @@ fn refuse_unmaskable(
 /// the last error and its detail) with `env`'s secrets, and drops an icon that spells one.
 fn sanitize(command: &mut WorkspaceCommand, env: &CommandEnv) {
     let info = &mut command.info;
-    info.name = env.redact(&info.name);
+    info.name = fit_name(&env.redact(&info.name));
     for field in &mut info.credentials {
         field.label = env.redact(&field.label);
         field.placeholder = field.placeholder.as_deref().map(|text| env.redact(text));

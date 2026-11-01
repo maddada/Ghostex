@@ -515,13 +515,244 @@ fn a_save_that_cant_read_the_stored_values_is_refused() {
     std::fs::remove_file(&file).expect("remove");
     std::fs::create_dir(&file).expect("folder");
     match save(&store, &workspace_id, json!({ "token": "unread" })) {
-        Err(WorkSourceError::Refused(text)) => assert_eq!(
-            text,
-            "Ghostex couldn't read the credentials already stored, so it saved nothing; try again."
+        // Ghostex's own words around the platform's reason.
+        Err(WorkSourceError::Refused(text)) => assert!(
+            text.starts_with("Ghostex couldn't read the credentials already stored, so it saved nothing: work-mode-credentials.json can't be read (")
+                && text.ends_with("); fix it or remove it, and try again"),
+            "{text}"
         ),
         other => panic!("not refused: {other:?}"),
     }
     assert!(file.is_dir(), "nothing was written over it");
+}
+
+/// A command whose 40-character name and label hold `ж€✓`; once `phase` says `declare-mode`,
+/// its `info` fails and declares `mode` secret.
+fn capped_names_source(store: &Store, name: &str, label: &str) -> String {
+    let phase = store._temp.path().join("phase");
+    script(
+        store,
+        "capped-source",
+        &format!(
+            r#"if [ "$(cat '{}' 2>/dev/null)" = declare-mode ]; then
+printf '{{ "credentials": [ {{ "name": "mode", "label": "Mode" }} ] }}\n'; exit 1
+fi
+printf '{{ "id": "fixture", "name": "{name}", "ids": {{ "format": "number" }}, "credentials": [ {{ "name": "token", "label": "{label}" }}, {{ "name": "mode", "label": "Mode", "secret": false }} ] }}\n'"#,
+            phase.display()
+        ),
+    )
+}
+
+/// Masking can lengthen the name past the 40 characters `parse_info` reads back (`••••` over a
+/// 3-character value): the record is still read, whether the record was masked when the secret
+/// was saved or the next `info` was masked with it. A label at its cap is cut where it is read.
+#[test]
+fn a_name_at_its_cap_stays_readable_once_a_secret_in_it_is_masked() {
+    let store = Store::new();
+    let workspace_id = store.ws("ws-a");
+    let name = format!("{:x<40}", "Tracker ж€✓ ");
+    let label = format!("{:y<40}", "Token ж€✓ ");
+    let program = capped_names_source(&store, &name, &label);
+    let set = || {
+        set_work_source(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            &program,
+            false,
+            &no_references,
+        )
+    };
+    assert_eq!(set().expect("pinned").info.name, name);
+    let saved = save(&store, &workspace_id, json!({ "token": "ж€✓" })).expect("stored");
+    assert!(saved.failure.is_none(), "{:?}", saved.failure);
+    for _ in 0..2 {
+        let command = stored_command(&store, &workspace_id);
+        assert!(
+            command.info.name.chars().count() <= 40,
+            "{}",
+            command.info.name
+        );
+        assert!(
+            command.info.name.starts_with("Tracker •••• x"),
+            "{}",
+            command.info.name
+        );
+        assert!(!command.info.credentials[0].label.contains("ж€✓"));
+        set().expect("checked again");
+    }
+}
+
+/// A short value stored as not secret, which a failed check then declares secret, withholds a
+/// name holding it whole (44 characters): the record is still read.
+#[test]
+fn a_name_withheld_after_a_failed_check_stays_readable() {
+    let store = Store::new();
+    let workspace_id = store.ws("ws-a");
+    let program = capped_names_source(&store, "Tracker ё", "Token");
+    let set = || {
+        set_work_source(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            &program,
+            false,
+            &no_references,
+        )
+    };
+    set().expect("pinned");
+    save(&store, &workspace_id, json!({ "mode": "ё" })).expect("not secret");
+    std::fs::write(store._temp.path().join("phase"), "declare-mode").expect("phase");
+    assert!(matches!(set(), Err(WorkSourceError::Failed(_))));
+    let command = stored_command(&store, &workspace_id);
+    assert!(is_secret(&command, "mode"));
+    assert!(
+        command.info.name.chars().count() <= 40,
+        "{}",
+        command.info.name
+    );
+    assert!(
+        command.info.name.starts_with("(message hidden"),
+        "{}",
+        command.info.name
+    );
+}
+
+/// A credentials file that is there but can't be read is never written over: a credential save,
+/// a Linear key save and a workspace deletion each answer with an error and leave it byte for byte as it was. A
+/// missing file is still created.
+#[test]
+fn a_damaged_credentials_file_is_never_written_over() {
+    let store = Store::new();
+    store.answer("good");
+    let workspace_id = store.ws("ws-a");
+    store.set("ws-a", false).expect("pinned");
+    let file = store.paths.auth_dir.join("work-mode-credentials.json");
+    std::fs::create_dir_all(&store.paths.auth_dir).expect("auth dir");
+    for damaged in ["{ \"linearApiKey\": ", "[1, 2]"] {
+        std::fs::write(&file, damaged).expect("damage");
+        match save(&store, &workspace_id, json!({ "token": "tok-dmg-1" })) {
+            Err(WorkSourceError::Refused(text)) => {
+                assert!(
+                    text.contains("work-mode-credentials.json can't be read"),
+                    "{text}"
+                )
+            }
+            other => panic!("not refused: {other:?}"),
+        }
+        let linear = store_linear_api_key(&store.paths, LinearKeyScope::Shared, Some("lin_api_k"))
+            .expect_err("a damaged file");
+        assert!(
+            linear.to_string().contains("fix it or remove it"),
+            "{linear}"
+        );
+        // A deletion can't tell whether the file holds the workspace's credentials. It runs in a
+        // transaction, as the route runs it, which the error rolls back.
+        let transaction = store.db.unchecked_transaction().expect("transaction");
+        assert!(delete_workspace_work_source(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            &no_references
+        )
+        .is_err());
+        drop(transaction);
+        assert!(store.sources().workspaces.contains_key(&workspace_id));
+        assert_eq!(std::fs::read_to_string(&file).expect("read"), damaged);
+    }
+    std::fs::remove_file(&file).expect("remove");
+    store_linear_api_key(&store.paths, LinearKeyScope::Shared, Some("lin_api_k"))
+        .expect("a missing file is created");
+    assert!(store.credentials().contains_key("linearApiKey"));
+}
+
+/// A file whose root is an object but which holds a container a change writes into that isn't
+/// one is never written over: one case per container and depth, each change answering with an
+/// error that names the container's level, never a key read from the file. A key Ghostex doesn't
+/// know stays as it is.
+#[test]
+fn a_credentials_file_with_a_misshapen_container_is_never_written_over() {
+    let store = Store::new();
+    store.answer("good");
+    let workspace_id = store.ws("ws-a");
+    store.set("ws-a", false).expect("pinned");
+    let file = store.paths.auth_dir.join("work-mode-credentials.json");
+    std::fs::create_dir_all(&store.paths.auth_dir).expect("auth dir");
+    let linear = |scope| store_linear_api_key(&store.paths, scope, Some("lin_api_k"));
+    let cases: [(String, &str, Box<dyn Fn() -> String>); 5] = [
+        (
+            r#"{"projectLinearApiKeys":[{"P1":"lin_api_p1"}]}"#.to_string(),
+            "projectLinearApiKeys",
+            Box::new(|| {
+                linear(LinearKeyScope::Project("P2"))
+                    .expect_err("misshapen")
+                    .to_string()
+            }),
+        ),
+        (
+            r#"{"workspaceLinearApiKeys":"lin_api_w"}"#.to_string(),
+            "workspaceLinearApiKeys",
+            Box::new(|| {
+                linear(LinearKeyScope::Workspace("ws-b"))
+                    .expect_err("misshapen")
+                    .to_string()
+            }),
+        ),
+        (
+            r#"{"workspaceSourceCredentials":[1]}"#.to_string(),
+            "workspaceSourceCredentials",
+            Box::new(|| {
+                refused(save(
+                    &store,
+                    &workspace_id,
+                    json!({ "token": "tok-shape-1" }),
+                ))
+            }),
+        ),
+        (
+            r#"{"workspaceSourceCredentials":{"tok-key-leak-7":"fixture"}}"#.to_string(),
+            "workspaceSourceCredentials has a workspace that isn't a JSON object",
+            Box::new(|| {
+                refused(save(
+                    &store,
+                    &workspace_id,
+                    json!({ "token": "tok-shape-1" }),
+                ))
+            }),
+        ),
+        (
+            format!(
+                r#"{{"workspaceSourceCredentials":{{"{workspace_id}":{{"tok-src-leak-8":["tok-old"]}}}}}}"#
+            ),
+            "workspaceSourceCredentials has a source that isn't a JSON object",
+            Box::new(|| {
+                refused(save(
+                    &store,
+                    &workspace_id,
+                    json!({ "token": "tok-shape-1" }),
+                ))
+            }),
+        ),
+    ];
+    for (damaged, named, change) in cases {
+        std::fs::write(&file, &damaged).expect("damage");
+        let error = change();
+        assert!(error.contains("can't be read"), "{error}");
+        assert!(error.contains(named), "{named}: {error}");
+        // A key read from a damaged file can be any text, a credential among them.
+        assert!(!error.contains("leak"), "{error}");
+        assert_eq!(std::fs::read_to_string(&file).expect("read"), damaged);
+    }
+    std::fs::write(&file, r#"{"laterKey":[1,2]}"#).expect("unknown key");
+    linear(LinearKeyScope::Shared).expect("an unknown key is no container Ghostex writes");
+    assert_eq!(store.credentials()["laterKey"], json!([1, 2]));
+}
+
+fn refused(result: Result<CredentialsSaved, WorkSourceError>) -> String {
+    match result {
+        Err(WorkSourceError::Refused(text)) => text,
+        other => panic!("not refused: {other:?}"),
+    }
 }
 
 fn is_secret(command: &WorkspaceCommand, name: &str) -> bool {

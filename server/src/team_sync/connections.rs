@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use crate::paths::GxserverPaths;
 use crate::work_mode::{change_work_source_config, mutate_credentials, read_credentials};
 
-const CREDENTIALS_KEY: &str = "teamSync";
+const CREDENTIALS_KEY: &str = crate::work_mode::TEAM_CONNECTIONS_KEY;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,7 +113,9 @@ pub(crate) fn remove_team_connection(
     workspace_id: &str,
 ) -> std::io::Result<bool> {
     // Nothing to remove: the file is left as it is.
-    if !connections_map(&read_credentials(paths)).contains_key(workspace_id) {
+    if !connections_map(&crate::work_mode::read_credentials_strictly(paths)?)
+        .contains_key(workspace_id)
+    {
         return Ok(false);
     }
     change_work_source_config(workspace_id, || {
@@ -131,6 +133,35 @@ pub(crate) fn remove_team_connection(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Joining or leaving a team never writes over a credentials file that is there but can't be
+    /// read: each answers with an error and the file stays byte for byte as it was.
+    #[test]
+    fn a_team_change_never_writes_over_a_damaged_credentials_file() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = crate::paths::get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let file = paths.auth_dir.join("work-mode-credentials.json");
+        std::fs::create_dir_all(&paths.auth_dir).expect("auth dir");
+        for damaged in ["{ \"teamSync\": ", "[1, 2]", "{ \"teamSync\": [1] }"] {
+            std::fs::write(&file, damaged).expect("damage");
+            let joined = store_team_connection(
+                &paths,
+                &TeamConnection {
+                    workspace_id: "ws-team-dmg".to_string(),
+                    deployment_url: "https://team.example".to_string(),
+                    member_token: "member-dmg".to_string(),
+                    team_name: None,
+                    member_id: None,
+                    member_name: None,
+                    connected_at: None,
+                    own_linear_key: false,
+                },
+            );
+            assert!(joined.is_err(), "{joined:?}");
+            assert!(remove_team_connection(&paths, "ws-team-dmg").is_err());
+            assert_eq!(std::fs::read_to_string(&file).expect("read"), damaged);
+        }
+    }
 
     /// Every writer of the credentials file at once (the real team writer, the Linear key's and a
     /// ticket command's), 50 rounds each: none loses another's change.

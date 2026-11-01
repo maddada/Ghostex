@@ -159,3 +159,42 @@ async fn a_deletion_that_cant_remove_the_credentials_changes_nothing() {
     assert_ne!(status, StatusCode::OK, "{body}");
     assert!(deletion.all_there(&workspace_id).await);
 }
+
+/// A deletion that can't read the credentials file answers with an error that names what is
+/// wrong in fixed words: the answer and the request log never hold a key read from the file,
+/// which in a damaged file can be any text, a credential among them.
+#[tokio::test]
+async fn a_deletion_error_never_repeats_a_key_from_the_credentials_file() {
+    let deletion = Deletion::new();
+    let workspace_id = deletion.workspace_with_command("Work").await;
+    let file = deletion.paths.auth_dir.join("work-mode-credentials.json");
+    for damaged in [
+        r#"{"workspaceSourceCredentials":{"tok-key-leak-7":"fixture"}}"#.to_string(),
+        format!(r#"{{"workspaceSourceCredentials":{{"{workspace_id}":{{"tok-src-leak-8":1}}}}}}"#),
+    ] {
+        fs::write(&file, &damaged).expect("damage");
+        let response = handle_http_request(
+            deletion.state.clone(),
+            rpc_request(
+                "/api/deleteWorkspace",
+                &deletion.token,
+                json!({ "params": { "workspaceId": workspace_id } }),
+            ),
+        )
+        .await
+        .expect("answered");
+        assert_ne!(response.status(), StatusCode::OK);
+        let body = response_json(response).await.to_string();
+        assert!(body.contains("can't be read"), "{body}");
+        let log = fs::read_to_string(&deletion.paths.log_file).unwrap_or_default();
+        assert!(
+            log.contains("isn't a JSON object"),
+            "the error is logged: {log}"
+        );
+        for key in ["tok-key-leak-7", "tok-src-leak-8"] {
+            assert!(!body.contains(key), "{key} in {body}");
+            assert!(!log.contains(key), "{key} in the log");
+        }
+        assert_eq!(fs::read_to_string(&file).expect("read"), damaged);
+    }
+}
