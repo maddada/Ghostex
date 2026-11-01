@@ -649,4 +649,50 @@ fn a_coordinator_offered_low_gets_it_in_every_agents_launch_command() {
         with_agent_model_options("agy", "antigravity", None, Some("low")).unwrap(),
         "agy --effort low"
     );
+
+    // A configured command's own pin is replaced, never repeated.
+    assert_eq!(
+        with_agent_model_options(
+            "grok -m old --effort low --rules '--model x'",
+            "grok",
+            Some("new"),
+            Some("high")
+        )
+        .unwrap(),
+        "grok --rules '--model x' --model new --reasoning-effort high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "hermes -m old --reasoning=low --provider anthropic",
+            "hermes-agent",
+            Some("new"),
+            Some("high")
+        )
+        .unwrap(),
+        "hermes --provider anthropic --model new --reasoning high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "omp --provider openai --model gpt --thinking low",
+            "omp",
+            Some("openai/gpt-5.5"),
+            Some("high")
+        )
+        .unwrap(),
+        "omp --model openai/gpt-5.5 --thinking high"
+    );
+    assert_eq!(
+        with_agent_model_options(
+            "copilot --reasoning-effort low",
+            "copilot",
+            None,
+            Some("xhigh")
+        )
+        .unwrap(),
+        "copilot --reasoning-effort xhigh"
+    );
+    assert_eq!(
+        with_agent_model_options("gemini -m a", "gemini", Some("b"), None).unwrap(),
+        "gemini --model b"
+    );
 }

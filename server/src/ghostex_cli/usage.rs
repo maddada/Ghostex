@@ -222,7 +222,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "create-agent <agentId> --project-id id [--group-id id] [--model m] [--effort e] [--first-input-draft text] [--run-on location] [--defer-start] [--replace-empty-sessions] [--allow-hidden]",
-            "Create and start a configured agent session; --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI; Pi takes provider/model and a thinking level) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box",
+            "Create and start a configured agent session; --group-id puts it in one of the project's session groups; an agent turned off in Settings > Agents is refused unless --allow-hidden is passed (ghostex agents types lists the visible ones); --model/--effort (Claude, Codex, Antigravity CLI, Copilot, Grok Build, Hermes Agent; Pi and OMP take provider/model and a thinking level; Cursor CLI and Gemini take --model only) apply to this session only; Empryo takes provider/model and starts on it without changing Empryo's default; --first-input-draft stages text in its input without sending; --run-on local|docker|hetzner|vercel|daytona|e2b|digitalocean|docker:<host> runs Claude, Codex, OpenCode or Pi in an agentbox box",
         ),
         format_help_command(
             "board start-work <bead-id> [--agent id [--allow-hidden]] [--model m] [--effort e] [--project-path path|--project-id id] [--json]",
@@ -1041,8 +1041,9 @@ Behavior:
   Without --agent, the bead assignee is matched case-insensitively against configured agents,
   falling back to the default prompt agent. An --agent turned off in Settings > Agents is refused
   unless --allow-hidden is passed.
-  --model and --effort start a new Claude, Codex, Pi, Empryo or Antigravity CLI worker on that model and effort for this
-  session only (a Pi or Empryo model is <provider>/<model>, a Pi effort a thinking level); your default
+  --model and --effort start a new Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo or Antigravity CLI worker
+  on that model and effort for this session only (a Pi, OMP or Empryo model is <provider>/<model>, a Pi or OMP effort a
+  thinking level; Cursor CLI and Gemini take --model only); your default
   model is unchanged, and a resumed worker keeps them. A reused worker keeps
   whatever it already runs.
   Pass --project-path <repo> (or --project-id) to start the worker in the project the card is

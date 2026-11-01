@@ -2,6 +2,7 @@ use super::*;
 
 /// CDXC:AgentScreenDetection 2026-10-04 DECISION:
 /// User: after the new-thread hotkey the composer must show its details as instantly as possible. What the session's agent command was started with (`--model`, `--effort`, Codex's `-m` and `model_reasoning_effort`, Claude's `--permission-mode` and `--dangerously-skip-permissions`) is known the moment the session exists, so it fills the pills before the agent has painted. It is the weakest evidence and holds only until the agent reports through its transcript or statusline; anything the command does not name stays loading, never guessed from settings files (Claude's own settings disagreed with the effort it actually ran).
+/// The launch flags Ghostex adds for OMP (`--thinking`), Copilot and Grok Build (`--reasoning-effort`) and Hermes Agent (`--reasoning`) are read the same way since 2026-11-01.
 /// SEE-ALSO: `merge_session_chat_option_selections`, `apply_detected_choice` in packages/gx-chat-core/src/menus/option_values.rs (launch evidence never replaces a pick made in the chat).
 pub(crate) fn read_session_chat_launch_selection(
     repository: &DomainRepository<'_>,
@@ -119,6 +120,10 @@ pub(crate) fn launch_command_selection(
         SessionChatOptionAgent::Pi => "pi",
         SessionChatOptionAgent::Cursor => "cursor",
         SessionChatOptionAgent::Antigravity => "antigravity",
+        SessionChatOptionAgent::Omp => "omp",
+        SessionChatOptionAgent::Copilot => "copilot",
+        SessionChatOptionAgent::Grok => "grok",
+        SessionChatOptionAgent::Hermes => "hermes-agent",
         _ => return None,
     };
     let mut words = Vec::new();
@@ -159,15 +164,34 @@ pub(crate) fn launch_command_selection(
             codex_flags.push((flag.to_string(), value.map(str::to_string)));
         }
         match (agent, flag, value) {
-            (_, "--model", Some(model)) | (SessionChatOptionAgent::Codex, "-m", Some(model)) => {
+            (_, "--model", Some(model))
+            | (
+                SessionChatOptionAgent::Codex
+                | SessionChatOptionAgent::Grok
+                | SessionChatOptionAgent::Hermes,
+                "-m",
+                Some(model),
+            ) => {
                 selection.model = launch_model_choice(family, model);
             }
             (
-                SessionChatOptionAgent::Claude | SessionChatOptionAgent::Antigravity,
+                SessionChatOptionAgent::Claude
+                | SessionChatOptionAgent::Antigravity
+                | SessionChatOptionAgent::Grok,
                 "--effort",
                 Some(effort),
             )
-            | (SessionChatOptionAgent::Pi, "--thinking", Some(effort)) => {
+            | (
+                SessionChatOptionAgent::Pi | SessionChatOptionAgent::Omp,
+                "--thinking",
+                Some(effort),
+            )
+            | (
+                SessionChatOptionAgent::Copilot | SessionChatOptionAgent::Grok,
+                "--reasoning-effort",
+                Some(effort),
+            )
+            | (SessionChatOptionAgent::Hermes, "--reasoning", Some(effort)) => {
                 selection.effort = launch_effort_choice(family, effort);
             }
             (SessionChatOptionAgent::Codex, "-c" | "--config", Some(setting)) => {

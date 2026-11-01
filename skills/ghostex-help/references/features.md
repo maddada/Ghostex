@@ -2846,8 +2846,8 @@ Cross-agent orchestration also works through the `$ghostex-cli` skill. For
    `ghostex read-text` or `ghostex read-session-chat`, and wait with
    `ghostex wait-for-text`.
    To pick the worker's model and effort, add `--model <model> --effort <level>`
-   to `create-agent` or `board start-work` (Claude, Codex, Pi, Empryo and
-   Antigravity CLI; for Pi and Empryo the model is `<provider>/<model>`, as in
+   to `create-agent` or `board start-work` (Claude, Codex, Pi, OMP, Copilot,
+   Grok Build, Hermes Agent, Empryo and Antigravity CLI, or the model alone for Cursor CLI and Gemini; for Pi and Empryo the model is `<provider>/<model>`, as in
    Pi's `/model`, and Pi's effort is its thinking level, such as `high`). The choice
    applies to that session only, survives a resume, and leaves your default
    model unchanged. For `board start-work`, these flags apply only when a new
@@ -2990,8 +2990,9 @@ version of the Projects features in Cursor and Claude Code.
   starts it: Opus 5.5 at high effort for substantial work, Opus 5.5 at medium
   for hard but small changes, Sonnet 5.5 at high for small contained fixes. A
   coordinator on another agent starts its threads on its own agent and model,
-  at high effort for substantial work and medium otherwise (OpenCode, Cursor,
-  Grok, Copilot, OMP and ZCode threads start on the agent's configured model).
+  at high effort for substantial work and medium otherwise (Cursor and Gemini
+  threads take the model but keep their own effort; OpenCode, ZCode and DeepSeek
+  Harness threads start on the agent's configured model).
   It never switches a running thread's model (that throws away its prompt cache);
   a follow-up that needs a stronger model gets a new thread.
 - **Worktrees**: threads that need the same files run one after another; when

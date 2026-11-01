@@ -53,11 +53,10 @@ CREATE
   --agent takes an id from `ghostex agents types`; it must be a Claude, Codex,
   ZCode, Cursor, Grok, Copilot, Antigravity, Pi, OMP or OpenCode agent, and
   defaults to the first configured one, preferring Claude. --model picks its model (a value from
-  the agent's model list, such as sonnet or opus[1m]) for Claude, Codex, Pi, ZCode
-  and Antigravity; a Claude coordinator defaults to Opus 5.5 (opus[1m]), every
-  other one to its configured model. --effort defaults to high for Claude, Codex
-  and Antigravity; a ZCode coordinator takes no effort, and the
-  other agents keep their own unless you pass one. --goal is one line the
+  the agent's model list, such as sonnet or opus[1m]); a Claude coordinator defaults to Opus 5.5
+  (opus[1m]), every other one to its configured model. --effort defaults to high for Claude, Codex
+  and Antigravity; Cursor and ZCode coordinators take no effort, an OpenCode
+  coordinator takes neither, and the other agents keep their own unless you pass one. --goal is one line the
   coordinator works toward. --task follows the skill line in its first message.
   options lists the agents a coordinator can run on, with each one's models,
   the model it starts on, the efforts it offers (Low, Medium, High and XHigh, or the agent's
@@ -88,8 +87,9 @@ THREADS
   itself. The agent defaults to the coordinator's own agent; an --agent turned off
   in Settings > Agents is refused unless --allow-hidden is passed. --worktree gives the
   thread its own git worktree and branch (from --base-branch, or the default
-  branch). --model and --effort apply to this thread only (Claude, Codex, Pi, Empryo
-  and Antigravity CLI; a ZCode thread keeps its configured model).
+  branch). --model and --effort apply to this thread only (Claude, Codex, Pi, OMP,
+  Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI; Cursor and Gemini take
+  --model only, and an OpenCode, ZCode or DeepSeek Harness thread keeps its configured model).
   start-thread then waits up to a minute for the thread's transcript to show
   the brief and answers `started`, or `pending: <reason>` (still starting, or
   its screen shows a question only a person can answer). A brief whose send

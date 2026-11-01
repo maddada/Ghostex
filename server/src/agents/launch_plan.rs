@@ -488,6 +488,7 @@ fn empryo_cwd(
 /// The flags live in the session's saved base command, which resume, fork and account wrapping all rebuild from.
 /// Sven extended it to Empryo on 2026-10-06 (Empryo harness spec). Empryo's terminal app ignores launch flags, so the model goes into a session folder Ghostex seeds and launches with `--session`, and the effort is typed with `/effort` once Empryo is up; neither changes Empryo's default. A resume keeps the model (it reopens that tab), but Empryo 3.9.0-beta drops a tab's effort when it resumes it (seen 2026-10-06), so the effort lasts until the session restarts (session_chat_empryo_launch_selection.rs).
 /// Antigravity CLI joined on 2026-10-13 (user: port the launch flags after checking agy still accepts `--effort`): agy 1.2.14 takes `--model <id>` and `--effort low|medium|high|max` for that CLI session only.
+/// On 2026-11-01 the user approved every other agent whose installed CLI has the flags, so a coordinator on any agent can start threads on its own model and effort (skills/ghostex-orchestrator/SKILL.md): OMP 18.13.2 (`--model`, `--thinking`), Copilot 1.0.103 (`--model`, `--reasoning-effort`), Grok Build 1.0.70 (`--model`, `--reasoning-effort`) and Hermes Agent 0.22.5 (`--model`, `--reasoning`) take both; Cursor CLI 2026.10.22 (effort lives with each model) and Gemini 0.41.2 take a model only. DeepSeek Harness 0.17.0 and OpenCode 2.1.4 (the build `with_opencode2` launches; 1.19.4's `-m` is gone from its terminal app, only `opencode run` takes one) have no interactive model flag and stay refused.
 /// SEE-ALSO: server/src/ghostex_cli/actions/create.rs (create-agent), server/src/ghostex_cli/board.rs and server/src/board_start_work.rs (board start-work).
 fn apply_requested_agent_model(
     project: &Value,
@@ -507,14 +508,30 @@ fn apply_requested_agent_model(
         .filter(|family| {
             matches!(
                 family.as_str(),
-                "claude" | "codex" | "pi" | "zcode" | "empryo" | "antigravity"
+                "claude"
+                    | "codex"
+                    | "pi"
+                    | "omp"
+                    | "copilot"
+                    | "grok"
+                    | "hermes-agent"
+                    | "cursor"
+                    | "gemini"
+                    | "zcode"
+                    | "empryo"
+                    | "antigravity"
             )
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, ZCode, Empryo and Antigravity CLI agents.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, and ZCode only a coordinator's model.",
             )
         })?;
+    if effort.is_some() {
+        if let Some(refusal) = model_only_effort_refusal(&family) {
+            return Err(DomainStateError::bad_request(refusal));
+        }
+    }
     if family == "empryo" {
         use crate::session_chat_empryo_launch_selection as launch;
         let model = launch::empryo_launch_model(model.as_deref())?;
@@ -557,11 +574,55 @@ fn apply_requested_agent_model(
             "A Pi effort is its thinking level: off, minimal, low, medium, high, xhigh or max.",
         ));
     }
+    if let (Some(effort), Some((name, levels))) = (effort.as_deref(), launch_effort_levels(&family))
+    {
+        if !levels.contains(&effort) {
+            return Err(DomainStateError::bad_request(format!(
+                "A {name} effort is one of: {}.",
+                levels.join(", ")
+            )));
+        }
+    }
     let base = command
         .or_else(|| default_agent_command(&family).map(str::to_string))
         .unwrap_or_else(|| family.clone());
     with_agent_model_options(&base, &family, model.as_deref(), effort.as_deref())
         .map(|command| (Some(command), None))
+}
+
+/// Why a family whose CLI takes a launch model but has no effort flag refuses a launch effort.
+fn model_only_effort_refusal(family: &str) -> Option<&'static str> {
+    match family {
+        "cursor" => Some(
+            "Cursor CLI takes a launch model but no effort: Cursor keeps the effort with each model, so pick a model id that names it, such as gpt-5.3-codex-high.",
+        ),
+        "gemini" => Some("Gemini takes a launch model but no effort: Gemini CLI has no effort flag."),
+        _ => None,
+    }
+}
+
+/// The effort levels a family's CLI lists for its launch effort flag, so a typo is refused here
+/// instead of the CLI exiting to the shell. Grok Build lists none, so its value goes through.
+fn launch_effort_levels(family: &str) -> Option<(&'static str, &'static [&'static str])> {
+    match family {
+        "omp" => Some((
+            "OMP",
+            &[
+                "off", "minimal", "low", "medium", "high", "xhigh", "max", "auto",
+            ],
+        )),
+        "copilot" => Some((
+            "Copilot",
+            &["none", "minimal", "low", "medium", "high", "xhigh", "max"],
+        )),
+        "hermes-agent" => Some((
+            "Hermes Agent",
+            &[
+                "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
+            ],
+        )),
+        _ => None,
+    }
 }
 
 /// A new Claude, Codex or Cursor session starts on the model the user last chose as the agent's
@@ -955,4 +1016,99 @@ pub(crate) fn requested_agent_model_option(
         )));
     }
     Ok(Some(value.to_string()))
+}
+
+#[cfg(test)]
+mod launch_choice_tests {
+    use super::*;
+
+    fn launch(
+        agent_id: &str,
+        model: Option<&str>,
+        effort: Option<&str>,
+    ) -> Result<Option<String>, String> {
+        let mut params = Map::new();
+        if let Some(model) = model {
+            params.insert("agentModel".to_string(), Value::String(model.to_string()));
+        }
+        if let Some(effort) = effort {
+            params.insert("agentEffort".to_string(), Value::String(effort.to_string()));
+        }
+        apply_requested_agent_model(
+            &Value::Null,
+            agent_id,
+            &Map::new(),
+            &Map::new(),
+            &params,
+            None,
+            &mut Map::new(),
+        )
+        .map(|(command, _)| command)
+        .map_err(|error| error.to_string())
+    }
+
+    #[test]
+    fn every_agent_with_launch_flags_takes_the_model_and_effort() {
+        assert_eq!(
+            launch("omp", Some("anthropic/claude-opus-5-5"), Some("high"))
+                .unwrap()
+                .as_deref(),
+            Some("omp --model anthropic/claude-opus-5-5 --thinking high")
+        );
+        assert_eq!(
+            launch("copilot", Some("claude-opus-5.5"), Some("high"))
+                .unwrap()
+                .as_deref(),
+            Some("copilot --model claude-opus-5.5 --reasoning-effort high")
+        );
+        assert_eq!(
+            launch("grok", Some("grok-build"), Some("medium"))
+                .unwrap()
+                .as_deref(),
+            Some("grok --model grok-build --reasoning-effort medium")
+        );
+        assert_eq!(
+            launch(
+                "hermes-agent",
+                Some("anthropic/claude-sonnet-4.6"),
+                Some("high")
+            )
+            .unwrap()
+            .as_deref(),
+            Some("hermes --model anthropic/claude-sonnet-4.6 --reasoning high")
+        );
+        for (agent, command) in [
+            ("cursor", "cursor-agent --model grok-4.7"),
+            ("gemini", "gemini --model grok-4.7"),
+        ] {
+            assert_eq!(
+                launch(agent, Some("grok-4.7"), None).unwrap().as_deref(),
+                Some(command)
+            );
+        }
+    }
+
+    #[test]
+    fn an_agent_without_an_effort_flag_refuses_only_the_effort() {
+        for agent in ["cursor", "gemini"] {
+            let refusal = launch(agent, Some("m"), Some("high")).unwrap_err();
+            assert!(
+                refusal.contains("takes a launch model but no effort"),
+                "{agent}: {refusal}"
+            );
+        }
+        assert!(launch("opencode", Some("opencode/big-pickle"), None)
+            .unwrap_err()
+            .contains("can only be set for"));
+        assert!(launch("dsh", Some("deepseek-v4"), None)
+            .unwrap_err()
+            .contains("Cursor CLI and Gemini take a model only"));
+        assert!(launch("copilot", None, Some("hgih"))
+            .unwrap_err()
+            .contains("A Copilot effort is one of"));
+        assert!(launch("omp", None, Some("ultra"))
+            .unwrap_err()
+            .contains("A OMP effort"));
+        assert!(launch("hermes-agent", None, Some("ultra")).is_ok());
+    }
 }

@@ -233,6 +233,137 @@ pub(crate) fn option_takes_value(agent: &str, word: &str) -> bool {
                 | "-i"
                 | "--prompt-interactive"
         ),
+        // CDXC:AgentProviders 2026-11-01: the value options each CLI's `--help` lists (OMP
+        // 18.13.2, Copilot 1.0.103, Grok Build 1.0.70, Hermes Agent 0.22.5, Gemini
+        // 0.41.2), so a model or effort override never mistakes another option's value
+        // for a flag.
+        "omp" => matches!(
+            word,
+            "--model"
+                | "--smol"
+                | "--slow"
+                | "--plan"
+                | "--goal"
+                | "--prewalk-into"
+                | "--plan-yolo-into"
+                | "--provider"
+                | "--api-key"
+                | "--system-prompt"
+                | "--system-prompt-template"
+                | "--append-system-prompt"
+                | "--profile"
+                | "--alias"
+                | "--cwd"
+                | "--mode"
+                | "--config"
+                | "--add-dir"
+                | "-r"
+                | "--resume"
+                | "--restore"
+                | "--session"
+                | "--session-dir"
+                | "--models"
+                | "--tools"
+                | "--thinking"
+                | "--service-tier"
+                | "--hook"
+                | "-e"
+                | "--extension"
+                | "--skills"
+                | "--export"
+                | "--max-time"
+                | "--warn-cost"
+                | "--max-cost"
+                | "--approval-mode"
+        ),
+        "copilot" => matches!(
+            word,
+            "--model"
+                | "--reasoning-effort"
+                | "-i"
+                | "--interactive"
+                | "-p"
+                | "--prompt"
+                | "--context"
+                | "--auto-tier"
+                | "--agent"
+                | "-n"
+                | "--name"
+                | "--session-id"
+                | "--log-dir"
+                | "--log-level"
+                | "--stream"
+                | "--output-format"
+                | "--add-dir"
+                | "--attachment"
+                | "--disable-mcp-server"
+                | "--enable-mcp-server"
+                | "--add-github-mcp-toolset"
+                | "--add-github-mcp-tool"
+                | "--plugin-dir"
+                | "--additional-mcp-config"
+                | "--mode"
+                | "--max-autopilot-continues"
+                | "--max-ai-credits"
+        ),
+        "grok" => matches!(
+            word,
+            "-m" | "--model"
+                | "--reasoning-effort"
+                | "--effort"
+                | "--add-dir"
+                | "--agent"
+                | "--agents"
+                | "--allow"
+                | "--deny"
+                | "--cwd"
+                | "--disallowed-tools"
+                | "--json-schema"
+                | "--max-turns"
+                | "--output-format"
+                | "-p"
+                | "--single"
+                | "--permission-mode"
+                | "--prompt-file"
+                | "--prompt-json"
+                | "--rules"
+                | "-s"
+                | "--session-id"
+                | "--sandbox"
+                | "--system-prompt-override"
+                | "--tools"
+        ),
+        "hermes-agent" => matches!(
+            word,
+            "-m" | "--model"
+                | "--provider"
+                | "--reasoning"
+                | "-z"
+                | "--usage-file"
+                | "-t"
+                | "--toolsets"
+                | "-s"
+                | "--skills"
+                | "--resume"
+                | "--in"
+        ),
+        "gemini" => matches!(
+            word,
+            "-m" | "--model"
+                | "-p"
+                | "--prompt"
+                | "-i"
+                | "--prompt-interactive"
+                | "--approval-mode"
+                | "-e"
+                | "--extensions"
+                | "-r"
+                | "--resume"
+                | "--session-id"
+                | "--include-directories"
+                | "-o"
+                | "--output-format"
+        ),
         _ => false,
     }
 }
@@ -265,32 +396,54 @@ pub(crate) fn with_agent_model_options(
         let next_value = words.get(index + 1).map(|(_, _, value)| value.as_str());
         let (remove, takes_value) = match (agent, word.as_str()) {
             _ if !is_flag => (false, false),
-            ("claude" | "codex" | "cursor" | "antigravity", "--model") | ("codex", "-m")
+            (
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent"
+                | "gemini",
+                "--model",
+            )
+            | ("codex" | "grok" | "hermes-agent" | "gemini", "-m")
                 if model.is_some() =>
             {
                 (true, true)
             }
-            ("claude" | "codex" | "cursor" | "antigravity", value)
-                if model.is_some() && value.starts_with("--model=") =>
+            (
+                "claude" | "codex" | "cursor" | "antigravity" | "copilot" | "grok" | "hermes-agent"
+                | "gemini",
+                value,
+            ) if model.is_some() && value.starts_with("--model=") => (true, false),
+            ("claude" | "antigravity" | "grok", "--effort")
+            | ("copilot" | "grok", "--reasoning-effort")
+            | ("hermes-agent", "--reasoning")
+                if effort.is_some() =>
             {
-                (true, false)
+                (true, true)
             }
-            ("claude" | "antigravity", "--effort") if effort.is_some() => (true, true),
-            ("claude" | "antigravity", value)
+            ("claude" | "antigravity" | "grok", value)
                 if effort.is_some() && value.starts_with("--effort=") =>
             {
                 (true, false)
             }
+            ("copilot" | "grok", value)
+                if effort.is_some() && value.starts_with("--reasoning-effort=") =>
+            {
+                (true, false)
+            }
+            ("hermes-agent", value) if effort.is_some() && value.starts_with("--reasoning=") => {
+                (true, false)
+            }
             // Ghostex's Pi model is `provider/id`, so a pinned `--provider` goes with the old model.
-            ("pi", "--model" | "--provider") if model.is_some() => (true, true),
-            ("pi", value)
+            // OMP is Pi's fork: its `--model` takes `provider/id` too and `--provider` is legacy.
+            ("pi" | "omp", "--model" | "--provider") if model.is_some() => (true, true),
+            ("pi" | "omp", value)
                 if model.is_some()
                     && (value.starts_with("--model=") || value.starts_with("--provider=")) =>
             {
                 (true, false)
             }
-            ("pi", "--thinking") if effort.is_some() => (true, true),
-            ("pi", value) if effort.is_some() && value.starts_with("--thinking=") => (true, false),
+            ("pi" | "omp", "--thinking") if effort.is_some() => (true, true),
+            ("pi" | "omp", value) if effort.is_some() && value.starts_with("--thinking=") => {
+                (true, false)
+            }
             ("codex", "-c" | "--config")
                 if effort.is_some() && next_value.is_some_and(codex_effort) =>
             {
@@ -338,9 +491,13 @@ pub(crate) fn with_agent_model_options(
                 " -c {}",
                 shell_word(&format!("model_reasoning_effort={effort}"))
             )),
-            "pi" => result.push_str(&format!(" --thinking {}", shell_word(effort))),
-            // Cursor keeps each model's effort in its own settings and takes no effort flag.
-            "cursor" => {}
+            "pi" | "omp" => result.push_str(&format!(" --thinking {}", shell_word(effort))),
+            "copilot" | "grok" => {
+                result.push_str(&format!(" --reasoning-effort {}", shell_word(effort)))
+            }
+            "hermes-agent" => result.push_str(&format!(" --reasoning {}", shell_word(effort))),
+            // These take no effort flag; the launch plan refuses an effort for them before here.
+            "cursor" | "gemini" => {}
             _ => result.push_str(&format!(" --effort {}", shell_word(effort))),
         }
     }

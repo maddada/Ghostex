@@ -590,6 +590,54 @@ fn cursor_launch_model_survives_its_context_only_statusline() {
     );
 }
 
+#[test]
+fn launch_flags_of_the_newer_agents_fill_the_pills() {
+    for (agent, command, model, effort) in [
+        (
+            SessionChatOptionAgent::Omp,
+            "omp --model openai/gpt-5.5 --thinking high",
+            "openai/gpt-5.5",
+            "high",
+        ),
+        (
+            SessionChatOptionAgent::Copilot,
+            "copilot --model claude-opus-5.5 --reasoning-effort xhigh",
+            "claude-opus-5.5",
+            "xhigh",
+        ),
+        (
+            SessionChatOptionAgent::Grok,
+            "grok -m grok-build --effort medium",
+            "grok-build",
+            "medium",
+        ),
+        (
+            SessionChatOptionAgent::Grok,
+            "grok --model grok-build --reasoning-effort low",
+            "grok-build",
+            "low",
+        ),
+        (
+            SessionChatOptionAgent::Hermes,
+            "hermes -m anthropic/claude-sonnet-4.6 --reasoning high",
+            "anthropic/claude-sonnet-4.6",
+            "high",
+        ),
+    ] {
+        let launch = launch_command_selection(agent, command).expect(command);
+        assert_eq!(
+            launch.model.as_ref().map(|choice| choice.value.as_str()),
+            Some(model),
+            "{command}"
+        );
+        assert_eq!(
+            launch.effort.as_ref().map(|choice| choice.value.as_str()),
+            Some(effort),
+            "{command}"
+        );
+    }
+}
+
 /// Verbatim from a Codex 0.164 session started with `--yolo` whose mode was then changed with
 /// `/permissions` (2026-10-27).
 const CODEX_PERMISSIONS_HISTORY: &str = concat!(

@@ -101,9 +101,12 @@ ghostex coordinator start-thread --title "<its task, 3 to 6 words>" --task "<bri
     `ghostex read-session-chat <your Session ID> --limit 1 --json` shows them under
     `selectedOptions.model.value` and `selectedOptions.effort.value`. Then start the thread
     without `--agent` (it defaults to your agent) and with `--model <your model> --effort high`
-    (or `medium`). Pi takes a thinking level as its effort. When `start-thread` refuses `--model`
-    or `--effort` for your agent (OpenCode, Cursor, Grok, Copilot, OMP and ZCode do today), start
-    it without them: the thread then starts on your agent's configured model. When no model is
+    (or `medium`). Pi takes a thinking level as its effort. OMP, Copilot, Grok Build and Hermes Agent
+    take both. Cursor and Gemini take `--model` but refuse `--effort`, so start them with
+    `--model` alone. OpenCode, ZCode and DeepSeek Harness refuse both, so start them without either:
+    the thread then starts on your agent's configured model. Ghostex releases before 10.43 refuse
+    the flags for OMP, Copilot, Grok Build, Hermes Agent, Cursor and Gemini too: whenever
+    `start-thread` refuses a flag, start the thread again without it. When no model is
     shown, start it without `--model`.
   - Pick the model when starting the thread and never change it afterwards: switching a running
     session's model throws away its prompt cache. When a follow-up needs a stronger model, start a
