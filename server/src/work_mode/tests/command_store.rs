@@ -112,6 +112,67 @@ fn setting_a_command_pins_its_id_and_keeps_its_info() {
 }
 
 #[test]
+fn a_damaged_command_store_blocks_changes_without_losing_other_pins() {
+    let store = Store::new();
+    store.answer("good");
+    store.set("ws-a", false).expect("first pin");
+    store.set("ws-b", false).expect("second pin");
+    let intact = stored_row(&store);
+    let mut bad_command: Value = serde_json::from_str(&intact).expect("document");
+    bad_command["workspaces"][store.ws("ws-a")]
+        .as_object_mut()
+        .expect("command")
+        .remove("sourceId");
+    let mut bad_retired: Value = serde_json::from_str(&intact).expect("document");
+    bad_retired["retired"] = json!([{ "id": "old-without-format" }]);
+    for damaged in [
+        "{".to_string(),
+        "[]".to_string(),
+        bad_command.to_string(),
+        bad_retired.to_string(),
+    ] {
+        store
+            .db
+            .execute(
+                "UPDATE metadata SET value = ?1 WHERE key = 'workTicketSources'",
+                [&damaged],
+            )
+            .expect("damage row");
+        assert!(read_work_sources(&store.db).is_err());
+        assert!(matches!(
+            store.set("ws-b", false),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert!(matches!(
+            clear_work_source(&store.db, &store.ws("ws-b"), &no_references),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert!(matches!(
+            delete_workspace_work_source(
+                &store.db,
+                &store.paths,
+                &store.ws("ws-b"),
+                &no_references
+            ),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert_eq!(
+            stored_row(&store),
+            damaged,
+            "the damaged row was not replaced"
+        );
+    }
+    store
+        .db
+        .execute(
+            "UPDATE metadata SET value = ?1 WHERE key = 'workTicketSources'",
+            [&intact],
+        )
+        .expect("restore row");
+    assert_eq!(store.sources().workspaces.len(), 2);
+}
+
+#[test]
 fn a_command_that_now_calls_itself_otherwise_waits_for_a_switch() {
     let store = Store::new();
     store.answer("good");
@@ -189,6 +250,38 @@ fn clearing_keeps_the_credentials_and_retires_the_id() {
         stored,
         "clearing keeps the credentials"
     );
+}
+
+#[test]
+fn a_refused_path_masks_credentials_kept_after_clearing() {
+    let store = Store::new();
+    store.answer("good");
+    let workspace_id = store.ws("ws-a");
+    store.set("ws-a", false).expect("pinned");
+    let secret = "tok-path-903";
+    set_work_source_credentials(
+        &store.db,
+        &store.paths,
+        &workspace_id,
+        json!({ "token": secret }).as_object().expect("values"),
+    )
+    .expect("stored");
+    let path = format!("bin/{secret}");
+    for cleared in [false, true] {
+        if cleared {
+            clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+        }
+        let refused = refusal(set_work_source(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            &path,
+            false,
+            &no_references,
+        ));
+        assert!(refused.contains("bin/••••"), "{refused}");
+        assert!(!refused.contains(secret), "{refused}");
+    }
 }
 
 #[test]

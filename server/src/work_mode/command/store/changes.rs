@@ -283,9 +283,15 @@ pub(crate) fn set_work_source(
     let (plan, resolved) = {
         let _writer = writer();
         let plan = plan(db, paths, workspace_id)?;
-        // Through the mask: a typed path can spell a credential the workspace already has.
-        let resolved = resolve_command_path(typed_path)
-            .map_err(|error| WorkSourceError::Refused(plan.env.shown(&error)))?;
+        // A cleared command keeps its credentials, but has no declarations for `plan.env`.
+        // Include those retained values before quoting a refused path.
+        let resolved = match resolve_command_path(typed_path) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                let mask = credential_save_mask(db, paths, workspace_id, &Map::new())?;
+                return Err(WorkSourceError::Refused(mask.shown(&error)));
+            }
+        };
         (plan, resolved)
     };
     let accepted = plan
