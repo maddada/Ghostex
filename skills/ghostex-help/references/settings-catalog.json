@@ -8216,6 +8216,18 @@
       "agentWritable": false
     },
     {
+      "key": "claudeHookFreeActivity",
+      "title": "Track Claude without its hooks",
+      "subtitle": "Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.",
+      "tab": "debugging",
+      "tabTitle": "Debugging",
+      "section": "controls",
+      "sectionTitle": "Debug controls",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
       "key": "version",
       "title": "Version",
       "subtitle": "Ghostex app version.",

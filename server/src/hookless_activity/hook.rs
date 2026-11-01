@@ -27,6 +27,7 @@ pub(crate) fn observe_hook_event(
     result: &Value,
 ) {
     if endpoint_path != "/api/ingestAgentHookEvent"
+        || params.contains_key(super::drive::OBSERVER_MARK)
         || !super::task::comparison_enabled(state)
         || result.get("reason").and_then(Value::as_str) == Some("agent-hook-agent-mismatch")
     {

@@ -20,6 +20,7 @@ pub(crate) const OBSERVABLE_EVENTS: &[&str] = &[
     "UserPromptSubmit",
     "PermissionRequest",
     "Stop",
+    "StopFailure",
     "PostCompact",
 ];
 
@@ -111,8 +112,25 @@ fn waiting_event(waiting_for: Option<&str>) -> Option<&'static str> {
     }
 }
 
+/// One live `claude` process's session record and the config folder it was found in.
+pub(super) struct LiveRecord {
+    config_dir: PathBuf,
+    record: Value,
+}
+
 impl ClaudeObserver {
     pub(super) fn poll(&mut self, home: &Path) -> Vec<ActivityEvent> {
+        let live = self.read_records(home);
+        self.step(&live, &mut pane_of)
+    }
+
+    /// The Ghostex panes (project id, session id) a live `claude` is shown in right now.
+    pub(super) fn panes(&self) -> impl Iterator<Item = &(String, String)> {
+        self.panes.keys()
+    }
+
+    /// The records of every live `claude` process, in `~/.claude` and every cswap profile.
+    fn read_records(&mut self, home: &Path) -> Vec<LiveRecord> {
         let mut seen = HashSet::new();
         for dir in session_dirs(home) {
             let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -149,28 +167,45 @@ impl ClaudeObserver {
             }
         }
         self.files.retain(|path, _| seen.contains(path));
-
-        let live: Vec<(&PathBuf, &Value)> = self
-            .files
+        self.files
             .iter()
-            .map(|(path, (_, record))| (path, record))
-            .filter(|(_, record)| {
+            .filter(|(_, (_, record))| {
                 record["pid"]
                     .as_u64()
                     .and_then(|pid| u32::try_from(pid).ok())
                     .is_some_and(process_alive)
             })
-            .collect();
+            .map(|(path, (_, record))| LiveRecord {
+                // `<config>/sessions/<pid>.json`
+                config_dir: path
+                    .parent()
+                    .and_then(Path::parent)
+                    .map(Path::to_path_buf)
+                    .unwrap_or_default(),
+                record: record.clone(),
+            })
+            .collect()
+    }
+
+    /// Turns the live records into hook events by comparing each pane with what it showed on the
+    /// last pass. `pane_lookup` finds the Ghostex pane a `claude` process hangs below; the
+    /// conversation always comes from the record, never from a hook.
+    fn step(
+        &mut self,
+        live: &[LiveRecord],
+        pane_lookup: &mut dyn FnMut(u32) -> Option<(String, String)>,
+    ) -> Vec<ActivityEvent> {
         let jobs: HashMap<String, &Value> = live
             .iter()
-            .filter(|(_, record)| record["kind"] != "interactive")
-            .filter_map(|(_, record)| Some((text(record, "jobId")?, *record)))
+            .map(|live| &live.record)
+            .filter(|record| record["kind"] != "interactive")
+            .filter_map(|record| Some((text(record, "jobId")?, record)))
             .collect();
 
         let mut events = Vec::new();
         let mut live_panes = HashSet::new();
         let mut live_pids = HashSet::new();
-        for (path, record) in &live {
+        for LiveRecord { config_dir, record } in live {
             if record["kind"] != "interactive" {
                 continue;
             }
@@ -184,7 +219,7 @@ impl ClaudeObserver {
             let Some(pane) = self
                 .owners
                 .entry(pid)
-                .or_insert_with(|| pane_of(pid))
+                .or_insert_with(|| pane_lookup(pid))
                 .clone()
             else {
                 continue;
@@ -203,20 +238,52 @@ impl ClaudeObserver {
                 conversation: text(shown, "sessionId"),
             };
             live_panes.insert(pane.clone());
-            let config_dir = path
-                .parent()
-                .and_then(Path::parent)
-                .map(Path::to_path_buf)
-                .unwrap_or_default();
+            let cwd = text(shown, "cwd");
+            // Looked up only when the pane has news: a conversation with no transcript yet is
+            // searched for in every project folder.
+            let transcript = std::cell::OnceCell::new();
+            let transcript = || {
+                transcript
+                    .get_or_init(|| {
+                        next.conversation
+                            .as_deref()
+                            .and_then(|id| transcript_path(config_dir, cwd.as_deref(), id))
+                    })
+                    .clone()
+            };
             let previous = self.panes.insert(pane.clone(), next.clone());
             let make = |name: &str| {
-                ActivityEvent::new(&pane.0, &pane.1, "claude", name, next.conversation.clone())
+                let mut event =
+                    ActivityEvent::new(&pane.0, &pane.1, "claude", name, next.conversation.clone());
+                event.transcript = transcript();
+                event
+            };
+            // Claude's SessionStart names why it fired. A new conversation has no transcript until
+            // its first prompt, except that /clear writes the new one's first lines at once
+            // (Claude 2.1.312), starting with the /clear command itself; any other conversation
+            // already on disk was resumed.
+            let start = |same_process: bool| {
+                let source = match transcript() {
+                    Some(path) if !(same_process && opened_by_clear(&path)) => "resume",
+                    _ if same_process => "clear",
+                    _ => "startup",
+                };
+                make("SessionStart").with("source", json!(source))
+            };
+            // A conversation that is already working when it starts (a launch with a prompt, a
+            // prompt sent right after /clear) also reports the turn, as the hooks do.
+            let started_turn = || match next.status.as_str() {
+                "busy" => Some(make("UserPromptSubmit")),
+                "waiting" => waiting_event(next.waiting_for.as_deref())
+                    .map(|name| make(name).with("waitingFor", json!(next.waiting_for))),
+                _ => None,
             };
             let Some(previous) = previous else {
                 let started = record["startedAt"].as_i64().unwrap_or_default();
                 let age = chrono::Utc::now().timestamp_millis() - started;
                 if (0..FRESH_START.as_millis() as i64).contains(&age) {
-                    events.push(make("SessionStart").with("source", json!("startup")));
+                    events.push(start(false));
+                    events.extend(started_turn());
                 } else {
                     let name = match next.status.as_str() {
                         "busy" => "UserPromptSubmit",
@@ -232,7 +299,8 @@ impl ClaudeObserver {
             if previous.pid != next.pid || previous.conversation != next.conversation {
                 // A new `claude` in the pane, /clear, /resume, or the daemon view moving on. The
                 // same process leaving a conversation ends it, as Claude's SessionEnd hook says.
-                if previous.pid == next.pid && previous.conversation.is_some() {
+                let same_process = previous.pid == next.pid;
+                if same_process && previous.conversation.is_some() {
                     events.push(ActivityEvent::new(
                         &pane.0,
                         &pane.1,
@@ -241,7 +309,9 @@ impl ClaudeObserver {
                         previous.conversation.clone(),
                     ));
                 }
-                events.push(make("SessionStart"));
+                self.reminders.remove(&pane);
+                events.push(start(same_process));
+                events.extend(started_turn());
                 continue;
             }
             if previous.status == next.status && previous.waiting_for == next.waiting_for {
@@ -272,8 +342,8 @@ impl ClaudeObserver {
                         self.turn_ends.push(TurnEnd {
                             event: make("Stop"),
                             conversation: next.conversation.clone(),
-                            config_dir,
-                            cwd: text(shown, "cwd"),
+                            config_dir: config_dir.clone(),
+                            cwd: cwd.clone(),
                             due: Instant::now() + TURN_END_SETTLE,
                         });
                     }
@@ -357,8 +427,11 @@ fn settle_turn_end(end: TurnEnd) -> ActivityEvent {
             event.event_name = "PostCompact".to_string();
             event.payload.insert("trigger".to_string(), json!(trigger));
         }
+        // Claude sends StopFailure instead of Stop for a turn its last API call failed.
+        Some(TurnTail::Failed) => event.event_name = "StopFailure".to_string(),
         _ => {}
     }
+    event.transcript = Some(path);
     event
 }
 
@@ -379,9 +452,23 @@ fn transcript_path(config_dir: &Path, cwd: Option<&str>, conversation: &str) -> 
     crate::agent_transcripts::find_claude_transcript(conversation)
 }
 
+/// Whether a transcript's first lines are the `/clear` that started it.
+fn opened_by_clear(path: &Path) -> bool {
+    let mut head = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|file| file.take(64 * 1024).read_to_end(&mut head))
+        .is_ok()
+        && String::from_utf8_lossy(&head)
+            .lines()
+            .take(16)
+            .any(|line| line.contains("<command-name>/clear</command-name>"))
+}
+
 enum TurnTail {
     Interrupted,
     Compacted(String),
+    /// The turn's last API call failed (an `isApiErrorMessage` reply).
+    Failed,
     Other,
 }
 
@@ -406,6 +493,9 @@ fn last_turn_entry(path: &Path) -> Option<TurnTail> {
                     .unwrap_or("auto")
                     .to_string();
                 return Some(TurnTail::Compacted(trigger));
+            }
+            Some("assistant") if entry["isApiErrorMessage"] == true => {
+                return Some(TurnTail::Failed)
             }
             Some("assistant") => return Some(TurnTail::Other),
             Some("user") => {
@@ -438,4 +528,260 @@ fn last_turn_entry(path: &Path) -> Option<TurnTail> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PANE: (&str, &str) = ("P1", "G1");
+
+    struct Fixture {
+        dir: PathBuf,
+    }
+
+    impl Fixture {
+        fn new(name: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!(
+                "gx-hookless-{name}-{}-{}",
+                std::process::id(),
+                uuid::Uuid::new_v4()
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            Self { dir }
+        }
+
+        /// Writes `<config>/projects/<cwd folder>/<id>.jsonl`, as Claude does once a conversation
+        /// has its first line.
+        fn write_transcript(&self, profile: &str, id: &str) -> PathBuf {
+            let folder = self
+                .cwd()
+                .replace(|c: char| !c.is_ascii_alphanumeric(), "-");
+            let dir = self.dir.join(profile).join("projects").join(folder);
+            std::fs::create_dir_all(&dir).unwrap();
+            let path = dir.join(format!("{id}.jsonl"));
+            std::fs::write(
+                &path,
+                "{\"type\":\"user\",\"message\":{\"content\":\"hi\"}}\n",
+            )
+            .unwrap();
+            path
+        }
+
+        fn cwd(&self) -> String {
+            self.dir.join("project").to_string_lossy().into_owned()
+        }
+
+        fn record(&self, profile: &str, pid: u32, conversation: &str, status: &str) -> LiveRecord {
+            LiveRecord {
+                config_dir: self.dir.join(profile),
+                record: json!({
+                    "pid": pid,
+                    "sessionId": conversation,
+                    "cwd": self.cwd(),
+                    "kind": "interactive",
+                    "status": status,
+                    "startedAt": chrono::Utc::now().timestamp_millis(),
+                }),
+            }
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn step(observer: &mut ClaudeObserver, live: &[LiveRecord]) -> Vec<ActivityEvent> {
+        observer.step(live, &mut |_| {
+            Some((PANE.0.to_string(), PANE.1.to_string()))
+        })
+    }
+
+    fn names(events: &[ActivityEvent]) -> Vec<(String, Option<String>, Option<String>)> {
+        events
+            .iter()
+            .map(|event| {
+                (
+                    event.event_name.clone(),
+                    event.agent_session_id.clone(),
+                    event
+                        .payload
+                        .get("source")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                )
+            })
+            .collect()
+    }
+
+    fn id() -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+
+    fn start(conversation: &str, source: &str) -> (String, Option<String>, Option<String>) {
+        (
+            "SessionStart".to_string(),
+            Some(conversation.to_string()),
+            Some(source.to_string()),
+        )
+    }
+
+    fn end(conversation: &str) -> (String, Option<String>, Option<String>) {
+        (
+            "SessionEnd".to_string(),
+            Some(conversation.to_string()),
+            None,
+        )
+    }
+
+    #[test]
+    fn clear_moves_the_pane_to_the_new_unwritten_conversation() {
+        let fixture = Fixture::new("clear");
+        let (first, cleared) = (id(), id());
+        fixture.write_transcript(".claude", &first);
+        let mut observer = ClaudeObserver::default();
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &first, "idle")],
+        );
+        assert_eq!(names(&events), vec![start(&first, "resume")]);
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &cleared, "idle")],
+        );
+        assert_eq!(names(&events), vec![end(&first), start(&cleared, "clear")]);
+        assert_eq!(events[1].transcript, None);
+        // The first prompt of the cleared conversation, sent at once.
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &cleared, "busy")],
+        );
+        assert_eq!(
+            names(&events),
+            vec![("UserPromptSubmit".to_string(), Some(cleared.clone()), None)]
+        );
+    }
+
+    #[test]
+    fn clear_that_writes_its_transcript_at_once_is_still_a_clear() {
+        let fixture = Fixture::new("clear-written");
+        let (first, cleared) = (id(), id());
+        fixture.write_transcript(".claude", &first);
+        let path = fixture.write_transcript(".claude", &cleared);
+        std::fs::write(
+            &path,
+            "{\"type\":\"user\",\"message\":{\"content\":\"<command-name>/clear</command-name>\"}}\n",
+        )
+        .unwrap();
+        let mut observer = ClaudeObserver::default();
+        step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &first, "idle")],
+        );
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &cleared, "idle")],
+        );
+        assert_eq!(names(&events), vec![end(&first), start(&cleared, "clear")]);
+        assert_eq!(events[1].transcript.as_deref(), Some(path.as_path()));
+    }
+
+    #[test]
+    fn resume_in_the_same_process_names_the_resumed_transcript() {
+        let fixture = Fixture::new("resume");
+        let (fresh, resumed) = (id(), id());
+        let path = fixture.write_transcript(".claude", &resumed);
+        let mut observer = ClaudeObserver::default();
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &fresh, "idle")],
+        );
+        assert_eq!(names(&events), vec![start(&fresh, "startup")]);
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &resumed, "idle")],
+        );
+        assert_eq!(names(&events), vec![end(&fresh), start(&resumed, "resume")]);
+        assert_eq!(events[1].transcript.as_deref(), Some(path.as_path()));
+    }
+
+    #[test]
+    fn an_account_switch_restarts_claude_in_another_profile() {
+        let fixture = Fixture::new("account");
+        let conversation = id();
+        fixture.write_transcript(".claude", &conversation);
+        let profile_path = fixture.write_transcript("profile-2", &conversation);
+        let mut observer = ClaudeObserver::default();
+        step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "idle")],
+        );
+        // The old process is gone and the account's `claude --resume` took the pane over: a new
+        // process, so no SessionEnd from the old one, which never left its conversation.
+        let events = step(
+            &mut observer,
+            &[fixture.record("profile-2", 200, &conversation, "idle")],
+        );
+        assert_eq!(names(&events), vec![start(&conversation, "resume")]);
+        assert_eq!(
+            events[0].transcript.as_deref(),
+            Some(profile_path.as_path())
+        );
+    }
+
+    #[test]
+    fn a_launch_with_a_prompt_reports_its_turn() {
+        let fixture = Fixture::new("launch");
+        let conversation = id();
+        let mut observer = ClaudeObserver::default();
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "busy")],
+        );
+        assert_eq!(
+            names(&events),
+            vec![
+                start(&conversation, "startup"),
+                (
+                    "UserPromptSubmit".to_string(),
+                    Some(conversation.clone()),
+                    None
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_parked_terminal_speaks_for_the_daemon_conversation() {
+        let fixture = Fixture::new("parked");
+        let (own, hosted) = (id(), id());
+        let mut terminal = fixture.record(".claude", 100, &own, "idle");
+        let mut observer = ClaudeObserver::default();
+        step(&mut observer, &[terminal.clone_record()]);
+        terminal.record["parkedJobId"] = json!("job1");
+        let job = LiveRecord {
+            config_dir: fixture.dir.join(".claude"),
+            record: json!({"pid": 300, "sessionId": hosted, "kind": "bg", "jobId": "job1", "status": "busy", "cwd": fixture.cwd()}),
+        };
+        let events = step(&mut observer, &[terminal, job]);
+        assert_eq!(
+            names(&events),
+            vec![
+                end(&own),
+                start(&hosted, "clear"),
+                ("UserPromptSubmit".to_string(), Some(hosted.clone()), None),
+            ]
+        );
+    }
+
+    impl LiveRecord {
+        fn clone_record(&self) -> LiveRecord {
+            LiveRecord {
+                config_dir: self.config_dir.clone(),
+                record: self.record.clone(),
+            }
+        }
+    }
 }

@@ -257,6 +257,7 @@ How to use this file:
 
 - **Show debug UI controls** `debuggingMode` (boolean, default false): Show diagnostic logs.
 - **Diagnostic logs** `diagnosticLogging` (structured value; change it in Settings, not with `ghostex settings set`): Pick the areas to log while you reproduce an issue, and when logging turns off. Warnings, errors, and crashes are always captured.
+- **Track Claude without its hooks** `claudeHookFreeActivity` (boolean, default false): Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.
 ## About (tab `about`)
 
 ### About

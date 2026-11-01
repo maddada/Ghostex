@@ -2,6 +2,7 @@
 //! hook event for the same session, and what only one side saw is counted and logged.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::path::PathBuf;
 use std::sync::{LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -54,6 +55,8 @@ pub(crate) struct ActivityEvent {
     /// When Ghostex learned of it.
     pub(crate) at: Instant,
     pub(crate) wall_ms: i64,
+    /// The conversation's transcript on disk, when an observer knows it (Claude's).
+    pub(crate) transcript: Option<PathBuf>,
 }
 
 impl ActivityEvent {
@@ -75,6 +78,7 @@ impl ActivityEvent {
             baseline: false,
             at: Instant::now(),
             wall_ms: chrono::Utc::now().timestamp_millis(),
+            transcript: None,
         }
     }
 

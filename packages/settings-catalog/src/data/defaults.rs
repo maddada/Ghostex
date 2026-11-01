@@ -225,6 +225,7 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // and never the raw account id the hash is derived from.
     ("analyticsEnabled", J::Bool(true)),
     ("debuggingMode", J::Bool(false)),
+    ("claudeHookFreeActivity", J::Bool(false)),
     (
         "diagnosticLogging",
         J::Obj(&[("scenarios", J::Obj(&[])), ("version", J::Num(1.0))]),

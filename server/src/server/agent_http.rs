@@ -69,6 +69,22 @@ pub(crate) fn dispatch_agent_http_blocking(
             );
         }
     };
+    // A Claude hook superseded by the hook-free observer is only compared (hookless_activity/drive.rs).
+    if crate::hookless_activity::claude_hook_superseded(state, &endpoint_path, &params) {
+        crate::hookless_activity::observe_hook_event(state, &endpoint_path, &params, &Value::Null);
+        return routed_json(
+            Some(endpoint_path),
+            StatusCode::OK,
+            rpc_success(
+                request_id,
+                json!({
+                    "changed": false,
+                    "enteredAttention": false,
+                    "reason": "claude-hook-superseded",
+                }),
+            ),
+        );
+    }
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let context = ZmxServerContext {
         auth_token_file: state.paths.auth_token_file.to_string_lossy().to_string(),

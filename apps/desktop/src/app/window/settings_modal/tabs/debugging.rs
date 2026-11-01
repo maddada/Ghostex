@@ -1,5 +1,6 @@
 //! The Debugging page (packages/core-ui/settings-modal/tabs/debugging.tsx (deleted 2026-10-01)), listed in the rail
-//! under its built-in extension: Show debug UI controls, then the diagnostic log areas.
+//! under its built-in extension: Show debug UI controls, the diagnostic log areas, then Track Claude
+//! without its hooks.
 use super::super::fields::{
     FieldStates, RowSpec, SettingsPage, diagnostic_logging_field, reset_key, settings_section,
     toggle_field,
@@ -89,6 +90,21 @@ impl Render for DebuggingTab {
                 Some(reset_key::<Self>("diagnosticLogging")),
                 &value,
                 window,
+                cx,
+            ));
+        }
+        if debugging_mode && search.row_visible("controls", "claudeHookFreeActivity") {
+            rows.push(toggle_field(
+                self,
+                &p,
+                "claudeHookFreeActivity",
+                RowSpec::new("Track Claude without its hooks")
+                    .description(
+                        "Follow Claude sessions' activity and conversation from the session files Claude writes itself instead of from its hooks. The hooks stay installed and are only compared.",
+                    )
+                    .dependent()
+                    .keyed(&values, "claudeHookFreeActivity"),
+                values.bool("claudeHookFreeActivity"),
                 cx,
             ));
         }
