@@ -1195,9 +1195,36 @@ fn gpui_bootout_all_ghostex_launchd_jobs() {
             }
         }
     }
-    for label in labels {
+    let mut targets = labels
+        .into_iter()
+        .map(|label| format!("gui/{uid}/{label}"))
+        .collect::<Vec<_>>();
+    // gxserver starts zmx jobs in the background `user/<uid>` domain while nobody is logged in
+    // (CDXC:Zmx 2026-11-02 in server/src/zmx/launch.rs); `launchctl list` above only shows the
+    // desktop login's own domain.
+    if let Ok(print_output) = std::process::Command::new("/bin/launchctl")
+        .args(["print", &format!("user/{uid}")])
+        .output()
+    {
+        let text = String::from_utf8_lossy(&print_output.stdout);
+        let services = text
+            .lines()
+            .skip_while(|line| line.trim() != "services = {")
+            .skip(1)
+            .take_while(|line| line.trim() != "}");
+        for line in services {
+            if let Some(label) = line
+                .split_whitespace()
+                .last()
+                .filter(|label| label.starts_with(&prefix))
+            {
+                targets.push(format!("user/{uid}/{label}"));
+            }
+        }
+    }
+    for target in targets {
         let _ = std::process::Command::new("/bin/launchctl")
-            .args(["bootout", &format!("gui/{uid}/{label}")])
+            .args(["bootout", &target])
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())

@@ -448,6 +448,12 @@ pub async fn run_gxserver_foreground(
     );
     shutdown_bounds::stop_session_watchers_on_shutdown(&state);
     startup_gate.open();
+    #[cfg(target_os = "macos")]
+    tokio::task::spawn_blocking(move || {
+        if let Err(error) = super::macos_login_recovery::install(local_port) {
+            eprintln!("install gxserver login-session recovery agent failed: {error:#}");
+        }
+    });
 
     // The drain waits for every in-flight request; long waits are cut off (shutdown_bounds.rs).
     let serve_result = tokio::select! {

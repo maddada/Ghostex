@@ -135,6 +135,8 @@ mod http_dispatch;
 pub mod http_endpoints;
 pub mod http_infra;
 pub(crate) mod machine_integrations_http;
+#[cfg(target_os = "macos")]
+pub(crate) mod macos_login_recovery;
 pub(crate) mod managed_tools_http;
 mod open_conversation_http;
 pub mod presentation_delta;
