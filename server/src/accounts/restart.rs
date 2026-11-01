@@ -247,6 +247,12 @@ pub(crate) fn start(
         home_dir: state.paths.home_dir.clone(),
         timeout_ms: 10_000,
     });
+    let started_login = StartedLogin {
+        zmx_name: crate::zmx::provider_zmx_session_name(session)?,
+        agent: plan.agent.clone(),
+        expected_identity: plan.expected_identity.clone(),
+        previous_process_id: plan.previous_process_id,
+    };
     steps.push(SessionChatSendStep::WaitForAccountReady {
         agent: plan.agent,
         expected_identity: plan.expected_identity,
@@ -303,6 +309,7 @@ pub(crate) fn start(
             session_id,
             attempt,
             plan.account_settings,
+            started_login,
             source,
             result,
             started,
@@ -312,16 +319,34 @@ pub(crate) fn start(
     Ok(())
 }
 
+/// The agent a restart started, so a switch that fails after it started can tell which login runs.
+struct StartedLogin {
+    zmx_name: String,
+    agent: String,
+    expected_identity: String,
+    previous_process_id: Option<i64>,
+}
+
 async fn finish(
     state: Arc<AppState>,
     project_id: String,
     session_id: String,
     attempt: String,
     account_settings: Value,
+    started_login: StartedLogin,
     source: SwitchSource,
     result: Result<(), SessionChatSendError>,
     started: Instant,
 ) {
+    let runs_on_selected_login = result.is_err()
+        && super::restart_verification::runs_on_selected_login(
+            &started_login.zmx_name,
+            &started_login.agent,
+            &started_login.expected_identity,
+            &state.paths.home_dir,
+            started_login.previous_process_id,
+        )
+        .await;
     let Ok(_gate) = state.accounts.mutations.lock() else {
         return;
     };
@@ -413,9 +438,40 @@ async fn finish(
                 &project_id,
                 &session_id,
             );
+            let row = if runs_on_selected_login {
+                record_started_account(&repo, &row, &account_settings, &project_id, &session_id)
+                    .unwrap_or(row)
+            } else {
+                row
+            };
             fail(&state, &repo, &row, &error.message);
         }
     }
+}
+
+/// CDXC:AgentProviders 2026-11-01 WHY:
+/// The session's recorded account must always be the one its agent runs on. A switch that failed after the selected login started (its input box never showed: a login or setup prompt, a dialog) used to keep the previous account recorded while the CLI ran on the new one, so the sidebar, usage and the next switch all described the wrong login. When the new agent is verified to run on the selected login, that account is recorded and the switch still asks for attention.
+fn record_started_account(
+    repo: &DomainRepository<'_>,
+    row: &Value,
+    account_settings: &Value,
+    project_id: &str,
+    session_id: &str,
+) -> Option<Value> {
+    let mut runtime = row["runtimeSettings"].as_object().cloned()?;
+    apply_account_settings(&mut runtime, account_settings);
+    let row = endpoint::update_session(repo, row, runtime).ok()?;
+    if let Some(since) = account_settings["accountSuppressedUsageNoticeAt"]
+        .as_str()
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+    {
+        crate::session_chat_notice::suppress_account_usage_notice(
+            project_id,
+            session_id,
+            since.with_timezone(&chrono::Utc),
+        );
+    }
+    Some(row)
 }
 
 fn fail(state: &AppState, repo: &DomainRepository<'_>, row: &Value, error: &str) {

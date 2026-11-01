@@ -467,6 +467,12 @@ impl SessionChatTerminalNotice {
             && self.title == CLAUDE_ACCOUNT_DISABLED_TITLE
     }
 
+    /// Claude's usage-limit chooser ("What do you want to do?", "You've hit your limit" with its
+    /// rows): a live prompt of the CLI now running, which a resumed transcript never repaints.
+    pub fn usage_limit_chooser(&self) -> bool {
+        self.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT && self.is_answerable()
+    }
+
     pub fn blocks_queued_delivery(&self) -> bool {
         self.blocks_input()
             || matches!(

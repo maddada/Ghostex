@@ -50,9 +50,60 @@ async fn accept_remembered_trust(target: &AccountReadyTarget<'_>, agent: &str) {
     .await;
 }
 
+/// The login of the agent the switch started: `None` while no new agent of this kind runs in the
+/// session, `Some(None)` when its login cannot be read.
+async fn observe_new_login(
+    zmx_name: &str,
+    agent: &str,
+    home_dir: &Path,
+    previous_process_id: Option<i64>,
+) -> Option<Option<String>> {
+    let name = zmx_name.to_string();
+    let home = home_dir.to_path_buf();
+    let provider = agent.to_string();
+    tokio::task::spawn_blocking(move || {
+        let identities =
+            crate::zmx::read_zmx_session_process_identities(std::slice::from_ref(&name), &home)
+                .ok()?;
+        let process = identities.get(&name)?;
+        let pid = process
+            .process_id
+            .filter(|pid| Some(*pid) != previous_process_id)?;
+        if process.agent_id.as_deref() != Some(provider.as_str()) {
+            return None;
+        }
+        Some(super::process_login::identity(pid, &provider, &home))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+fn is_expected_login(agent: &str, expected_identity: &str, identity: &str) -> bool {
+    super::launch::agent_provider(agent, None).is_some_and(|provider| {
+        super::codex_identity::identity_matches(provider, expected_identity, identity)
+    })
+}
+
+/// Whether the agent the switch started runs on the selected login, whatever its screen shows.
+pub(crate) async fn runs_on_selected_login(
+    zmx_name: &str,
+    agent: &str,
+    expected_identity: &str,
+    home_dir: &Path,
+    previous_process_id: Option<i64>,
+) -> bool {
+    observe_new_login(zmx_name, agent, home_dir, previous_process_id)
+        .await
+        .flatten()
+        .is_some_and(|identity| is_expected_login(agent, expected_identity, &identity))
+}
+
 /// CDXC:AgentProviders 2026-09-11 DECISION:
 /// User: verify the new process's account identity and ready input before marking a switch successful or sending its continuation dot.
 /// The live process's configured login is the evidence: the saved account binding and shared transcript folder can both still describe a different account.
+/// CDXC:AgentProviders 2026-11-01 WHY:
+/// A login verified to be the selected account that opens on Claude's usage-limit chooser has switched: that account is at its limit, and the chooser is its own live prompt, not the previous login's repaint. Waiting for the input box there failed the switch with "its input box is not ready" and kept the old account recorded while Claude ran on the new one (account 4 to account 5 at its 7d limit, 2026-11-01). The switch now succeeds and the chat shows the new account's limit card; an automatic switch's continuation dot keeps waiting for the input box as before.
 pub(crate) async fn wait_for_account_ready(
     target: AccountReadyTarget<'_>,
     agent: &str,
@@ -71,41 +122,23 @@ pub(crate) async fn wait_for_account_ready(
         if cancelled() {
             return Err("The account switch was cancelled.".to_string());
         }
-        let name = zmx_name.to_string();
-        let home = home_dir.to_path_buf();
-        let provider = agent.to_string();
-        let observation = tokio::task::spawn_blocking(move || {
-            let identities =
-                crate::zmx::read_zmx_session_process_identities(std::slice::from_ref(&name), &home)
-                    .ok()?;
-            let process = identities.get(&name)?;
-            let pid = process
-                .process_id
-                .filter(|pid| Some(*pid) != previous_process_id)?;
-            if process.agent_id.as_deref() != Some(provider.as_str()) {
-                return None;
-            }
-            Some(super::process_login::identity(pid, &provider, &home))
-        })
-        .await
-        .ok()
-        .flatten();
+        let observation = observe_new_login(zmx_name, agent, home_dir, previous_process_id).await;
         if let Some(identity) = observation {
             saw_agent = true;
             match identity {
-                Some(identity)
-                    if super::launch::agent_provider(agent, None).is_some_and(|provider| {
-                        super::codex_identity::identity_matches(
-                            provider,
-                            expected_identity,
-                            &identity,
-                        )
-                    }) =>
-                {
+                Some(identity) if is_expected_login(agent, expected_identity, &identity) => {
                     if let Some(screen) = capture_session_terminal_text(zmx_name).await {
+                        let notice = classify_session_chat_terminal_notice(Some(agent), &screen);
+                        if notice
+                            .as_ref()
+                            .is_some_and(|notice| notice.usage_limit_chooser())
+                            && !cancelled()
+                        {
+                            return Ok(());
+                        }
                         // A resumed transcript can repaint the old account's usage limit. The switch already suppresses that replay.
-                        let notice = classify_session_chat_terminal_notice(Some(agent), &screen)
-                            .filter(|notice| notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT);
+                        let notice =
+                            notice.filter(|notice| notice.kind != SESSION_CHAT_NOTICE_USAGE_LIMIT);
                         let composer = detect_session_chat_composer_readiness(
                             Some(agent),
                             &screen,

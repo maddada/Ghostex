@@ -192,12 +192,14 @@ pub(crate) fn lift_account_usage_notice_suppression(project_id: &str, session_id
 ///
 /// CDXC:AgentProviders 2026-11-01 DECISION:
 /// User: "when i switch accounts DONT SHOW THIS NOTICE until you're 100% sure it's still applicable". A sign-in error ("Login expired · Please run /login") is hidden from the switch on like a usage limit, and with it the pause on automatic queued delivery; it comes back only when the transcript records a sign-in error after the switch time (`session_chat_notice_progress::refresh`), which is the new login failing. On 2026-11-01 a coordinator switched from account 2 to account 4 six seconds after account 2's "Login expired", and the resumed CLI's repaint of that line showed as account 4's sign-in error.
+/// CDXC:AgentProviders 2026-11-01 WHY:
+/// Claude's usage-limit chooser is never hidden: it is a live prompt of the CLI running now, never a repaint, so it is the current login's limit for certain. A switch onto an account already at its limit opens on that chooser, and hiding it left the chat without a card while the input box stayed covered.
 pub(crate) fn account_usage_notice_suppressed(
     project_id: &str,
     session_id: &str,
     notice: &SessionChatTerminalNotice,
 ) -> bool {
-    (notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT
+    ((notice.kind == SESSION_CHAT_NOTICE_USAGE_LIMIT && !notice.usage_limit_chooser())
         || notice.account_disabled()
         || notice.sign_in_error())
         && account_usage_notice_suppression(project_id, session_id).is_some()
