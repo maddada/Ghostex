@@ -203,15 +203,16 @@ pub(crate) fn start(
         .to_string();
     runtime.insert("accountSwitchAttempt".into(), json!(attempt));
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
-    runtime.insert(
-        "accountRecovery".into(),
-        json!({
+    super::api_errors::switch_recovery(
+        &mut runtime,
+        Some(json!({
             "status": "retrying", "trigger": "accountSwitch", "attempt": 0,
             "reason": "Restarting the agent on the selected account.",
             "updatedAt": chrono::Utc::now().to_rfc3339()
-        }),
+        })),
+        source == SwitchSource::Automatic,
     );
-    endpoint::update_session(repository, session, runtime)?;
+    endpoint::update_session_changes(repository, session, &runtime, Map::new())?;
     let cwd = session["cwd"].as_str().map(str::to_string).or_else(|| {
         repository
             .get_project(&project_id)
@@ -289,7 +290,7 @@ pub(crate) fn start(
     let completion = match completion {
         Ok(completion) => completion,
         Err(error) => {
-            fail(state, repository, session, &error.message);
+            fail(state, repository, session, &error.message, source);
             return Err(error);
         }
     };
@@ -374,7 +375,11 @@ async fn finish(
                 .and_then(Value::as_bool)
                 != Some(true);
             runtime.remove("accountSwitchAttempt");
-            runtime.remove("accountRecovery");
+            super::api_errors::switch_recovery(
+                &mut runtime,
+                None,
+                source == SwitchSource::Automatic,
+            );
             apply_account_settings(&mut runtime, &account_settings);
             super::switch_progress::set_phase(
                 &mut runtime,
@@ -385,7 +390,8 @@ async fn finish(
                 },
                 None,
             );
-            let Ok(row) = endpoint::update_session(&repo, &row, runtime) else {
+            let Ok(row) = endpoint::update_session_changes(&repo, &row, &runtime, Map::new())
+            else {
                 return;
             };
             if let Some(since) = account_settings["accountSuppressedUsageNoticeAt"]
@@ -442,7 +448,7 @@ async fn finish(
             } else {
                 row
             };
-            fail(&state, &repo, &row, &error.message);
+            fail(&state, &repo, &row, &error.message, source);
         }
     }
 }
@@ -472,7 +478,13 @@ fn record_started_account(
     Some(row)
 }
 
-fn fail(state: &AppState, repo: &DomainRepository<'_>, row: &Value, error: &str) {
+fn fail(
+    state: &AppState,
+    repo: &DomainRepository<'_>,
+    row: &Value,
+    error: &str,
+    source: SwitchSource,
+) {
     let mut runtime = row["runtimeSettings"]
         .as_object()
         .cloned()
@@ -480,15 +492,16 @@ fn fail(state: &AppState, repo: &DomainRepository<'_>, row: &Value, error: &str)
     runtime.remove("accountSwitchAttempt");
     super::switch_progress::set_phase(&mut runtime, "failed", Some(error));
     runtime.insert("accountRecoverySuppressed".into(), json!(true));
-    runtime.insert(
-        "accountRecovery".into(),
-        json!({
+    super::api_errors::switch_recovery(
+        &mut runtime,
+        Some(json!({
             "status": "needsAttention", "trigger": "accountSwitch", "attempt": 0,
             "reason": format!("{error} The account switch was not confirmed. Check the terminal before retrying."),
             "updatedAt": chrono::Utc::now().to_rfc3339()
-        }),
+        })),
+        source == SwitchSource::Automatic,
     );
-    if endpoint::update_session(repo, row, runtime).is_ok() {
+    if endpoint::update_session_changes(repo, row, &runtime, Map::new()).is_ok() {
         let _ = endpoint::publish(state, repo, row);
     }
 }

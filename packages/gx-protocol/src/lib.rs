@@ -66,3 +66,9 @@ pub const GXSERVER_REMOTE_PORT: u16 = 58745;
 pub const GXSERVER_EVENTS_PATH: &str = "/api/events";
 /// `stream` query value that restricts an event socket to subscribed session chat frames.
 pub const GXSERVER_EVENTS_STREAM_SESSION_CHAT: &str = "sessionChat";
+/// `stream` query value that restricts an event socket to notification feed changes and the
+/// daemon's start and stop. A client opens it only when `ghostex server endpoint` lists
+/// [`GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM`]; an older daemon would send its whole hub.
+pub const GXSERVER_EVENTS_STREAM_NOTIFICATIONS: &str = "notifications";
+/// The `ghostex server endpoint` capability that promises [`GXSERVER_EVENTS_STREAM_NOTIFICATIONS`].
+pub const GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM: &str = "notificationStream";

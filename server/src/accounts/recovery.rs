@@ -123,7 +123,7 @@ fn log(state: &AppState, level: LogLevel, event: &str, error: Option<String>, de
         details: Some(details),
     });
 }
-struct Plan {
+pub(crate) struct Plan {
     project: String,
     session: String,
     claim: String,
@@ -141,11 +141,25 @@ pub(crate) fn holds_queue(
     session: &Value,
     notice: &SessionChatTerminalNotice,
 ) -> bool {
-    if !retryable(notice)
-        || session
-            .pointer("/runtimeSettings/accountRecoverySuppressed")
-            .and_then(Value::as_bool)
-            == Some(true)
+    retryable(notice)
+        && recovery_retries(
+            repository,
+            session,
+            notice.kind == "usageLimit" || notice.account_disabled(),
+        )
+}
+/// Whether this pass would retry the session's failed turn by itself: its recovery is on and not
+/// stopped, and for anything but a usage limit (or a disabled account) retries after temporary
+/// errors are on too.
+pub(crate) fn recovery_retries(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    usage_limit: bool,
+) -> bool {
+    if session
+        .pointer("/runtimeSettings/accountRecoverySuppressed")
+        .and_then(Value::as_bool)
+        == Some(true)
     {
         return false;
     }
@@ -162,8 +176,7 @@ pub(crate) fn holds_queue(
         return false;
     };
     let policy = launch::effective_policy(&registry, provider, session);
-    policy.enabled
-        && (notice.kind == "usageLimit" || notice.account_disabled() || policy.retry_errors)
+    policy.enabled && (usage_limit || policy.retry_errors)
 }
 fn time(value: Option<&Value>) -> Option<DateTime<Utc>> {
     value
@@ -174,7 +187,7 @@ fn time(value: Option<&Value>) -> Option<DateTime<Utc>> {
 pub(super) fn backoff(attempt: u64) -> chrono::Duration {
     chrono::Duration::minutes((5_i64.saturating_mul(1_i64 << attempt.min(4))).min(60))
 }
-pub(super) fn save(
+pub(crate) fn save(
     state: &AppState,
     repo: &DomainRepository<'_>,
     session: &Value,
@@ -194,14 +207,17 @@ pub(super) fn save(
     {
         super::switch_progress::set_phase(&mut runtime, "failed", recovery["reason"].as_str());
     }
-    runtime.insert("accountRecovery".into(), recovery);
-    endpoint::update_session(repo, session, runtime)?;
+    let previous = runtime
+        .insert("accountRecovery".into(), recovery)
+        .unwrap_or(Value::Null);
+    // And the episode's failed row when due (CDXC:Notifications 2026-10-31 in api_errors.rs).
+    super::api_errors::store_recovery(state, repo, session, &previous, runtime)?;
     endpoint::publish(state, repo, session)
 }
 /// CDXC:AgentProviders 2026-09-11 WHY:
 /// One session used to end the whole pass: a `?` or a panic anywhere in the loop skipped every session behind it in the list, silently, for as long as the fault lasted.
 /// Each session is now planned on its own, with its errors and panics logged, and the pass outcome is logged too, because three sessions sat at the Fable limit for an hour with nothing in gxserver.jsonl to say why.
-fn collect(
+pub(crate) fn collect(
     state: &AppState,
     restart: bool,
     selected: Option<BTreeSet<SessionKey>>,
@@ -245,6 +261,13 @@ fn collect(
                 );
             }
         }
+    }
+    if narrowed {
+        super::api_errors::retain_continuations(&targets);
+    }
+    // A failed row an episode owes cannot wait for what follows, which may skip the session.
+    for session in &targets {
+        super::api_errors::settle_failure_notice(state, &repo, session);
     }
     // A provider with nothing saved follows `Policy::default`, which is on.
     if registry.accounts.is_empty()
@@ -489,7 +512,7 @@ fn restore_session(
     Ok(())
 }
 /// Decides what one session needs this pass: nothing, a state update, an account switch, a restart, or a continuation send (the returned plan).
-fn plan_session(
+pub(crate) fn plan_session(
     state: &AppState,
     db: &rusqlite::Connection,
     repo: &DomainRepository<'_>,
@@ -627,7 +650,8 @@ fn plan_session(
     if !usage_limit
         && (live_activity || (working && !detection.notice.as_ref().is_some_and(retryable)))
     {
-        if !recovery.is_null() {
+        // A failed-episode marker alone is no recovery to report progress on.
+        if recovery["status"].is_string() {
             if let Some(since) = time(recovery.get("healthySince")) {
                 if now - since >= chrono::Duration::minutes(1) {
                     recovery["attempt"] = json!(0);
@@ -673,6 +697,16 @@ fn plan_session(
             recovery["reason"] = json!(notice.title);
             recovery["updatedAt"] = json!(now.to_rfc3339());
             save(state, repo, &session, recovery)?;
+        } else if retryable(&notice)
+            && !notice.account_disabled()
+            && matches!(
+                notice.kind.as_str(),
+                crate::session_chat_notice::SESSION_CHAT_NOTICE_STREAM_ERROR | "agentError"
+            )
+        {
+            // An error recovery never retries because retries are off, whatever an earlier
+            // recovery that ended left behind: announced once.
+            super::api_errors::announce_episode(state, repo, &session)?;
         }
         return Ok(None);
     }
@@ -1122,11 +1156,13 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
         let owned = state.clone();
         let pid = plan.project.clone();
         let sid = plan.session.clone();
+        let claim = plan.claim.clone();
         let sender: crate::session_chat_queue::SessionChatQueueSender =
             Arc::new(move |text, _images| {
                 let state = owned.clone();
-                let pid = pid.clone();
-                let sid = sid.clone();
+                let (pid, sid) = (pid.clone(), sid.clone());
+                // Its prompt hook is this continuation (api_errors::end_failure_episode).
+                super::api_errors::note_continuation(&pid, &sid, &claim, &text);
                 Box::pin(async move {
                     send_session_chat_message_internal(
                         &state,
@@ -1158,6 +1194,7 @@ async fn deliver(state: Arc<AppState>, plan: Plan) {
             }
         })
     } else {
+        super::api_errors::note_continuation(&plan.project, &plan.session, &plan.claim, CONTINUE);
         send_session_chat_message_internal(
             &state,
             &plan.project,
@@ -1260,21 +1297,22 @@ pub(crate) fn retry_now(
     let claim = uuid::Uuid::new_v4().to_string();
     let now = Utc::now().to_rfc3339();
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
-    runtime.insert(
-        "accountRecovery".into(),
-        json!({
-            "status": "retrying",
-            "trigger": crate::session_chat_notice::SESSION_CHAT_NOTICE_STREAM_ERROR,
-            "claim": claim,
-            "attempt": previous["attempt"].as_u64().unwrap_or(0),
-            "reason": "Retrying now.",
-            "errorText": error_text,
-            "previousAttemptAt": previous["lastAttemptAt"],
-            "lastAttemptAt": now,
-            "updatedAt": now,
-        }),
-    );
-    endpoint::update_session(repo, session, runtime)?;
+    let mut recovery = json!({
+        "status": "retrying",
+        "trigger": crate::session_chat_notice::SESSION_CHAT_NOTICE_STREAM_ERROR,
+        "claim": claim,
+        "attempt": previous["attempt"].as_u64().unwrap_or(0),
+        "reason": "Retrying now.",
+        "errorText": error_text,
+        "previousAttemptAt": previous["lastAttemptAt"],
+        "lastAttemptAt": now,
+        "updatedAt": now,
+    });
+    // A retry the user asked for continues the episode: no second failed notification.
+    super::api_errors::reconcile_failure_notice(&previous, &mut recovery);
+    runtime.insert("accountRecovery".into(), recovery);
+    let members = &["accountRecoverySuppressed", "accountRecovery"];
+    endpoint::update_session_members(repo, session, &runtime, members)?;
     let queue = crate::session_chat_queue::read_session_chat_queue_snapshot_with(db, pid, sid);
     let plan = Plan {
         project: pid.into(),
@@ -1325,6 +1363,7 @@ pub(crate) fn user_action(
         return Ok(());
     }
     runtime.remove("accountRecovery");
+    super::api_errors::forget_continuation(project, session);
     super::switch_progress::set_phase(&mut runtime, "cancelled", None);
     runtime.insert("accountRecoverySuppressed".into(), json!(stop));
     endpoint::update_session(&repo, &row, runtime)?;

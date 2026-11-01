@@ -18,6 +18,8 @@ pub(crate) const NOTIFICATION_FEED_KIND_BELL: &str = "bell";
 pub(crate) const NOTIFICATION_FEED_KIND_CUSTOM: &str = "custom";
 /// A chat message could not be sent for good (session_chat_send_failure.rs), drawn red.
 pub(crate) const NOTIFICATION_FEED_KIND_SEND_FAILED: &str = "sendFailed";
+/// An agent's turn ended on an error Ghostex positively identified (failure.rs); clients draw it red.
+pub(crate) const NOTIFICATION_FEED_KIND_FAILED: &str = "failed";
 /// A banked usage reset of a saved account expires soon; clients draw it red.
 pub(crate) const NOTIFICATION_FEED_KIND_RESET_EXPIRING: &str = "resetExpiring";
 /// Ghostex used an expiring banked reset on its own.
@@ -67,6 +69,8 @@ pub(crate) fn insert_notification_feed_row(
     let id = uuid::Uuid::new_v4().to_string();
     let created_at = now_iso();
     // A finished turn says nothing about a message that was not sent, so it never replaces that row.
+    // A newer row of any other kind (finished, needs input, failed) therefore sits next to an unread
+    // Not sent row: a session can hold two unread rows, Not sent and the newer one.
     db.execute(
         "DELETE FROM notification_feed WHERE sessionId = ?1 AND readAt IS NULL AND (kind <> ?2 OR ?3 = ?2)",
         params![row.session_id, NOTIFICATION_FEED_KIND_SEND_FAILED, row.kind],

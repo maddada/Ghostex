@@ -179,7 +179,12 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 ///
 /// CDXC:Mobile 2026-10-09 WHY: the phone retries a chat send whose HTTP request was lost on its SSH port forward only when gxserver dedupes `sendRequestId` (`session_chat_send_requests.rs`, `send_once`); an older daemon would type the message twice, and no other field tells the phone which it is talking to. SEE-ALSO: apps/mobile/app/src/chat/rust/machine-link.ts
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO: `voiceAgent` means `/api/voice` (conversation and dictation) and `/api/readVoiceAgent` exist (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
-const ENDPOINT_CAPABILITIES: [&str; 2] = ["sendRequestLedger", "voiceAgent"];
+/// CDXC:Notifications 2026-10-31 SEE-ALSO: `notificationStream` means `/api/events?stream=notifications` carries only notification feed changes and the daemon's start and stop (`notification_event_matches` in server/src/server/ws.rs); an older daemon would send that socket its whole hub, so the phone opens it only behind this flag and otherwise polls the feed.
+const ENDPOINT_CAPABILITIES: [&str; 3] = [
+    "sendRequestLedger",
+    "voiceAgent",
+    ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM,
+];
 
 /// `gxserver endpoint` (`ghostex server endpoint`): the running daemon's local port and bearer token
 /// as JSON.
@@ -191,13 +196,7 @@ fn print_endpoint(without_token: bool) -> Result<()> {
     let paths = get_gxserver_paths(None);
     let metadata =
         read_runtime_metadata(&paths)?.ok_or_else(|| anyhow!("gxserver is not running."))?;
-    let mut endpoint = serde_json::json!({
-        "ok": true,
-        "port": metadata.port,
-        "baseUrl": format!("http://127.0.0.1:{}", metadata.port),
-        "protocolVersion": metadata.protocol_version,
-        "capabilities": ENDPOINT_CAPABILITIES,
-    });
+    let mut endpoint = endpoint_answer(metadata.port, metadata.protocol_version);
     if !without_token {
         let auth = read_gxserver_auth_token(&paths)?
             .ok_or_else(|| anyhow!("gxserver has no auth token yet; start it first."))?;
@@ -205,6 +204,16 @@ fn print_endpoint(without_token: bool) -> Result<()> {
     }
     println!("{}", serde_json::to_string(&endpoint)?);
     Ok(())
+}
+
+fn endpoint_answer(port: u16, protocol_version: u64) -> Value {
+    serde_json::json!({
+        "ok": true,
+        "port": port,
+        "baseUrl": format!("http://127.0.0.1:{port}"),
+        "protocolVersion": protocol_version,
+        "capabilities": ENDPOINT_CAPABILITIES,
+    })
 }
 
 pub async fn get_gxserver_status(_build_identity: &str, _version: &str) -> Result<StatusResponse> {
@@ -1006,6 +1015,27 @@ mod tests {
         assert_eq!(
             parsed.values.get("repository"),
             Some(&vec!["/tmp/skills".to_string()])
+        );
+    }
+
+    #[test]
+    fn the_endpoint_answer_offers_the_notification_stream() {
+        let answer = endpoint_answer(58744, 1);
+        let capabilities = answer["capabilities"].as_array().expect("capabilities");
+        assert_eq!(
+            capabilities,
+            &vec![
+                Value::from("sendRequestLedger"),
+                Value::from("voiceAgent"),
+                Value::from("notificationStream"),
+            ]
+        );
+        // The token names the stream the event socket filters on.
+        assert_eq!(
+            crate::server::EventStreamMode::from_query(Some(
+                ghostex_gx_protocol::GXSERVER_EVENTS_STREAM_NOTIFICATIONS
+            )),
+            crate::server::EventStreamMode::Notifications
         );
     }
 }

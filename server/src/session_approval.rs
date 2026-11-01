@@ -1,6 +1,6 @@
 //! Whether a session is stuck on an approval only the user can grant, decided once in gxserver for
 //! every client (the sidebar's red dot, the orchestrator's crew badge, the notifications list,
-//! `ghostex sessions`).
+//! `ghostex sessions`), and whether it waits on a question card only the user can answer.
 
 use serde_json::Value;
 
@@ -27,6 +27,16 @@ fn stored_approval_card(session: &Value) -> bool {
     session_chat_prompt_setting(session)
         .and_then(|stored| parse_stored_session_chat_prompt(&stored))
         .is_some_and(|prompt| matches!(prompt, SessionChatInteractivePrompt::Approval { .. }))
+}
+
+/// CDXC:SessionStatus 2026-10-31 WHY:
+/// The phone names a waiting session "has a question" from `awaitingAnswer`: a running session holds the question card a hook stored for an ask-user tool call (Claude's AskUserQuestion and the agents that share its hook contract). The card lives from the asking call's PreToolUse, which maps to working, until that call's own completion, so unlike the approval rule above a working title does not end it. It is a separate field because `pendingQuestionCount` (the pink dot, auto-sleep and the bulk sleep guard) counts open question forms and pages only and stays as it was. A sleeping or stopped session's leftover card does not count; a question that exists only in a transcript or on the screen is not covered.
+/// SEE-ALSO: `awaitingAnswer` in packages/gx-protocol/src/presentation.rs and packages/shared/gxserver-protocol-presentation.ts, server/src/ghostex_cli/sessions/cli_session.rs and mobile_summary.rs (forwarding).
+pub fn session_awaits_answer(session: &Value) -> bool {
+    effective_lifecycle_state(session) == "running"
+        && session_chat_prompt_setting(session)
+            .and_then(|stored| parse_stored_session_chat_prompt(&stored))
+            .is_some_and(|prompt| matches!(prompt, SessionChatInteractivePrompt::Question { .. }))
 }
 
 #[cfg(test)]
@@ -96,5 +106,52 @@ mod tests {
             &session("sleeping", "attention", Some(approval())),
             NOW
         ));
+    }
+
+    /// The card the PreToolUse hook of Claude's AskUserQuestion stores (the real derivation).
+    fn asked_question() -> Value {
+        let prompt = crate::session_chat_interactive::derive_session_chat_prompt(
+            Some("AskUserQuestion"),
+            Some(&json!({
+                "questions": [{
+                    "question": "Which one?", "header": "Pick", "multiSelect": false,
+                    "options": [{ "label": "A", "description": "First" }, { "label": "B", "description": "Second" }],
+                }],
+            })),
+            Some("PreToolUse"),
+        )
+        .expect("a question card");
+        serde_json::to_value(prompt).expect("stored card")
+    }
+
+    #[test]
+    fn a_stored_question_card_awaits_an_answer_while_the_agent_works() {
+        // The asking call's PreToolUse stored the card and set working; it still waits.
+        for activity in ["working", "attention", "idle"] {
+            assert!(
+                session_awaits_answer(&session("running", activity, Some(asked_question()))),
+                "{activity}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_approval_no_card_or_a_sleeping_session_does_not_await_an_answer() {
+        assert!(!session_awaits_answer(&session(
+            "running",
+            "attention",
+            Some(approval())
+        )));
+        assert!(!session_awaits_answer(&session(
+            "running",
+            "attention",
+            None
+        )));
+        for lifecycle in ["sleeping", "stopped"] {
+            assert!(
+                !session_awaits_answer(&session(lifecycle, "working", Some(asked_question()))),
+                "{lifecycle}"
+            );
+        }
     }
 }

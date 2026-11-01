@@ -19,7 +19,7 @@ use super::thread_read::acknowledge_read_notification_sessions;
 pub(crate) const NOTIFICATION_FEED_READ_ENDPOINT: &str = "/api/readNotificationFeed";
 pub(crate) const NOTIFICATION_FEED_UPDATE_ENDPOINT: &str = "/api/updateNotificationFeed";
 pub(crate) const NOTIFICATION_FEED_CREATE_ENDPOINT: &str = "/api/createNotification";
-const NOTIFICATION_FEED_CHANGED_EVENT_TYPE: &str = "notificationFeedChanged";
+pub(crate) const NOTIFICATION_FEED_CHANGED_EVENT_TYPE: &str = "notificationFeedChanged";
 
 /// The change announcement carries no rows: `/api/readNotificationFeed` stays the single projection, so every client refetches and sees the same list.
 pub(crate) fn broadcast_notification_feed_changed(state: &AppState) {

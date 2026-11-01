@@ -241,6 +241,10 @@ pub(crate) fn project_presentation_session(
             output.insert("stuckSince".to_string(), Value::String(since));
         }
     }
+    // Present only while true (CDXC:SessionStatus 2026-10-31 in server/src/session_approval.rs).
+    if crate::session_approval::session_awaits_answer(session) {
+        output.insert("awaitingAnswer".to_string(), Value::Bool(true));
+    }
     insert_optional_string(
         &mut output,
         "agentName",

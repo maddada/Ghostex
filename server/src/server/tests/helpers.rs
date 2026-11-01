@@ -6,7 +6,7 @@ use crate::{
 };
 use std::fs;
 
-pub(super) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
+pub(crate) fn test_app_state(paths: GxserverPaths) -> Arc<AppState> {
     test_app_state_for(paths, "S7k")
 }
 

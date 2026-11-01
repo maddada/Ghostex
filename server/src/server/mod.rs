@@ -163,7 +163,7 @@ mod storage_cleanup_sweep;
 pub mod telemetry_http;
 pub mod telemetry_tasks;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 pub mod title_generation;
 pub(crate) mod title_job_recovery;
 pub mod typed_operation_http;

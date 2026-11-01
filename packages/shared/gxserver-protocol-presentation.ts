@@ -266,6 +266,8 @@ A missing flag means "this machine has no git/PR data to give", and V2 renders
 its cards exactly as it does for a session with no `gitStatus` at all.
 */
 export interface GxserverPresentationCapabilities {
+  /** The daemon publishes `awaitingAnswer` on its sessions; absent means it cannot say whether a question card waits. */
+  awaitingAnswer?: boolean;
   sessionGitStatus?: boolean;
   sessionSettlement: boolean;
   sessionSnooze: boolean;
@@ -466,6 +468,8 @@ export interface GxserverPresentationSession {
   pendingQuestionCount?: number;
   /** Stuck on a permission prompt or approval card only the user can grant (the red dot); absent when not. */
   awaitingApproval?: boolean;
+  /** A running session holds a question card only the user can answer, also while the agent works; absent when not. Independent of pendingQuestionCount. */
+  awaitingAnswer?: boolean;
   agentIcon?: string;
   agentId?: string;
   agentName?: string;

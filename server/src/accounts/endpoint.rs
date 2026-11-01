@@ -515,9 +515,11 @@ pub(crate) fn dispatch(
                     })?;
                 }
                 runtime.insert("accountPolicyOverride".into(), policy);
-                runtime.remove("accountRecovery");
                 runtime.remove("accountRecoverySuppressed");
-                update_session(&repository, &session, runtime)?;
+                // Starts recovery over; a failed episode keeps its marker, and an error the new
+                // settings stop retrying is announced once (CDXC:Notifications 2026-10-31 in
+                // api_errors.rs).
+                super::api_errors::save_settings(state, &repository, &session, runtime)?;
             } else if operation == "stopRecovery" {
                 runtime.remove("accountRecovery");
                 runtime.insert("accountRecoverySuppressed".into(), json!(true));
@@ -638,6 +640,90 @@ pub(crate) fn update_session(
 ) -> Result<Value, DomainStateError> {
     repository.update_session(&json!({"projectId":session["projectId"],"sessionId":session["sessionId"],"runtimeSettings":runtime}).as_object().unwrap().clone())
 }
+/// Writes only `members` of the session's runtime settings, as `runtime` has them (removed where it
+/// has none), onto the row as stored now. The row is read after SQLite's writer is reserved, so the
+/// members other writers stored since the caller read the session (a hook's activity and question
+/// card, a published question) stay; inside a caller's transaction the caller holds that reservation.
+pub(crate) fn update_session_members(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    runtime: &Map<String, Value>,
+    members: &[&str],
+) -> Result<Value, DomainStateError> {
+    write_session_members(repository, session, runtime, members, Map::new())
+}
+/// `update_session_members` for the members `runtime` changed relative to the session it was built
+/// from (added, changed or removed), with the other session fields in `other` (an account switch's
+/// `launchSettings`) written in the same update.
+pub(crate) fn update_session_changes(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    runtime: &Map<String, Value>,
+    other: Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let before = session["runtimeSettings"]
+        .as_object()
+        .cloned()
+        .unwrap_or_default();
+    let mut members: Vec<&str> = before
+        .keys()
+        .chain(runtime.keys())
+        .map(String::as_str)
+        .filter(|member| before.get(*member) != runtime.get(*member))
+        .collect();
+    members.sort_unstable();
+    members.dedup();
+    write_session_members(repository, session, runtime, &members, other)
+}
+fn write_session_members(
+    repository: &DomainRepository<'_>,
+    session: &Value,
+    runtime: &Map<String, Value>,
+    members: &[&str],
+    other: Map<String, Value>,
+) -> Result<Value, DomainStateError> {
+    let own = repository.db.is_autocommit();
+    if own {
+        repository
+            .db
+            .execute_batch("BEGIN IMMEDIATE")
+            .map_err(store::error)?;
+    }
+    let written = repository
+        .get_session(
+            session["projectId"].as_str().unwrap_or_default(),
+            session["sessionId"].as_str().unwrap_or_default(),
+        )
+        .and_then(|row| row.ok_or_else(|| DomainStateError::not_found("Session not found.")))
+        .and_then(|row| {
+            let mut current = row["runtimeSettings"]
+                .as_object()
+                .cloned()
+                .unwrap_or_default();
+            for member in members {
+                match runtime.get(*member) {
+                    Some(value) => current.insert((*member).to_string(), value.clone()),
+                    None => current.remove(*member),
+                };
+            }
+            let mut params = other;
+            params.insert("projectId".into(), row["projectId"].clone());
+            params.insert("sessionId".into(), row["sessionId"].clone());
+            params.insert("runtimeSettings".into(), Value::Object(current));
+            repository.update_session(&params)
+        });
+    if own {
+        let end = match written {
+            Ok(_) => repository.db.execute_batch("COMMIT").map_err(store::error),
+            Err(_) => Ok(()),
+        };
+        if written.is_err() || end.is_err() {
+            let _ = repository.db.execute_batch("ROLLBACK");
+        }
+        end?;
+    }
+    written
+}
 pub(crate) fn publish(
     state: &AppState,
     repository: &DomainRepository<'_>,
@@ -753,7 +839,8 @@ pub(crate) fn select(
         let command = launch::with_account_command(base, provider, provider.id())?;
         runtime.insert("accountCommand".into(), json!(command));
     }
-    runtime.remove("accountRecovery");
+    // An automatic switch keeps the error episode; one the user picks ends it (api_errors.rs).
+    super::api_errors::switch_recovery(&mut runtime, None, source == SwitchSource::Automatic);
     // Every switch hides usage-limit notices from the switch time on, whether or not the cache held one: the resumed CLI repaints the previous login's limit from the transcript, and that replay must never read as the new login's limit. See `suppress_account_usage_notice`.
     let switched_at = chrono::Utc::now();
     runtime.remove("accountSuppressedUsageNotice");
@@ -810,15 +897,14 @@ pub(crate) fn select(
         "toAccountId": id,
         "updatedAt": chrono::Utc::now().to_rfc3339(),
     }));
-    let updated = repository.update_session(
-        json!({
-            "projectId": session["projectId"],
-            "sessionId": session["sessionId"],
-            "runtimeSettings": runtime,
-            "launchSettings": launch_settings,
-        })
-        .as_object()
-        .unwrap(),
+    // Only what the switch changed, onto the row as stored now (CDXC:Notifications 2026-10-31 in
+    // api_errors.rs): a question card or published question stored meanwhile stays.
+    let launch_settings = json!({ "launchSettings": launch_settings });
+    let updated = update_session_changes(
+        repository,
+        session,
+        &runtime,
+        launch_settings.as_object().cloned().unwrap_or_default(),
     )?;
     super::switch_progress::publish(state, &updated);
     if !restarting_in_place {
@@ -980,7 +1066,7 @@ fn state_value(
         } else if let Some(p) = launch::provider(&project, &session) {
             let account_id =
                 super::session_identity::display_account_id(registry, p, &session, home);
-            value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":session.pointer("/runtimeSettings/accountRecovery"),"accountSwitch":session.pointer("/runtimeSettings/accountSwitch")});
+            value["session"] = json!({"provider":p,"accountId":account_id,"override":session.pointer("/runtimeSettings/accountPolicyOverride"),"policy":launch::effective_policy(registry,p,&session),"recovery":super::api_errors::shown_recovery(&session),"accountSwitch":session.pointer("/runtimeSettings/accountSwitch")});
             if launch::session_uses_own_login(p, &session) {
                 value["session"]["usesOwnLogin"] = json!(true);
             }

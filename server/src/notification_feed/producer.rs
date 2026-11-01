@@ -16,7 +16,7 @@ use super::store::{
     NOTIFICATION_FEED_KIND_FINISHED, NOTIFICATION_FEED_KIND_NEEDS_INPUT,
 };
 
-const OBSERVER_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
+pub(super) const OBSERVER_BUSY_TIMEOUT: Duration = Duration::from_millis(2_000);
 
 /// Feed rows are written from the one place every attention transition already passes through, after the endpoint's own transaction committed.
 /// Entering attention writes a row; leaving attention reads the session's rows, preserving deferrals on automatic transitions.
@@ -156,22 +156,7 @@ fn record_attention_row(
             message: format!("SQLite gxserver state error: {error}"),
         })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
-    let subtitle = repository
-        .get_project(project_id)?
-        .and_then(|project| {
-            project
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        })
-        .unwrap_or_default();
-    let title = session
-        .get("title")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or("Session")
-        .to_string();
+    let (title, subtitle) = session_row_heading(&repository, project_id, session)?;
     insert_notification_feed_row(
         &db,
         NewNotificationFeedRow {
@@ -189,6 +174,31 @@ fn record_attention_row(
         },
     )?;
     Ok(true)
+}
+
+/// A session row's title (the session's title) and subtitle (its project's name).
+pub(super) fn session_row_heading(
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session: &Value,
+) -> Result<(String, String), DomainStateError> {
+    let subtitle = repository
+        .get_project(project_id)?
+        .and_then(|project| {
+            project
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .unwrap_or_default();
+    let title = session
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("Session")
+        .to_string();
+    Ok((title, subtitle))
 }
 
 fn record_attention_left(

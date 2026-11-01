@@ -306,12 +306,20 @@ pub(crate) fn apply_program_status(
     };
     log_agent_activity_transition(state, endpoint, &params, &output.result);
     if reused_event_id.is_none() {
-        crate::notification_feed::observe_agent_activity_result(
-            state,
-            endpoint,
-            &params,
-            &output.result,
-        );
+        /*
+        CDXC:Notifications 2026-10-31 WHY:
+        A program's `error` is a failed run, not a finished one: its feed row is Failed (failure.rs), also when the session was already in attention (blocked, then error; done, then error) and so entered none. The activity stays the finished attention the 2026-10-14 decision above maps it to, so the queue, the red program-status dot and acknowledgement behave as before; a report applied again keeps skipping the feed.
+        */
+        if effective == "error" {
+            crate::notification_feed::observe_program_error(state, &output.result);
+        } else {
+            crate::notification_feed::observe_agent_activity_result(
+                state,
+                endpoint,
+                &params,
+                &output.result,
+            );
+        }
         crate::session_chat_question_resend::observe_turn_end(state, &params, &output.result);
         crate::session_chat_open_questions::observe_activity(state, &params, &output.result);
         if let Some(event_id) = output

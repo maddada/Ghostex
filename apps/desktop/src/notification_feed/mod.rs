@@ -63,6 +63,8 @@ pub(crate) enum GpuiNotificationFeedKind {
     Custom,
     /// A chat message could not be sent (drawn red, and the bell's badge turns red with it).
     SendFailed,
+    /// An agent's run ended on an error (drawn red, like an urgent row).
+    Failed,
     /// A saved account's banked usage reset expires soon (an account row, drawn red).
     ResetExpiring,
     /// Ghostex used an expiring banked reset on its own (an account row).
@@ -77,6 +79,7 @@ impl GpuiNotificationFeedKind {
             "bell" => Some(Self::Bell),
             "custom" => Some(Self::Custom),
             "sendFailed" => Some(Self::SendFailed),
+            "failed" => Some(Self::Failed),
             "resetExpiring" => Some(Self::ResetExpiring),
             "resetRedeemed" => Some(Self::ResetRedeemed),
             _ => None,
@@ -90,13 +93,17 @@ impl GpuiNotificationFeedKind {
             Self::Bell => "Bell",
             Self::Custom => "Notification",
             Self::SendFailed => "Not sent",
+            Self::Failed => "Failed",
             Self::ResetExpiring => "Reset expiring",
             Self::ResetRedeemed => "Reset used",
         }
     }
 
+    /// Red rows: an expiring reset, a message not sent and a failed run (failed falls back to the
+    /// alert-circle glyph when the session has no agent logo). An unread one turns the bell's badge
+    /// red.
     pub(crate) fn urgent(self) -> bool {
-        matches!(self, Self::ResetExpiring | Self::SendFailed)
+        matches!(self, Self::ResetExpiring | Self::SendFailed | Self::Failed)
     }
 
     /// The card's accent: red for urgent rows, the attention blue otherwise.
@@ -123,6 +130,7 @@ impl GpuiNotificationFeedKind {
             Self::Finished => "titlebar/message-circle.svg",
             Self::NeedsInput => "titlebar/help-circle.svg",
             Self::Bell => "titlebar/bell.svg",
+            Self::Failed => "titlebar/alert-circle.svg",
             Self::Custom | Self::SendFailed | Self::ResetExpiring | Self::ResetRedeemed => {
                 "titlebar/info-circle.svg"
             }

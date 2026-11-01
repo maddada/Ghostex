@@ -278,6 +278,29 @@ mod tests {
     }
 
     #[test]
+    fn an_open_question_card_is_forwarded_without_changing_the_question_count() {
+        let session = json!({ "sessionId": "G9", "projectId": "P1", "lifecycleState": "running" });
+        let asking =
+            json!({ "activity": "working", "awaitingAnswer": true, "pendingQuestionCount": 0 });
+        let quiet = json!({ "activity": "working", "pendingQuestionCount": 0 });
+        let cli = to_cli_session(&session, None, 0, Some(&asking), Some(0));
+        assert_eq!(cli["awaitingAnswer"], json!(true));
+        let summary = super::super::mobile_summary::to_mobile_session_list(
+            &json!({
+                "ok": true,
+                "capabilities": { "awaitingAnswer": true },
+                "sessions": [cli, to_cli_session(&session, None, 1, Some(&quiet), Some(1))],
+            }),
+            &serde_json::Map::new(),
+        );
+        assert_eq!(summary["capabilities"]["awaitingAnswer"], json!(true));
+        assert_eq!(summary["sessions"][0]["awaitingAnswer"], json!(true));
+        // The pink-dot count stays its own field, absent at zero as before.
+        assert!(summary["sessions"][0].get("pendingQuestionCount").is_none());
+        assert!(summary["sessions"][1].get("awaitingAnswer").is_none());
+    }
+
+    #[test]
     fn to_cli_session_status_fallbacks_and_empty_project_path() {
         let session = json!({ "sessionId": "G2", "projectId": "P1" });
         let cli = to_cli_session(&session, None, 4, None, None);

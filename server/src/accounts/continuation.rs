@@ -3,7 +3,7 @@ use crate::{
     domain::{DomainRepository, DomainStateError},
     server::AppState,
 };
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -42,7 +42,7 @@ pub(crate) fn start(
             .cloned()
             .unwrap_or_default();
         super::switch_progress::set_phase(&mut runtime, "success", None);
-        endpoint::update_session(repo, &session, runtime)?;
+        endpoint::update_session_changes(repo, &session, &runtime, Map::new())?;
         super::switch_progress::publish(state, &session);
         return Ok(());
     }
@@ -53,15 +53,16 @@ pub(crate) fn start(
         .unwrap_or_default();
     super::switch_progress::set_phase(&mut runtime, "continuing", None);
     runtime.insert("accountRecoverySuppressed".into(), json!(false));
-    runtime.insert(
-        "accountRecovery".into(),
-        json!({
+    super::api_errors::switch_recovery(
+        &mut runtime,
+        Some(json!({
             "status":"retrying", "trigger":"accountSwitch", "claim":claim.to_string(), "attempt":0,
             "reason":"Waiting for the agent input to continue on this account.",
             "updatedAt":chrono::Utc::now().to_rfc3339()
-        }),
+        })),
+        source == SwitchSource::Automatic,
     );
-    endpoint::update_session(repo, &session, runtime)?;
+    endpoint::update_session_changes(repo, &session, &runtime, Map::new())?;
     super::switch_progress::publish(state, &session);
     let state = Arc::new(state.clone());
     tokio::spawn(async move {
@@ -106,6 +107,7 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
                 && detection.composer.state
                     == crate::session_chat_composer::SessionChatComposerState::Ready
             {
+                super::api_errors::note_continuation(&project, &session_id, &claim_text, ".");
                 let sent = crate::session_chat_queue_runtime::send_session_chat_message_internal(
                     &state,
                     &project,
@@ -164,7 +166,7 @@ async fn deliver(state: Arc<AppState>, project: String, session_id: String, clai
         Err(error) => error.message,
     });
     runtime["accountRecovery"]["updatedAt"] = json!(chrono::Utc::now().to_rfc3339());
-    if endpoint::update_session(&repo, &row, runtime).is_ok() {
+    if endpoint::update_session_changes(&repo, &row, &runtime, Map::new()).is_ok() {
         let _ = endpoint::publish(&state, &repo, &row);
     }
 }
