@@ -178,6 +178,11 @@ impl GhostexGpuiApp {
         if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
+        // A page card on screen whose page has no picture yet (visual_page_background_pictures.rs).
+        if action == "pictureUnopenedPage" {
+            self.picture_unopened_page(session_id, &message, cx);
+            return;
+        }
         // The working card's Links pill (native_chat/links_pill.rs) opens the session's links list.
         if action == "sessionLinks" {
             if let (Some(key), Some(anchor)) = (

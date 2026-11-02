@@ -74,6 +74,8 @@
     }, { passive: true, capture: true });
   }
   addEventListener('scroll', () => {
+    // Held at the top for the picture: keys or the scrollbar moved it, so it goes straight back.
+    if (holding && (scrollX || scrollY)) scrollTo({ left: 0, top: 0, behavior: 'instant' });
     if (holding || restoring) return;
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveScroll, SAVE_AFTER_MS);
@@ -101,10 +103,20 @@
   }
 
   // The chat card's picture is the top of the page, and the app takes it from the page on screen
-  // (app/visual_page_thumbnails.rs), so it asks the page to wait at the top while it does.
+  // (app/visual_page_thumbnails.rs), so it asks the page to wait at the top while it does. The
+  // reader's wheel and finger do not move it meanwhile: a page scrolled when the picture is taken
+  // comes out as an empty band above a strip of its middle, and a trackpad's momentum from the
+  // reader's first flick outlasts a single scroll back to the top. Only during the hold, because
+  // a wheel listener that can cancel takes scrolling off Chromium's fast path.
+  const stopScrolling = (event) => {
+    if (event.cancelable) event.preventDefault();
+  };
+  const PINNED = { passive: false, capture: true };
   const release = () => {
     const held = holding;
     holding = null;
+    removeEventListener('wheel', stopScrolling, PINNED);
+    removeEventListener('touchmove', stopScrolling, PINNED);
     if (held && !held.touched && held.y > 0) scrollBack(held.y);
   };
   Object.defineProperty(window, '__ghostexPageScroll', {
@@ -114,6 +126,8 @@
         const y = restoring ? restoring.target : scrollY;
         if (restoring) restoring();
         holding = { y, touched: false };
+        addEventListener('wheel', stopScrolling, PINNED);
+        addEventListener('touchmove', stopScrolling, PINNED);
         scrollTo({ left: 0, top: 0, behavior: 'instant' });
         // Never stuck at the top when the app's release does not come.
         setTimeout(() => { if (holding) release(); }, 15000);
