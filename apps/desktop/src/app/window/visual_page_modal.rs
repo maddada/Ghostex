@@ -88,6 +88,9 @@ pub(crate) struct GpuiVisualPageModalWindow {
     counted_press: Option<Instant>,
     _disarm: Option<Task<()>>,
     _source_watch: Option<Task<()>>,
+    /// What the page was last handed of the app's glass and theme (`glass.rs`).
+    glass: glass::PageGlass,
+    _glass_watch: Option<Task<()>>,
     _click_away: Vec<Subscription>,
 }
 
@@ -147,6 +150,8 @@ impl GpuiVisualPageModalWindow {
             counted_press: None,
             _disarm: None,
             _source_watch: None,
+            glass: glass::PageGlass::default(),
+            _glass_watch: None,
             _click_away: click_away,
         };
         modal.watch_page_source(cx);
@@ -306,13 +311,6 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
-                let mut page_bounds = window.bounds();
-                page_bounds.origin.y += px(HEADER_HEIGHT);
-                page_bounds.size.height =
-                    (page_bounds.size.height - px(HEADER_HEIGHT)).max(px(1.0));
-                if let Some(script) = glass::page_glass_script(page_bounds, cx) {
-                    surface.read(cx).add_page_script(&script);
-                }
                 // A CEF page starts 1×1 and only gets its frame when the window paints; give it
                 // the area under the header from the start so it lays out at its real width.
                 let viewport = window.viewport_size();
@@ -327,6 +325,7 @@ impl GpuiVisualPageModalWindow {
                     window.scale_factor(),
                 );
                 self.surface = Some(surface);
+                self.follow_page_glass(window, cx);
             }
             Err(error) => {
                 support_logs::append(
