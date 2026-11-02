@@ -7,7 +7,11 @@
 //! this only lays the tiles out. The phone draws the same tiles in
 //! apps/mobile/app/src/chat/native/transcript/Images.tsx (`ReadImages`).
 
+use super::tool_run::{ROW_PAD_X, TILE};
 use super::{appearance::ChatAppearance, images::VISUAL, state::NativeChatView};
+
+/// Where a strip under a closed fold of a message's calls starts: under a tool row's label.
+pub(super) const FOLDED_CALLS_INSET: f32 = ROW_PAD_X + TILE + 8.0;
 use gpui::{AnyElement, Context, IntoElement, ParentElement as _, Styled as _, div, px};
 use serde_json::Value;
 

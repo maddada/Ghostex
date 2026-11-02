@@ -177,6 +177,16 @@ impl NativeChatView {
                             .child(self.disclosure_body_motion(&calls_key, motion, 4.0 * s, body)),
                     );
                 }
+            } else if let Some(pictures) = self.read_pictures(
+                &format!("{calls_key}:read"),
+                &message["readImages"],
+                super::read_pictures::FOLDED_CALLS_INSET,
+                p,
+                cx,
+            ) {
+                // Folded calls keep the pictures they read in view, as a closed turn fold does
+                // (gx-chat-core `read_images.rs`).
+                column = column.child(pictures);
             }
         }
         div()

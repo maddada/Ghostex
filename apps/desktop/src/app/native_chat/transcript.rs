@@ -569,6 +569,16 @@ impl NativeChatView {
                         );
                         row = row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                     }
+                } else if let Some(pictures) = self.read_pictures(
+                    &format!("{key}:read"),
+                    &message["readImages"],
+                    super::read_pictures::FOLDED_CALLS_INSET,
+                    p,
+                    cx,
+                ) {
+                    // The closed headline keeps the pictures its calls read in view
+                    // (gx-chat-core `read_images.rs`).
+                    row = row.child(pictures);
                 }
                 tools_rendered = true;
             } else if reasoning {
@@ -647,6 +657,16 @@ impl NativeChatView {
                             row =
                                 row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                         }
+                    } else if let Some(pictures) = self.read_pictures(
+                        &format!("{key}:read"),
+                        &message["readImages"],
+                        super::read_pictures::FOLDED_CALLS_INSET,
+                        p,
+                        cx,
+                    ) {
+                        // The sentence's closed calls keep the pictures they read in view
+                        // (gx-chat-core `read_images.rs`).
+                        row = row.child(pictures);
                     }
                     tools_rendered = true;
                 }
