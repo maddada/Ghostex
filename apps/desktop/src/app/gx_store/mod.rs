@@ -71,6 +71,7 @@ mod diagnostics_open;
 mod diagnostics_project_docs;
 mod diagnostics_remote_last_seen;
 mod diagnostics_runtime_facts;
+mod draft_arrivals;
 mod effects;
 mod focus_perform;
 mod focus_publish;

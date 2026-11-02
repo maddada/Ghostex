@@ -260,6 +260,10 @@ pub use crate::sidebar_view::{
     window_machine_tabs, window_spaces, window_workspace, WindowWorkspace,
     MACHINE_SESSION_MEMORY_SPACE_ID,
 };
+pub use crate::sidebar_view::{
+    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
+    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+};
 pub use crate::workspace_groups::{
     owns_group_command, plan_group_command, CustomTagsPush, CustomTagsPushEffect, GroupCommandPlan,
 };

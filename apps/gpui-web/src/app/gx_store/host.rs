@@ -27,6 +27,8 @@ pub(crate) struct GxStoreHost {
     pub(crate) sidebar_list: super::sidebar_list::SidebarList,
     /// The Unified sidebar's per-machine lists, as on the desktop (`unified_sidebar.rs`).
     pub(crate) unified_sidebar: super::unified_sidebar::UnifiedSidebarHost,
+    /// The drafts each sidebar last drew, as on the desktop (`draft_arrivals.rs`).
+    pub(crate) draft_arrivals: super::draft_arrivals::DraftArrivalsHost,
     pub(crate) menu_host: MenuHost,
     /// The desktop's record lines; the page writes none (`diagnostics.rs`).
     pub(crate) diagnostics: super::diagnostics::GxStoreDiagnostics,
@@ -404,6 +406,7 @@ impl GhostexGpuiApp {
         self.install_native_sidebar_snapshot(Arc::new(snapshot), cx);
         let changes = std::mem::take(&mut self.gx_store.sidebar_list.last_changes);
         self.gx_store_unified_sidebar_changed(&changes, cx);
+        self.gx_store_open_arrived_drafts(cx);
         self.web_open_linked_session(cx);
         self.web_book_sidebar_deadline(cx);
         // A showing Quick Access republishes from the store it reads (`quick_access/host.rs`).

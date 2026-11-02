@@ -15,8 +15,11 @@ mod close_after_done;
 pub(crate) mod close_successor;
 pub(crate) mod collections;
 mod daemon_wait;
+mod draft_arrivals;
 mod drop_landing;
 mod groups;
+#[cfg(test)]
+mod hide_empty_tests;
 mod inputs;
 mod links;
 mod machine_connection;
@@ -33,8 +36,6 @@ pub(crate) mod projects;
 mod reveal;
 pub(crate) mod rows;
 mod sections;
-#[cfg(test)]
-mod hide_empty_tests;
 #[cfg(test)]
 mod session_notes_tests;
 pub(crate) mod session_slot;
@@ -64,6 +65,10 @@ pub use daemon_wait::{
     DAEMON_RETRY_INTERVAL_MS, SERVICE_START_FAILED_TITLE, SESSIONS_LOADING_DETAIL,
     SESSIONS_LOADING_TITLE,
 };
+pub use draft_arrivals::{
+    open_draft_headings, project_draft_rows, DraftArrival, DraftArrivals, DraftRow,
+    DRAFT_ARRIVAL_WINDOW_MS, DRAFT_CLOCK_SLACK_MS, DRAFT_FOCUS_WAIT_MS,
+};
 pub use drop_landing::{DropLanding, DropWrites, TreeDropTarget};
 pub use inputs::{
     BrowserTabInput, CloseAfterDoneInput, DelayedSendInput, MachineTabInput, ProjectDiffStats,
@@ -83,6 +88,9 @@ pub use machine_connection::{
 pub use machine_switch::{
     machine_switch_memory, plan_machine_switch_restore, MACHINE_SESSION_MEMORY_SPACE_ID,
 };
+pub use machine_tab_layout::{
+    machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view, MachineTabLayout,
+};
 pub use model::{SidebarUpdateWork, SidebarViewModel};
 pub use ordering::session_is_snoozed;
 pub use project_drop_landing::{ProjectDropLanding, ProjectDropRow};
@@ -90,9 +98,6 @@ pub use reveal::{reveal_plan, space_for_focused_row, FocusedRowSpace, SidebarRev
 pub use session_slot::{rendered_session_ids, session_slot_plan, SessionSlotPlan};
 pub use slot_hotkey::{project_slot_plan, ProjectSlotPlan};
 pub use space_landing::space_landing_project_ids;
-pub use machine_tab_layout::{
-    machine_tab_layout, machine_tab_reveal_offset, machine_tabs_out_of_view, MachineTabLayout,
-};
 pub use space_sleep::{plan_space_sleep, SpaceSleepPlan, SpaceSleepPlans, SpaceSleepScope};
 pub use space_switch::{
     plan_space_switch_restore, plan_workspace_switch_restore, SpaceSwitchFocus,

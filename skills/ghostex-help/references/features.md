@@ -620,7 +620,8 @@ repository on this computer and a remote one is one project. Sessions are
 ordered by when they last came back to you (started, sent a message, or a
 finished turn), never by output while an agent works; pinned sessions come
 first, and above them a Drafts section holds every session nobody has sent a
-message to yet (the pencil), newest first, until its first message is sent.
+message to yet (the pencil), newest first, until its first message is sent;
+it opens on its own whenever a new session lands in it.
 Working, Snoozed and Parked fold into shelves at the bottom. Working holds
 sessions whose agent works or still runs something in the background, while the
 Working section switch (`unifiedWorkingSection`, on by default, under the
@@ -1004,14 +1005,17 @@ where they are while you open, change and close views.
   on the wrong model. Hover the session to read why, then pick a model again in
   the chat's model menu (the same one, or another); once it applies, the dot
   clears and the waiting messages are sent.
-- New sessions appear at the top of Sessions for 10 minutes. After that,
-  a session with unsent text that has not received its first message moves
-  into Drafts, below Pinned and above Sessions. Drafts starts collapsed;
-  expand it to continue a draft. Choose Pin to move a draft into Pinned
-  without sending or changing its text. Unpin returns it to Drafts after
-  the 10-minute window, or to Sessions while still new. Sending its first
-  message returns an unpinned draft to Sessions; pinned drafts stay in
-  Pinned. Empty sessions remain in Sessions. No setting is required.
+- A new session goes straight into Drafts, below Pinned and above Sessions,
+  and stays there until its first message is sent or its agent starts
+  working, whether it is empty or holds unsent text. Drafts starts collapsed,
+  but it opens on its own whenever a new session lands there (New Agent
+  Session, the New Thread picker, a project's agent button, or one made
+  elsewhere), and a session you start in this window is selected and scrolled
+  into view. If you collapse Drafts again it stays collapsed until the next new session.
+  Choose Pin to move a draft into Pinned without sending or changing its
+  text; Unpin returns it to Drafts. Sending its first message moves an
+  unpinned draft to Sessions; pinned drafts stay in Pinned. No setting is
+  required.
 - Parking is enabled by default. Right-click a session and choose Park, or
   select several sessions and choose Park Selected, to move them into the
   collapsible Parked section at the bottom. Use Unpark or Unpark Selected to

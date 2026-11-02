@@ -7,6 +7,7 @@ mod coordinator_actions;
 mod create;
 mod custom_tags_sync;
 mod diagnostics;
+mod draft_arrivals;
 /// Items of desktop store files the page does not compile whole (`extracted-items.txt`).
 #[allow(dead_code, unused_imports)]
 mod gx_store_lifted {

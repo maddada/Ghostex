@@ -1,9 +1,8 @@
 //! The display order of a group's rows, and which section heading each row sits under.
 //!
-//! CDXC:Drafts 2026-09-15 DECISION:
-//! User: new sessions lead Sessions for 10 minutes, then move into a collapsed-by-default DRAFTS section below Pinned and above Sessions if they contain text and have not been sent yet.
-//! User: pinning a draft moves it into Pinned, retaining its unsent text.
-//! This replaces keeping drafts at the top of Sessions indefinitely; empty sessions stay in Sessions.
+//! CDXC:Drafts 2026-11-02 DECISION:
+//! User: "please for all empty sessions / draft sessions move those to the draft area and always expand that when a new session goes there (i know draft was supposed to be for sessions that have content that were left, but i want new sessions even if empty, to go there from now on)". Every session nobody has sent a message to yet (gxserver's draft marker), empty or holding unsent text, sits in the DRAFTS section below Pinned and above Sessions from the moment it is created, and leaves it for its usual place once its first message is sent or the agent starts working. A session arriving in Drafts opens the heading (gx_store/draft_arrivals.rs). This supersedes the 2026-09-15 decision that kept new sessions at the top of Sessions for 10 minutes and moved only drafts holding text into Drafts.
+//! User (2026-09-15, still in force): pinning a draft moves it into Pinned, retaining its unsent text.
 //!
 //! Ported from `active-sessions-sort.ts`, `session-drafts.ts` and `session-snooze.ts` in
 //! packages/shared and `sidebar-app/project-session-section-model.ts` in packages/core-ui (all
@@ -44,9 +43,10 @@ pub(crate) fn is_snoozed(row: &SessionRow, now_ms: u64) -> bool {
     session_is_snoozed(row.timing.snoozed_until_ms, now_ms)
 }
 
-/// `isSidebarDraftSectionSession`.
-pub(crate) fn is_draft_section_session(row: &SessionRow, now_ms: u64) -> bool {
-    row.is_draft && !row.is_pinned && row.has_composer_draft && !is_new_session(row, now_ms)
+/// `isSidebarDraftSectionSession`: a never-sent session that is not pinned (CDXC:Drafts 2026-11-02
+/// above).
+pub(crate) fn is_draft_section_session(row: &SessionRow) -> bool {
+    row.is_draft && !row.is_pinned
 }
 
 /// Whether a row sits in its project's Working section while Group working sessions is on: its
@@ -114,7 +114,7 @@ pub(crate) fn section_of(
     if enable_parking && row.is_parked {
         return SectionId::Parked;
     }
-    if is_draft_section_session(row, now_ms) {
+    if is_draft_section_session(row) {
         return SectionId::Drafts;
     }
     if row.is_pinned {
@@ -207,7 +207,7 @@ fn order_kind(
             snoozed.push(*index);
         } else if enable_parking && row.is_parked {
             parked.push(*index);
-        } else if !row.is_browser && is_draft_section_session(row, now_ms) {
+        } else if !row.is_browser && is_draft_section_session(row) {
             drafts.push(*index);
         } else if row.is_pinned {
             pinned.push(*index);
