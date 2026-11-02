@@ -403,7 +403,6 @@ fn main() {
         // surface has focus.
         crate::app::shell_hotkeys::gpui_bind_hotkeys_from_settings(cx);
         gpui_prewarm_ghostex_editor_daemon();
-        crate::app::helpers::note_main_window_background(window_glass_background_appearance());
         cx.on_action(|_: &NewGhostexGpuiWindow, cx| {
             // A key press dispatches while its window is mid-update; the new window reads that
             // window's frame and project, so it opens on the next turn.

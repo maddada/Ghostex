@@ -460,26 +460,36 @@ fn system_reduces_transparency() -> bool {
     false
 }
 
-/// Whether the main window was created on a backend that can show glass. On Windows a window's
-/// per-pixel alpha is fixed when it is created (it either presents through DirectComposition or
-/// through an opaque redirection surface), so a main window opened opaque stays opaque until the
-/// app restarts, and glass turned off later keeps working because an opaque fill needs no alpha.
-static MAIN_WINDOW_CAN_SHOW_GLASS: AtomicBool = AtomicBool::new(true);
-
-/// Records the background the main window is being created with. Call right before it opens.
+/// The background a window that follows the glass live (every workspace window, the Project
+/// board's own window) opens with. Its first render gives it the background the settings ask for
+/// (`apply_workspace_window_glass`), and every later change switches it in place.
 ///
-/// CDXC:Theming 2026-09-25 WHY:
-/// The Windows main window hosts windowed CEF pages as child HWNDs, which is why it normally opens on the opaque redirection surface; only a main window opened with glass uses DirectComposition (`ensure_child_composited_by_dwm` in src/cef/windows.rs keeps its CEF children visible there). Turning glass on while the app runs on Windows would draw the translucent tints over an opaque surface, so it waits for the next launch instead.
-pub(crate) fn note_main_window_background(appearance: WindowBackgroundAppearance) {
-    MAIN_WINDOW_CAN_SHOW_GLASS.store(
-        !cfg!(target_os = "windows") || appearance != WindowBackgroundAppearance::Opaque,
-        Ordering::Relaxed,
-    );
+/// CDXC:Theming 2026-11-02 DECISION:
+/// User: "when i apply transparency for ghostex on windows it doesn't apply until i restart the app. please fix." On Windows these windows always open on DirectComposition, so turning transparency on, off or between its choices applies to every open window at once, as on macOS and Linux. Supersedes the 2026-09-25 rule that a Windows main window opened opaque stayed opaque until the next launch.
+///
+/// CDXC:Theming 2026-11-02 WHY:
+/// A Windows window's compositing path is fixed when it is created: GPUI opens an opaque window on the redirection surface (`GPUI_DISABLE_DIRECT_COMPOSITION` in main.rs, for windowed CEF children), whose swap chain ignores alpha and which `WS_EX_NOREDIRECTIONBITMAP` can never be added to later, so glass drawn there was solid. Asking for Transparent at creation keeps the window on DirectComposition, where the DWM backdrop, the blur and the per-pixel alpha all change live; an opaque background there is just an opaque fill. Windowed CEF pages stay visible on it because `ensure_child_composited_by_dwm` in src/cef/windows.rs makes them layered, the path glass windows have used since 2026-09-25.
+pub(crate) fn live_glass_window_creation_background() -> WindowBackgroundAppearance {
+    creation_background_for(
+        window_glass_background_appearance(),
+        cfg!(target_os = "windows"),
+    )
+}
+
+/// `live_glass_window_creation_background` for a given wanted background and platform.
+fn creation_background_for(
+    wanted: WindowBackgroundAppearance,
+    windows: bool,
+) -> WindowBackgroundAppearance {
+    if windows && wanted == WindowBackgroundAppearance::Opaque {
+        WindowBackgroundAppearance::Transparent
+    } else {
+        wanted
+    }
 }
 
 pub(crate) fn window_glass_active() -> bool {
     WINDOW_GLASS_ACTIVE.load(Ordering::Relaxed)
-        && MAIN_WINDOW_CAN_SHOW_GLASS.load(Ordering::Relaxed)
 }
 
 pub(crate) fn window_glass_active_in(window: &Window) -> bool {
@@ -1019,6 +1029,38 @@ mod frosted_dialog_tests {
                 FROSTED_PANEL_ALPHA_DARK
             };
             assert_eq!(panel.a, expected);
+        }
+    }
+}
+
+#[cfg(test)]
+mod live_glass_creation_tests {
+    use super::*;
+
+    /// On Windows an opaque window opens on DirectComposition (as Transparent) so glass can be
+    /// turned on later without a restart (CDXC:Theming 2026-11-02 on
+    /// `live_glass_window_creation_background`); a window opened with glass keeps it.
+    #[test]
+    fn windows_opens_opaque_windows_on_direct_composition() {
+        assert_eq!(
+            creation_background_for(WindowBackgroundAppearance::Opaque, true),
+            WindowBackgroundAppearance::Transparent
+        );
+        assert_eq!(
+            creation_background_for(WindowBackgroundAppearance::Blurred, true),
+            WindowBackgroundAppearance::Blurred
+        );
+    }
+
+    /// macOS and Linux switch a window's background live whatever it opened with, so they open
+    /// with the background the settings ask for.
+    #[test]
+    fn other_platforms_open_with_the_wanted_background() {
+        for wanted in [
+            WindowBackgroundAppearance::Opaque,
+            WindowBackgroundAppearance::Blurred,
+        ] {
+            assert_eq!(creation_background_for(wanted, false), wanted);
         }
     }
 }
