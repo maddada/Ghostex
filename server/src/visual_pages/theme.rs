@@ -19,7 +19,7 @@ macro_rules! light_tokens {
             "--gx-accent:#2563eb;--gx-warn:#a16207;--gx-good:#047857;--gx-bad:#b91c1c;--gx-code-bg:rgba(255,255,255,0.62);--gx-pick:#c2661c;",
             "--gx-card:rgba(255,255,255,0.62);--gx-footer:rgba(255,255,255,0.68);--gx-option:rgba(255,255,255,0.5);",
             "--gx-card-border:rgba(90,60,40,0.13);--gx-option-border:rgba(90,60,40,0.1);",
-            "--gx-glass-shadow:0 14px 36px rgba(120,80,50,0.12);",
+            "--gx-glass-shadow:0 14px 36px rgba(120,80,50,0.12);--gx-glass-dim:rgba(250,247,242,0.7);",
             "--gx-backdrop:radial-gradient(60% 50% at 85% 100%,rgba(240,170,120,0.28),transparent 70%),radial-gradient(55% 45% at 5% 0%,rgba(140,165,215,0.3),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(230,140,110,0.16),transparent 70%),linear-gradient(180deg,#eef0f6 0%,#f1edf0 45%,#f6ece3 100%);",
             "--gx-card-muted:#71717b;--gx-control:#18181b;",
             "--gx-tip-bg:#fcfcfc;--gx-tip-fg:#292929;--gx-tip-border:rgba(0,0,0,0.12)"
@@ -45,7 +45,7 @@ macro_rules! light_tokens {
 /// CDXC:SessionChat 2026-11-02 DECISION:
 /// User picked "A. Real glass, your wallpaper" on the page asking how every page should look as good as the screenshot page (issues-1027/showcase), with the note "a and skill adjustments also. i like this one you just gave me a lot for example … i love the glassy selections". Every page now paints a toned-down dusk (dark) or dawn (light) behind frosted question cards, choices, note boxes, send bar and tied option sections, with a warm amber (`--gx-pick`) for picks. This supersedes the 2026-10-11 rule that the question card takes the chat card's own colours. Pages that paint their own background keep it.
 /// CDXC:SessionChat 2026-11-02 WHY:
-/// The page window's page is a windowed CEF browser, and CEF paints a windowed browser opaque whatever its background colour says (only off-screen browsers can be transparent), so a page can't show the app's own glass through itself; the backdrop is painted by the page on every client instead.
+/// The page window's page is a windowed CEF browser, and CEF paints a windowed browser opaque whatever its background colour says (only off-screen browsers can be transparent), so a page can't show the app's own glass through itself. The desktop's page window hands the page the picture behind its glass instead (`data-gx-glass`, CDXC:SessionChat 2026-11-02 DECISION in apps/desktop/src/app/window/visual_page_modal/glass.rs), and every other client paints the dusk or dawn.
 ///
 /// CDXC:SessionChat 2026-10-27 DECISION:
 /// User picked the v2 page template from the plan page (issues-1027/page-template): the "Editorial" look, a 720px column with a wide band up to 1120px, Ghostex's theme plus a Dark / Light switch on the page, "follow paint" when a page paints the other theme, and the same template for pages meant for other people. The kit's question cards keep their decided look; only their colours stop depending on `light-dark()` and on the page's `--background`.
@@ -77,7 +77,7 @@ pub(super) const THEME_STYLE: &str = concat!(
     // The question card's glass and the painted backdrop behind every page (CDXC:SessionChat 2026-11-02 DECISION above).
     "--gx-card:rgba(40,35,52,0.5);--gx-footer:rgba(40,35,52,0.56);--gx-option:rgba(255,244,234,0.035);",
     "--gx-card-border:rgba(255,228,204,0.13);--gx-option-border:rgba(255,228,204,0.09);",
-    "--gx-glass-shadow:0 16px 40px rgba(12,8,16,0.28);",
+    "--gx-glass-shadow:0 16px 40px rgba(12,8,16,0.28);--gx-glass-dim:rgba(18,16,26,0.52);",
     "--gx-backdrop:radial-gradient(60% 50% at 82% 100%,rgba(226,138,88,0.2),transparent 70%),radial-gradient(55% 45% at 8% 0%,rgba(92,122,176,0.22),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(184,82,58,0.16),transparent 70%),linear-gradient(180deg,#1b2131 0%,#222437 32%,#2b2639 60%,#352a35 84%,#3a2b2c 100%);",
     "--gx-card-muted:#b4b8bf;--gx-control:#e5e5e5;",
     // The app's tooltip bubble without window glass (apps/desktop/src/app/helpers/titlebar/chrome_colors.rs
@@ -91,6 +91,10 @@ pub(super) const THEME_STYLE: &str = concat!(
     "}",
     "html{background-color:var(--background);background-image:var(--gx-backdrop,none);background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
     "font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}",
+    // The picture behind the app's glass, when the desktop's page window hands one over
+    // (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
+    "html[data-gx-glass]{background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
+    "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat}",
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",

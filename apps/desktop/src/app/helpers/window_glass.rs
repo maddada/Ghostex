@@ -591,6 +591,20 @@ pub(crate) fn sync_overlay_window_glass(window: &Window, main_origin: gpui::Poin
 static MAIN_WINDOW_SIZE: std::sync::Mutex<Option<gpui::Size<gpui::Pixels>>> =
     std::sync::Mutex::new(None);
 
+/// Whether the main window's glass picture stays still against the screen
+/// (`windowGlassImagePlacement` "desktop") rather than covering the window.
+pub(crate) fn window_glass_picture_follows_screen() -> bool {
+    WINDOW_GLASS_PICTURE_FOLLOWS_SCREEN.load(Ordering::Relaxed)
+}
+
+/// The main window, whose glass the app's other surfaces match.
+pub(crate) fn main_window_handle(cx: &gpui::App) -> Option<gpui::AnyWindowHandle> {
+    let id = MAIN_WINDOW_ID.load(Ordering::Relaxed);
+    cx.windows()
+        .into_iter()
+        .find(|window| window.window_id().as_u64() == id)
+}
+
 pub(crate) fn window_glass_background_appearance() -> WindowBackgroundAppearance {
     if window_glass_active() {
         WindowBackgroundAppearance::Blurred
