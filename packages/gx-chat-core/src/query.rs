@@ -109,7 +109,8 @@ fn render_visual(arguments: &[Value]) -> Option<String> {
     ))
 }
 
-/// `insertAnswerAttachments(current, paths, original, start, end)`, offsets in UTF-16 code units.
+/// `insertAnswerAttachments(current, paths, original, start, end, others?)`, offsets in UTF-16 code
+/// units; `others` (a question form's other boxes) is optional.
 pub fn answer_attachments_edit(arguments: &[Value]) -> Option<ComposerEdit> {
     let paths: Vec<&str> = arguments
         .get(1)?
@@ -123,6 +124,7 @@ pub fn answer_attachments_edit(arguments: &[Value]) -> Option<ComposerEdit> {
         arguments.get(2)?.as_str()?,
         usize_argument(arguments, 3)?,
         usize_argument(arguments, 4)?,
+        arguments.get(5).and_then(Value::as_str).unwrap_or_default(),
     ))
 }
 

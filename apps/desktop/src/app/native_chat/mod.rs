@@ -44,6 +44,7 @@ mod files_links;
 mod focus;
 pub(crate) mod fonts;
 mod fork_branches;
+mod form_attachments;
 pub(crate) mod frosted_overlay_window;
 pub(crate) mod image_viewer;
 mod images;

@@ -76,6 +76,10 @@ pub(in crate::server) async fn route_http(
         return crate::visual_pages::save_draft(state.clone(), path, body).await;
     }
 
+    if method == Method::POST && crate::visual_pages::is_image_route(&path) {
+        return crate::visual_pages::save_page_image(state.clone(), path, body).await;
+    }
+
     if method == Method::POST && crate::visual_pages::is_notice_route(&path) {
         return crate::visual_pages::dismiss_page_notice(state.clone(), path, body).await;
     }

@@ -322,6 +322,22 @@ pub(crate) fn unique_session_chat_image_path(
     )))
 }
 
+/// Writes a pasted image where the chat keeps them and returns its path. A published page's pasted
+/// images land here too (`server/src/visual_pages/images.rs`), so the agent reads both the same way.
+pub(crate) fn write_session_chat_image(
+    data_dir: &std::path::Path,
+    bytes: &[u8],
+    suggested_name: Option<&str>,
+) -> std::result::Result<std::path::PathBuf, DomainStateError> {
+    let extension = session_chat_image_extension(bytes, suggested_name);
+    let path = unique_session_chat_image_path(data_dir, &extension)?;
+    std::fs::write(&path, bytes).map_err(|_| DomainStateError {
+        code: "internalError",
+        message: "Could not write the pasted image.".to_string(),
+    })?;
+    Ok(path)
+}
+
 pub(crate) fn handle_save_session_chat_image_http(
     state: &AppState,
     endpoint_path: String,
@@ -400,21 +416,10 @@ pub(crate) fn handle_save_session_chat_image_http(
         return response;
     }
     let suggested_name = params.get("suggestedName").and_then(Value::as_str);
-    let extension = session_chat_image_extension(&bytes, suggested_name);
-    let path = match unique_session_chat_image_path(&state.paths.app_data_dir, &extension) {
+    let path = match write_session_chat_image(&state.paths.app_data_dir, &bytes, suggested_name) {
         Ok(path) => path,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
     };
-    if std::fs::write(&path, &bytes).is_err() {
-        return domain_error_response(
-            endpoint_path,
-            request_id,
-            DomainStateError {
-                code: "internalError",
-                message: "Could not write the pasted image.".to_string(),
-            },
-        );
-    }
     routed_json(
         Some(endpoint_path),
         StatusCode::OK,

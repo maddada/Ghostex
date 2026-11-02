@@ -1687,7 +1687,9 @@ Agents can show charts, tables, stat tiles, and short text layouts right in the
 chat, drawn in the chat's own colors on desktop, web, and mobile. For things a
 chart can't show, such as a UI mockup or a small interactive tool, the agent
 writes an HTML page and the chat shows a card for it with a small preview
-picture of the page, the same on desktop, web, and mobile. The picture is taken
+picture of the page, the same on desktop, web, and mobile. Pages share one
+look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
+glass cards and choices. The picture is taken
 the first time you open the page in the Ghostex desktop app (and again after you
 answer it); until then the card shows the page's file name. On desktop the card opens
 the page where Settings > Chat > Open chat pages in says: Popup (the default), a
@@ -1730,7 +1732,10 @@ it. A question you leave blank is sent to the agent as skipped, so it moves on
 without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
-for anything else you want the agent to know. Send (or Ctrl+Enter, Cmd+Enter
+for anything else you want the agent to know. You can paste a picture (a
+screenshot or a copied image) into any note or text box, in a form or a
+question page: it shows as an Image #1 pill and goes to the agent with your
+answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent
 as a message; the chat shows them as a card, and the form then reads Answered.
 Answers from question forms and chat pages send like normal chat messages; a busy

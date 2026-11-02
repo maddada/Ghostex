@@ -159,12 +159,17 @@ pub fn native_path_reference(path: &str, text: &str) -> String {
 /// pasted attachment (the user's `CDXC:Clipboard` decision on `finish_answer_attachments`). The
 /// upload can finish after more typing; the selection captured when the paste started then no
 /// longer belongs to the draft, so the references go at the end instead.
+///
+/// `others` is the text of the other boxes whose answers go in the same message (a question form's
+/// notes and text boxes, `questions/forms.rs`): the numbers go on from theirs, so two boxes never
+/// both send an `Image #1`. The composer's own draft is never part of that message.
 pub fn insert_answer_attachments(
     current: &str,
     paths: &[&str],
     original: &str,
     start: usize,
     end: usize,
+    others: &str,
 ) -> ComposerEdit {
     let unchanged = current == original;
     let mut edit = ComposerEdit {
@@ -177,7 +182,7 @@ pub fn insert_answer_attachments(
     };
     let mut finish = if unchanged { end } else { edit.caret };
     for path in paths {
-        let reference = native_path_reference(path, &edit.text);
+        let reference = native_path_reference(path, &format!("{others}\n{}", edit.text));
         edit = insert_reference(&edit.text, &reference, edit.caret, finish);
         finish = edit.caret;
     }

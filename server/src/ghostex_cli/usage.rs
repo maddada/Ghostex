@@ -242,7 +242,7 @@ pub fn usage() -> String {
         ),
         format_help_command(
             "show <file.html> [--title text] [--json] [--no-check]",
-            "Publish a self-contained HTML page and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open chat pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at a phone's width and says what did not fit (--no-check skips that)",
+            "Publish a self-contained HTML page and print the ```visual block that shows it as a card in the chat; the card opens it where the reader's Open chat pages in setting says (a floating window over the chat by default). Questions written as <gx-questions> (or the page's own ghostex.submit(answers)) send the reader's answers back to you as a message; the block then lists the questions' tags, so the chat counts the page as unanswered until they arrive. When Chrome is installed it then opens the page at a phone's width and says what did not fit (--no-check skips that). Ghostex paints the page's backdrop and glass cards itself; for a page that looks good at a glance (a strong header, options side by side in .gx-options with Pick buttons, one question under them, about one screen) follow $ghostex-visuals and its examples/plan-review.html",
         ),
         format_help_command(
             "visual check <file.json|-|page.html> [--width N] [--light] [--out file.png]",
@@ -1370,6 +1370,15 @@ Agent skill:
   in the reply as a ```visual block; questions go in a ```questions block,
   which the chat shows as a form; mockups and small tools are HTML pages
   published with `ghostex show`.
+
+Pages:
+  Ghostex paints every page's backdrop (a soft dusk in dark, dawn in light)
+  and its glass cards, so a page never paints html or body. The chat's card
+  previews the page's top: give it a strong header (.gx-eyebrow, a specific
+  h1, a one-line .gx-lede, .gx-chip facts), put options side by side in a
+  .gx-options row of tied sections (each gets a Pick button), one question
+  under them, and keep it to about one screen. The skill's
+  examples/plan-review.html shows the whole shape.
 
 check:
   Draws the block's JSON (or the whole fenced block) exactly as the chat lays

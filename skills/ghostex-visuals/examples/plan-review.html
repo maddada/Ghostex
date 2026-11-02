@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ghostex-page" content="v2">
+<title>Three ways to ship the settings migration</title>
+<style>
+  /* Only the mockups' own drawing: the kit paints the page, the glass and the Pick buttons. */
+  .how { margin: -2px 0 0; font-size: 13px; line-height: 1.45; color: var(--gx-muted); }
+  .how b { color: var(--gx-fg); font-weight: 600; }
+  /* One shared 0 to 60 minute scale, so the plans compare at a glance. */
+  .lanes { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; align-items: center;
+    padding: 11px 11px 8px; border-radius: 12px; background: var(--gx-surface); border: 1px solid var(--gx-line); }
+  .who { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 550; color: var(--gx-text); white-space: nowrap; }
+  .who::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+  .a1 { --c: var(--chart-2); } .a2 { --c: var(--chart-1); } .a3 { --c: var(--chart-4); }
+  .track { position: relative; height: 9px; border-radius: 99px; background: var(--gx-line); }
+  .bar { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: var(--c); }
+  .bar.review { background: repeating-linear-gradient(90deg, var(--c) 0 2px, transparent 2px 5px); }
+  .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 9.5px; color: var(--gx-muted); font-variant-numeric: tabular-nums; }
+  .done { font-style: normal; font-size: 11px; font-weight: 650; color: var(--gx-pick); }
+</style>
+</head>
+<body>
+<gx-questions submit="Send to the agent">
+  <header>
+    <span class="gx-eyebrow">Coordinator · plan review</span>
+    <h1>Three ways to ship the settings migration</h1>
+    <p class="gx-lede">Same work, same agents. Each plan trades speed, tokens and risk differently.</p>
+    <div class="gx-chips">
+      <span class="gx-chip"><b>38</b> files in settings/</span>
+      <span class="gx-chip"><b>3</b> agents ready</span>
+      <span class="gx-chip">main is clean</span>
+    </div>
+  </header>
+
+  <gx-wide>
+    <div class="gx-options">
+      <section data-question="Q1" data-choice="parallel">
+        <h3>A. Parallel worktrees</h3>
+        <p class="how">Each agent owns a folder in its <b>own worktree</b>; one merge at the end.</p>
+        <div class="lanes">
+          <span class="who a1">Opus</span><div class="track a1"><i class="bar" style="left:0;width:40%"></i></div>
+          <span class="who a2">Codex</span><div class="track a2"><i class="bar" style="left:0;width:44%"></i></div>
+          <span class="who a3">Sonnet</span><div class="track a3"><i class="bar" style="left:0;width:34%"></i></div>
+          <div class="axis"><span>0</span><em class="done">done 28m</em><span>60m</span></div>
+        </div>
+        <div class="gx-stats">
+          <div class="gx-stat"><small>Time</small><b>28m</b></div>
+          <div class="gx-stat"><small>Tokens</small><b>1.9M</b></div>
+          <div class="gx-stat"><small>Risk</small><b>Merge</b></div>
+        </div>
+      </section>
+
+      <section data-question="Q1" data-choice="lead">
+        <span class="gx-ribbon">Recommended</span>
+        <h3>B. Lead + reviewers</h3>
+        <p class="how">Opus builds; Codex <b>reviews every step</b> and Sonnet tests the end.</p>
+        <div class="lanes">
+          <span class="who a1">Opus</span><div class="track a1"><i class="bar" style="left:0;width:56%"></i></div>
+          <span class="who a2">Codex</span><div class="track a2"><i class="bar review" style="left:12%;width:8%"></i><i class="bar review" style="left:28%;width:8%"></i><i class="bar review" style="left:45%;width:8%"></i></div>
+          <span class="who a3">Sonnet</span><div class="track a3"><i class="bar" style="left:56%;width:10%"></i></div>
+          <div class="axis"><span>0</span><em class="done">done 40m</em><span>60m</span></div>
+        </div>
+        <div class="gx-stats">
+          <div class="gx-stat"><small>Time</small><b>40m</b></div>
+          <div class="gx-stat"><small>Tokens</small><b>1.4M</b></div>
+          <div class="gx-stat"><small>Risk</small><b>Low</b></div>
+        </div>
+      </section>
+
+      <section data-question="Q1" data-choice="relay">
+        <h3>C. Relay</h3>
+        <p class="how">One agent at a time, each <b>picks up the last one's notes</b>.</p>
+        <div class="lanes">
+          <span class="who a1">Opus</span><div class="track a1"><i class="bar" style="left:0;width:32%"></i></div>
+          <span class="who a2">Codex</span><div class="track a2"><i class="bar" style="left:34%;width:31%"></i></div>
+          <span class="who a3">Sonnet</span><div class="track a3"><i class="bar" style="left:67%;width:33%"></i></div>
+          <div class="axis"><span>0</span><em class="done">done 60m</em><span>60m</span></div>
+        </div>
+        <div class="gx-stats">
+          <div class="gx-stat"><small>Time</small><b>60m</b></div>
+          <div class="gx-stat"><small>Tokens</small><b>0.9M</b></div>
+          <div class="gx-stat"><small>Risk</small><b>Handoff</b></div>
+        </div>
+      </section>
+    </div>
+  </gx-wide>
+
+  <gx-question tag="Q1" title="Which plan should the coordinator run?">
+    <gx-choice value="parallel">A. Parallel worktrees<small>Done in about 28 minutes, with one big merge to watch.</small></gx-choice>
+    <gx-choice value="lead" recommended>B. Lead + reviewers<small>12 minutes slower than A, and nothing lands unreviewed.</small></gx-choice>
+    <gx-choice value="relay">C. Relay<small>The fewest tokens, but twice as long as A.</small></gx-choice>
+  </gx-question>
+</gx-questions>
+</body>
+</html>
