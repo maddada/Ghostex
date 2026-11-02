@@ -327,6 +327,9 @@ impl GhostexGpuiApp {
                 if connected {
                     this.gx_store_sync_remote_clients(true, cx);
                     this.refresh_session_chat_runtime_endpoints(false, cx);
+                    // A restored pane of this box re-arms now, as a saved machine's does when its
+                    // connect lands (os_integration/toast_and_status_dispatch.rs).
+                    this.attach_surfaced_remote_workspace_terminals(&machine_id, cx);
                 } else {
                     // Asked again once the retry time has passed.
                     cx.spawn(async move |this, cx| {

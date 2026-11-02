@@ -35,6 +35,24 @@ pub(crate) fn gpui_cloud_box_machine_config(remote_machine_id: &str) -> GpuiRemo
     }
 }
 
+/// The machine config a remote session's pane (re)attaches with: a box's stand-in, else the
+/// saved machine's. Every attach path (a row click, a tab click, a restored pane) asks this, so
+/// a box session is never refused for want of SSH settings.
+pub(crate) fn gpui_remote_attach_machine_config(
+    settings: &serde_json::Map<String, serde_json::Value>,
+    remote_machine_id: &str,
+) -> Option<GpuiRemoteMachineConfig> {
+    if gpui_is_cloud_box_machine(remote_machine_id) {
+        return Some(gpui_cloud_box_machine_config(remote_machine_id));
+    }
+    gpui_remote_machine_config_from_settings(settings, remote_machine_id)
+}
+
+/// Whether a remote machine id is a Cloud Box's hidden machine.
+pub(crate) fn gpui_is_cloud_box_machine(remote_machine_id: &str) -> bool {
+    ghostex_gx_core::protocol::cloud_box::cloud_box_id_from_machine_id(remote_machine_id).is_some()
+}
+
 /// The bundled `ghostex` the pane runs.
 fn ghostex_cli_path() -> Result<PathBuf, String> {
     let name = if cfg!(target_os = "windows") {

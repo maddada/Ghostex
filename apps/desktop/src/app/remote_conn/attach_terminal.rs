@@ -10,11 +10,27 @@ impl GhostexGpuiApp {
         placement: AgentsWorkspaceNewTerminalPlacement,
         cx: &mut gpui::Context<Self>,
     ) -> bool {
-        if self
-            .remote_machine_connect_states
-            .get(&reference.remote_machine_id)
-            .map(String::as_str)
-            != Some(GpuiRemoteGxserverConnectState::Connected.wire_status_state())
+        // A Cloud Box has no connect state of its own: it is ready once its address is known
+        // (gx_store/cloud_boxes.rs), and a stopped one wakes only on a send (Q1013).
+        if gpui_is_cloud_box_machine(&reference.remote_machine_id)
+            && self
+                .gpui_remote_gxserver_request_target(&reference.remote_machine_id)
+                .is_none()
+        {
+            self.dispatch_gpui_app_modal_toast(
+                "info",
+                "Cloud box stopped",
+                "This cloud box is stopped. Send a message in its chat to wake it.",
+                cx,
+            );
+            return false;
+        }
+        if !gpui_is_cloud_box_machine(&reference.remote_machine_id)
+            && self
+                .remote_machine_connect_states
+                .get(&reference.remote_machine_id)
+                .map(String::as_str)
+                != Some(GpuiRemoteGxserverConnectState::Connected.wire_status_state())
         {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
@@ -35,7 +51,7 @@ impl GhostexGpuiApp {
             return false;
         };
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
-        let Some(config) = gpui_remote_machine_config_from_settings(
+        let Some(config) = gpui_remote_attach_machine_config(
             settings_snapshot.object(),
             reference.remote_machine_id.as_str(),
         ) else {
