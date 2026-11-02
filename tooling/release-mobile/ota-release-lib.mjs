@@ -19,6 +19,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,6 +164,46 @@ export function verifyExport(plan, exported) {
       problems.push(`${platform}: exported version ${info.version}, expected ${plan.version}`);
   }
   return problems;
+}
+
+/**
+ * The manifest `key` of one exported asset (not the launch bundle): the MD5 of its bytes, which is
+ * the hash Metro registers the asset under in the JavaScript bundle and the name `expo export` gives
+ * the file (`assets/<md5>`). Throws when the two disagree, so an export that names its files some
+ * other way stops the publish instead of shipping assets the app cannot find.
+ *
+ * CDXC:Release 2026-11-02 WHY: issue #393. expo-asset finds an update's asset by
+ * `ExpoUpdates.localAssets[<Metro md5>]`, and expo-updates fills that map with each manifest
+ * asset's `key`. ota-publish.mjs used the SHA-256 as the key, so no OTA asset was ever found: a
+ * page or picture byte-identical to the one inside the app fell back to the app's copy (the
+ * embedded manifest keys by MD5), and a changed one resolved to an empty URI. On iOS expo-modules
+ * turns "" into the app's working directory, `file:///`, so the chat core's WebView failed every
+ * load with -1101 (NSURLErrorFileIsDirectory). Android's 10.42.1 APK and its OTA were built in one
+ * job with the same page, so Android found the APK's copy and never showed it; the iOS app is built
+ * on macOS, its page bytes differ, and every iPhone broke on the first OTA.
+ *
+ * CDXC:Release 2026-11-02 DECISION: the user wants iOS over-the-air updates back ("Is there really
+ * no way to do ota for ios??"), so the fix ships without a new iOS build: this key, plus the app's
+ * own fallback in apps/mobile/app/src/chat/rust/wasm-core/pageLoad.ts (pageFromUpdate).
+ */
+export function manifestAssetKey(bytes, exportedPath) {
+  const md5 = createHash('md5').update(bytes).digest('hex');
+  const name = path.basename(exportedPath);
+  if (name !== md5) {
+    throw new Error(
+      `${exportedPath}: expo export named it ${name}, but its MD5 (the key the app looks it up by) is ${md5}`
+    );
+  }
+  return md5;
+}
+
+/**
+ * The asset keys in a signed update manifest that the app cannot look up (anything but a Metro MD5,
+ * see {@link manifestAssetKey}). ota-publish.mjs refuses to republish such an update: 10.42.1 and
+ * every update before it keyed assets by SHA-256, and serving one again breaks chat on iOS.
+ */
+export function unreachableAssetKeys(manifest) {
+  return (manifest.assets ?? []).map((asset) => asset.key).filter((key) => !/^[0-9a-f]{32}$/.test(key ?? ''));
 }
 
 /**
