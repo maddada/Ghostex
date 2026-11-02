@@ -550,7 +550,7 @@ impl<'a> DomainRepository<'a> {
                             THEN json_extract(runtimeSettingsJson, '$.sessionPersistenceProvider') END,
                        CASE WHEN json_type(runtimeSettingsJson, '$.previousAgentSessionIds') = 'array'
                             THEN json_extract(runtimeSettingsJson, '$.previousAgentSessionIds') END,
-                       restoredFromSessionId
+                       restoredFromSessionId, createdAt, lastActiveAt
                 FROM sessions
                 ORDER BY updatedAt DESC, projectId ASC, sessionId ASC
                 "#,
@@ -569,6 +569,8 @@ impl<'a> DomainRepository<'a> {
                     session_persistence_provider: row.get(7)?,
                     previous_agent_session_ids_json: row.get(8)?,
                     restored_from_session_id: row.get(9)?,
+                    created_at: row.get(10)?,
+                    last_active_at: row.get(11)?,
                 })
             })
             .map_err(sql_error)?;
@@ -1041,6 +1043,8 @@ struct SessionForkRow {
     /// stored value is an array.
     previous_agent_session_ids_json: Option<String>,
     restored_from_session_id: Option<String>,
+    created_at: Option<String>,
+    last_active_at: Option<String>,
 }
 
 fn session_fork_row_value(server_id: &str, row: SessionForkRow) -> DomainResult<Value> {
@@ -1090,6 +1094,8 @@ fn session_fork_row_value(server_id: &str, row: SessionForkRow) -> DomainResult<
         runtime_settings.insert("previousAgentSessionIds".to_string(), previous_ids);
     }
     let mut session = Map::new();
+    insert_optional_string(&mut session, "createdAt", row.created_at);
+    insert_optional_string(&mut session, "lastActiveAt", row.last_active_at);
     session.insert("hiddenMetadata".to_string(), Value::Object(hidden));
     session.insert("launchSettings".to_string(), Value::Object(launch_settings));
     session.insert(
