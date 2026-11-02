@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+## 10.43.0 - 2026-11-02
+
+**Ghostex 10.43.0 is out.** Side chats, thumbnails of the pictures an agent opens, one view choice of Summary, Normal or Detailed, an OpenCode tab in every model picker with a see-through OpenCode theme, zoom for files, and a calmer chat while agents stream.
+
+### 💬 Chat
+- **Side chats fork the session and open beside it.** Side chat in the chat box (or `/btw <question>`) starts a side conversation that knows the chat so far, runs in the same folder in ask-before-edits, and opens as a side panel tab; the main chat's Side chats pill lists them, with Bring back and Delete.
+- **Pictures an agent opens show as thumbnails.** When Claude, Codex, OpenCode or Gemini reads an image from disk, its row shows the picture, and a folded turn keeps its pictures inside its card in one row that scrolls sideways, with an "N images" count. Click one to open it large. A picture you already pasted isn't shown twice.
+- **The chat's view is one of Summary, Normal or Detailed.** Simple is now called Normal, Verbose is gone (chats on it open Detailed), turning Summary off always goes back to Normal, and a "Summary view" or "Detailed view" chip at the top of the chat box has an X back to Normal. Default to Detailed view is in Settings > Advanced.
+- **While an agent works, its steps fold like Claude's.** A running thought folds the calls it made behind "N tool calls", for every agent, and OpenCode's and Codex's many short thoughts join into one Thought row.
+- **The chat holds still while an agent streams.** A form field you're typing in no longer slides under the caret, and a chat you scrolled up stays where you left it, thanks to @suatkocar.
+- **Answered forms stay answered,** thanks to @suatkocar: an old answer no longer comes back as "Sending to the agent…", the ? pill counts only questions really waiting, Go to chat reaches an early form in a long turn, and a queued form reads Queued.
+- **A Stashed pill above the chat box** shows how many prompts this chat has stashed; click it to open just those.
+- **The scroll marks on the chat's right edge** show only messages you typed, not form answers or messages from other agents.
+- **The new chat's project and worktree bar** hides as soon as you send the first message.
+- **Message from and Message to cards** lose their Go to session button: click the session's name instead, which now works for every card.
+- **The question popup** takes the chat's colours and fits the whole form.
+
+### 🤖 Agents
+- **Every model picker has an OpenCode tab** with the models your OpenCode can use; picking one in a new chat hands it to OpenCode, thanks to @DaveW001 (#390).
+- **OpenCode gets a see-through Ghostex theme,** so the window shows behind it like Claude Code and Codex. It's used only when you haven't picked an OpenCode theme yourself.
+- **OpenCode's own session name shows in the sidebar,** and a name you gave it in Ghostex wins, thanks to @DaveW001 (#392).
+- **The model picker gets a search field** when an agent has more than 6 models, and starred models sit on top in alphabetical order.
+- **Install hooks repairs a damaged OpenCode settings file** and says why an install failed: the other computer's error, a timeout, an older Ghostex there, or the agent that didn't install.
+- **Coordinator threads can start on OMP, Copilot, Grok Build, Hermes, Cursor and Gemini** with a chosen model, and effort where the agent has it.
+- **Codex's footer is read when it says "Fast"** with a capital F, so its model and effort no longer go missing, thanks to @suatkocar.
+
+### 🧭 Coordinators
+- **Handing off a coordinator keeps it a coordinator,** with its Goal and Standing instructions, locally and to another computer, thanks to @diocata (#383).
+- **A coordinator hears about a thread stuck on a permission prompt** without anyone reading its screen.
+- **The New Thread picker has a Coordinator row.**
+- **A handed-off coordinator keeps the title Coordinator** instead of being named after its setup line.
+
+### 📂 Sidebar and files
+- **New and never-sent sessions go to Drafts,** which opens and selects the new row when one arrives.
+- **Notifications keep a waiting permission request unread and red** until it's answered, and the bell turns red while one waits.
+- **The text of an open file zooms** with Cmd/Ctrl+=, - and 0 like the chat, with a Default files zoom setting, thanks to @DaveW001 (#388).
+- **The Add a comment box in Files opens beside the text** instead of covering it.
+- **Filter dropdown rows have a ⋯ button and a right-click menu,** and each row is only as tall as its content.
+- **The Rename dialog shows Generate** only for long or empty names.
+- **Settings > Notifications has a Finished-work border switch and colour,** off by default.
+
+### 🪟 Windows
+- **Windows: `file:///C:/…` and `/C:/…` chat links open the file** instead of copying its path, and documents and other files can open in the system's default app, thanks to @DaveW001 (#391).
+
+### 📱 On the phone
+- **The phone picks its own sessions list layout** in Settings > Sessions list; Unified lists every computer's sessions together without the computer tabs.
+- **The Android notification** leaves out coordinators' threads and side chats, and its status bar icon is the seven-petal flower.
+- **Reconnecting shows a plain spinner** and keeps its gap above the working bar.
+
+### 🩹 Fixes and polish
+- **Switching accounts brings the Claude conversation along,** completes on an account at its limit, and no longer shows the previous login's sign-in error.
+- **A signed-out Claude account is restored** from this computer's newer copy of its login.
+- **Sessions start while the Mac is logged out,** and Ghostex recovers by itself after you log back in.
+- **A command's auto-detected title goes back** when the terminal returns to its prompt, thanks to @Bet4 (#379).
+- **Work mode keeps a workspace's ticket command and its masked credentials** (not switched on yet), thanks to @lardissone (#378, #384).
+- **The onboarding screens show the seven-petal logo,** and the Claude extension's description names the sidebar's top bar.
+
 ## 10.42.1 - 2026-11-01
 
 **Ghostex 10.42.1 is out.** Larger pasted images work in chat, and answers from forms and pages reach a busy agent sooner.
