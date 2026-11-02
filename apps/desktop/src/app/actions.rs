@@ -252,6 +252,16 @@ pub(crate) struct ClaudeCloudMenuPicked {
     pub(crate) account_id: Option<String>,
 }
 
+/// A row of the header's box chip menu (render/workarea_header/box_chip.rs) for the Cloud Box the
+/// work area's session ran on when the menu opened.
+#[derive(Clone, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CloudBoxMenuPicked {
+    pub(crate) shell_session_id: u64,
+    pub(crate) box_id: String,
+    pub(crate) pick: &'static str,
+}
+
 /// The header headset arrow's "This session: <title>": a call about the session the work area
 /// showed when the menu opened (raw ids of its computer; `remote_machine` names a connected one).
 #[derive(Clone, Debug, PartialEq, Eq, Action)]

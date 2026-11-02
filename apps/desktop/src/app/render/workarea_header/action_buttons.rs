@@ -443,6 +443,7 @@ impl GhostexGpuiApp {
             .items_center()
             .gap(px(WORKAREA_HEADER_PINNED_GAP))
             .ml(px(4.0))
+            .children(self.render_workarea_header_box_chip(compact, cx))
             .when(shown(HeaderControl::ClaudeCloud), |this| {
                 this.children(self.render_workarea_header_claude_cloud_button(compact, cx))
             })

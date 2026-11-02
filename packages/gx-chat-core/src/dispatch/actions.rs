@@ -155,6 +155,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SwitchDraftAgent
         | ActionKind::SwitchDraftRunLocation
         | ActionKind::SetDraftWorktree
+        | ActionKind::SetDraftCloudBox
+        | ActionKind::OpenCloudBoxSettings
         | ActionKind::SwitchToTerminal
         | ActionKind::SelectForkBranch
         | ActionKind::ContextEdit

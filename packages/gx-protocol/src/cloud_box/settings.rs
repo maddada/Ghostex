@@ -86,6 +86,10 @@ pub struct DraftCloudBox {
     /// The tray's This folder / New worktree choice applied on the box.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<bool>,
+    /// Start from the provider's base image instead of a snapshot: "Set up cloud box" (Q1003,
+    /// guided setup) stages its prompt in a draft with this set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blank: Option<bool>,
     /// Set once Send started a box for this draft; the draft row retires when its session exists
     /// on the box.
     #[serde(default, skip_serializing_if = "Option::is_none")]

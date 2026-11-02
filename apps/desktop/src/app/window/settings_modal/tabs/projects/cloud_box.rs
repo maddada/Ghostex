@@ -274,6 +274,7 @@ impl ProjectsTab {
         } else if self.cloud_box.settings.is_some() {
             rows.push(self.cloud_box_defaults_row(p, window, cx));
             rows.extend(self.cloud_box_snapshot_rows(p, cx));
+            rows.push(self.cloud_box_setup_row(p, project, cx));
             rows.push(self.cloud_box_secrets_row(p, window, cx));
         } else {
             rows.push(note_row(

@@ -243,6 +243,8 @@ export interface GxserverDraftCloudBox {
   size?: string;
   reuseBoxId?: string;
   worktree?: boolean;
+  /** Start from the provider's base image (Set up cloud box, guided setup). */
+  blank?: boolean;
   boxId?: string;
 }
 

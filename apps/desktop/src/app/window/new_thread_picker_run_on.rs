@@ -18,6 +18,13 @@ use gpui_component::input::{MoveEnd, MoveHome};
 pub(crate) const NEW_THREAD_PICKER_RUN_ON_HEIGHT: f32 = 30.0;
 
 const RUN_ON_LABEL: &str = "Run on";
+/// The Cloud Box chip's run location: the chat opens with the tray's Cloud Box segment on and the
+/// box starts with its first message.
+pub(crate) const CLOUD_BOX_RUN_LOCATION: &str = "cloudBox";
+const CLOUD_BOX_LABEL: &str = "Cloud Box";
+const CLOUD_BOX_TOOLTIP: &str =
+    "Runs on a cloud box. The box starts when you send the first message.";
+const ICON_CLOUD_BOX: &str = "titlebar/cloud.svg";
 const THIS_COMPUTER: &str = "This computer";
 const SET_UP_LINK: &str = "Run in a cloud box…";
 const ICON_THIS_COMPUTER: &str = "titlebar/device-desktop.svg";
@@ -92,6 +99,9 @@ pub(crate) struct RunOnState {
     selected: Option<String>,
     /// The user picked a chip during this open, so a late status answer keeps their pick.
     touched: bool,
+    /// Cloud Boxes is on and the project is on this computer: the Cloud Box chip follows This
+    /// computer (D3).
+    cloud_box: bool,
 }
 
 impl RunOnState {
@@ -101,6 +111,7 @@ impl RunOnState {
             preferred,
             selected: None,
             touched: false,
+            cloud_box: false,
         };
         state.apply_preferred();
         state
@@ -131,42 +142,65 @@ impl RunOnState {
         }
     }
 
-    /// The picked box's `runLocation`; `None` runs on this computer.
+    /// Offers the Cloud Box chip (Cloud Boxes on, project on this computer).
+    pub(crate) fn with_cloud_box(mut self, offered: bool) -> Self {
+        self.cloud_box = offered;
+        self
+    }
+
+    /// The picked box's `runLocation` ([`CLOUD_BOX_RUN_LOCATION`] for the Cloud Box chip); `None`
+    /// runs on this computer.
     pub(crate) fn run_location(&self) -> Option<&str> {
         self.selected.as_deref()
     }
 
+    /// An agentbox box is picked (its agents and no account list); the Cloud Box chip starts the
+    /// chat here and keeps the full list.
     pub(crate) fn in_box(&self) -> bool {
-        self.selected.is_some()
+        self.selected
+            .as_deref()
+            .is_some_and(|selected| selected != CLOUD_BOX_RUN_LOCATION)
     }
 
     pub(crate) fn shown(&self) -> bool {
-        self.boxes.shows_run_on()
+        self.boxes.shows_run_on() || self.cloud_box
     }
 
-    /// Chip index: 0 is This computer, then the boxes in order.
+    /// The boxes after This computer and the Cloud Box chip.
+    fn box_offset(&self) -> usize {
+        1 + usize::from(self.cloud_box)
+    }
+
+    /// Chip index: 0 is This computer, then Cloud Box when offered, then the boxes in order.
     fn selected_index(&self) -> usize {
-        self.selected
-            .as_deref()
-            .and_then(|selected| {
-                self.boxes
-                    .locations()
-                    .iter()
-                    .position(|location| location.run_location == selected)
-            })
-            .map_or(0, |index| index + 1)
+        match self.selected.as_deref() {
+            Some(CLOUD_BOX_RUN_LOCATION) if self.cloud_box => 1,
+            selected => selected
+                .and_then(|selected| {
+                    self.boxes
+                        .locations()
+                        .iter()
+                        .position(|location| location.run_location == selected)
+                })
+                .map_or(0, |index| index + self.box_offset()),
+        }
     }
 
     fn select_index(&mut self, index: usize) {
         self.touched = true;
+        if self.cloud_box && index == 1 {
+            self.selected = Some(CLOUD_BOX_RUN_LOCATION.to_string());
+            return;
+        }
         self.selected = index
-            .checked_sub(1)
+            .checked_sub(self.box_offset())
+            .filter(|_| index > 0)
             .and_then(|index| self.boxes.locations().get(index))
             .map(|location| location.run_location.clone());
     }
 
     fn chip_count(&self) -> usize {
-        1 + self.boxes.locations().len()
+        self.box_offset() + self.boxes.locations().len()
     }
 }
 
@@ -388,6 +422,16 @@ impl GpuiNewThreadPickerWindow {
             Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string()),
             cx,
         )];
+        if self.run_on.cloud_box {
+            chips.push(self.render_run_on_chip(
+                1,
+                ICON_CLOUD_BOX,
+                CLOUD_BOX_LABEL.to_string(),
+                Some(CLOUD_BOX_TOOLTIP.to_string()),
+                cx,
+            ));
+        }
+        let box_offset = self.run_on.box_offset();
         for (offset, location) in self.run_on.boxes.locations().iter().enumerate() {
             // A label the chip cuts short is readable on hover.
             let tooltip = location
@@ -395,7 +439,7 @@ impl GpuiNewThreadPickerWindow {
                 .clone()
                 .or_else(|| (location.label.chars().count() > 16).then(|| location.label.clone()));
             chips.push(self.render_run_on_chip(
-                offset + 1,
+                offset + box_offset,
                 location.icon(),
                 location.label.clone(),
                 tooltip,

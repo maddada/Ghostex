@@ -3724,13 +3724,22 @@ it off hides it everywhere and keeps your boxes and settings.
   API key instead. Free plans and trials work; Settings shows their limits
   (Instabox free: one box at a time; Boat trial: boxes stop after 2 hours).
 - **Start one**: in a new chat pick Cloud Box beside This folder and New
-  worktree; the choice is remembered per project. Nothing starts or bills until
-  you send the first message; it waits with a progress card while the box
-  starts, fetches the latest base branch into a new branch and starts the
-  agent. The box chip in the session's header shows its state, running time
-  and about-$ cost, and its menu stops, deletes or snapshots it. Cloud
-  sessions sit in their project in the sidebar with a cloud badge. The agent
-  pushes its branch; Pull branch brings it into a local worktree.
+  worktree (or the Cloud Box chip under Run on in New Thread); the choice is
+  remembered per project. The chip beside it picks what the box starts from:
+  a snapshot (★ is the project's Default), a Blank box, or a running box to
+  reuse (the chat gets its own worktree there), plus the provider and size
+  with their price per hour. Nothing starts or bills until you send the first
+  message; it waits with a progress card while the box starts, fetches the
+  code and starts the agent, then the chat opens on the box. The box chip in
+  the session's header shows its state, running time and about-$ cost; its
+  menu has Open terminal, Save as snapshot, Update snapshot, Open PR, Stop and
+  Delete. Cloud sessions sit in their project in the sidebar with a cloud
+  badge. The agent pushes its branch.
+- **Set up cloud box**: Settings > Projects > Cloud box opens a new chat on a
+  blank box with a setup prompt (install the project, run its tests, write
+  `.ghostex/cloud-setup.sh`, sign in to GitHub with you). Check it, press
+  Enter, and when it's done use Save as snapshot on the box chip so new boxes
+  start ready.
 - **Snapshots**: a project's snapshot holds its tools and caches, so a box
   starts ready; the code is always fetched fresh. Settings > Projects > Cloud
   box lists them: the Default (★) is what new boxes start from, Update saves a
@@ -3764,8 +3773,8 @@ it off hides it everywhere and keeps your boxes and settings.
   starts an agent that installs agentbox and sets up the providers you want,
   asking before anything that costs money; or Install agentbox, then Set Up for
   Docker, or Log In and Prepare for a cloud; Add Server registers your own
-  server. Pick a box under Run on in New Thread, or Run in a Box in a
-  project's Select Agent menu; right-click a box session for Open Box Web App,
+  server. Pick a box under More providers in a new chat's Cloud Box chip,
+  under Run on in New Thread, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
   Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
   they exist.
 

@@ -295,7 +295,13 @@ pub(super) fn prepare_request(
         agent_id: text("agentId").unwrap_or_else(|| "claude".to_string()),
         account_id: text("accountId"),
         title: text("title"),
-        first_message: text("firstUserMessage"),
+        // A draft keeps its first message in its runtime settings.
+        first_message: text("firstUserMessage").or_else(|| {
+            session
+                .pointer("/runtimeSettings/firstUserMessage")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        }),
         home_project_id: Some(draft.project_id.clone()),
         home_machine_id: Some(state.metadata.server_id.clone()),
         home_session_id: Some(draft.session_id.clone()),

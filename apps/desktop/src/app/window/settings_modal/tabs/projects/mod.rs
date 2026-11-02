@@ -6,6 +6,7 @@
 //!
 //! CDXC:Projects 2026-06-19-12:11 SEE-ALSO: the page edits selected-project metadata only and never offers project deletion.
 mod cloud_box;
+mod cloud_box_setup;
 mod picker;
 mod views;
 mod work_mode;

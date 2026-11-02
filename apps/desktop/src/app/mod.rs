@@ -80,6 +80,7 @@ pub(crate) mod native_kanban;
 pub(crate) mod native_sidebar;
 pub(crate) mod new_agent_session;
 pub(crate) mod new_coordinator_modal_lifecycle;
+pub(crate) mod new_thread_picker_cloud_box;
 pub(crate) mod new_thread_picker_lifecycle;
 pub(crate) mod onboarding_modal_lifecycle;
 pub(crate) mod os_integration;

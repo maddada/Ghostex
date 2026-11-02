@@ -94,6 +94,7 @@ impl GhostexGpuiApp {
             | "runManagedToolTerminalCommand"
             | "runAgentboxTerminalCommand"
             | "setUpAgentboxWithAgent"
+            | "setUpCloudBox"
             | "uninstallBundledAgentSkills"
             | "uninstallBundledAgentSkill"
             | "requestAgentHookStatus"

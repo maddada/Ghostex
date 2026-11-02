@@ -19,6 +19,7 @@ mod attachment_previews;
 mod attachments;
 mod background_tasks;
 mod binding;
+mod box_picker;
 mod cards;
 mod catch_up;
 mod chat_hotkeys;

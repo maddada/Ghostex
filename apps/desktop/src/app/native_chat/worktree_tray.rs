@@ -6,6 +6,8 @@
 //!
 //! The project chip and its search are `draft_project_picker.rs`.
 //!
+//! The Cloud Box segment's chip and its boot progress card are `box_picker.rs`.
+//!
 //! CDXC:Worktrees 2026-10-31 DECISION:
 //! User (Q828): the tray sits on top of the message box, attached to it like a tab, while the chat is
 //! new. The pick uses the shared bordered segmented control (AGENTS.md "Shared UI controls"); the
@@ -162,8 +164,10 @@ impl NativeChatView {
         .text_size(px(13.0 * s))
         .when(busy, |control| control.opacity(0.6));
 
+        // A narrow chat wraps the chips after the segments onto a second line instead of clipping.
         let mut row = div()
             .flex()
+            .flex_wrap()
             .items_center()
             .gap(px(8.0 * s))
             .min_w_0()
@@ -313,9 +317,15 @@ impl NativeChatView {
                         cx,
                     ));
                 }
+                "cloudBox" => {
+                    if tray["cloudBox"].is_object() {
+                        row = row.child(self.render_cloud_box_chip(&tray["cloudBox"], p, busy, cx));
+                    }
+                }
                 _ => {
+                    // CDXC:CloudBoxes 2026-11-02 DECISION: User (Q1006 note): "move the branch name to align to the end of the left aligned elements in that bar". The current branch sits right after the segments, not at the bar's right end.
                     if let Some(current) = tray["currentBranch"].as_str() {
-                        row = row.child(div().flex_1()).child(
+                        row = row.child(
                             div()
                                 .flex()
                                 .items_center()
@@ -361,7 +371,10 @@ impl NativeChatView {
                         .border_b_0()
                         .border_color(p.composer_border)
                         .bg(p.composer_background)
-                        .child(row),
+                        .child(row)
+                        .when(status["card"].is_object(), |tray| {
+                            tray.child(self.render_cloud_box_card(&status["card"], p))
+                        }),
                 )
                 .into_any_element(),
         )

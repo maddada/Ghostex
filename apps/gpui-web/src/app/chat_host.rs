@@ -60,9 +60,13 @@ impl GhostexGpuiApp {
                 };
                 if let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId"))
                 {
+                    // A Cloud Box start names the box's machine (`cloudbox:<boxId>`) the session is on.
+                    let machine = text("machineId")
+                        .map(ghostex_gx_core::MachineId::Remote)
+                        .unwrap_or_else(|| session.machine.clone());
                     self.web_open_session_in_work_area(
                         SessionKey {
-                            machine: session.machine.clone(),
+                            machine,
                             project_id,
                             session_id,
                         },

@@ -201,6 +201,8 @@ action_kinds! {
     SwitchDraftAgent => "switchDraftAgent",
     SwitchDraftRunLocation => "switchDraftRunLocation",
     SetDraftWorktree => "setDraftWorktree",
+    SetDraftCloudBox => "setDraftCloudBox",
+    OpenCloudBoxSettings => "openCloudBoxSettings",
     SwitchToTerminal => "switchToTerminal",
     SelectForkBranch => "selectForkBranch",
 

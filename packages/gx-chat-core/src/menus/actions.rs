@@ -39,6 +39,16 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
         ActionKind::SwitchDraftAgent => switch_draft_agent(state, action),
         ActionKind::SwitchDraftRunLocation => crate::menus::run_location::switch(state, action),
         ActionKind::SetDraftWorktree => crate::menus::draft_worktree::pick(state, action),
+        ActionKind::SetDraftCloudBox => crate::menus::draft_worktree::pick_cloud(state, action),
+        ActionKind::OpenCloudBoxSettings => vec![Effect::HostAction {
+            action: "openSettingsPage".to_string(),
+            params: Box::new(serde_json::json!({
+                "page": action
+                    .param("page")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("cloudBoxes"),
+            })),
+        }],
         ActionKind::SwitchToTerminal => vec![Effect::HostAction {
             action: "switchToTerminal".to_string(),
             params: Box::new(serde_json::json!({})),
