@@ -65,8 +65,12 @@ const TTL: std::time::Duration = std::time::Duration::from_secs(60);
 fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
     let _serial = serial();
     registry::reset_for_tests();
-    let first = registry::issue_grant("S4k", "Omarchy", true, false, TTL).expect("a token");
-    let renewed = registry::issue_grant("S4k", "Omarchy", true, false, TTL).expect("renewal");
+    let first = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+        .unwrap()
+        .expect("a token");
+    let renewed = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+        .unwrap()
+        .expect("renewal");
     assert_eq!(first, renewed);
     assert!(first.starts_with("gxpeer_"));
     assert_eq!(
@@ -76,7 +80,9 @@ fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
             name: "Omarchy".into()
         })
     );
-    let rotated = registry::issue_grant("S4k", "Omarchy", true, true, TTL).expect("rotated");
+    let rotated = registry::issue_grant("S4k", "Omarchy", true, true, TTL, true)
+        .unwrap()
+        .expect("rotated");
     assert_ne!(rotated, first);
     assert_eq!(
         authorize_peer_token(&first),
@@ -95,10 +101,12 @@ fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
 fn turning_agent_access_off_drops_the_token_and_refuses_the_relay() {
     let _serial = serial();
     registry::reset_for_tests();
-    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL).unwrap();
+    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+        .unwrap()
+        .unwrap();
     registry::register(outbound("S4k", true));
     assert_eq!(
-        registry::issue_grant("S4k", "Omarchy", false, false, TTL),
+        registry::issue_grant("S4k", "Omarchy", false, false, TTL, true).unwrap(),
         None
     );
     registry::register(outbound("S4k", false));
@@ -155,4 +163,84 @@ fn relay_paths_name_a_computer_and_an_api_path() {
         relay_base_url("http://127.0.0.1:58744", "S4k"),
         "http://127.0.0.1:58744/api/computers/S4k/relay"
     );
+}
+
+fn registration(server_id: &str, agent_access: bool, owner: bool, off_there: bool) -> Registration {
+    Registration::from_params(
+        &json!({
+            "serverId": server_id,
+            "name": "Omarchy",
+            "baseUrl": "http://127.0.0.1:58800/",
+            "token": "remote-token-value-0123456789abcdefghij",
+            "agentAccess": agent_access,
+            "owner": owner,
+            "offOnOtherComputer": off_there,
+        }),
+        "S9l",
+    )
+    .expect("valid registration")
+}
+
+/// Two computers connected to each other both renew both gxservers. This computer's own switch
+/// turned off holds against the other computer's "on" until this computer's app turns it on.
+#[test]
+fn this_computers_own_off_switch_holds_until_it_turns_it_back_on() {
+    let _serial = serial();
+    registry::reset_for_tests();
+    // On: the other computer's app gets a token here.
+    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false)
+        .unwrap()
+        .expect("a token");
+    // This computer's app turns the switch off: the token is dropped and a deny is set.
+    registry::revoke_grant("S4k", true, TTL);
+    assert_eq!(authorize_peer_token(&token), None);
+    // The other computer's next renewal asks again: refused, and nothing is minted.
+    assert_eq!(
+        registry::issue_grant("S4k", "Omarchy", true, false, TTL, false),
+        Err(registry::GrantDenied)
+    );
+    assert!(registry::issue_grant("S4k", "Omarchy", true, true, TTL, false).is_err());
+    // Nor can it register itself back on.
+    assert!(!registry::register(registration("S4k", true, false, false)));
+    let held = find("S4k").unwrap();
+    assert!(!held.agent_access);
+    assert_eq!(held.off_by, Some(registry::OffBy::ThisComputer));
+    assert!(held.token().is_empty());
+    // This computer's app turns it back on: the deny lifts and the other computer is served again.
+    assert!(
+        registry::issue_grant("S4k", "Omarchy", true, false, TTL, true)
+            .unwrap()
+            .is_some()
+    );
+    let again = registry::issue_grant("S4k", "Omarchy", true, false, TTL, false)
+        .unwrap()
+        .expect("a token again");
+    assert!(authorize_peer_token(&again).is_some());
+    assert!(registry::register(registration("S4k", true, false, false)));
+    registry::reset_for_tests();
+}
+
+/// The refusal names whose switch is off: this computer's, or the other computer's.
+#[test]
+fn an_off_switch_is_named_on_the_computer_it_belongs_to() {
+    let _serial = serial();
+    registry::reset_for_tests();
+    registry::register(registration("S4k", false, true, false));
+    assert_eq!(
+        find("S4k").unwrap().off_by,
+        Some(registry::OffBy::ThisComputer)
+    );
+    registry::register(registration("S4k", false, true, true));
+    assert_eq!(
+        find("S4k").unwrap().off_by,
+        Some(registry::OffBy::OtherComputer)
+    );
+    registry::register(registration("S4k", false, false, false));
+    assert_eq!(
+        find("S4k").unwrap().off_by,
+        Some(registry::OffBy::OtherComputer)
+    );
+    registry::register(registration("S4k", true, true, false));
+    assert_eq!(find("S4k").unwrap().off_by, None);
+    registry::reset_for_tests();
 }

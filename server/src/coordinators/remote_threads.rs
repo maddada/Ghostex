@@ -30,6 +30,9 @@ pub struct RemoteThreadRecord {
     pub last_state: Option<String>,
     /// The assistant message the last finished report carried (migration 0052).
     pub reported_message_id: Option<String>,
+    /// The other computer's own activity time (ms) the last finished check covered (migration
+    /// 0053), compared only with that computer's later times, never with this computer's clock.
+    pub checked_activity_ms: Option<i64>,
 }
 
 impl RemoteThreadRecord {
@@ -64,7 +67,7 @@ impl RemoteThreadRecord {
     }
 }
 
-const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState, reportedMessageId";
+const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState, reportedMessageId, checkedActivityMs";
 
 fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
     Ok(RemoteThreadRecord {
@@ -82,6 +85,7 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
         last_report: row.get(11)?,
         last_state: row.get(12)?,
         reported_message_id: row.get(13)?,
+        checked_activity_ms: row.get(14)?,
     })
 }
 
@@ -223,6 +227,21 @@ pub fn set_remote_thread_title(
     )
     .map(|changed| changed > 0)
     .map_err(sql_error)
+}
+
+/// The other computer's activity time a finished check covered (whether it reported or not), so
+/// that time is never read again.
+pub fn record_remote_thread_checked(
+    db: &Connection,
+    key: &RemoteThreadKey,
+    activity_ms: i64,
+) -> Result<(), DomainStateError> {
+    db.execute(
+        "UPDATE coordinator_remote_threads SET checkedActivityMs = MAX(COALESCE(checkedActivityMs, 0), ?4) WHERE serverId = ?1 AND projectId = ?2 AND sessionId = ?3",
+        params![key.0, key.1, key.2, activity_ms],
+    )
+    .map_err(sql_error)?;
+    Ok(())
 }
 
 /// A report that reached the coordinator. A finished turn clears the working mark; a question
@@ -456,6 +475,10 @@ mod tests {
         .unwrap();
         db.execute_batch(include_str!(
             "../storage/migrations/0052_coordinator_remote_thread_message.sql"
+        ))
+        .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0053_coordinator_remote_thread_activity.sql"
         ))
         .unwrap();
         db.execute(

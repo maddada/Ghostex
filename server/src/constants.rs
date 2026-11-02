@@ -162,4 +162,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0050_coordinator_close_threads",
     "0051_coordinator_remote_threads",
     "0052_coordinator_remote_thread_message",
+    "0053_coordinator_remote_thread_activity",
 ];

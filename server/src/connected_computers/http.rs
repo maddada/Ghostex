@@ -40,9 +40,10 @@ pub(crate) fn handle_connected_computers_http(
         "/api/registerConnectedComputer" => {
             match Registration::from_params(&params, &state.metadata.server_id) {
                 Ok(registration) => {
-                    registry::register(registration);
+                    let agent_access = registry::register(registration);
                     json!({
                         "registered": true,
+                        "agentAccess": agent_access,
                         "serverId": state.metadata.server_id,
                         "name": this_computer_name(),
                     })
@@ -89,15 +90,19 @@ pub(crate) fn handle_connected_computers_http(
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
             let rotate = params.get("rotate").and_then(Value::as_bool) == Some(true);
+            let owner = params.get("owner").and_then(Value::as_bool) == Some(true);
             let ttl = params
                 .get("ttlMs")
                 .and_then(Value::as_u64)
                 .map(std::time::Duration::from_millis)
                 .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
+            let grant = registry::issue_grant(server_id, name, agent_access, rotate, ttl, owner);
             json!({
                 "serverId": state.metadata.server_id,
                 "name": this_computer_name(),
-                "peerToken": registry::issue_grant(server_id, name, agent_access, rotate, ttl),
+                // This computer's own switch is off for that computer: nothing is minted.
+                "denied": grant.is_err(),
+                "peerToken": grant.ok().flatten(),
                 // The way back lands on the listener that serves only the allowlist.
                 "peerPort": super::peer_listener::peer_listener_port(),
             })
@@ -107,7 +112,13 @@ pub(crate) fn handle_connected_computers_http(
                 .get("serverId")
                 .and_then(Value::as_str)
                 .unwrap_or_default();
-            json!({ "revoked": registry::revoke_grant(server_id) })
+            let deny = params.get("deny").and_then(Value::as_bool) == Some(true);
+            let ttl = params
+                .get("ttlMs")
+                .and_then(Value::as_u64)
+                .map(std::time::Duration::from_millis)
+                .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
+            json!({ "revoked": registry::revoke_grant(server_id, deny, ttl) })
         }
         _ => json!({
             "serverId": state.metadata.server_id,

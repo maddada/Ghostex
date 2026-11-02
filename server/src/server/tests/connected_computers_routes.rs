@@ -600,10 +600,15 @@ async fn a_turn_finished_between_two_passes_is_noticed_from_the_rows_activity_ti
     .expect("coordinator row");
     let key = ("S5m".to_string(), thread.0.clone(), thread.1.clone());
     crate::coordinators::link_remote_thread(&db, &key, &coordinator, "", "Quick one").unwrap();
-    // Its last report was an hour ago; the turn since then was never seen.
+    // Its last check covered the other computer's 09:00; the turn since then (10:00 on that
+    // computer's clock) was never seen working. This computer's clock runs ahead: its last report
+    // says 11:00, which a comparison with this clock would have taken as newer than the turn.
+    let checked = chrono::DateTime::parse_from_rfc3339("2026-11-03T09:00:00.000Z")
+        .unwrap()
+        .timestamp_millis();
     db.execute(
-        "UPDATE coordinator_remote_threads SET reportedAt = '2026-11-03T09:00:00.000Z', observedWorking = 0",
-        [],
+        "UPDATE coordinator_remote_threads SET reportedAt = '2026-11-03T11:00:00.000Z', observedWorking = 0, checkedActivityMs = ?1",
+        rusqlite::params![checked],
     )
     .unwrap();
     let remote_db = crate::storage::open_gxserver_database(&remote.paths).expect("open db");
@@ -641,20 +646,97 @@ async fn a_turn_finished_between_two_passes_is_noticed_from_the_rows_activity_ti
         .not_working_since
         .insert(key.clone(), chrono::Utc::now().timestamp_millis() - 5_000);
     assert_eq!(pass(&memory), vec![format!("{:?}", RemoteReport::Finished)]);
-    // Delivery reads the chat once at that activity time; the next passes leave it alone.
+    // Delivery covers that activity time, reported or not; the next passes leave it alone.
     let marker = chrono::DateTime::parse_from_rfc3339("2026-11-03T10:00:00.000Z")
         .unwrap()
         .timestamp_millis();
-    memory
-        .lock()
-        .unwrap()
-        .checked_marker
-        .insert(key.clone(), marker);
+    crate::coordinators::record_remote_thread_checked(&db, &key, marker).unwrap();
     memory
         .lock()
         .unwrap()
         .not_working_since
         .insert(key.clone(), chrono::Utc::now().timestamp_millis() - 5_000);
     assert!(pass(&memory).is_empty());
+    // A thread reported before it had a time of the other computer's gets one from that
+    // computer's clock on the next pass, and is not reported for it.
+    db.execute(
+        "UPDATE coordinator_remote_threads SET checkedActivityMs = NULL",
+        [],
+    )
+    .unwrap();
+    memory
+        .lock()
+        .unwrap()
+        .not_working_since
+        .insert(key.clone(), chrono::Utc::now().timestamp_millis() - 5_000);
+    assert!(pass(&memory).is_empty());
+    let baseline = crate::coordinators::read_remote_thread(&db, &key)
+        .unwrap()
+        .unwrap()
+        .checked_activity_ms;
+    assert_eq!(baseline, Some(marker));
+    crate::connected_computers::tests::reset();
+}
+
+/// Through the endpoints the desktop apps call: this computer's app turns a computer off; the
+/// other computer's app keeps renewing ("on") and gets nothing until this app turns it on again.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_other_computers_renewals_cannot_undo_this_computers_off_switch() {
+    let _serial = crate::connected_computers::tests::serial();
+    crate::connected_computers::tests::reset();
+    let (_dir, state) = temp_state("S6d");
+    let token = state.auth_token.clone();
+    let other = |rotate: bool| json!({ "serverId": "S5d", "name": "Omarchy", "rotate": rotate });
+    let (_, issued) = post(&state, "/api/issueComputerGrant", &token, other(false)).await;
+    let first = issued["result"]["peerToken"]
+        .as_str()
+        .expect("a token")
+        .to_string();
+    // This computer's app: off.
+    let (status, _) = post(
+        &state,
+        "/api/revokeComputerGrant",
+        &token,
+        json!({ "serverId": "S5d", "deny": true }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, registered) = post(
+        &state,
+        "/api/registerConnectedComputer",
+        &token,
+        json!({ "serverId": "S5d", "name": "Omarchy", "agentAccess": false, "owner": true }),
+    )
+    .await;
+    assert_eq!(registered["result"]["agentAccess"], false);
+    // The other computer's app, a minute later: asks for a token and registers itself on.
+    for rotate in [false, true] {
+        let (_, issued) = post(&state, "/api/issueComputerGrant", &token, other(rotate)).await;
+        assert_eq!(issued["result"]["denied"], true);
+        assert!(issued["result"]["peerToken"].is_null());
+    }
+    let (_, registered) = post(
+        &state,
+        "/api/registerConnectedComputer",
+        &token,
+        json!({ "serverId": "S5d", "name": "Omarchy", "direction": "inbound",
+                "baseUrl": "http://127.0.0.1:58800", "token": "gxpeer_from_there", "agentAccess": true }),
+    )
+    .await;
+    assert_eq!(registered["result"]["agentAccess"], false, "it stays off");
+    let (status, _) = post(&state, "/api/listProjects", &first, json!({})).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // This computer's app: on again. The other computer is served again.
+    let (_, issued) = post(
+        &state,
+        "/api/issueComputerGrant",
+        &token,
+        json!({ "serverId": "S5d", "name": "Omarchy", "owner": true }),
+    )
+    .await;
+    assert!(issued["result"]["peerToken"].is_string());
+    let (_, issued) = post(&state, "/api/issueComputerGrant", &token, other(false)).await;
+    assert_eq!(issued["result"]["denied"], false);
+    assert!(issued["result"]["peerToken"].is_string());
     crate::connected_computers::tests::reset();
 }

@@ -46,7 +46,18 @@ pub(crate) struct ConnectedComputer {
     token: String,
     pub(crate) direction: Direction,
     pub(crate) agent_access: bool,
+    /// Whose switch turned Agent access off, for the refusal's wording.
+    pub(crate) off_by: Option<OffBy>,
     expires_at: Instant,
+}
+
+/// Which computer's Agent access switch is off.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OffBy {
+    /// This computer's own switch (Settings here).
+    ThisComputer,
+    /// The other computer's switch (Settings there).
+    OtherComputer,
 }
 
 impl ConnectedComputer {
@@ -77,6 +88,9 @@ struct PeerGrant {
 struct Registry {
     computers: BTreeMap<String, ConnectedComputer>,
     grants: BTreeMap<String, PeerGrant>,
+    /// Computers this computer's own desktop app turned Agent access off for, until when (renewed
+    /// while the app keeps renewing them).
+    denied: BTreeMap<String, Instant>,
 }
 
 fn registry() -> MutexGuard<'static, Registry> {
@@ -96,6 +110,10 @@ pub(crate) struct Registration {
     pub(crate) direction: Direction,
     pub(crate) agent_access: bool,
     pub(crate) ttl: Duration,
+    /// This computer's own desktop app sent it (`owner`), rather than the other computer's.
+    pub(crate) owner: bool,
+    /// Agent access is off because the other computer's switch is (`offOnOtherComputer`).
+    pub(crate) off_on_other_computer: bool,
 }
 
 impl Registration {
@@ -148,6 +166,7 @@ impl Registration {
             .map(Duration::from_millis)
             .unwrap_or(DEFAULT_REGISTRATION_TTL)
             .clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL);
+        let flag = |key: &str| params.get(key).and_then(Value::as_bool) == Some(true);
         Ok(Self {
             server_id,
             name,
@@ -156,6 +175,8 @@ impl Registration {
             direction,
             agent_access,
             ttl,
+            owner: flag("owner"),
+            off_on_other_computer: flag("offOnOtherComputer"),
         })
     }
 }
@@ -185,28 +206,58 @@ fn loopback_base_url(value: &str) -> Option<String> {
 }
 
 /// Adds or renews a computer: where this gxserver reaches it and the token that computer gave
-/// this one (`issue_grant` on its side).
-pub(crate) fn register(registration: Registration) {
+/// this one (`issue_grant` on its side). Returns whether Agent access is on for it.
+///
+/// CDXC:RemoteMachines 2026-11-03 WHY:
+/// When two computers each connect to the other, both desktop apps renew both gxservers every minute, so one side's "on" used to overwrite the other side's "off" until the next renewal flipped it back. A switch this computer's own app turned off is a local deny: another computer's registration cannot turn access back on, and `issue_grant` mints nothing for it, until this computer's app turns it on again.
+pub(crate) fn register(registration: Registration) -> bool {
     let mut registry = registry();
     let now = Instant::now();
     prune(&mut registry, now);
+    let denied_here = !registration.owner && registry.denied.contains_key(&registration.server_id);
+    let agent_access = registration.agent_access && !denied_here;
+    let off_by = match (
+        agent_access,
+        registration.owner,
+        registration.off_on_other_computer,
+    ) {
+        (true, _, _) => None,
+        (false, _, true) => Some(OffBy::OtherComputer),
+        (false, true, false) => Some(OffBy::ThisComputer),
+        // Another computer's app says its switch is off, unless this one's own deny holds.
+        (false, false, false) if denied_here => Some(OffBy::ThisComputer),
+        (false, false, false) => Some(OffBy::OtherComputer),
+    };
+    let (base_url, token) = if agent_access {
+        (registration.base_url, registration.token)
+    } else {
+        (String::new(), String::new())
+    };
     registry.computers.insert(
         registration.server_id.clone(),
         ConnectedComputer {
             server_id: registration.server_id,
             name: registration.name,
-            base_url: registration.base_url,
-            token: registration.token,
+            base_url,
+            token,
             direction: registration.direction,
-            agent_access: registration.agent_access,
+            agent_access,
+            off_by,
             expires_at: now + registration.ttl,
         },
     );
+    agent_access
 }
+
+/// Agent access for `server_id` is off on this computer (its own app's switch), so nothing is
+/// minted for it.
+#[derive(Debug, Eq, PartialEq)]
+pub(crate) struct GrantDenied;
 
 /// The token `server_id`'s agents use to reach this gxserver: kept and renewed, or a new one when
 /// `rotate` (a new way back was opened, or the machine reconnected) or when there is none. With
-/// Agent access off the grant is dropped and there is no token.
+/// Agent access off the grant is dropped and there is no token. `owner` is this computer's own
+/// app: its "on" lifts this computer's deny; anyone else is refused while the deny holds.
 ///
 /// CDXC:RemoteMachines 2026-11-03 WHY:
 /// The token rotates whenever the way back is (re)opened: a dead reverse forward frees its port on the other computer, where any local user could listen and collect the token the other side keeps sending, so a token must never outlive the tunnel it was handed over through.
@@ -216,13 +267,21 @@ pub(crate) fn issue_grant(
     agent_access: bool,
     rotate: bool,
     ttl: Duration,
-) -> Option<String> {
+    owner: bool,
+) -> Result<Option<String>, GrantDenied> {
     let mut registry = registry();
     let now = Instant::now();
     prune(&mut registry, now);
+    if owner && agent_access {
+        registry.denied.remove(server_id);
+    }
+    if !owner && registry.denied.contains_key(server_id) {
+        registry.grants.remove(server_id);
+        return Err(GrantDenied);
+    }
     if !agent_access {
         registry.grants.remove(server_id);
-        return None;
+        return Ok(None);
     }
     let token = registry
         .grants
@@ -239,12 +298,20 @@ pub(crate) fn issue_grant(
             expires_at: now + ttl.clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL),
         },
     );
-    Some(token)
+    Ok(Some(token))
 }
 
-/// Drops the token `server_id` was given, so its agents are refused from now on.
-pub(crate) fn revoke_grant(server_id: &str) -> bool {
-    registry().grants.remove(server_id).is_some()
+/// Drops the token `server_id` was given, so its agents are refused from now on. `deny` (this
+/// computer's own app turning the switch off) also keeps it from being minted again for `ttl`.
+pub(crate) fn revoke_grant(server_id: &str, deny: bool, ttl: Duration) -> bool {
+    let mut registry = registry();
+    if deny {
+        registry.denied.insert(
+            server_id.to_string(),
+            Instant::now() + ttl.clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL),
+        );
+    }
+    registry.grants.remove(server_id).is_some()
 }
 
 /// Forgets a computer and the token it was given, so its agents are refused from now on.
@@ -300,6 +367,7 @@ fn prune(registry: &mut Registry, now: Instant) {
         .computers
         .retain(|_, computer| computer.expires_at > now);
     registry.grants.retain(|_, grant| grant.expires_at > now);
+    registry.denied.retain(|_, until| *until > now);
 }
 
 fn new_peer_token() -> String {
@@ -313,4 +381,5 @@ pub(crate) fn reset_for_tests() {
     let mut registry = registry();
     registry.computers.clear();
     registry.grants.clear();
+    registry.denied.clear();
 }

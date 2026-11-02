@@ -59,6 +59,8 @@ struct RegistrationOutcome {
     local_port: u16,
     opened_reverse: Option<GpuiRemoteReverseTunnel>,
     reverse_failed: bool,
+    /// The machine's own switch is off for this computer: the way back closes here too.
+    close_reverse: bool,
 }
 
 /// The Agent access switch of a machine in Settings > Remote > Remote machines (on unless the
@@ -163,6 +165,16 @@ impl GhostexGpuiApp {
                 .await;
             let _ = this.update(cx, |this, _cx| {
                 for outcome in outcomes {
+                    if outcome.close_reverse {
+                        if let Some(connection) = this
+                            .remote_gxserver_connections
+                            .get_mut(outcome.machine_id.as_str())
+                        {
+                            if let Some(mut reverse) = connection.reverse_tunnel.take() {
+                                reverse.terminate();
+                            }
+                        }
+                    }
                     if outcome.reverse_failed {
                         if let Some(machine) = state().get_mut(&outcome.machine_id) {
                             machine.reverse_retry_at = Some(Instant::now() + REVERSE_TUNNEL_RETRY);
@@ -275,35 +287,53 @@ fn grant_from(result: &Value) -> Option<Grant> {
     })
 }
 
-/// The tokens each side gives the other, minted (or renewed) on this computer and on the machine.
-/// `None` when either gxserver predates connected computers.
-fn issue_grants(
-    job: &RegistrationJob,
-    remote_server_id: &str,
-    rotate: bool,
-) -> Option<(Grant, Grant)> {
-    let local = grant_from(&post_local(
+enum Grants {
+    Issued(Grant, Grant),
+    /// The machine's own Agent access switch is off for this computer.
+    DeniedThere,
+    /// One side's gxserver predates connected computers.
+    Unsupported,
+}
+
+/// The tokens each side gives the other, minted (or renewed) on this computer (as its own app,
+/// `owner`, which lifts a deny this computer's switch set) and on the machine (as another
+/// computer's app, which the machine refuses while its own switch is off).
+fn issue_grants(job: &RegistrationJob, remote_server_id: &str, rotate: bool) -> Grants {
+    let Some(local) = post_local(
         "/api/issueComputerGrant",
-        json!({ "serverId": remote_server_id, "name": job.name, "rotate": rotate, "ttlMs": REGISTRATION_TTL_MS }),
-    )?)?;
-    let remote = grant_from(&post_remote(
+        json!({ "serverId": remote_server_id, "name": job.name, "rotate": rotate, "owner": true, "ttlMs": REGISTRATION_TTL_MS }),
+    )
+    .as_ref()
+    .and_then(grant_from) else {
+        return Grants::Unsupported;
+    };
+    let Some(remote) = post_remote(
         &job.target,
         "/api/issueComputerGrant",
         json!({ "serverId": local.server_id, "name": local.name, "rotate": rotate, "ttlMs": REGISTRATION_TTL_MS }),
-    )?)?;
-    Some((local, remote))
+    ) else {
+        return Grants::Unsupported;
+    };
+    if remote.get("denied").and_then(Value::as_bool) == Some(true) {
+        return Grants::DeniedThere;
+    }
+    match grant_from(&remote) {
+        Some(remote) => Grants::Issued(local, remote),
+        None => Grants::Unsupported,
+    }
 }
 
 /// One machine's registration, run on the background executor. Never logs or returns a token.
 ///
 /// CDXC:RemoteMachines 2026-11-03 WHY:
-/// Each side mints its own token for the other (`issueComputerGrant`), limited to the agent allowlist, so this computer's gxserver never holds the machine's full token and its relay cannot reach the machine's settings or controls. The way back is opened only after the machine answered, so an older gxserver there gets no tunnel it cannot use; it is closed (and both tokens dropped) when Agent access goes off, and every new way back gets new tokens.
+/// Each side mints its own token for the other (`issueComputerGrant`), limited to the agent allowlist, so this computer's gxserver never holds the machine's full token and its relay cannot reach the machine's settings or controls. The way back is opened only after the machine answered, so an older gxserver there gets no tunnel it cannot use; it is closed (and both tokens dropped) when Agent access goes off on either computer, and every new way back gets new tokens. Calls to this computer's own gxserver say `owner`: only they set or lift this computer's deny, so when two computers connect to each other, one app's renewals never undo the other's switch.
 fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
     let mut outcome = RegistrationOutcome {
         machine_id: job.machine_id.clone(),
         local_port: job.target.local_port,
         opened_reverse: None,
         reverse_failed: false,
+        close_reverse: false,
     };
     let Some(remote_server_id) = remote_server_id(&job.target) else {
         return outcome;
@@ -312,14 +342,15 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         machine.server_id = Some(remote_server_id.clone());
     }
     if !job.agent_access {
-        // Registered with access off so refusals on either side can name it; no tokens remain.
+        // Registered with access off so refusals on either side can name it; no tokens remain,
+        // and the deny keeps the machine's own renewals from minting one here again.
         let _ = post_local(
             "/api/revokeComputerGrant",
-            json!({ "serverId": remote_server_id }),
+            json!({ "serverId": remote_server_id, "deny": true, "ttlMs": REGISTRATION_TTL_MS }),
         );
         let _ = post_local(
             "/api/registerConnectedComputer",
-            json!({ "serverId": remote_server_id, "name": job.name, "agentAccess": false, "ttlMs": REGISTRATION_TTL_MS }),
+            json!({ "serverId": remote_server_id, "name": job.name, "agentAccess": false, "owner": true, "ttlMs": REGISTRATION_TTL_MS }),
         );
         if let Some(local) = post_local("/api/listConnectedComputers", json!({})) {
             let local_server_id = local
@@ -343,18 +374,26 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         }
         return outcome;
     }
-    let Some((mut local, mut remote)) = issue_grants(&job, &remote_server_id, job.rotate) else {
-        // One side predates connected computers: agents can't use this machine, and nothing is
-        // left registered that could suggest they can.
-        let _ = post_local(
-            "/api/unregisterConnectedComputer",
-            json!({ "serverId": remote_server_id }),
-        );
-        let _ = post_local(
-            "/api/revokeComputerGrant",
-            json!({ "serverId": remote_server_id }),
-        );
-        return outcome;
+    let (mut local, mut remote) = match issue_grants(&job, &remote_server_id, job.rotate) {
+        Grants::Issued(local, remote) => (local, remote),
+        Grants::DeniedThere => {
+            off_on_other_computer(&remote_server_id, &job.name);
+            outcome.close_reverse = true;
+            return outcome;
+        }
+        Grants::Unsupported => {
+            // One side predates connected computers: agents can't use this machine, and nothing is
+            // left registered that could suggest they can.
+            let _ = post_local(
+                "/api/unregisterConnectedComputer",
+                json!({ "serverId": remote_server_id }),
+            );
+            let _ = post_local(
+                "/api/revokeComputerGrant",
+                json!({ "serverId": remote_server_id }),
+            );
+            return outcome;
+        }
     };
     // The way back: kept while it lands on this gxserver's current way-back listener, else
     // (re)opened, with new tokens on both sides when it was not opened with them already.
@@ -364,8 +403,16 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         .map(|(remote_port, _)| remote_port);
     if reverse_port.is_none() && (job.may_open_reverse || job.reverse.is_some()) {
         if !job.rotate {
-            if let Some(rotated) = issue_grants(&job, &remote_server_id, true) {
-                (local, remote) = rotated;
+            match issue_grants(&job, &remote_server_id, true) {
+                Grants::Issued(rotated_local, rotated_remote) => {
+                    (local, remote) = (rotated_local, rotated_remote);
+                }
+                Grants::DeniedThere => {
+                    off_on_other_computer(&remote_server_id, &job.name);
+                    outcome.close_reverse = true;
+                    return outcome;
+                }
+                Grants::Unsupported => {}
             }
         }
         match local
@@ -386,6 +433,7 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
             "name": job.name,
             "baseUrl": format!("http://127.0.0.1:{}", job.target.local_port),
             "token": remote.token,
+            "owner": true,
             "ttlMs": REGISTRATION_TTL_MS,
         }),
     );
@@ -404,6 +452,27 @@ fn register_machine(job: RegistrationJob) -> RegistrationOutcome {
         );
     }
     outcome
+}
+
+/// The machine turned Agent access off for this computer, so the pair is off here too: drop the
+/// token this computer gave it (with no deny of this computer's own) and register it off, naming
+/// the machine's switch.
+fn off_on_other_computer(remote_server_id: &str, name: &str) {
+    let _ = post_local(
+        "/api/revokeComputerGrant",
+        json!({ "serverId": remote_server_id }),
+    );
+    let _ = post_local(
+        "/api/registerConnectedComputer",
+        json!({
+            "serverId": remote_server_id,
+            "name": name,
+            "agentAccess": false,
+            "owner": true,
+            "offOnOtherComputer": true,
+            "ttlMs": REGISTRATION_TTL_MS,
+        }),
+    );
 }
 
 fn open_reverse_tunnel(

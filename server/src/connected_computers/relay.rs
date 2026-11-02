@@ -78,12 +78,12 @@ pub(crate) async fn relay(
         );
     };
     if !computer.agent_access {
-        let message = match computer.direction {
-            super::registry::Direction::Outbound => format!(
+        let message = match computer.off_by {
+            Some(super::registry::OffBy::ThisComputer) | None => format!(
                 "Agent access to {name} is off. Turn on Agent access for {name} in Settings > Remote > Remote machines.",
                 name = computer.name
             ),
-            super::registry::Direction::Inbound => format!(
+            Some(super::registry::OffBy::OtherComputer) => format!(
                 "{name} has Agent access for this computer turned off. It is turned back on in {name}'s Settings > Remote > Remote machines.",
                 name = computer.name
             ),

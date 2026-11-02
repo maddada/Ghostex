@@ -154,9 +154,6 @@ pub(super) fn waiting_prompt(chat: &Value) -> (String, String) {
 pub(super) struct RemoteSupervisorMemory {
     pub(super) not_working_since: HashMap<RemoteThreadKey, i64>,
     pub(super) in_flight: HashSet<RemoteThreadKey>,
-    /// The activity marker whose chat was last read for a finished turn, so an idle thread's chat
-    /// is read once per change, not every pass.
-    pub(super) checked_marker: HashMap<RemoteThreadKey, i64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -322,6 +319,15 @@ pub(super) fn tick(
                 };
             }
             let marker = session.as_ref().and_then(activity_marker_ms);
+            // A thread linked as it was (or reported before 0053) has no time of the other
+            // computer's yet: this pass sets one, from that computer's own clock.
+            if let (None, Some(_), Some(marker)) = (
+                thread.checked_activity_ms,
+                thread.reported_at.as_ref(),
+                marker,
+            ) {
+                let _ = crate::coordinators::record_remote_thread_checked(&db, &key, marker);
+            }
             let mut observed_working = thread.observed_working;
             let report = match observation {
                 RemoteObservation::Working => {
@@ -334,8 +340,7 @@ pub(super) fn tick(
                     Some(RemoteReport::Waiting)
                 }
                 RemoteObservation::Idle
-                    if thread.observed_working
-                        || activity_moved_since_report(&thread, marker, &memory, &key) =>
+                    if thread.observed_working || activity_moved_since_check(&thread, marker) =>
                 {
                     let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
                     (now - since >= FINISH_STABILITY_MS).then_some(RemoteReport::Finished)
@@ -395,19 +400,20 @@ pub(super) fn finished_reply(
     }
 }
 
-/// The row moved after the last finished report and its chat was not read at that marker yet.
-fn activity_moved_since_report(
-    thread: &RemoteThreadRecord,
-    marker: Option<i64>,
-    memory: &RemoteSupervisorMemory,
-    key: &RemoteThreadKey,
-) -> bool {
+/// The row moved since the last finished check, judged on the other computer's own clock: its
+/// activity time is newer than the one that check covered. A thread never checked or reported
+/// counts as moved; one reported but not yet checked waits for the baseline `tick` sets.
+///
+/// CDXC:RemoteMachines 2026-11-03 WHY:
+/// Comparing the other computer's activity time with `reportedAt` from this computer's clock missed a short turn whenever the other computer's clock was behind, so both sides of the comparison now come from that computer.
+pub(super) fn activity_moved_since_check(thread: &RemoteThreadRecord, marker: Option<i64>) -> bool {
     let Some(marker) = marker else {
         return false;
     };
-    let reported = thread.reported_at.as_deref().and_then(iso_ms);
-    reported.is_none_or(|reported| marker > reported)
-        && memory.checked_marker.get(key) != Some(&marker)
+    match thread.checked_activity_ms {
+        Some(checked) => marker > checked,
+        None => thread.reported_at.is_none(),
+    }
 }
 
 /// What a thread missing from the snapshot is: closed when its computer's session list has it
@@ -487,8 +493,20 @@ async fn deliver(
     let mut message_id = None;
     let (body, prompt_key, excerpt) = match report.kind {
         RemoteReport::Finished => {
-            if let (Some(marker), Ok(mut memory)) = (report.marker, memory.lock()) {
-                memory.checked_marker.insert(key.clone(), marker);
+            // This activity time is covered now, reported or not: its chat is not read again.
+            if let Some(marker) = report.marker {
+                let checked_state = state.clone();
+                let checked_key = key.clone();
+                let _ = tokio::task::spawn_blocking(move || {
+                    if let Ok(db) = open_gxserver_database(&checked_state.paths) {
+                        let _ = crate::coordinators::record_remote_thread_checked(
+                            &db,
+                            &checked_key,
+                            marker,
+                        );
+                    }
+                })
+                .await;
             }
             let Some(reply) = finished_reply(
                 chat.as_ref().and_then(last_assistant_message),
