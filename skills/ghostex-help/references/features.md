@@ -1916,9 +1916,11 @@ The card keeps updating while the workflow runs. Click or tap an agent to read
 its whole transcript, and use Show full script under the card to see the script
 Claude ran. The card stays in the chat after the workflow finishes, even when the
 turn that started it is folded.
-Slash commands sent from chat stay in the conversation after a reload, together
-with any captured output. Long command output expands when clicked; model, effort,
-Fast mode, and compaction results keep their status rows.
+A slash command shows as your own message, with the command in monospace, whether
+you sent it from chat or typed it in the terminal, and it stays in the conversation
+after a reload. What the command printed shows as a short note under it; click or
+tap a note with more than one line to see the whole output. Model, effort, Fast
+mode, and compaction results keep their status rows.
 During `/compact`, Claude, Codex, Cursor, and Grok Build show a compaction card above the input.
 Cursor's `/summarize` and Hermes's `/compress` use the same flow. Claude shows its reported progress;
 Codex, Cursor, Grok Build, and Hermes show a looping bar. A Hermes `/compress` sent from chat that
