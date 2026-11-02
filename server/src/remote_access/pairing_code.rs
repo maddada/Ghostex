@@ -156,8 +156,9 @@ pub fn pairing_link(code: &str) -> String {
 ///
 /// CDXC:RemotePairing 2026-11-02 DECISION:
 /// The user chose (Q618) to switch the pairing QR to this code "in the release after" the phones
-/// got its reader (10.37); issue #394 (an Android phone's scanner never read the `ghostex-ec1:`
-/// QR, version 16) is that switch. `/api/remotePairingCode` puts it in the QR's link and keeps
+/// got its reader (10.37); it went out with the fix for issue #394, whose cause was the Android
+/// release build (see the phone's plugins/withAndroidReleaseSize.js), not the QR's density.
+/// `/api/remotePairingCode` puts it in the QR's link and keeps
 /// `ghostex-ec1:` for Copy as text, which every phone and computer reads; a code this cannot
 /// encode falls back to the `ghostex-ec1:` link. Phone apps older than 10.37 (not updated over the
 /// air) cannot read the new QR and pair with Copy as text.
