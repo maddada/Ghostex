@@ -68,7 +68,11 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.agent_tasks_panel = Tri::Value(tasks_panel);
     into.coordinator_threads_panel = Tri::Value(threads_panel);
     into.side_chats_panel = Tri::Value(side_chats_panel);
-    into.side_chat_of = Tri::Value(side_chats::bar(state.session.side_chat_of.as_ref()));
+    into.side_chat_of = Tri::Value(side_chats::bar(
+        state.session.side_chat_of.as_ref(),
+        &state.identity.project_id,
+        &state.transcript_view.session_directory,
+    ));
     into.background_tasks_panel = Tri::Value(background);
     into.terminal_tail = terminal_tail::project(&extras.terminal_tail);
     into.subagent = Tri::Value(subagent::project(state));

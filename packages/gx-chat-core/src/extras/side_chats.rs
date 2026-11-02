@@ -9,7 +9,10 @@ use serde_json::{json, Value};
 
 use crate::document::ChatPill;
 use crate::effect::Effect;
+use crate::event::KnownSession;
 use crate::state::{ChatState, PanelsState};
+use crate::transcript::agent_message_card::{agent_icon, GO_TO_SESSION};
+use crate::transcript::session_mentions::card_pill;
 use crate::wire::ChatRpcMethod;
 
 /// The Side chats pill's id.
@@ -106,23 +109,48 @@ pub fn pill(panel: &Value) -> Option<ChatPill> {
     })
 }
 
-/// A side chat's own bar: `{ parentSessionId, parentTitle }`, or `null` for any other chat.
-pub fn bar(side_chat_of: Option<&Value>) -> Value {
+/// A side chat's own bar: `{ parentSessionId, parentTitle, parentPill }`, or `null` for any other
+/// chat. `parentPill` is the main session's name as the "Message from" cards draw theirs
+/// (`card_pill`), so it opens that session through the same `openAgentSession` action.
+///
+/// CDXC:SideChats 2026-11-02 DECISION:
+/// User: "please make clicking on the name of the chat that spawned the side chat focus the original session (we need the dotted underline exactly like we have under the name of the session in message to/from cards in the chat transcript)". In a side chat's bar the main session's name is the same session pill as the name on a "Message from" / "Message to" card: the dotted underline that brightens on hover, the faint fill, the "Go to session" tooltip, and a click that opens and focuses that session. It is built here, from `card_pill`, and drawn by each renderer's own card pill, never copied. This holds wherever a side chat names its origin (desktop, GPUI web, phone).
+pub fn bar(side_chat_of: Option<&Value>, project_id: &str, directory: &[KnownSession]) -> Value {
     let Some(parent) = side_chat_of.filter(|parent| !text(parent, "sessionId").is_empty()) else {
         return Value::Null;
     };
+    let session_id = text(parent, "sessionId");
+    // A side chat runs in its main session's project, so the project id is this chat's own.
+    let found = directory
+        .iter()
+        .find(|known| known.project_id == project_id && known.session_id == session_id);
+    let title = found
+        .map(|known| known.title.as_str())
+        .filter(|title| !title.trim().is_empty())
+        .unwrap_or_else(|| text(parent, "title"));
+    let title = match title.trim() {
+        "" => "the main session",
+        title => title,
+    };
+    let gone = !directory.is_empty() && found.is_none();
+    let (icon, coordinator) = found.map_or((Value::Null, false), |known| {
+        (
+            agent_icon(&known.agent_id, &known.agent_name),
+            known.coordinator,
+        )
+    });
+    let session =
+        json!({ "projectId": project_id, "sessionId": session_id, "label": GO_TO_SESSION });
     json!({
-        "parentSessionId": text(parent, "sessionId"),
-        "parentTitle": match text(parent, "title") {
-            "" => "the main session",
-            title => title,
-        },
+        "parentSessionId": session_id,
+        "parentTitle": title,
+        "parentPill": card_pill("Side chat of", title, icon, coordinator, &session, gone),
     })
 }
 
 /// Whether this chat is a side chat, which cannot start another one.
 pub fn is_side_chat(side_chat_of: Option<&Value>) -> bool {
-    !bar(side_chat_of).is_null()
+    side_chat_of.is_some_and(|parent| !text(parent, "sessionId").is_empty())
 }
 
 /// A row was picked: the host opens that side chat (the desktop's side panel, the phone's chat
@@ -245,4 +273,50 @@ pub fn settle(
 pub fn opened_by_start(result: &Value) -> Option<Effect> {
     let session = result.pointer("/fork/session")?;
     open(text(session, "projectId"), text(session, "sessionId"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn known(title: &str) -> KnownSession {
+        KnownSession {
+            project_id: "p1".into(),
+            session_id: "main".into(),
+            title: title.into(),
+            agent_id: "claude".into(),
+            agent_name: "Claude".into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn the_bar_names_the_main_session_with_a_card_pill_that_opens_it() {
+        let of = json!({ "sessionId": "main", "title": "Old title" });
+        let bar = bar(Some(&of), "p1", &[known("Fix login")]);
+        assert_eq!(bar["parentTitle"], "Fix login");
+        let pill = &bar["parentPill"];
+        assert_eq!(pill["prefix"], "Side chat of");
+        assert_eq!(pill["label"], "Fix login");
+        assert_eq!(pill["title"], GO_TO_SESSION);
+        assert_eq!(pill["missing"], false);
+        assert_eq!(pill["session"]["projectId"], "p1");
+        assert_eq!(pill["session"]["sessionId"], "main");
+    }
+
+    #[test]
+    fn the_pill_works_before_the_session_list_loads_and_opens_nothing_once_it_is_gone() {
+        let of = json!({ "sessionId": "main", "title": "Fix login" });
+        let loading = bar(Some(&of), "p1", &[]);
+        assert_eq!(loading["parentPill"]["label"], "Fix login");
+        assert_eq!(loading["parentPill"]["session"]["sessionId"], "main");
+        let other = KnownSession {
+            session_id: "other".into(),
+            ..known("Other")
+        };
+        let gone = bar(Some(&of), "p1", &[other]);
+        assert_eq!(gone["parentPill"]["missing"], true);
+        assert!(gone["parentPill"]["session"].is_null());
+        assert!(bar(None, "p1", &[]).is_null());
+    }
 }

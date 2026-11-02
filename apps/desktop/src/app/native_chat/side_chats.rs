@@ -4,7 +4,7 @@
 //! (packages/gx-chat-core/src/extras/side_chats.rs, where the user's decision lives); the pill is
 //! chat_pills.rs.
 //!
-//! SEE-ALSO: apps/mobile/app/src/chat/native/cards/SideChats.tsx (the phone's twin),
+//! SEE-ALSO: apps/mobile/app/src/chat/native/cards/SideChats.tsx (the phone's twin; the bar's main session name is the card pill of inter_agent_message.rs),
 //! apps/desktop/src/app/session_chat/host_actions.rs (`openSideChat`, `sideChatDeleted`).
 
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
@@ -253,12 +253,20 @@ impl NativeChatView {
                         .child("Side chat of"),
                 )
                 .child(
+                    // The main session's name is the same pill as on a "Message from" card
+                    // (`session_pill`: dotted underline, hover fill, click opens that session).
                     div()
                         .flex_1()
                         .min_w_0()
-                        .truncate()
+                        .flex()
+                        .items_center()
                         .text_color(p.foreground)
-                        .child(parent),
+                        .child(self.session_pill(
+                            "chat-side-chat-bar:pill",
+                            &bar["parentPill"],
+                            p,
+                            cx,
+                        )),
                 )
                 .child(
                     icon_button(
