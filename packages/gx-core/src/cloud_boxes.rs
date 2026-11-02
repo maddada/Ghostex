@@ -205,6 +205,21 @@ impl SessionCloudBoxBadge {
         }
     }
 
+    /// A home draft's badge once its first message started a box: that box's name and state from
+    /// the registry, so a failed start reads as Failed instead of still waiting.
+    ///
+    /// CDXC:CloudBoxes 2026-11-02 WHY: the draft's own row (`runtimeSettings.cloudBox`) stays
+    /// `pending` until the box session replaces it, so after a failed start its badge kept saying
+    /// the box starts with the first message. The draft records the box it started (`boxId`), and
+    /// the registry knows how that went.
+    /// SEE-ALSO: apps/mobile/app/src/cloudBoxes/boxSessions.ts (`withBoxSessions`, the phone's twin).
+    pub fn with_started_box(self, boxes: &CloudBoxes) -> Self {
+        if self.state != CloudBoxState::Pending || self.box_id.is_empty() {
+            return self;
+        }
+        boxes.get(&self.box_id).map_or(self, Self::from_box)
+    }
+
     pub fn from_box(cloud_box: &CloudBox) -> Self {
         Self {
             box_id: cloud_box.box_id.clone(),

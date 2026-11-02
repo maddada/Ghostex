@@ -581,9 +581,16 @@ async function rustObjcopy() {
   // The aarch64 Linux toolchain's rust-objcopy links libLLVM from the sysroot's lib folder, which
   // only rustup's proxies put on the loader path, so a direct call needs it (10.31.0's ARM64 build
   // failed with "libLLVM.so.22.1-rust-1.95.0-stable: cannot open shared object file").
+  // macOS's loader reads DYLD_LIBRARY_PATH for the same libLLVM.dylib ("Library not loaded: @rpath/libLLVM.dylib").
   const libDir = path.join(sysroot.trim(), 'lib');
-  const loaderPath = [libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
-  return { command: objcopy, env: { LD_LIBRARY_PATH: loaderPath } };
+  const loaderPath = (current) => [libDir, current].filter(Boolean).join(path.delimiter);
+  return {
+    command: objcopy,
+    env: {
+      LD_LIBRARY_PATH: loaderPath(process.env.LD_LIBRARY_PATH),
+      DYLD_LIBRARY_PATH: loaderPath(process.env.DYLD_LIBRARY_PATH),
+    },
+  };
 }
 
 async function assertDirectory(candidate, label) {

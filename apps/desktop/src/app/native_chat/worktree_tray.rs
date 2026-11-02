@@ -205,57 +205,60 @@ impl NativeChatView {
             }
             Some("failed") => {
                 let message = status["message"].as_str().unwrap_or_default().to_owned();
-                row = row
-                    .child(
-                        div()
-                            .id("chat-worktree-failure")
-                            .flex()
-                            .flex_1()
-                            .items_center()
-                            .gap(px(6.0 * s))
-                            .min_w_0()
-                            .text_color(rgb(FAILED_COLOR))
-                            .child(
-                                svg()
-                                    .path("titlebar/alert-triangle.svg")
-                                    .size(px(13.0 * s))
-                                    .flex_shrink_0()
-                                    .text_color(rgb(FAILED_COLOR)),
-                            )
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .whitespace_nowrap()
-                                    .child(message.clone()),
-                            )
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(message.clone())
-                                    .build(window, cx)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("chat-worktree-retry")
-                            .role(gpui::Role::Button)
-                            .aria_label("Try again")
-                            .flex_shrink_0()
-                            .h(px(26.0 * s))
-                            .px(px(10.0 * s))
-                            .flex()
-                            .items_center()
-                            .rounded(px(7.0 * s))
-                            .border_1()
-                            .border_color(p.composer_border)
-                            .text_color(p.primary)
-                            .chat_cursor_pointer()
-                            .hover(|style| style.bg(p.border))
-                            .child("Try again")
-                            .on_click(cx.listener(|chat, _, window, cx| {
-                                chat.submit("send", window, cx);
-                            })),
-                    );
+                // A line of its own, like the boot card: as a flexible item beside the segments
+                // the message was cut to its first word ("ghostex b…") even in a wide window.
+                row = row.child(
+                    div()
+                        .id("chat-worktree-failure")
+                        .flex()
+                        .w_full()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .min_w_0()
+                        .text_color(rgb(FAILED_COLOR))
+                        .child(
+                            svg()
+                                .path("titlebar/alert-triangle.svg")
+                                .size(px(13.0 * s))
+                                .flex_shrink_0()
+                                .text_color(rgb(FAILED_COLOR)),
+                        )
+                        .child(
+                            div()
+                                .id("chat-worktree-failure-message")
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .child(message.clone())
+                                .tooltip(move |window, cx| {
+                                    gpui_component::tooltip::Tooltip::new(message.clone())
+                                        .build(window, cx)
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id("chat-worktree-retry")
+                                .role(gpui::Role::Button)
+                                .aria_label("Try again")
+                                .flex_shrink_0()
+                                .h(px(26.0 * s))
+                                .px(px(10.0 * s))
+                                .flex()
+                                .items_center()
+                                .rounded(px(7.0 * s))
+                                .border_1()
+                                .border_color(p.composer_border)
+                                .text_color(p.primary)
+                                .chat_cursor_pointer()
+                                .hover(|style| style.bg(p.border))
+                                .child("Try again")
+                                .on_click(cx.listener(|chat, _, window, cx| {
+                                    chat.submit("send", window, cx);
+                                })),
+                        ),
+                );
             }
             _ => {}
         }

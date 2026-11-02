@@ -456,6 +456,12 @@ impl SidebarViewModel {
         {
             rows.remove(&project.project_id);
         }
+        // A draft's ☁ badge reads the box its first message started from the registry.
+        if changes.cloud_boxes_changed {
+            for sessions in rows.values_mut() {
+                sessions.retain(|_, row| row.row.cloud_box.is_none());
+            }
+        }
         let mut box_rows = match (&mut previous, rows_all_dirty || changes.cloud_boxes_changed) {
             (Some(previous), false) => std::mem::take(&mut previous.box_rows),
             _ => BTreeMap::new(),
@@ -589,6 +595,7 @@ impl SidebarViewModel {
                 if let Some(row) = resolve_row(
                     &mut state,
                     store,
+                    core.cloud_boxes(),
                     &machine,
                     project_id,
                     session_id,
@@ -650,6 +657,7 @@ impl SidebarViewModel {
                     if let Some(row) = resolve_row(
                         &mut state,
                         store,
+                        core.cloud_boxes(),
                         &machine,
                         project_id,
                         session_id,
@@ -848,6 +856,7 @@ fn browser_rows_for_project(
 fn resolve_row(
     state: &mut CacheState,
     store: &PresentationStore,
+    boxes: &crate::cloud_boxes::CloudBoxes,
     machine: &MachineId,
     project_id: &str,
     session_id: &str,
@@ -870,17 +879,19 @@ fn resolve_row(
         session_id: session_id.to_string(),
     };
     let sidebar_id = key.to_sidebar_session_id();
+    let mut row = session_row(
+        key,
+        &session,
+        super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
+        inputs.host.local_delayed_sends.get(&sidebar_id),
+        context,
+    );
+    row.cloud_box = row.cloud_box.map(|badge| badge.with_started_box(boxes));
     state.next_row_id += 1;
     state.work.rows_built += 1;
     let row = RowRef {
         id: state.next_row_id,
-        row: Arc::new(session_row(
-            key,
-            &session,
-            super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
-            inputs.host.local_delayed_sends.get(&sidebar_id),
-            context,
-        )),
+        row: Arc::new(row),
     };
     state
         .rows
@@ -920,6 +931,9 @@ fn resolve_box_row(
             cloud_box,
         ));
     }
+    // Listed with the sessions, never Drafts: the rows of a box that is not up (`cached_box_snapshot`)
+    // carry no draft flag, so a not-started agent jumped out of Drafts when its box stopped.
+    row.is_draft = false;
     state.next_row_id += 1;
     state.work.rows_built += 1;
     let row = RowRef {

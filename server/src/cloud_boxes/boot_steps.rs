@@ -105,10 +105,7 @@ pub(super) fn run_box_verb(
             .and_then(Value::as_str)
             .map(str::to_string)
             .unwrap_or_else(|| format!("ghostex box {verb} failed."))),
-        None => Err(format!(
-            "ghostex box {verb} printed no answer: {}",
-            output.failure_tail()
-        )),
+        None => Err(output.box_verb_failure(verb)),
     }
 }
 

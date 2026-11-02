@@ -26,6 +26,10 @@ pub struct ProviderMachine {
     pub operation_id: Option<String>,
 }
 
+/// [`ExecOutput::missing_box_command`]'s message.
+pub const MISSING_BOX_COMMAND: &str =
+    "The Ghostex on this box is too old for Cloud Boxes (it has no `ghostex box` command).";
+
 /// A command's result.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ExecOutput {
@@ -48,6 +52,33 @@ impl ExecOutput {
                         .filter(serde_json::Value::is_object)
                 })
             })
+    }
+
+    /// What a box whose `ghostex` predates Cloud Boxes says instead of answering a `ghostex box`
+    /// verb, in words for the box's error line, or `None`.
+    ///
+    /// CDXC:CloudBoxes 2026-11-02 WHY: an old `ghostex` answers `Unknown command: box` followed by
+    /// its whole usage, and the last lines of that were the box's error ("quick-actions --help
+    /// Show focused project quick-action help"), which said nothing about what went wrong.
+    pub fn missing_box_command(&self) -> Option<&'static str> {
+        [&self.stdout, &self.stderr]
+            .iter()
+            .any(|text| {
+                text.lines()
+                    .any(|line| line.trim() == "Unknown command: box")
+            })
+            .then_some(MISSING_BOX_COMMAND)
+    }
+
+    /// Why a `ghostex box` verb printed no JSON answer.
+    pub fn box_verb_failure(&self, verb: &str) -> String {
+        match self.missing_box_command() {
+            Some(message) => message.to_string(),
+            None => format!(
+                "ghostex box {verb} printed no answer: {}",
+                self.failure_tail()
+            ),
+        }
     }
 
     /// The last lines of stderr (else stdout), for a failure message.

@@ -134,6 +134,7 @@ fn exec_json(output: ExecOutput) -> Value {
         "timedOut": output.timed_out,
         "json": output.json_object(),
         "failureTail": output.failure_tail(),
+        "missingBoxCommand": output.missing_box_command(),
     })
 }
 

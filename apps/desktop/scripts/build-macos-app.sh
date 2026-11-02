@@ -698,6 +698,42 @@ resolve_remote_gxserver_linux_package_source() {
 	return 0
 }
 
+# The Linux arch this Mac's Docker runs, which is the package a local Cloud Box gets.
+local_start_docker_linux_arch() {
+	case "$GHOSTEX_MACOS_ARCH" in
+	arm64) printf 'arm64\n' ;;
+	x86_64) printf 'x64\n' ;;
+	esac
+}
+
+# CDXC:CloudBoxes 2026-11-02 WHY:
+# A local Docker box gets the bundle's Web/gxserver-linux-<arch> copied in, and the published package a local start fell back to predated box mode (no `ghostex box`, no tailcat), so every local box failed at boot. The package for this Mac's Docker arch is built from the checkout (tooling/build-remote-gxserver-linux-release.sh, about 2.5 min cold, 25 s when gxserver is unchanged) when Cloud Box code or the package recipe changed, behind a content-hash stamp. Other gxserver edits do not trigger it, because a cross release build after every server edit would end the 10-second start; a box running a slightly older gxserver is what real providers get too (they install the release package). A failed build (missing musl target, Zig or Go) falls back to the published package with the reason.
+# SEE-ALSO: server/package-remote-linux.mjs, server/src/cloud_boxes/local_provider.rs (`package_dir`).
+refresh_local_start_box_linux_package() {
+	local arch="$1"
+	local package_dir="$2"
+	local digest
+	digest="$(fingerprint_inputs \
+		--value "remote-gxserver-linux-box-v1" \
+		--value "arch=$arch" \
+		--path "$REPO_ROOT/server/src/cloud_boxes" \
+		--path "$REPO_ROOT/packages/gx-cloud/src" \
+		--path "$REPO_ROOT/packages/gx-protocol/src/cloud_box" \
+		--path "$REPO_ROOT/server/package-remote-linux.mjs" \
+		--path "$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh")"
+	if cache_matches "remote-gxserver-linux-box-$arch" "$digest" \
+		"$package_dir/build-identity.json" "$package_dir/bin/gxserver" "$package_dir/bin/tailcat"; then
+		return 0
+	fi
+	echo "Building the Linux gxserver package ($arch) from this checkout for local Cloud Boxes..." >&2
+	if "$REPO_ROOT/tooling/build-remote-gxserver-linux-release.sh" --arch "$arch" --allow-dirty --force >&2; then
+		write_cache_stamp "remote-gxserver-linux-box-$arch" "$digest"
+		return 0
+	fi
+	echo "Could not build the Linux gxserver package ($arch); local Cloud Boxes will fail to boot until it builds." >&2
+	return 1
+}
+
 # CDXC:RemoteMachines 2026-10-01 WHY:
 # A local start used to bundle the leftover Linux package under runtime/macos/Web whenever build/ had none, so a Mac shipped a 2026-08-05 gxserver and Linux installs failed. A locally built package is used only while its source revision matches the checkout's gxserver sources; otherwise the published package of this release is used (tooling/release-gpui/dev-remote-gxserver-package.mjs).
 # SEE-ALSO: server/package-remote-linux.mjs writes the sourceRevision this compares.
@@ -710,6 +746,10 @@ resolve_local_start_remote_gxserver_linux_package() {
 	LINUX_ARM64) arch="arm64" ;;
 	*) return 0 ;;
 	esac
+	if [[ "$arch" == "$(local_start_docker_linux_arch)" ]] && refresh_local_start_box_linux_package "$arch" "$default_source"; then
+		printf '%s\n' "$default_source"
+		return 0
+	fi
 	if [[ -f "$default_source/build-identity.json" ]]; then
 		revision="$(sed -n 's/.*"sourceRevision": *"\([0-9a-f]\{40\}\)".*/\1/p' "$default_source/build-identity.json" | head -n 1)"
 		if [[ -n "$revision" ]] && git -C "$REPO_ROOT" diff --quiet "$revision" -- \

@@ -103,11 +103,15 @@ elapsed_since() {
 # the two checks cannot drift apart.
 package_status() {
 	local arch="$1"
+	# "built": the check after this run's own build, which --allow-dirty made from the working tree.
+	local accept_dirty=0
+	[[ "${2:-}" == "built" && "$ALLOW_DIRTY" == "1" ]] && accept_dirty=1
 	local package_dir="$PACKAGE_ROOT/$arch/package"
 	GHOSTEX_RELEASE_MODULE="$AUTOMATION_ROOT/tooling/release-shared.mjs" \
 		GHOSTEX_PACKAGE_DIR="$package_dir" \
 		GHOSTEX_EXPECTED_REVISION="$HEAD_REVISION" \
 		GHOSTEX_EXPECTED_ZMX_REVISION="$ZMX_HEAD_REVISION" \
+		GHOSTEX_ACCEPT_DIRTY="$accept_dirty" \
 		node --input-type=module --eval '
 		import { readFileSync, existsSync } from "node:fs";
 		import { pathToFileURL } from "node:url";
@@ -128,7 +132,8 @@ package_status() {
 			process.exit(1);
 		}
 		const identity = JSON.parse(readFileSync(identityPath, "utf8"));
-		if (identity.sourceDirty) {
+		const allowDirty = process.env.GHOSTEX_ACCEPT_DIRTY === "1";
+		if (identity.sourceDirty && !allowDirty) {
 			console.log("built from a dirty worktree");
 			process.exit(1);
 		}
@@ -136,7 +141,7 @@ package_status() {
 			console.log("built from " + identity.sourceRevision + " but HEAD is " + expectedRevision);
 			process.exit(1);
 		}
-		if (identity.zmxSourceDirty !== false) {
+		if (identity.zmxSourceDirty !== false && !(allowDirty && identity.zmxSourceDirty === true)) {
 			console.log("built from a dirty or unrecorded zmx submodule worktree");
 			process.exit(1);
 		}
@@ -212,7 +217,11 @@ ZIG_REQUIRED="$(ghostex_find_zig "$REPO_ROOT")"
 # CDXC:Release 2026-09-26 WHY: cargo builds inside server/, whose rust-toolchain.toml pins the compiler, so the musl target check, the host triple and rust-lld must come from that toolchain. Asked from the repo root they read the runner's default toolchain, which the release workflow no longer gives the musl targets, and the 10.2.1 and 10.3.0 runs failed here before building.
 SERVER_DIR="$REPO_ROOT/server"
 if command -v rustup >/dev/null 2>&1; then
-	for target in x86_64-unknown-linux-musl aarch64-unknown-linux-musl; do
+	for arch in "${ARCHES[@]}"; do
+		case "$arch" in
+		x64) target=x86_64-unknown-linux-musl ;;
+		arm64) target=aarch64-unknown-linux-musl ;;
+		esac
 		if ! (cd "$SERVER_DIR" && rustup target list --installed 2>/dev/null) | grep -Fxq "$target"; then
 			cat >&2 <<EOF
 Rust target $target is not installed.
@@ -296,7 +305,7 @@ build_arch() {
 		ZMX_ZIG="$ZIG_REQUIRED" \
 		node "$REPO_ROOT/server/package-remote-linux.mjs" --arch "$arch" --allow-cross
 
-	if ! status="$(package_status "$arch")"; then
+	if ! status="$(package_status "$arch" built)"; then
 		echo "LINUX_$arch package failed validation after build: $status" >&2
 		exit 1
 	fi
