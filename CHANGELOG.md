@@ -55,6 +55,7 @@
 
 ### 🪟 Windows
 
+- **Windows: transparency changes apply right away** to every open window, without restarting Ghostex.
 - **Windows: `file:///C:/…` and `/C:/…` chat links open the file** instead of copying its path, and documents and other files can open in the system's default app, thanks to @DaveW001 (#391).
 
 ### 📱 On the phone
