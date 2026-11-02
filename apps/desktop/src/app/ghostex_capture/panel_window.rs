@@ -17,11 +17,12 @@ use gpui::{
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
+use super::machine_sections::{MachineSection, PanelMachine, split_by_machine};
 use super::model::*;
 use super::persistence;
 use super::placement;
 use super::platform;
-use super::project_list::{ListState, Shown};
+use super::project_list::{ListState, MachineShown, Shown};
 use crate::GhostexGpuiApp;
 use crate::app::helpers::{GpuiStatusIndicatorSessionState, GpuiStatusIndicatorStatus};
 
@@ -38,6 +39,7 @@ const PROJECT_GAP: f32 = 6.0;
 const FOOTER_HEIGHT: f32 = 30.0;
 const EMPTY_HEIGHT: f32 = 44.0;
 const FILTER_HEIGHT: f32 = 36.0;
+const MACHINE_HEADER_HEIGHT: f32 = 28.0;
 /// The list's height, whatever it holds: the panel keeps one size so it never moves while open.
 const LIST_HEIGHT: f32 = 280.0;
 /// Projects expanded when the panel opens (user decision 2026-10-28, see `project_list.rs`).
@@ -139,6 +141,32 @@ impl GhostexGpuiApp {
         }
         active.extend(idle);
         active
+    }
+
+    /// Every remote machine the sidebar has a tab for, in its order, with its connection state.
+    pub(crate) fn ghostex_capture_panel_machines(&self) -> Vec<PanelMachine> {
+        self.gx_store
+            .remote
+            .tabs()
+            .iter()
+            .filter(|tab| !tab.is_local())
+            .map(|tab| {
+                let (status, detail) = ghostex_gx_core::machine_state_copy(&tab.state);
+                PanelMachine {
+                    machine_id: tab.machine_id.clone(),
+                    name: tab.label.clone(),
+                    connected: tab.is_connected(),
+                    busy: ghostex_gx_core::machine_state_is_busy(&tab.state),
+                    failed: ghostex_gx_core::machine_state_is_failure(&tab.state),
+                    status: status.to_string(),
+                    detail: tab
+                        .message
+                        .clone()
+                        .filter(|message| !message.trim().is_empty())
+                        .or(detail.map(str::to_string)),
+                }
+            })
+            .collect()
     }
 
     fn ghostex_capture_panel_height(&self) -> f32 {
@@ -337,6 +365,10 @@ impl GhostexGpuiApp {
         self.open_ghostex_capture_panel(cx);
     }
 
+    fn ghostex_capture_connect_machine(&mut self, machine_id: String, cx: &mut Context<Self>) {
+        self.remote_reconnect_from_sidebar(&machine_id, cx);
+    }
+
     fn ghostex_capture_open_session(
         &mut self,
         project_id: String,
@@ -485,6 +517,125 @@ fn project_header(
                 .text_color(rgb(0x6b6b6b))
                 .child(sessions.len().to_string()),
         )
+}
+
+/// A remote machine's row: a chevron, a cloud, its name, and either the same counts as a project
+/// header (summed over its projects) or, while it is not connected, what its connection says and
+/// a Connect button.
+fn machine_header(
+    machine: &PanelMachine,
+    projects: &[PanelProject],
+    open: bool,
+) -> gpui::Stateful<gpui::Div> {
+    let sessions: Vec<&PanelSession> = projects
+        .iter()
+        .flat_map(|project| project.sessions.iter())
+        .collect();
+    let question = sessions.iter().filter(|session| session.question).count();
+    let count = |status: GpuiStatusIndicatorStatus| {
+        sessions
+            .iter()
+            .filter(|session| !session.question && session.status == status)
+            .count()
+    };
+    let badges = [
+        (count(GpuiStatusIndicatorStatus::Attention), 0x0093fe),
+        (question, 0xf472b6),
+        (count(GpuiStatusIndicatorStatus::Working), 0xc68a06),
+    ];
+    let row = div()
+        .id(SharedString::from(format!(
+            "ghostex-capture-machine-{}",
+            machine.machine_id
+        )))
+        .h(px(MACHINE_HEADER_HEIGHT))
+        .px(px(10.0))
+        .flex()
+        .items_center()
+        .gap(px(8.0))
+        .rounded(px(8.0))
+        .hover(|style| style.bg(rgb(0x202020)))
+        .cursor_pointer()
+        .child(
+            gpui::svg()
+                .path(if open {
+                    "titlebar/chevron-down.svg"
+                } else {
+                    "titlebar/chevron-right.svg"
+                })
+                .size(px(12.0))
+                .text_color(rgb(0x9a9a9a)),
+        )
+        .child(
+            gpui::svg()
+                .path("titlebar/cloud.svg")
+                .size(px(13.0))
+                .text_color(rgb(if machine.failed {
+                    0xe5767a
+                } else if machine.connected {
+                    0x9a9a9a
+                } else {
+                    0x6b6b6b
+                })),
+        )
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .overflow_hidden()
+                .whitespace_nowrap()
+                .text_ellipsis()
+                .text_size(px(12.0))
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .text_color(rgb(if machine.connected {
+                    0xcfd2d8
+                } else {
+                    0x8a8a8a
+                }))
+                .child(SharedString::from(machine.name.clone())),
+        );
+    if !machine.connected {
+        return row.child(
+            div()
+                .flex_none()
+                .whitespace_nowrap()
+                .text_size(px(11.5))
+                .text_color(rgb(0x6b6b6b))
+                .child(SharedString::from(machine.status.clone())),
+        );
+    }
+    row.children(
+        badges
+            .into_iter()
+            .filter(|(value, _)| *value > 0)
+            .map(|(value, color)| {
+                div()
+                    .text_size(px(11.5))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(rgb(color))
+                    .child(value.to_string())
+            }),
+    )
+    .child(
+        div()
+            .text_size(px(11.5))
+            .text_color(rgb(0x6b6b6b))
+            .child(sessions.len().to_string()),
+    )
+}
+
+/// A quiet line inside a machine's section.
+fn machine_note(text: String) -> AnyElement {
+    div()
+        .min_h(px(SESSION_ROW_HEIGHT))
+        .px(px(12.0))
+        .py(px(6.0))
+        .flex()
+        .items_center()
+        .text_size(px(12.0))
+        .text_color(rgb(0x6b6b6b))
+        .child(SharedString::from(text))
+        .into_any_element()
 }
 
 fn action_button(
@@ -687,54 +838,191 @@ impl CapturePanelView {
             .into_any_element()
     }
 
-    fn render_list(&self, projects: Vec<PanelProject>, cx: &mut Context<Self>) -> AnyElement {
-        let mut cards = Vec::new();
-        for (rank, project) in projects.into_iter().enumerate() {
-            let titles: Vec<&str> = project
-                .sessions
-                .iter()
-                .map(|session| session.title.as_str())
-                .collect();
-            let open = match self
+    /// A project's card, or `None` when the filter hides it. `all` shows every session whatever
+    /// the filter says (its machine's name matched).
+    fn render_project_card(
+        &self,
+        rank: usize,
+        project: &PanelProject,
+        all: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<gpui::Div> {
+        let titles: Vec<&str> = project
+            .sessions
+            .iter()
+            .map(|session| session.title.as_str())
+            .collect();
+        let open = if all {
+            Some((0..project.sessions.len()).collect())
+        } else {
+            match self
                 .list
                 .shown(rank, &project.project_id, &project.title, &titles)
             {
-                Shown::Hidden => continue,
+                Shown::Hidden => return None,
                 Shown::Collapsed => None,
                 Shown::Open(indices) => Some(indices),
-            };
-            let project_id = project.project_id.clone();
-            let header = project_header(
-                SharedString::from(format!("ghostex-capture-project-{}", project.project_id)),
-                &project.title,
-                &project.sessions,
-                open.is_some(),
-            )
-            .on_click(cx.listener(move |this, _, window, cx| {
-                if this.list.toggle(rank, &project_id) {
+            }
+        };
+        let project_id = project.project_id.clone();
+        let header = project_header(
+            SharedString::from(format!("ghostex-capture-project-{}", project.project_id)),
+            &project.title,
+            &project.sessions,
+            open.is_some(),
+        )
+        .on_click(cx.listener(move |this, _, window, cx| {
+            if this.list.toggle(rank, &project_id) {
+                this.filter
+                    .update(cx, |input, cx| input.set_value("", window, cx));
+            }
+            cx.notify();
+        }));
+        let mut card = div()
+            .flex()
+            .flex_col()
+            .rounded(px(8.0))
+            .border_1()
+            .border_color(rgba(0x3a3a3ab8))
+            .bg(rgb(0x161616))
+            .child(header);
+        for index in open.unwrap_or_default() {
+            if let Some(session) = project.sessions.get(index) {
+                card = card.child(self.render_session_row(
+                    project.project_id.clone(),
+                    session.clone(),
+                    cx,
+                ));
+            }
+        }
+        Some(card)
+    }
+
+    /// A remote machine's section: its header, then (open) its project cards, or a line saying
+    /// why there are none.
+    fn render_machine_section(
+        &self,
+        section: MachineSection,
+        first_rank: usize,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let MachineSection { machine, projects } = section;
+        let filtering = self.list.filtering();
+        let cards: Vec<gpui::Div> = projects
+            .iter()
+            .enumerate()
+            .filter_map(|(index, project)| {
+                self.render_project_card(first_rank + index, project, false, cx)
+            })
+            .collect();
+        let shown = self.list.machine_shown(
+            &machine.machine_id,
+            &machine.name,
+            machine.connected,
+            filtering && !cards.is_empty(),
+        );
+        let (open, name_matched) = match shown {
+            MachineShown::Hidden => return None,
+            MachineShown::Collapsed => (false, false),
+            MachineShown::Open { name_matched } => (true, name_matched),
+        };
+        let machine_id = machine.machine_id.clone();
+        let connected = machine.connected;
+        let mut header = machine_header(&machine, &projects, open).on_click(cx.listener(
+            move |this, _, window, cx| {
+                if this.list.toggle_machine(&machine_id, connected) {
                     this.filter
                         .update(cx, |input, cx| input.set_value("", window, cx));
                 }
                 cx.notify();
-            }));
-            let mut card = div()
-                .flex()
-                .flex_col()
-                .rounded(px(8.0))
-                .border_1()
-                .border_color(rgba(0x3a3a3ab8))
-                .bg(rgb(0x161616))
-                .child(header);
-            for index in open.unwrap_or_default() {
-                if let Some(session) = project.sessions.get(index) {
-                    card = card.child(self.render_session_row(
-                        project.project_id.clone(),
-                        session.clone(),
-                        cx,
-                    ));
-                }
+            },
+        ));
+        if !machine.connected && !machine.busy {
+            let machine_id = machine.machine_id.clone();
+            header = header.child(
+                div()
+                    .id(SharedString::from(format!(
+                        "ghostex-capture-machine-connect-{}",
+                        machine.machine_id
+                    )))
+                    .flex_none()
+                    .h(px(20.0))
+                    .px(px(8.0))
+                    .flex()
+                    .items_center()
+                    .rounded(px(6.0))
+                    .border_1()
+                    .border_color(rgba(0xffffff1f))
+                    .text_size(px(11.0))
+                    .text_color(rgb(0xb4b8c0))
+                    .hover(|style| style.bg(rgb(0x262626)).text_color(rgb(0xe8e8e8)))
+                    .cursor_pointer()
+                    .child(if machine.failed {
+                        "Reconnect"
+                    } else {
+                        "Connect"
+                    })
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        let machine_id = machine_id.clone();
+                        this.with_app(cx, move |app, cx| {
+                            app.ghostex_capture_connect_machine(machine_id, cx)
+                        });
+                    })),
+            );
+        }
+        let mut column = div().flex().flex_col().gap(px(PROJECT_GAP)).child(header);
+        if !open {
+            return Some(column.into_any_element());
+        }
+        if !machine.connected {
+            let note = match &machine.detail {
+                Some(detail) => format!("{detail} Connect to see its running agents."),
+                None if machine.busy => "Its running agents show once it connects.".to_string(),
+                None => "Connect to see its running agents.".to_string(),
+            };
+            return Some(column.child(machine_note(note)).into_any_element());
+        }
+        if name_matched {
+            let all: Vec<gpui::Div> = projects
+                .iter()
+                .enumerate()
+                .filter_map(|(index, project)| {
+                    self.render_project_card(first_rank + index, project, true, cx)
+                })
+                .collect();
+            column = column.children(all);
+        } else {
+            column = column.children(cards);
+        }
+        if projects.is_empty() {
+            column = column.child(machine_note("No running agents".to_string()));
+        }
+        Some(column.into_any_element())
+    }
+
+    fn render_list(
+        &self,
+        projects: Vec<PanelProject>,
+        machines: Vec<PanelMachine>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let (local, sections) = split_by_machine(projects, &machines);
+        let mut rank = local.len();
+        let mut items: Vec<AnyElement> = local
+            .iter()
+            .enumerate()
+            .filter_map(|(rank, project)| self.render_project_card(rank, project, false, cx))
+            .map(IntoElement::into_any_element)
+            .collect();
+        let local_shown = !items.is_empty();
+        let mut machine_items = Vec::new();
+        for section in sections {
+            let count = section.projects.len();
+            if let Some(element) = self.render_machine_section(section, rank, cx) {
+                machine_items.push(element);
             }
-            cards.push(card);
+            rank += count;
         }
         let list = div()
             .id("ghostex-capture-agents")
@@ -743,25 +1031,31 @@ impl CapturePanelView {
             .flex()
             .flex_col()
             .gap(px(PROJECT_GAP));
-        if cards.is_empty() {
-            return list
-                .child(
-                    div()
-                        .h(px(EMPTY_HEIGHT))
-                        .flex()
-                        .items_center()
-                        .justify_center()
-                        .text_size(px(13.0))
-                        .text_color(rgb(0x6b6b6b))
-                        .child(if self.list.filtering() {
-                            "No matching projects or sessions"
-                        } else {
-                            "No running agents"
-                        }),
-                )
-                .into_any_element();
+        if !local_shown && (machine_items.is_empty() || !self.list.filtering()) {
+            // With machines under it, the line names this computer so it does not read as "none
+            // anywhere".
+            let empty = if self.list.filtering() {
+                "No matching projects or sessions"
+            } else if machine_items.is_empty() {
+                "No running agents"
+            } else {
+                "No running agents on this computer"
+            };
+            items.push(
+                div()
+                    .h(px(EMPTY_HEIGHT))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_size(px(13.0))
+                    .text_color(rgb(0x6b6b6b))
+                    .child(empty)
+                    .into_any_element(),
+            );
         }
-        list.children(cards).into_any_element()
+        items.extend(machine_items);
+        list.children(items).into_any_element()
     }
 
     fn render_filter(&self) -> AnyElement {
@@ -838,13 +1132,14 @@ impl CapturePanelView {
 
 impl Render for CapturePanelView {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let (projects, has_draft) = self
+        let (projects, machines, has_draft) = self
             .app
             .upgrade()
             .map(|app| {
                 let app = app.read(cx);
                 (
                     app.ghostex_capture_panel_projects(),
+                    app.ghostex_capture_panel_machines(),
                     app.ghostex_capture_has_draft(),
                 )
             })
@@ -864,7 +1159,7 @@ impl Render for CapturePanelView {
             .child("LOCAL + REMOTE");
         let actions = self.render_actions(has_draft, cx);
         let filter = self.render_filter();
-        let list = self.render_list(projects, cx);
+        let list = self.render_list(projects, machines, cx);
         let footer = self.render_footer(cx);
         div()
             .id("ghostex-capture-panel")

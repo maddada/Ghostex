@@ -4013,9 +4013,12 @@ Click the button, or press Cmd+Ctrl+Shift+S (Alt+Ctrl+Shift+S on Windows and
 Linux), to open its panel: Capture Area (A), Capture App (Space), Capture Screen (F)
 and Write Prompt (T), over the same
 Running Agents list as the menu bar dropdown, with Open Ghostex, Hide button,
-Restart and Quit. Projects in the list start collapsed: click one to see its
-sessions (click a session to open it in Ghostex), or type in the filter above
-the list to find a project or session by name. Drag the empty part of the
+Restart and Quit. The first three projects in the list start open: click a
+project to open or close it (click a session to open it in Ghostex), or type in
+the filter above the list to find a project, session or remote machine by name.
+Below this computer's projects, each remote machine has its own section with its
+projects and running agents; a machine that is not connected shows one row saying
+so, with a Connect button. Drag the empty part of the
 Running Agents heading to move the panel; it opens there from then on. Use the same
 modifiers with A, Space, F or T instead of S to run an action straight away,
 from any app. "Hide button" keeps it hidden until you turn the setting on
