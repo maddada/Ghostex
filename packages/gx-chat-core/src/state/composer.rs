@@ -197,6 +197,9 @@ pub struct Submission {
     pub send_request_id: Option<String>,
     /// Interrupt and send: gxserver stops the agent's running turn and sends this one now.
     pub interrupt: bool,
+    /// A sleeping Cloud Box refused the draft push, so the box never saved this revision and the
+    /// send that wakes it goes without one (`session/cloud_box.rs`).
+    pub draft_unsaved: bool,
 }
 
 /// A submission whose send or queue call failed, kept so pressing Enter again on the same text
