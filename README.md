@@ -58,7 +58,7 @@
   </a>
 </p>
 
-<p align="center"><sub>Want an animated wallpaper behind Ghostex like these? Try <a href="https://wallspace.app/">Wallspace</a> on macOS (free, recommended), <a href="https://github.com/rocksdanister/lively">Lively Wallpaper</a> on Windows (free, open source) or <a href="https://github.com/jeffshee/hidamari">Hidamari</a> on Linux (free, open source). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub></p>
+<p align="center"><sub>Want an animated wallpaper behind Ghostex like these? Try <a href="https://wallspace.app/">Wallspace</a> on macOS (free, recommended), <a href="https://github.com/rocksdanister/lively">Lively Wallpaper</a> on Windows (free, open source) or <a href="https://github.com/jeffshee/hidamari">Hidamari</a> on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from <a href="https://www.pexels.com/search/videos/abstract%20loop/">Pexels Videos</a>, or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub></p>
 
 ## Features
 
