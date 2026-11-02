@@ -2971,7 +2971,9 @@ version of the Projects features in Cursor and Claude Code.
   Antigravity, Pi, OMP or OpenCode, whichever you have set up), its model where the agent
   lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its
   own default) and its effort: Low, Medium, High or XHigh, High by default (an agent without
-  XHigh offers its levels from Low up to its highest). Use a very good model: the coordinator
+  XHigh offers its levels from Low up to its highest). Cursor and ZCode coordinators take no
+  effort choice (Cursor's effort is part of its model), and an OpenCode coordinator starts on
+  its own model and effort. Use a very good model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
   /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude

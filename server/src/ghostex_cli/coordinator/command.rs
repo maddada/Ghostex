@@ -1,6 +1,9 @@
 use ghostex_gx_chat_core::menus::orchestrator_effort::{
     default_orchestrator_effort, orchestrator_efforts,
 };
+use ghostex_gx_chat_core::protocol::{
+    coordinator_launch_takes_effort, coordinator_launch_takes_model,
+};
 use serde_json::{json, Value};
 
 use super::{acknowledge_threads, playbook, sleep_threads, threads};
@@ -316,11 +319,12 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
         .iter()
         .filter_map(|row| {
             let family = agent_family(row)?;
-            // Only these agents' launches take a model (launch_plan.rs `apply_agent_model_options`);
-            // the others start on their own configured model, so their form shows no model choice.
-            let lineup = matches!(family, "claude" | "codex" | "pi" | "zcode" | "antigravity")
+            // An agent whose launch takes no model starts on its configured one, so its form shows
+            // no model choice; one whose launch takes no effort shows no effort choice.
+            let lineup = coordinator_launch_takes_model(family)
                 .then(|| catalog.pointer(&format!("/agents/{family}")))
                 .flatten();
+            let takes_effort = coordinator_launch_takes_effort(family);
             let agent_efforts = lineup
                 .and_then(|agent| agent.get("efforts"))
                 .cloned()
@@ -340,6 +344,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .unwrap_or_default()
                         .iter()
                         .filter_map(Value::as_str)
+                        .filter(|_| takes_effort)
                         .collect();
                     let offered = orchestrator_efforts(&levels, all_efforts, None);
                     let efforts: Vec<Value> = offered

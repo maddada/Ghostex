@@ -589,66 +589,67 @@ impl GpuiNewCoordinatorModalWindow {
         Some(row.into_any_element())
     }
 
-    /// The one open select's list, floated above the dialog.
+    /// The one open select's list, floated above the dialog. Every select goes through
+    /// `modal_select_menu` on every render, open or not, because under window glass the list
+    /// draws in a frosted window of its own that only a closed select's render hides.
+    ///
+    /// CDXC:AppModal 2026-11-02 WHY:
+    /// Issue #395: this drew only the open select's list and asked nothing of the closed ones, so a picked agent closed the Agent select but its frosted list stayed on screen (only the Effort list was ever told to hide). Never skip a closed select here.
     fn render_open_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.palette;
-        if self.agent_select.open {
-            let labels = self
-                .agents
-                .iter()
-                .map(|agent| agent.name.clone())
-                .collect::<Vec<_>>();
-            return modal_select_menu(
-                &p,
-                &self.agent_select,
-                "new-coordinator-agent-menu",
-                &labels,
-                Some(self.selected_agent),
-                |this: &mut Self, index, _window, cx| this.choose_agent(index, cx),
-                |this: &mut Self, _window, cx| {
-                    this.agent_select.close();
-                    cx.notify();
-                },
-                window,
-                cx,
-            );
-        }
-        if self.model_select.open {
-            let labels = self
-                .agent()
-                .map(|agent| {
-                    agent
-                        .models
-                        .iter()
-                        .map(|model| model.label.clone())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            return modal_select_menu(
-                &p,
-                &self.model_select,
-                "new-coordinator-model-menu",
-                &labels,
-                Some(self.model_index),
-                |this: &mut Self, index, _window, cx| this.choose_model(index, cx),
-                |this: &mut Self, _window, cx| {
-                    this.model_select.close();
-                    cx.notify();
-                },
-                window,
-                cx,
-            );
-        }
+        let agent_labels = self
+            .agents
+            .iter()
+            .map(|agent| agent.name.clone())
+            .collect::<Vec<_>>();
+        let agent_menu = modal_select_menu(
+            &p,
+            &self.agent_select,
+            "new-coordinator-agent-menu",
+            &agent_labels,
+            Some(self.selected_agent),
+            |this: &mut Self, index, _window, cx| this.choose_agent(index, cx),
+            |this: &mut Self, _window, cx| {
+                this.agent_select.close();
+                cx.notify();
+            },
+            window,
+            cx,
+        );
+        let model_labels = self
+            .agent()
+            .map(|agent| {
+                agent
+                    .models
+                    .iter()
+                    .map(|model| model.label.clone())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let model_menu = modal_select_menu(
+            &p,
+            &self.model_select,
+            "new-coordinator-model-menu",
+            &model_labels,
+            Some(self.model_index),
+            |this: &mut Self, index, _window, cx| this.choose_model(index, cx),
+            |this: &mut Self, _window, cx| {
+                this.model_select.close();
+                cx.notify();
+            },
+            window,
+            cx,
+        );
         let efforts = self.efforts();
-        let labels = efforts
+        let effort_labels = efforts
             .iter()
             .map(|(_, label)| label.clone())
             .collect::<Vec<_>>();
-        modal_select_menu(
+        let effort_menu = modal_select_menu(
             &p,
             &self.effort_select,
             "new-coordinator-effort-menu",
-            &labels,
+            &effort_labels,
             efforts
                 .iter()
                 .position(|(value, _)| Some(value) == self.effort.as_ref()),
@@ -659,7 +660,8 @@ impl GpuiNewCoordinatorModalWindow {
             },
             window,
             cx,
-        )
+        );
+        agent_menu.or(model_menu).or(effort_menu)
     }
 
     fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -711,11 +713,10 @@ impl Render for GpuiNewCoordinatorModalWindow {
             ]
         };
         let footer = self.render_footer(cx);
-        let menu = if self.editor.is_some() {
-            None
-        } else {
-            self.render_open_menu(window, cx)
-        };
+        // Rendered on the playbook page too, so a list left open when Edit was pressed hides.
+        let menu = self
+            .render_open_menu(window, cx)
+            .filter(|_| self.editor.is_none());
         modal_shell(
             &p,
             "ghostex-gpui-new-coordinator-modal",
