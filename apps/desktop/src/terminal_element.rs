@@ -1519,7 +1519,7 @@ impl TerminalView {
         cx.notify();
     }
 
-    fn handle_key_down(&mut self, event: &KeyDownEvent, cx: &mut Context<Self>) {
+    fn handle_key_down(&mut self, event: &KeyDownEvent, caps_lock: bool, cx: &mut Context<Self>) {
         let keystroke = &event.keystroke;
         let modifiers = &keystroke.modifiers;
         self.last_modifiers = *modifiers;
@@ -1725,40 +1725,23 @@ impl TerminalView {
             && !modifiers.platform
             && !modifiers.function
             && self.model.option_sends_alt();
-        let (key, unshifted_codepoint) = keystroke_vt_key(keystroke);
-        let utf8 = if option_as_alt_translation {
-            keystroke_option_as_alt_text(keystroke)
-        } else {
-            keystroke_text(keystroke)
-        };
-        let mods = vt_mods(modifiers);
         // While IME composition is active every key belongs to the marked
         // text (the platform routes it to the IME first; a key can only get
         // here when the IME declined it). The encoder drops everything but
         // plain modifiers for composing events, so e.g. Backspace can never
         // delete committed text behind an active pinyin preedit.
         let composing = self.marked_text.is_some();
-        let input = VtKeyInput {
-            action: if event.is_held {
+        let input = terminal_key_press_input(
+            keystroke,
+            caps_lock,
+            option_as_alt_translation,
+            if event.is_held {
                 VtKeyAction::Repeat
             } else {
                 VtKeyAction::Press
             },
-            key,
-            mods,
-            // GPUI's key_char has already folded shift/option into produced
-            // text. When Option acts as Alt, use GPUI's documented physical
-            // layout key instead and leave every modifier unconsumed so
-            // libghostty performs the configured Alt/Shift encoding itself.
-            consumed_mods: if utf8.is_some() && !option_as_alt_translation {
-                mods & (ffi::GHOSTTY_MODS_SHIFT | ffi::GHOSTTY_MODS_ALT)
-            } else {
-                0
-            },
-            utf8,
-            unshifted_codepoint,
             composing,
-        };
+        );
         let kitty_keyboard_flags = self.model.kitty_keyboard_flags();
         let accepted = self.model.send_key(&input);
         /*
@@ -1811,7 +1794,7 @@ impl TerminalView {
 
     /// Key releases only produce output under kitty report-events mode;
     /// they never consume the event.
-    fn handle_key_up(&mut self, event: &KeyUpEvent) {
+    fn handle_key_up(&mut self, event: &KeyUpEvent, caps_lock: bool) {
         let keystroke = &event.keystroke;
         self.last_modifiers = keystroke.modifiers;
         // Shift+Insert's press went to the browser paste event, so its release
@@ -1839,7 +1822,7 @@ impl TerminalView {
         let _ = self.model.send_key(&VtKeyInput {
             action: VtKeyAction::Release,
             key,
-            mods: vt_mods(&keystroke.modifiers),
+            mods: vt_key_mods(&keystroke.modifiers, caps_lock),
             consumed_mods: 0,
             utf8: None,
             unshifted_codepoint,
@@ -3729,11 +3712,12 @@ impl TerminalElement {
 
         window.on_key_event({
             let entity = entity.clone();
-            move |event: &KeyDownEvent, phase, _window, cx| {
+            move |event: &KeyDownEvent, phase, window, cx| {
                 if phase != DispatchPhase::Bubble {
                     return;
                 }
-                entity.update(cx, |view, cx| view.handle_key_down(event, cx));
+                let caps_lock = window.capslock().on;
+                entity.update(cx, |view, cx| view.handle_key_down(event, caps_lock, cx));
             }
         });
         window.on_modifiers_changed({
@@ -3744,11 +3728,12 @@ impl TerminalElement {
         });
         window.on_key_event({
             let entity = entity.clone();
-            move |event: &KeyUpEvent, phase, _window, cx| {
+            move |event: &KeyUpEvent, phase, window, cx| {
                 if phase != DispatchPhase::Bubble {
                     return;
                 }
-                entity.update(cx, |view, _cx| view.handle_key_up(event));
+                let caps_lock = window.capslock().on;
+                entity.update(cx, |view, _cx| view.handle_key_up(event, caps_lock));
             }
         });
 
@@ -4717,6 +4702,74 @@ fn vt_mods(modifiers: &Modifiers) -> VtMods {
     mods
 }
 
+/*
+CDXC DECISION:Terminal 2026-11-02:
+The user: "I should be able to do caps lock, type, and see everything all
+caps on macOS, Linux, and Windows in terminals." The typed text is the
+platform's own `key_char`, which carries Caps Lock on every desktop platform
+(GPUI's macOS key parsing now passes alphaLock to UCKeyTranslate; Windows'
+ToUnicode and Linux's xkb state already did). So Caps Lock+letter types the
+capital, Shift+letter with Caps Lock follows the OS (lowercase on Windows and
+Linux, still uppercase on macOS, like Terminal.app and Ghostty), and digits
+and symbols are unchanged. Caps Lock also reaches libghostty as a lock
+modifier, as Ghostty's own macOS surface sends it: the encoder strips lock
+modifiers before matching Ctrl/Alt sequences, so Ctrl-C and the app's
+shortcuts behave the same with Caps Lock on, and kitty's report-all mode can
+tell `A` from Caps Lock apart from Shift+`a`.
+*/
+/// The key press libghostty encodes for a keystroke the terminal did not
+/// handle itself: the physical key, the platform's typed text, and the
+/// modifiers with Caps Lock.
+fn terminal_key_press_input(
+    keystroke: &Keystroke,
+    caps_lock: bool,
+    option_as_alt_translation: bool,
+    action: VtKeyAction,
+    composing: bool,
+) -> VtKeyInput<'_> {
+    let (key, unshifted_codepoint) = keystroke_vt_key(keystroke);
+    let utf8 = if option_as_alt_translation {
+        keystroke_option_as_alt_text(keystroke)
+    } else {
+        keystroke_text(keystroke)
+    };
+    let mods = vt_key_mods(&keystroke.modifiers, caps_lock);
+    VtKeyInput {
+        action,
+        key,
+        mods,
+        // GPUI's key_char has already folded shift/option/caps lock into
+        // produced text. When Option acts as Alt, use GPUI's documented
+        // physical layout key instead and leave every modifier unconsumed
+        // so libghostty performs the configured Alt/Shift encoding itself.
+        consumed_mods: vt_consumed_mods(mods, utf8.is_some(), option_as_alt_translation),
+        utf8,
+        unshifted_codepoint,
+        composing,
+    }
+}
+
+/// Modifiers for a key event, including the Caps Lock state that GPUI keeps
+/// on the window rather than on `Modifiers`.
+fn vt_key_mods(modifiers: &Modifiers, caps_lock: bool) -> VtMods {
+    let mut mods = vt_mods(modifiers);
+    if caps_lock {
+        mods |= ffi::GHOSTTY_MODS_CAPS_LOCK;
+    }
+    mods
+}
+
+/// Modifiers the platform already applied to produce `utf8` (Shift in `A`,
+/// Option in `ß`, Caps Lock in `A`), mirroring Ghostty's macOS
+/// `translationMods - [ctrl, super]`. Control and Command never are.
+fn vt_consumed_mods(mods: VtMods, has_text: bool, option_as_alt_translation: bool) -> VtMods {
+    if has_text && !option_as_alt_translation {
+        mods & (ffi::GHOSTTY_MODS_SHIFT | ffi::GHOSTTY_MODS_ALT | ffi::GHOSTTY_MODS_CAPS_LOCK)
+    } else {
+        0
+    }
+}
+
 fn vt_mouse_button(button: MouseButton) -> Option<VtMouseButton> {
     match button {
         MouseButton::Left => Some(VtMouseButton::Left),
@@ -5497,4 +5550,155 @@ pub fn set_grid_resize_held(held: bool) {
 /// the one the layout will settle at.
 pub(crate) fn grid_resize_held() -> bool {
     GRID_RESIZE_HELD.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(test)]
+mod caps_lock_key_tests {
+    use super::*;
+    use crate::ghostty_vt::{VtKeyEncoder, VtOptionAsAlt, VtTerminal};
+
+    /// A keystroke as GPUI's platform code delivers it: `key` is the layout
+    /// key (letters always lowercase) and `key_char` the text the OS layout
+    /// typed, which carries Shift, Option and Caps Lock.
+    fn keystroke(key: &str, key_char: Option<&str>, modifiers: Modifiers) -> Keystroke {
+        Keystroke {
+            modifiers,
+            key: key.to_string(),
+            key_char: key_char.map(str::to_string),
+        }
+    }
+
+    fn shift() -> Modifiers {
+        Modifiers {
+            shift: true,
+            ..Modifiers::default()
+        }
+    }
+
+    fn control() -> Modifiers {
+        Modifiers {
+            control: true,
+            ..Modifiers::default()
+        }
+    }
+
+    fn alt() -> Modifiers {
+        Modifiers {
+            alt: true,
+            ..Modifiers::default()
+        }
+    }
+
+    /// Bytes the terminal sends for a key press, through the real
+    /// libghostty-vt encoder. `kitty_flags` is what the running program
+    /// pushed (`CSI > flags u`); Claude Code and Codex push 5.
+    fn encode(
+        keystroke: &Keystroke,
+        caps_lock: bool,
+        option_as_alt: bool,
+        kitty_flags: u8,
+    ) -> Vec<u8> {
+        let mut terminal = VtTerminal::new(80, 24, 0).expect("terminal");
+        if kitty_flags != 0 {
+            terminal.feed(format!("\x1b[>{kitty_flags}u").as_bytes());
+        }
+        let mut encoder = VtKeyEncoder::new().expect("encoder");
+        encoder.sync_from_terminal(
+            &mut terminal,
+            if option_as_alt {
+                VtOptionAsAlt::True
+            } else {
+                VtOptionAsAlt::False
+            },
+        );
+        let input = terminal_key_press_input(
+            keystroke,
+            caps_lock,
+            option_as_alt && keystroke.modifiers.alt,
+            VtKeyAction::Press,
+            false,
+        );
+        let mut out = Vec::new();
+        encoder.encode(&input, &mut out).expect("encode");
+        out
+    }
+
+    #[test]
+    fn caps_lock_types_capital_letters() {
+        let off = keystroke("a", Some("a"), Modifiers::default());
+        let on = keystroke("a", Some("A"), Modifiers::default());
+        for flags in [0, 5] {
+            assert_eq!(encode(&off, false, false, flags), b"a");
+            assert_eq!(encode(&on, true, false, flags), b"A");
+        }
+    }
+
+    #[test]
+    fn shift_with_caps_lock_types_what_the_os_produced() {
+        // Windows and Linux invert Caps Lock with Shift; macOS keeps capitals.
+        let windows_linux = keystroke("a", Some("a"), shift());
+        let macos = keystroke("a", Some("A"), shift());
+        for flags in [0, 5] {
+            assert_eq!(encode(&windows_linux, true, false, flags), b"a");
+            assert_eq!(encode(&macos, true, false, flags), b"A");
+            assert_eq!(encode(&macos, false, false, flags), b"A");
+        }
+    }
+
+    #[test]
+    fn caps_lock_leaves_digits_and_symbols_alone() {
+        for flags in [0, 5] {
+            for (key, text) in [("1", "1"), ("[", "["), (";", ";"), ("space", " ")] {
+                let k = keystroke(key, Some(text), Modifiers::default());
+                assert_eq!(encode(&k, true, false, flags), text.as_bytes(), "{key}");
+            }
+            assert_eq!(
+                encode(&keystroke("1", Some("!"), shift()), true, false, flags),
+                b"!"
+            );
+        }
+    }
+
+    #[test]
+    fn caps_lock_keeps_control_and_alt_combos() {
+        // GPUI gives Control combos no key_char on every platform.
+        let ctrl_c = keystroke("c", None, control());
+        assert_eq!(
+            encode(&ctrl_c, true, false, 0),
+            encode(&ctrl_c, false, false, 0)
+        );
+        assert_eq!(encode(&ctrl_c, true, false, 0), b"\x03");
+        // Kitty programs see Ctrl-C plus the lock bit (5 + 64), as Ghostty
+        // sends it; they decode modifiers bitwise, so it is still Ctrl-C.
+        assert_eq!(encode(&ctrl_c, false, false, 5), b"\x1b[99;5u");
+        assert_eq!(encode(&ctrl_c, true, false, 5), b"\x1b[99;69u");
+
+        let enter = keystroke("enter", Some("\n"), Modifiers::default());
+        assert_eq!(encode(&enter, true, false, 0), b"\r");
+        assert_eq!(encode(&enter, true, false, 5), b"\r");
+
+        // Option as Alt encodes the layout key, so Caps Lock changes nothing.
+        let option_a = keystroke("a", Some("\u{c5}"), alt());
+        assert_eq!(encode(&option_a, true, true, 0), b"\x1ba");
+        assert_eq!(
+            encode(&option_a, true, true, 0),
+            encode(&option_a, false, true, 0)
+        );
+    }
+
+    #[test]
+    fn caps_lock_is_a_lock_modifier_not_shift() {
+        let mods = vt_key_mods(&Modifiers::default(), true);
+        assert_eq!(mods, ffi::GHOSTTY_MODS_CAPS_LOCK);
+        assert_eq!(
+            vt_consumed_mods(mods, true, false),
+            ffi::GHOSTTY_MODS_CAPS_LOCK
+        );
+        assert_eq!(vt_consumed_mods(mods, false, false), 0);
+        assert_eq!(vt_consumed_mods(mods, true, true), 0);
+        assert_eq!(
+            vt_key_mods(&control(), true),
+            ffi::GHOSTTY_MODS_CTRL | ffi::GHOSTTY_MODS_CAPS_LOCK
+        );
+    }
 }
