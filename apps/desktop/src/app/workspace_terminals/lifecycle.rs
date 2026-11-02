@@ -138,6 +138,12 @@ impl GhostexGpuiApp {
             );
         }
 
+        // The door this close came through, for gxserver's close log (session_close_log.rs).
+        if action == GpuiLocalWorkspaceLifecycleAction::Close
+            && let Some(door) = self.gx_store.close_source.take()
+        {
+            message.insert("closeSource".to_string(), serde_json::json!(door));
+        }
         if action == GpuiLocalWorkspaceLifecycleAction::Close {
             /*
             CDXC:Workarea 2026-07-10:
@@ -251,6 +257,12 @@ impl GhostexGpuiApp {
                 "skipReplacementFallback".to_string(),
                 serde_json::Value::Bool(true),
             );
+        }
+        // The door this close came through, for gxserver's close log (session_close_log.rs).
+        if action == GpuiLocalWorkspaceLifecycleAction::Close
+            && let Some(door) = self.gx_store.close_source.take()
+        {
+            message.insert("closeSource".to_string(), serde_json::json!(door));
         }
         if action == GpuiLocalWorkspaceLifecycleAction::Close {
             let changed = self.apply_local_workspace_terminal_lifecycle_result(request, cx);

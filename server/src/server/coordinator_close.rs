@@ -30,6 +30,14 @@ pub(crate) fn close_threads_with_coordinator(
         params.insert("action".to_string(), json!("close"));
         params.insert("projectId".to_string(), json!(thread.project_id));
         params.insert("reason".to_string(), json!("coordinatorClosed"));
+        params.insert("closeSource".to_string(), json!("server.coordinatorClosed"));
+        params.insert(
+            "closedByRef".to_string(),
+            json!(format!(
+                "{}:{}:{}",
+                state.metadata.server_id, coordinator.0, coordinator.1
+            )),
+        );
         params.insert("sessionId".to_string(), json!(thread.session_id));
         let routed = dispatch_zmx_lifecycle_http_blocking(
             state,

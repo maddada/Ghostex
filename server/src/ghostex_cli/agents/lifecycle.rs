@@ -128,13 +128,13 @@ pub(super) fn close(args: &Arguments) -> CliResult<Value> {
             "The target is not an agent session.".into(),
         ));
     }
-    let result = call_gxserver_rpc(
-        "/api/killSession",
-        &json!({
-            "globalRef": recipient["globalRef"], "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
-        }),
-        &flags,
-    )?;
+    let mut params = json!({
+        "globalRef": recipient["globalRef"], "projectId": recipient["projectId"], "sessionId": recipient["sessionId"],
+    });
+    if let Some(params) = params.as_object_mut() {
+        crate::ghostex_cli::wait::insert_close_source(params, &args.flags, "cli.agentsClose");
+    }
+    let result = call_gxserver_rpc("/api/killSession", &params, &flags)?;
     Ok(
         json!({"ok": true, "status": "closed", "session": identity::summary(&recipient), "receipt": super::delivery::receipt(&result)}),
     )

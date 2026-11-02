@@ -60,7 +60,7 @@ pub use bulk::{
     BatchPlan, BulkAction, BulkRequest, BULK_MESSAGE_TYPES, BULK_SLEEP_INTERVAL_MS,
 };
 pub use close::{
-    apply_close_answer, close_as_claude_cloud_sleep, close_optimistic_follow_ups,
+    apply_close_answer, close_as_claude_cloud_sleep, close_optimistic_follow_ups, close_source,
     owns_close_message, plan_close_request, CloseAnswer, CloseFollowUp, CloseRequest,
 };
 pub use close_confirm::{close_confirmation, sidebar_close_targets, CloseConfirmation};

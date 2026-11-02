@@ -233,17 +233,31 @@ fn close_feedback_session(state: &AppState, project_id: &str, session_id: &str) 
     let mut params = Map::new();
     params.insert("projectId".to_string(), json!(project_id));
     params.insert("sessionId".to_string(), json!(session_id));
-    if let Err(error) = dispatch_zmx_lifecycle_endpoint(
+    params.insert("closeSource".to_string(), json!("server.feedbackFiled"));
+    let outcome = match dispatch_zmx_lifecycle_endpoint(
         &repository,
         "/api/killSession",
         &params,
         &super::agent::zmx_context(state),
         &agent_settings,
     ) {
-        eprintln!(
-            "Could not close the feedback agent session {project_id}/{session_id}: {error:?}"
-        );
-    }
+        Ok(_) => "stopped",
+        Err(error) => {
+            eprintln!(
+                "Could not close the feedback agent session {project_id}/{session_id}: {error:?}"
+            );
+            "failed"
+        }
+    };
+    crate::session_close_log::log_session_close(
+        &state.logger,
+        &state.metadata.server_id,
+        project_id,
+        session_id,
+        &params,
+        "/api/killSession",
+        outcome,
+    );
     crate::session_chat_send_wake::retire_held_messages_of_closed_session(
         state, project_id, session_id,
     );

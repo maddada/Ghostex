@@ -170,7 +170,12 @@ impl GhostexGpuiApp {
                                     cx,
                                 );
                             } else if let Some(command) = &command {
-                                app.dispatch_native_sidebar_ui(command.clone(), cx);
+                                // The row's × runs the menu's Close; the close log names the button.
+                                let mut command = command.clone();
+                                if command["message"]["type"] == "closeSession" {
+                                    command["message"]["closeSource"] = json!("sidebarRowButton");
+                                }
+                                app.dispatch_native_sidebar_ui(command, cx);
                             }
                         }),
                     )

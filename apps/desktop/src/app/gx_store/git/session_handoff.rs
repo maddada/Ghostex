@@ -249,6 +249,7 @@ impl GhostexGpuiApp {
                                 json!({
                                     "type": "closeSession",
                                     "sessionId": session.to_sidebar_session_id(),
+                                    "closeSource": "handoff",
                                 }),
                                 cx,
                             );

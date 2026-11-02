@@ -16,7 +16,7 @@ use std::time::Duration;
 use ghostex_gx_core::protocol::LifecycleState;
 use ghostex_gx_core::{
     Event, FocusOptions, Intent, LIFECYCLE_PATCH_TTL_MS, REMOTE_AWAITED_TIMEOUT_MS, SessionKey,
-    SessionPatch, close_keeps_claude_cloud_row, open_remote_session_terminal,
+    SessionPatch, close_keeps_claude_cloud_row, close_source, open_remote_session_terminal,
     provider_transition_committed, terminal_lifecycle_fallback_focus,
 };
 use serde_json::{Value, json};
@@ -37,6 +37,8 @@ struct TabLifecycleRequest {
     replacement_session_id: Option<String>,
     skip_replacement_fallback: bool,
     keep_sidebar_focus: bool,
+    /// `desktop.<door>` for a close, for gxserver's close log (gx-core `close_source`).
+    close_source: String,
 }
 
 impl TabLifecycleRequest {
@@ -61,6 +63,7 @@ impl TabLifecycleRequest {
             skip_replacement_fallback: message.get("skipReplacementFallback")
                 == Some(&Value::Bool(true)),
             keep_sidebar_focus: message.get("keepSidebarFocus") == Some(&Value::Bool(true)),
+            close_source: close_source(message, "tab"),
         })
     }
 }
@@ -102,7 +105,9 @@ impl GhostexGpuiApp {
                 .flatten()
         });
         match request.action.as_str() {
-            "close" => self.gx_store_close_tab_session(session, replacement, cx),
+            "close" => {
+                self.gx_store_close_tab_session(session, replacement, &request.close_source, cx)
+            }
             "sleep" => self.gx_store_sleep_tab_session(request, session, replacement, cx),
             _ => self.gx_store_wake_tab_session(request, session, cx),
         }
@@ -113,6 +118,7 @@ impl GhostexGpuiApp {
         &mut self,
         session: SessionKey,
         replacement: Option<SessionKey>,
+        close_source: &str,
         cx: &mut gpui::Context<Self>,
     ) {
         // CDXC:ClaudeCloud 2026-10-23: gxserver puts an awake Claude cloud session to sleep on
@@ -139,6 +145,7 @@ impl GhostexGpuiApp {
         }
         let params = json!({
             "action": "close",
+            "closeSource": close_source,
             "projectId": session.project_id,
             "reason": "closeTerminal",
             "sessionId": session.session_id,
@@ -242,11 +249,14 @@ impl GhostexGpuiApp {
                 project_id: reference.project_id,
                 session_id,
             });
-        let params = json!({
+        let mut params = json!({
             "projectId": project_id,
             "reason": if request.action == "close" { "closeTerminal" } else { "gpui-sidebar" },
             "sessionId": request.session_id,
         });
+        if request.action == "close" {
+            params["closeSource"] = json!(request.close_source);
+        }
         let timeout = Duration::from_millis(REMOTE_AWAITED_TIMEOUT_MS);
         if request.action == "close" {
             // CDXC:RemoteMachines 2026-08-08 WHY: a remote direct close focuses its surviving terminal through the same native open as a remote session click; a presentation-only focus update selected the row but never moved keyboard ownership.

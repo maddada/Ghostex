@@ -110,7 +110,11 @@ impl GhostexGpuiApp {
                 // members are already off the list when the group goes.
                 for session_id in member_session_ids {
                     self.dispatch_native_sidebar_command(
-                        json!({ "type": "closeSession", "sessionId": session_id }),
+                        json!({
+                            "type": "closeSession",
+                            "sessionId": session_id,
+                            "closeSource": "closeGroup",
+                        }),
                         cx,
                     );
                 }

@@ -359,4 +359,32 @@ mod tests {
             Vec::<SessionKey>::new()
         );
     }
+
+    #[test]
+    fn a_close_names_its_door_for_the_close_log() {
+        let core = core();
+        let row = key("Busy").to_sidebar_session_id();
+        let plan = |message: Value| {
+            super::super::close::plan_close_request(&core, &message)
+                .expect("a close")
+                .rpc_params["closeSource"]
+                .clone()
+        };
+        assert_eq!(
+            plan(
+                json!({ "type": "closeSession", "sessionId": row, "closeSource": "sidebarRowButton" })
+            ),
+            json!("desktop.sidebarRowButton")
+        );
+        assert_eq!(
+            plan(json!({ "type": "closeSession", "sessionId": row })),
+            json!("desktop.sidebar")
+        );
+        let below = super::super::bulk::plan_bulk_request(
+            &core,
+            &json!({ "type": "closeSessions", "sessionIds": [row], "closeSource": "closeBelow" }),
+        )
+        .expect("a bulk close");
+        assert_eq!(below.messages[0]["closeSource"], json!("closeBelow"));
+    }
 }

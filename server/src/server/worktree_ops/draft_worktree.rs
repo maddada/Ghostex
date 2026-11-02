@@ -981,6 +981,7 @@ fn finish_draft_move(state: &AppState, project_id: &str, session_id: &str, moved
     let mut params = lifecycle_params(project_id, session_id);
     params.insert("action".into(), json!("close"));
     params.insert("reason".into(), json!(DRAFT_MOVED_CLOSE_REASON));
+    params.insert("closeSource".into(), json!("server.draftMovedToWorktree"));
     let response = dispatch_zmx_lifecycle_http_blocking(
         state,
         "/api/transitionSession".to_string(),

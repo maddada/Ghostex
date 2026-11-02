@@ -828,7 +828,7 @@ fn full_menu(
             MenuItem::row(
                 "Close Below",
                 "x",
-                MenuCommand::command(message::close_sessions(&below_ids)),
+                MenuCommand::command(message::close_sessions(&below_ids, "closeBelow")),
             )
             .with_danger(),
         );

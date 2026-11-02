@@ -41,7 +41,18 @@ impl GhostexGpuiApp {
         let performed = match action {
             // A coordinator or a busy agent asks first (gx_store/sidebar_close_confirm.rs).
             "closeSession" | "close" => {
-                let close = command(json!({ "type": "closeSession", "sessionId": session_id }));
+                // The door for the close log: Running Sessions names itself, every other session
+                // control (the terminal bar, the chat, a hotkey) is `sessionControl`.
+                let door = self
+                    .gx_store
+                    .close_source
+                    .take()
+                    .unwrap_or("sessionControl");
+                let close = command(json!({
+                    "type": "closeSession",
+                    "sessionId": session_id,
+                    "closeSource": door,
+                }));
                 self.gx_store_ask_before_sidebar_close(&close, cx)
                     || self.gx_store_run_sidebar_close(&close, cx)
             }

@@ -90,6 +90,7 @@ fn tick(state: &AppState) {
                 params.insert("action".into(), json!("close"));
                 params.insert("projectId".into(), json!(project_id));
                 params.insert("reason".into(), json!("closeAfterDone"));
+                params.insert("closeSource".into(), json!("server.closeAfterDone"));
                 params.insert("sessionId".into(), json!(session_id));
                 let _ = dispatch_zmx_lifecycle_http_blocking(
                     state,

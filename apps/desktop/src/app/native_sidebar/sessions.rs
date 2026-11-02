@@ -245,7 +245,7 @@ impl GhostexGpuiApp {
                     cx.stop_propagation();
                     app.close_native_sidebar_menu(window, cx);
                     app.dispatch_native_sidebar_command(
-                        json!({"type": "closeSession", "sessionId": close_id}),
+                        json!({"type": "closeSession", "sessionId": close_id, "closeSource": "sidebarMiddleClick"}),
                         cx,
                     );
                 }))
