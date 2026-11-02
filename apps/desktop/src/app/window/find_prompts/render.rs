@@ -17,6 +17,10 @@ use super::model::{
     FIND_PROMPT_AGENTS, FIND_PROMPT_FORK_AGENT_COUNT, FindAction, ViewRow, format_day_header,
     format_last_active_compact,
 };
+use super::toolbar_steps::{
+    ActionsStep, FILTER_AGENTS_WIDTH, FILTER_PROJECTS_WIDTH, ToolbarLayout, ToolbarMetrics,
+    toolbar_layout,
+};
 use super::window::{
     FIND_PLACEHOLDER, FIND_PLACEHOLDER_SHORT, FindMenu, FindNoticeKind, GpuiFindPromptsModalWindow,
 };
@@ -64,10 +68,6 @@ fn inset_ring(color: Rgba) -> BoxShadow {
     }
 }
 
-/// Narrower than this, the Fav, View, Copy and Fork buttons drop their labels (the tooltips keep the names), so the query field keeps room for its placeholder.
-const FIND_COMPACT_ACTIONS_BELOW: f32 = 970.0;
-/// Narrower than this, the query field's placeholder shortens to `FIND_PLACEHOLDER_SHORT` and the Grouping button drops its label too.
-const FIND_SHORT_PLACEHOLDER_BELOW: f32 = 830.0;
 /// The query field can shrink to this width, no further, so typed text keeps scrolling inside the field instead of under the buttons.
 const FIND_QUERY_MIN_WIDTH: f32 = 120.0;
 
@@ -79,7 +79,15 @@ impl Render for GpuiFindPromptsModalWindow {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.sync_preview_input(window, cx);
         let width = f32::from(window.viewport_size().width);
-        self.sync_search_placeholder(width < FIND_SHORT_PLACEHOLDER_BELOW, window, cx);
+        let metrics = *self
+            .toolbar_metrics
+            .get_or_insert_with(|| ToolbarMetrics::measure(window, &self.font_family));
+        let layout = toolbar_layout(width, &metrics);
+        self.sync_search_placeholder(layout.short_placeholder, window, cx);
+        if layout.actions != ActionsStep::Menu && self.open_menu == Some(FindMenu::Actions) {
+            // The "…" button is gone at this width, so its menu goes with it.
+            self.close_menu(window, cx);
+        }
         let p = self.p;
         div()
             .id("find-prompts-window")
@@ -91,11 +99,7 @@ impl Render for GpuiFindPromptsModalWindow {
             .bg(hsla(p.background))
             .font_family(self.font_family.clone())
             .text_color(hsla(p.foreground))
-            .child(self.render_toolbar(
-                width < FIND_COMPACT_ACTIONS_BELOW,
-                width < FIND_SHORT_PLACEHOLDER_BELOW,
-                cx,
-            ))
+            .child(self.render_toolbar(layout, cx))
             .when(!self.fullscreen_preview, |this| {
                 this.child(self.render_results(cx))
             })
@@ -150,13 +154,16 @@ impl GpuiFindPromptsModalWindow {
     }
 
     /// The query row: chevron and input on the left, the filter dropdowns and actions on the right.
-    /// `compact` drops the Fav, View, Copy and Fork labels; `narrow` drops Grouping's as well.
-    fn render_toolbar(&self, compact: bool, narrow: bool, cx: &mut Context<Self>) -> AnyElement {
+    /// `layout` says which labels are drawn and whether Fav, View, Copy and Fork sit behind the "…" button (`toolbar_steps.rs`).
+    fn render_toolbar(&self, layout: ToolbarLayout, cx: &mut Context<Self>) -> AnyElement {
+        let compact = layout.actions == ActionsStep::Icons;
+        let narrow = !layout.grouping_label;
         let p = self.p;
         let selected = self.selected_row();
         let has_row = selected.is_some();
         let favorite = selected.is_some_and(|row| row.favorite);
         let mut buttons: Vec<AnyElement> = Vec::with_capacity(7);
+        let menu_actions = layout.actions == ActionsStep::Menu;
         buttons.push(self.toolbar_button(
             "find-grouping",
             ICON_CALENDAR_WEEK,
@@ -178,82 +185,86 @@ impl GpuiFindPromptsModalWindow {
         ));
         buttons.push(self.filter_trigger(FindMenu::Agent, cx));
         buttons.push(self.filter_trigger(FindMenu::Project, cx));
-        buttons.push(self.toolbar_button(
-            "find-favorite",
-            if favorite {
-                ICON_STAR_FILLED
-            } else {
-                ICON_STAR
-            },
-            if compact { "" } else { "Fav" },
-            favorite,
-            favorite,
-            !has_row,
-            format!(
-                "{} ({})",
+        if menu_actions {
+            buttons.push(self.actions_menu_button(cx));
+        } else {
+            buttons.push(self.toolbar_button(
+                "find-favorite",
                 if favorite {
-                    "Remove this prompt from favorites"
+                    ICON_STAR_FILLED
                 } else {
-                    "Favorite this prompt"
+                    ICON_STAR
                 },
-                hotkey("ctrl+f")
-            ),
-            FindAction::ToggleFavorite,
-            cx,
-        ));
-        buttons.push(self.toolbar_button(
-            "find-view",
-            ICON_EYE,
-            if compact { "" } else { "View" },
-            self.expanded_prompt,
-            false,
-            !has_row,
-            format!(
-                "{} ({})",
-                if self.expanded_prompt {
-                    "Close the full prompt"
+                if compact { "" } else { "Fav" },
+                favorite,
+                favorite,
+                !has_row,
+                format!(
+                    "{} ({})",
+                    if favorite {
+                        "Remove this prompt from favorites"
+                    } else {
+                        "Favorite this prompt"
+                    },
+                    hotkey("ctrl+f")
+                ),
+                FindAction::ToggleFavorite,
+                cx,
+            ));
+            buttons.push(self.toolbar_button(
+                "find-view",
+                ICON_EYE,
+                if compact { "" } else { "View" },
+                self.expanded_prompt,
+                false,
+                !has_row,
+                format!(
+                    "{} ({})",
+                    if self.expanded_prompt {
+                        "Close the full prompt"
+                    } else {
+                        "View the full prompt"
+                    },
+                    hotkey("ctrl+e")
+                ),
+                FindAction::ViewPrompt,
+                cx,
+            ));
+            buttons.push(self.toolbar_button(
+                "find-copy",
+                if self.copied_visible {
+                    ICON_CHECK
                 } else {
-                    "View the full prompt"
+                    ICON_COPY
                 },
-                hotkey("ctrl+e")
-            ),
-            FindAction::ViewPrompt,
-            cx,
-        ));
-        buttons.push(self.toolbar_button(
-            "find-copy",
-            if self.copied_visible {
-                ICON_CHECK
-            } else {
-                ICON_COPY
-            },
-            if compact { "" } else { "Copy" },
-            false,
-            false,
-            !has_row,
-            format!("Copy this prompt ({})", hotkey("ctrl+y")),
-            FindAction::CopyPrompt,
-            cx,
-        ));
-        buttons.push(self.toolbar_button(
-            "find-fork",
-            ICON_GIT_FORK,
-            if compact { "" } else { "Fork" },
-            self.fork_open,
-            false,
-            !has_row,
-            format!(
-                "{} ({})",
-                if self.fork_open {
-                    "Cancel fork"
-                } else {
-                    "Fork this prompt into another agent"
-                },
-                hotkey("ctrl+o")
-            ),
-            FindAction::ForkPicker,
-            cx,
-        ));
+                if compact { "" } else { "Copy" },
+                false,
+                false,
+                !has_row,
+                format!("Copy this prompt ({})", hotkey("ctrl+y")),
+                FindAction::CopyPrompt,
+                cx,
+            ));
+            buttons.push(self.toolbar_button(
+                "find-fork",
+                ICON_GIT_FORK,
+                if compact { "" } else { "Fork" },
+                self.fork_open,
+                false,
+                !has_row,
+                format!(
+                    "{} ({})",
+                    if self.fork_open {
+                        "Cancel fork"
+                    } else {
+                        "Fork this prompt into another agent"
+                    },
+                    hotkey("ctrl+o")
+                ),
+                FindAction::ForkPicker,
+                cx,
+            ));
+        }
         h_flex()
             .flex_shrink_0()
             .w_full()
@@ -390,7 +401,7 @@ impl GpuiFindPromptsModalWindow {
                     .collect();
                 (
                     "find-agents",
-                    128.0,
+                    FILTER_AGENTS_WIDTH,
                     !picked.is_empty(),
                     if picked.is_empty() {
                         "All agents".to_string()
@@ -404,7 +415,7 @@ impl GpuiFindPromptsModalWindow {
             }
             FindMenu::Project => (
                 "find-projects",
-                160.0,
+                FILTER_PROJECTS_WIDTH,
                 self.project.is_some(),
                 match self.project.as_ref() {
                     None => "All projects".to_string(),
@@ -419,6 +430,9 @@ impl GpuiFindPromptsModalWindow {
                 "ctrl+j",
                 self.project_trigger.clone(),
             ),
+            FindMenu::Actions => {
+                unreachable!("the actions menu has its own button, `actions_menu_button`")
+            }
         };
         let open = self.open_menu == Some(menu);
         let text = if active || open {

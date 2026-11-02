@@ -7,15 +7,17 @@
 //!
 //! CDXC:PromptSearch 2026-09-16 DECISION:
 //! User: the agent and project dropdowns keep a fixed width and truncate the picked value, so the toolbar does not resize when the selection changes.
+//!
+//! The "…" button that holds Fav, View, Copy and Fork in a narrow window (`toolbar_steps.rs`) opens the same kind of panel, one row per action with its hotkey.
 use super::model::FIND_PROMPT_AGENTS;
 use super::window::{FindMenu, GpuiFindPromptsModalWindow};
-use crate::app::window::native_modal_kit::hsla;
+use crate::app::window::native_modal_kit::{hsla, neutral_button_fills};
 use crate::app::window::quick_access::chrome::quick_access_tooltip;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, BoxShadow, ClickEvent, Context, InteractiveElement as _, IntoElement,
     MouseDownEvent, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    anchored, deferred, div, point, px, svg,
+    anchored, canvas, deferred, div, point, px, svg,
 };
 use gpui_component::input::Input;
 use gpui_component::{h_flex, v_flex};
@@ -30,14 +32,116 @@ struct MenuRow {
     dot: Option<gpui::Rgba>,
     checked: bool,
     tooltip: Option<String>,
+    /// The action's hotkey, drawn at the right.
+    hint: Option<String>,
+    /// A row that does nothing for now (no prompt is selected).
+    disabled: bool,
+}
+
+fn hotkey(chord: &str) -> String {
+    crate::hotkey_label::terminal_overlay_hotkey_chord_label(chord)
 }
 
 impl GpuiFindPromptsModalWindow {
+    /// The four toolbar actions as menu rows, in the buttons' order; the hotkeys are the tooltips'.
+    fn action_menu_rows(&self) -> Vec<(usize, MenuRow)> {
+        let favorite = self.selected_row().is_some_and(|row| row.favorite);
+        let has_row = self.selected_row().is_some();
+        let row = |label: &'static str, chord: &str| MenuRow {
+            label: SharedString::new_static(label),
+            dot: None,
+            checked: false,
+            tooltip: None,
+            hint: Some(hotkey(chord)),
+            disabled: !has_row,
+        };
+        vec![
+            row(
+                if favorite {
+                    "Remove from favorites"
+                } else {
+                    "Favorite this prompt"
+                },
+                "ctrl+f",
+            ),
+            row(
+                if self.expanded_prompt {
+                    "Close the full prompt"
+                } else {
+                    "View the full prompt"
+                },
+                "ctrl+e",
+            ),
+            row("Copy this prompt", "ctrl+y"),
+            row(
+                if self.fork_open {
+                    "Cancel fork"
+                } else {
+                    "Fork into another agent"
+                },
+                "ctrl+o",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        .collect()
+    }
+
+    /// The "…" button that stands in for Fav, View, Copy and Fork in a narrow window.
+    pub(super) fn actions_menu_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.p;
+        let open = self.open_menu == Some(FindMenu::Actions);
+        let fills = neutral_button_fills(p.light);
+        let bounds = self.actions_trigger.clone();
+        let text = if open { p.foreground } else { p.muted };
+        h_flex()
+            .id("find-actions-menu")
+            .relative()
+            .flex_shrink_0()
+            .size(px(32.0))
+            .items_center()
+            .justify_center()
+            .rounded(px(10.0))
+            .border_1()
+            .border_color(hsla(crate::app::window::native_modal_kit::rgba_of(
+                p.border, 0.0,
+            )))
+            .bg(hsla(if open { fills.pressed } else { fills.rest }))
+            .text_color(hsla(text))
+            .cursor_pointer()
+            .hover(move |this| this.text_color(hsla(p.foreground)).bg(hsla(fills.hover)))
+            .active(move |this| this.bg(hsla(fills.pressed)))
+            .on_click(cx.listener(|this, _: &ClickEvent, window, cx| {
+                this.toggle_menu(FindMenu::Actions, window, cx);
+            }))
+            .tooltip(move |window, cx| {
+                quick_access_tooltip(
+                    "Favorite, view, copy or fork this prompt".to_string(),
+                    window,
+                    cx,
+                )
+            })
+            .child(
+                canvas(move |rect, _, _| bounds.set(Some(rect)), |_, _, _, _| {})
+                    .absolute()
+                    .size_full(),
+            )
+            .child(
+                svg()
+                    .path(crate::app::consts::TITLEBAR_ICON_DOTS)
+                    .size(px(14.0))
+                    .flex_shrink_0()
+                    .text_color(hsla(text)),
+            )
+            .into_any_element()
+    }
+
     pub(super) fn render_menu(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let menu = self.open_menu?;
         let trigger = match menu {
             FindMenu::Agent => self.agent_trigger.get(),
             FindMenu::Project => self.project_trigger.get(),
+            FindMenu::Actions => self.actions_trigger.get(),
         }?;
         let p = self.p;
         let rows: Vec<(usize, MenuRow)> = match menu {
@@ -46,6 +150,8 @@ impl GpuiFindPromptsModalWindow {
                 dot: None,
                 checked: !self.agents.iter().any(|on| *on),
                 tooltip: None,
+                hint: None,
+                disabled: false,
             })
             .chain(
                 FIND_PROMPT_AGENTS
@@ -56,6 +162,8 @@ impl GpuiFindPromptsModalWindow {
                         dot: Some(self.agent_color(index).unwrap_or(p.muted)),
                         checked: self.agents[index],
                         tooltip: None,
+                        hint: None,
+                        disabled: false,
                     }),
             )
             .enumerate()
@@ -71,17 +179,22 @@ impl GpuiFindPromptsModalWindow {
                             dot: None,
                             checked: self.project.is_none(),
                             tooltip: None,
+                            hint: None,
+                            disabled: false,
                         },
                         Some(facet) => MenuRow {
                             label: facet.name.clone().into(),
                             dot: None,
                             checked: self.project.as_deref() == Some(facet.path.as_str()),
                             tooltip: Some(facet.path.clone()),
+                            hint: None,
+                            disabled: false,
                         },
                     };
                     (position, row)
                 })
                 .collect(),
+            FindMenu::Actions => self.action_menu_rows(),
         };
         let highlight = self.menu_highlight.min(rows.len().saturating_sub(1));
         let items = rows
@@ -102,7 +215,10 @@ impl GpuiFindPromptsModalWindow {
                     .line_height(px(20.0))
                     .text_color(hsla(p.foreground))
                     .cursor_pointer()
-                    .when(highlighted, |this| this.bg(hsla(p.foreground_at(0.08))))
+                    .when(row.disabled, |this| this.opacity(0.5))
+                    .when(highlighted && !row.disabled, |this| {
+                        this.bg(hsla(p.foreground_at(0.08)))
+                    })
                     .on_mouse_move(cx.listener(move |this, _, _window, cx| {
                         if this.menu_highlight != index {
                             this.menu_highlight = index;
@@ -133,6 +249,15 @@ impl GpuiFindPromptsModalWindow {
                             .text_ellipsis()
                             .child(row.label),
                     )
+                    .when_some(row.hint, |this, hint| {
+                        this.child(
+                            div()
+                                .flex_shrink_0()
+                                .text_size(px(12.0))
+                                .text_color(hsla(p.muted))
+                                .child(hint),
+                        )
+                    })
                     .when(row.checked, |this| {
                         this.child(
                             svg()
