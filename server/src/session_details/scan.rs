@@ -83,6 +83,8 @@ pub(super) struct TranscriptFacts {
     background_order: Vec<String>,
     pending_launches: HashMap<String, Launch>,
     last_at: i64,
+    /// How far the process starts Ghostex recorded for this conversation are applied.
+    starts: crate::hookless_activity::ProcessStartCursor,
 }
 
 impl TranscriptFacts {
@@ -458,7 +460,20 @@ impl TranscriptFacts {
         }
     }
 
-    fn observe(&mut self, line: &[u8]) {
+    /// Applies the recorded process starts due by `upto` (hookless_activity/process_starts.rs).
+    fn apply_process_starts(
+        &mut self,
+        starts: &[crate::hookless_activity::ClaudeProcessStart],
+        upto: i64,
+    ) {
+        for start in self.starts.due(starts, upto) {
+            if start.source.new_process() {
+                self.forget_unfinished_background();
+            }
+        }
+    }
+
+    fn observe(&mut self, line: &[u8], starts: &[crate::hookless_activity::ClaudeProcessStart]) {
         // Cheap marker tests first: most records are messages this reader skips.
         let text = String::from_utf8_lossy(line);
         if !self.conversation_started
@@ -487,6 +502,7 @@ impl TranscriptFacts {
             return;
         };
         if let Some(at) = timestamp(&record) {
+            self.apply_process_starts(starts, at);
             self.last_at = at;
         }
         match record.get("type").and_then(Value::as_str) {
@@ -494,10 +510,10 @@ impl TranscriptFacts {
                 let Some(attachment) = record.get("attachment") else {
                     return;
                 };
-                if matches!(
-                    attachment.get("hookName").and_then(Value::as_str),
-                    Some("SessionStart:startup" | "SessionStart:resume")
-                ) {
+                // An old transcript's hook line for the same start.
+                if crate::hookless_activity::claude_hook_line_start(&record)
+                    .is_some_and(|source| source.new_process())
+                {
                     self.forget_unfinished_background();
                 }
                 self.observe_attachment(attachment);
@@ -571,6 +587,11 @@ pub(super) fn scan_claude_transcript(path: &Path) -> std::io::Result<TranscriptF
             facts: TranscriptFacts::default(),
             used: 0,
         });
+    let starts = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(crate::hookless_activity::read_claude_process_starts)
+        .unwrap_or_default();
     if entry.consumed_to < version.size {
         let mut file = File::open(path)?;
         file.seek(SeekFrom::Start(entry.consumed_to))?;
@@ -584,11 +605,13 @@ pub(super) fn scan_claude_transcript(path: &Path) -> std::io::Result<TranscriptF
                 break;
             }
             if read <= MAX_RECORD_BYTES {
-                entry.facts.observe(&line);
+                entry.facts.observe(&line, &starts);
             }
             entry.consumed_to += read as u64;
         }
     }
+    // Starts after the newest record: the process has written nothing since.
+    entry.facts.apply_process_starts(&starts, i64::MAX);
     entry.version = version;
     let facts = entry.facts.clone();
     if let Ok(mut cache) = cache.lock() {
@@ -607,4 +630,58 @@ pub(super) fn scan_claude_transcript(path: &Path) -> std::io::Result<TranscriptF
         cache.1.insert(path.to_path_buf(), entry);
     }
     Ok(facts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hookless_activity::{ClaudeProcessStart, ClaudeStartSource};
+
+    fn launch(second: u32, id: &str, task: &str) -> [String; 2] {
+        [
+            format!(
+                r#"{{"type":"assistant","timestamp":"2026-11-02T10:00:{second:02}.000Z","message":{{"content":[{{"type":"tool_use","id":"{id}","name":"Bash","input":{{"command":"sleep 600","description":"{task}","run_in_background":true}}}}]}}}}"#
+            ),
+            format!(
+                r#"{{"type":"user","timestamp":"2026-11-02T10:00:{:02}.000Z","message":{{"content":[{{"type":"tool_result","tool_use_id":"{id}"}}]}},"toolUseResult":{{"backgroundTaskId":"{task}"}}}}"#,
+                second + 1
+            ),
+        ]
+    }
+
+    fn unfinished(lines: &[String], starts: &[ClaudeProcessStart]) -> Vec<String> {
+        let mut facts = TranscriptFacts::default();
+        for line in lines {
+            facts.observe(line.as_bytes(), starts);
+        }
+        facts.apply_process_starts(starts, i64::MAX);
+        let mut ids: Vec<String> = facts
+            .background
+            .values()
+            .filter(|run| run.ended_at_ms.is_none())
+            .map(|run| run.id.clone())
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    #[test]
+    fn a_recorded_process_start_forgets_the_old_processes_shells() {
+        let lines: Vec<String> = launch(1, "toolu_a", "old")
+            .into_iter()
+            .chain(launch(20, "toolu_b", "new"))
+            .collect();
+        assert_eq!(unfinished(&lines, &[]), vec!["new", "old"]);
+        let resumed = ClaudeProcessStart {
+            at: crate::session_chat_fleet_transcript::parse_time("2026-11-02T10:00:10.000Z")
+                .unwrap(),
+            source: ClaudeStartSource::Resume,
+        };
+        assert_eq!(unfinished(&lines, &[resumed]), vec!["new"]);
+        let cleared = ClaudeProcessStart {
+            source: ClaudeStartSource::Clear,
+            ..resumed
+        };
+        assert_eq!(unfinished(&lines, &[cleared]), vec!["new", "old"]);
+    }
 }

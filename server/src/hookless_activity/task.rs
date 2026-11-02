@@ -9,10 +9,13 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 
-use super::claude::ClaudeObserver;
+use super::claude::{ClaudeObserver, SessionRecords};
 use super::codex::CodexObserver;
 use super::comparison::{self, Side};
 use super::drive::{self, ClaudeDriver};
+use super::plan_mode::PlanModeWatch;
+use super::process_starts::ProcessStartRecorder;
+use super::surfaces::SurfaceRecords;
 use crate::domain::DomainRepository;
 use crate::logging::DiagnosticLogScenario;
 use crate::server::AppState;
@@ -21,11 +24,22 @@ use crate::storage::open_gxserver_database;
 const POLL: Duration = Duration::from_millis(500);
 const SESSIONS_REFRESH: Duration = Duration::from_secs(2);
 
+/// What runs whether or not the observers do: Claude's session records and the process starts
+/// read off them (process_starts.rs).
+#[derive(Default)]
+struct AlwaysOn {
+    records: SessionRecords,
+    starts: ProcessStartRecorder,
+}
+
 #[derive(Default)]
 struct Observers {
+    always: AlwaysOn,
     claude: ClaudeObserver,
     codex: CodexObserver,
     driver: ClaudeDriver,
+    plan_mode: PlanModeWatch,
+    surfaces: SurfaceRecords,
     sessions: Vec<Value>,
     sessions_read_at: Option<Instant>,
     /// Whether the last pass ran the comparison (Codex and OpenCode run only for it).
@@ -47,23 +61,24 @@ pub(crate) fn spawn_hookless_activity_task(state: &Arc<AppState>) -> tokio::task
         loop {
             let compare = comparison_enabled(&state);
             let drive = drive::claude_drive_enabled(&state.paths);
-            if compare || drive {
-                running = true;
-                let state = state.clone();
-                let mut current = observers.take().unwrap_or_default();
-                observers = tokio::task::spawn_blocking(move || {
-                    poll(&state, &mut current, compare, drive);
-                    current
-                })
-                .await
-                .ok();
-            } else if running {
+            let mut current = observers.take().unwrap_or_default();
+            if !(compare || drive) && running {
                 // Off: forget every baseline so turning it back on starts clean.
-                running = false;
                 super::opencode::refresh(&[], false);
                 drive::set_tracked([].iter());
-                observers = Some(Observers::default());
+                current = Observers {
+                    always: current.always,
+                    ..Observers::default()
+                };
             }
+            running = compare || drive;
+            let state = state.clone();
+            observers = tokio::task::spawn_blocking(move || {
+                poll(&state, &mut current, compare, drive);
+                current
+            })
+            .await
+            .ok();
             tokio::select! {
                 _ = shutdown.recv() => break,
                 _ = tokio::time::sleep(POLL) => {}
@@ -73,6 +88,18 @@ pub(crate) fn spawn_hookless_activity_task(state: &Arc<AppState>) -> tokio::task
 }
 
 fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool) {
+    let observing = compare || drive;
+    let live = observers
+        .always
+        .records
+        .read(&state.paths.home_dir, observing);
+    observers
+        .always
+        .starts
+        .record(&state.paths.app_state_dir, &live);
+    if !observing {
+        return;
+    }
     if !compare && observers.compared {
         // The comparison turned off while the switch stays on: Codex and OpenCode start over.
         super::opencode::refresh(&[], false);
@@ -94,13 +121,15 @@ fn poll(state: &AppState, observers: &mut Observers, compare: bool, drive: bool)
         observers.sessions_read_at = Some(Instant::now());
         super::opencode::refresh(&observers.sessions, true);
     }
-    let mut events = observers.claude.poll(&state.paths.home_dir);
+    let mut events = observers.claude.poll(&live);
     if drive {
         drive::set_tracked(observers.claude.panes());
+        observers.surfaces.poll(&state.paths, &observers.claude);
         for event in &events {
             observers.driver.drive(state, event);
         }
         observers.driver.retry_unread_waits(state);
+        observers.plan_mode.poll(state, &observers.claude);
     } else {
         drive::set_tracked([].iter());
     }
