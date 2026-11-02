@@ -460,6 +460,7 @@ pub(crate) fn render_playbook_sheet<V: HasOrchestratorPlaybook>(
     window: &mut Window,
     cx: &mut Context<V>,
 ) -> Option<AnyElement> {
+    let p = &p.nested_dialog();
     apply_pending_text(page, window, cx);
     let state = page.orchestrator_playbook();
     let sheet = state.sheet.as_ref()?;

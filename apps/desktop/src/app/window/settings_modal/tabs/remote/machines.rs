@@ -819,7 +819,7 @@ pub(super) fn machine_dialog(
 ) -> Option<AnyElement> {
     let dialog = tab.machine_dialog.as_ref()?;
     let colors = dialog_colors(t);
-    let p = t.p;
+    let p = t.p.nested_dialog();
     let is_new = dialog.machine_id.is_none();
     let draft = dialog.draft.clone();
     let advanced_open = dialog.advanced_open;
@@ -1048,9 +1048,7 @@ pub(super) fn machine_dialog(
         .w_full()
         .pt(px(8.0))
         .border_t_1()
-        // The dialog is portaled out of the themed Settings root, so `--app-border` is the dark
-        // app's white hairline in both appearances (invisible on the light surface).
-        .border_color(hsla(modal_rgba(0xffffff, 0.11)))
+        .border_color(hsla(p.hairline))
         .child(div().flex().child(compact_button(
             &p,
             "remote-machine-advanced-toggle",
