@@ -28,7 +28,12 @@ pub(super) fn work_source_command(rest: &[String], flags: &Flags) -> CliResult<(
             let path = rest
                 .get(1)
                 .ok_or_else(|| CliError::Other("Pass the command's path. ".to_string() + USAGE))?;
-            params.insert("path".to_string(), json!(path_to_send(path)));
+            let target =
+                rpc::resolve_gxserver_server_target(flags, &Value::Object(params.clone()))?;
+            params.insert(
+                "path".to_string(),
+                json!(path_to_send(path, rpc::targets_this_computer(&target))),
+            );
             params.insert("switch".to_string(), json!(flags.truthy("switch")));
             rpc::call_gxserver_rpc("/api/setWorkSource", &Value::Object(params), flags)
                 .map_err(with_switch_hint)?
@@ -80,13 +85,15 @@ pub(super) fn work_source_command(rest: &[String], flags: &Flags) -> CliResult<(
 /// drive-relative `C:tools\x.ps1` or `C:x.ps1` included; elsewhere joined to the current folder,
 /// symlinks left as they are). A bare name (looked up on PATH), `~` and `~/…` (the server
 /// expands them) and an absolute path are sent as typed, and so is a path `absolute` can't make
-/// absolute, which the server then refuses in its own words.
-fn path_to_send(typed: &str) -> String {
+/// absolute, which the server then refuses in its own words. For another computer's gxserver
+/// (`--server`, `this_computer` false) this shell's folder means nothing there, so a relative
+/// path goes as typed too, and that server refuses it.
+fn path_to_send(typed: &str, this_computer: bool) -> String {
     let trimmed = typed.trim();
     let path = Path::new(trimmed);
     let drive_prefixed = matches!(path.components().next(), Some(Component::Prefix(_)));
     let bare_name = !trimmed.contains('/') && !trimmed.contains('\\') && !drive_prefixed;
-    if trimmed.starts_with('~') || path.is_absolute() || bare_name {
+    if !this_computer || trimmed.starts_with('~') || path.is_absolute() || bare_name {
         return typed.to_string();
     }
     std::path::absolute(path)
@@ -149,7 +156,7 @@ mod tests {
     fn a_relative_path_is_sent_under_the_current_folder() {
         let folder = std::env::current_dir().expect("current folder");
         for (typed, under) in [("./tracker.sh", "tracker.sh"), ("bin/source", "bin/source")] {
-            let sent = path_to_send(typed);
+            let sent = path_to_send(typed, true);
             assert!(Path::new(&sent).is_absolute(), "{sent}");
             assert_eq!(Path::new(&sent), folder.join(under));
         }
@@ -157,7 +164,7 @@ mod tests {
         // where `absolute` would drop a `.`.
         let absolute = folder.join(".").join("tracker").display().to_string();
         for typed in ["tracker", "~", "~/bin/x", absolute.as_str()] {
-            assert_eq!(path_to_send(typed), typed);
+            assert_eq!(path_to_send(typed, true), typed);
         }
     }
 
@@ -166,16 +173,86 @@ mod tests {
     #[test]
     fn a_windows_relative_path_is_sent_absolute() {
         let folder = std::env::current_dir().expect("current folder");
-        assert_eq!(Path::new(&path_to_send(r".\x.ps1")), folder.join("x.ps1"));
+        assert_eq!(
+            Path::new(&path_to_send(r".\x.ps1", true)),
+            folder.join("x.ps1")
+        );
         // Drive-relative: absolute on drive C, from that drive's own current folder.
         for (typed, end) in [("C:x.ps1", r"x.ps1"), (r"C:dir\x.ps1", r"dir\x.ps1")] {
-            let sent = path_to_send(typed);
+            let sent = path_to_send(typed, true);
             assert!(Path::new(&sent).is_absolute(), "{sent}");
             assert!(sent.starts_with(r"C:\") && sent.ends_with(end), "{sent}");
         }
         for typed in [r"C:\tools\x.ps1", r"\\server\share\x.ps1"] {
-            assert_eq!(path_to_send(typed), typed);
+            assert_eq!(path_to_send(typed, true), typed);
         }
+    }
+
+    /// Another computer's gxserver: this shell's folder means nothing there, so the path goes as
+    /// typed and that server refuses it in its own words.
+    #[test]
+    fn another_computers_server_gets_a_relative_path_as_typed() {
+        for typed in [
+            "./tracker.sh",
+            "bin/source",
+            r".\x.ps1",
+            "tracker",
+            "~/bin/x",
+        ] {
+            assert_eq!(path_to_send(typed, false), typed);
+        }
+    }
+
+    #[test]
+    fn only_this_computers_server_counts_as_this_computer() {
+        let target = |kind: &str, base_url: &str| rpc::Target {
+            base_url: base_url.to_string(),
+            forward_plan: None,
+            kind: kind.to_string(),
+            profile_id: None,
+            server_id: None,
+            tailcat_plan: None,
+            token: String::new(),
+        };
+        assert!(rpc::targets_this_computer(&target(
+            "local",
+            "http://127.0.0.1:58744"
+        )));
+        assert!(rpc::targets_this_computer(&target(
+            "direct",
+            "http://localhost:58799"
+        )));
+        assert!(rpc::targets_this_computer(&target(
+            "direct",
+            "http://[::1]:58744"
+        )));
+        assert!(rpc::targets_this_computer(&target(
+            "direct",
+            "http://[::1]/"
+        )));
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://[fd00::5]:58744"
+        )));
+        // A bracketed host without its closing bracket is malformed, never this computer.
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://[::1"
+        )));
+        assert!(!rpc::targets_this_computer(&target("direct", "[::1")));
+        // Forwards to another computer listen on this one's loopback.
+        assert!(!rpc::targets_this_computer(&target(
+            "ssh",
+            "http://127.0.0.1:61000"
+        )));
+        assert!(!rpc::targets_this_computer(&target(
+            "tailcat",
+            "http://127.0.0.1:61001"
+        )));
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://10.0.0.5:58744"
+        )));
     }
 
     #[test]

@@ -4044,7 +4044,7 @@ IDs look and which credentials it needs. Set it from a terminal on the computer
 that runs the workspace: `ghostex issues source set ~/bin/my-tracker --workspace
 Work` runs the program's `info`, keeps the ID it answers with, and shows its name,
 its ID keys and the full path it found (a bare name is looked up on your PATH, and
-a path relative to the current folder works too).
+a path relative to the current folder works too, unless `--server` points at another computer).
 Then `ghostex issues source credential token --workspace Work` reads one of the
 credentials it asks for from stdin (`--clear` removes it). A credential the program
 marks secret is never shown back, only whether it is set, and needs at least

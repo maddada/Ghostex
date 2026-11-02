@@ -33,9 +33,8 @@ pub(crate) const SWITCH_OFFER: &str = "Switch to it to use the new id.";
 
 const NOTHING_TO_CHECK: &str = "This workspace has no ticket command to check.";
 
-/// A path the workspace's command can't be set to: it would be kept and shown with a stored
-/// credential in it. Names no value, like `refuse_unmaskable`'s refusals.
-/// Why a path holding a stored value is refused; the refusal quotes the typed path before it.
+/// Why a path holding a stored credential's value is refused: it would be kept and shown with
+/// that value in it. The refusal quotes the typed path before it, and names no value.
 pub(crate) const PATH_SPELLS_CREDENTIAL: &str = "can't be used: it contains the value of a credential this workspace keeps, which Ghostex can't hide in the command's path.";
 
 /// An `info` answer that can't be kept: its id, an ID key or a credential name holds a stored
@@ -616,8 +615,8 @@ impl WorkSourceDeletion {
 /// A workspace is being deleted: its command is cleared and its credentials removed. Never fails
 /// on a bound, since retiring an id the record already holds adds none.
 ///
-/// CDXC:WorkMode 2026-10-31 DECISION:
-/// Leandro: `/api/deleteWorkspace` stays allowed from any client for a workspace with a ticket command, and removes the command and its credentials, like the Linear key it already removes, because deleting never sets a command, runs one or reveals a credential.
+/// CDXC:WorkMode 2026-10-31 WHY:
+/// `/api/deleteWorkspace` stays allowed from any client for a workspace with a ticket command, and removes the command and its credentials, like the Linear key it already removes: deleting never sets a command, runs one or reveals a credential.
 ///
 /// Call it inside a transaction on `db`, before the workspace document is written. Once the
 /// transaction commits, `commit` it; if anything fails first, roll the transaction back (the
@@ -1148,8 +1147,8 @@ fn answer_declares_secret(checked: &Result<CommandInfo, CheckFailure>) -> Vec<St
 /// removed any. Through the strict writer (`mutate_credentials_when`): a file it can't change
 /// drops the check's answer, like a file `stored_values` can't read.
 ///
-/// CDXC:WorkMode 2026-11-02 DECISION:
-/// Leandro: a value of 1 or 2 characters is never secret and never hidden, not even in the request that removes it: it was shown openly while it wasn't secret. When any answer marks its field secret, Ghostex removes that saved value, the same rule as saving one, says why and asks for one of at least 3 characters. The record's shape stays as it is.
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// A value of 1 or 2 characters is never secret and never hidden, not even in the request that removes it: it was shown openly while it wasn't secret, so hiding it then protects nothing. When any answer marks its field secret, Ghostex removes that saved value, the same rule as saving one, says why and asks for one of at least 3 characters. The record's shape stays as it is.
 fn remove_short_secrets(
     paths: &GxserverPaths,
     workspace_id: &str,

@@ -171,8 +171,7 @@ pub(crate) fn resolve_cli_cwd(
         return Ok(cwd.to_string());
     }
     let target = rpc::resolve_gxserver_server_target(flags, params)?;
-    if !matches!(target.kind.as_str(), "ssh" | "tailcat") && rpc::is_local_gxserver_target(&target)
-    {
+    if rpc::targets_this_computer(&target) {
         return Ok(node_path_resolve(cwd));
     }
     Err(CliError::Other(format!(

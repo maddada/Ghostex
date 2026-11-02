@@ -190,8 +190,24 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
     else {
         return false;
     };
-    let host = rest.split(['/', ':']).next().unwrap_or("");
-    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+    let authority = rest.split('/').next().unwrap_or("");
+    // A bracketed IPv6 host (`[::1]:58744`) holds colons of its own, so it ends at its bracket.
+    // One without its closing bracket is malformed, never this computer.
+    let host = match authority.strip_prefix('[') {
+        Some(bracketed) => match bracketed.split_once(']') {
+            Some((host, _)) => host,
+            None => return false,
+        },
+        None => authority.split(':').next().unwrap_or(""),
+    };
+    matches!(host, "127.0.0.1" | "localhost" | "::1")
+}
+
+/// Whether `target` is the gxserver of the computer this CLI runs on, so a path relative to this
+/// shell's folder means the same file there. An `ssh` or `tailcat` target reaches another
+/// computer through a forward on this one's loopback, so its URL alone would read as local.
+pub fn targets_this_computer(target: &Target) -> bool {
+    !matches!(target.kind.as_str(), "ssh" | "tailcat") && is_local_gxserver_target(target)
 }
 
 pub fn is_gxserver_global_session_ref(value: &str) -> bool {
