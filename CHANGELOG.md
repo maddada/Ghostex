@@ -23,7 +23,7 @@
 - **The voice agent panel is frosted glass** like the Notifications menu, with its controls in the header and your conversation on the same glass.
 - **Slash commands look like the rest of the chat:** a command such as `/rename` shows as your own message, and its output as a quiet note under it, for every agent.
 - **Paste pictures into question notes,** in chat forms and question pages; they show as Image pills and reach the agent with your answers.
-- **Question pages get a softer look:** a dusk (or dawn) backdrop with frosted glass cards, and options side by side with a Pick button.
+- **Question pages get a softer look:** frosted glass cards over your own wallpaper or custom picture on macOS (a soft dusk or dawn elsewhere), and options side by side with a Pick button.
 - **Page cards show a preview before you open them,** and the preview shows the page's real top.
 
 ### 🤖 Agents
