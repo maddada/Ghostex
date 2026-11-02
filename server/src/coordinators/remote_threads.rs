@@ -28,6 +28,8 @@ pub struct RemoteThreadRecord {
     /// The state the supervisor last saw (`working`, `waiting`, `finished`, `sleeping`, `closed`,
     /// or `unreachable` while its computer is not connected).
     pub last_state: Option<String>,
+    /// The assistant message the last finished report carried (migration 0052).
+    pub reported_message_id: Option<String>,
 }
 
 impl RemoteThreadRecord {
@@ -62,7 +64,7 @@ impl RemoteThreadRecord {
     }
 }
 
-const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState";
+const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState, reportedMessageId";
 
 fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
     Ok(RemoteThreadRecord {
@@ -79,6 +81,7 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
         reported_prompt_key: row.get(10)?,
         last_report: row.get(11)?,
         last_state: row.get(12)?,
+        reported_message_id: row.get(13)?,
     })
 }
 
@@ -228,6 +231,7 @@ pub fn record_remote_thread_report(
     db: &Connection,
     key: &RemoteThreadKey,
     prompt_key: Option<&str>,
+    message_id: Option<&str>,
     excerpt: &str,
 ) -> Result<(), DomainStateError> {
     let timestamp = now_iso();
@@ -241,8 +245,8 @@ pub fn record_remote_thread_report(
             params![key.0, key.1, key.2, prompt_key, excerpt, timestamp],
         ),
         None => db.execute(
-            "UPDATE coordinator_remote_threads SET observedWorking = 0, reportedAt = ?6, reportedPromptKey = NULL, lastReport = ?5, updatedAt = ?6 WHERE serverId = ?1 AND projectId = ?2 AND sessionId = ?3",
-            params![key.0, key.1, key.2, "", excerpt, timestamp],
+            "UPDATE coordinator_remote_threads SET observedWorking = 0, reportedAt = ?6, reportedPromptKey = NULL, lastReport = ?5, reportedMessageId = COALESCE(?4, reportedMessageId), updatedAt = ?6 WHERE serverId = ?1 AND projectId = ?2 AND sessionId = ?3",
+            params![key.0, key.1, key.2, message_id, excerpt, timestamp],
         ),
     }
     .map_err(sql_error)?;
@@ -270,8 +274,10 @@ pub fn insert_coordinator_remote_threads(
                 "serverId": thread.server_id,
                 "projectId": thread.project_id,
                 "sessionId": thread.session_id,
+                // The sidebar knows no "away" state; a thread whose computer is not connected is
+                // drawn asleep rather than as working, which it may no longer be.
                 "threadState": match thread.state() {
-                    "unreachable" => "working",
+                    "unreachable" => "sleeping",
                     state => state,
                 },
             })
@@ -323,12 +329,7 @@ pub fn remote_thread_view(thread: &RemoteThreadRecord) -> Value {
     let computer = crate::connected_computers::find(&thread.server_id)
         .map(|computer| computer.name)
         .unwrap_or_else(|| thread.server_id.clone());
-    // While its computer is away the thread is still working as far as anyone knows; the computer
-    // name says where it runs.
-    let state = match thread.state() {
-        "unreachable" => "working",
-        state => state,
-    };
+    let state = thread.state();
     json!({
         "globalRef": thread.global_ref(),
         "serverId": thread.server_id,
@@ -338,7 +339,7 @@ pub fn remote_thread_view(thread: &RemoteThreadRecord) -> Value {
         "title": format!("{} (on {computer})", if thread.title.is_empty() { "(untitled)" } else { thread.title.as_str() }),
         "task": thread.task.chars().take(300).collect::<String>(),
         "state": state,
-        "reachable": thread.state() != "unreachable",
+        "reachable": state != "unreachable",
         "lastReport": thread.last_report,
         "resolvedAt": thread.resolved_at,
     })
@@ -453,6 +454,10 @@ mod tests {
             "../storage/migrations/0051_coordinator_remote_threads.sql"
         ))
         .unwrap();
+        db.execute_batch(include_str!(
+            "../storage/migrations/0052_coordinator_remote_thread_message.sql"
+        ))
+        .unwrap();
         db.execute(
             "INSERT INTO coordinators (projectId, sessionId, createdAt, updatedAt) VALUES ('P1', 'G1', 'x', 'x')",
             [],
@@ -490,11 +495,11 @@ mod tests {
         );
         assert!(record_remote_thread_progress(&db, &key, true, "working").unwrap());
         assert!(!record_remote_thread_progress(&db, &key, true, "working").unwrap());
-        record_remote_thread_report(&db, &key, None, "Done.").unwrap();
+        record_remote_thread_report(&db, &key, None, Some("m1"), "Done.").unwrap();
         let thread = read_remote_thread(&db, &key).unwrap().unwrap();
         assert!(!thread.observed_working);
         assert_eq!(thread.last_report.as_deref(), Some("Done."));
-        record_remote_thread_report(&db, &key, Some("prompt:abc"), "Which one?").unwrap();
+        record_remote_thread_report(&db, &key, Some("prompt:abc"), None, "Which one?").unwrap();
         assert_eq!(
             read_remote_thread(&db, &key)
                 .unwrap()

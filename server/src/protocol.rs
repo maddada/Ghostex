@@ -1044,7 +1044,9 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
         "/api/registerConnectedComputer"
         | "/api/unregisterConnectedComputer"
-        | "/api/listConnectedComputers" => full_local(path),
+        | "/api/listConnectedComputers"
+        | "/api/issueComputerGrant"
+        | "/api/revokeComputerGrant" => full_local(path),
         // CDXC:RemoteMachines 2026-11-03 WHY: a coordinator's threads on another computer are linked on the coordinator's own computer, by its own CLI, so only this computer's clients may change them.
         "/api/linkRemoteCoordinatorThread"
         | "/api/updateRemoteCoordinatorThread"

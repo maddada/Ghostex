@@ -220,7 +220,7 @@ pub(in crate::server) async fn route_http(
         .authorize_api_token(&parts.headers, &endpoint.path);
     /*
     CDXC:RemoteMachines 2026-11-03 WHY:
-    A connected computer's agents reach this gxserver with the token this computer gave that computer (`registerConnectedComputer`), never this computer's own token, so turning off its Agent access or disconnecting it cuts them off at once. That token opens only the endpoints a remote client may already use (`RemoteAllowed`: sessions, chats, coordinators), not this computer's settings, auth or relay.
+    A connected computer's agents reach this gxserver with the token this computer gave that computer (`issueComputerGrant`), never this computer's own token, so turning off its Agent access or disconnecting it cuts them off at once. That token opens only `PEER_ALLOWED_ENDPOINTS` (connected_computers/scope.rs), not the whole `RemoteAllowed` surface a remote desktop client uses.
     */
     let peer = (endpoint.requires_auth
         && token_extension_id.is_none()
@@ -237,7 +237,7 @@ pub(in crate::server) async fn route_http(
             );
         }
         Some(PeerAuthorization::Allowed { .. })
-            if endpoint.permission != crate::protocol::ApiPermission::RemoteAllowed =>
+            if !crate::connected_computers::is_peer_allowed(&endpoint.path) =>
         {
             return crate::connected_computers::peer_refusal(
                 "forbidden",

@@ -105,7 +105,9 @@ THREADS
   and its turn-end and waiting reports arrive like a local thread's, with the
   computer's name after its title. Its ref names that computer, so agents
   send, read-session-chat, resolve, reopen and unlink take it unchanged.
-  While the computer is not connected its reports wait.
+  While the computer is not connected its reports wait and status lists it
+  as on a computer that isn't connected; resolve and unlink still work then,
+  changing only the link here and leaving its session there as it is.
   link adopts a session that already exists as a thread. unlink does the
   opposite: the session stops being a thread and becomes an ordinary session
   of its project, shown as its own sidebar row, with no more thread reports to

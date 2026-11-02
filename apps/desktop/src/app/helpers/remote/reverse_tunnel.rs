@@ -16,10 +16,18 @@ pub(crate) struct GpuiRemoteReverseTunnel {
     pub(crate) child: Child,
     /// The port on the connected computer's loopback that leads back here.
     pub(crate) remote_port: u16,
+    /// This computer's way-back listener the forward lands on (gxserver's `peerPort`).
+    pub(crate) peer_port: u16,
     _askpass: Option<GpuiRemoteAskpassScript>,
 }
 
 impl GpuiRemoteReverseTunnel {
+    /// The ssh process still runs. A forward that died frees its port on the other computer, so
+    /// it is replaced (with a new token) rather than left for the other side to keep using.
+    pub(crate) fn is_alive(&mut self) -> bool {
+        matches!(self.child.try_wait(), Ok(None))
+    }
+
     pub(crate) fn terminate(&mut self) {
         gpui_forget_remote_tunnel(self.child.id());
         let _ = self.child.kill();
@@ -30,12 +38,13 @@ impl GpuiRemoteReverseTunnel {
 /// Opens the way back for `config`, or `None` when it cannot be had.
 ///
 /// CDXC:RemoteMachines 2026-11-03 WHY:
-/// The way back is its own `ssh -N -R 0:…` rather than a `-R` on the machine's main tunnel: the main tunnel runs with `ExitOnForwardFailure=yes`, so an sshd that refuses remote forwards (`AllowTcpForwarding local`) would have taken the whole connection down with it. Port 0 lets the other computer pick a free port, which ssh reports on stderr ("Allocated port N for remote forward"), so two computers connected to the same one never collide. A WSL machine gets none: its gxserver runs inside WSL, where the Windows host's loopback is not reachable.
+/// The way back is its own `ssh -N -R 127.0.0.1:0:…` rather than a `-R` on the machine's main tunnel: the main tunnel runs with `ExitOnForwardFailure=yes`, so an sshd that refuses remote forwards (`AllowTcpForwarding local`) would have taken the whole connection down with it. Port 0 lets the other computer pick a free port, which ssh reports on stderr ("Allocated port N for remote forward"), so two computers connected to the same one never collide; the explicit 127.0.0.1 keeps it on that computer's loopback unless its sshd forces `GatewayPorts yes`. It lands on gxserver's way-back listener (`peer_port`), which answers only the agent allowlist to a token this computer gave, never the main listener and its pages. A WSL machine gets none: its gxserver runs inside WSL, where the Windows host's loopback is not reachable.
 /// SEE-ALSO: server/src/connected_computers/registry.rs (the inbound registration that names this port), apps/desktop/src/app/remote_conn/connected_computers.rs.
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 pub(crate) fn gpui_open_remote_reverse_tunnel(
     config: &GpuiRemoteMachineConfig,
     execution_target: &GpuiRemoteExecutionTarget,
+    peer_port: u16,
 ) -> Option<GpuiRemoteReverseTunnel> {
     if matches!(
         execution_target,
@@ -45,7 +54,7 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
     }
     let target_arguments = gpui_remote_ssh_target_arguments(config).ok()?;
     let askpass = gpui_remote_ssh_askpass_script(config).ok()?;
-    let forward = format!("0:127.0.0.1:{}", gpui_local_gxserver_api_port());
+    let forward = format!("127.0.0.1:0:127.0.0.1:{peer_port}");
     let mut arguments = vec!["-N".to_string()];
     arguments.extend(gpui_remote_ssh_tunnel_options(config.has_saved_password));
     arguments.extend([
@@ -86,6 +95,7 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
         Ok(remote_port) if matches!(child.try_wait(), Ok(None)) => Some(GpuiRemoteReverseTunnel {
             child,
             remote_port,
+            peer_port,
             _askpass: askpass,
         }),
         _ => {
@@ -101,6 +111,7 @@ pub(crate) fn gpui_open_remote_reverse_tunnel(
 pub(crate) fn gpui_open_remote_reverse_tunnel(
     _config: &GpuiRemoteMachineConfig,
     _execution_target: &GpuiRemoteExecutionTarget,
+    _peer_port: u16,
 ) -> Option<GpuiRemoteReverseTunnel> {
     None
 }

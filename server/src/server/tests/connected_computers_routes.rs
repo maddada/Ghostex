@@ -59,9 +59,59 @@ async fn register(state: &Arc<AppState>, params: Value) -> Value {
     response_json(routed.response).await
 }
 
+async fn post(
+    state: &Arc<AppState>,
+    path: &str,
+    token: &str,
+    params: Value,
+) -> (StatusCode, Value) {
+    let routed = route_http(
+        state.clone(),
+        rpc_request(path, token, json!({ "params": params })),
+        "test".to_string(),
+    )
+    .await;
+    let status = routed.response.status();
+    (status, response_json(routed.response).await)
+}
+
+/// The token `issuer` gives `holder_server_id`, as the desktop asks for it.
+async fn grant(
+    issuer: &Arc<AppState>,
+    holder_server_id: &str,
+    agent_access: bool,
+    rotate: bool,
+) -> Option<String> {
+    let (status, body) = post(
+        issuer,
+        "/api/issueComputerGrant",
+        &issuer.auth_token.clone(),
+        json!({ "serverId": holder_server_id, "name": "Peer", "agentAccess": agent_access, "rotate": rotate }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    body["result"]["peerToken"].as_str().map(str::to_string)
+}
+
+/// Every `/api/...` path the endpoint table names.
+fn every_endpoint_path() -> Vec<String> {
+    let source = include_str!("../../protocol.rs");
+    let table = &source[source.find("pub fn endpoint_for").expect("endpoint table")..];
+    let table = &table[..table.find("\nfn descriptor(").expect("table end")];
+    let mut paths: Vec<String> = table
+        .split('"')
+        .filter(|part| part.starts_with("/api/") && !part.contains(' '))
+        .map(str::to_string)
+        .collect();
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_agent_reaches_a_connected_computer_and_its_switch_cuts_both_ways() {
     let _serial = crate::connected_computers::tests::serial();
+    crate::connected_computers::tests::reset();
     let (_remote_dir, remote) = temp_state("S5r");
     let (_local_dir, local) = temp_state("S6l");
     let remote_url = serve(remote.clone()).await;
@@ -86,23 +136,22 @@ async fn an_agent_reaches_a_connected_computer_and_its_switch_cuts_both_ways() {
         .unwrap()
         .contains("Settings > Remote"));
 
-    let registered = register(
+    // The other computer gives this one a token of its own; this one never holds its full token.
+    let token_for_local = grant(&remote, "S6l", true, false).await.expect("a token");
+    let (status, registered) = post(
         &local,
-        json!({
-            "serverId": "S5r",
-            "name": "Omarchy",
-            "baseUrl": remote_url,
-            "token": remote.auth_token,
-        }),
+        "/api/registerConnectedComputer",
+        &local.auth_token.clone(),
+        json!({ "serverId": "S5r", "name": "Omarchy", "baseUrl": remote_url, "token": token_for_local }),
     )
     .await;
-    let peer_token = registered["result"]["peerToken"]
-        .as_str()
-        .expect("the other computer gets a token")
-        .to_string();
-    assert_eq!(registered["result"]["serverId"], "S6l");
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        registered["result"].get("peerToken").is_none(),
+        "registering hands out nothing"
+    );
 
-    // The relay answers with the other computer's own health.
+    // The relay answers with the other computer's own health and lists its projects.
     let health = route_http(
         local.clone(),
         request(
@@ -116,28 +165,53 @@ async fn an_agent_reaches_a_connected_computer_and_its_switch_cuts_both_ways() {
     .await;
     assert_eq!(health.response.status(), StatusCode::OK);
     assert_eq!(response_json(health.response).await["serverId"], "S5r");
-
-    // An RPC goes through too.
-    let projects = route_http(
-        local.clone(),
-        rpc_request(
-            "/api/computers/S5r/relay/api/listProjects",
-            &local.auth_token,
-            json!({ "params": {} }),
-        ),
-        "projects".to_string(),
+    let (status, projects) = post(
+        &local,
+        "/api/computers/S5r/relay/api/listProjects",
+        &local.auth_token.clone(),
+        json!({}),
     )
     .await;
-    assert_eq!(projects.response.status(), StatusCode::OK);
-    assert_eq!(response_json(projects.response).await["ok"], true);
+    assert_eq!(status, StatusCode::OK, "{projects}");
 
-    // Only this computer's own token relays; the other computer's token never chains onward.
+    // The relay forwards only the allowlist, and never another relay (A to B to C).
+    for forwarded in [
+        "/api/computers/S7c/relay/api/sendSessionText",
+        "/api/control/stop",
+        "/api/registerConnectedComputer",
+        "/api/enableSshAccess",
+        "/api/remotePairingCode",
+        "/api/installExtension",
+    ] {
+        let (status, body) = post(
+            &local,
+            &format!("/api/computers/S5r/relay{forwarded}"),
+            &local.auth_token.clone(),
+            json!({}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{forwarded}: {body}");
+    }
+    let (status, _) = post(
+        &remote,
+        "/api/listProjects",
+        &remote.auth_token.clone(),
+        json!({}),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "the other computer is still running"
+    );
+
+    // Only this computer's own token relays.
     let chained = route_http(
         local.clone(),
         request(
             Method::GET,
             "/api/computers/S5r/relay/api/health/server",
-            &peer_token,
+            &token_for_local,
             None,
         ),
         "chained".to_string(),
@@ -145,101 +219,151 @@ async fn an_agent_reaches_a_connected_computer_and_its_switch_cuts_both_ways() {
     .await;
     assert_eq!(chained.response.status(), StatusCode::UNAUTHORIZED);
 
-    // The other computer's agents may use what a remote client may, and nothing else.
-    let peer_projects = route_http(
-        local.clone(),
-        rpc_request("/api/listProjects", &peer_token, json!({ "params": {} })),
-        "peer-projects".to_string(),
-    )
-    .await;
-    assert_eq!(peer_projects.response.status(), StatusCode::OK);
-    let peer_admin = route_http(
-        local.clone(),
-        rpc_request(
-            "/api/listConnectedComputers",
-            &peer_token,
-            json!({ "params": {} }),
-        ),
-        "peer-admin".to_string(),
-    )
-    .await;
-    assert_eq!(peer_admin.response.status(), StatusCode::FORBIDDEN);
+    // On the other computer, its token opens the allowlist and nothing else: every endpoint walked.
+    let (status, _) = post(&remote, "/api/listProjects", &token_for_local, json!({})).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut walked = 0;
+    for path in every_endpoint_path() {
+        if crate::connected_computers::is_peer_allowed(&path) {
+            continue;
+        }
+        let Some(endpoint) = crate::protocol::endpoint_for(&path) else {
+            continue;
+        };
+        if !endpoint.requires_auth || endpoint.transport != crate::protocol::Transport::Http {
+            // Answered without any token on the main listener, as before; the way-back listener
+            // below refuses them.
+            continue;
+        }
+        let (status, body) = post(&remote, &path, &token_for_local, json!({})).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "{path} answered a peer token: {body}"
+        );
+        assert_eq!(body["error"], "forbidden", "{path}");
+        walked += 1;
+    }
+    assert!(walked > 250, "walked only {walked} endpoints");
 
     // The listing never shows a token or the address.
-    let listed = route_http(
-        local.clone(),
-        rpc_request(
-            "/api/listConnectedComputers",
-            &local.auth_token,
-            json!({ "params": {} }),
-        ),
-        "list".to_string(),
+    let (_, listed) = post(
+        &local,
+        "/api/listConnectedComputers",
+        &local.auth_token.clone(),
+        json!({}),
     )
     .await;
-    let listed = response_json(listed.response).await.to_string();
+    let listed = listed.to_string();
     assert!(listed.contains("Omarchy"));
     assert!(!listed.contains(&remote.auth_token));
-    assert!(!listed.contains(&peer_token));
+    assert!(!listed.contains(&token_for_local));
     assert!(!listed.contains(&remote_url));
 
-    // Agent access off: the relay and the other computer's token are both refused, plainly.
-    let renewed = register(
+    // Agent access off: the relay refuses plainly, and the other computer drops the token.
+    let (status, _) = post(
         &local,
-        json!({
-            "serverId": "S5r",
-            "name": "Omarchy",
-            "baseUrl": remote_url,
-            "token": remote.auth_token,
-            "agentAccess": false,
-        }),
+        "/api/registerConnectedComputer",
+        &local.auth_token.clone(),
+        json!({ "serverId": "S5r", "name": "Omarchy", "agentAccess": false }),
     )
     .await;
-    assert_eq!(renewed["result"]["peerToken"], peer_token.as_str());
-    let off = route_http(
-        local.clone(),
-        rpc_request(
-            "/api/computers/S5r/relay/api/listProjects",
-            &local.auth_token,
-            json!({ "params": {} }),
-        ),
-        "off".to_string(),
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = post(
+        &local,
+        "/api/computers/S5r/relay/api/listProjects",
+        &local.auth_token.clone(),
+        json!({}),
     )
     .await;
-    assert_eq!(off.response.status(), StatusCode::FORBIDDEN);
-    let body = response_json(off.response).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(body["error"], "agentAccessOff");
     assert!(body["message"].as_str().unwrap().contains("Omarchy"));
-    let peer_off = route_http(
-        local.clone(),
-        rpc_request("/api/listProjects", &peer_token, json!({ "params": {} })),
-        "peer-off".to_string(),
-    )
-    .await;
-    assert_eq!(peer_off.response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(grant(&remote, "S6l", false, false).await, None);
+    let (status, _) = post(&remote, "/api/listProjects", &token_for_local, json!({})).await;
     assert_eq!(
-        response_json(peer_off.response).await["error"],
-        "agentAccessOff"
+        status,
+        StatusCode::UNAUTHORIZED,
+        "a dropped token opens nothing"
     );
 
-    // Disconnected: the token stops working at all.
-    let unregistered = route_http(
-        local.clone(),
-        rpc_request(
-            "/api/unregisterConnectedComputer",
-            &local.auth_token,
-            json!({ "params": { "serverId": "S5r" } }),
-        ),
-        "unregister".to_string(),
+    // Disconnected: forgotten.
+    let (status, _) = post(
+        &local,
+        "/api/unregisterConnectedComputer",
+        &local.auth_token.clone(),
+        json!({ "serverId": "S5r" }),
     )
     .await;
-    assert_eq!(unregistered.response.status(), StatusCode::OK);
-    let gone = route_http(
-        local.clone(),
-        rpc_request("/api/listProjects", &peer_token, json!({ "params": {} })),
-        "gone".to_string(),
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = post(
+        &local,
+        "/api/computers/S5r/relay/api/listProjects",
+        &local.auth_token.clone(),
+        json!({}),
     )
     .await;
-    assert_eq!(gone.response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    crate::connected_computers::tests::reset();
+}
+
+/// The way-back listener answers only the allowlist, only to a token this computer gave, and
+/// none of the routes the main listener serves before sign-in.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_way_back_listener_serves_only_the_allowlist_to_a_granted_token() {
+    let _serial = crate::connected_computers::tests::serial();
+    crate::connected_computers::tests::reset();
+    let (_dir, state) = temp_state("S6w");
+    let token = grant(&state, "S5w", true, false).await.expect("a token");
+    let call = |method: Method, path: &str, token: &str| {
+        super::peer_http::handle_peer_http_request(
+            state.clone(),
+            request(method, path, token, Some(json!({ "params": {} }))),
+        )
+    };
+    let ok = call(Method::POST, "/api/listProjects", &token)
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    let health = call(Method::GET, "/api/health/server", &token)
+        .await
+        .unwrap();
+    assert_eq!(health.status(), StatusCode::OK);
+    // This computer's own token is not taken here.
+    let own = call(Method::POST, "/api/listProjects", &state.auth_token.clone())
+        .await
+        .unwrap();
+    assert_eq!(own.status(), StatusCode::UNAUTHORIZED);
+    // Routes served before sign-in and every other endpoint are not there at all.
+    let mut walked = 0;
+    for path in every_endpoint_path().into_iter().chain(
+        [
+            "/api/health",
+            "/api/pairDevice",
+            "/visual/x",
+            "/open-file/x",
+            "/ext/x/y",
+            "/api/computers/S5w/relay/api/listProjects",
+        ]
+        .map(str::to_string),
+    ) {
+        if crate::connected_computers::is_peer_allowed(&path) {
+            continue;
+        }
+        let refused = call(Method::POST, &path, &token).await.unwrap();
+        assert_eq!(refused.status(), StatusCode::NOT_FOUND, "{path}");
+        let refused = call(Method::GET, &path, &token).await.unwrap();
+        assert_eq!(refused.status(), StatusCode::NOT_FOUND, "{path}");
+        walked += 1;
+    }
+    assert!(walked > 250, "walked only {walked}");
+    // Agent access off: the token is dropped and refused.
+    assert_eq!(grant(&state, "S5w", false, false).await, None);
+    let dropped = call(Method::POST, "/api/listProjects", &token)
+        .await
+        .unwrap();
+    assert_eq!(dropped.status(), StatusCode::UNAUTHORIZED);
+    crate::connected_computers::tests::reset();
 }
 
 fn params(value: Value) -> Map<String, Value> {
@@ -330,6 +454,7 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
         format!("S5t:{}:{}", thread.0, thread.1)
     );
     let key = ("S5t".to_string(), thread.0.clone(), thread.1.clone());
+    let remote_grant = grant(&remote, "S6t", true, false).await.expect("a token");
     let memory = Mutex::new(RemoteSupervisorMemory::default());
     let pass = |local: Arc<AppState>, memory: &Mutex<RemoteSupervisorMemory>| {
         let reports = tick(&local, memory);
@@ -349,7 +474,7 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
 
     register(
         &local,
-        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote.auth_token }),
+        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote_grant }),
     )
     .await;
     let read = |local: &Arc<AppState>| {
@@ -388,7 +513,7 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
     // Its computer turned Agent access off: left alone, as when it is away.
     register(
         &local,
-        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote.auth_token, "agentAccess": false }),
+        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote_grant, "agentAccess": false }),
     )
     .await;
     let local_for_pass = local.clone();
@@ -397,7 +522,7 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
     assert_eq!(read(&local).last_state.as_deref(), Some("unreachable"));
     register(
         &local,
-        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote.auth_token }),
+        json!({ "serverId": "S5t", "name": "Omarchy", "baseUrl": remote_url, "token": remote_grant }),
     )
     .await;
 
@@ -450,5 +575,86 @@ async fn a_thread_on_another_computer_reports_its_turns_to_the_coordinator_here(
         coordinator_row["coordinatorRemoteThreads"][0]["serverId"],
         "S5t"
     );
+    crate::connected_computers::tests::reset();
+}
+
+/// A turn that started and ended between two passes (never seen working) is still noticed: the
+/// row's activity time moved past the last report. Once its chat was read at that time it is not
+/// read again, and a session left out of the snapshot but still running is not closed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_turn_finished_between_two_passes_is_noticed_from_the_rows_activity_time() {
+    use super::coordinator_remote_runtime::{tick, RemoteReport, RemoteSupervisorMemory};
+
+    let _serial = crate::connected_computers::tests::serial();
+    crate::connected_computers::tests::reset();
+    let (_remote_dir, remote) = temp_state("S5m");
+    let (_local_dir, local) = temp_state("S6m");
+    let remote_url = serve(remote.clone()).await;
+    let thread = agent_session(&remote, json!({ "activity": "idle" }));
+    let coordinator = agent_session(&local, json!({ "activity": "idle" }));
+    let db = crate::storage::open_gxserver_database(&local.paths).expect("open db");
+    db.execute(
+        "INSERT INTO coordinators (projectId, sessionId, createdAt, updatedAt) VALUES (?1, ?2, 'x', 'x')",
+        rusqlite::params![coordinator.0, coordinator.1],
+    )
+    .expect("coordinator row");
+    let key = ("S5m".to_string(), thread.0.clone(), thread.1.clone());
+    crate::coordinators::link_remote_thread(&db, &key, &coordinator, "", "Quick one").unwrap();
+    // Its last report was an hour ago; the turn since then was never seen.
+    db.execute(
+        "UPDATE coordinator_remote_threads SET reportedAt = '2026-11-03T09:00:00.000Z', observedWorking = 0",
+        [],
+    )
+    .unwrap();
+    let remote_db = crate::storage::open_gxserver_database(&remote.paths).expect("open db");
+    remote_db
+        .execute(
+            "UPDATE sessions SET lastActiveAt = '2026-11-03T10:00:00.000Z' WHERE projectId = ?1 AND sessionId = ?2",
+            rusqlite::params![thread.0, thread.1],
+        )
+        .unwrap();
+    let remote_grant = grant(&remote, "S6m", true, false).await.expect("a token");
+    register(
+        &local,
+        json!({ "serverId": "S5m", "name": "Omarchy", "baseUrl": remote_url, "token": remote_grant }),
+    )
+    .await;
+    let memory = Mutex::new(RemoteSupervisorMemory::default());
+    let pass = |memory: &Mutex<RemoteSupervisorMemory>| {
+        let local = local.clone();
+        tokio::task::block_in_place(|| {
+            let kinds: Vec<_> = tick(&local, memory)
+                .iter()
+                .map(|report| format!("{:?}", report.kind))
+                .collect();
+            memory.lock().unwrap().in_flight.clear();
+            kinds
+        })
+    };
+    assert!(
+        pass(&memory).is_empty(),
+        "still inside the stability window"
+    );
+    memory
+        .lock()
+        .unwrap()
+        .not_working_since
+        .insert(key.clone(), chrono::Utc::now().timestamp_millis() - 5_000);
+    assert_eq!(pass(&memory), vec![format!("{:?}", RemoteReport::Finished)]);
+    // Delivery reads the chat once at that activity time; the next passes leave it alone.
+    let marker = chrono::DateTime::parse_from_rfc3339("2026-11-03T10:00:00.000Z")
+        .unwrap()
+        .timestamp_millis();
+    memory
+        .lock()
+        .unwrap()
+        .checked_marker
+        .insert(key.clone(), marker);
+    memory
+        .lock()
+        .unwrap()
+        .not_working_since
+        .insert(key.clone(), chrono::Utc::now().timestamp_millis() - 5_000);
+    assert!(pass(&memory).is_empty());
     crate::connected_computers::tests::reset();
 }

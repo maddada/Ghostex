@@ -61,7 +61,9 @@ is off.
   ghostex read-session-chat <ref> --last 2 --format text
   ghostex coordinator start-thread --computer <name> --title \"...\" --task \"...\" [--project-id <id>]
 
---computer takes the computer's name (or the start of it) or its server id.";
+--computer takes the computer's name (or the start of it) or its server id. Both computers need
+Ghostex 10.44 or later; agents there can start, message, read, sleep, wake and close sessions,
+nothing else.";
 
 /// A computer this one is connected to, as `listConnectedComputers` reports it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -203,12 +205,13 @@ fn require_agent_access(computer: &ConnectedComputer) -> CliResult<()> {
     )))
 }
 
-/// `args` with `--computer <server id>` added when the session it names (the first positional or a
-/// `--session-id`, `--session`, `--selector` or `--target` value) is a ref of a connected computer
+/// `args` with `--computer <server id>` added when the session they name (what the verb's own
+/// `session_selector_from_args` reads: `--session-id`, `--selector`, `--session`,
+/// `--session-title`, `--target`, else the first positional) is a ref of a connected computer
 /// and nothing already says where to go; `None` leaves them as they are.
 ///
 /// CDXC:RemoteMachines 2026-11-03 WHY:
-/// Most session verbs (`read-text`, `send-message`, `send-key`, `wait-for-text`, the session actions) resolve their selector in a session list and then call gxserver with only the session's project and session ids, so a ref of another computer was looked up on this one ("No matching session found"). Saying `--computer` for them before they run sends both the lookup and the call there, for every verb at once. Only a ref whose server is not this computer's costs the one extra local call that lists the connected computers.
+/// Most session verbs (`read-text`, `send-message`, `send-key`, `wait-for-text`, the session actions) resolve their selector in a session list and then call gxserver with only the session's project and session ids, so a ref of another computer was looked up on this one ("No matching session found"). Saying `--computer` for them before they run sends both the lookup and the call there, for every verb at once. The selector is read with the same parser the verbs use, so a flag's value (`--body-file x`) is never taken for it. Only a ref whose server is not this computer's costs the one extra local call that lists the connected computers.
 pub(crate) fn args_for_session_on_another_computer(
     name: &str,
     args: &[String],
@@ -216,34 +219,15 @@ pub(crate) fn args_for_session_on_another_computer(
     // These choose their computer themselves (agents, coordinator) or take no session.
     if matches!(
         name,
-        "computers" | "coordinator" | "orchestrator" | "server" | "help"
+        "computers" | "coordinator" | "orchestrator" | "agents" | "server" | "help"
     ) {
         return None;
     }
-    if args
-        .iter()
-        .any(|arg| matches!(arg.as_str(), "--computer" | "--server"))
-    {
+    let parsed = super::args::parse_args(args);
+    if parsed.flags.contains("computer") || parsed.flags.contains("server") {
         return None;
     }
-    let mut candidate = None;
-    let mut iter = args.iter().peekable();
-    while let Some(arg) = iter.next() {
-        if matches!(
-            arg.as_str(),
-            "--session-id" | "--session" | "--selector" | "--target"
-        ) {
-            candidate = iter.next().cloned();
-            break;
-        }
-        if arg.starts_with("--") {
-            continue;
-        }
-        if candidate.is_none() {
-            candidate = Some(arg.clone());
-        }
-    }
-    let reference = candidate?;
+    let reference = super::selector::session_selector_from_args(&parsed.rest, &parsed.flags)?;
     if !super::rpc::is_gxserver_global_session_ref(&reference) {
         return None;
     }
@@ -261,6 +245,14 @@ pub(crate) fn args_for_session_on_another_computer(
             routed.push(server_id);
             routed
         })
+}
+
+/// The session ref `args` name, read the way the verbs read it (for the routing test).
+#[cfg(test)]
+fn named_session(args: &[&str]) -> Option<String> {
+    let args: Vec<String> = args.iter().map(|arg| arg.to_string()).collect();
+    let parsed = super::args::parse_args(&args);
+    super::selector::session_selector_from_args(&parsed.rest, &parsed.flags)
 }
 
 /// The target for a session ref of `server_id` when it is a connected computer.
@@ -329,6 +321,26 @@ mod tests {
         assert!(error.contains("more than one"), "{error}");
         let error = pick_computer(&[], "omarchy", None).unwrap_err().to_string();
         assert!(error.contains("Settings > Remote"), "{error}");
+    }
+
+    #[test]
+    fn the_session_a_verb_names_is_found_after_flags_that_take_a_value() {
+        assert_eq!(
+            named_session(&["--body-file", "x.md", "S4k:P1:G2", "--lines", "3"]).as_deref(),
+            Some("S4k:P1:G2")
+        );
+        assert_eq!(
+            named_session(&["--lines", "3", "S4k:P1:G2"]).as_deref(),
+            Some("S4k:P1:G2")
+        );
+        assert_eq!(
+            named_session(&["hello", "--session-id", "S4k:P1:G2"]).as_deref(),
+            Some("S4k:P1:G2")
+        );
+        assert_eq!(
+            named_session(&["S4k:P1:G2", "some text"]).as_deref(),
+            Some("S4k:P1:G2")
+        );
     }
 
     #[test]

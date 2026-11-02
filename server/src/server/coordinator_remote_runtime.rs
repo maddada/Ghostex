@@ -79,8 +79,8 @@ pub(super) fn observe_remote_session(session: Option<&Value>) -> RemoteObservati
     }
 }
 
-/// The text of the last assistant message in a `readSessionChat` answer.
-pub(super) fn last_assistant_text(chat: &Value) -> Option<String> {
+/// The id and text of the last assistant message in a `readSessionChat` answer.
+pub(super) fn last_assistant_message(chat: &Value) -> Option<(Option<String>, String)> {
     chat.get("messages")
         .and_then(Value::as_array)?
         .iter()
@@ -98,8 +98,33 @@ pub(super) fn last_assistant_text(chat: &Value) -> Option<String> {
                 .filter(|text| !text.is_empty())
                 .collect::<Vec<_>>()
                 .join("\n\n");
-            (!text.is_empty()).then_some(text)
+            (!text.is_empty()).then(|| {
+                (
+                    message
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(str::to_string),
+                    text,
+                )
+            })
         })
+}
+
+/// When the row last moved: the later of its meaningful-activity and last-active times. It only
+/// moves forward, so a turn that ended between two passes still shows as newer than the last
+/// report.
+pub(super) fn activity_marker_ms(session: &Value) -> Option<i64> {
+    ["meaningfulActivityAt", "lastActiveAt"]
+        .iter()
+        .filter_map(|key| session.get(*key).and_then(Value::as_str))
+        .filter_map(iso_ms)
+        .max()
+}
+
+fn iso_ms(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value.trim())
+        .ok()
+        .map(|time| time.timestamp_millis())
 }
 
 /// The question a `readSessionChat` answer shows, with the key it is reported once by.
@@ -129,6 +154,9 @@ pub(super) fn waiting_prompt(chat: &Value) -> (String, String) {
 pub(super) struct RemoteSupervisorMemory {
     pub(super) not_working_since: HashMap<RemoteThreadKey, i64>,
     pub(super) in_flight: HashSet<RemoteThreadKey>,
+    /// The activity marker whose chat was last read for a finished turn, so an idle thread's chat
+    /// is read once per change, not every pass.
+    pub(super) checked_marker: HashMap<RemoteThreadKey, i64>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -143,6 +171,7 @@ pub(super) struct PendingRemoteReport {
     computer: ConnectedComputer,
     session: Option<Value>,
     pub(super) kind: RemoteReport,
+    marker: Option<i64>,
 }
 
 pub(crate) fn start_coordinator_remote_runtime(state: Arc<AppState>) {
@@ -283,7 +312,16 @@ pub(super) fn tick(
             {
                 let _ = crate::coordinators::set_remote_thread_title(&db, &key, title);
             }
-            let observation = observe_remote_session(session.as_ref());
+            let mut observation = observe_remote_session(session.as_ref());
+            // A row missing from the snapshot is closed only once its computer's session list
+            // says so (stopped, or gone); a snapshot can leave out a running session.
+            if session.is_none() {
+                observation = match confirm_missing_session(&computer, &thread) {
+                    Some(observation) => observation,
+                    None => continue,
+                };
+            }
+            let marker = session.as_ref().and_then(activity_marker_ms);
             let mut observed_working = thread.observed_working;
             let report = match observation {
                 RemoteObservation::Working => {
@@ -295,7 +333,10 @@ pub(super) fn tick(
                     memory.not_working_since.remove(&key);
                     Some(RemoteReport::Waiting)
                 }
-                RemoteObservation::Idle if thread.observed_working => {
+                RemoteObservation::Idle
+                    if thread.observed_working
+                        || activity_moved_since_report(&thread, marker, &memory, &key) =>
+                {
                     let since = *memory.not_working_since.entry(key.clone()).or_insert(now);
                     (now - since >= FINISH_STABILITY_MS).then_some(RemoteReport::Finished)
                 }
@@ -329,11 +370,72 @@ pub(super) fn tick(
                     computer: computer.clone(),
                     session,
                     kind,
+                    marker,
                 });
             }
         }
     }
     reports
+}
+
+/// What a finished report carries: the new reply's id and text, `(None, None)` for a turn seen
+/// working that left no new reply, or `None` when there is nothing to report (the row moved, but
+/// its last reply is the one already reported and no work was seen: a rename or a read).
+pub(super) fn finished_reply(
+    last: Option<(Option<String>, String)>,
+    reported_message_id: Option<&str>,
+    observed_working: bool,
+) -> Option<(Option<String>, Option<String>)> {
+    match last {
+        Some((id, text)) if id.is_none() || id.as_deref() != reported_message_id => {
+            Some((id, Some(text)))
+        }
+        _ if observed_working => Some((None, None)),
+        _ => None,
+    }
+}
+
+/// The row moved after the last finished report and its chat was not read at that marker yet.
+fn activity_moved_since_report(
+    thread: &RemoteThreadRecord,
+    marker: Option<i64>,
+    memory: &RemoteSupervisorMemory,
+    key: &RemoteThreadKey,
+) -> bool {
+    let Some(marker) = marker else {
+        return false;
+    };
+    let reported = thread.reported_at.as_deref().and_then(iso_ms);
+    reported.is_none_or(|reported| marker > reported)
+        && memory.checked_marker.get(key) != Some(&marker)
+}
+
+/// What a thread missing from the snapshot is: closed when its computer's session list has it
+/// stopped or not at all, sleeping or idle when it is still there; `None` when the list could not
+/// be read, so nothing is judged this pass.
+fn confirm_missing_session(
+    computer: &ConnectedComputer,
+    thread: &RemoteThreadRecord,
+) -> Option<RemoteObservation> {
+    let listed = remote_rpc(
+        computer,
+        "/api/listSessions",
+        json!({ "projectId": thread.project_id, "includeStopped": true }),
+    )?;
+    let row = listed
+        .get("sessions")
+        .and_then(Value::as_array)?
+        .iter()
+        .find(|row| row.get("sessionId").and_then(Value::as_str) == Some(&thread.session_id))
+        .cloned();
+    Some(match row {
+        None => RemoteObservation::Closed,
+        Some(row) => match crate::presentation::effective_lifecycle_state(&row).as_str() {
+            "running" => RemoteObservation::Idle,
+            "sleeping" => RemoteObservation::Sleeping,
+            _ => RemoteObservation::Closed,
+        },
+    })
 }
 
 fn sender_for(report: &PendingRemoteReport) -> MessageSender {
@@ -382,9 +484,24 @@ async fn deliver(
         .ok()
         .flatten(),
     };
+    let mut message_id = None;
     let (body, prompt_key, excerpt) = match report.kind {
         RemoteReport::Finished => {
-            let message = chat.as_ref().and_then(last_assistant_text);
+            if let (Some(marker), Ok(mut memory)) = (report.marker, memory.lock()) {
+                memory.checked_marker.insert(key.clone(), marker);
+            }
+            let Some(reply) = finished_reply(
+                chat.as_ref().and_then(last_assistant_message),
+                report.thread.reported_message_id.as_deref(),
+                report.thread.observed_working,
+            ) else {
+                if let Ok(mut memory) = memory.lock() {
+                    memory.in_flight.remove(&key);
+                }
+                return;
+            };
+            message_id = reply.0;
+            let message = reply.1;
             (
                 report_body(
                     &ThreadReport::Finished {
@@ -427,6 +544,7 @@ async fn deliver(
         key.2,
         prompt_key
             .clone()
+            .or_else(|| message_id.clone())
             .or_else(|| report.thread.reported_at.clone())
             .unwrap_or_else(|| "first".to_string())
     );
@@ -451,7 +569,13 @@ async fn deliver(
         if closed {
             let _ = set_remote_thread_resolved(&db, &key, true);
         } else {
-            let _ = record_remote_thread_report(&db, &key, prompt_key.as_deref(), &excerpt);
+            let _ = record_remote_thread_report(
+                &db,
+                &key,
+                prompt_key.as_deref(),
+                message_id.as_deref(),
+                &excerpt,
+            );
         }
         let repository = DomainRepository::new(&db, settle_state.metadata.server_id.as_str());
         let _ = schedule_presentation_session_delta(
@@ -512,14 +636,46 @@ mod tests {
             {"role": "user", "blocks": [{"type": "text", "text": "Do it"}]},
             {"role": "assistant", "blocks": [{"type": "text", "text": "First"}]},
             {"role": "tool", "blocks": [{"type": "tool-result", "output": "x"}]},
-            {"role": "assistant", "blocks": [{"type": "text", "text": "Done: all green."}]},
+            {"id": "m2", "role": "assistant", "blocks": [{"type": "text", "text": "Done: all green."}]},
             {"role": "assistant", "queued": true, "blocks": [{"type": "text", "text": "not yet"}]},
         ]});
         assert_eq!(
-            last_assistant_text(&chat).as_deref(),
-            Some("Done: all green.")
+            last_assistant_message(&chat),
+            Some((Some("m2".to_string()), "Done: all green.".to_string()))
         );
-        assert_eq!(last_assistant_text(&json!({"messages": []})), None);
+        // The activity marker is the later of the two times, so it only moves forward.
+        assert_eq!(
+            activity_marker_ms(&json!({
+                "meaningfulActivityAt": "2026-11-03T10:00:00.000Z",
+                "lastActiveAt": "2026-11-03T10:00:05.000Z",
+            })),
+            Some(1_793_700_005_000)
+        );
+        assert_eq!(activity_marker_ms(&json!({})), None);
+    }
+
+    #[test]
+    fn a_new_reply_is_reported_once_whether_or_not_a_pass_saw_the_turn_work() {
+        let reply = |id: &str| Some((Some(id.to_string()), format!("reply {id}")));
+        // A short turn that ended between two passes: never seen working, a new reply.
+        assert_eq!(
+            finished_reply(reply("m2"), Some("m1"), false),
+            Some((Some("m2".to_string()), Some("reply m2".to_string())))
+        );
+        // The same reply again: nothing new to say.
+        assert_eq!(finished_reply(reply("m2"), Some("m2"), false), None);
+        // Seen working but no new reply: a finished report without its message.
+        assert_eq!(
+            finished_reply(reply("m2"), Some("m2"), true),
+            Some((None, None))
+        );
+        assert_eq!(finished_reply(None, None, false), None);
+        // The first reply of a thread that never reported.
+        assert_eq!(
+            finished_reply(reply("m1"), None, false),
+            Some((Some("m1".to_string()), Some("reply m1".to_string())))
+        );
+        assert_eq!(last_assistant_message(&json!({"messages": []})), None);
         let (first_key, summary) = waiting_prompt(&json!({"prompt": {"kind": "unknown"}}));
         assert!(first_key.starts_with("prompt:"));
         assert!(!summary.is_empty());

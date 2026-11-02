@@ -25,32 +25,58 @@ fn sender(row: &Value) -> MessageSender {
     }
 }
 
-/// A thread ref of a connected computer: its server, project and session ids, plus the flags that
-/// reach that computer. `None` for a ref of this computer or of no connected one.
-fn remote_thread_ref(
-    reference: &str,
-) -> Option<(String, String, String, crate::ghostex_cli::args::Flags)> {
+/// A session ref of another computer: its server, project and session ids, plus the flags that
+/// reach that computer when it is connected with Agent access on (`None` while it is away).
+struct RemoteRef {
+    server_id: String,
+    project_id: String,
+    session_id: String,
+    flags: Option<crate::ghostex_cli::args::Flags>,
+}
+
+/// `reference` is a session of another computer that this computer either links already (so a
+/// thread whose computer is away can still be resolved or unlinked here) or can reach now.
+///
+/// CDXC:RemoteMachines 2026-11-03 WHY:
+/// Deciding by "its computer is connected" left a thread on a computer that went away (or turned off Agent access) impossible to resolve or unlink: the command fell into the local path and failed. The coordinator's own computer holds the link, so its row is enough; only closing or waking the session there needs the computer.
+fn remote_ref(reference: &str, linked_only: bool) -> Option<RemoteRef> {
     if !crate::ghostex_cli::rpc::is_gxserver_global_session_ref(reference) {
         return None;
     }
     let mut parts = reference.splitn(3, ':');
     let (server_id, project_id, session_id) = (parts.next()?, parts.next()?, parts.next()?);
-    let target = crate::ghostex_cli::rpc::resolve_gxserver_server_target(
+    if crate::ghostex_cli::rpc::local_gxserver_server_id().as_deref() == Some(server_id) {
+        return None;
+    }
+    let flags = crate::ghostex_cli::rpc::resolve_gxserver_server_target(
         &crate::ghostex_cli::args::Flags::default(),
         &json!({ "globalRef": reference }),
     )
-    .ok()?;
-    if target.kind != "computer" {
-        return None;
-    }
-    let mut flags = crate::ghostex_cli::args::Flags::default();
-    flags.insert_text("computer", server_id);
-    Some((
-        server_id.to_string(),
-        project_id.to_string(),
-        session_id.to_string(),
+    .ok()
+    .filter(|target| target.kind == "computer")
+    .map(|_| {
+        let mut flags = crate::ghostex_cli::args::Flags::default();
+        flags.insert_text("computer", server_id);
+        flags
+    });
+    let linked = call_gxserver_rpc(
+        "/api/listRemoteCoordinatorThreads",
+        &json!({}),
+        &crate::ghostex_cli::args::Flags::default(),
+    )
+    .ok()
+    .and_then(|listed| listed.get("threads").and_then(Value::as_array).cloned())
+    .is_some_and(|threads| {
+        threads
+            .iter()
+            .any(|thread| thread.get("globalRef").and_then(Value::as_str) == Some(reference))
+    });
+    (linked || (!linked_only && flags.is_some())).then(|| RemoteRef {
+        server_id: server_id.to_string(),
+        project_id: project_id.to_string(),
+        session_id: session_id.to_string(),
         flags,
-    ))
+    })
 }
 
 fn update_remote_thread(
@@ -324,13 +350,13 @@ pub(super) fn link(parsed: &ParsedArgs) -> CliResult<()> {
         CliError::Other("Usage: ghostex coordinator link <session-ref> [--task <text>]".into())
     })?;
     let (coordinator, coordinator_flags) = target_coordinator(parsed)?;
-    if let Some((server_id, project_id, session_id, _)) = remote_thread_ref(&reference) {
+    if let Some(remote) = remote_ref(&reference, false) {
         let result = call_gxserver_rpc(
             "/api/linkRemoteCoordinatorThread",
             &json!({
                 "coordinatorProjectId": coordinator["projectId"],
                 "coordinatorSessionId": coordinator["sessionId"],
-                "serverId": server_id, "projectId": project_id, "sessionId": session_id,
+                "serverId": remote.server_id, "projectId": remote.project_id, "sessionId": remote.session_id,
                 "task": flag_text(&parsed.flags, "task").unwrap_or_default(),
             }),
             &coordinator_flags,
@@ -382,8 +408,13 @@ pub(super) fn unlink(parsed: &ParsedArgs) -> CliResult<()> {
         ));
     };
     let (coordinator, _) = target_coordinator(parsed)?;
-    if let Some((server_id, project_id, session_id, _)) = remote_thread_ref(reference) {
-        let result = update_remote_thread(&server_id, &project_id, &session_id, "unlink")?;
+    if let Some(remote) = remote_ref(reference, true) {
+        let result = update_remote_thread(
+            &remote.server_id,
+            &remote.project_id,
+            &remote.session_id,
+            "unlink",
+        )?;
         if parsed.flags.truthy("json") {
             print_json(&result);
         } else {
@@ -421,37 +452,48 @@ pub(super) fn set_resolved(parsed: &ParsedArgs, resolved: bool) -> CliResult<()>
     let reference = parsed.rest.first().cloned().ok_or_else(|| {
         CliError::Other(format!("Usage: ghostex coordinator {verb} <thread-ref>"))
     })?;
-    if let Some((server_id, project_id, session_id, remote_flags)) = remote_thread_ref(&reference) {
+    if let Some(remote) = remote_ref(&reference, true) {
         let close_session = resolved && !parsed.flags.truthy("keepOpen");
         let result = update_remote_thread(
-            &server_id,
-            &project_id,
-            &session_id,
+            &remote.server_id,
+            &remote.project_id,
+            &remote.session_id,
             if resolved { "resolve" } else { "reopen" },
         )?;
-        let session = json!({ "projectId": project_id, "sessionId": session_id });
-        // Its own computer closes or wakes the session, as for a thread here.
-        let session_result = if close_session {
-            call_gxserver_rpc("/api/killSession", &session, &remote_flags).map(|_| ())
-        } else if !resolved {
-            call_gxserver_rpc("/api/wakeSession", &session, &remote_flags).map(|_| ())
-        } else {
-            Ok(())
+        let session = json!({ "projectId": remote.project_id, "sessionId": remote.session_id });
+        // Its own computer closes or wakes the session, as for a thread here; while it is away
+        // only the link here changes.
+        let session_result = match (&remote.flags, close_session, resolved) {
+            (None, true, _) | (None, _, false) => Err(CliError::Other("away".into())),
+            (Some(flags), true, _) => {
+                call_gxserver_rpc("/api/killSession", &session, flags).map(|_| ())
+            }
+            (Some(flags), false, false) => {
+                call_gxserver_rpc("/api/wakeSession", &session, flags).map(|_| ())
+            }
+            _ => Ok(()),
         };
+        let away = remote.flags.is_none();
         if parsed.flags.truthy("json") {
+            let mut result = result;
+            result["computerConnected"] = json!(!away);
             print_json(&result);
         } else {
-            match (resolved, close_session, &session_result) {
-                (true, true, Ok(())) => {
+            match (resolved, close_session, away, &session_result) {
+                (true, true, true, _) | (false, _, true, _) => println!(
+                    "{} {reference} here. Its computer isn't connected (or its Agent access is off), so its session there was left as it is.",
+                    if resolved { "Marked done" } else { "Reopened" }
+                ),
+                (true, true, false, Ok(())) => {
                     println!("Marked {reference} done and closed its session on its computer.")
                 }
-                (true, true, Err(error)) => println!(
+                (true, true, false, Err(error)) => println!(
                     "Marked {reference} done; its session on its computer did not close: {error}"
                 ),
-                (true, false, _) => {
+                (true, false, _, _) => {
                     println!("Marked {reference} done; its session stays open on its computer.")
                 }
-                (false, _, _) => println!("Reopened {reference}."),
+                (false, _, false, _) => println!("Reopened {reference}."),
             }
         }
         return Ok(());

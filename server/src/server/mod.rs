@@ -141,6 +141,7 @@ pub(crate) mod machine_integrations_http;
 pub(crate) mod macos_login_recovery;
 pub(crate) mod managed_tools_http;
 mod open_conversation_http;
+mod peer_http;
 pub mod presentation_delta;
 mod previous_session_restore_http;
 mod project_docs_http;

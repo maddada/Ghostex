@@ -347,6 +347,7 @@ pub async fn run_gxserver_foreground(
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
     coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
+    tokio::spawn(peer_http::start_peer_listener(state.clone()));
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
     crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());

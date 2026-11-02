@@ -119,13 +119,6 @@ impl Registration {
         let name = text("name")
             .map(|name| name.chars().take(MAX_NAME_CHARS).collect::<String>())
             .unwrap_or_else(|| server_id.clone());
-        let base_url = text("baseUrl").ok_or("baseUrl is required.")?;
-        let base_url = loopback_base_url(&base_url)
-            .ok_or("baseUrl must be http://127.0.0.1:<port> or http://localhost:<port>.")?;
-        let token = text("token").ok_or("token is required.")?;
-        if token.len() > 512 || token.chars().any(char::is_whitespace) {
-            return Err("token is not a gxserver token.".to_string());
-        }
         let direction = match text("direction").as_deref() {
             None | Some("outbound") => Direction::Outbound,
             Some("inbound") => Direction::Inbound,
@@ -135,6 +128,20 @@ impl Registration {
             .get("agentAccess")
             .and_then(Value::as_bool)
             .unwrap_or(true);
+        // A computer with Agent access off is registered only so its refusals can name it: it
+        // has no address and no token.
+        let (base_url, token) = if agent_access {
+            let base_url = text("baseUrl").ok_or("baseUrl is required.")?;
+            let base_url = loopback_base_url(&base_url)
+                .ok_or("baseUrl must be http://127.0.0.1:<port> or http://localhost:<port>.")?;
+            let token = text("token").ok_or("token is required.")?;
+            if !is_token(&token) {
+                return Err("token is not a gxserver token.".to_string());
+            }
+            (base_url, token)
+        } else {
+            (String::new(), String::new())
+        };
         let ttl = params
             .get("ttlMs")
             .and_then(Value::as_u64)
@@ -151,6 +158,10 @@ impl Registration {
             ttl,
         })
     }
+}
+
+fn is_token(token: &str) -> bool {
+    token.len() <= 512 && !token.chars().any(char::is_whitespace)
 }
 
 /// Server ids are `S` plus base-36 digits (`ids::create_server_id`).
@@ -173,32 +184,12 @@ fn loopback_base_url(value: &str) -> Option<String> {
     (port != 0).then(|| format!("http://127.0.0.1:{port}"))
 }
 
-/// Adds or renews a computer. An outbound registration also gets (or keeps) the token that
-/// computer's agents use to reach this one, which the desktop app passes on to it.
-pub(crate) fn register(registration: Registration) -> Option<String> {
+/// Adds or renews a computer: where this gxserver reaches it and the token that computer gave
+/// this one (`issue_grant` on its side).
+pub(crate) fn register(registration: Registration) {
     let mut registry = registry();
     let now = Instant::now();
     prune(&mut registry, now);
-    let expires_at = now + registration.ttl;
-    let peer_token = (registration.direction == Direction::Outbound).then(|| {
-        // A renewal hands back the token the other computer already holds, so it is never cut
-        // off between renewals.
-        let token = registry
-            .grants
-            .get(&registration.server_id)
-            .map(|grant| grant.token.clone())
-            .unwrap_or_else(new_peer_token);
-        registry.grants.insert(
-            registration.server_id.clone(),
-            PeerGrant {
-                token: token.clone(),
-                name: registration.name.clone(),
-                agent_access: registration.agent_access,
-                expires_at,
-            },
-        );
-        token
-    });
     registry.computers.insert(
         registration.server_id.clone(),
         ConnectedComputer {
@@ -208,10 +199,52 @@ pub(crate) fn register(registration: Registration) -> Option<String> {
             token: registration.token,
             direction: registration.direction,
             agent_access: registration.agent_access,
-            expires_at,
+            expires_at: now + registration.ttl,
         },
     );
-    peer_token
+}
+
+/// The token `server_id`'s agents use to reach this gxserver: kept and renewed, or a new one when
+/// `rotate` (a new way back was opened, or the machine reconnected) or when there is none. With
+/// Agent access off the grant is dropped and there is no token.
+///
+/// CDXC:RemoteMachines 2026-11-03 WHY:
+/// The token rotates whenever the way back is (re)opened: a dead reverse forward frees its port on the other computer, where any local user could listen and collect the token the other side keeps sending, so a token must never outlive the tunnel it was handed over through.
+pub(crate) fn issue_grant(
+    server_id: &str,
+    name: &str,
+    agent_access: bool,
+    rotate: bool,
+    ttl: Duration,
+) -> Option<String> {
+    let mut registry = registry();
+    let now = Instant::now();
+    prune(&mut registry, now);
+    if !agent_access {
+        registry.grants.remove(server_id);
+        return None;
+    }
+    let token = registry
+        .grants
+        .get(server_id)
+        .filter(|_| !rotate)
+        .map(|grant| grant.token.clone())
+        .unwrap_or_else(new_peer_token);
+    registry.grants.insert(
+        server_id.to_string(),
+        PeerGrant {
+            token: token.clone(),
+            name: name.chars().take(MAX_NAME_CHARS).collect(),
+            agent_access,
+            expires_at: now + ttl.clamp(Duration::from_secs(10), MAX_REGISTRATION_TTL),
+        },
+    );
+    Some(token)
+}
+
+/// Drops the token `server_id` was given, so its agents are refused from now on.
+pub(crate) fn revoke_grant(server_id: &str) -> bool {
+    registry().grants.remove(server_id).is_some()
 }
 
 /// Forgets a computer and the token it was given, so its agents are refused from now on.

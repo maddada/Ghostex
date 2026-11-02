@@ -550,7 +550,7 @@ pub fn coordinator_view(
         "waiting" => ThreadState::Waiting.order(),
         "finished" => ThreadState::Finished.order(),
         "working" => ThreadState::Working.order(),
-        "sleeping" => ThreadState::Sleeping.order(),
+        "sleeping" | "unreachable" => ThreadState::Sleeping.order(),
         "closed" => ThreadState::Closed.order(),
         _ => ThreadState::Done.order(),
     };

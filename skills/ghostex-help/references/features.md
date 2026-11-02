@@ -3113,7 +3113,7 @@ version of the Projects features in Cursor and Claude Code.
   project with the same name (or the one you name), its agents and its
   folders, sits under the coordinator in the sidebar with the computer's name
   after its title in reports, and reports back like any thread. While the
-  computer is not connected, its reports wait. From a terminal: `ghostex
+  computer is not connected, its reports wait; you can still mark it done. From a terminal: `ghostex
   coordinator start-thread --computer <name> --title "<title>" --task "<task>"
   [--project-id <id>]`.
 - **Work that never arrives is caught**: when the coordinator starts a thread,
@@ -3587,9 +3587,12 @@ sessions, so any client can control agents on any machine.
   start, message and read sessions there, and the machine's agents can do the
   same on this computer, while the connection is up (`ghostex computers` lists
   them; agents add `--computer <name>` to `ghostex sessions`, `ghostex agents
-  create` and `ghostex coordinator start-thread`). Connecting is the
-  permission: turn **Agent access** off in the machine's Edit dialog to stop
-  agents on either computer from using the other.
+  create` and `ghostex coordinator start-thread`). They can start, message,
+  read, sleep, wake and close sessions there, nothing else, and both computers
+  need Ghostex 10.44 or later. Connecting is the permission: an agent that can
+  type into a session on the other computer can run commands there, as you
+  could. Turn **Agent access** off in the machine's Edit dialog to stop agents
+  on either computer from using the other.
   Files and folders you drop onto a remote terminal or add with its attach
   (paperclip) button are uploaded to that computer first, so the terminal gets
   references the agent there can open.

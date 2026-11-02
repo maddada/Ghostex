@@ -77,7 +77,9 @@ OTHER COMPUTERS
   unchanged; replies to you use your own ref the same way. Run by a
   coordinator, create --computer makes the session one of its threads.
   --computer takes the name, the start of it, or the server id. A computer
-  whose Agent access switch is off refuses with a plain error.
+  whose Agent access switch is off refuses with a plain error. Both computers
+  need Ghostex 10.44 or later. Agents there can start, message, read, sleep,
+  wake and close sessions, nothing else (no settings, projects or git).
 
 SENDER BLOCK
   send and create --task/--body-file attach your identity automatically, after

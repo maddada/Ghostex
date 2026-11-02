@@ -16,6 +16,8 @@ pub(crate) const CONNECTED_COMPUTER_ENDPOINTS: &[&str] = &[
     "/api/registerConnectedComputer",
     "/api/unregisterConnectedComputer",
     "/api/listConnectedComputers",
+    "/api/issueComputerGrant",
+    "/api/revokeComputerGrant",
 ];
 
 pub(crate) fn handle_connected_computers_http(
@@ -38,12 +40,11 @@ pub(crate) fn handle_connected_computers_http(
         "/api/registerConnectedComputer" => {
             match Registration::from_params(&params, &state.metadata.server_id) {
                 Ok(registration) => {
-                    let peer_token = registry::register(registration);
+                    registry::register(registration);
                     json!({
                         "registered": true,
                         "serverId": state.metadata.server_id,
                         "name": this_computer_name(),
-                        "peerToken": peer_token,
                     })
                 }
                 Err(message) => {
@@ -61,6 +62,52 @@ pub(crate) fn handle_connected_computers_http(
                 .and_then(Value::as_str)
                 .unwrap_or_default();
             json!({ "unregistered": registry::unregister(server_id) })
+        }
+        "/api/issueComputerGrant" => {
+            let server_id = params
+                .get("serverId")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or_default();
+            if !registry::is_server_id(server_id) || server_id == state.metadata.server_id {
+                return routed_json(
+                    Some(endpoint_path),
+                    StatusCode::BAD_REQUEST,
+                    rpc_error(
+                        "badRequest",
+                        "serverId must be another computer's server id.",
+                        Some(request_id),
+                    ),
+                );
+            }
+            let name = params
+                .get("name")
+                .and_then(Value::as_str)
+                .unwrap_or(server_id);
+            let agent_access = params
+                .get("agentAccess")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let rotate = params.get("rotate").and_then(Value::as_bool) == Some(true);
+            let ttl = params
+                .get("ttlMs")
+                .and_then(Value::as_u64)
+                .map(std::time::Duration::from_millis)
+                .unwrap_or(registry::DEFAULT_REGISTRATION_TTL);
+            json!({
+                "serverId": state.metadata.server_id,
+                "name": this_computer_name(),
+                "peerToken": registry::issue_grant(server_id, name, agent_access, rotate, ttl),
+                // The way back lands on the listener that serves only the allowlist.
+                "peerPort": super::peer_listener::peer_listener_port(),
+            })
+        }
+        "/api/revokeComputerGrant" => {
+            let server_id = params
+                .get("serverId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            json!({ "revoked": registry::revoke_grant(server_id) })
         }
         _ => json!({
             "serverId": state.metadata.server_id,

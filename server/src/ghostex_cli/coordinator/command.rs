@@ -528,6 +528,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
         ("finished", "Finished"),
         ("working", "Working"),
         ("sleeping", "Sleeping"),
+        ("unreachable", "On a computer that isn't connected"),
         ("closed", "Closed"),
         ("done", "Done"),
     ] {

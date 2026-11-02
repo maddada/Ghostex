@@ -31,13 +31,20 @@ pub(crate) fn parse_relay_path(path: &str) -> Option<(&str, &str)> {
     .then_some((server_id, forwarded))
 }
 
+/// Whether the relay forwards `forwarded`: only the endpoints another computer's agents may use,
+/// and never another relay, so a request never chains from A through B to C.
+pub(crate) fn relay_forwards(forwarded: &str) -> bool {
+    !forwarded.starts_with(RELAY_ROUTE_PREFIX) && super::scope::is_peer_allowed(forwarded)
+}
+
 /// The relay base a CLI sends every request of that computer to.
 pub(crate) fn relay_base_url(local_base_url: &str, server_id: &str) -> String {
     format!("{local_base_url}{RELAY_ROUTE_PREFIX}{server_id}{RELAY_SEGMENT}")
 }
 
 /// Forwards the request. The caller has already checked it carries this gxserver's own token: a
-/// token another computer was given never relays onward, so access never chains past one hop.
+/// token another computer was given never relays onward. The other computer is reached with the
+/// token it gave this one, which its gxserver limits to the same allowlist.
 pub(crate) async fn relay(
     method: Method,
     path: &str,
@@ -54,6 +61,14 @@ pub(crate) async fn relay(
             request_id,
         );
     };
+    if !relay_forwards(forwarded) {
+        return refusal(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            format!("Agents can't use {forwarded} on another computer."),
+            request_id,
+        );
+    }
     let Some(computer) = registry::find(server_id) else {
         return refusal(
             StatusCode::NOT_FOUND,

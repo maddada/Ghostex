@@ -325,8 +325,8 @@ impl GhostexGpuiApp {
         self.stop_remote_browser_tunnel(remote_machine_id);
         if let Some(mut connection) = self.remote_gxserver_connections.remove(remote_machine_id) {
             connection.terminate();
+            self.unregister_connected_computer(remote_machine_id, connection.local_port);
         }
-        self.unregister_connected_computer(remote_machine_id);
         // The Easy Connect forwarder shares the machine's connection lifetime.
         gpui_stop_easy_connect_forward(remote_machine_id);
     }
@@ -337,12 +337,13 @@ impl GhostexGpuiApp {
         for (_, tunnel) in self.remote_browser.tunnels.drain() {
             tunnel.stop();
         }
-        let machine_ids: Vec<String> = self.remote_gxserver_connections.keys().cloned().collect();
-        for (_, mut connection) in self.remote_gxserver_connections.drain() {
+        let mut ended = Vec::new();
+        for (machine_id, mut connection) in self.remote_gxserver_connections.drain() {
             connection.terminate();
+            ended.push((machine_id, connection.local_port));
         }
-        for machine_id in machine_ids {
-            self.unregister_connected_computer(&machine_id);
+        for (machine_id, local_port) in ended {
+            self.unregister_connected_computer(&machine_id, local_port);
         }
         // The Easy Connect forwarders are process-wide, shared with another open window's
         // connection to the same machine (app/workspace_windows/).

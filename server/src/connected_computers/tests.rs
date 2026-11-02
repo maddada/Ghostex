@@ -59,14 +59,15 @@ fn a_computer_cannot_register_itself_and_errors_never_quote_the_token() {
     assert!(!error.contains("secret-y"));
 }
 
+const TTL: std::time::Duration = std::time::Duration::from_secs(60);
+
 #[test]
-fn a_renewal_keeps_the_token_the_other_computer_holds() {
+fn a_renewal_keeps_the_token_and_a_new_way_back_rotates_it() {
     let _serial = serial();
     registry::reset_for_tests();
-    let first =
-        registry::register(outbound("S4k", true)).expect("an outbound computer gets a token");
-    let second = registry::register(outbound("S4k", true)).expect("renewal");
-    assert_eq!(first, second);
+    let first = registry::issue_grant("S4k", "Omarchy", true, false, TTL).expect("a token");
+    let renewed = registry::issue_grant("S4k", "Omarchy", true, false, TTL).expect("renewal");
+    assert_eq!(first, renewed);
     assert!(first.starts_with("gxpeer_"));
     assert_eq!(
         authorize_peer_token(&first),
@@ -75,25 +76,44 @@ fn a_renewal_keeps_the_token_the_other_computer_holds() {
             name: "Omarchy".into()
         })
     );
+    let rotated = registry::issue_grant("S4k", "Omarchy", true, true, TTL).expect("rotated");
+    assert_ne!(rotated, first);
+    assert_eq!(
+        authorize_peer_token(&first),
+        None,
+        "the old token stops working"
+    );
+    assert!(authorize_peer_token(&rotated).is_some());
     assert_eq!(authorize_peer_token("gxpeer_wrong"), None);
+    // Registering a computer hands out nothing.
+    registry::register(outbound("S7a", true));
+    assert!(authorize_peer_token("remote-token-value-0123456789abcdefghij").is_none());
     registry::reset_for_tests();
 }
 
 #[test]
-fn turning_agent_access_off_refuses_the_other_computer_and_the_relay() {
+fn turning_agent_access_off_drops_the_token_and_refuses_the_relay() {
     let _serial = serial();
     registry::reset_for_tests();
-    let token = registry::register(outbound("S4k", true)).unwrap();
-    registry::register(outbound("S4k", false));
+    let token = registry::issue_grant("S4k", "Omarchy", true, false, TTL).unwrap();
+    registry::register(outbound("S4k", true));
     assert_eq!(
-        authorize_peer_token(&token),
-        Some(PeerAuthorization::AccessOff {
-            name: "Omarchy".into()
-        })
+        registry::issue_grant("S4k", "Omarchy", false, false, TTL),
+        None
     );
-    assert!(!find("S4k").unwrap().agent_access);
-    assert!(registry::unregister("S4k"));
+    registry::register(outbound("S4k", false));
     assert_eq!(authorize_peer_token(&token), None);
+    let off = find("S4k").unwrap();
+    assert!(!off.agent_access);
+    assert!(
+        off.token().is_empty(),
+        "no token is kept for a computer with access off"
+    );
+    // With access off a registration needs neither an address nor a token.
+    assert!(
+        Registration::from_params(&json!({"serverId": "S4k", "agentAccess": false}), "S9l").is_ok()
+    );
+    assert!(registry::unregister("S4k"));
     assert!(find("S4k").is_none());
     registry::reset_for_tests();
 }
@@ -123,6 +143,14 @@ fn relay_paths_name_a_computer_and_an_api_path() {
         parse_relay_path("/api/computers/S4k/relay/api/../control/stop"),
         None
     );
+    // Only the allowlist is forwarded, and never another relay.
+    assert!(super::relay::relay_forwards("/api/readSessionChat"));
+    assert!(!super::relay::relay_forwards(
+        "/api/computers/S5c/relay/api/sendSessionText"
+    ));
+    assert!(!super::relay::relay_forwards("/api/control/stop"));
+    assert!(!super::relay::relay_forwards("/api/enableSshAccess"));
+    assert!(!super::relay::relay_forwards("/api/installExtension"));
     assert_eq!(
         relay_base_url("http://127.0.0.1:58744", "S4k"),
         "http://127.0.0.1:58744/api/computers/S4k/relay"
