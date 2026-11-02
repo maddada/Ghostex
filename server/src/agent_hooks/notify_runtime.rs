@@ -275,6 +275,18 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     if let Some(transcript_path) = transcript_path.clone() {
         state.insert("agentSessionPath".to_string(), json!(transcript_path));
     }
+    /*
+    CDXC:SessionTitles 2026-11-02 WHY:
+    The OpenCode TUI plugin names its conversation in the hook payload (`title`, read from
+    OpenCode's own session record), but this runtime posted only the title remembered in the
+    sidecar state, and nothing ever wrote a payload title there. Every OpenCode title was
+    therefore dropped (no state file) or replaced by the first one it had (stale state), so the
+    sidebar kept its placeholder or an old name. Keep the payload's title; the sidecar stays the
+    source only for agents whose payload carries none.
+    */
+    if let Some(title) = first_string([payload.get("title")]) {
+        state.insert("title".to_string(), json!(title));
+    }
 
     let notification_is_idle_input = matches!(agent_key.as_str(), "claude" | "openclaude")
         && event_name.to_ascii_lowercase().contains("notification")

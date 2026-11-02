@@ -1080,7 +1080,7 @@ ready. Custom tags then appear in the same drag list as the built-in ones: drag
 to reorder, use the switch or eye to hide them from menus and filters, and the
 trash button to delete one (sessions that carried it become untagged). The
 mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
-custom tag by name. Claude and Codex name their own sessions; Ghostex
+custom tag by name. Claude, Codex and OpenCode name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
 input. If Codex has not named a session about a minute after a prompt, Ghostex
 names it in the background with the Title Generation Agent, without blocking
@@ -1088,6 +1088,8 @@ typing, and Codex's own name replaces it if Codex names the session later.
 Pi uses the Title Generation Agent for first-prompt names. OMP names its own
 sessions once a prompt says enough to name, and Ghostex syncs that name; renaming
 an OMP session from Ghostex sends OMP's own `/rename <name>`, which OMP keeps.
+An OpenCode session takes the name OpenCode holds for it, including a name it
+gained after the session opened, such as one written through OpenCode's API.
 Manual Generate Name and `/rename` in chat remain available for Claude and Codex.
 In the Rename dialog, a name of up to 70 characters renames directly. Paste
 longer text, or leave the box empty, and Generate name turns that text (or,
