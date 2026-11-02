@@ -18,6 +18,10 @@
 
 <h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a>  &nbsp;·&nbsp; <a href="https://www.youtube.com/watch?v=cJgogrS4mao">Watch the Demo</a></h3>
 
+<br />
+
+<h3 align="center">Lots of useful extensions & views</h3>
+
 <p align="center">
   <a href="media/readme/gx-hero-1.webp">
     <picture>
@@ -25,6 +29,8 @@
     </picture>
   </a>
 </p>
+
+<h3 align="center">As minimal or feature-rich as you want it to be</h3>
 
 <p align="center">
   <a href="media/readme/gx-hero-2.jpeg">
@@ -34,30 +40,8 @@
   </a>
 </p>
 
-<p align="center">
-  <a href="media/readme/gx-hero-4.webp">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-4.webp" />
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <a href="media/readme/gx-hero-5.jpeg">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-5.jpeg" />
-    </picture>
-  </a>
-</p>
-
-<p align="center">
-  <a href="media/readme/gx-hero-6.jpeg">
-    <picture>
-      <img width="960" src="media/readme/gx-hero-6.jpeg" />
-    </picture>
-  </a>
-</p>
-
+<h3 align="center">First-class Coordinators with Visual Questions</h3>
+<p align="center">Coordinators fully manage your projects for you and spin up threads automatically.</br>Work best with the /ghostex-visuals skill</p>
 <p align="center">
   <a href="media/readme/gx-hero-7.webp">
     <picture>
@@ -70,6 +54,16 @@
   <a href="media/readme/gx-hero-8.webp">
     <picture>
       <img width="960" src="media/readme/gx-hero-8.webp" />
+    </picture>
+  </a>
+</p>
+
+<h3 align="center">Fully-featured Editor Built in (with annotations)</h3>
+
+<p align="center">
+  <a href="media/readme/gx-hero-6.jpeg">
+    <picture>
+      <img width="960" src="media/readme/gx-hero-6.jpeg" />
     </picture>
   </a>
 </p>
