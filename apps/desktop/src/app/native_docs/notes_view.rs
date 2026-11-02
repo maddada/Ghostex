@@ -575,22 +575,33 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
-        let Some(composer) = self.native_docs.composer.as_ref() else {
+        let Some(anchor) = self
+            .native_docs
+            .composer
+            .as_ref()
+            .map(|composer| composer.anchor)
+        else {
             self.native_docs_sync_composer_window(None, cx);
             return None;
         };
         let viewport = window.viewport_size();
         let width = (f32::from(viewport.width) - 24.0).clamp(280.0, 360.0);
-        let left = (f32::from(composer.anchor.center().x) - width / 2.0)
-            .clamp(12.0, (f32::from(viewport.width) - width - 12.0).max(12.0));
-        let top = (f32::from(composer.anchor.top()) + 12.0)
-            .min(f32::from(viewport.height) - 260.0)
-            .max(12.0);
+        let frame = match self.native_docs_composer_text_frame(width, cx) {
+            Some(frame) => frame,
+            None => {
+                // A global comment, or a note whose text is not laid out: by its button.
+                let left = (f32::from(anchor.center().x) - width / 2.0)
+                    .clamp(12.0, (f32::from(viewport.width) - width - 12.0).max(12.0));
+                let top = (f32::from(anchor.top()) + 12.0)
+                    .min(f32::from(viewport.height) - 260.0)
+                    .max(12.0);
+                Bounds::new(
+                    point(px(left), px(top)),
+                    gpui::size(px(width), px(COMPOSER_HEIGHT)),
+                )
+            }
+        };
         // Under glass the composer draws in its frosted window (`notes_windows.rs`).
-        let frame = Bounds::new(
-            point(px(left), px(top)),
-            gpui::size(px(width), px(COMPOSER_HEIGHT)),
-        );
         let hosted = notes_frosted();
         self.native_docs_sync_composer_window(hosted.then_some(frame), cx);
         if hosted {
@@ -604,6 +615,71 @@ impl GhostexGpuiApp {
                 .with_priority(2)
                 .into_any_element(),
         )
+    }
+
+    /// Where the composer goes beside the text it is about (`composer_placement.rs`), from the
+    /// editor's layout as last painted, so it follows the text as the document scrolls and
+    /// respects the Files zoom's line heights. Its first placement may scroll the document once to
+    /// show the text and the composer together. `None` when the composer is not about laid-out text.
+    fn native_docs_composer_text_frame(
+        &mut self,
+        width: f32,
+        cx: &mut Context<Self>,
+    ) -> Option<Bounds<Pixels>> {
+        use super::composer_placement::place_composer;
+        let range = self.native_docs.composer.as_ref()?.range.clone()?;
+        let document = self.native_docs.active_document()?;
+        let scroll = document.scroll.clone();
+        let editor = document.live.as_ref()?.read(cx);
+        let len = editor.text().len();
+        let first = editor.bounds_for_offset(range.start.min(len))?;
+        let last = editor
+            .bounds_for_offset(range.end.min(len))
+            .unwrap_or(first);
+        let area = scroll.bounds();
+        if area.size.height <= px(0.0) {
+            return None;
+        }
+        // Below the document's header and above the formatting bar that floats over its bottom.
+        let header_bottom = super::document_view::HEADER_BOUNDS
+            .with(|cell| cell.get())
+            .bottom();
+        let top = area.top().max(header_bottom);
+        let bottom = (area.bottom() - px(super::markdown_body::BODY_BOTTOM_PAD - 60.0)).max(top);
+        let visible = Bounds::from_corners(point(area.left(), top), point(area.right(), bottom));
+        // A selection over several lines spans the text column.
+        let (left, right) = if (last.top() - first.top()).abs() < px(1.0) {
+            (first.left().min(last.left()), first.left().max(last.left()))
+        } else {
+            let full = f32::from(area.size.width);
+            let column = if self.native_docs.constrain_width {
+                full.min(
+                    super::markdown_body::CONTENT_MAX_WIDTH * crate::ui_fonts::files_zoom_scale()
+                        + super::gutter::gutter_width(self.native_docs.line_numbers),
+                )
+            } else {
+                full
+            };
+            let center = f32::from(area.center().x);
+            (px(center - column / 2.0), px(center + column / 2.0))
+        };
+        let text = Bounds::from_corners(point(left, first.top()), point(right, last.bottom()));
+        let composer = self.native_docs.composer.as_mut()?;
+        let may_scroll = !std::mem::replace(&mut composer.revealed, true);
+        let placed = place_composer(
+            text,
+            visible,
+            gpui::size(px(width), px(COMPOSER_HEIGHT)),
+            may_scroll,
+        );
+        if placed.scroll_by != 0.0 {
+            let max = scroll.max_offset().y;
+            let mut offset = scroll.offset();
+            offset.y = (offset.y - px(placed.scroll_by)).clamp(-max, px(0.0));
+            scroll.set_offset(offset);
+            cx.notify();
+        }
+        Some(placed.frame)
     }
 
     /// The composer's card, with its text field made for `window`. `frosted` draws it for its

@@ -5,6 +5,7 @@ pub(crate) mod annotations;
 pub(crate) mod blocks;
 pub(crate) mod bridge;
 pub(crate) mod browser_area;
+pub(crate) mod composer_placement;
 pub(crate) mod conflicts;
 pub(crate) mod data_table;
 pub(crate) mod data_views;
