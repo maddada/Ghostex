@@ -23,6 +23,13 @@ fn tailcat_binary_candidates() -> Vec<PathBuf> {
             candidates.push(PathBuf::from(value));
         }
     }
+    // Beside gxserver: the Linux package (remote computers, Cloud Boxes) ships tailcat in its bin/.
+    if let Some(bin) = env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        candidates.push(bin.join(executable_name()));
+    }
     if let Some(path) = env::var_os("PATH") {
         candidates
             .extend(env::split_paths(&path).map(|directory| directory.join(executable_name())));

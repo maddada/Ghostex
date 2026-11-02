@@ -15,13 +15,14 @@ const HELP: &str = "Commands Ghostex runs on a Cloud Box. You don't run these yo
 
 USAGE
   ghostex box boot --ticket <ticket>
-  ghostex box prepare-session --request <file>
+  ghostex box prepare-session [--request <file>]
   ghostex box prepare-snapshot
   ghostex box finish-snapshot
   ghostex box idle-status
   ghostex box work-status
   ghostex box write-back [--ack <id,id>]
   ghostex box relay --listen <addr:port> --to <addr:port>
+  ghostex box idle-watch
 ";
 
 fn print_ok(mut value: Value) {
@@ -35,6 +36,17 @@ fn fail(message: String) -> CliResult<()> {
     println!("{}", json!({ "ok": false, "error": message }));
     crate::ghostex_cli::set_exit_code(1);
     Ok(())
+}
+
+/// Prints a verb's answer, or its failure.
+fn answer<T: serde::Serialize>(result: Result<T, String>) -> CliResult<()> {
+    match result {
+        Ok(value) => {
+            print_ok(serde_json::to_value(value).unwrap_or_default());
+            Ok(())
+        }
+        Err(message) => fail(message),
+    }
 }
 
 pub(crate) fn run(args: &[String]) -> CliResult<()> {
@@ -57,12 +69,27 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 Ok(ticket) => ticket,
                 Err(message) => return fail(message),
             };
-            match box_mode::boot::run_boot(&ticket) {
-                Ok(result) => print_ok(serde_json::to_value(result).unwrap_or_default()),
-                Err(message) => return fail(message),
-            }
-            Ok(())
+            answer(box_mode::boot::run_boot(&ticket))
         }
+        box_verbs::PREPARE_SESSION => answer(box_mode::prepare_session::run_prepare_session(
+            flags.string_value("request"),
+        )),
+        box_verbs::PREPARE_SNAPSHOT => answer(box_mode::snapshot::run_prepare_snapshot()),
+        box_verbs::FINISH_SNAPSHOT => answer(box_mode::snapshot::run_finish_snapshot()),
+        box_verbs::IDLE_STATUS => answer(box_mode::idle::run_idle_status()),
+        box_verbs::WORK_STATUS => answer(box_mode::work::run_work_status()),
+        box_verbs::WRITE_BACK => {
+            let ack: Vec<String> = flags
+                .string_value("ack")
+                .unwrap_or_default()
+                .split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty())
+                .map(str::to_string)
+                .collect();
+            answer(box_mode::logins::run_write_back(&ack))
+        }
+        box_verbs::IDLE_WATCH => box_mode::idle::run_idle_watch().map_err(CliError::Other),
         box_verbs::RELAY => {
             let (Some(listen), Some(target)) =
                 (flags.string_value("listen"), flags.string_value("to"))
@@ -73,12 +100,6 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
             };
             box_mode::relay::run_relay(listen, target).map_err(CliError::Other)
         }
-        box_verbs::PREPARE_SESSION
-        | box_verbs::PREPARE_SNAPSHOT
-        | box_verbs::FINISH_SNAPSHOT
-        | box_verbs::IDLE_STATUS
-        | box_verbs::WORK_STATUS
-        | box_verbs::WRITE_BACK => fail(format!("ghostex box {verb} isn't built yet")),
         other => fail(format!("Unknown box command: {other}")),
     }
 }

@@ -39,8 +39,11 @@ pub mod box_verbs {
     /// the box gxserver (loopback-only in the container) on the computer's loopback. Real
     /// providers use tailcat.
     pub const RELAY: &str = "relay";
+    /// Started by `boot` (one per box, never run by home): the idle countdown behind
+    /// [`super::BoxIdleStatus`], and the self-stop where the ticket asks for it.
+    pub const IDLE_WATCH: &str = "idle-watch";
 
-    pub const ALL: [&str; 8] = [
+    pub const ALL: [&str; 9] = [
         BOOT,
         PREPARE_SESSION,
         PREPARE_SNAPSHOT,
@@ -49,6 +52,7 @@ pub mod box_verbs {
         WORK_STATUS,
         WRITE_BACK,
         RELAY,
+        IDLE_WATCH,
     ];
 }
 

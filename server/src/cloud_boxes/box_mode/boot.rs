@@ -1,14 +1,20 @@
-//! `ghostex box boot --ticket <ticket>`: start the box's gxserver (and, without tailcat, the
-//! relay Docker publishes) and report how to reach it.
+//! `ghostex box boot --ticket <ticket>`: make the box this box (reset an identity copied from a
+//! snapshot or another box), start its gxserver and, for a real provider, tailcat with the
+//! allow-list of the user's devices; start the idle countdown; report how to reach it. Safe to
+//! run again: a resume re-runs it.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use ghostex_gx_protocol::cloud_box::{BoxBootResult, BoxBootTicket};
-use serde_json::Value;
+use serde_json::{json, Value};
+
+use super::{idle, state};
+use crate::ghostex_cli::{args::Flags, rpc};
 
 const ENDPOINT_WAIT: Duration = Duration::from_secs(60);
+const TAILCAT_WAIT: Duration = Duration::from_secs(60);
 
 /// The folder of the running `ghostex` (the package's `bin/`).
 fn bin_dir() -> Result<PathBuf, String> {
@@ -28,36 +34,56 @@ struct BoxIdentity {
     machine_id: String,
 }
 
-fn identity_file() -> PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/root"));
-    home.join(".ghostex-box").join("identity.json")
+/// gxserver's identity (its server id), its API token and tailcat's key and address: everything
+/// a client knows this box by. A copied set would make two boxes answer as one.
+fn copied_identity_files() -> Vec<PathBuf> {
+    let paths = crate::paths::get_gxserver_paths(None);
+    vec![
+        paths.identity_file.clone(),
+        paths.auth_token_file.clone(),
+        crate::tailcat::tailcat_key_file(&paths),
+        crate::tailcat::tailcat_address_file(&paths),
+    ]
 }
 
+/// Keeps this box's identity, or makes a new one when the disk came from another box (whose
+/// gxserver and tailcat identity files are removed, so both make new ones when they start).
+/// Returns the identity and whether a copied one was reset.
 fn read_or_reset_identity(box_id: &str) -> Result<(BoxIdentity, bool), String> {
-    let file = identity_file();
-    if let Some(identity) = std::fs::read_to_string(&file)
-        .ok()
-        .and_then(|text| serde_json::from_str::<BoxIdentity>(&text).ok())
+    let file = state::identity_file();
+    let previous = state::read_json::<BoxIdentity>(&file);
+    if let Some(identity) = previous
+        .as_ref()
         .filter(|identity| identity.box_id == box_id)
     {
-        return Ok((identity, false));
+        return Ok((
+            BoxIdentity {
+                box_id: identity.box_id.clone(),
+                machine_id: identity.machine_id.clone(),
+            },
+            false,
+        ));
     }
-    let existed = file.is_file();
+    for copied in copied_identity_files() {
+        match std::fs::remove_file(&copied) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "Can't reset the box identity ({}): {error}",
+                    copied.display()
+                ))
+            }
+        }
+    }
     let mut entropy = [0u8; 16];
     rand::Rng::fill_bytes(&mut rand::rng(), &mut entropy);
     let identity = BoxIdentity {
         box_id: box_id.to_string(),
         machine_id: ghostex_gx_cloud::ids::gx_id_from_entropy(&entropy),
     };
-    if let Some(parent) = file.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Can't write the box identity: {error}"))?;
-    }
-    std::fs::write(&file, serde_json::to_vec(&identity).unwrap_or_default())
-        .map_err(|error| format!("Can't write the box identity: {error}"))?;
-    Ok((identity, existed))
+    state::write_json(&file, &identity)?;
+    Ok((identity, previous.is_some()))
 }
 
 fn run_json(program: &Path, args: &[&str]) -> Result<Value, String> {
@@ -89,30 +115,56 @@ fn run_json(program: &Path, args: &[&str]) -> Result<Value, String> {
         })
 }
 
-/// Starts gxserver unless it runs, and waits for its endpoint (port and token).
-fn start_gxserver(bin: &Path) -> Result<Value, String> {
+/// The endpoint of a gxserver that answers. `gxserver endpoint` reads the runtime file the last
+/// start wrote, which survives a restart of the box (a `local` or Boat resume), so its port must
+/// also accept a connection.
+fn running_endpoint(gxserver: &Path) -> Option<Value> {
+    run_json(gxserver, &["endpoint"])
+        .ok()
+        .filter(|endpoint| endpoint.get("ok").and_then(Value::as_bool) == Some(true))
+        .filter(|endpoint| {
+            endpoint
+                .get("port")
+                .and_then(Value::as_u64)
+                .and_then(|port| u16::try_from(port).ok())
+                .is_some_and(|port| {
+                    std::net::TcpStream::connect_timeout(
+                        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+                        Duration::from_secs(2),
+                    )
+                    .is_ok()
+                })
+        })
+}
+
+/// Starts gxserver unless it runs (restarting it when the identity was just reset, since a
+/// running one still holds the copied identity), and waits for its endpoint (port and token).
+fn start_gxserver(bin: &Path, identity_reset: bool) -> Result<Value, String> {
     let gxserver = bin.join("gxserver");
-    if let Ok(endpoint) = run_json(&gxserver, &["endpoint"]) {
-        if endpoint.get("ok").and_then(Value::as_bool) == Some(true) {
+    if let Some(endpoint) = running_endpoint(&gxserver) {
+        if !identity_reset {
             return Ok(endpoint);
         }
+        let _ = Command::new(&gxserver)
+            .arg("stop")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
     }
     run_json(&gxserver, &["start", "--json"])?;
     let started = Instant::now();
     loop {
-        match run_json(&gxserver, &["endpoint"]) {
-            Ok(endpoint) if endpoint.get("ok").and_then(Value::as_bool) == Some(true) => {
-                return Ok(endpoint)
-            }
-            result if started.elapsed() >= ENDPOINT_WAIT => {
-                return Err(format!(
-                    "gxserver did not start on the box within {} seconds ({}).",
-                    ENDPOINT_WAIT.as_secs(),
-                    result.err().unwrap_or_default()
-                ))
-            }
-            _ => std::thread::sleep(Duration::from_millis(250)),
+        if let Some(endpoint) = running_endpoint(&gxserver) {
+            return Ok(endpoint);
         }
+        if started.elapsed() >= ENDPOINT_WAIT {
+            return Err(format!(
+                "gxserver did not start on the box within {} seconds.",
+                ENDPOINT_WAIT.as_secs()
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(250));
     }
 }
 
@@ -153,25 +205,83 @@ fn start_relay(bin: &Path, gxserver_port: u16) -> Result<(), String> {
     Ok(())
 }
 
+/// Turns on the box gxserver's tailcat (its own sshd and gxserver ports, the same Easy Connect
+/// sidecar a remote computer runs) for the user's devices only, and waits for its address.
+///
+/// CDXC:CloudBoxes 2026-11-02 DECISION: the user chose private access only (Q1021 "private
+/// only"): a box publishes no port and answers only the user's own devices. tailcat with an empty
+/// allow-list admits every client that has the address, so a boot that asks for tailcat without
+/// device keys is refused instead of serving an open box.
+fn start_tailcat(ticket: &BoxBootTicket) -> Result<String, String> {
+    if ticket.allow_device_keys.is_empty() {
+        return Err(
+            "The boot ticket names no device allowed to reach the box, so tailcat was not started."
+                .to_string(),
+        );
+    }
+    let flags = Flags::default();
+    let call = |params: Value| {
+        rpc::call_gxserver_rpc("/api/updateTailcatState", &params, &flags)
+            .map_err(|error| format!("The box's gxserver did not set up tailcat: {error}"))
+    };
+    call(json!({
+        "kind": "setAllowedClientKeys",
+        "allowed_client_keys": ticket.allow_device_keys,
+    }))?;
+    call(json!({ "kind": "setEnabled", "enabled": true }))?;
+    let started = Instant::now();
+    loop {
+        let status = rpc::call_gxserver_rpc("/api/tailcatStatus", &json!({}), &flags).ok();
+        let status = status.as_ref().and_then(|value| value.get("status"));
+        if let Some(token) = status
+            .and_then(|status| status.get("token"))
+            .and_then(Value::as_str)
+            .filter(|token| !token.is_empty())
+        {
+            return Ok(token.to_string());
+        }
+        if started.elapsed() >= TAILCAT_WAIT {
+            let reason = status
+                .and_then(|status| status.get("lastError"))
+                .and_then(Value::as_str)
+                .unwrap_or("no address yet");
+            return Err(format!(
+                "tailcat did not start on the box within {} seconds ({reason}).",
+                TAILCAT_WAIT.as_secs()
+            ));
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+}
+
 pub(crate) fn run_boot(ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {
     if !ghostex_gx_cloud::ids::is_gx_id(&ticket.box_id) {
         return Err(format!("\"{}\" is not a box id.", ticket.box_id));
     }
     let bin = bin_dir()?;
     let (identity, identity_reset) = read_or_reset_identity(&ticket.box_id)?;
-    let endpoint = start_gxserver(&bin)?;
+    state::write_json(&state::ticket_file(), ticket)?;
+    let private = state::private_dir(&ticket.provider);
+    std::fs::create_dir_all(&private)
+        .map_err(|error| format!("Can't make {}: {error}", private.display()))?;
+    state::set_mode(&private, 0o700);
+    let endpoint = start_gxserver(&bin, identity_reset)?;
     let gxserver_port = endpoint
         .get("port")
         .and_then(Value::as_u64)
         .unwrap_or_default();
-    if !ticket.tailcat {
+    let tailcat_address = if ticket.tailcat {
+        Some(start_tailcat(ticket)?)
+    } else {
         start_relay(&bin, u16::try_from(gxserver_port).unwrap_or_default())?;
-    }
+        None
+    };
+    idle::restart_watcher(&bin)?;
     Ok(BoxBootResult {
         box_id: ticket.box_id.clone(),
         machine_id: identity.machine_id,
         identity_reset,
-        tailcat_address: None,
+        tailcat_address,
         gxserver_port,
         gxserver_token: endpoint
             .get("authToken")
