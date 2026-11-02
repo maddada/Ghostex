@@ -290,7 +290,6 @@ impl NativeChatView {
         let failure = self.agent_card_failure(&key, card, hairline, p, cx);
         SINGLE_LINE_CARD
             .shell(div(), p)
-            .group(SharedString::from(format!("agent-card:{key}")))
             .flex()
             .flex_col()
             .w_full()
@@ -302,8 +301,12 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The logo, the core's sentence (the same collapsed and opened), then Go to session on hover,
-    /// the time and the status pill; no chevron. The row opens and closes the message.
+    /// The logo, the core's sentence (the same collapsed and opened), the time and the status
+    /// pill; no chevron. The row opens and closes the message; the session's name in it is a pill
+    /// (`session_pill`) that jumps to the session.
+    ///
+    /// CDXC:SessionChat 2026-11-02 DECISION:
+    /// User: "let's remove "Go to session" button since we already can click on the session's name to jump to it ... in the "Message from" and "Message to" header cards basically". The Message from / Message to header cards have no Go to session button on any client; the session's name opens the session.
     fn agent_card_row(
         &self,
         key: &str,
@@ -314,10 +317,8 @@ impl NativeChatView {
         cx: &Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let session = &card["session"];
         let status = &card["status"];
         let time = text(card, "time");
-        let group = SharedString::from(format!("agent-card:{key}"));
         let shape = &*SINGLE_LINE_CARD;
         let row = div()
             .id(SharedString::from(format!("{key}:row")))
@@ -352,44 +353,6 @@ impl NativeChatView {
                     .child(text(card, "name"))
                     .into_any_element()
             })
-            .when(
-                session.is_object() && text(card, "failure").is_empty(),
-                |row| {
-                    let command = json!({
-                        "type": "openAgentSession",
-                        "projectId": session["projectId"],
-                        "sessionId": session["sessionId"],
-                    });
-                    let (muted, foreground, fill) =
-                        (p.muted, p.foreground, p.foreground.opacity(0.08));
-                    row.child(
-                        div()
-                            .id(SharedString::from(format!("{key}:session")))
-                            .invisible()
-                            .group_hover(group.clone(), |style| style.visible())
-                            .flex()
-                            .flex_shrink_0()
-                            .items_center()
-                            .gap(px(4.0 * s))
-                            .px(px(6.0 * s))
-                            .py(px(1.0 * s))
-                            .rounded(px(6.0 * s))
-                            .text_size(px(12.5 * s))
-                            .text_color(muted)
-                            .whitespace_nowrap()
-                            .role(gpui::Role::Button)
-                            .aria_label("Go to session")
-                            .chat_cursor_pointer()
-                            .hover(move |style| style.text_color(foreground).bg(fill))
-                            .child(icon("titlebar/arrow-up-right.svg", 12.0 * s, muted))
-                            .child("Go to session")
-                            .on_click(cx.listener(move |this, _, _, cx| {
-                                cx.stop_propagation();
-                                this.invoke(command.clone(), cx)
-                            })),
-                    )
-                },
-            )
             .when(!time.is_empty(), |row| {
                 row.child(
                     div()

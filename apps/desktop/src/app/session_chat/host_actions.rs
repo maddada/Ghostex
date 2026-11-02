@@ -662,7 +662,7 @@ impl GhostexGpuiApp {
             return;
         }
         // CDXC:Coordinators 2026-10-08 WHY: a row of a coordinator's Threads panel opens that thread the way a fork branch opens, by focusing and revealing it in the sidebar; gxserver already resumed it when it was closed (server/src/server/coordinator_open_http.rs), so the action carries no lifecycleState and nothing is woken here. Supersedes the 2026-09-30 note that this host woke it.
-        // An agent message card's Go to session focuses the other session the same way.
+        // A session name's pill on an agent message card focuses the other session the same way.
         if action == "selectForkBranch"
             || action == "openCoordinatorThread"
             || action == "openAgentSession"

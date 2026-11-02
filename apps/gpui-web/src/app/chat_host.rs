@@ -50,7 +50,7 @@ impl GhostexGpuiApp {
             }
             // A row of a coordinator's Threads panel: that thread's chat, on the same machine.
             // gxserver resumed it first when it was closed (`openCoordinatorThread`). An agent
-            // message card's Go to session opens the other session's chat the same way.
+            // message card's session-name pill opens the other session's chat the same way.
             Some("openCoordinatorThread" | "openAgentSession") => {
                 let text = |key: &str| {
                     message[key]

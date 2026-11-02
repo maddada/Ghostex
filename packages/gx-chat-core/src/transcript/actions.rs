@@ -305,7 +305,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 "paths": param(action, "paths").cloned().unwrap_or_else(|| json!([])),
             })),
         }],
-        // An agent message card's Go to session: the other session, focused like a fork branch.
+        // A session name's pill on an agent message card: the other session, focused like a fork branch.
         ActionKind::OpenAgentSession => {
             let (project_id, session_id) = (text(action, "projectId"), text(action, "sessionId"));
             if project_id.is_empty() || session_id.is_empty() {
