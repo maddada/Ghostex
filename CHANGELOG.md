@@ -21,6 +21,9 @@
 - **The question popup** takes the chat's colours and fits the whole form.
 - **The menus above the chat box** (Resources, Workers, Links and the others) use the same lighter frosted glass as the sidebar's menus.
 - **The voice agent panel is frosted glass** like the Notifications menu, with its controls in the header and your conversation on the same glass.
+- **Slash commands look like the rest of the chat:** a command such as `/rename` shows as your own message, and its output as a quiet note under it, for every agent.
+- **Paste pictures into question notes,** in chat forms and question pages; they show as Image pills and reach the agent with your answers.
+- **Question pages get a softer look:** a dusk (or dawn) backdrop with frosted glass cards, and options side by side with a Pick button.
 
 ### 🤖 Agents
 
