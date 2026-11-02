@@ -275,11 +275,17 @@ pub(crate) fn apply_session_state_update(
     any other client renaming through the API) never reached the sidebar: the session kept the
     name it had when the pane opened, or the placeholder. The record is the name for this agent,
     as the transcript is for Claude, so an OpenCode hook title for this conversation replaces a
-    stored one. Coordinators and threads keep the name they were given, as they do for metadata.
+    stored one. Coordinators and threads keep the name they were given, as they do for metadata,
+    and so does a session the user renamed in Ghostex (`titleSource: "user"`): their rename
+    outranks the agent's own name.
     */
     let opencode_title = if identity_update_source == SessionIdentityUpdateSource::Passive {
         opencode_record_title(&session, next_agent.as_deref(), params, &identity).filter(|title| {
             read_text_value(&current_with_identity, "title").as_deref() != Some(title.as_str())
+                && current_with_identity
+                    .pointer("/runtimeSettings/titleSource")
+                    .and_then(Value::as_str)
+                    != Some("user")
                 && !crate::coordinators::keeps_its_given_title(
                     repository.connection(),
                     &current_with_identity,
