@@ -53,6 +53,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &fleet_strip,
         &background,
     );
+    into.chat_pills.extend(chat_pills::stashed_pill(
+        state.composer.chrome.stashed_prompt_count(),
+    ));
     into.view_chips = chat_pills::view_chips(crate::transcript::view_level::view_level(
         &state.transcript_view,
     ));

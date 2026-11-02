@@ -139,6 +139,10 @@ fn running_dot(s: f32) -> AnyElement {
     .into_any_element()
 }
 
+/// The Stashed pill's id (gx-chat-core extras/chat_pills.rs `stashed_pill`): it opens Saved Prompts
+/// rather than a menu of its own.
+const STASHED_PILL: &str = "stashed";
+
 /// The menu-toggle key of a pill (menu_toggle.rs).
 fn trigger_id(id: &str) -> &'static str {
     match id {
@@ -156,6 +160,8 @@ fn icon(id: &str) -> &'static str {
     match id {
         "threads" => "titlebar/users-group.svg",
         "resources" => "titlebar/stack.svg",
+        // The More actions row's own icon for Stash prompt (actions.rs).
+        STASHED_PILL => "titlebar/stack-push.svg",
         "tasks" => "titlebar/list-check.svg",
         "background" => "titlebar/terminal-2.svg",
         _ => "titlebar/users.svg",
@@ -443,6 +449,11 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
+                if id == STASHED_PILL {
+                    // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
+                    this.host("stashedPrompts", json!({}), cx);
+                    return;
+                }
                 this.toggle_pill_menu(&id, bounds.get(), window, cx);
                 if id == super::questions_list::QUESTIONS_MENU && this.chat_menu_is_open(trigger) {
                     this.keep_question_ages_current(cx);

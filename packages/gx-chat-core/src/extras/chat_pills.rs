@@ -135,6 +135,29 @@ pub fn chat_pills(
     pills
 }
 
+/// The Stashed pill, the last of the core's pills (the Links pill follows it): how many prompts
+/// the user stashed from this chat, shown while there is any. A tap opens Saved Prompts.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User: "i have a stashed prompt but we aren't showing it at all. let's please show stashed pill here in the pills bar above the composer. should just say stashed and the number of stashed prompts for that session and look like the resources one basically". The count used to live only as the badge on the More actions menu's "Stash prompt" row (composerChrome.stashBadge, capped at 9, in a menu nobody opens) since the toolbar's stash button went on 2026-10-22, so a stash sat unseen. The pill reads "Stashed" and the real count, drawn like Resources, and opens the Saved Prompts list the Stash prompt row opens from an empty chat box. It is the last of the core's pills, so it appearing after a stash moves none of the others; the Links pill still follows it.
+pub fn stashed_pill(stashed: usize) -> Option<ChatPill> {
+    (stashed > 0).then(|| ChatPill {
+        id: STASHED_PILL.to_string(),
+        label: "Stashed".to_string(),
+        count: stashed.to_string(),
+        waiting: String::new(),
+        running: false,
+        aria_label: format!(
+            "Stashed, {stashed} saved {}",
+            if stashed == 1 { "prompt" } else { "prompts" }
+        ),
+        meta: String::new(),
+    })
+}
+
+/// The Stashed pill's id, which the renderers open Saved Prompts for instead of a pill menu.
+pub const STASHED_PILL: &str = "stashed";
+
 /// The status chip at the left of the chat box's pill strip for a view level that is not Normal:
 /// "Summary view" or "Detailed view", whose X (or a click on it) goes back to Normal.
 ///
@@ -157,7 +180,7 @@ pub fn view_chips(level: &str) -> Vec<ViewChip> {
 
 #[cfg(test)]
 mod tests {
-    use super::{chat_pills, view_chips, OpenQuestions};
+    use super::{chat_pills, stashed_pill, view_chips, OpenQuestions};
     use serde_json::{json, Value};
 
     /// Resources comes first, ahead of Threads (the renderers' ? pill sits before both), and only
@@ -273,6 +296,23 @@ mod tests {
             &Value::Null,
         )[0];
         assert_eq!((pill.running, pill.waiting.as_str()), (true, "question"));
+    }
+
+    /// The Stashed pill shows while the chat has a stashed prompt, with the real count (the
+    /// More actions badge stops at 9).
+    #[test]
+    fn stashed_pill_counts_the_chats_stashed_prompts() {
+        assert!(stashed_pill(0).is_none(), "nothing stashed, no pill");
+        let one = stashed_pill(1).expect("pill");
+        assert_eq!(
+            (one.id.as_str(), one.label.as_str(), one.count.as_str()),
+            ("stashed", "Stashed", "1")
+        );
+        assert_eq!(one.aria_label, "Stashed, 1 saved prompt");
+        let many = stashed_pill(12).expect("pill");
+        assert_eq!(many.count, "12");
+        assert_eq!(many.aria_label, "Stashed, 12 saved prompts");
+        assert!(!many.running && many.waiting.is_empty());
     }
 
     #[test]

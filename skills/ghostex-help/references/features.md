@@ -2146,7 +2146,11 @@ and Linux), which switches it from anywhere in that chat and can be changed in
 Settings > Hotkeys.
 Stash prompt is in More actions, second from the bottom: it stashes what is in
 the chat box, or, with an empty chat box, opens your stashed prompts; the row
-shows how many are stashed.
+shows how many are stashed. While this chat has stashed prompts, a Stashed pill
+with their number sits in the pill strip along the chat box's top edge, after
+Resources, Workers and the other pills (before the Links pill); click or tap it
+to open the stashed prompts (Saved Prompts on the computer, Saved prompts on the
+phone). Alt+S (Option+S on macOS) is the Stash Prompt shortcut in a chat too.
 The Maximize button's tooltip shows the Maximize Chat Box shortcut (Option+Ctrl+M
 on macOS, Ctrl+Alt+Shift+M on Windows and Linux), which maximizes the chat box of
 the chat you are in, or restores it. The Prompt Editor shortcut (Ctrl+G on macOS,
