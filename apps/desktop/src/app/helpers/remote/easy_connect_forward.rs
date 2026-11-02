@@ -21,7 +21,7 @@ use std::{
 use crate::app::helpers::*;
 use crate::*;
 use ghostex_paths::tailcat::{
-    TAILCAT_MIN_VERSION, managed_tailcat_binary, tailcat_version_supported,
+    TAILCAT_MIN_VERSION, bundled_tailcat_binary, managed_tailcat_binary, tailcat_version_supported,
 };
 
 /*
@@ -41,7 +41,7 @@ same paths that terminate the machine's gxserver connection (disconnect,
 watchdog, app quit) and by a failed connect. A machine whose forwarder is not
 running resolves to an empty SSH host, which is deliberately not dialable.
 
-The binary is the first of: explicit override, the helper Ghostex installs (Settings), PATH, `~/go/bin`, then Homebrew, that is at least `TAILCAT_MIN_VERSION` (`gpui_resolve_easy_connect_binary`).
+The binary is the first of: explicit override, the helper Ghostex installs (Settings), the one the Linux packages ship beside their gxserver, PATH, `~/go/bin`, then Homebrew, that is at least `TAILCAT_MIN_VERSION` (`gpui_resolve_easy_connect_binary`).
 */
 
 pub(crate) const GPUI_EASY_CONNECT_FORWARD_HOST: &str = "127.0.0.1";
@@ -295,6 +295,13 @@ fn easy_connect_binary_candidates() -> Vec<PathBuf> {
     candidates.push(managed_tailcat_binary(
         &ghostex_paths::GhostexPaths::resolve().data_dir,
     ));
+    // CDXC:CloudBoxes 2026-11-02 WHY: the Linux packages ship tailcat in the bundled gxserver
+    // package (package-remote-linux.mjs), so a Linux desktop dials boxes without installing one.
+    if let Some(bundled) =
+        gpui_resolve_local_gxserver_binary().and_then(|gxserver| bundled_tailcat_binary(&gxserver))
+    {
+        candidates.push(bundled);
+    }
     if let Some(path) = env::var_os("PATH") {
         candidates.extend(
             env::split_paths(&path).map(|directory| directory.join(easy_connect_executable_name())),

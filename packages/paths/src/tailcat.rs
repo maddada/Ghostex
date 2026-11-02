@@ -35,6 +35,19 @@ pub fn tailcat_version_supported(version: &str) -> bool {
     }
 }
 
+/// The tailcat a Ghostex package ships in the gxserver package's `bin/`, beside `gxserver` itself:
+/// the Linux desktop packages (`/opt/ghostex/gxserver/bin/tailcat`, the AppImage's copy of it),
+/// remote computers and Cloud Boxes. gxserver finds it beside its own executable; the desktop app
+/// finds it beside the gxserver it runs.
+pub fn bundled_tailcat_binary(gxserver_binary: &std::path::Path) -> Option<PathBuf> {
+    let directory = gxserver_binary.parent()?;
+    Some(directory.join(if cfg!(windows) {
+        "tailcat.exe"
+    } else {
+        "tailcat"
+    }))
+}
+
 /// Where Ghostex's own install (Settings › Remote › Easy Connect › Install) puts tailcat.
 pub fn managed_tailcat_binary(data_dir: &std::path::Path) -> PathBuf {
     data_dir.join("tailcat/bin").join(if cfg!(windows) {

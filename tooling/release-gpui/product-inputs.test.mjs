@@ -332,6 +332,48 @@ describe('pinned toolchain values track the workflows', () => {
   });
 
   /*
+   * Every gxserver Linux package, and through it every Linux desktop package,
+   * carries a tailcat that server/package-remote-linux.mjs builds with
+   * `go install <module>@<pin>`. The pin there, the one Settings installs, the
+   * oldest version clients dial with, and the Go the release jobs set up must
+   * agree with TOOLCHAIN, so a pin change is a declared input of every product
+   * that ships it instead of an unnoticed edit inside server/**.
+   */
+  test('the bundled tailcat pin matches the package script, the Settings install and the workflows', () => {
+    const module = `github.com/tailscale/tailcat/cmd/tailcat@${TOOLCHAIN.tailcat}`;
+    expect(readFileSync('server/package-remote-linux.mjs', 'utf8')).toContain(`const TAILCAT_MODULE = '${module}';`);
+    expect(readFileSync('server/src/tailcat/install.rs', 'utf8')).toContain(
+      `const TAILCAT_MODULE: &str = "${module}";`
+    );
+    const minimum = /pub const TAILCAT_MIN_VERSION: &str = "v(\d+)\.(\d+)\.(\d+)";/u.exec(
+      readFileSync('packages/paths/src/tailcat.rs', 'utf8')
+    );
+    expect(minimum).not.toBeNull();
+    const pinned = /^v(\d+)\.(\d+)\.(\d+)$/u.exec(TOOLCHAIN.tailcat);
+    expect(pinned).not.toBeNull();
+    const [minMajor, minMinor, minPatch] = minimum.slice(1).map(Number);
+    const [major, minor, patch] = pinned.slice(1).map(Number);
+    expect(major * 1e6 + minor * 1e3 + patch).toBeGreaterThanOrEqual(minMajor * 1e6 + minMinor * 1e3 + minPatch);
+    for (const name of ['release-gpui-gxserver.yml', 'warm-rust-build-cache.yml']) {
+      expect(workflow(name)).toContain(`go-version: '${TOOLCHAIN.tailcatGo}'`);
+    }
+  });
+
+  test('a tailcat pin change is an input of the gxserver and every Linux desktop package', () => {
+    const context = { scope: defaultScope(), version: '7.8.0' };
+    const linuxDesktop = PRODUCT_IDS.filter((id) => /^linux-(deb|rpm|tar|appimage)-(x64|arm64)$/u.test(id));
+    expect(linuxDesktop).toHaveLength(8);
+    for (const id of ['gxserver-linux-x64', 'gxserver-linux-arm64']) {
+      expect(nodeValues(id, context)).toMatchObject({ tailcat: TOOLCHAIN.tailcat, tailcatGo: TOOLCHAIN.tailcatGo });
+    }
+    for (const id of linuxDesktop) {
+      expect(nodeValues(id, context).tailcat).toBe(TOOLCHAIN.tailcat);
+      const arch = id.endsWith('arm64') ? 'arm64' : 'x64';
+      expect(productDefinition(id).composedFrom).toContain(`gxserver-linux-${arch}`);
+    }
+  });
+
+  /*
    * The 7.8.0 Ghostty-sync guard: each vendored Zig source's own
    * minimum_zig_version is the authority for TOOLCHAIN.zig. The standalone check
    * script runs the same assertion pre-dispatch; this test keeps it from rotting.
