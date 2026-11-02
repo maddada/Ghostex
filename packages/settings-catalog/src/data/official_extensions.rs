@@ -341,7 +341,7 @@ pub const GHOSTEX_OFFICIAL_EXTENSIONS: J = J::Arr(&[
     // User: claude.ai inside Ghostex "has to be built in extension", not an external Ghostex extension from the Store. Enabled, it adds a sidebar button that opens a global page, with "different claude profiles for each account" to switch between. The 2026-10-28 decision in apps/desktop/src/app/claude_web/takeover.rs supersedes "switches to a global page that just keeps just my sidebar shown": turning Claude on now hides the sidebar too. A whole-feature entry with a new key (`claudeWebHidden`, default on = hidden, so it starts off like Actions) because the settings file stores every default. Off removes the sidebar button and the Claude view; each account's claude.ai sign-in is kept.
     // SEE-ALSO: apps/desktop/src/app/claude_web/ (the view, the button and the account bar).
     J::Obj(&[
-        ("description", J::Str("Use claude.ai inside Ghostex from a button in the sidebar's bottom bar, with one sign-in per saved Claude account and a bar above the page to switch between them.")),
+        ("description", J::Str("Use claude.ai inside Ghostex from a button in the sidebar's top bar, with one sign-in per saved Claude account and a bar above the page to switch between them.")),
         ("category", J::Str("features")),
         ("id", J::Str("claudeWeb")),
         ("placement", J::Str("feature")),
