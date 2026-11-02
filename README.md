@@ -27,25 +27,33 @@
 </p>
 
 <p align="center">
-  <a href="media/readme/gx-hero-2.webp">
+  <a href="media/readme/gx-hero-2.jpeg">
     <picture>
-          <img width="960" src="media/readme/gx-hero-4.jpeg" />
+      <img width="960" src="media/readme/gx-hero-2.jpeg" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="media/readme/gx-hero-5.webp">
+  <a href="media/readme/gx-hero-4.webp">
     <picture>
-          <img width="960" src="media/readme/gx-hero-5.jpeg" />
+      <img width="960" src="media/readme/gx-hero-4.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="media/readme/gx-hero-3.webp">
+  <a href="media/readme/gx-hero-5.jpeg">
     <picture>
-      <img width="960" src="media/readme/gx-hero-3.webp" />
+      <img width="960" src="media/readme/gx-hero-5.jpeg" />
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <a href="media/readme/gx-hero-6.jpeg">
+    <picture>
+      <img width="960" src="media/readme/gx-hero-6.jpeg" />
     </picture>
   </a>
 </p>
