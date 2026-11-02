@@ -347,6 +347,7 @@ pub async fn run_gxserver_foreground(
     coordinator_runtime::start_coordinator_runtime(state.clone());
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
+    crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());
     crate::claude_cloud::start_claude_cloud_poller(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:

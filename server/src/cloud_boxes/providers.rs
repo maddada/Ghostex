@@ -65,14 +65,21 @@ pub(super) fn local_row(home: &std::path::Path) -> CloudProvider {
     }
 }
 
-/// Every provider row. Blocking.
-pub(super) fn provider_rows(home: &std::path::Path, include_local: bool) -> Vec<CloudProvider> {
-    let mut rows = vec![
-        not_connected(CloudProviderId::Instabox),
-        not_connected(CloudProviderId::Boat),
-    ];
-    if include_local {
-        rows.push(local_row(home));
+/// Every provider row: the connected ones from the registry, the rest as not connected, and
+/// `local` when listed. Blocking.
+pub(super) fn provider_rows(state: &AppState) -> Vec<CloudProvider> {
+    let mut rows: Vec<CloudProvider> = [CloudProviderId::Instabox, CloudProviderId::Boat]
+        .into_iter()
+        .map(|provider| {
+            super::store::read_provider(&state.paths, &provider)
+                .ok()
+                .flatten()
+                .map(|stored| stored.row)
+                .unwrap_or_else(|| not_connected(provider))
+        })
+        .collect();
+    if local_provider_listed(state) {
+        rows.push(local_row(&state.paths.home_dir));
     }
     rows
 }

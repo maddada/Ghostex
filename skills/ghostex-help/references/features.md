@@ -3709,54 +3709,72 @@ CLI: `ghostex create-agent claude-cloud --project-id <id> --prompt "<task>"`,
 `ghostex claude-cloud status <session>`, `ghostex claude-cloud send <session>
 <message>`, `ghostex claude-cloud bring-back <session>`.
 
-## Cloud Boxes (agents in a box, here or in the cloud)
+## Cloud Boxes (sessions on a machine in the cloud)
 
-A box is an isolated copy of your project where an agent works without touching
-this computer. Boxes run on this computer with Docker (free), in the cloud on
-Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server over SSH.
-Ghostex drives agentbox, a free open-source command line tool
-(https://github.com/madarco/agentbox); Claude, Codex, OpenCode and Pi can run
-in a box. Your agent's settings, skills and Codex sign-in go with it. Claude
-needs its own one-time sign-in for boxes, so Claude on this computer stays
-signed in.
+A Cloud Box is a Linux machine on your own Instabox (instabox.sh) or Boat
+(boat.dev) account that runs a Ghostex session: the agent works there, not on
+this computer, and keeps working when this computer sleeps. Ghostex never
+bills; your provider account does. Cloud Boxes is a built-in extension, on by
+default on every computer (Settings > Extensions, `cloudBoxesEnabled`); turning
+it off hides it everywhere and keeps your boxes and settings.
 
-Cloud Boxes is a built-in extension, off by default and only on macOS and
-Linux: turn it on with its switch in Settings > Extensions (Features). While it
-is off the Cloud Boxes page in Settings, the Run on choice in New Thread and in
-a new chat thread, Run in a Box in the Select Agent menu and the
-`ghostex agentbox` commands are gone (they say Cloud Boxes is turned off), and
-new threads run on this computer. Your boxes, provider logins and default
-location are kept and come back when you turn it on (`cloudBoxesHidden`).
+- **Connect a provider**: Settings > Cloud Boxes > Providers. Instabox's
+  Connect signs in in your browser. Boat's Connect asks for your Boat email,
+  opens Boat's page and shows a 6-digit code to type there. Paste Key takes an
+  API key instead. Free plans and trials work; Settings shows their limits
+  (Instabox free: one box at a time; Boat trial: boxes stop after 2 hours).
+- **Start one**: in a new chat pick Cloud Box beside This folder and New
+  worktree; the choice is remembered per project. Nothing starts or bills until
+  you send the first message; it waits with a progress card while the box
+  starts, fetches the latest base branch into a new branch and starts the
+  agent. The box chip in the session's header shows its state, running time
+  and about-$ cost, and its menu stops, deletes or snapshots it. Cloud
+  sessions sit in their project in the sidebar with a cloud badge. The agent
+  pushes its branch; Pull branch brings it into a local worktree.
+- **Snapshots**: a project's snapshot holds its tools and caches, so a box
+  starts ready; the code is always fetched fresh. Settings > Projects > Cloud
+  box lists them: the Default (★) is what new boxes start from, Update saves a
+  running box of the project as the new Default (the old one stays as Previous
+  for 7 days), Make Default and Delete. The same section picks the provider
+  and size, and **Send to the box**: tick the project's `.env` files and name
+  variables; their values are read from this computer whenever a box starts
+  and never saved in a snapshot.
+- **Agent logins for boxes**: Settings > Cloud Boxes. Allow on Cloud Boxes for
+  a Claude account approves a one-year box token once in your browser, so
+  Claude on this computer stays signed in (claude.ai connectors and Remote
+  Control don't work on a box). A Codex account is allowed as it is: each box
+  gets a fresh copy of its login and sends refreshed sign-ins back.
+- **Cost and stopping**: Settings > Cloud Boxes shows this month's spend per
+  provider and in total. The Monthly cap warns at 80% and starts no new box at
+  100%; running boxes keep running. A box with no agent working and no
+  terminal open pauses (Instabox) or stops (Boat) after 15 minutes; opening its
+  session shows the last transcript without waking it, and sending a message
+  wakes it. When every session on a box is archived it stops, and is deleted
+  after 7 days unless it has unpushed work. Your boxes lists every box with
+  Stop and Delete (a box with unpushed work asks before Delete Anyway).
+- **From your phone**: Start boxes from your phone keeps what a phone needs on
+  your paired phones, so they can start, chat with, wake and stop boxes while
+  this computer is off. Connecting providers, the first snapshot and picking
+  secrets stay on the computer.
+- **More providers (agentbox)**: under Advanced on Settings > Cloud Boxes,
+  boxes run through agentbox, a free open-source command line tool
+  (https://github.com/madarco/agentbox), on this computer with Docker, on
+  Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server over
+  SSH (macOS and Linux; on Windows, use Ghostex inside WSL). "Set It Up for Me"
+  starts an agent that installs agentbox and sets up the providers you want,
+  asking before anything that costs money; or Install agentbox, then Set Up for
+  Docker, or Log In and Prepare for a cloud; Add Server registers your own
+  server. Pick a box under Run on in New Thread, or Run in a Box in a
+  project's Select Agent menu; right-click a box session for Open Box Web App,
+  Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
+  they exist.
 
-- **Set up**: Settings > Cloud Boxes. "Set It Up for Me" starts an agent that
-  installs agentbox, asks which clouds you want before anything that costs
-  money, creates the provider API token in your browser, and signs Claude and
-  Codex in for boxes. To do it by hand: Install agentbox, then Set Up for
-  Docker, or Log In (paste an API token from the provider's console) and
-  Prepare (once, builds the base image) for a cloud. Add Server registers your
-  own server by a name and its SSH address; Check tests it. Claude in boxes >
-  Sign In opens the sign-in page. Each step runs in a terminal tab; the page
-  updates while it runs. Run Check shows agentbox's own health check.
-- **Use**: pick a box under Run on in New Thread (Cmd+Left and Cmd+Right switch
-  location), or choose Run in a Box in a project's Select Agent menu. A new
-  chat thread also shows a Run on row above its message box until you send the
-  first message: pick This computer or a box there, and the box starts with
-  that first message. Box sessions open in the terminal view and show a badge with where they run. The
-  first Claude box asks you to sign in right in its terminal: approve in the
-  browser page that opens and paste the code. Right-click a box session for Open
-  Box Web App (the app it serves, opened on this computer), Open Box Screen (the
-  box's own browser), Stop Box and Destroy Box. Add an `agentbox.yaml` with
-  `services.web.expose.port` to your project to start your dev server in the box
-  automatically. Sleeping or waking a session, or restarting Ghostex, reconnects
-  to the same box and conversation.
-- **Cost**: cloud boxes bill while they exist. Closing or deleting a session
-  stops its box and keeps its work; Settings > Cloud Boxes > Your boxes lists
-  every box with Open Web App, Stop and Destroy (deletes the box for good).
-- Boxes run on macOS and Linux; on Windows, use Ghostex inside WSL.
-
-Related settings: `cloudBoxesHidden` (turns the feature off; default on, so
-Cloud Boxes starts off), `agentboxDefaultLocation` (where new threads run unless you
-pick another location; default `local`, this computer). CLI:
+Related settings: `cloudBoxesEnabled` (on by default),
+`cloudBoxesMonthlyCapUsd` (0 = no cap), `cloudBoxesIdleStopMinutes` (default
+15), `cloudBoxesDeleteStoppedAfterDays` (default 7),
+`cloudBoxesPhoneStartEnabled` (default off), `agentboxDefaultLocation` (where
+agentbox New Thread runs unless you pick another place; default `local`). CLI:
+`ghostex cloud providers`, `ghostex cloud list`, `ghostex cloud spend`,
 `ghostex agentbox status`, `ghostex agentbox list`,
 `ghostex create-agent <agent> --project-id <id> --run-on docker`.
 
@@ -4307,14 +4325,13 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   project.
   Features are whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
-  default), Cloud Boxes (off by default; macOS and Linux only, not listed on
-  Windows), Workspaces (off by default; it brings workspaces and the team's
+  default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
   Slack flow), Read aloud (off by default, and
   listed only while Enable Experimental Features is on) and the Session details
   panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
-  `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesHidden`,
+  `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
   `workspacesHidden`, `readAloudHidden`, `sessionDetailsPanelHidden`.
   The Edit (pencil) button on a card chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then

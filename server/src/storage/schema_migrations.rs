@@ -1244,4 +1244,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0048_session_chat_resources",
         sql: include_str!("migrations/0048_session_chat_resources.sql"),
     },
+    Migration {
+        id: "0049_cloud_boxes",
+        sql: include_str!("migrations/0049_cloud_boxes.sql"),
+    },
 ];

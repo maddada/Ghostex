@@ -1,5 +1,5 @@
 //! The sizes each provider offers and Ghostex's about-$ per running hour for them (the picker
-//! footer's "≈ $/h", the chip's estimate). Instabox and Boat rows arrive with their adapters.
+//! footer's "≈ $/h", the chip's estimate).
 
 use ghostex_gx_protocol::cloud_box::{CloudBoxSize, CloudProviderId};
 
@@ -29,7 +29,20 @@ pub fn sizes(provider: &CloudProviderId) -> Vec<CloudBoxSize> {
             size(CloudProviderId::Local, 2, 4, 0.0, true),
             size(CloudProviderId::Local, 4, 8, 0.0, false),
         ],
-        _ => Vec::new(),
+        // About-$ from the 2026-11-02 research page (4 vCPU / 8 GiB ≈ $0.034/h), scaled with size.
+        CloudProviderId::Instabox => vec![
+            size(CloudProviderId::Instabox, 2, 4, 0.017, false),
+            size(CloudProviderId::Instabox, 4, 8, 0.034, true),
+            size(CloudProviderId::Instabox, 8, 16, 0.068, false),
+        ],
+        // Boat's list prices (docs.boat.dev/pricing, 2026-11-02): small, default, large, xlarge.
+        CloudProviderId::Boat => vec![
+            size(CloudProviderId::Boat, 2, 4, 0.018, false),
+            size(CloudProviderId::Boat, 4, 8, 0.036, true),
+            size(CloudProviderId::Boat, 8, 16, 0.072, false),
+            size(CloudProviderId::Boat, 16, 32, 0.200, false),
+        ],
+        CloudProviderId::Other(_) => Vec::new(),
     }
 }
 

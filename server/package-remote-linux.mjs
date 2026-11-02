@@ -236,6 +236,8 @@ async function buildPackage({ config, outputDir, workRoot }) {
   await copyExecutable(gxserverBin, path.join(binsDir, 'gxserver'), 'gxserver');
   await linkCli(binsDir);
   await copyStrippedExecutable(zmxBin, path.join(binsDir, 'zmx'), 'zmx');
+  const tailcatBin = await buildTailcat({ arch: config.arch, workRoot });
+  await copyExecutable(tailcatBin, path.join(binsDir, 'tailcat'), 'tailcat');
 
   /*
    * CDXC:AgentSkills 2026-09-11 WHY:
@@ -318,6 +320,37 @@ function cargoTargetRoot(defaultRoot) {
   return configured ? path.resolve(repoRoot, configured) : path.join(defaultRoot, 'target');
 }
 
+/*
+ * CDXC:CloudBoxes 2026-11-02 WHY:
+ * A Cloud Box reaches the user's devices only through tailcat (Q1021 "private only"), and the
+ * Settings install path (`go install`, server/src/tailcat/install.rs) takes minutes and needs Go
+ * on the box, so the package carries a prebuilt static tailcat beside gxserver (which looks there
+ * first, server/src/tailcat/binary.rs). Same module and version as that install; keep them equal.
+ * Go cross-compiles it without cgo from any host, the macOS release build included.
+ */
+const TAILCAT_MODULE = 'github.com/tailscale/tailcat/cmd/tailcat@v0.6.0';
+
+async function buildTailcat({ arch, workRoot }) {
+  const goArch = arch === 'x64' ? 'amd64' : 'arm64';
+  const goPath = path.join(workRoot, 'go');
+  const { stdout: modCache } = await execFileAsync('go', ['env', 'GOMODCACHE']);
+  const { stdout: hostOs } = await execFileAsync('go', ['env', 'GOHOSTOS']);
+  const { stdout: hostArch } = await execFileAsync('go', ['env', 'GOHOSTARCH']);
+  await run('go', ['install', '-trimpath', '-ldflags=-s -w', TAILCAT_MODULE], {
+    env: {
+      ...process.env,
+      CGO_ENABLED: '0',
+      GOARCH: goArch,
+      GOMODCACHE: modCache.trim(),
+      GOOS: 'linux',
+      GOPATH: goPath,
+    },
+  });
+  // `go install` puts a cross-compiled binary under bin/<os>_<arch>, a native one in bin/.
+  const native = hostOs.trim() === 'linux' && hostArch.trim() === goArch;
+  return path.join(goPath, 'bin', native ? '' : `linux_${goArch}`, 'tailcat');
+}
+
 async function buildZigTool({ binName, root, target, workRoot, zigBin }) {
   await assertDirectory(root, `${binName} root`);
   const prefix = path.join(workRoot, binName);
@@ -360,11 +393,11 @@ async function stageBundledSkills(stageDir) {
 }
 
 async function validateLinuxPackage(packageDir, config) {
-  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'skills/ghostex-cli/SKILL.md'];
+  const requiredFiles = ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat', 'skills/ghostex-cli/SKILL.md'];
   for (const relativePath of requiredFiles) {
     await assertFile(path.join(packageDir, relativePath), relativePath);
   }
-  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx']) {
+  for (const relativePath of ['bin/gxserver', 'bin/ghostex', 'bin/zmx', 'bin/tailcat']) {
     const fullPath = path.join(packageDir, relativePath);
     if (!(await isElf(fullPath))) {
       throw new Error(`Linux remote package expected an ELF binary at ${relativePath}.`);

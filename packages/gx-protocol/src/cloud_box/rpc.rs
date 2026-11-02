@@ -39,7 +39,8 @@ open_string_enum! {
         /// [`BoxParams`] → [`BoxResult`]. Wakes a `paused` or `stopped` box (the send path calls it,
         /// never an open, Q1013).
         Resume => "resume",
-        /// [`BoxParams`] → [`BoxResult`]. Refused while another open session uses the box.
+        /// [`BoxParams`] → [`BoxResult`]. A manual stop always stops; the archive rule stops a box only
+        /// once every session on it is archived (Q1012).
         Stop => "stop",
         /// [`DeleteParams`] → [`BoxResult`]. Refused with `cloudBoxHasUnpushedWork` unless `force`.
         Delete => "delete",
@@ -58,6 +59,14 @@ open_string_enum! {
         /// [`ProjectSettingsParams`] → [`ProjectSettingsResult`]. Reads, and with `settings` replaces,
         /// the project's Cloud Box settings.
         ProjectSettings => "projectSettings",
+        /// → [`super::AgentLoginsResult`]: every Claude and Codex account and whether boxes may use it.
+        AgentLogins => "agentLogins",
+        /// [`super::SetAgentLoginParams`] → [`super::AgentLoginsResult`].
+        SetAgentLogin => "setAgentLogin",
+        /// [`ReportBoxSessionsParams`] → [`BoxResult`]. A client attached to a box reports the box's
+        /// sessions, so a stopped box still lists them and the archive rule sees when all are
+        /// archived.
+        ReportBoxSessions => "reportBoxSessions",
         /// Box mode only → [`super::BoxIdleStatus`].
         BoxIdleStatus => "boxIdleStatus",
         /// Box mode only → [`super::BoxWorkStatus`].
@@ -234,6 +243,10 @@ pub struct CreateParams {
     /// The home draft whose first message is waiting; its session starts on the box.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub draft: Option<CloudBoxDraftRef>,
+    /// Start the draft's session on this running (or stopped) box instead of a new box (Q1007);
+    /// it gets its own worktree there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reuse_box_id: Option<String>,
     /// The same key returns the same box instead of making a second (a retried Send).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
@@ -313,6 +326,10 @@ pub struct ProjectSettingsParams {
 pub struct ProjectSettingsResult {
     pub project_id: String,
     pub settings: ProjectCloudBoxSettings,
+    /// The project's `.env*` files (project-relative), the candidates of "Send to the box" (Q1020).
+    /// Empty when the project folder is not on this computer.
+    #[serde(default, deserialize_with = "crate::de::lenient_strings")]
+    pub env_files: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -321,4 +338,12 @@ pub struct BoxWriteBackParams {
     /// [`super::BoxWriteBackItem::id`]s home has saved.
     #[serde(default, deserialize_with = "crate::de::lenient_strings")]
     pub ack: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportBoxSessionsParams {
+    pub box_id: String,
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub sessions: Vec<super::CloudBoxSessionRow>,
 }

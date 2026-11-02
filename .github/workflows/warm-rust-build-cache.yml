@@ -540,6 +540,11 @@ jobs:
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'
@@ -625,6 +630,11 @@ jobs:
         run: |
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get update
           tooling/release-gpui/retry.sh 3 5 -- sudo apt-get install -y build-essential cmake ninja-build pkg-config
+      # Cloud Boxes: the Linux package's tailcat is cross-compiled with Go (package-remote-linux.mjs).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache: false
       - name: Install pinned Zig toolchain
         run: |
           tooling/release-gpui/retry.sh 3 5 -- bash -c 'curl -fsSL https://mise.run | sh'

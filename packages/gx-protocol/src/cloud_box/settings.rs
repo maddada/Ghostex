@@ -11,7 +11,8 @@ pub const CLOUD_BOX_RUNTIME_SETTINGS_KEY: &str = "cloudBox";
 /// Settings keys (in the shared settings file, `ghostex settings`; rows in
 /// `packages/settings-catalog`, W5). gxserver reads them; it never writes them.
 pub mod setting_keys {
-    /// Monthly cap in dollars across providers; absent or `null` means off (Q1001, D8).
+    /// Monthly cap in dollars across providers; absent, `null` or `0` means off (Q1001, D8). The
+    /// catalog's default is `0`, so `ghostex settings set` treats it as a number.
     pub const MONTHLY_CAP_USD: &str = "cloudBoxesMonthlyCapUsd";
     /// Minutes with no agent turn and no open terminal before a box pauses or stops (Q1011).
     pub const IDLE_STOP_MINUTES: &str = "cloudBoxesIdleStopMinutes";

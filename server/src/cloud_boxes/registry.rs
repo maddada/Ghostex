@@ -1,22 +1,23 @@
-//! The box registry. The provider's own list is the source of truth (every box carries Ghostex's
-//! metadata); this keeps what the provider can't say: boot progress, the gxserver version a boot
-//! reported, and a box that is being stopped or deleted. Rows are rebuilt from the provider list
-//! plus this overlay on every read.
+//! The box registry: rows in the `cloud_boxes` table (store.rs), kept in step with the providers'
+//! own lists (reconcile.rs), plus what only this gxserver's memory holds: each box's boot progress
+//! card and a stop or delete in flight. A row a client reads is the stored row with that overlay.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
-use ghostex_gx_cloud::local::LocalContainer;
 use ghostex_gx_protocol::cloud_box::{
-    CloudBox, CloudBoxBootStep, CloudBoxProgress, CloudBoxProgressStep, CloudBoxState,
-    CloudBoxStepState, CloudProviderId,
+    CloudBox, CloudBoxBootStep, CloudBoxDraftRef, CloudBoxProgress, CloudBoxProgressStep,
+    CloudBoxState, CloudBoxStepState,
 };
+
+use super::store::{self, StoredBox};
+use crate::domain::DomainStateError;
+use crate::paths::GxserverPaths;
 
 #[derive(Clone, Default)]
 struct Overlay {
     progress: Option<CloudBoxProgress>,
-    gxserver_version: Option<String>,
-    /// `stopping` or `deleting` while that call runs.
+    /// `deleting` while that call runs.
     transition: Option<CloudBoxState>,
 }
 
@@ -33,12 +34,8 @@ fn with_overlay<T>(box_id: &str, change: impl FnOnce(&mut Overlay) -> T) -> T {
 }
 
 /// Starts a fresh progress card (`create` or `resume`) with every step waiting.
-pub(super) fn start_progress(
-    box_id: &str,
-    kind: &str,
-    draft: Option<ghostex_gx_protocol::cloud_box::CloudBoxDraftRef>,
-) {
-    let now = crate::domain::params::now_iso();
+pub(super) fn start_progress(box_id: &str, kind: &str, draft: Option<CloudBoxDraftRef>) {
+    let now = super::time::now_iso();
     with_overlay(box_id, |overlay| {
         overlay.progress = Some(CloudBoxProgress {
             draft,
@@ -62,7 +59,7 @@ pub(super) fn set_step(
     state: CloudBoxStepState,
     message: Option<String>,
 ) {
-    let now = crate::domain::params::now_iso();
+    let now = super::time::now_iso();
     with_overlay(box_id, |overlay| {
         let Some(progress) = overlay.progress.as_mut() else {
             return;
@@ -89,7 +86,7 @@ pub(super) fn set_step(
 }
 
 pub(super) fn finish_progress(box_id: &str) {
-    let now = crate::domain::params::now_iso();
+    let now = super::time::now_iso();
     with_overlay(box_id, |overlay| {
         if let Some(progress) = overlay.progress.as_mut() {
             progress.finished_at.get_or_insert(now);
@@ -97,10 +94,14 @@ pub(super) fn finish_progress(box_id: &str) {
     });
 }
 
-pub(super) fn set_booted(box_id: &str, gxserver_version: String) {
+/// The box is starting or resuming right now (its card is open and has not failed).
+pub(super) fn is_starting(box_id: &str) -> bool {
     with_overlay(box_id, |overlay| {
-        overlay.gxserver_version = Some(gxserver_version)
-    });
+        overlay
+            .progress
+            .as_ref()
+            .is_some_and(|progress| progress.finished_at.is_none())
+    })
 }
 
 pub(super) fn set_transition(box_id: &str, transition: Option<CloudBoxState>) {
@@ -114,30 +115,72 @@ pub(super) fn forget(box_id: &str) {
         .remove(box_id);
 }
 
-/// A `pending`/`creating` row for a box whose provider machine does not exist yet.
-pub(super) fn creating_row(
+/// A stored row with the overlay applied.
+pub(super) fn with_overlay_applied(mut row: CloudBox) -> CloudBox {
+    let overlay = with_overlay(&row.box_id, |overlay| overlay.clone());
+    if let Some(transition) = overlay.transition {
+        row.state = transition;
+    }
+    if let Some(progress) = overlay.progress {
+        if let Some(error) = progress.error.clone() {
+            row.state = CloudBoxState::Failed;
+            row.state_detail = Some(error);
+        }
+        row.progress = Some(progress);
+    }
+    row
+}
+
+/// Every box (deleted rows included), overlay applied. Blocking.
+pub(super) fn rows(paths: &GxserverPaths) -> Result<Vec<CloudBox>, DomainStateError> {
+    Ok(store::list_boxes(paths)?
+        .into_iter()
+        .map(|stored| with_overlay_applied(stored.row))
+        .collect())
+}
+
+/// One box's stored row and secrets. Blocking.
+pub(super) fn stored(paths: &GxserverPaths, box_id: &str) -> Result<StoredBox, DomainStateError> {
+    if !ghostex_gx_cloud::ids::is_gx_id(box_id) {
+        return Err(DomainStateError::bad_request(format!(
+            "\"{box_id}\" is not a box id."
+        )));
+    }
+    store::get_box(paths, box_id)?
+        .ok_or_else(|| DomainStateError::not_found(format!("No box {box_id}.")))
+}
+
+/// One box's row, overlay applied. Blocking.
+pub(super) fn row(paths: &GxserverPaths, box_id: &str) -> Result<CloudBox, DomainStateError> {
+    Ok(with_overlay_applied(stored(paths, box_id)?.row))
+}
+
+/// Reads, changes and writes a box row. Blocking.
+pub(super) fn update(
+    paths: &GxserverPaths,
     box_id: &str,
-    provider: CloudProviderId,
+    change: impl FnOnce(&mut StoredBox),
+) -> Result<CloudBox, DomainStateError> {
+    let mut stored = stored(paths, box_id)?;
+    change(&mut stored);
+    store::save_box(paths, &stored)?;
+    Ok(with_overlay_applied(stored.row))
+}
+
+/// A new row for a box Ghostex is about to make.
+pub(super) fn new_row(
+    box_id: &str,
+    provider: ghostex_gx_protocol::cloud_box::CloudProviderId,
     project_key: &str,
     home_project_id: Option<String>,
 ) -> CloudBox {
-    let overlay = with_overlay(box_id, |overlay| overlay.clone());
     CloudBox {
         box_id: box_id.to_string(),
         provider,
         provider_box_id: None,
         name: ghostex_gx_cloud::ids::box_display_name(box_id),
-        state: if overlay
-            .progress
-            .as_ref()
-            .and_then(|p| p.error.as_ref())
-            .is_some()
-        {
-            CloudBoxState::Failed
-        } else {
-            CloudBoxState::Creating
-        },
-        state_detail: overlay.progress.as_ref().and_then(|p| p.error.clone()),
+        state: CloudBoxState::Creating,
+        state_detail: None,
         project_key: project_key.to_string(),
         home_project_id,
         snapshot_id: None,
@@ -145,7 +188,7 @@ pub(super) fn creating_row(
         tailcat_address: None,
         gxserver_version: None,
         created_by: None,
-        created_at: overlay.progress.as_ref().and_then(|p| p.started_at.clone()),
+        created_at: Some(super::time::now_iso()),
         started_at: None,
         last_active_at: None,
         stopped_at: None,
@@ -154,73 +197,10 @@ pub(super) fn creating_row(
         cost_total_usd: Some(0.0),
         cost_month_usd: Some(0.0),
         cost_estimated: false,
-        usd_per_hour: Some(0.0),
+        usd_per_hour: None,
         has_unpushed_work: None,
         snapshot_update_reason: None,
         sessions: Vec::new(),
-        progress: overlay.progress,
-    }
-}
-
-/// The registry row of a `local` container.
-pub(super) fn local_row(container: &LocalContainer) -> CloudBox {
-    let meta = &container.metadata;
-    let overlay = with_overlay(&meta.box_id, |overlay| overlay.clone());
-    let progress = overlay.progress.clone();
-    let failed = progress.as_ref().and_then(|p| p.error.clone());
-    let starting = progress.as_ref().is_some_and(|p| p.finished_at.is_none());
-    let docker_state = container.box_state();
-    let state = match (&overlay.transition, &failed, starting, &docker_state) {
-        (Some(transition), _, _, _) => transition.clone(),
-        (None, Some(_), _, _) => CloudBoxState::Failed,
-        (None, None, true, CloudBoxState::Running) => CloudBoxState::Booting,
-        (None, None, true, _) => CloudBoxState::Creating,
-        // Running but never booted by this gxserver (it restarted): still reachable once its own
-        // gxserver is up, which `connectInfo` checks.
-        _ => docker_state.clone(),
-    };
-    let size = meta.size.clone();
-    let usd_per_hour =
-        ghostex_gx_cloud::prices::size_or_default(&CloudProviderId::Local, size.as_deref())
-            .and_then(|size| size.usd_per_hour);
-    CloudBox {
-        box_id: meta.box_id.clone(),
-        provider: CloudProviderId::Local,
-        provider_box_id: Some(container.container_id.chars().take(12).collect()),
-        name: ghostex_gx_cloud::ids::box_display_name(&meta.box_id),
-        state: state.clone(),
-        state_detail: failed,
-        project_key: meta.project_key.clone(),
-        home_project_id: meta.home_project_id.clone(),
-        snapshot_id: meta.snapshot_id.clone(),
-        size,
-        tailcat_address: None,
-        gxserver_version: overlay.gxserver_version,
-        created_by: meta.created_by.clone(),
-        created_at: meta
-            .created_at
-            .clone()
-            .or_else(|| container.created.clone()),
-        started_at: if docker_state == CloudBoxState::Running {
-            container.started_at.clone()
-        } else {
-            None
-        },
-        last_active_at: None,
-        stopped_at: if state == CloudBoxState::Stopped {
-            container.finished_at.clone()
-        } else {
-            None
-        },
-        delete_after: None,
-        idle_stops_at: None,
-        cost_total_usd: Some(0.0),
-        cost_month_usd: Some(0.0),
-        cost_estimated: false,
-        usd_per_hour,
-        has_unpushed_work: None,
-        snapshot_update_reason: None,
-        sessions: Vec::new(),
-        progress,
+        progress: None,
     }
 }

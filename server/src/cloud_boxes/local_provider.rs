@@ -6,8 +6,7 @@ use std::path::{Path, PathBuf};
 use ghostex_gx_cloud::local;
 use ghostex_gx_cloud::metadata::BoxMetadata;
 use ghostex_gx_protocol::cloud_box::{
-    box_verbs, BoxBootResult, BoxBootTicket, CloudBoxConnectInfo, BOX_GHOSTEX_BIN,
-    CLOUD_BOX_TRANSPORT_DIRECT,
+    CloudBoxConnectInfo, BOX_GHOSTEX_BIN, CLOUD_BOX_TRANSPORT_DIRECT,
 };
 use serde_json::Value;
 
@@ -109,47 +108,6 @@ pub(super) fn install_package(home: &Path, box_id: &str, package: &Path) -> Resu
     .map(|_| ())
 }
 
-/// Runs a `ghostex box <verb>` on the box and reads the one JSON object it prints.
-pub(super) fn run_box_verb(
-    home: &Path,
-    box_id: &str,
-    verb: &str,
-    extra: &[&str],
-) -> Result<Value, String> {
-    let mut argv = vec![BOX_GHOSTEX_BIN, "box", verb];
-    argv.extend_from_slice(extra);
-    let output = run_docker(home, &local::exec_args(box_id, &argv), None, BOOT_TIMEOUT)?;
-    let parsed: Option<Value> = output.stdout.lines().rev().find_map(|line| {
-        serde_json::from_str::<Value>(line.trim())
-            .ok()
-            .filter(Value::is_object)
-    });
-    match parsed {
-        Some(value) if value.get("ok").and_then(Value::as_bool) == Some(true) => Ok(value),
-        Some(value) => Err(value
-            .get("error")
-            .and_then(Value::as_str)
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("ghostex box {verb} failed."))),
-        None => Err(format!(
-            "ghostex box {verb} printed no answer: {}",
-            output.failure_message()
-        )),
-    }
-}
-
-pub(super) fn boot(home: &Path, ticket: &BoxBootTicket) -> Result<BoxBootResult, String> {
-    let encoded = ghostex_gx_cloud::ticket::encode_ticket(ticket);
-    let value = run_box_verb(
-        home,
-        &ticket.box_id,
-        box_verbs::BOOT,
-        &["--ticket", &encoded],
-    )?;
-    serde_json::from_value(value)
-        .map_err(|error| format!("ghostex box boot answered something unexpected: {error}"))
-}
-
 pub(super) fn start(home: &Path, box_id: &str) -> Result<(), String> {
     run_docker(home, &local::start_args(box_id), None, QUICK_TIMEOUT)?
         .into_stdout()
@@ -208,4 +166,104 @@ pub(super) fn connect_info(
             .to_string(),
         gxserver_version: None,
     })
+}
+
+/// `docker exec [-i] <box> argv…` with stdin piped in when given.
+pub(super) fn exec(
+    home: &Path,
+    box_id: &str,
+    argv: &[&str],
+    stdin: Option<&str>,
+) -> Result<ghostex_gx_cloud::provider::ExecOutput, String> {
+    let mut args = vec!["exec".to_string()];
+    if stdin.is_some() {
+        args.push("-i".to_string());
+    }
+    args.push(local::container_name(box_id));
+    args.extend(argv.iter().map(|arg| arg.to_string()));
+    let output = run_docker(home, &args, stdin.map(str::as_bytes), BOOT_TIMEOUT)?;
+    Ok(ghostex_gx_cloud::provider::ExecOutput {
+        exit_code: if output.success { 0 } else { 1 },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        timed_out: false,
+    })
+}
+
+/// The `local` file API: writes `bytes` to `path` (mode 0600, parents made).
+pub(super) fn write_file(
+    home: &Path,
+    box_id: &str,
+    path: &str,
+    bytes: &[u8],
+) -> Result<(), String> {
+    let args = local::write_file_args(box_id, path)
+        .ok_or_else(|| format!("\"{path}\" is not a path a box file can be written to."))?;
+    run_docker(home, &args, Some(bytes), QUICK_TIMEOUT)?
+        .into_stdout()
+        .map(|_| ())
+}
+
+/// `docker commit` of the box into its snapshot image.
+pub(super) fn commit(
+    home: &Path,
+    box_id: &str,
+    snapshot_id: &str,
+    name: &str,
+    created_at: &str,
+) -> Result<(), String> {
+    run_docker(
+        home,
+        &local::commit_args(box_id, snapshot_id, name, created_at),
+        None,
+        CREATE_TIMEOUT,
+    )?
+    .into_stdout()
+    .map(|_| ())
+}
+
+/// The snapshot image, when Docker still has it.
+pub(super) fn snapshot_exists(
+    home: &Path,
+    image: &str,
+) -> Result<Option<ghostex_gx_cloud::provider::ProviderSnapshot>, String> {
+    let output = run_docker(
+        home,
+        &[
+            "image".to_string(),
+            "inspect".to_string(),
+            image.to_string(),
+        ],
+        None,
+        QUICK_TIMEOUT,
+    )?;
+    if !output.success {
+        return Ok(None);
+    }
+    Ok(local::parse_snapshot_images(&output.stdout)?
+        .into_iter()
+        .next()
+        .map(|found| ghostex_gx_cloud::provider::ProviderSnapshot {
+            provider_snapshot_id: image.to_string(),
+            name: found.name,
+            status: "ready".to_string(),
+            source_box_id: found.source_box_id,
+            size_bytes: found.size_bytes,
+            created_at: found.created_at,
+            error: None,
+        }))
+}
+
+pub(super) fn delete_snapshot_image(home: &Path, image: &str) -> Result<(), String> {
+    let output = run_docker(
+        home,
+        &["rmi".to_string(), image.to_string()],
+        None,
+        QUICK_TIMEOUT,
+    )?;
+    if output.success || output.failure_message().contains("No such image") {
+        Ok(())
+    } else {
+        Err(output.failure_message())
+    }
 }

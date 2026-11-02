@@ -239,8 +239,9 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
         }
         "cap" => {
             let value = arg(1, "a dollar amount or off")?;
+            // The setting's 0 means off (packages/settings-catalog pages/cloud_boxes.rs).
             let value = if value == "off" {
-                "null".to_string()
+                "0".to_string()
             } else {
                 value
             };

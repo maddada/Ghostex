@@ -287,6 +287,9 @@ export type GxserverCloudBoxesAction =
   | 'deleteSnapshot'
   | 'spend'
   | 'projectSettings'
+  | 'reportBoxSessions'
+  | 'agentLogins'
+  | 'setAgentLogin'
   | 'boxIdleStatus'
   | 'boxWorkStatus'
   | 'boxWriteBack';
@@ -324,6 +327,8 @@ export interface GxserverCloudBoxesParams {
     size?: string;
     blank?: boolean;
     draft?: GxserverCloudBoxDraftRef;
+    /** Start the draft's session on this box instead of a new one (its own worktree there). */
+    reuseBoxId?: string;
     idempotencyKey?: string;
   };
   resume: { boxId: string; idempotencyKey?: string };
@@ -336,6 +341,9 @@ export interface GxserverCloudBoxesParams {
   deleteSnapshot: { snapshotId: string };
   spend: { refresh?: boolean };
   projectSettings: { projectId: string; settings?: GxserverProjectCloudBoxSettings };
+  agentLogins: Record<string, never>;
+  setAgentLogin: { accountId: string; allowed: boolean };
+  reportBoxSessions: { boxId: string; sessions: GxserverCloudBoxSessionRow[] };
   boxIdleStatus: Record<string, never>;
   boxWorkStatus: Record<string, never>;
   boxWriteBack: { ack?: string[] };
@@ -352,6 +360,22 @@ export interface GxserverCloudConnectResult {
   expiresAt?: string;
   providerRow?: GxserverCloudProvider;
   error?: string;
+}
+
+export type GxserverCloudAgentLoginState = 'notAllowed' | 'waiting' | 'ready' | 'error' | (string & {});
+
+/**
+ * One Claude or Codex account and whether boxes may use it (D5 Claude box token from
+ * `claude setup-token`, D6 Codex `auth.json` copied at boot). Tokens never appear here.
+ */
+export interface GxserverCloudAgentLogin {
+  accountId: string;
+  agent: 'claude' | 'codex' | (string & {});
+  name: string;
+  state: GxserverCloudAgentLoginState;
+  authUrl?: string;
+  detail?: string;
+  allowedAt?: string;
 }
 
 export interface GxserverBoxIdleStatus {
@@ -397,7 +421,15 @@ export interface GxserverCloudBoxesResults {
   setDefaultSnapshot: { snapshot: GxserverCloudSnapshot };
   deleteSnapshot: { snapshot: GxserverCloudSnapshot };
   spend: GxserverCloudSpend;
-  projectSettings: { projectId: string; settings: GxserverProjectCloudBoxSettings };
+  /** `envFiles`: the project's `.env*` files, the candidates of "Send to the box". */
+  projectSettings: {
+    projectId: string;
+    settings: GxserverProjectCloudBoxSettings;
+    envFiles: string[];
+  };
+  agentLogins: { logins: GxserverCloudAgentLogin[] };
+  setAgentLogin: { logins: GxserverCloudAgentLogin[] };
+  reportBoxSessions: { box: GxserverCloudBox };
   boxIdleStatus: GxserverBoxIdleStatus;
   boxWorkStatus: GxserverBoxWorkStatus;
   boxWriteBack: GxserverBoxWriteBackResult;
@@ -424,4 +456,6 @@ export const GXSERVER_BOX_VERBS = [
   'write-back',
   /** `local` provider only: TCP forwarder standing in for tailcat. */
   'relay',
+  /** Started by `boot`, one per box: the idle countdown and the self-stop. */
+  'idle-watch',
 ] as const;

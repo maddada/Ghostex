@@ -12,6 +12,8 @@ pub(super) struct HomeProject {
     pub(super) project_id: String,
     pub(super) project_key: String,
     pub(super) settings: ProjectCloudBoxSettings,
+    /// The project folder on this computer.
+    pub(super) path: Option<String>,
     value: Value,
 }
 
@@ -56,6 +58,7 @@ pub(super) fn read_home_project(
         project_key: project_key(path.as_deref(), project_id),
         project_id: project_id.to_string(),
         settings,
+        path,
         value,
     })
 }
@@ -86,4 +89,23 @@ pub(super) fn write_project_settings(
     );
     repository.update_project(&update)?;
     Ok(())
+}
+
+impl HomeProject {
+    /// The repository's origin URL, which a blank box clones.
+    pub(super) fn origin_url(&self) -> Option<String> {
+        self.path.as_deref().and_then(|path| {
+            crate::project_git_remote::cached_project_git_remote(path)
+                .and_then(|remote| remote.origin_url)
+        })
+    }
+
+    /// The project's name, for its folder on a box.
+    pub(super) fn name(&self) -> String {
+        self.value
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| self.project_id.clone())
+    }
 }

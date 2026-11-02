@@ -20,7 +20,6 @@ use std::rc::Rc;
 
 #[path = "settings_cloud_boxes.rs"]
 mod settings_cloud_boxes;
-mod settings_secrets;
 #[path = "settings_e.rs"]
 mod settings_e;
 #[path = "settings_f1.rs"]
@@ -29,6 +28,7 @@ mod settings_f1;
 mod settings_f2;
 #[path = "settings_machines.rs"]
 mod settings_machines;
+mod settings_secrets;
 #[path = "settings_workspaces.rs"]
 mod settings_workspaces;
 
