@@ -61,6 +61,7 @@ mod burst;
 mod capture_targets;
 mod client_document;
 mod client_storage_init;
+mod cloud_boxes;
 mod collection_menu;
 mod coordinator_actions;
 mod create;
@@ -165,6 +166,7 @@ pub(crate) use agentbox::{
 };
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
+pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
 pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{
     read_agent_choices, read_primary_agent_launcher_id, try_read_agent_choices, write_agent_choices,

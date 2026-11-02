@@ -108,6 +108,9 @@ struct CacheState {
     membership: BTreeMap<String, Arc<ProjectMembers>>,
     project_contexts: BTreeMap<String, Arc<ProjectContextInput>>,
     rows: BTreeMap<String, BTreeMap<String, RowRef>>,
+    /// The rows of Cloud Box sessions merged into this computer's projects, by their key on the
+    /// box machine (`cloud_boxes.rs`). Kept like `rows`; dropped whole when the registry moves.
+    box_rows: BTreeMap<SessionKey, RowRef>,
     browser_rows: BTreeMap<String, (Vec<BrowserTabInput>, Vec<RowRef>)>,
     /// The next row number to mint; monotonic while the cache lives.
     next_row_id: u64,
@@ -330,21 +333,18 @@ impl SidebarViewModel {
         // offers before it reads them, so a filter whose tag was turned off in settings (or whose
         // custom tag the daemon dropped) filters nothing.
         let enabled_filters = inputs.settings.enabled_tag_filters(&filter_catalog);
-        let effective_inputs: Cow<'_, SidebarInputs> = if inputs
-            .ui
-            .selected_tag_filters
-            .iter()
-            .all(|tag| enabled_filters.contains(tag))
-        {
-            Cow::Borrowed(inputs)
-        } else {
-            let mut pruned = inputs.clone();
-            pruned
-                .ui
-                .selected_tag_filters
-                .retain(|tag| enabled_filters.contains(tag));
-            Cow::Owned(pruned)
-        };
+        let effective_inputs: Cow<'_, SidebarInputs> =
+            if inputs.ui.selected_tag_filters.iter().all(|tag| {
+                enabled_filters.contains(tag) || tag == crate::cloud_boxes::CLOUD_BOX_FILTER
+            }) {
+                Cow::Borrowed(inputs)
+            } else {
+                let mut pruned = inputs.clone();
+                pruned.ui.selected_tag_filters.retain(|tag| {
+                    enabled_filters.contains(tag) || tag == crate::cloud_boxes::CLOUD_BOX_FILTER
+                });
+                Cow::Owned(pruned)
+            };
         let effective = effective_inputs.as_ref();
         let side_chat_needs = super::rows::side_chat_needs(store, &machine);
         let row_context = RowContext {
@@ -456,6 +456,24 @@ impl SidebarViewModel {
         {
             rows.remove(&project.project_id);
         }
+        let mut box_rows = match (&mut previous, rows_all_dirty || changes.cloud_boxes_changed) {
+            (Some(previous), false) => std::mem::take(&mut previous.box_rows),
+            _ => BTreeMap::new(),
+        };
+        if changes
+            .machines_reloaded
+            .iter()
+            .any(crate::cloud_boxes::is_cloud_box_machine)
+        {
+            box_rows.clear();
+        }
+        for session in changes
+            .sessions_changed
+            .iter()
+            .chain(&changes.sessions_removed)
+        {
+            box_rows.remove(session);
+        }
 
         // 4. Membership, per project.
         let membership_all_dirty = previous.is_none() || meta_dirty;
@@ -486,6 +504,7 @@ impl SidebarViewModel {
             membership,
             project_contexts: BTreeMap::new(),
             rows,
+            box_rows,
             browser_rows: BTreeMap::new(),
             next_row_id,
             groups: BTreeMap::new(),
@@ -577,6 +596,18 @@ impl SidebarViewModel {
                     &row_context,
                 ) {
                     rows.push(row);
+                }
+            }
+            // The project's Cloud Box sessions, after its own (Q1015 "in project with badge").
+            if machine.is_local() {
+                for key in
+                    crate::cloud_boxes::box_session_keys(store, core.cloud_boxes(), project_id)
+                {
+                    if let Some(row) =
+                        resolve_box_row(&mut state, core, &key, effective, &row_context)
+                    {
+                        rows.push(row);
+                    }
                 }
             }
             // A project's facts are kept until the project row, the overlays, or the host's git
@@ -859,6 +890,46 @@ fn resolve_row(
     Some(row)
 }
 
+/// A Cloud Box session's row in its home project: built like any row from the box machine's
+/// session, with the badge taken from the registry, which knows the box's state better than the
+/// box itself (a stopped box publishes nothing).
+fn resolve_box_row(
+    state: &mut CacheState,
+    core: &Core,
+    key: &SessionKey,
+    inputs: &SidebarInputs,
+    context: &RowContext<'_>,
+) -> Option<RowRef> {
+    if let Some(row) = state.box_rows.get(key) {
+        return Some(row.clone());
+    }
+    let session = core
+        .presentation()
+        .machine(&key.machine)?
+        .effective_session(&key.project_id, &key.session_id)?;
+    let sidebar_id = key.to_sidebar_session_id();
+    let mut row = session_row(
+        key.clone(),
+        &session,
+        super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
+        inputs.host.local_delayed_sends.get(&sidebar_id),
+        context,
+    );
+    if let Some(cloud_box) = core.cloud_boxes().of_machine(&key.machine) {
+        row.cloud_box = Some(crate::cloud_boxes::SessionCloudBoxBadge::from_box(
+            cloud_box,
+        ));
+    }
+    state.next_row_id += 1;
+    state.work.rows_built += 1;
+    let row = RowRef {
+        id: state.next_row_id,
+        row: Arc::new(row),
+    };
+    state.box_rows.insert(key.clone(), row.clone());
+    Some(row)
+}
+
 /// The project facts a project group draws.
 fn project_context(
     store: &PresentationStore,
@@ -1134,25 +1205,47 @@ fn machine_id(selected_machine_id: &str) -> MachineId {
 /// Focus in the vocabulary the rows compare against: raw session ids of this machine.
 fn focus_key(core: &Core, machine: &MachineId) -> FocusKey {
     let focus = core.focus();
+    // A Cloud Box session is drawn in its home project on this computer's tab, so its focus is
+    // this tab's focus, and the project it lives in on the box reads as that home project.
+    let drawn_here = |owner: &MachineId| {
+        owner == machine || (machine.is_local() && crate::cloud_boxes::is_cloud_box_machine(owner))
+    };
+    let home_project = |owner: &MachineId| -> Option<String> {
+        core.cloud_boxes()
+            .of_machine(owner)
+            .and_then(|cloud_box| cloud_box.home_project_id.clone())
+    };
+    let box_home = focus
+        .active_project
+        .as_ref()
+        .filter(|project| {
+            machine.is_local() && crate::cloud_boxes::is_cloud_box_machine(&project.machine)
+        })
+        .and_then(|project| home_project(&project.machine));
     FocusKey {
-        active_group_id: focus
-            .active_group
-            .as_ref()
-            .map(crate::focus::ActiveGroup::to_sidebar_group_id),
-        active_project_id: focus
-            .active_project
-            .as_ref()
-            .filter(|project| project.machine == *machine)
-            .map(|project| project.project_id.clone()),
+        active_group_id: match &box_home {
+            Some(home) => Some(ProjectKey::local(home.clone()).to_sidebar_group_id()),
+            None => focus
+                .active_group
+                .as_ref()
+                .map(crate::focus::ActiveGroup::to_sidebar_group_id),
+        },
+        active_project_id: box_home.or_else(|| {
+            focus
+                .active_project
+                .as_ref()
+                .filter(|project| project.machine == *machine)
+                .map(|project| project.project_id.clone())
+        }),
         focused_session_id: focus
             .focused_session
             .as_ref()
-            .filter(|session| session.machine == *machine)
+            .filter(|session| drawn_here(&session.machine))
             .map(|session| session.session_id.clone()),
         visible_session_ids: focus
             .visible_sessions
             .iter()
-            .filter(|session| session.machine == *machine)
+            .filter(|session| drawn_here(&session.machine))
             .map(|session| session.session_id.clone())
             .collect(),
     }

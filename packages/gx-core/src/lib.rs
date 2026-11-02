@@ -20,6 +20,7 @@ mod attention;
 pub mod bot_feed;
 mod change;
 mod claude_cloud;
+pub mod cloud_boxes;
 mod connection;
 mod core;
 mod doc_sync;

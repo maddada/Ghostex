@@ -51,6 +51,8 @@ pub struct SidebarMenus<'a> {
     /// The drawn orchestrators that have a thread Sleep Inactive Threads would sleep. Left empty
     /// when no orchestrator is drawn, so a list without one never walks the rows for it.
     coordinators_with_inactive_threads: std::collections::HashSet<SessionKey>,
+    /// This computer has a Cloud Box, so the Sort & Filter menu offers the Cloud Box filter.
+    has_cloud_boxes: bool,
     now_ms: u64,
 }
 
@@ -150,6 +152,7 @@ impl<'a> SidebarMenus<'a> {
             } else {
                 Default::default()
             },
+            has_cloud_boxes: !core.cloud_boxes().is_empty(),
             now_ms,
         }
     }
@@ -395,6 +398,8 @@ impl<'a> SidebarMenus<'a> {
             filter_catalog: &self.filter_catalog,
             host: self.host,
             drawn_project_group_ids: &drawn,
+            // Asked of the registry, not the drawn rows: another ticked filter may be hiding them.
+            cloud_box_rows: self.has_cloud_boxes,
         })
     }
 

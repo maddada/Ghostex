@@ -557,6 +557,9 @@ pub struct SessionRow {
     pub thread_state: Option<String>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
+    /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray
+    /// picked; the registry's state wins over what the box last published (`cloud_boxes.rs`).
+    pub cloud_box: Option<crate::cloud_boxes::SessionCloudBoxBadge>,
     /// The Claude cloud session this row stands for, when its agent runs on claude.ai.
     pub claude_cloud: Option<ghostex_gx_protocol::presentation::PresentationClaudeCloud>,
     /// What the session is linked to; present only for a session of a project with work mode on

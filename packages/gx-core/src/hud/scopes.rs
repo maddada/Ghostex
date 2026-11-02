@@ -145,6 +145,10 @@ pub(crate) fn project_view_spaces(
         let Some(remote_id) = machine_id.remote_id() else {
             continue;
         };
+        // A Cloud Box is no place of its own: its sessions sit in their home project here.
+        if crate::cloud_boxes::is_cloud_box_machine(machine_id) {
+            continue;
+        }
         if store.loaded_live(machine_id).is_none() {
             continue;
         }

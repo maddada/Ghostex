@@ -1048,7 +1048,30 @@ impl NativeChatView {
                 return super::attachments::import_paths(&config.remote, &params)
                     .map_err(|message| json!({"message":message,"endpoint":endpoint}));
             }
-            super::rpc::request(config.remote, &endpoint, &params).await
+            // A session on a Cloud Box reaches the box's own gxserver; a send wakes a stopped box
+            // first and nothing else does (gx_store/cloud_boxes.rs, Q1013).
+            let delivers_message = matches!(
+                endpoint.as_str(),
+                "/api/sendSessionChatMessage"
+                    | "/api/queueSessionChatPrompt"
+                    | "/api/sendSessionChatQueuedPrompt"
+                    | "/api/answerSessionChatPrompt"
+            );
+            let remote = match crate::app::gx_store::cloud_box_send_target(
+                &config.machine_id,
+                delivers_message,
+            )
+            .await
+            {
+                Ok(Some(target)) => Some(target),
+                Ok(None) => config.remote,
+                Err(refusal) => {
+                    return Err(
+                        json!({"code":refusal.code,"message":refusal.message,"endpoint":endpoint}),
+                    );
+                }
+            };
+            super::rpc::request(remote, &endpoint, &params).await
         });
         cx.spawn(async move |this, cx| {
             let result = task.await;

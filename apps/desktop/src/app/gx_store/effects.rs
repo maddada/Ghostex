@@ -82,6 +82,8 @@ impl GxStoreHost {
                 effect @ (Effect::MachineLive { .. }
                 | Effect::RefetchSidebarHud { .. }
                 | Effect::DomainProjectChanged { .. }) => self.app_effects.push(effect),
+                // Home gxserver's box registry is read again (gx_store/cloud_boxes.rs).
+                effect @ Effect::RefetchCloudBoxes => self.app_effects.push(effect),
                 // Attention: the acknowledgement timer, the report to the session's daemon and the
                 // completion sound (gx_store/attention/).
                 effect @ (Effect::ArmAttentionAcknowledge { .. }
@@ -146,12 +148,14 @@ impl GhostexGpuiApp {
                 self.gx_store_refresh_notification_feed(machine.clone(), cx);
                 if machine.is_local() {
                     self.navigation_history_refresh(cx);
+                    self.gx_store_refresh_cloud_boxes(cx);
                 }
                 self.gx_store_perform_hud_effect(Effect::MachineLive { machine }, cx);
             }
             effect @ (Effect::RefetchSidebarHud { .. } | Effect::DomainProjectChanged { .. }) => {
                 self.gx_store_perform_hud_effect(effect, cx)
             }
+            Effect::RefetchCloudBoxes => self.gx_store_refresh_cloud_boxes(cx),
             _ => {}
         }
     }

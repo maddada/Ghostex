@@ -13,8 +13,15 @@ impl GhostexGpuiApp {
             return view.clone();
         }
         let shell_session_id = TerminalSessionId(self.native_chats.len() as u64 + 1);
+        // A Cloud Box session's chat talks to the box's own gxserver (`gx_store/cloud_boxes.rs`).
+        let machine_id = session
+            .machine
+            .remote_id()
+            .unwrap_or(crate::app::gx_chat::LOCAL_MACHINE_ID)
+            .to_string();
+        let remote = crate::app::gx_store::cloud_box_request_target(&machine_id);
         let config = NativeChatConfig {
-            machine_id: "local".to_string(),
+            machine_id,
             project_id: session.project_id.clone(),
             session_id: session.session_id.clone(),
             sidebar_session_id: format!(
@@ -28,7 +35,7 @@ impl GhostexGpuiApp {
                 "gpui-web-{}",
                 crate::app::helpers::gpui_random_uuid_string().unwrap_or_default()
             ),
-            remote: None,
+            remote,
             initial_snapshot: None,
             initial_presentation: self.initial_web_chat_presentation(session),
         };

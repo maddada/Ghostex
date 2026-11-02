@@ -17,6 +17,7 @@ mod lifecycle;
 mod local_provider;
 mod ops;
 mod params;
+pub(crate) mod presentation;
 mod project;
 mod providers;
 mod reconcile;
