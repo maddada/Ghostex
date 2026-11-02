@@ -28,6 +28,7 @@ USAGE
   ghostex cloud stop <box-id> [--json]
   ghostex cloud delete <box-id> [--force] [--json]
   ghostex cloud connect-info <box-id> --json
+  ghostex cloud attach <box-id> <project-id> <session-id>
   ghostex cloud snapshots [--project <project-id>] [--json]
   ghostex cloud snapshot save <box-id> [--name <name>] [--default | --replace-default] [--json]
   ghostex cloud snapshot default <snapshot-id> [--json]
@@ -41,7 +42,9 @@ USAGE
   runs (or fails). Sending a message to a stopped box's session wakes it; resume
   does the same by hand. delete refuses a box with unpushed work unless --force.
   cap sets the monthly spending cap: at 80% Ghostex warns, at 100% it refuses new
-  boxes, and running boxes keep running.
+  boxes, and running boxes keep running. attach makes this terminal the session's
+  terminal on a running box (the ids are the box's own, as `ghostex cloud show` lists
+  them); it does not wake a stopped box.
 
 EXAMPLES
   ghostex cloud connect instabox
@@ -183,6 +186,14 @@ pub(crate) fn run(args: &[String]) -> CliResult<()> {
                 params.insert("force".into(), json!(true));
             }
             request("delete", params)?
+        }
+        "attach" => {
+            return super::cloud_attach::attach(
+                &arg(1, "a box id")?,
+                &arg(2, "the session's project id on the box")?,
+                &arg(3, "the session id on the box")?,
+                &flags,
+            );
         }
         "connect-info" => {
             params.insert("boxId".into(), json!(arg(1, "a box id")?));

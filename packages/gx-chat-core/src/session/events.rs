@@ -586,6 +586,7 @@ fn rpc_settled(
                 return Vec::new();
             };
             arm_read_deadline(state, context);
+            crate::session::cloud_box::note_awake(state);
             if request.generation != state.messages.generation {
                 // The answer belongs to the previous conversation.
                 return Vec::new();
@@ -596,7 +597,7 @@ fn rpc_settled(
                 ReadKind::Page => page_read_settled(state, &read, &request, context),
             }
         }
-        RpcOutcome::Err { .. } => {
+        RpcOutcome::Err { code, .. } => {
             let Some(request) = state
                 .messages
                 .reads
@@ -606,6 +607,11 @@ fn rpc_settled(
             else {
                 return Vec::new();
             };
+            if crate::session::cloud_box::is_asleep(code.as_deref()) {
+                crate::session::cloud_box::read_refused_asleep(state, context, &request);
+                arm_read_deadline(state, context);
+                return Vec::new();
+            }
             let effects = fail_read(state, context, &request, !answered);
             arm_read_deadline(state, context);
             effects

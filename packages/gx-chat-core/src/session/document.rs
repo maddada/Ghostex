@@ -42,6 +42,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.agent_session_id = tri_string(session.agent_session_id.clone());
     into.session_agent_id = tri_string(session.session_agent_id.clone());
     into.screen_probed = session.screen_probed;
+    into.cloud_box_asleep = session.cloud_box_asleep;
     into.retired_async_question_ids = Tri::Value(session.retired_async_question_ids.clone());
     into.has_more = state.messages.has_more;
     into.earlier_page_cursor = state.messages.before_offset as i64;

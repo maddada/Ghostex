@@ -14,6 +14,7 @@ mod box_cli;
 pub mod browser_mcp;
 mod built_in_extensions;
 mod claude_cloud_cli;
+mod cloud_attach;
 mod cloud_cli;
 mod connectors;
 mod connectors_executor;

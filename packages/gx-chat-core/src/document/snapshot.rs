@@ -62,6 +62,10 @@ pub struct Document {
     pub agent_tasks: Tri<Value>,
     /// Latched once gxserver has read this session's screen.
     pub screen_probed: bool,
+    /// The session's Cloud Box is paused or stopped; sending a message wakes it
+    /// (`session/cloud_box.rs`). The composer's placeholder already says so.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cloud_box_asleep: bool,
     pub agent: Tri<String>,
     pub agent_session_id: Tri<String>,
     /// A draft session's agent choices. Family e.

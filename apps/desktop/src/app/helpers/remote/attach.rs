@@ -69,6 +69,18 @@ pub(crate) fn gpui_prepare_remote_attach_terminal_plan(
     askpass exactly as much as a woken one, or ssh falls back to prompting for
     the password on the pane's own TTY.
     */
+    // A Cloud Box's session has no SSH machine: its pane attaches through the box's gxserver
+    // (helpers/remote/cloud_box_attach.rs).
+    if let Some(box_id) = ghostex_gx_core::protocol::cloud_box::cloud_box_id_from_machine_id(
+        reference.remote_machine_id.as_str(),
+    ) {
+        return gpui_prepare_cloud_box_attach_terminal_plan(
+            target,
+            reference,
+            box_id,
+            wake_session,
+        );
+    }
     let path = if wake_session {
         "/api/wakeSession"
     } else {

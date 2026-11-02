@@ -3791,6 +3791,8 @@ Related settings: `cloudBoxesEnabled` (on by default),
 `cloudBoxesPhoneStartEnabled` (default off), `agentboxDefaultLocation` (where
 agentbox New Thread runs unless you pick another place; default `local`). CLI:
 `ghostex cloud providers`, `ghostex cloud list`, `ghostex cloud spend`,
+`ghostex cloud attach <box-id> <project-id> <session-id>` (a box session's
+terminal in any terminal; the ids are the box's own, from `ghostex cloud show`),
 `ghostex agentbox status`, `ghostex agentbox list`,
 `ghostex create-agent <agent> --project-id <id> --run-on docker`.
 

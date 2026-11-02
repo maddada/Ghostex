@@ -63,10 +63,21 @@ impl GhostexGpuiApp {
             return;
         };
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
-        let Some(config) = gpui_remote_machine_config_from_settings(
-            settings_snapshot.object(),
+        // A Cloud Box is no saved machine; its pane attaches through its gxserver
+        // (helpers/remote/cloud_box_attach.rs).
+        let config = if ghostex_gx_core::protocol::cloud_box::cloud_box_id_from_machine_id(
             reference.remote_machine_id.as_str(),
-        ) else {
+        )
+        .is_some()
+        {
+            Some(gpui_cloud_box_machine_config(&reference.remote_machine_id))
+        } else {
+            gpui_remote_machine_config_from_settings(
+                settings_snapshot.object(),
+                reference.remote_machine_id.as_str(),
+            )
+        };
+        let Some(config) = config else {
             self.dispatch_gpui_app_modal_toast(
                 "warning",
                 "Remote action unavailable",

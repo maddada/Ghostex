@@ -96,8 +96,15 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     `starting` or `empty` transcript greets the user with the agent mark and headline instead of
     falling through to the `emptyState` loading copy.
     */
-    let show_welcome = shows_new_session_welcome(view_kind)
-        || (view_kind == "loading" && state.session.available_agents.is_some());
+    // A sleeping Cloud Box's session is not a new one: with nothing cached it says why the
+    // conversation is not shown, instead of greeting (`session/cloud_box.rs`).
+    let box_asleep = state.session.cloud_box_asleep;
+    if box_asleep {
+        into.empty_state = crate::session::cloud_box::asleep_empty_state();
+    }
+    let show_welcome = !box_asleep
+        && (shows_new_session_welcome(view_kind)
+            || (view_kind == "loading" && state.session.available_agents.is_some()));
     into.new_session_welcome = show_welcome.then(|| {
         let agent_name = welcome_agent_name(state.session.agent.as_deref());
         NewSessionWelcome {

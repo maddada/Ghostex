@@ -95,6 +95,9 @@ pub struct SessionState {
     pub agent_message_deliveries: Option<Value>,
     /// Latched once gxserver has read this session's screen; an omission never unsets it.
     pub screen_probed: bool,
+    /// The session's Cloud Box is paused or stopped: its host refused a read with
+    /// `cloudBoxAsleep` (`session/cloud_box.rs`). A sent message wakes it.
+    pub cloud_box_asleep: bool,
     /// Live work as the chat channel itself reports it.
     pub server_working: bool,
     /// The session activity gxserver presents, which is what the sidebar spinner reads.
@@ -170,6 +173,7 @@ impl Default for SessionState {
             secret_requests: None,
             agent_message_deliveries: None,
             screen_probed: false,
+            cloud_box_asleep: false,
             server_working: false,
             session_activity_working: false,
             external_working: false,

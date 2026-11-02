@@ -763,6 +763,25 @@ pub fn settle_request(
             }
             effects.extend(run_head(state, context));
         }
+        // A sleeping Cloud Box refuses the draft push ahead of a send; the send itself is what
+        // wakes it (`session/cloud_box.rs`), so the submission goes on to it.
+        crate::wire::RpcOutcome::Err { code, .. }
+            if crate::session::cloud_box::is_asleep(code.as_deref())
+                && state
+                    .composer
+                    .submitting
+                    .as_ref()
+                    .is_some_and(|submission| {
+                        submission.phases.first() == Some(&SendPhase::PushDraft)
+                    }) =>
+        {
+            state.core.refusal_claimed = true;
+            if let Some(submission) = state.composer.submitting.as_mut() {
+                submission.request = None;
+                submission.phases.remove(0);
+            }
+            effects.extend(run_head(state, context));
+        }
         crate::wire::RpcOutcome::Err { message, code, .. } => {
             remember_failed_send(state, code.as_deref());
             undo_optimistic(state);
