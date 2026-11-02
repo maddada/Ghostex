@@ -548,9 +548,13 @@ view from the strip.
   Settings > File opening decides where a file opens from Quick Access, a chat
   link, a terminal link or `ghostex open <file>`: one dropdown for HTML,
   Markdown and images, one for every other file (code and text). Both offer Files (the default), the built-in
-  VS Code view, and the editor apps Ghostex knows (VS Code, Cursor, Zed, the
+  VS Code view, System App (the app your computer opens that file type with, on
+  Windows, macOS and Linux), and the editor apps Ghostex knows (VS Code, Cursor, Zed, the
   JetBrains IDEs and the rest); an editor that is not installed on this computer
-  is listed but cannot be picked. If you had changed the old Markdown, HTML or
+  is listed but cannot be picked. A remote session's file cannot reach this
+  computer's apps, so System App opens it in VS Code instead. A chat file link can be a
+  plain path, a `file://` URL or, on Windows, `C:/...`, `/C:/...` or
+  `file:///C:/...`; all of them open the same file. If you had changed the old Markdown, HTML or
   Images setting, the first dropdown reads As before and keeps those choices
   until you pick something else. Videos and audio keep their own Files or system
   app choice; AVIF pictures follow the first dropdown, and PDFs, fonts and

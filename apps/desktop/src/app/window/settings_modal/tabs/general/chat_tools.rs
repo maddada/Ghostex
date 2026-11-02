@@ -498,7 +498,9 @@ fn file_opening_section(
     let unavailable: Vec<String> = targets
         .iter()
         .map(|option| option.value.clone())
-        .filter(|value| value != "files" && value != "code" && !installed.contains(value))
+        .filter(|value| {
+            !matches!(value.as_str(), "files" | "code" | "system-app") && !installed.contains(value)
+        })
         .collect();
     for option in &mut targets {
         if unavailable.contains(&option.value) {
@@ -510,12 +512,12 @@ fn file_opening_section(
         (
             "documentFileOpenTarget",
             "HTML, Markdown and images",
-            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat, the terminal or `ghostex open`.",
+            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
         (
             "otherFileOpenTarget",
             "Other files",
-            "Code and text files, opened from Quick Access, agent chat, the terminal or `ghostex open`.",
+            "Code and text files, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
     ] {
         if !g.visible(s, key) {

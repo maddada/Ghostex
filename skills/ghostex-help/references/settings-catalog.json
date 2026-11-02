@@ -2322,7 +2322,7 @@
     {
       "key": "documentFileOpenTarget",
       "title": "HTML, Markdown and images",
-      "subtitle": "Choose where HTML, Markdown and picture files open from Quick Access, agent chat, the terminal and `ghostex open`: Files, VS Code, or an editor app installed on this computer.",
+      "subtitle": "Choose where HTML, Markdown and picture files open from Quick Access, agent chat, the terminal and `ghostex open`: Files, VS Code, the system app (your computer's default app for that file type), or an editor app installed on this computer.",
       "tab": "tools",
       "tabTitle": "Files & Links",
       "section": "fileOpening",
@@ -2337,6 +2337,10 @@
         {
           "label": "VS Code",
           "value": "code"
+        },
+        {
+          "label": "System App",
+          "value": "system-app"
         },
         {
           "label": "VS Code app",
@@ -2424,7 +2428,7 @@
     {
       "key": "otherFileOpenTarget",
       "title": "Other files",
-      "subtitle": "Choose where every other file (code and text) opens from Quick Access, agent chat, the terminal and `ghostex open`: Files, VS Code, or an editor app installed on this computer.",
+      "subtitle": "Choose where every other file (code and text) opens from Quick Access, agent chat, the terminal and `ghostex open`: Files, VS Code, the system app (your computer's default app for that file type), or an editor app installed on this computer.",
       "tab": "tools",
       "tabTitle": "Files & Links",
       "section": "fileOpening",
@@ -2439,6 +2443,10 @@
         {
           "label": "VS Code",
           "value": "code"
+        },
+        {
+          "label": "System App",
+          "value": "system-app"
         },
         {
           "label": "VS Code app",
