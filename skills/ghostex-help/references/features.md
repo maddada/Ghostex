@@ -1461,8 +1461,8 @@ sends it, as Send would. Shift+Enter starts a new line and Escape closes it.
 On the phone there is no hover. Hold a message's words to select them (drag
 the handles to change the selection); the menu that appears offers Copy, Add to
 Chat, which quotes the selected words into the chat box, and More, which opens
-the message's menu with Copy, Add to Chat and Reply for the whole message and the same
-actions. A selection stays inside one paragraph, list item, table cell or code
+the message's menu with Copy and Add to Chat for the whole message, Reply for
+the words you selected, and the same actions. A selection stays inside one paragraph, list item, table cell or code
 block, so use More > Copy for a whole message. Holding a message beside its
 words opens that menu straight away, and holding a link opens the link's own
 menu. Nothing shows under a message until you do.
