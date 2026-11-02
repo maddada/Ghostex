@@ -69,6 +69,42 @@ fn answered_by_index(state: &ChatState, id: &str) -> bool {
         == Some(&"answered")
 }
 
+/// Whether the session's queue holds answers for the form.
+fn queued_in_queue(state: &ChatState, id: &str) -> bool {
+    state.session.queue_prompts.as_ref().is_some_and(|queue| {
+        queue.iter().any(|prompt| {
+            prompt
+                .get("text")
+                .and_then(Value::as_str)
+                .and_then(crate::transcript::page_answers::answers_page_id)
+                .as_deref()
+                == Some(id)
+        })
+    })
+}
+
+/// Whether the form's answers are still on their way: this client is sending them or they wait in
+/// the queue, and no real transcript row records them yet. The pending "You answered" card already
+/// carries them as a row, so the transcript's answers alone cannot tell this apart from answered.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// A form answered while the agent worked, with "Wait for turn end before sending form answers" on, read Answered in its header while the card under it said "Waiting for the agent to finish its turn…": the pending card's row counted as the transcript carrying the answers. The header reads Queued (or Sending) until a real transcript row, this client's confirmation or the session's resource index records them.
+fn awaiting_delivery(state: &ChatState, id: &str) -> bool {
+    if state.questions.form_answer_index.holds(id)
+        || crate::questions::resource_index::answered_in_transcript(
+            &state.session.resource_index,
+            id,
+        )
+    {
+        return false;
+    }
+    let local =
+        state.questions.forms.get(id).is_some_and(|entry| {
+            !entry.confirmed && (entry.send.is_some() || entry.sent.is_some())
+        });
+    local || queued_in_queue(state, id)
+}
+
 /// Whether the reader can still change the form. It never waits for the saved picks: the rows
 /// that find a new form are rebuilt after this family's sync, so their read can leave an event
 /// late, and picks the reader makes first win over it.
@@ -660,26 +696,21 @@ pub fn project(state: &ChatState) -> BTreeMap<String, Value> {
             let entry = entry.unwrap_or(&fallback);
             let sent = received_answers(state, &form.id).or(entry.sent.as_ref());
             let (phase, drafts, notes) = match (sent, entry.send.as_ref()) {
-                (Some(answers), _) if received_answers(state, &form.id).is_some() => (
-                    "answered",
-                    drafts_from_answers(form, answers),
-                    notes_from_answers(form, answers),
-                ),
+                (Some(answers), _)
+                    if received_answers(state, &form.id).is_some()
+                        && !awaiting_delivery(state, &form.id) =>
+                {
+                    (
+                        "answered",
+                        drafts_from_answers(form, answers),
+                        notes_from_answers(form, answers),
+                    )
+                }
                 (Some(answers), _) => (
                     // Recorded in the transcript where this client's confirmation missed it.
                     if crate::questions::resource_index::answered_in_transcript(index, &form.id) {
                         "answered"
-                    } else if entry.sent_waiting_for_idle
-                        || state.session.queue_prompts.as_ref().is_some_and(|queue| {
-                            queue.iter().any(|prompt| {
-                                prompt
-                                    .get("text")
-                                    .and_then(Value::as_str)
-                                    .and_then(crate::transcript::page_answers::answers_page_id)
-                                    == Some(form.id.clone())
-                            })
-                        })
-                    {
+                    } else if entry.sent_waiting_for_idle || queued_in_queue(state, &form.id) {
                         "queued"
                     } else {
                         "sending"
@@ -885,6 +916,34 @@ mod canceled_tests {
         assert!(sync(&mut state)
             .iter()
             .all(|effect| !matches!(effect, Effect::ReadStorage { .. })));
+    }
+
+    /// The pending "You answered" card puts the answers among the transcript's rows; the form still
+    /// reads queued until a real row or the index records them.
+    #[test]
+    fn a_queued_answer_with_its_pending_card_reads_queued() {
+        let (mut state, id) = state_with_form();
+        let answers = json!({"Pick?": "Yes"});
+        let entry = state.questions.forms.get_mut(&id).unwrap();
+        entry.sent = Some(answers.clone());
+        entry.sent_waiting_for_idle = true;
+        state
+            .transcript_view
+            .page_answers
+            .push(crate::transcript::page_answers::PageAnswers {
+                page_id: id.clone(),
+                title: String::new(),
+                answers,
+            });
+        assert_eq!(project(&state)[&id]["state"], "queued");
+        assert_eq!(project(&state)[&id]["canSend"], false);
+        state.session.resource_index =
+            vec![json!({"id": id, "kind": "form", "status": "answered", "answersOffset": 900})];
+        assert_eq!(
+            project(&state)[&id]["state"],
+            "answered",
+            "the transcript recorded it"
+        );
     }
 
     /// The index counts answers waiting in the queue as answered: the form still reads queued,

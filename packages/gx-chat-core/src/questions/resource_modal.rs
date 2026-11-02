@@ -56,6 +56,25 @@ pub struct ResourceGo {
     pub offset: Option<u64>,
     /// The jump read for it went out.
     pub read_issued: bool,
+    /// Where a second jump read ends when the first one comes back without the reply: a little past
+    /// the reply itself (`retry_end`).
+    pub retry_offset: Option<u64>,
+}
+
+/// How far past a reply's start a second jump read ends: past the reply's whole line (a history
+/// page holds only the lines that end before its cursor), and early in its turn.
+pub const RETRY_CONTEXT_BYTES: u64 = 65_536;
+
+/// Where a second jump read for the entry ends when the window that ends at its turn's end does not
+/// hold the reply: a little past the reply, so the reply is among the window's newest rows.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// "Go to chat" on a form an agent asked before a long run of tool calls said "Ghostex could not bring that part of the chat in.": the window ending at the turn's end came back with the turn folded, and a gxserver older than the one that keeps question replies (`Turn::push` in server/src/session_chat_history.rs) held the form back with the folded work. A window that ends soon after the form makes it the newest reply of what it holds, which every gxserver keeps. A cursor inside the form's own line would leave it out, hence the margin. The turn's end stays the first choice, since it shows the whole turn.
+fn retry_end(entry: &crate::questions::resource_index::ResourceEntry) -> Option<u64> {
+    let end = entry.offset? + RETRY_CONTEXT_BYTES;
+    jump_end(entry)
+        .is_some_and(|first| end < first)
+        .then_some(end)
 }
 
 fn loaded_form(state: &ChatState, id: &str) -> bool {
@@ -326,11 +345,12 @@ pub fn go_to(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effe
             return effects;
         }
     }
-    let offset = entry_of(state, id).and_then(|entry| jump_end(&entry));
+    let entry = entry_of(state, id);
     state.questions.resource_go = Some(ResourceGo {
         id: id.to_string(),
-        offset,
+        offset: entry.as_ref().and_then(jump_end),
         read_issued: false,
+        retry_offset: entry.as_ref().and_then(retry_end),
     });
     state.core.request_publish();
     advance(state, context)
@@ -344,8 +364,22 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     };
     if go.read_issued {
         // The jump read is out or settled: `after_refresh` scrolls once the rows are rebuilt from
-        // it (scrolling now would run against rows that do not hold the new messages yet).
-        return Vec::new();
+        // it (scrolling now would run against rows that do not hold the new messages yet). One that
+        // settled without the reply reads again, ending a little past it (`retry_end`).
+        let settled =
+            !state.messages.loading_earlier && state.messages.load_earlier_request.is_none();
+        let retry = go
+            .retry_offset
+            .filter(|_| settled && holder_message(state, &go.id).is_none());
+        let Some(retry) = retry else {
+            return Vec::new();
+        };
+        if let Some(waiting) = state.questions.resource_go.as_mut() {
+            waiting.offset = Some(retry);
+            waiting.retry_offset = None;
+        }
+        state.core.request_publish();
+        return crate::session::actions::load_window_ending_at(state, context, retry);
     }
     if let Some(message_id) = holder_message(state, &go.id) {
         if let Some(effects) = scroll_to(state, context, &go.id, &message_id) {
@@ -692,6 +726,71 @@ mod tests {
             crate::questions::forms::project(&state)[&id]["state"],
             "canceled"
         );
+    }
+
+    /// A first jump read that comes back without the reply (an older gxserver folded it into its
+    /// turn's work) reads again with a window ending a little past the reply, and the chat scrolls
+    /// to it then.
+    #[test]
+    fn a_jump_read_without_the_reply_reads_again_ending_at_it() {
+        let id = form_id();
+        let context = ChatContext::default();
+        let mut state = ChatState::default();
+        let mut entry = index_entry(&id, "form", Some(5_000));
+        entry["turnEnd"] = json!(180_000);
+        state.session.resource_index = vec![entry];
+        state.messages.has_more = true;
+        state.messages.before_offset = 90_000;
+        let settle = |state: &mut ChatState, request_id: u64, messages: Value| {
+            let result = json!({
+                "messages": messages, "hasMore": true, "beforeOffset": 4_000, "status": "ready",
+            });
+            crate::session::events::handle(
+                state,
+                &crate::event::Event::RpcSettled {
+                    request_id,
+                    outcome: Box::new(RpcOutcome::Ok { result }),
+                },
+                &context,
+            );
+        };
+        let request_id = match &go_to(&mut state, &context, &id)[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(
+            state
+                .messages
+                .load_earlier_request
+                .as_ref()
+                .map(|r| r.before_offset),
+            Some(180_000),
+            "the first window ends at the turn's end"
+        );
+        let tool = json!({"id": "work", "role": "assistant", "source": "transcript",
+            "timestamp": 2, "blocks": [{"type": "text", "text": "still working"}]});
+        settle(&mut state, request_id, json!([tool]));
+        let request_id = match &advance(&mut state, &context)[..] {
+            [Effect::SendRpc { request_id, .. }] => *request_id,
+            other => panic!("expected a second read, got {other:?}"),
+        };
+        assert_eq!(
+            state
+                .messages
+                .load_earlier_request
+                .as_ref()
+                .map(|r| r.before_offset),
+            Some(5_000 + RETRY_CONTEXT_BYTES),
+            "the second window ends a little past the reply"
+        );
+        assert!(advance(&mut state, &context).is_empty(), "one retry only");
+        let old = serde_json::to_value(reply("old-form", FORM)).unwrap();
+        settle(&mut state, request_id, json!([old]));
+        crate::session::composition::compose_cached(&mut state, &[], None, false);
+        crate::transcript::refresh(&mut state, &context);
+        after_refresh(&mut state, &context);
+        assert!(state.questions.resource_go.is_none(), "the jump is done");
+        assert!(state.questions.open_questions.jump.is_some());
     }
 
     /// The jump read merges the window that ends at the old form without moving the Load earlier

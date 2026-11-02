@@ -86,9 +86,11 @@ pub struct Asker {
     /// The reply that holds it.
     pub message_id: String,
     pub tags: Vec<String>,
-    /// The transcript carries its answers.
+    /// The transcript carries its answers, or the session's resource index records them when the
+    /// loaded rows do not (`questions::resource_index::settle_loaded`).
     pub answered: bool,
-    /// A later form or page asks all of its tags again, or a later block withdrew them.
+    /// A later form or page asks all of its tags again, or a later block withdrew them (also when
+    /// only the resource index holds that later block).
     pub obsolete: bool,
     /// Its tags a later ```questions block withdrew.
     pub withdrawn: Vec<String>,

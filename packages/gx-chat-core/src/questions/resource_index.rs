@@ -84,6 +84,29 @@ pub fn settled_by_index<'a>(index: &'a [Value], kind: &str) -> HashMap<&'a str, 
         .collect()
 }
 
+/// Marks the loaded askers the index records as settled (`settled_by_index`): answered, or
+/// withdrawn when the loaded rows do not say answered. The loaded rows can hold a question without
+/// its answer (a jump read's window, a reload), and a Q-tag link, the ? pill and the Resources row
+/// all read these marks, so a tag whose answer is outside the loaded rows reads answered, not amber.
+pub fn settle_loaded(askers: &mut [Asker], index: &[Value]) {
+    if index.is_empty() {
+        return;
+    }
+    let forms = settled_by_index(index, "form");
+    let pages = settled_by_index(index, "page");
+    for asker in askers.iter_mut() {
+        let settled = match asker.kind {
+            AskerKind::Form => &forms,
+            AskerKind::Page => &pages,
+        };
+        match settled.get(asker.id.as_str()) {
+            Some(&"answered") => asker.answered = true,
+            Some(&"withdrawn") if !asker.answered => asker.obsolete = true,
+            _ => {}
+        }
+    }
+}
+
 /// Whether the index records the form's answers in the transcript itself (where its answers
 /// message starts), not only in the queue: the answers can be read back by
 /// `readSessionChatResource` and stay given whatever happens to the queue.
@@ -321,6 +344,33 @@ mod tests {
         let answered = index(&messages, &[id("Q1")]);
         assert_eq!(status(&answered, "Q1"), "answered");
         assert_eq!(status(&answered, "Q3"), "waiting");
+    }
+
+    /// A Q-tag whose form's answer or withdrawal is outside the loaded rows reads as the index
+    /// records it, not open.
+    #[test]
+    fn tags_read_what_the_index_records() {
+        use crate::transcript::open_questions::{askers, linkable_tags, TagState};
+        let messages = [
+            reply("m1", 1, &form("Q1", "One")),
+            reply("m2", 2, &form("Q2", "Two")),
+            reply("m3", 3, &form("Q3", "Three")),
+        ];
+        let mut loaded = askers(&messages, &[]);
+        let states = |askers: &[Asker]| -> Vec<TagState> {
+            linkable_tags(askers)
+                .into_iter()
+                .map(|tag| tag.state)
+                .collect()
+        };
+        assert_eq!(states(&loaded), [TagState::Open; 3]);
+        let entry = |at: usize, status: &str| serde_json::json!({"id": loaded[at].id, "kind": "form", "status": status});
+        let recorded = vec![entry(0, "answered"), entry(1, "withdrawn")];
+        settle_loaded(&mut loaded, &recorded);
+        assert_eq!(
+            states(&loaded),
+            [TagState::Answered, TagState::Withdrawn, TagState::Open]
+        );
     }
 
     #[test]
