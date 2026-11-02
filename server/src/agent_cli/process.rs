@@ -128,7 +128,12 @@ pub(crate) async fn run_executable(
                 .collect::<Vec<_>>()
                 .join(" ")
         );
-        return run(&script, home, &BTreeMap::new(), timeout, output).await;
+        let mut env = BTreeMap::new();
+        if is_agy(executable) {
+            let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+            env.insert(key.to_string(), value.to_string());
+        }
+        return run(&script, home, &env, timeout, output).await;
     }
     let mut command = Command::new(executable);
     #[cfg(unix)]
@@ -146,7 +151,18 @@ pub(crate) async fn run_executable(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    // See `AGY_BACKGROUND_AUTO_UPDATE_OFF` (issue #397): this runs the Agents Hub's version and update checks.
+    if is_agy(executable) {
+        let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+        command.env(key, value);
+    }
     wait(command, timeout, output).await
+}
+
+fn is_agy(executable: &str) -> bool {
+    Path::new(executable)
+        .file_stem()
+        .is_some_and(|stem| stem.eq_ignore_ascii_case("agy"))
 }
 
 async fn wait(
@@ -207,5 +223,17 @@ async fn drain(mut stream: impl tokio::io::AsyncRead + Unpin, output: impl Fn(St
             break;
         }
         output(String::from_utf8_lossy(&buffer[..count]).into_owned());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_agy;
+
+    #[test]
+    fn agy_is_recognised_by_its_file_name() {
+        assert!(is_agy("/Users/me/.local/bin/agy"));
+        assert!(is_agy("agy.exe"));
+        assert!(!is_agy("/usr/local/bin/codex"));
     }
 }

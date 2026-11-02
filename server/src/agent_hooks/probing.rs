@@ -19,6 +19,11 @@ use super::probe_cache::{
     cached_resolve_command_path, login_shell_path_entries, refresh_resolved_command_path,
 };
 
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// Antigravity's `agy` starts its own detached updater whenever its last update check is 15 minutes old, whatever the command (even `agy models` or `agy --version`), and on Windows that updater runs `agy --version` in a new visible console, so the lineup probe popped a Windows Terminal window every ~20 minutes (issue #397). gxserver sets this on every background `agy` it runs (the lineup read, the Agents Hub version and update checks, title, commit-message and catch-up jobs), never on a session the user starts, so agy keeps updating itself there. agy reads only the value `true` (`1` is ignored).
+pub(crate) const AGY_BACKGROUND_AUTO_UPDATE_OFF: (&str, &str) =
+    ("AGY_CLI_DISABLE_AUTO_UPDATE", "true");
+
 pub(crate) fn parse_global_session_ref(value: &str) -> (Option<String>, Option<String>) {
     let parts = value.trim().split(':').collect::<Vec<_>>();
     if parts.len() == 3 && !parts[1].is_empty() && !parts[2].is_empty() {

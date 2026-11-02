@@ -70,18 +70,7 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
     };
     let home = crate::resume_lookup::home_dir();
     let program = crate::agent_hooks::probing::resolve_probe_command(command, &home)?;
-    let mut process = Command::new(program);
-    process
-        .args(args)
-        .current_dir(&home)
-        .env(
-            "PATH",
-            crate::agent_hooks::probing::normalize_gxserver_process_path(
-                std::env::var("PATH").ok().as_deref(),
-                &home,
-            ),
-        )
-        .env("NO_COLOR", "1");
+    let process = lineup_command(agent, program, args, &home);
     let output = run_to_end(process)?;
     let entry = match agent {
         "antigravity" => antigravity_lineup(&output),
@@ -94,6 +83,33 @@ pub(crate) fn read_lineup(agent: &str) -> Option<Value> {
         .and_then(Value::as_array)
         .is_some_and(|models| !models.is_empty())
         .then_some(entry)
+}
+
+/// The lineup read's command. `agy` also gets the switch that keeps it from spawning its updater
+/// (see `AGY_BACKGROUND_AUTO_UPDATE_OFF`).
+fn lineup_command(
+    agent: &str,
+    program: impl AsRef<std::ffi::OsStr>,
+    args: &[&str],
+    home: &std::path::Path,
+) -> Command {
+    let mut process = Command::new(program);
+    process
+        .args(args)
+        .current_dir(home)
+        .env(
+            "PATH",
+            crate::agent_hooks::probing::normalize_gxserver_process_path(
+                std::env::var("PATH").ok().as_deref(),
+                home,
+            ),
+        )
+        .env("NO_COLOR", "1");
+    if agent == "antigravity" {
+        let (key, value) = crate::agent_hooks::probing::AGY_BACKGROUND_AUTO_UPDATE_OFF;
+        process.env(key, value);
+    }
+    process
 }
 
 /// CDXC:AgentProviders 2026-11-02 WHY:
@@ -575,4 +591,29 @@ fn cursor_lineup(output: &str) -> Option<Value> {
         json!({ "available": true, "scope": "model" }),
         rows,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn env_of(command: &Command, key: &str) -> Option<String> {
+        command
+            .get_envs()
+            .find(|(name, _)| *name == key)
+            .and_then(|(_, value)| value)
+            .map(|value| value.to_string_lossy().into_owned())
+    }
+
+    #[test]
+    fn the_antigravity_lineup_probe_turns_agy_auto_update_off() {
+        let home = std::env::temp_dir();
+        let agy = lineup_command("antigravity", "agy", &["models"], &home);
+        assert_eq!(
+            env_of(&agy, "AGY_CLI_DISABLE_AUTO_UPDATE").as_deref(),
+            Some("true")
+        );
+        let codex = lineup_command("codex", "codex", &["debug", "models"], &home);
+        assert_eq!(env_of(&codex, "AGY_CLI_DISABLE_AUTO_UPDATE"), None);
+    }
 }
