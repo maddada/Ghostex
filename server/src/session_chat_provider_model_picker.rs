@@ -349,7 +349,7 @@ fn omp_effort_answers(screen: &str, level: &str) -> usize {
         .count()
 }
 
-/// What `screen` says about an OMP command sent while `errors_before` error lines and `answers_before` of its answers were on screen: OMP's refusal (the first error line past those), its answer (more answers than before: OMP prints a repeat of the same answer as a new line, seen on real OMP screens), or nothing yet.
+/// What `screen` says about an OMP command sent while `errors_before` error lines and `answers_before` of its answers were on screen: OMP's refusal (the first error line past those), its answer (more answers than before), or nothing yet. A repeat of the same answer is a new line only once the previous one has gone into the terminal's history; while it is still drawn live, OMP replaces it (see [`OmpRecord`]).
 fn omp_command_outcome(
     screen: &str,
     errors_before: usize,
@@ -360,6 +360,52 @@ fn omp_command_outcome(
         return Some(Err(reason));
     }
     (answers(screen) > answers_before).then_some(Ok(()))
+}
+
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// OMP's answer is not always a new line on screen. OMP 18.13.3 shows both answers with `showStatus`, which updates the previous notice in place when nothing came between them and replaces a notice repeating the same text (`modes/utils/ui-helpers.ts`), and rows that have gone into the terminal's history are never repainted (`tui/src/chrome/transcript-container.ts`). In a live `box` session (S7h:P0gy7:G7v3w, 2026-11-02) every pick for three minutes failed: `/effort low`'s answer replaced `/switch`'s in a notice already in history, so the screen kept showing `Session-only model: …` and never `Thinking set to low.`, and each retry's `/switch` then replaced a notice that already read the same answer. OMP's transcript recorded every one of those changes (`model_change`, then `thinking_level_change` 70 ms later), and the messages held behind the pick stayed held. A repeated model-only pick fails the same way in a fresh session.
+/// So a command also counts once OMP's transcript records it after the command was typed. `/switch` always appends a `model_change`, also for the model already running; a level change appends a `thinking_level_change` only when the level changes, or when it leaves Auto, both synchronously before the answer is shown (`session/model-controls.ts` `setModelTemporary`, `setThinkingLevel`; `session/session-manager.ts`). A level counts only as a fixed choice (`configured` equals the level), never as what Auto resolved to (`configured: "auto"`). Until OMP writes its transcript (it does so with the first message), only the answer on screen counts.
+/// A change OMP's transcript must record for an OMP command to count as applied.
+#[derive(Clone, Copy, Debug)]
+enum OmpRecord<'a> {
+    /// `/switch`: a `model_change` naming the model as `provider/id`.
+    Model(&'a str),
+    /// `/effort`: a `thinking_level_change` that sets the level as the chosen one.
+    Level(&'a str),
+}
+
+/// Whether `records`, lines of an OMP transcript, hold `record`.
+fn omp_transcript_holds(records: &str, record: OmpRecord<'_>) -> bool {
+    let (kind, keys, value): (_, &[&str], _) = match record {
+        OmpRecord::Model(model) => ("model_change", &["model"], model),
+        OmpRecord::Level(level) => (
+            "thinking_level_change",
+            &["thinkingLevel", "configured"],
+            level,
+        ),
+    };
+    let marker = format!("\"{kind}\"");
+    records.lines().any(|line| {
+        line.contains(&marker)
+            && serde_json::from_str::<Value>(line).is_ok_and(|entry| {
+                entry.get("type").and_then(Value::as_str) == Some(kind)
+                    && keys
+                        .iter()
+                        .all(|key| entry.get(*key).and_then(Value::as_str) == Some(value))
+            })
+    })
+}
+
+/// What OMP appended to its transcript at `path` past byte `from`.
+fn omp_transcript_since(path: &std::path::Path, from: u64) -> String {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut bytes = Vec::new();
+    if let Ok(mut file) = std::fs::File::open(path) {
+        if file.seek(SeekFrom::Start(from)).is_ok() {
+            let _ = file.read_to_end(&mut bytes);
+        }
+    }
+    String::from_utf8_lossy(&bytes).into_owned()
 }
 
 /// CDXC:AgentProviders 2026-10-31 WHY:
@@ -713,7 +759,7 @@ impl PickerDriver<'_> {
     }
 
     /// CDXC:AgentProviders 2026-10-29 WHY:
-    /// OMP's `/switch <provider>/<id>` changes the model for this session and answers `Session-only model: <provider>/<id>.`, and `/effort <level>` answers `Thinking set to <level>.` (`/model` only opens its selector, ignoring arguments). A pick counts once those answers appear. OMP's composer head, which picks used to be confirmed on, follows its `composer.shape` and status line settings, and with a `pi` composer or a custom status line every applied switch was reported unconfirmed and typed again. `/switch <provider>/<id>:<level>` sets both in one command, but its answer names no level, and it can lower a level above the session's thinking ceiling without saying so, where `/effort` refuses a level the model or the ceiling does not allow. Refusals come as `Error:` lines (`Unknown model`, `No API key for …`, `Unknown thinking level: … Available: …`). This replaces the one `/switch <provider>/<id>:<level>` confirmed on the composer head (2026-09-30).
+    /// OMP's `/switch <provider>/<id>` changes the model for this session and answers `Session-only model: <provider>/<id>.`, and `/effort <level>` answers `Thinking set to <level>.` (`/model` only opens its selector, ignoring arguments). A pick counts once those answers appear, or once OMP's transcript records the change (2026-11-02, see [`OmpRecord`]); when the transcript shows right after the switch that OMP's configured level already is the picked one, `/effort` is not typed. OMP's composer head, which picks used to be confirmed on, follows its `composer.shape` and status line settings, and with a `pi` composer or a custom status line every applied switch was reported unconfirmed and typed again. `/switch <provider>/<id>:<level>` sets both in one command, but its answer names no level, and it can lower a level above the session's thinking ceiling without saying so, where `/effort` refuses a level the model or the ceiling does not allow. Refusals come as `Error:` lines (`Unknown model`, `No API key for …`, `Unknown thinking level: … Available: …`). This replaces the one `/switch <provider>/<id>:<level>` confirmed on the composer head (2026-09-30).
     async fn drive_omp(&self, plan: &CodexPickerPlan) -> Result<(), DomainStateError> {
         if !plan.model.contains('/') {
             return Err(invalid_params("An OMP model is picked as provider/id."));
@@ -736,10 +782,12 @@ impl PickerDriver<'_> {
         {
             return Ok(());
         }
+        let transcript = plan.omp_transcript.as_deref();
         self.run_omp_command(
             "applied model",
             &format!("/switch {}", plan.model),
             |screen| omp_switch_answers(screen, &plan.model),
+            transcript.map(|path| (path, OmpRecord::Model(&plan.model))),
         )
         .await?
         .map_err(|reason| {
@@ -748,11 +796,28 @@ impl PickerDriver<'_> {
         if plan.effort.is_empty() {
             return Ok(());
         }
+        // The switch wrote its level change, if any, before it counted (see `OmpRecord`), so the
+        // transcript's newest level record is the session's level now. Only a level the record
+        // names as chosen counts: under OMP's Auto (`configured: "auto"`) the level is what Auto
+        // resolved to, and a fixed pick still needs `/effort` to leave Auto.
+        if let Some(path) = transcript.map(std::path::Path::to_path_buf) {
+            let configured = tokio::task::spawn_blocking(move || {
+                crate::session_chat_pi_status::read_pi_transcript_status(&path)
+                    .and_then(|status| status.configured_thinking_level)
+            })
+            .await
+            .ok()
+            .flatten();
+            if configured.as_deref() == Some(plan.effort.as_str()) {
+                return Ok(());
+            }
+        }
         self.composer_ready("omp").await?;
         self.run_omp_command(
             "applied thinking level",
             &format!("/effort {}", plan.effort),
             |screen| omp_effort_answers(screen, &plan.effort),
+            transcript.map(|path| (path, OmpRecord::Level(&plan.effort))),
         )
         .await?
         .map_err(|reason| {
@@ -763,22 +828,31 @@ impl PickerDriver<'_> {
         })
     }
 
-    /// Pastes an OMP command (as [`Self::type_pi_family_command`] does), presses Enter and waits for [`omp_command_outcome`] (the inner `Err` is OMP's refusal). Both baselines come from the one screen that shows the command typed, the last before Enter. Clears the command when it did not go through, and once it was seen in the input, OMP's completion of it.
+    /// Pastes an OMP command (as [`Self::type_pi_family_command`] does), presses Enter and waits for [`omp_command_outcome`] (the inner `Err` is OMP's refusal), or for `record` in the transcript at its path. All baselines come from the one screen that shows the command typed, the last before Enter: the transcript's length is taken when that screen is read. Clears the command when it did not go through, and once it was seen in the input, OMP's completion of it.
     async fn run_omp_command(
         &self,
         step: &str,
         command: &str,
         answers: impl Fn(&str) -> usize,
+        record: Option<(&std::path::Path, OmpRecord<'_>)>,
     ) -> Result<Result<(), String>, DomainStateError> {
         let mut delivered = false;
         let result = async {
             self.write(&crate::session_chat_send::wrap_terminal_bracketed_paste_text(command))
                 .await?;
-            let (errors_before, answers_before) = self
+            let (errors_before, answers_before, transcript_before) = self
                 .wait_for("type model command", |screen| {
                     session_chat_composer_input("omp", screen)
                         .is_some_and(|input| collapse_spaces(&input.text) == command)
-                        .then(|| (pi_family_errors(screen).len(), answers(screen)))
+                        .then(|| {
+                            (
+                                pi_family_errors(screen).len(),
+                                answers(screen),
+                                record.and_then(|(path, _)| {
+                                    std::fs::metadata(path).ok().map(|meta| meta.len())
+                                }),
+                            )
+                        })
                 })
                 .await?;
             delivered = true;
@@ -789,7 +863,11 @@ impl PickerDriver<'_> {
             }
             self.write(CODEX_SUBMIT).await?;
             self.wait_for(step, |screen| {
-                omp_command_outcome(screen, errors_before, &answers, answers_before)
+                omp_command_outcome(screen, errors_before, &answers, answers_before).or_else(|| {
+                    let (path, record) = record?;
+                    omp_transcript_holds(&omp_transcript_since(path, transcript_before?), record)
+                        .then_some(Ok(()))
+                })
             })
             .await
         }
@@ -1067,9 +1145,9 @@ pub(crate) async fn run_provider_model_picker_job(
 #[cfg(test)]
 mod omp_answer_tests {
     use super::{
-        omp_command_outcome, omp_effort_answers, omp_switch_answers, pi_family_errors,
-        pi_family_leftover_input, CodexPickerPlan, PickerDriver, AGENT_TUI_CLEAR_INPUT_LINE,
-        UNSUPPORTED_SELECTION_CODE,
+        omp_command_outcome, omp_effort_answers, omp_switch_answers, omp_transcript_holds,
+        pi_family_errors, pi_family_leftover_input, CodexPickerPlan, OmpRecord, PickerDriver,
+        AGENT_TUI_CLEAR_INPUT_LINE, UNSUPPORTED_SELECTION_CODE,
     };
     use crate::session_chat_send::test_terminal::{self, TestTerminal};
 
@@ -1270,9 +1348,12 @@ mod omp_answer_tests {
     async fn failed_omp_command(name: &str, terminal: TestTerminal, command: &str) -> TestTerminal {
         test_terminal::open(name, terminal);
         let outcome = driver(name)
-            .run_omp_command("applied model", command, |screen| {
-                omp_switch_answers(screen, "openrouter/qwen3.8-max")
-            })
+            .run_omp_command(
+                "applied model",
+                command,
+                |screen| omp_switch_answers(screen, "openrouter/qwen3.8-max"),
+                None,
+            )
             .await;
         assert!(!matches!(outcome, Ok(Ok(()))));
         test_terminal::terminal(name)
@@ -1397,5 +1478,224 @@ mod omp_answer_tests {
             .await
             .unwrap_err();
         assert_eq!(unread.code, "sessionNotRunning");
+    }
+
+    const HAIKU: &str = "anthropic/claude-haiku-5-5";
+    const SONNET: &str = "anthropic/claude-sonnet-5-5";
+
+    /// OMP 18.13.3's transcript records of an applied `/switch` and level change, as written in
+    /// the live session S7h:P0gy7:G7v3w on 2026-11-02.
+    fn model_change(model: &str) -> String {
+        format!(
+            r#"{{"type":"model_change","id":"5d1c","parentId":"4e0b","timestamp":"2026-11-02T11:30:55.333Z","runtime":{{"version":"18.13.3"}},"model":"{model}","role":"temporary","resolvedModelIsFallback":false}}"#
+        )
+    }
+
+    fn level_change(level: &str) -> String {
+        format!(
+            r#"{{"type":"thinking_level_change","id":"6f2d","parentId":"5d1c","timestamp":"2026-11-02T11:30:55.409Z","runtime":{{"version":"18.13.3"}},"thinkingLevel":"{level}","configured":"{level}"}}"#
+        )
+    }
+
+    /// OMP's record while its Auto chooses the level: `level` is only what Auto resolved to
+    /// (`session/model-controls.ts` `setThinkingLevel`, the `AUTO_THINKING` branch).
+    fn auto_level_change(level: &str) -> String {
+        format!(
+            r#"{{"type":"thinking_level_change","id":"7a3e","parentId":"5d1c","timestamp":"2026-11-02T11:30:55.409Z","runtime":{{"version":"18.13.3"}},"thinkingLevel":"{level}","configured":"auto"}}"#
+        )
+    }
+
+    /// A transcript holding `records`, and a terminal that never prints an answer but appends
+    /// `on_enter[n]` to it on its n-th Enter: OMP's answer replaced a notice that already read the
+    /// same, or went into a notice the terminal no longer repaints.
+    fn silent_omp(records: &[String], on_enter: &[String]) -> (tempfile::TempDir, TestTerminal) {
+        let folder = tempfile::tempdir().expect("transcript folder");
+        let path = folder.path().join("omp-session.jsonl");
+        let mut text = records.join("\n");
+        text.push('\n');
+        std::fs::write(&path, text).expect("write the transcript");
+        let terminal = TestTerminal {
+            transcript: Some((path, on_enter.to_vec())),
+            ..TestTerminal::default()
+        };
+        (folder, terminal)
+    }
+
+    fn transcript_of(terminal: &TestTerminal) -> std::path::PathBuf {
+        terminal
+            .transcript
+            .as_ref()
+            .expect("a transcript")
+            .0
+            .clone()
+    }
+
+    fn omp_pick(model: &str, effort: &str, transcript: std::path::PathBuf) -> CodexPickerPlan {
+        CodexPickerPlan {
+            provider: "omp".to_string(),
+            model: model.to_string(),
+            effort: effort.to_string(),
+            omp_transcript: Some(transcript),
+            ..CodexPickerPlan::default()
+        }
+    }
+
+    fn claude_lineup() -> crate::session_chat_pi_models::TestLineup {
+        let row = |id: &str, name: &str| {
+            serde_json::json!({
+                "provider": "anthropic",
+                "id": id,
+                "name": name,
+                "thinking": ["low", "medium", "high", "max"],
+            })
+        };
+        crate::session_chat_pi_models::serve_test_omp_lineup(Some(&[
+            row("claude-haiku-5-5", "Claude Haiku 5.5"),
+            row("claude-sonnet-5-5", "Claude Sonnet 5.5"),
+        ]))
+    }
+
+    /// Whether the driver pasted exactly `commands`, in this order, and no other command.
+    fn pasted(terminal: &TestTerminal, commands: &[&str]) -> bool {
+        let pastes: Vec<&String> = terminal
+            .writes
+            .iter()
+            .filter(|write| write.contains('/'))
+            .collect();
+        pastes.len() == commands.len()
+            && pastes.iter().zip(commands).all(|(write, command)| {
+                **write == crate::session_chat_send::wrap_terminal_bracketed_paste_text(command)
+            })
+    }
+
+    #[tokio::test]
+    async fn a_command_omp_recorded_counts_though_no_new_answer_line_shows() {
+        // The session ran Haiku before: that record predates the command and is not its answer.
+        let (_folder, terminal) = silent_omp(
+            &[model_change(HAIKU), level_change("low")],
+            &[model_change(HAIKU), level_change("max")],
+        );
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-recorded-switch", terminal);
+        let switched = driver("omp-recorded-switch")
+            .run_omp_command(
+                "applied model",
+                &format!("/switch {HAIKU}"),
+                |screen| omp_switch_answers(screen, HAIKU),
+                Some((&path, OmpRecord::Model(HAIKU))),
+            )
+            .await;
+        assert!(matches!(switched, Ok(Ok(()))), "{switched:?}");
+        let (_folder, terminal) = silent_omp(&[level_change("max")], &[level_change("low")]);
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-recorded-effort", terminal);
+        let set = driver("omp-recorded-effort")
+            .run_omp_command(
+                "applied thinking level",
+                "/effort low",
+                |screen| omp_effort_answers(screen, "low"),
+                Some((&path, OmpRecord::Level("low"))),
+            )
+            .await;
+        assert!(matches!(set, Ok(Ok(()))), "{set:?}");
+    }
+
+    #[tokio::test]
+    async fn only_a_record_of_the_picked_model_written_after_the_command_counts() {
+        // An older record of the same model, and after Enter only a sibling model's.
+        let (_folder, terminal) = silent_omp(
+            &[model_change(HAIKU)],
+            &[model_change("anthropic/claude-haiku-5-5-fast")],
+        );
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-sibling-record", terminal);
+        let outcome = driver("omp-sibling-record")
+            .run_omp_command(
+                "applied model",
+                &format!("/switch {HAIKU}"),
+                |screen| omp_switch_answers(screen, HAIKU),
+                Some((&path, OmpRecord::Model(HAIKU))),
+            )
+            .await;
+        assert_eq!(outcome.unwrap_err().code, "timeout");
+    }
+
+    #[tokio::test]
+    async fn a_repick_of_the_running_model_and_level_counts_without_typing_effort() {
+        let _lineup = claude_lineup();
+        // Sonnet 5.5 at medium, its default level: OMP's `/switch` records the model again and
+        // leaves the level, so no level record follows (S7h:P0gy7:G7v3w at 11:32:54).
+        let (_folder, terminal) = silent_omp(
+            &[model_change(SONNET), level_change("medium")],
+            &[model_change(SONNET)],
+        );
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-repick", terminal);
+        driver("omp-repick")
+            .drive_omp(&omp_pick(SONNET, "medium", path))
+            .await
+            .expect("the re-pick counts");
+        assert!(pasted(
+            &test_terminal::terminal("omp-repick"),
+            &[&format!("/switch {SONNET}")]
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_valid_pick_after_a_refused_one_counts_once_omp_records_it() {
+        let _lineup = claude_lineup();
+        let (_folder, terminal) = silent_omp(
+            &[model_change(HAIKU), level_change("low")],
+            &[
+                // `/switch` to Haiku again resets the level to its default before `/effort`.
+                format!("{}\n{}", model_change(HAIKU), level_change("max")),
+                level_change("low"),
+            ],
+        );
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-after-refusal", terminal);
+        let refused = driver("omp-after-refusal")
+            .drive_omp(&omp_pick("nopkey/held-demo-model", "medium", path.clone()))
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code, UNSUPPORTED_SELECTION_CODE);
+        driver("omp-after-refusal")
+            .drive_omp(&omp_pick(HAIKU, "low", path))
+            .await
+            .expect("the pick OMP applied counts");
+        assert!(pasted(
+            &test_terminal::terminal("omp-after-refusal"),
+            &[&format!("/switch {HAIKU}"), "/effort low"]
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_fixed_pick_leaves_omps_auto_even_when_auto_resolved_to_that_level() {
+        let _lineup = claude_lineup();
+        // Auto chose High for Sonnet 5.5; `/switch` keeps Auto and writes no level record. A pick
+        // of fixed High must still send `/effort high`, which OMP records as the chosen level.
+        let (_folder, terminal) = silent_omp(
+            &[model_change(SONNET), auto_level_change("high")],
+            &[model_change(SONNET), level_change("high")],
+        );
+        let path = transcript_of(&terminal);
+        test_terminal::open("omp-leave-auto", terminal);
+        driver("omp-leave-auto")
+            .drive_omp(&omp_pick(SONNET, "high", path))
+            .await
+            .expect("the fixed pick counts once OMP records it");
+        assert!(pasted(
+            &test_terminal::terminal("omp-leave-auto"),
+            &[&format!("/switch {SONNET}"), "/effort high"]
+        ));
+        // What Auto resolved to is not a fixed choice of that level.
+        assert!(!omp_transcript_holds(
+            &auto_level_change("high"),
+            OmpRecord::Level("high")
+        ));
+        assert!(omp_transcript_holds(
+            &level_change("high"),
+            OmpRecord::Level("high")
+        ));
     }
 }

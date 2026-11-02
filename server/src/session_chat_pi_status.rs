@@ -30,6 +30,9 @@ pub(crate) struct PiTranscriptStatus {
     /// `provider/id` of the model the newest reply ran on, else of the newest `model_change`.
     pub model: Option<String>,
     pub thinking_level: Option<String>,
+    /// The level selector the newest `thinking_level_change` names as chosen (`configured`): a
+    /// fixed level, or OMP's `auto` while `thinking_level` is only what Auto resolved to.
+    pub configured_thinking_level: Option<String>,
     pub started_at: Option<i64>,
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -105,6 +108,7 @@ fn scan_pi_transcript(path: &Path) -> Option<PiTranscriptStatus> {
             }
             Some("thinking_level_change") => {
                 status.thinking_level = text(&record, "thinkingLevel");
+                status.configured_thinking_level = text(&record, "configured");
             }
             Some("usage") => add_usage(&mut status, record.get("usage")),
             Some("compaction" | "branch_summary") => {

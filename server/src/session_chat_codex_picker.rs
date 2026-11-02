@@ -401,6 +401,8 @@ struct CodexPickerPlan {
     hermes_provider: Option<String>,
     /// Empryo only: the session's `session.jsonl`, whose `meta.json` names the tab's model.
     empryo_session_log: Option<std::path::PathBuf>,
+    /// OMP only: the session's transcript, where OMP records every model and level it applies.
+    omp_transcript: Option<std::path::PathBuf>,
 }
 
 struct CodexPickerJob {
@@ -1433,6 +1435,22 @@ pub(crate) async fn select_session_chat_model(
     } else {
         None
     };
+    // Finding the transcript may search OMP's session folders, so it stays off the async workers.
+    let omp_transcript = if agent.as_deref() == Some("omp") {
+        let session = target.session.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::session_chat::resolve_session_chat_transcript_path(
+                crate::session_chat::SessionChatTranscriptAgent::Pi,
+                crate::server::read_runtime_text(&session, "agentSessionId").as_deref(),
+                crate::server::read_runtime_text(&session, "agentSessionPath").as_deref(),
+            )
+        })
+        .await
+        .ok()
+        .flatten()
+    } else {
+        None
+    };
     let job_id = register_job(CodexPickerPlan {
         provider: agent.clone().unwrap_or_default(),
         model: model.clone(),
@@ -1447,6 +1465,7 @@ pub(crate) async fn select_session_chat_model(
             agent.as_deref(),
             &target.session,
         ),
+        omp_transcript,
     });
     let send = execute_session_chat_send(
         &target.project_id,

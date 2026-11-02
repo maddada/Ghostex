@@ -75,6 +75,10 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
 }
 
 pub(crate) async fn capture_session_terminal_text_vt(zmx_name: &str) -> Option<String> {
+    #[cfg(test)]
+    if let Some(screen) = test_terminal::capture(zmx_name) {
+        return Some(screen);
+    }
     let name = zmx_name.to_string();
     let capture =
         tokio::task::spawn_blocking(move || crate::zmx::read_zmx_session_screen_capture_vt(&name))

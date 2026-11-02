@@ -1,5 +1,5 @@
-//! A scripted terminal for the model picker's tests: plain captures and writes for a session name
-//! opened here are answered on the test's own thread instead of going to zmx.
+//! A scripted terminal for the model picker's tests: captures (plain and VT) and writes for a
+//! session name opened here are answered on the test's own thread instead of going to zmx.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -16,6 +16,9 @@ pub(crate) struct TestTerminal {
     pub(crate) after_enter: String,
     /// Refuse every paste, leaving the input as it is.
     pub(crate) refuse_paste: bool,
+    /// The agent's transcript, and what each Enter appends to it, in order: OMP's records of the
+    /// change it applied (an empty entry appends nothing).
+    pub(crate) transcript: Option<(std::path::PathBuf, Vec<String>)>,
     /// Every write, in order.
     pub(crate) writes: Vec<String>,
 }
@@ -68,6 +71,19 @@ pub(super) fn write(name: &str, payload: &str) -> Option<Result<(), String>> {
             terminal.input = text.to_string();
         } else if payload == "\r" {
             terminal.input = terminal.after_enter.clone();
+            if let Some((path, records)) = terminal.transcript.as_mut() {
+                if !records.is_empty() {
+                    let record = records.remove(0);
+                    if !record.is_empty() {
+                        use std::io::Write;
+                        let mut file = std::fs::OpenOptions::new()
+                            .append(true)
+                            .open(path)
+                            .expect("open the test transcript");
+                        writeln!(file, "{record}").expect("append to the test transcript");
+                    }
+                }
+            }
         } else if payload == AGENT_TUI_CLEAR_INPUT_LINE {
             terminal.input.clear();
         }
