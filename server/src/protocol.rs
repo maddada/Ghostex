@@ -784,6 +784,13 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         */
         "/api/createGithubIssue" | "/api/dismissWorkNotice" => remote_allowed(path),
         "/api/readWorkTracker" | "/api/setWorkTracker" => full_local(path),
+        /*
+        CDXC:WorkMode 2026-10-31 DECISION:
+        The repository owner: "Setting the command and its credentials is local only (like `setLinearApiKey`), and gxserver refuses it for team workspaces, not just the UI." A ticket command is a program this computer runs, so only this computer's clients may read, set or clear it, or store its credentials; its record is its own metadata row, never the workspaces document remote clients write. Deleting a workspace with a command stays allowed from any client (the decision is on `delete_workspace_work_source`).
+        */
+        "/api/readWorkSource" | "/api/setWorkSource" | "/api/setWorkSourceCredentials" => {
+            full_local(path)
+        }
         "/api/updateTeamFlow" => full_local(path),
         /*
         CDXC:WorkMode 2026-10-10 WHY:

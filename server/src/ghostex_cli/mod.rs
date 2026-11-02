@@ -60,6 +60,7 @@ mod voice;
 pub mod wait;
 pub mod web;
 mod work_mode;
+mod work_source;
 mod workspace;
 
 use rpc::{CliError, CliResult};

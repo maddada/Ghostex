@@ -131,6 +131,10 @@ pub(crate) struct CommandEnv {
     pub(crate) project: Option<CommandProject>,
     /// The declared credential fields that have a value.
     pub(crate) credentials: Vec<CommandCredential>,
+    /// Values that are only masked, never passed to the command (`vars` leaves them out):
+    /// what the workspace keeps and the command doesn't run with, such as a cleared command's
+    /// credentials (`masking_too`). Each counts as a set secret.
+    pub(crate) masked_only: Vec<String>,
 }
 
 /// One credential the command gets: a declared field and its stored value.
@@ -173,6 +177,7 @@ impl std::fmt::Debug for CommandEnv {
                     .map(|credential| (shown(&credential.name), MASK))
                     .collect::<Vec<_>>(),
             )
+            .field("masked_only", &self.masked_only.len())
             .finish()
     }
 }
@@ -204,7 +209,19 @@ impl CommandEnv {
             workspace_id: workspace_id.to_string(),
             project,
             credentials,
+            masked_only: Vec::new(),
         }
+    }
+
+    /// This environment, also masking every secret of `mask` without passing it to the command:
+    /// a run's texts are then built and cut with what the workspace keeps, not only with what the
+    /// command runs with.
+    pub(crate) fn masking_too(&self, mask: &CommandEnv) -> Self {
+        let mut widened = self.clone();
+        widened
+            .masked_only
+            .extend(mask.secrets().map(str::to_string));
+        widened
     }
 
     /// This environment with `names` secret too: an `info` being checked may declare secret a
@@ -272,7 +289,9 @@ impl CommandEnv {
         self.credentials
             .iter()
             .filter(|credential| credential.secret)
-            .map(|credential| credential.value.trim())
+            .map(|credential| credential.value.as_str())
+            .chain(self.masked_only.iter().map(String::as_str))
+            .map(str::trim)
             .filter(|value| !value.is_empty())
     }
 

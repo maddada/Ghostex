@@ -3959,6 +3959,31 @@ removes it). GitHub status comes from `gh`, so sign in
 with `gh auth login`. `ghostex issues status` says what is set up.
 `ghostex work-mode …`, the old name, still works for every one of these commands.
 
+A workspace can also point at a **ticket command**: a program you or your team
+wrote for another tracker, which tells Ghostex its name, its icon, how its ticket
+IDs look and which credentials it needs. Set it from a terminal on the computer
+that runs the workspace: `ghostex issues source set ~/bin/my-tracker --workspace
+Work` runs the program's `info`, keeps the ID it answers with, and shows its name,
+its ID keys and the full path it found (a bare name is looked up on your PATH).
+Then `ghostex issues source credential token --workspace Work` reads one of the
+credentials it asks for from stdin (`--clear` removes it). A credential the program
+marks secret is never shown back, only whether it is set, and needs at least
+three characters: a short value such as a team number should be marked
+`"secret": false` by the program instead. If the program later marks secret a
+credential whose saved value is shorter than that, Ghostex removes the value and
+says so, and you save one of at least three characters. Ghostex hides the
+program's own error output while a secret is set, and masks it wherever the program
+echoes it. `ghostex issues source` shows what is set, `check` runs `info` again,
+and `clear` removes the program but keeps its credentials. If the program later
+answers with another ID, Ghostex keeps the old one until you run `set` again with
+`--switch`. Only the computer itself can set a ticket command or its credentials,
+and a workspace connected to a team can't use one. Ghostex checks and keeps the
+command and its credentials; its tickets don't show in Ghostex yet. A PowerShell
+program (`.ps1`) should start with `[Console]::OutputEncoding =
+[Text.UTF8Encoding]::new($false)` so its answers reach Ghostex as UTF-8; `.bat`
+and `.cmd` files are not run. These commands need a Ghostex version that has
+`ghostex issues source`.
+
 Every session, in any project, keeps a list of the pull requests, GitHub issues
 and Linear tickets it is linked to, and gathers them by itself: the PR of the
 branch it is on (and of branches it worked on before, when it has a worktree of
@@ -4156,7 +4181,7 @@ docs directory), Settings > Projects > Linear API key, `hideProjectHeaderDiffSta
 `showProjectEditorDiffFileCount`,
 `showUntrackedProjectDiffWhenNoTrackedChanges`. Issues Workflow:
 `titleSessionsByBranch`, `offerCleanupWhenPrMerges`, `ghostex issues
-status|linear-key|tracker|create-ticket|start|cleanup` (old name `ghostex
+status|linear-key|source|tracker|create-ticket|start|cleanup` (old name `ghostex
 work-mode`), `ghostex link-session`. Team
 backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
 `ghostex team flow|slack-manifest|slack-connect|linear-connect|own-linear-key`,

@@ -15,6 +15,56 @@ use crate::storage::{initialize_gxserver_storage, open_gxserver_database, Gxserv
 
 use super::*;
 
+mod stored_values;
+
+/// The store's set of a typed path, as these tests read it: its result, whose errors already left
+/// through its mask (`WorkSourceChange`).
+fn set_work_source(
+    db: &rusqlite::Connection,
+    paths: &GxserverPaths,
+    workspace_id: &str,
+    typed_path: &str,
+    switch: bool,
+    references: References,
+) -> Result<WorkspaceCommand, WorkSourceError> {
+    crate::work_mode::set_work_source(
+        db,
+        paths,
+        workspace_id,
+        SourcePath::Typed(typed_path),
+        switch,
+        references,
+    )
+    .result
+}
+
+/// The store's check with the path the workspace has, as these tests read it.
+fn check_work_source(
+    db: &rusqlite::Connection,
+    paths: &GxserverPaths,
+    workspace_id: &str,
+) -> Result<WorkspaceCommand, WorkSourceError> {
+    crate::work_mode::set_work_source(
+        db,
+        paths,
+        workspace_id,
+        SourcePath::Stored,
+        false,
+        &no_references,
+    )
+    .result
+}
+
+/// The store's clear, as these tests read it.
+fn clear_work_source(
+    db: &rusqlite::Connection,
+    paths: &GxserverPaths,
+    workspace_id: &str,
+    references: References,
+) -> Result<(), WorkSourceError> {
+    crate::work_mode::clear_work_source(db, paths, workspace_id, references).result
+}
+
 struct Store {
     /// Each name's workspace, created in the workspaces document on first use. Generations are
     /// process-wide, and these ids are new for every test.
@@ -122,6 +172,8 @@ fn a_command_that_now_calls_itself_otherwise_waits_for_a_switch() {
         refused.contains("now calls itself \"renamed\""),
         "{refused}"
     );
+    // `ghostex issues source` adds its `--switch` hint after this ending.
+    assert!(refused.ends_with(SWITCH_OFFER), "{refused}");
     let kept = &store.sources().workspaces[&store.ws("ws-a")];
     assert_eq!(kept.source_id, "fixture");
     assert_eq!(kept.offered_id.as_deref(), Some("renamed"));
@@ -155,7 +207,7 @@ fn a_change_of_id_format_is_refused_here_and_in_another_workspace() {
     let elsewhere = refusal(store.set("ws-b", false));
     assert!(elsewhere.contains("key-number ids"), "{elsewhere}");
     // A retired id keeps its format too.
-    clear_work_source(&store.db, &store.ws("ws-a"), &no_references).expect("cleared");
+    clear_work_source(&store.db, &store.paths, &store.ws("ws-a"), &no_references).expect("cleared");
     assert!(refusal(store.set("ws-b", false)).contains("sends number ids now"));
 }
 
@@ -181,7 +233,7 @@ fn clearing_keeps_the_credentials_and_retires_the_id() {
         stored["workspaceSourceCredentials"][&store.ws("ws-a")]["fixture"],
         json!({ "mode": "good", "token": "tok-store-1" })
     );
-    clear_work_source(&store.db, &store.ws("ws-a"), &no_references).expect("cleared");
+    clear_work_source(&store.db, &store.paths, &store.ws("ws-a"), &no_references).expect("cleared");
     assert!(store.sources().workspaces.is_empty());
     assert_eq!(store.sources().retired[0].id, "fixture");
     assert_eq!(
@@ -429,9 +481,9 @@ fn join_team(store: &Store, workspace_id: &str) {
     .expect("joined");
 }
 
-/// A team workspace can't set a command or store its credentials. A credential save's refusal is
-/// masked with what the workspace stored before it and with what it proposes, read before the
-/// team check: here `team`, stored in one workspace and proposed in the other.
+/// A team workspace can't set a command or store its credentials. Every refusal is masked with
+/// what the workspace stored before it, and a credential save's with what it proposes too, both
+/// read before the team check: here `team`, stored in one workspace and proposed in the other.
 #[test]
 fn a_team_workspace_is_refused_and_the_refusal_masks_stored_and_proposed_values() {
     let store = Store::new();
@@ -445,7 +497,8 @@ fn a_team_workspace_is_refused_and_the_refusal_masks_stored_and_proposed_values(
     for workspace_id in [&stored, &proposed] {
         join_team(&store, workspace_id);
     }
-    assert_eq!(refusal(store.set("ws-a", false)), TEAM_REFUSAL);
+    assert_eq!(refusal(store.set("ws-a", false)), masked);
+    assert_eq!(refusal(store.set("ws-b", false)), TEAM_REFUSAL);
     match save(&store, &stored, json!({ "token": "tok-new-5" })) {
         Err(WorkSourceError::Refused(text)) => assert_eq!(text, masked),
         other => panic!("not refused: {other:?}"),
@@ -495,7 +548,7 @@ fn a_refusal_after_a_clear_masks_the_values_it_kept() {
     let workspace_id = store.ws("ws-a");
     store.set("ws-a", false).expect("pinned");
     save(&store, &workspace_id, json!({ "token": "command" })).expect("stored");
-    clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+    clear_work_source(&store.db, &store.paths, &workspace_id, &no_references).expect("cleared");
     match save(&store, &workspace_id, json!({ "token": "tok-new-6" })) {
         Err(WorkSourceError::Refused(text)) => assert_eq!(text, "Set the ticket •••• first."),
         other => panic!("not refused: {other:?}"),
@@ -517,7 +570,7 @@ fn a_save_that_cant_read_the_stored_values_is_refused() {
     match save(&store, &workspace_id, json!({ "token": "unread" })) {
         // Ghostex's own words around the platform's reason.
         Err(WorkSourceError::Refused(text)) => assert!(
-            text.starts_with("Ghostex couldn't read the credentials already stored, so it saved nothing: work-mode-credentials.json can't be read (")
+            text.starts_with("Ghostex couldn't read the credentials already stored, so it changed nothing: work-mode-credentials.json can't be read (")
                 && text.ends_with("); fix it or remove it, and try again"),
             "{text}"
         ),
@@ -583,10 +636,11 @@ fn a_name_at_its_cap_stays_readable_once_a_secret_in_it_is_masked() {
     }
 }
 
-/// A short value stored as not secret, which a failed check then declares secret, withholds a
-/// name holding it whole (44 characters): the record is still read.
+/// A short value stored as not secret, which a failed check then declares secret, is removed: it
+/// can't be kept secret. The failure says so first, so does `lastError`, and the record's name
+/// holding it is kept as it is, since it is no credential any more.
 #[test]
-fn a_name_withheld_after_a_failed_check_stays_readable() {
+fn a_failed_check_that_marks_a_short_value_secret_removes_it() {
     let store = Store::new();
     let workspace_id = store.ws("ws-a");
     let program = capped_names_source(&store, "Tracker ё", "Token");
@@ -603,19 +657,21 @@ fn a_name_withheld_after_a_failed_check_stays_readable() {
     set().expect("pinned");
     save(&store, &workspace_id, json!({ "mode": "ё" })).expect("not secret");
     std::fs::write(store._temp.path().join("phase"), "declare-mode").expect("phase");
-    assert!(matches!(set(), Err(WorkSourceError::Failed(_))));
+    let Err(WorkSourceError::Failed(failure)) = set() else {
+        panic!("not a failed check");
+    };
+    assert!(
+        failure
+            .message
+            .starts_with(&format!("{SHORT_SECRET_REMOVED} ")),
+        "{}",
+        failure.message
+    );
     let command = stored_command(&store, &workspace_id);
     assert!(is_secret(&command, "mode"));
-    assert!(
-        command.info.name.chars().count() <= 40,
-        "{}",
-        command.info.name
-    );
-    assert!(
-        command.info.name.starts_with("(message hidden"),
-        "{}",
-        command.info.name
-    );
+    assert_eq!(command.last_error, Some(failure.message));
+    assert_eq!(command.info.name, "Tracker ё");
+    assert!(!Value::Object(store.credentials()).to_string().contains('ё'));
 }
 
 /// A credentials file that is there but can't be read is never written over: a credential save,
@@ -846,7 +902,10 @@ fn retiring_never_fails_past_the_pruning_target_and_keeps_referenced_ids() {
     store.set("ws-b", false).expect("pinned again");
     let mut kept: BTreeSet<String> = BTreeSet::new();
     kept.insert("old-63".to_string());
-    clear_work_source(&store.db, &store.ws("ws-b"), &|| Ok(kept.clone())).expect("cleared");
+    clear_work_source(&store.db, &store.paths, &store.ws("ws-b"), &|| {
+        Ok(kept.clone())
+    })
+    .expect("cleared");
     let sources = store.sources();
     assert_eq!(sources.retired.len(), 64);
     assert!(sources.retired.iter().any(|retired| retired.id == "old-63"));
@@ -1185,7 +1244,7 @@ fn a_failed_reference_read_is_an_error_not_no_references() {
     store.answer("good");
     store.set("ws-a", false).expect("pinned");
     let workspace_id = store.ws("ws-a");
-    let failed = clear_work_source(&store.db, &workspace_id, &|| {
+    let failed = clear_work_source(&store.db, &store.paths, &workspace_id, &|| {
         Err(crate::domain::DomainStateError::bad_request("no sessions"))
     });
     assert!(

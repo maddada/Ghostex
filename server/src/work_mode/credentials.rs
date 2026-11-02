@@ -396,6 +396,49 @@ pub(crate) fn store_source_credentials(
     }
 }
 
+/// Removes each of a workspace's values, for any ticket command source, that `remove` picks by its
+/// field name and its trimmed value; a source left with no value, and a workspace left with no
+/// source, are removed. Whether it removed any.
+pub(crate) fn remove_source_credentials_where(
+    credentials: &mut Map<String, Value>,
+    workspace_id: &str,
+    remove: impl Fn(&str, &str) -> bool,
+) -> bool {
+    let Some(workspaces) = credentials
+        .get_mut(SOURCE_CREDENTIALS_KEY)
+        .and_then(Value::as_object_mut)
+    else {
+        return false;
+    };
+    let Some(sources) = workspaces
+        .get_mut(workspace_id)
+        .and_then(Value::as_object_mut)
+    else {
+        return false;
+    };
+    let mut removed = false;
+    sources.retain(|_, fields| {
+        let Some(fields) = fields.as_object_mut() else {
+            return true;
+        };
+        let before = fields.len();
+        fields.retain(|name, value| {
+            !value
+                .as_str()
+                .is_some_and(|value| remove(name, value.trim()))
+        });
+        removed |= fields.len() != before;
+        !(fields.is_empty() && before > 0)
+    });
+    if sources.is_empty() {
+        workspaces.remove(workspace_id);
+    }
+    if workspaces.is_empty() {
+        credentials.remove(SOURCE_CREDENTIALS_KEY);
+    }
+    removed
+}
+
 /// Removes every ticket command credential of a workspace (it is being deleted), returning them,
 /// so a deletion that fails afterwards can put them back.
 pub(crate) fn remove_workspace_source_credentials(

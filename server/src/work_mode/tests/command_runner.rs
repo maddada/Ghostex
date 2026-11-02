@@ -68,6 +68,7 @@ fn env(mode: &str) -> CommandEnv {
             credential("mode", mode, false),
             credential("token", TOKEN, true),
         ],
+        masked_only: Vec::new(),
     }
 }
 
@@ -813,6 +814,7 @@ fn a_secret_equal_to_or_inside_any_path_id_or_name_never_prints() {
                 .enumerate()
                 .map(|(index, value)| credential(&format!("token{index}"), value, true))
                 .collect(),
+            masked_only: Vec::new(),
         };
         env.credentials
             .push(credential("token", "the-token-value", true));

@@ -11,7 +11,7 @@ use super::args::parse_args;
 use super::output::print_json;
 use super::rpc::{self, CliError, CliResult};
 
-/// `ghostex issues status|linear-key|tracker|create-ticket|start|cleanup …`. `on|off` are left from
+/// `ghostex issues status|linear-key|source|tracker|create-ticket|start|cleanup …`. `on|off` are left from
 /// the retired per-project switch: they change nothing and print what the project has.
 pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
     let parsed = parse_args(args);
@@ -46,6 +46,7 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
         }
         "create-ticket" => create_ticket(&parsed.rest[1..], flags),
         "tracker" => tracker_command(parsed.rest.get(1).map(String::as_str), flags),
+        "source" => super::work_source::work_source_command(&parsed.rest[1..], flags),
         "start" => {
             let ticket = parsed
                 .rest
@@ -68,7 +69,7 @@ pub(super) fn work_mode_command(args: &[String]) -> CliResult<()> {
         }
         "cleanup" => answer_cleanup(&parsed.rest[1..], flags),
         other => Err(CliError::Other(format!(
-            "Unknown issues command \"{other}\". Use status, linear-key, tracker, create-ticket, start or cleanup."
+            "Unknown issues command \"{other}\". Use status, linear-key, source, tracker, create-ticket, start or cleanup."
         ))),
     }
 }
@@ -286,7 +287,10 @@ fn answer_cleanup(rest: &[String], flags: &super::args::Flags) -> CliResult<()> 
 
 /// Linear calls take a few seconds, and starting work fetches the branch, cuts the worktree, runs
 /// the project's setup command and starts the agent: longer than the CLI's 15s default.
-fn with_default_timeout(flags: &super::args::Flags, timeout_ms: &str) -> super::args::Flags {
+pub(super) fn with_default_timeout(
+    flags: &super::args::Flags,
+    timeout_ms: &str,
+) -> super::args::Flags {
     let mut flags = flags.clone();
     if !flags.contains("timeout") && !flags.contains("timeoutMs") {
         flags.insert_text("timeout", timeout_ms);
