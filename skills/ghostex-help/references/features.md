@@ -286,6 +286,13 @@ view from the strip.
   Terminal), so the other hotkeys apply, and pressed again puts it back in the
   terminal that had it last (Focus Last Terminal). While the VS Code view itself has keyboard focus, Cmd+N and
   Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
+  Closing a session that is busy (an agent in the middle of a turn, waiting on
+  your answer to a question or approval, or still running background work) or
+  a coordinator asks first, naming what closes; an idle session closes at once.
+  Every way to close asks the same way: the sidebar's Close button and menu, a
+  tab's x, Cmd+W, the tab menu's Close Others, Left and Right, Running Sessions,
+  and the phone's Close. A closed session's conversation stays in Previous
+  Sessions, where you can restore it.
   Starting a new session always creates a new one; empty sessions stay in the
   sidebar until you close them. An Advanced setting, Close empty sessions when
   starting a new one (`closeEmptySessionsOnNew`, off by default), changes that:
@@ -3056,6 +3063,12 @@ version of the Projects features in Cursor and Claude Code.
   shell stay awake, and so does the coordinator (the item is greyed out when no
   thread can be slept). On the phone, long-press the coordinator for the same
   item; `ghostex coordinator sleep-inactive-threads` does it from a terminal.
+- **Closing a coordinator** closes its threads that are open in the sidebar
+  too (working, waiting, finished or asleep; done threads are left alone), and
+  Ghostex asks first: "Close Main Coordinator and its 3 open threads?". Every
+  thread keeps its conversation. Restoring the coordinator from Previous
+  Sessions brings those threads back under it, each on its own conversation.
+  `ghostex kill` on a coordinator closes its open threads the same way.
   The phone's session list shows the same
   tree: crown, crew count, threads indented under their coordinator, and the
   chevron to fold them.

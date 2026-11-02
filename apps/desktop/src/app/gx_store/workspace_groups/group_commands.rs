@@ -87,6 +87,24 @@ impl GhostexGpuiApp {
                 document,
                 activate_project_group,
             } => {
+                // Closing a group whose members include a coordinator or a busy agent asks once for
+                // all of them, then runs this command again (gx_store/sidebar_close_confirm.rs);
+                // each member's own close below then goes through without asking again.
+                let members: Vec<ghostex_gx_core::SessionKey> = member_session_ids
+                    .iter()
+                    .filter_map(|id| ghostex_gx_core::SessionKey::parse_sidebar_session_id(id))
+                    .collect();
+                let (again_command, again_message) = (command.clone(), message.clone());
+                if self.gx_store_ask_before_close(
+                    &members,
+                    Box::new(move |app, cx| {
+                        app.gx_store_run_group_command(&again_command, &again_message, cx);
+                    }),
+                    cx,
+                ) {
+                    return true;
+                }
+                let confirmed = std::mem::replace(&mut self.gx_store.session_close_confirmed, true);
                 // The TypeScript awaited every close before it removed the group. The store's close
                 // takes each row away at once (and puts it back if the daemon refuses), so the
                 // members are already off the list when the group goes.
@@ -96,6 +114,7 @@ impl GhostexGpuiApp {
                         cx,
                     );
                 }
+                self.gx_store.session_close_confirmed = confirmed;
                 self.gx_store_edit_workspace_groups(document, cx);
                 if let Some(project) = activate_project_group {
                     match project.machine {

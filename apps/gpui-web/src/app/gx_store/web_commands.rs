@@ -132,6 +132,10 @@ impl GhostexGpuiApp {
         if !self.gx_store_sidebar_list_ready() {
             return;
         }
+        // The desktop's question before a Close that would stop a coordinator or a busy agent.
+        if self.gx_store_ask_before_sidebar_close(&command, cx) {
+            return;
+        }
         if self.web_answer_session_menu(&command, cx)
             || self.gx_store_run_unified_sidebar_command(&command, cx)
             || self.gx_store_run_sidebar_accounts(&command, cx)

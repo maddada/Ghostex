@@ -2,6 +2,7 @@
 #![allow(dead_code, unused_imports)]
 pub(crate) mod add_session_link_modal;
 pub(crate) mod agent_hooks_required_modal;
+pub(crate) mod close_sessions_confirm_modal;
 pub(crate) mod coordinator_details_modal;
 pub(crate) mod create_linear_ticket_modal;
 pub(crate) mod create_worktree_modal;
@@ -19,14 +20,15 @@ pub(crate) mod popup_dismissal;
 pub(crate) mod popup_frame;
 pub(crate) mod quick_access;
 pub(crate) mod rename_session_modal;
-pub(crate) mod session_handoff_modal;
 pub(crate) mod rename_worktree_modal;
+pub(crate) mod session_handoff_modal;
 pub(crate) mod session_note_modal;
 pub(crate) mod toast;
 pub(crate) mod work_link_picker_modal;
 
 pub(crate) use add_session_link_modal::*;
 pub(crate) use agent_hooks_required_modal::*;
+pub(crate) use close_sessions_confirm_modal::*;
 pub(crate) use coordinator_details_modal::*;
 pub(crate) use create_linear_ticket_modal::*;
 pub(crate) use create_worktree_modal::*;
@@ -39,8 +41,8 @@ pub(crate) use modal_window_frame::*;
 pub(crate) use native_modal_kit::*;
 pub(crate) use new_coordinator_modal::*;
 pub(crate) use rename_session_modal::*;
-pub(crate) use session_handoff_modal::*;
 pub(crate) use rename_worktree_modal::*;
+pub(crate) use session_handoff_modal::*;
 pub(crate) use session_note_modal::*;
 pub(crate) use toast::*;
 pub(crate) use work_link_picker_modal::*;

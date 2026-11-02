@@ -88,6 +88,22 @@ impl GhostexGpuiApp {
         if !self.agents_workspace.can_close_tab(pane_id, session_id) {
             return false;
         }
+        // Closing a coordinator or a busy agent asks first; Close runs this again
+        // (gx_store/sidebar_close_confirm.rs). On 2026-11-02 a stray tab close here closed the
+        // Main Coordinator without a word.
+        let sessions: Vec<_> = self
+            .workspace_terminal_session_key(session_id)
+            .into_iter()
+            .collect();
+        if self.gx_store_ask_before_close(
+            &sessions,
+            Box::new(move |app, cx| {
+                app.close_agents_tab(pane_id, session_id, cx);
+            }),
+            cx,
+        ) {
+            return false;
+        }
         let target_key = self.workspace_terminal_key_for_shell_session(session_id);
         let replacement_key = self
             .agents_workspace
@@ -179,6 +195,19 @@ impl GhostexGpuiApp {
             .agents_workspace
             .tab_session_ids_for_close_scope(pane_id, session_id, scope);
         if session_ids.is_empty() {
+            return false;
+        }
+        let sessions: Vec<_> = session_ids
+            .iter()
+            .filter_map(|id| self.workspace_terminal_session_key(*id))
+            .collect();
+        if self.gx_store_ask_before_close(
+            &sessions,
+            Box::new(move |app, cx| {
+                app.close_agents_tabs_for_scope(pane_id, session_id, scope, cx);
+            }),
+            cx,
+        ) {
             return false;
         }
 

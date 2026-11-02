@@ -55,6 +55,7 @@ mod sidebar_accounts;
 mod sidebar_actions;
 mod sidebar_bulk;
 mod sidebar_clock;
+mod sidebar_close_confirm;
 mod sidebar_close_project;
 mod sidebar_drag;
 mod sidebar_drop_queue;

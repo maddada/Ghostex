@@ -169,7 +169,7 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
         &agent_settings,
     );
     match result {
-        Ok(output) => {
+        Ok(mut output) => {
             if let Some((project_id, session_id)) = output.presentation_session.as_ref() {
                 if let Err(error) = schedule_presentation_session_delta(
                     state,
@@ -205,6 +205,15 @@ pub(crate) fn dispatch_zmx_lifecycle_http_blocking(
                         &lifecycle.project_id,
                         &lifecycle.session_id,
                     );
+                    let closed_threads = super::coordinator_close::close_threads_with_coordinator(
+                        state,
+                        &db,
+                        &repository,
+                        &(lifecycle.project_id.clone(), lifecycle.session_id.clone()),
+                    );
+                    if closed_threads > 0 {
+                        output.result["closedThreads"] = json!(closed_threads);
+                    }
                 }
             }
             routed_json(

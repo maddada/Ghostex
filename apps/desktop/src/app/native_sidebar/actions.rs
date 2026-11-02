@@ -132,6 +132,11 @@ impl GhostexGpuiApp {
             self.gx_store_drop_sidebar_command_before_ready(&command);
             return;
         }
+        // A Close that would stop a coordinator or a busy agent asks first, and comes back through
+        // here once confirmed (gx_store/sidebar_close_confirm.rs).
+        if self.gx_store_ask_before_sidebar_close(&command, cx) {
+            return;
+        }
         // A row's context menu is built for the row the user opened, and since M4c the store
         // builds it: the panel is filled in this frame instead of after a round trip through the
         // old runtime (gx_store/sidebar_menus.rs).

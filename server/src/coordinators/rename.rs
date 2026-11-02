@@ -204,6 +204,7 @@ mod tests {
             last_report: None,
             pending_message: None,
             pending_message_at: None,
+            closed_with_coordinator_at: None,
             created_at: String::new(),
             updated_at: String::new(),
         }

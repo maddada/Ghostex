@@ -94,6 +94,10 @@ fn is_local_snapshot(event: &Event) -> bool {
 #[derive(Default)]
 pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
+    /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// Set while a confirmed close runs, so the same close does not ask again.
+    pub(crate) session_close_confirmed: bool,
     pub(super) client: Option<GxClient>,
     transport: Option<GxStoreTransport>,
     /// Bumped by every client start, so a pump task or a restart timer of an earlier client can

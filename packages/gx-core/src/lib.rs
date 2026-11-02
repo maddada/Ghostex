@@ -174,6 +174,7 @@ pub use crate::sidebar_actions::{
     REMOTE_AWAITED_TIMEOUT_MS, REMOTE_FIRE_AND_FORGET_TIMEOUT_MS, REMOTE_FOCUS_MESSAGE_TYPE,
     REMOTE_SESSION_MESSAGE_TYPES, SESSION_SNOOZE_PRESETS, SNOOZE_MESSAGE_TYPES, SORT_ACTIONS,
 };
+pub use crate::sidebar_actions::{close_confirmation, sidebar_close_targets, CloseConfirmation};
 pub use crate::sidebar_actions::{
     delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,
     owns_delayed_send_command, owns_group_working_sessions_command, owns_machine_disable_command,

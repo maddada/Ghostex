@@ -220,9 +220,11 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         return Vec::new();
     };
     repair_empryo_coordinator_roles(state, &db, &repository, &mut memory);
+    // A thread its coordinator's close took with it waits for the coordinator's restore, which
+    // brings it back; reporting it closed meanwhile would mark it done.
     let open = threads
         .into_iter()
-        .filter(|thread| !thread.is_resolved())
+        .filter(|thread| !thread.is_resolved() && thread.closed_with_coordinator_at.is_none())
         .collect::<Vec<_>>();
     let open_keys = open.iter().map(ThreadRecord::key).collect::<HashSet<_>>();
     memory

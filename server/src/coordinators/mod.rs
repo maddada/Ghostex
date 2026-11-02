@@ -3,6 +3,7 @@
 
 mod auto_sleep;
 mod brief;
+mod close;
 mod create;
 mod delivery;
 mod endpoint;
@@ -22,6 +23,7 @@ mod title;
 
 pub use auto_sleep::*;
 pub use brief::*;
+pub use close::*;
 pub use create::*;
 pub use delivery::*;
 pub use endpoint::*;

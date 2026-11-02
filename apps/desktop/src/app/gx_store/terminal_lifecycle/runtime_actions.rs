@@ -39,10 +39,12 @@ impl GhostexGpuiApp {
         let session_id =
             SessionKey::local(&key.project_id, &key.session_id).to_sidebar_session_id();
         let performed = match action {
-            "closeSession" | "close" => self.gx_store_run_sidebar_close(
-                &command(json!({ "type": "closeSession", "sessionId": session_id })),
-                cx,
-            ),
+            // A coordinator or a busy agent asks first (gx_store/sidebar_close_confirm.rs).
+            "closeSession" | "close" => {
+                let close = command(json!({ "type": "closeSession", "sessionId": session_id }));
+                self.gx_store_ask_before_sidebar_close(&close, cx)
+                    || self.gx_store_run_sidebar_close(&close, cx)
+            }
             "sleepSession" => self.gx_store_run_sidebar_lifecycle(
                 &command(json!({
                     "type": "setSessionSleeping",

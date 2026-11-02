@@ -159,4 +159,5 @@ pub const GXSERVER_MIGRATION_IDS: &[&str] = &[
     "0047_session_presentation_kept_index",
     "0048_session_chat_resources",
     "0049_cloud_boxes",
+    "0050_coordinator_close_threads",
 ];

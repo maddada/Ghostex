@@ -1248,4 +1248,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0049_cloud_boxes",
         sql: include_str!("migrations/0049_cloud_boxes.sql"),
     },
+    Migration {
+        id: "0050_coordinator_close_threads",
+        sql: include_str!("migrations/0050_coordinator_close_threads.sql"),
+    },
 ];

@@ -1,0 +1,1 @@
+../../../../desktop/src/app/window/close_sessions_confirm_modal.rs

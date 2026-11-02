@@ -18,6 +18,10 @@ use crate::GhostexGpuiApp;
 #[derive(Default)]
 pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
+    /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// Set while a confirmed close runs, so the same close does not ask again.
+    pub(crate) session_close_confirmed: bool,
     pub(crate) endpoint: Option<GxserverEndpoint>,
     /// What the page shows while there is no list: the connection's last failure.
     pub(crate) status: Option<String>,
