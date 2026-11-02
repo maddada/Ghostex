@@ -85,10 +85,6 @@ export const IGNORED_FOR_RELEASE = Object.freeze([
   { path: 'LICENSE', why: 'Metadata only.' },
   { path: 'README.md', why: 'Metadata only.' },
   { path: 'TERMS.md', why: 'Project glossary for agents and contributors; metadata only.' },
-  {
-    path: 'THIRD_PARTY_NOTICES.md',
-    why: 'Third-party licence notices kept at the repo root; metadata only, like LICENSE.',
-  },
   { path: 'appcast.xml', why: 'Sparkle feed output written by the publisher, not a build input.' },
   { path: 'claude-code-codex-keybindings.json', why: 'Developer keybindings; not packaged.' },
   { path: 'favicon.png', why: 'Web asset for local tooling; not packaged by any release job.' },
@@ -159,6 +155,11 @@ const DESKTOP_APP_PATHSPECS = Object.freeze([
    * raw.githubusercontent.com does not remove it as a build input.
    */
   { pathspec: 'agent-model-catalog.json' },
+  /*
+   * The licence notices every desktop package ships beside the app. Purely additive and desktop-only, so
+   * FINGERPRINT_ALGORITHM_REVISION is not bumped (same reasoning as the android product's note below).
+   */
+  { pathspec: 'THIRD_PARTY_NOTICES.md' },
   { pathspec: '.dependencies/ghostty/**' },
   { pathspec: ':(exclude).dependencies/ghostty/.zig-cache' },
   { pathspec: ':(exclude).dependencies/ghostty/zig-out' },
