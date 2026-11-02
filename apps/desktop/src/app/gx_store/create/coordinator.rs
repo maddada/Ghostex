@@ -21,7 +21,8 @@ use crate::app::remote_conn::sidebar_rpc::{
 use crate::app::window::{NewCoordinatorAgent, NewCoordinatorModel};
 use ghostex_gx_chat_core::composer::skill_invocation::orchestrator_skill_line;
 use ghostex_gx_chat_core::protocol::{
-    COORDINATOR_AGENT_FAMILIES, coordinator_launch_takes_effort, coordinator_launch_takes_model,
+    COORDINATOR_AGENT_FAMILIES, coordinator_default_model_label, coordinator_launch_takes_effort,
+    coordinator_launch_takes_model, coordinator_model_label,
 };
 
 /// The agent families a coordinator can run on (`COORDINATOR_AGENT_FAMILIES` in gx-protocol,
@@ -52,21 +53,25 @@ fn coordinator_models(family: &str) -> Vec<NewCoordinatorModel> {
         return Vec::new();
     };
     let takes_effort = coordinator_launch_takes_effort(family);
-    agent
-        .models
-        .iter()
-        .map(|model| NewCoordinatorModel {
-            value: model.value.clone(),
-            label: model.label.clone(),
-            efforts: model
-                .efforts
-                .iter()
-                .filter(|_| takes_effort)
-                .map(|effort| (effort.clone(), catalog.effort_label(effort)))
-                .collect(),
-            default: model.default,
-        })
-        .collect()
+    // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
+    let keep_default = coordinator_default_model_label(family).map(|label| NewCoordinatorModel {
+        value: String::new(),
+        label: label.to_string(),
+        efforts: Vec::new(),
+        default: true,
+    });
+    let models = agent.models.iter().map(|model| NewCoordinatorModel {
+        value: model.value.clone(),
+        label: coordinator_model_label(family, &model.value, &model.label),
+        efforts: model
+            .efforts
+            .iter()
+            .filter(|_| takes_effort)
+            .map(|effort| (effort.clone(), catalog.effort_label(effort)))
+            .collect(),
+        default: model.default,
+    });
+    keep_default.into_iter().chain(models).collect()
 }
 
 /// The title a coordinator is created with, and its source: an unnamed coordinator is a placeholder

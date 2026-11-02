@@ -55,8 +55,9 @@ CREATE
   defaults to the first configured one, preferring Claude. --model picks its model (a value from
   the agent's model list, such as sonnet or opus[1m]); a Claude coordinator defaults to Opus 5.5
   (opus[1m]), every other one to its configured model. --effort defaults to high for Claude, Codex
-  and Antigravity; Cursor and ZCode coordinators take no effort, an OpenCode
-  coordinator takes neither, and the other agents keep their own unless you pass one. --goal is one line the
+  and Antigravity; Cursor and ZCode coordinators take no effort, an OpenCode coordinator's --model
+  is provider/model (such as openai/gpt-6.1-terra) and its --effort one of that model's variants,
+  set before its first message, and the other agents keep their own unless you pass one. --goal is one line the
   coordinator works toward. --task follows the skill line in its first message.
   options lists the agents a coordinator can run on, with each one's models,
   the model it starts on, the efforts it offers (Low, Medium, High and XHigh, or the agent's

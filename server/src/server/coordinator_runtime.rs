@@ -1055,8 +1055,9 @@ pub(crate) fn prepare_coordinator_create_params(
 
 /// Hands a just-created orchestrator its role: installs the `ghostex-orchestrator` skill for its
 /// agent and queues its first message (the skill line, then the create's first request) as a
-/// startup send. A ZCode orchestrator's chosen model goes first as a `/model` line, because ZCode
-/// has no launch model flag and the first message must run on the model the user picked.
+/// startup send. A ZCode or OpenCode orchestrator's chosen model goes first as a `/model` line
+/// (OpenCode's with the chosen variant after it), because neither has a launch model flag and the
+/// first message must run on the model the user picked.
 pub(crate) fn start_orchestrator_role(
     state: &AppState,
     project_id: &str,
@@ -1065,21 +1066,8 @@ pub(crate) fn start_orchestrator_role(
     params: &Map<String, Value>,
 ) -> std::result::Result<(), DomainStateError> {
     coordinators::ensure_orchestrator_skill_installed(&state.paths, family)?;
-    if family == "zcode" {
-        if let Some(model) = params
-            .get("agentModel")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|model| !model.is_empty())
-        {
-            queue_session_chat_prompt(
-                state,
-                project_id,
-                session_id,
-                &format!("/model {model}"),
-                true,
-            )?;
-        }
+    if let Some(line) = coordinator_model_line(family, params) {
+        queue_session_chat_prompt(state, project_id, session_id, &line, true)?;
     }
     let first_request = coordinators::coordinator_create_request(params)?
         .map(|request| request.first_request)
@@ -1091,6 +1079,28 @@ pub(crate) fn start_orchestrator_role(
         &coordinators::orchestrator_first_message(family, &first_request),
         true,
     )
+}
+
+/// The `/model` line a new ZCode or OpenCode orchestrator's chosen model goes in ahead of its first
+/// message: `/model <model>` for ZCode, `/model <provider/model> [<variant>]` for OpenCode (its send
+/// path sets both through OpenCode's server, `session_chat_opencode::Client::send`).
+fn coordinator_model_line(family: &str, params: &Map<String, Value>) -> Option<String> {
+    let text = |key: &str| {
+        params
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+    };
+    let model = text("agentModel")?;
+    match family {
+        "zcode" => Some(format!("/model {model}")),
+        "opencode" => Some(match text("agentEffort") {
+            Some(effort) => format!("/model {model} {effort}"),
+            None => format!("/model {model}"),
+        }),
+        _ => None,
+    }
 }
 
 /// Queues a message in a session's chat queue and tells its viewers. A `startup_send` is a new

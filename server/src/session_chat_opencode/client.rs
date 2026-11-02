@@ -330,9 +330,19 @@ impl Client {
                             "Choose a model from the chat model picker, or use /model provider/model.",
                         ));
                     }
+                    // `/model provider/model [variant]`: a new coordinator's chosen model and
+                    // variant arrive this way (`coordinator_model_line`).
+                    let mut words = argument.split_whitespace();
+                    let model = words.next().unwrap_or_default();
+                    let variant = words.next().unwrap_or_default();
+                    if words.next().is_some() {
+                        return Err(error(
+                            "Use /model provider/model, then optionally a variant.",
+                        ));
+                    }
                     super::select(
                         id,
-                        json!({"model":argument.trim(),"scope":"session"})
+                        json!({"model":model,"effort":variant,"scope":"session"})
                             .as_object()
                             .unwrap(),
                     )?;

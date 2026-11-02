@@ -25,21 +25,39 @@ pub fn coordinator_agent_family_supported(family: &str) -> bool {
     COORDINATOR_AGENT_FAMILIES.contains(&family)
 }
 
-/// True for the orchestrator families whose launch takes a chosen model, so a New Coordinator form
-/// offers a Model field: every one but OpenCode, whose terminal app has no model flag.
+/// True for the orchestrator families whose new coordinator takes a chosen model, so a New
+/// Coordinator form offers a Model field: every one of them.
 ///
 /// CDXC:Coordinators 2026-11-02 WHY:
-/// Issue #395: the forms kept their own list of model-taking agents (Claude, Codex, Pi, ZCode, Antigravity) after gxserver started taking a launch model from Cursor, Grok, Copilot and OMP on 2026-11-01, so those coordinators showed no Model or Effort field. The forms read this rule and gxserver's launch refusals stay the one that decides.
-/// SEE-ALSO: server/src/agents/launch_plan.rs (`apply_requested_agent_model`, what a launch accepts), server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator options`, the phone's form), apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog).
+/// Issue #395: the forms kept their own list of model-taking agents (Claude, Codex, Pi, ZCode, Antigravity) after gxserver started taking a launch model from Cursor, Grok, Copilot and OMP on 2026-11-01, so those coordinators showed no Model or Effort field. The forms read this rule and gxserver's launch refusals stay the one that decides. OpenCode joined the same day (the user chose to build it): its terminal app has no model flag, so gxserver switches a new OpenCode coordinator to the chosen model and variant through OpenCode's own server before its first message, the way ZCode's model goes as a `/model` line.
+/// SEE-ALSO: server/src/agents/launch_plan.rs (`apply_requested_agent_model`, what a launch accepts), server/src/server/coordinator_runtime.rs (`start_orchestrator_role`, the ZCode and OpenCode `/model` line), server/src/ghostex_cli/coordinator/command.rs (`ghostex coordinator options`, the phone's form), apps/desktop/src/app/gx_store/create/coordinator.rs (the desktop dialog).
 pub fn coordinator_launch_takes_model(family: &str) -> bool {
-    coordinator_agent_family_supported(family) && family != "opencode"
+    coordinator_agent_family_supported(family)
 }
 
-/// True for the orchestrator families whose launch takes a chosen effort, so a New Coordinator form
-/// offers an Effort field: not Cursor (its effort lives in the model id), ZCode (no effort choice)
-/// or OpenCode (neither).
+/// True for the orchestrator families whose new coordinator takes a chosen effort, so a New
+/// Coordinator form offers an Effort field: not Cursor (its effort lives in the model id) or ZCode
+/// (no effort choice). OpenCode's effort is the chosen model's variant.
 pub fn coordinator_launch_takes_effort(family: &str) -> bool {
     coordinator_launch_takes_model(family) && !matches!(family, "cursor" | "zcode")
+}
+
+/// The label of the first Model row of a family whose new coordinator can also keep the agent's
+/// own configured model (no value, no effort): OpenCode, whose lineup marks no default and runs
+/// hundreds of models across providers.
+pub fn coordinator_default_model_label(family: &str) -> Option<&'static str> {
+    (family == "opencode").then_some("OpenCode's default")
+}
+
+/// A Model row's label in a New Coordinator form: OpenCode's lineup lists the same model under
+/// several providers ("GPT-6.1 Terra" from OpenAI and from OpenRouter), so its rows name the provider.
+pub fn coordinator_model_label(family: &str, value: &str, label: &str) -> String {
+    match value.split_once('/') {
+        Some((provider, _)) if family == "opencode" && !provider.is_empty() => {
+            format!("{label} ({provider})")
+        }
+        _ => label.to_string(),
+    }
 }
 
 /// The name an orchestrator family is called by in messages.

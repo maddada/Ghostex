@@ -2,7 +2,8 @@ use ghostex_gx_chat_core::menus::orchestrator_effort::{
     default_orchestrator_effort, orchestrator_efforts,
 };
 use ghostex_gx_chat_core::protocol::{
-    coordinator_launch_takes_effort, coordinator_launch_takes_model,
+    coordinator_default_model_label, coordinator_launch_takes_effort,
+    coordinator_launch_takes_model, coordinator_model_label,
 };
 use serde_json::{json, Value};
 
@@ -329,7 +330,13 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                 .and_then(|agent| agent.get("efforts"))
                 .cloned()
                 .unwrap_or_else(|| json!([]));
-            let models: Vec<Value> = lineup
+            // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
+            let keep_default = lineup.and(coordinator_default_model_label(family)).map(|label| {
+                json!({ "value": "", "label": label, "default": true, "efforts": [], "defaultEffort": null })
+            });
+            let models: Vec<Value> = keep_default
+                .into_iter()
+                .chain(lineup
                 .and_then(|agent| agent.get("models"))
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
@@ -353,12 +360,16 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .collect();
                     json!({
                         "value": model["value"],
-                        "label": model["label"],
+                        "label": coordinator_model_label(
+                            family,
+                            model["value"].as_str().unwrap_or_default(),
+                            model["label"].as_str().unwrap_or_default(),
+                        ),
                         "default": model.get("default").and_then(Value::as_bool) == Some(true),
                         "efforts": efforts,
                         "defaultEffort": default_orchestrator_effort(&levels),
                     })
-                })
+                }))
                 .collect();
             let default_model = models
                 .iter()

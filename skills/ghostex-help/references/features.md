@@ -2972,8 +2972,10 @@ version of the Projects features in Cursor and Claude Code.
   lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its
   own default) and its effort: Low, Medium, High or XHigh, High by default (an agent without
   XHigh offers its levels from Low up to its highest). Cursor and ZCode coordinators take no
-  effort choice (Cursor's effort is part of its model), and an OpenCode coordinator starts on
-  its own model and effort. Use a very good model: the coordinator
+  effort choice (Cursor's effort is part of its model). An OpenCode coordinator lists every model
+  your OpenCode has (search the list), starting on OpenCode's default, and its effort is that
+  model's variant; Ghostex switches OpenCode to them before its first message. Use a very good
+  model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
   /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude
