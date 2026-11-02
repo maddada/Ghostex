@@ -36,6 +36,11 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     */
     "ghostex-visuals",
     /*
+    CDXC:Secrets 2026-11-02 WHY:
+    `$ghostex-secrets` is the one bundled skill agents may pick up on their own: an agent that needs a password or token must find `ghostex secret request` at that moment, whichever agent family it is, or it asks for the secret in chat. Agents that never get the skill's description in context (it is not installed, or the agent reads no skills) fall back to asking, so the CLI help names the verb too.
+    */
+    "ghostex-secrets",
+    /*
     CDXC:Coordinators 2026-10-17 WHY:
     The orchestrator playbook is a bundled skill gxserver installs when an orchestrator is created or promoted (coordinators/role.rs), so it is listed here for the startup refresh from GitHub main, but left out of the default install set (`ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
     */

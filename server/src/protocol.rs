@@ -829,6 +829,18 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         }
         "/api/setVoiceAgentKey" => full_local(path),
         /*
+        CDXC:Secrets 2026-11-02 WHY:
+        A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
+        */
+        "/api/answerSecretRequest" => remote_allowed(path),
+        "/api/createSecretRequest"
+        | "/api/waitSecretRequest"
+        | "/api/cancelSecretRequest"
+        | "/api/readSecretProviders"
+        | "/api/saveSecretProvider"
+        | "/api/removeSecretProvider"
+        | "/api/checkSecretReference" => full_local(path),
+        /*
         CDXC:VoiceMode 2026-10-20 WHY:
         Dictate's recordings are kept on this computer and the phone dictates through it, so the phone uploads, transcribes, lists and dismisses recordings here too; the key never leaves this computer.
         */

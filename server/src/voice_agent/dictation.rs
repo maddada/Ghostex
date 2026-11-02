@@ -18,7 +18,7 @@ use crate::server::AppState;
 
 /// Runs one dictation on `client` until the client ends or cancels it.
 pub(super) async fn run(state: &AppState, mut client: WebSocket, language: Option<String>) {
-    let key = match keys::read_key(&state.paths, Provider::Xai) {
+    let key = match keys::read_key_async(&state.paths, Provider::Xai).await {
         Ok(Some(key)) => key,
         Ok(None) => {
             socket::fail(

@@ -224,6 +224,9 @@ pub struct Document {
     pub side_chats_panel: Tri<Value>,
     /// A side chat's own bar (`{ parentSessionId, parentTitle }`), or `null`. Family f.
     pub side_chat_of: Tri<Value>,
+    /// The private secret request cards above the composer (`extras::secret_requests::project`),
+    /// an array, empty when none. Family f.
+    pub secret_requests: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

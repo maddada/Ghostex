@@ -43,6 +43,14 @@ pub const BUNDLED_GHOSTEX_AGENT_SKILLS: J = J::Arr(&[
         ("tier", J::Str("recommended")),
     ]),
     J::Obj(&[
+        ("command", J::Str("ghostex secret install-skill")),
+        ("description", J::Str("Let agents ask you for a password, API key or token in a private card above the chat box instead of in the chat. What you type goes to a private file the agent's commands read; it never reaches the chat or the model.")),
+        ("id", J::Str("secrets")),
+        ("name", J::Str("Ghostex Secrets")),
+        ("skillName", J::Str("ghostex-secrets")),
+        ("tier", J::Str("recommended")),
+    ]),
+    J::Obj(&[
         ("command", J::Str("ghostex computer-use install-skill")),
         ("description", J::Str("Let agents control your machine: click, type, and see the screen in native apps. Runs through Fast Computer & Browser Use and also installs its cua-driver skill, which the agent reads first; your operating system may ask for accessibility and screen recording permissions.")),
         ("id", J::Str("computerUse")),
@@ -152,6 +160,14 @@ pub const VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS: J = J::Arr(&[
         ("id", J::Str("visuals")),
         ("name", J::Str("Ghostex Visuals")),
         ("skillName", J::Str("ghostex-visuals")),
+        ("tier", J::Str("recommended")),
+    ]),
+    J::Obj(&[
+        ("command", J::Str("ghostex secret install-skill")),
+        ("description", J::Str("Let agents ask you for a password, API key or token in a private card above the chat box instead of in the chat. What you type goes to a private file the agent's commands read; it never reaches the chat or the model.")),
+        ("id", J::Str("secrets")),
+        ("name", J::Str("Ghostex Secrets")),
+        ("skillName", J::Str("ghostex-secrets")),
         ("tier", J::Str("recommended")),
     ]),
     J::Obj(&[

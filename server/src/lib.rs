@@ -69,6 +69,8 @@ pub mod remote_access;
 pub mod repository_clone;
 pub mod resume_lookup;
 pub mod runtime;
+pub(crate) mod secret_providers;
+pub(crate) mod secret_requests;
 pub mod server;
 pub mod session_approval;
 pub mod session_auto_sleep;

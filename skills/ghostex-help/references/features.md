@@ -3760,6 +3760,41 @@ pick another location; default `local`, this computer). CLI:
 `ghostex agentbox status`, `ghostex agentbox list`,
 `ghostex create-agent <agent> --project-id <id> --run-on docker`.
 
+## Secrets (passwords, API keys and 1Password)
+
+When an agent needs a password, an API key or a token from you, it asks in a
+private card above the chat box instead of in the chat: the card says what it
+needs and why, and has a hidden field with Save privately and Decline. What you
+type never shows in the chat, the transcript or the agent's context: Ghostex
+writes it to a private file that only that agent's commands can read, and
+deletes the file after 24 hours. This works for every agent Ghostex runs
+(Claude, Codex, OpenCode and the rest), in the chat on the computer and on the
+phone, and covers a sudo password too. The card closes on its own when the
+agent stops waiting (10 minutes unless it asked for longer). Agents ask with
+`ghostex secret request`; the bundled `$ghostex-secrets` skill teaches them
+when and how, so tell an agent "ask me for the token privately" if it asks in
+the chat instead.
+
+Settings > Secrets lists the 1Password accounts Ghostex reads keys from, adds
+one (a name and the 1Password account, such as my.1password.com) and removes
+one. It needs the 1Password CLI (`op`, from 1Password or `brew install
+1password-cli`) with "Integrate with 1Password CLI" turned on in 1Password's
+Developer settings; each account shows whether `op` is signed in to it.
+Ghostex keeps only the account name, never a key. With an account added you
+can paste a 1Password reference (`op://vault/item/field`, from an item field's
+Copy Secret Reference) instead of a key: in a secret request card, and in the
+voice agent's xAI and OpenAI key fields, where the key is then read from
+1Password each time it is used. 1Password may ask you to unlock when a key is
+read. "Check a reference" on the same page tries a reference and says only
+whether it worked.
+
+Settings page: Secrets (`ghostex settings open --tab secrets`). CLI:
+`ghostex secret request --label text --reason text`,
+`ghostex secret providers list`,
+`ghostex secret providers add --name Personal --account my.1password.com`,
+`ghostex secret providers remove <id>`,
+`ghostex secret providers check --provider <id> --reference op://vault/item/field`.
+
 ## Notifications and status
 
 Ghostex tells you when an agent needs you: a completion sound when a session

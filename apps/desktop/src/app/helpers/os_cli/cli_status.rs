@@ -58,6 +58,7 @@ pub(crate) struct GpuiGhostexCliProbe {
     pub(crate) move_codex_session_skill_path: Option<String>,
     pub(crate) help_skill_path: Option<String>,
     pub(crate) visuals_skill_path: Option<String>,
+    pub(crate) secrets_skill_path: Option<String>,
 }
 
 #[cfg(target_os = "windows")]
@@ -81,6 +82,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         move_codex_session_skill_path: status.move_codex_session_skill_path,
         help_skill_path: status.help_skill_path,
         visuals_skill_path: status.visuals_skill_path,
+        secrets_skill_path: status.secrets_skill_path,
     })
 }
 
@@ -118,6 +120,7 @@ pub(crate) fn gpui_ghostex_cli_probe() -> Result<GpuiGhostexCliProbe, String> {
         move_codex_session_skill_path: skill_path("ghostex-move-codex-session"),
         help_skill_path: skill_path("ghostex-help"),
         visuals_skill_path: skill_path("ghostex-visuals"),
+        secrets_skill_path: skill_path("ghostex-secrets"),
     })
 }
 
@@ -225,6 +228,7 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
     let move_codex_session_skill_installed = probe.move_codex_session_skill_path.is_some();
     let help_skill_installed = probe.help_skill_path.is_some();
     let visuals_skill_installed = probe.visuals_skill_path.is_some();
+    let secrets_skill_installed = probe.secrets_skill_path.is_some();
     let cua_driver_path = gpui_cua_driver_executable_path();
     let cua_app_installed = gpui_is_dir(Path::new("/Applications/CuaDriver.app"));
     let cua_driver_installed = cua_driver_path.is_some() || cua_app_installed;
@@ -406,6 +410,8 @@ pub(crate) fn gpui_ghostex_cli_status_message_with_cua_update_check(
         "helpSkillPath": probe.help_skill_path,
         "visualsSkillInstalled": visuals_skill_installed,
         "visualsSkillPath": probe.visuals_skill_path,
+        "secretsSkillInstalled": secrets_skill_installed,
+        "secretsSkillPath": probe.secrets_skill_path,
         "type": "ghostexCliStatus",
     });
     if let (Some(payload), serde_json::Value::Object(spaceo)) = (

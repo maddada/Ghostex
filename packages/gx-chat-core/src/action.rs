@@ -85,6 +85,7 @@ action_kinds! {
     OpenSideChat => "openSideChat",
     BringBackSideChat => "bringBackSideChat",
     DeleteSideChat => "deleteSideChat",
+    AnswerSecretRequest => "answerSecretRequest",
     SearchOpen => "searchOpen",
     SearchClose => "searchClose",
     SearchQuery => "searchQuery",

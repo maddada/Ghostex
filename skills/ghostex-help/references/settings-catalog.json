@@ -9287,6 +9287,10 @@
           "value": "ghostex-visuals"
         },
         {
+          "label": "Ghostex Secrets",
+          "value": "ghostex-secrets"
+        },
+        {
           "label": "Ghostex Computer Use",
           "value": "ghostex-computer-use"
         },
@@ -11274,6 +11278,39 @@
       "agentWritable": false
     },
     {
+      "key": "secretProviders",
+      "title": "1Password accounts",
+      "subtitle": "The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with \"Integrate with 1Password CLI\" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "providers",
+      "sectionTitle": "Secret providers",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "secretReferenceCheck",
+      "title": "Check a 1Password reference",
+      "subtitle": "Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "check",
+      "sectionTitle": "Check a reference",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "secretRequests",
+      "title": "Private secret requests",
+      "subtitle": "When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "requests",
+      "sectionTitle": "Secrets agents ask for",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "workspaceName",
       "title": "Workspace name",
       "subtitle": "The name and letter shown on the workspace button left of your Spaces.",
@@ -11890,7 +11927,7 @@
     {
       "key": "voiceAgentXaiKey",
       "title": "xAI API key",
-      "subtitle": "Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it.",
+      "subtitle": "Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.",
       "tab": "voiceAgent",
       "tabTitle": "Voice agent",
       "section": "keys",
@@ -11901,7 +11938,7 @@
     {
       "key": "voiceAgentOpenaiKey",
       "title": "OpenAI API key",
-      "subtitle": "Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it.",
+      "subtitle": "Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.",
       "tab": "voiceAgent",
       "tabTitle": "Voice agent",
       "section": "keys",

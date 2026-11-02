@@ -49,6 +49,7 @@ pub(crate) async fn handle_read_voice_agent_http(
         json!({
             "configured": state == KeyState::Saved,
             "unreadable": state == KeyState::Unreadable,
+            "reference": keys::key_reference(paths, provider).map(|reference| reference.reference),
         })
     };
     let result = json!({
@@ -115,6 +116,32 @@ async fn set_key(state: &AppState, body: &Value) -> Result<Value, DomainStateErr
             .map_err(|error| failure("internalError", error.to_string()))?
             .map_err(|message| failure("internalError", message))?;
         return Ok(json!({"provider": provider.id(), "configured": false}));
+    }
+    // An `op://…` reference is kept as the reference; the key is read through 1Password, checked
+    // with the provider once here, and read again each time it is used.
+    if let Some(reference) = crate::secret_providers::typed_reference(&state.paths, &key) {
+        let reference = reference.map_err(|message| failure("invalidParams", message))?;
+        return tokio::task::spawn_blocking(move || {
+            let read = crate::secret_providers::resolve(&paths, &reference)
+                .map_err(|message| failure("badKey", message))?;
+            match keys::check_key(provider, read.trim()) {
+                KeyCheck::Valid => {}
+                KeyCheck::Refused => {
+                    return Err(failure(
+                        "badKey",
+                        format!("{} refused the key 1Password gave.", provider.label()),
+                    ))
+                }
+                KeyCheck::Unreachable(message) => {
+                    return Err(failure("providerUnavailable", message))
+                }
+            }
+            keys::write_key_reference(&paths, provider, &reference)
+                .map_err(|message| failure("internalError", message))
+        })
+        .await
+        .map_err(|error| failure("internalError", error.to_string()))?
+        .map(|()| json!({"provider": provider.id(), "configured": true, "reference": true}));
     }
     if key.len() > 512 || key.chars().any(char::is_whitespace) {
         return Err(failure(

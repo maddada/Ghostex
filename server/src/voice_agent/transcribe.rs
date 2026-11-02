@@ -163,7 +163,7 @@ async fn call_once(paths: &crate::paths::GxserverPaths, recording: &Recording) -
         }
         KeyChoice::Missing => return Outcome::Final(problem("noKey", None, NO_KEY)),
     };
-    let key = match keys::read_key(paths, provider) {
+    let key = match keys::read_key_async(paths, provider).await {
         Ok(Some(key)) => key,
         Ok(None) => return Outcome::Final(problem("noKey", None, NO_KEY)),
         Err(message) => return Outcome::Final(problem("noKey", Some(provider), message)),

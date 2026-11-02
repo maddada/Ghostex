@@ -121,6 +121,12 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "installSecretsSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallSecretsSkill,
+                    cx,
+                );
+            }
             "installCuaDriverSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallCuaDriverSkill,

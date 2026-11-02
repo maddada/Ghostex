@@ -77,6 +77,7 @@ mod runtime_worker;
 mod scroll_bottom;
 mod scrollbar;
 mod search;
+mod secret_request;
 mod side_chats;
 mod side_question;
 mod startup_delivery;

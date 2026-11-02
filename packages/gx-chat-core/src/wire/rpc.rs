@@ -66,6 +66,8 @@ pub enum ChatRpcMethod {
     BringBackSideChat,
     /// Stops a side chat and removes it.
     DeleteSideChat,
+    /// The user's answer to an agent's secret request (server/src/secret_requests/).
+    AnswerSecretRequest,
     /// Takes a message the agent CLI queued back out of its queue, for the composer.
     TakeBackSessionChatQueuedMessage,
     /// A short summary of where the session stands (`composer/catch_up.rs`).
@@ -122,6 +124,7 @@ impl ChatRpcMethod {
             Self::StartSideChat => "startSideChat",
             Self::BringBackSideChat => "bringBackSideChat",
             Self::DeleteSideChat => "deleteSideChat",
+            Self::AnswerSecretRequest => "answerSecretRequest",
             Self::TakeBackSessionChatQueuedMessage => "takeBackSessionChatQueuedMessage",
             Self::CatchUpSession => "catchUpSession",
             Self::ReadSessionFilesLinks => "readSessionFilesLinks",
@@ -171,6 +174,7 @@ impl ChatRpcMethod {
             "startSideChat" => Self::StartSideChat,
             "bringBackSideChat" => Self::BringBackSideChat,
             "deleteSideChat" => Self::DeleteSideChat,
+            "answerSecretRequest" => Self::AnswerSecretRequest,
             "takeBackSessionChatQueuedMessage" => Self::TakeBackSessionChatQueuedMessage,
             "catchUpSession" => Self::CatchUpSession,
             "readSessionFilesLinks" => Self::ReadSessionFilesLinks,

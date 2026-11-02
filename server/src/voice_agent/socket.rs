@@ -323,7 +323,7 @@ async fn start_conversation(
             }
         }
     };
-    let key = match keys::read_key(&state.paths, provider) {
+    let key = match keys::read_key_async(&state.paths, provider).await {
         Ok(Some(key)) => key,
         Ok(None) => {
             fail(socket, "noKey", &no_key_message(provider, client_remote)).await;

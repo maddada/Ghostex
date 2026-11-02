@@ -20,6 +20,7 @@ use std::rc::Rc;
 
 #[path = "settings_cloud_boxes.rs"]
 mod settings_cloud_boxes;
+mod settings_secrets;
 #[path = "settings_e.rs"]
 mod settings_e;
 #[path = "settings_f1.rs"]
@@ -176,6 +177,12 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                     cx.defer(move |cx| reply(result, cx));
                     return;
                 }
+                if settings_secrets::owns(&host_state)
+                    && let Some(result) = settings_secrets::rpc(&host_state, &path, &params)
+                {
+                    cx.defer(move |cx| reply(result, cx));
+                    return;
+                }
                 if settings_workspaces::owns(&host_state)
                     && let Some(result) = settings_workspaces::rpc(&host_state, &path, &params)
                 {
@@ -245,6 +252,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             .or_else(|| settings_workspaces::open_message(&state))
             .or_else(|| settings_f1::open_message(&state))
             .or_else(|| settings_cloud_boxes::open_message(&state))
+            .or_else(|| settings_secrets::open_message(&state))
             .or_else(|| settings_f2::open_message(&state))
             .or_else(|| settings_e::open_message(&state))
             .unwrap_or_else(|| json!({})),
@@ -266,6 +274,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     }
     request.gxserver_rpc_available = if settings_workspaces::owns(&state)
         || settings_machines::owns(&state)
+        || settings_secrets::owns(&state)
     {
         true
     } else if settings_cloud_boxes::owns(&state) {

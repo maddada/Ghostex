@@ -93,6 +93,7 @@ fn settle_with_ids(
                 crate::extras::side_chats::settle(state, *request_id, answer.clone())
             {
                 effects.extend(more);
+            } else if crate::extras::secret_requests::settle(state, *request_id, answer.clone()) {
             } else if let Some(more) =
                 settle_terminal_tail_rpc(state, *request_id, answer, context.now_ms)
             {

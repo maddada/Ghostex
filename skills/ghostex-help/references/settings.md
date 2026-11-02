@@ -560,6 +560,17 @@ How to use this file:
 - **Easy Connect binary** `binary` (Settings UI row without a settings key; use `ghostex settings open`): Path and version of the Easy Connect binary.
 - **gxserver** `gxserver` (Settings UI row without a settings key; use `ghostex settings open`): Local API the app and phones talk to.
 - **Raw Easy Connect status** `rawStatus` (Settings UI row without a settings key; use `ghostex settings open`): Raw Easy Connect status JSON for bug reports.
+## Secrets (tab `secrets`)
+
+### Secret providers
+
+- **1Password accounts** `secretProviders` (Settings UI row without a settings key; use `ghostex settings open`): The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with "Integrate with 1Password CLI" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.
+### Check a reference
+
+- **Check a 1Password reference** `secretReferenceCheck` (Settings UI row without a settings key; use `ghostex settings open`): Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.
+### Secrets agents ask for
+
+- **Private secret requests** `secretRequests` (Settings UI row without a settings key; use `ghostex settings open`): When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.
 ## Workspaces (tab `workspaces`)
 
 ### Workspaces
@@ -623,8 +634,8 @@ How to use this file:
 - **Last conversation** `voiceAgentMemory` (Settings UI row without a settings key; use `ghostex settings open`): A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say "pick up where we left off", to carry on from it. Forget deletes it.
 ### API keys
 
-- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it.
-- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it.
+- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.
+- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.
 ### Dictation history
 
 - **Dictation history** `voiceAgentDictationHistory` (Settings UI row without a settings key; use `ghostex settings open`): Every recording you made with the Dictate microphone, newest first, with its text. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them.

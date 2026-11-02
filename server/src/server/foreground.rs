@@ -403,6 +403,8 @@ pub async fn run_gxserver_foreground(
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     crate::voice_agent::recover_voice_agent_memory(&state);
+    // Secret request files are deleted a day after they were saved, even when no agent asks again.
+    crate::secret_requests::sweep_saved_files(&state.paths);
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);

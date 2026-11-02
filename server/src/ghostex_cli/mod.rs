@@ -38,6 +38,7 @@ pub mod resources;
 pub mod rpc;
 mod run_in_terminal;
 pub mod saved_prompts;
+mod secret;
 pub mod selector;
 mod session_chat_model;
 mod session_chat_rpc;
@@ -130,6 +131,8 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "guide",
     "manage-beads",
     "notify",
+    "secret",
+    "secrets",
     "visual",
     "h",
     "history",
@@ -402,6 +405,8 @@ fn is_known_command(name: &str) -> bool {
         "agent-sync",
         "feedback",
         "notify",
+        "secret",
+        "secrets",
         "show",
         "visual",
         "install-help-skill",
@@ -935,6 +940,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "bd" | "beads" => launchers::beads_command(args),
         "board" => board::board_command(args),
         "notify" => notify::notify_command(args),
+        "secret" | "secrets" => secret::secret_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
         "visual" => visual::visual_command(args),

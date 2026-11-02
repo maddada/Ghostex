@@ -262,7 +262,7 @@ pub struct TurnLifecycle {
 /// | Key | Absent means |
 /// | --- | --- |
 /// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks` | CLEARED |
-/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries` | UNCHANGED |
+/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries`, `secretRequests` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
@@ -314,6 +314,12 @@ pub struct ChatSideState {
     /// Bring back and Delete. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub side_chat_of: Option<Value>,
+    /// The secret requests an agent of this session made with `ghostex secret request`
+    /// (`[{ id, label, reason, placeholder?, status, createdAtMs, expiresAtMs,
+    /// acceptsReference }]`, server/src/secret_requests/), never a value; the private cards above
+    /// its composer. gxserver writes it on every frame. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret_requests: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.

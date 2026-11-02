@@ -1,0 +1,7 @@
+interface:
+  display_name: 'Ghostex Secrets'
+  short_description: 'Ask the user for a password, API key or token privately'
+  default_prompt: 'Use $ghostex-secrets to ask the user for the secret through a private card instead of in chat.'
+
+policy:
+  allow_implicit_invocation: true

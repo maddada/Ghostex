@@ -12,6 +12,7 @@ mod open_targets;
 mod os_integration;
 mod projects;
 mod remote;
+mod secrets;
 mod voice_agent;
 mod workspaces;
 
@@ -32,6 +33,7 @@ pub fn pages(platform: Platform) -> Vec<Page> {
         os_integration::page(),
         projects::page(),
         remote::page(),
+        secrets::page(),
         workspaces::page(),
         connectors::page(),
         voice_agent::page(),

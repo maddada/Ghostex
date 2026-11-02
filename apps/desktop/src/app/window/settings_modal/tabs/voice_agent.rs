@@ -32,8 +32,8 @@ use std::time::Duration;
 /// `.settings-page-width grid gap-6 px-5 py-5`: 20px above the first section on top of its own 12px.
 const PAGE_TOP_PADDING: f32 = 20.0;
 const READ_TIMEOUT: Duration = Duration::from_secs(10);
-/// Saving checks the key with the provider first.
-const SAVE_TIMEOUT: Duration = Duration::from_secs(30);
+/// Saving checks the key with the provider first, after 1Password unlocks for a reference.
+const SAVE_TIMEOUT: Duration = Duration::from_secs(90);
 
 const PROVIDER: &str = "voiceAgentProvider";
 const XAI_VOICE: &str = "voiceAgentXaiVoice";
@@ -94,6 +94,8 @@ struct KeyField {
     configured: Option<bool>,
     /// A key is saved but can't be read anymore, so it has to be pasted again.
     unreadable: bool,
+    /// The 1Password reference the key is read from, when it is kept there (Settings > Secrets).
+    reference: Option<String>,
     busy: bool,
     /// The last save or remove: whether it worked and what to say.
     note: Option<(bool, String)>,
@@ -136,6 +138,7 @@ impl VoiceAgentTab {
                 }),
                 configured: None,
                 unreadable: false,
+                reference: None,
                 busy: false,
                 note: None,
             };
@@ -147,8 +150,12 @@ impl VoiceAgentTab {
             history,
             store,
             fields: FieldStates::default(),
-            xai: key_field("Paste your xAI API key", window, cx),
-            openai: key_field("Paste your OpenAI API key", window, cx),
+            xai: key_field("Paste your xAI API key or an op:// reference", window, cx),
+            openai: key_field(
+                "Paste your OpenAI API key or an op:// reference",
+                window,
+                cx,
+            ),
             read_error: None,
             memory: None,
             memory_pending: false,
@@ -193,6 +200,7 @@ impl VoiceAgentTab {
                                 let field = page.key(provider);
                                 field.configured = key["configured"].as_bool();
                                 field.unreadable = key["unreadable"].as_bool() == Some(true);
+                                field.reference = key["reference"].as_str().map(str::to_string);
                             }
                             page.memory = Some(status["memory"].clone());
                             page.memory_pending =
@@ -232,6 +240,8 @@ impl VoiceAgentTab {
         field.note = None;
         // The key leaves the field as soon as it is sent, so it is never on screen again.
         input.update(cx, |input, cx| input.set_value("", window, cx));
+        // Only a reference (not a secret) is kept to show where the key is read from.
+        let typed_reference = key.starts_with("op://").then(|| key.clone());
         let page = cx.entity().downgrade();
         store_gxserver_rpc(
             &self.store,
@@ -245,11 +255,18 @@ impl VoiceAgentTab {
                     match result {
                         Ok(answer) => {
                             let configured = answer["configured"].as_bool().unwrap_or(!remove);
+                            let from_reference = answer["reference"] == true;
                             field.configured = Some(configured);
                             field.unreadable = false;
+                            field.reference = typed_reference.clone().filter(|_| from_reference);
                             field.note = Some((
                                 true,
-                                if configured {
+                                if from_reference {
+                                    format!(
+                                        "Saved. {} accepted the key 1Password gave; it is read from 1Password each time.",
+                                        provider.label()
+                                    )
+                                } else if configured {
                                     format!("Saved. {} accepted the key.", provider.label())
                                 } else {
                                     "Removed from this computer.".to_string()
@@ -411,6 +428,7 @@ impl VoiceAgentTab {
         let input = field.input.clone();
         let configured = field.configured;
         let unreadable = field.unreadable;
+        let reference = field.reference.clone();
         let busy = field.busy;
         let note = field.note.clone();
         let status: SharedString = match (busy, configured) {
@@ -418,7 +436,10 @@ impl VoiceAgentTab {
             (false, _) if unreadable => {
                 "This saved key can't be read anymore. Paste it again.".into()
             }
-            (false, Some(true)) => "A key is saved on this computer.".into(),
+            (false, Some(true)) => match &reference {
+                Some(reference) => format!("Read from 1Password: {reference}").into(),
+                None => "A key is saved on this computer.".into(),
+            },
             (false, Some(false)) => "No key yet.".into(),
             (false, None) => "".into(),
         };
