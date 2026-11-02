@@ -261,16 +261,41 @@ pub(super) fn prepare_request(
             )
         })?;
     let text = |key: &str| session.get(key).and_then(Value::as_str).map(str::to_string);
-    let base_branch = repository
-        .get_project(&draft.project_id)
-        .ok()
-        .flatten()
-        .and_then(|project| {
-            project
-                .pointer("/runtimeSettings/newChatWorktree/baseBranch")
-                .and_then(Value::as_str)
+    let project = repository.get_project(&draft.project_id).ok().flatten();
+    let base_branch = project.as_ref().and_then(|project| {
+        project
+            .pointer("/runtimeSettings/newChatWorktree/baseBranch")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    // A draft keeps its first message in its runtime settings.
+    let first_message = text("firstUserMessage").or_else(|| {
+        session
+            .pointer("/runtimeSettings/firstUserMessage")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    });
+    let branch = session_branch(
+        box_id,
+        &draft.project_id,
+        project
+            .as_ref()
+            .and_then(|project| project.get("path"))
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+        first_message.as_deref(),
+    );
+    let image_paths = session
+        .pointer("/runtimeSettings/cloudBox/imagePaths")
+        .and_then(Value::as_array)
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(Value::as_str)
                 .map(str::to_string)
-        });
+                .collect()
+        })
+        .unwrap_or_default();
     let slug: String = project_name
         .chars()
         .map(|c| {
@@ -290,23 +315,95 @@ pub(super) fn prepare_request(
             if slug.is_empty() { "project" } else { &slug }
         ),
         base_branch,
-        branch: None,
+        branch: Some(branch),
         worktree,
         agent_id: text("agentId").unwrap_or_else(|| "claude".to_string()),
         account_id: text("accountId"),
         title: text("title"),
-        // A draft keeps its first message in its runtime settings.
-        first_message: text("firstUserMessage").or_else(|| {
-            session
-                .pointer("/runtimeSettings/firstUserMessage")
-                .and_then(Value::as_str)
-                .map(str::to_string)
-        }),
+        first_message,
+        image_paths,
         home_project_id: Some(draft.project_id.clone()),
         home_machine_id: Some(state.metadata.server_id.clone()),
         home_session_id: Some(draft.session_id.clone()),
         snapshot_id,
     })
+}
+
+/// CDXC:CloudBoxes 2026-11-02 DECISION:
+/// User (Q1005 "fetch new branch", Q1014 "push branch"): every box session works on its own new
+/// branch cut from the freshly fetched base, named the way a new worktree's branch is (from the
+/// first message: a ticket key and its title, else the message's words), so the agent can push it
+/// and the box chip's Open PR and Pull find it. The box makes the name unique against its own and
+/// origin's branches.
+/// SEE-ALSO: server/src/worktree_branch_name.rs, server/src/cloud_boxes/box_mode/prepare_session.rs.
+fn session_branch(
+    box_id: &str,
+    project_id: &str,
+    cwd: &str,
+    first_message: Option<&str>,
+) -> String {
+    let hint = first_message
+        .filter(|message| !message.trim().is_empty())
+        .map(|message| {
+            crate::worktree_branch_name::worktree_name_hint(
+                message,
+                &crate::worktree_branch_name::ReferenceScope { project_id, cwd },
+            )
+        })
+        .unwrap_or_default();
+    let hint: String = hint
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '/' | '.') {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches(|c| matches!(c, '-' | '/' | '.'))
+        .to_string();
+    if hint.is_empty() {
+        format!("cloud-box-{}", box_id.trim_start_matches("gx_"))
+    } else {
+        hint
+    }
+}
+
+/// Copies the first message's pictures from this computer into the box's private folder
+/// (`images/`) and answers their paths on the box, in order. A picture that can't be read is
+/// left out.
+pub(super) fn send_images(
+    ops: &Ops,
+    target: &Target,
+    local_paths: &[String],
+) -> Result<Vec<String>, String> {
+    let folder = format!("{}/images", box_private_dir(&ops.provider()));
+    let mut on_box = Vec::new();
+    for (index, local) in local_paths.iter().enumerate() {
+        let Ok(bytes) = std::fs::read(local) else {
+            continue;
+        };
+        // Box file paths take letters, digits and `._-` only.
+        let name: String = std::path::Path::new(local)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "image.png".to_string())
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect();
+        let path = format!("{folder}/{index}-{name}");
+        ops.write_file(target, &path, &bytes)?;
+        on_box.push(path);
+    }
+    Ok(on_box)
 }
 
 /// The box user's home: Instabox keeps it on its storage disk, Boat's user is `user`, a `local`

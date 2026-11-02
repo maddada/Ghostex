@@ -217,6 +217,14 @@ pub struct BoxPrepareSessionRequest {
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_message: Option<String>,
+    /// Pictures attached to the first message, as paths on the box (home copied them into the
+    /// private folder's `images/`); they go with the first message.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::lenient_strings",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub image_paths: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_project_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

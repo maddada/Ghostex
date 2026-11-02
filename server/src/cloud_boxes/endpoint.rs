@@ -250,6 +250,22 @@ pub(crate) async fn dispatch(
             let request: ghostex_gx_protocol::cloud_box::BoxWriteBackParams = typed(params)?;
             super::box_mode::answer_box_action(action, request.ack).await
         }
+        CloudBoxesAction::PullBranch => {
+            let request: ghostex_gx_protocol::cloud_box::PullBranchParams = typed(params)?;
+            let row = {
+                let task_state = state.clone();
+                let box_id = request.box_id.clone();
+                blocking(move || registry::row(&task_state.paths, &box_id)).await??
+            };
+            to_value(
+                &crate::server::worktree_ops::pull_box_branch::pull_box_branch(
+                    &state,
+                    &row,
+                    request.session_id.as_deref(),
+                )
+                .await?,
+            )
+        }
         CloudBoxesAction::Other(other) => Err(DomainStateError::bad_request(format!(
             "\"{other}\" is not a Cloud Boxes action."
         ))),

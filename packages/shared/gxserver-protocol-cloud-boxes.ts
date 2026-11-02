@@ -245,6 +245,8 @@ export interface GxserverDraftCloudBox {
   worktree?: boolean;
   /** Start from the provider's base image (Set up cloud box, guided setup). */
   blank?: boolean;
+  /** The first message's pictures on this computer; the box start copies them onto the box. */
+  imagePaths?: string[];
   boxId?: string;
 }
 
@@ -294,7 +296,8 @@ export type GxserverCloudBoxesAction =
   | 'setAgentLogin'
   | 'boxIdleStatus'
   | 'boxWorkStatus'
-  | 'boxWriteBack';
+  | 'boxWriteBack'
+  | 'pullBranch';
 
 export const GXSERVER_CLOUD_BOXES_ERROR_CODES = {
   capReached: 'cloudCapReached',
@@ -349,6 +352,8 @@ export interface GxserverCloudBoxesParams {
   boxIdleStatus: Record<string, never>;
   boxWorkStatus: Record<string, never>;
   boxWriteBack: { ack?: string[] };
+  /** A box session's pushed branch into a worktree of its home project (Q1014). */
+  pullBranch: { boxId: string; sessionId?: string };
 }
 
 export interface GxserverCloudConnectResult {
@@ -435,6 +440,7 @@ export interface GxserverCloudBoxesResults {
   boxIdleStatus: GxserverBoxIdleStatus;
   boxWorkStatus: GxserverBoxWorkStatus;
   boxWriteBack: GxserverBoxWriteBackResult;
+  pullBranch: { branch: string; projectId: string; path: string; created: boolean; note?: string };
 }
 
 /** `cloudBoxesChanged`: `box` is the whole new row (replace; `deleted` = drop); without it refetch. */

@@ -90,6 +90,14 @@ pub struct DraftCloudBox {
     /// guided setup) stages its prompt in a draft with this set.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blank: Option<bool>,
+    /// The first message's pictures on this computer, kept by Send so the box start copies them
+    /// onto the box.
+    #[serde(
+        default,
+        deserialize_with = "crate::de::lenient_strings",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub image_paths: Vec<String>,
     /// Set once Send started a box for this draft; the draft row retires when its session exists
     /// on the box.
     #[serde(default, skip_serializing_if = "Option::is_none")]

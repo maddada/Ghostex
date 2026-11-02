@@ -93,6 +93,74 @@ fn branch_exists(checkout: &Path, branch: &str) -> bool {
     .is_ok()
 }
 
+/// `wanted`, or `wanted-2`, `-3`… when this box or origin already has that branch, so a session
+/// never lands on someone else's work (Q1005: every session gets a new branch).
+fn unique_branch(checkout: &Path, wanted: &str) -> String {
+    let taken = |name: &str| {
+        branch_exists(checkout, name)
+            || git(
+                checkout,
+                &[
+                    "rev-parse",
+                    "--verify",
+                    "--quiet",
+                    &format!("refs/remotes/origin/{name}"),
+                ],
+            )
+            .is_ok()
+    };
+    (1..100)
+        .map(|attempt| {
+            if attempt == 1 {
+                wanted.to_string()
+            } else {
+                format!("{wanted}-{attempt}")
+            }
+        })
+        .find(|name| !taken(name))
+        .unwrap_or_else(|| format!("{wanted}-{}", std::process::id()))
+}
+
+/// Lets the agent push its branch (Q1014): `git push` sets the upstream itself, git signs in
+/// through `gh` when the snapshot carries a GitHub login (Q1019), and commits get the gh user's
+/// name when the box has none. Best effort: without gh the push asks for credentials and fails,
+/// which the agent reports.
+fn prepare_push(cwd: &Path) {
+    let _ = git(cwd, &["config", "push.autoSetupRemote", "true"]);
+    let gh = |args: &[&str]| {
+        std::process::Command::new("gh")
+            .args(args)
+            .current_dir(cwd)
+            .stdin(std::process::Stdio::null())
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+    };
+    if gh(&["auth", "status"]).is_none() {
+        return;
+    }
+    let _ = gh(&["auth", "setup-git"]);
+    if git(cwd, &["config", "user.email"]).is_err() {
+        if let Some(login) =
+            gh(&["api", "user", "--jq", ".login"]).filter(|login| !login.is_empty())
+        {
+            let name = gh(&["api", "user", "--jq", ".name // empty"])
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| login.clone());
+            let _ = git(cwd, &["config", "user.name", &name]);
+            let _ = git(
+                cwd,
+                &[
+                    "config",
+                    "user.email",
+                    &format!("{login}@users.noreply.github.com"),
+                ],
+            );
+        }
+    }
+}
+
 /// Uncommitted changes, leaving out the secret files box mode copied in.
 fn has_changes(checkout: &Path, placed: &state::Placed) -> bool {
     git(checkout, &["status", "--porcelain"])
@@ -124,7 +192,9 @@ fn prepare_branch(
     let branch = request
         .branch
         .as_deref()
-        .filter(|name| !name.trim().is_empty());
+        .filter(|name| !name.trim().is_empty())
+        .map(|name| unique_branch(checkout, name));
+    let branch = branch.as_deref();
     if request.worktree {
         let branch = branch.ok_or("A worktree on the box needs a branch name.")?;
         let parent = checkout.parent().unwrap_or(Path::new("/"));
@@ -142,9 +212,19 @@ fn prepare_branch(
         if branch_exists(checkout, branch) {
             git(checkout, &["worktree", "add", &folder_text, branch])?;
         } else {
+            // `--no-track`: the new branch must not take `origin/<base>` as its upstream, or the
+            // agent's plain `git push` is refused; its first push sets its own (push.autoSetupRemote).
             git(
                 checkout,
-                &["worktree", "add", "-b", branch, &folder_text, &from],
+                &[
+                    "worktree",
+                    "add",
+                    "--no-track",
+                    "-b",
+                    branch,
+                    &folder_text,
+                    &from,
+                ],
             )?;
         }
         return Ok(folder);
@@ -166,7 +246,7 @@ fn prepare_branch(
     if branch_exists(checkout, target) {
         git(checkout, &["checkout", target])?;
     } else {
-        git(checkout, &["checkout", "-b", target, &from])?;
+        git(checkout, &["checkout", "--no-track", "-b", target, &from])?;
     }
     Ok(checkout.to_path_buf())
 }
@@ -268,6 +348,7 @@ pub(crate) fn run_prepare_session(
     if runs_claude {
         logins::prepare_claude_folder(&cwd)?;
     }
+    prepare_push(&cwd);
 
     let branch = git(&cwd, &["rev-parse", "--abbrev-ref", "HEAD"])
         .ok()
@@ -333,17 +414,24 @@ pub(crate) fn run_prepare_session(
     // `firstUserMessage` only names the session; the message itself goes through the session's
     // chat queue as its startup send, which holds it until the agent's input is up (the way
     // `ghostex board start-work` delivers a bead's prompt).
-    if let Some(message) = request
+    let message = request
         .first_message
         .as_deref()
-        .filter(|message| !message.trim().is_empty())
-    {
+        .filter(|message| !message.trim().is_empty());
+    // The pictures home copied into the private folder go with it (a message of pictures alone too).
+    let images: Vec<&String> = request
+        .image_paths
+        .iter()
+        .filter(|path| Path::new(path).is_file())
+        .collect();
+    if message.is_some() || !images.is_empty() {
         rpc::call_gxserver_rpc(
             "/api/queueSessionChatPrompt",
             &json!({
                 "projectId": project_id,
                 "sessionId": session_id,
-                "text": message,
+                "text": message.unwrap_or_default(),
+                "imagePaths": images,
                 "startupSend": true,
             }),
             &flags,

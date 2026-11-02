@@ -3732,9 +3732,16 @@ it off hides it everywhere and keeps your boxes and settings.
   message; it waits with a progress card while the box starts, fetches the
   code and starts the agent, then the chat opens on the box. The box chip in
   the session's header shows its state, running time and about-$ cost; its
-  menu has Open terminal, Save as snapshot, Update snapshot, Open PR, Stop and
-  Delete. Cloud sessions sit in their project in the sidebar with a cloud
-  badge. The agent pushes its branch.
+  menu has Open terminal, Save as snapshot, Update snapshot, Pull branch, Open
+  PR, Stop and Delete. Cloud sessions sit in their project in the sidebar with
+  a cloud badge whose dot shows the box's state (blue starting, green running,
+  amber idle, grey paused or stopped, red failed); the sidebar menu's Sort &
+  Filter > Cloud Box Sessions shows only them. Each box session works on its own new branch, cut from the
+  latest base branch and named from the first message; pictures attached to
+  that message go to the box with it. The agent pushes the branch (a GitHub
+  login saved in the project's snapshot lets it), and Pull branch brings it to
+  this computer as a worktree of the project (an existing worktree of that
+  branch is brought up to date).
 - **Set up cloud box**: Settings > Projects > Cloud box opens a new chat on a
   blank box with a setup prompt (install the project, run its tests, write
   `.ghostex/cloud-setup.sh`, sign in to GitHub with you). Check it, press

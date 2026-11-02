@@ -73,6 +73,9 @@ open_string_enum! {
         BoxWorkStatus => "boxWorkStatus",
         /// Box mode only, [`BoxWriteBackParams`] → [`super::BoxWriteBackResult`].
         BoxWriteBack => "boxWriteBack",
+        /// [`PullBranchParams`] → [`PullBranchResult`]. Brings a box session's pushed branch into a
+        /// worktree of its home project on this computer (Q1014).
+        PullBranch => "pullBranch",
     }
 }
 
@@ -338,6 +341,32 @@ pub struct BoxWriteBackParams {
     /// [`super::BoxWriteBackItem::id`]s home has saved.
     #[serde(default, deserialize_with = "crate::de::lenient_strings")]
     pub ack: Vec<String>,
+}
+
+/// `pullBranch`: the branch of one session on the box (by its id on the box or its home draft's
+/// id), else the box's first session with a branch.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullBranchParams {
+    pub box_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+}
+
+/// What `pullBranch` did: the worktree project on this computer that has the branch now.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullBranchResult {
+    pub branch: String,
+    pub project_id: String,
+    pub path: String,
+    /// A new worktree was made (false: an existing one was brought up to date).
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub created: bool,
+    /// Set when the local branch has commits the box's branch does not, so it was not
+    /// fast-forwarded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

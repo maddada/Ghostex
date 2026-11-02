@@ -7,8 +7,8 @@
 //! sits in the session header beside the session-details ring on every chat that runs on a cloud
 //! box, shaped `● ☁ box-c31 · 42m · ≈$0.02`; the dot is blue while starting, green running, amber
 //! idle (tooltip "Pauses in 6 min"), grey paused or stopped, red failed. Its menu offers Open
-//! terminal, Save as snapshot, Update snapshot (with a dot when updating makes sense, D9), Open PR,
-//! Stop and Delete; a box with unpushed work is deleted only on "Delete anyway" (D13).
+//! terminal, Save as snapshot, Update snapshot (with a dot when updating makes sense, D9), Pull
+//! branch, Open PR, Stop and Delete; a box with unpushed work is deleted only on "Delete anyway" (D13).
 //! SEE-ALSO: server/src/cloud_boxes/ (the box row and its actions).
 
 use std::cell::{Cell, RefCell};
@@ -315,6 +315,7 @@ impl GhostexGpuiApp {
             .separator()
             .menu_with_disabled("Save as snapshot", !reachable, pick("saveSnapshot"))
             .menu_with_disabled(update_label, !reachable, pick("updateSnapshot"))
+            .menu_with_disabled("Pull branch", !has_branch, pick("pull"))
             .menu_with_disabled("Open PR", !has_branch, pick("openPr"))
             .separator()
             .menu_with_disabled("Stop", !reachable, pick("stop"))
@@ -382,6 +383,10 @@ impl GhostexGpuiApp {
                 }
                 return;
             }
+            "pull" => {
+                self.pull_cloud_box_branch(box_id, name, cx);
+                return;
+            }
             "saveSnapshot" => (
                 json!({ "action": "saveSnapshot", "boxId": box_id, "makeDefault": true }),
                 format!("Saving a snapshot of {name}"),
@@ -427,6 +432,55 @@ impl GhostexGpuiApp {
                     this.dispatch_gpui_workspace_action_toast("warning", title, &error.message, cx);
                 }
                 cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Pull branch: the box session's pushed branch into a worktree of its project here
+    /// (`pullBranch`, server/src/server/worktree_ops/pull_box_branch.rs).
+    fn pull_cloud_box_branch(
+        &mut self,
+        box_id: String,
+        name: String,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.dispatch_gpui_workspace_action_toast(
+            "info",
+            &format!("Pulling the branch from {name}"),
+            "",
+            cx,
+        );
+        let background = cx.background_executor().clone();
+        cx.spawn(async move |this, cx| {
+            let params = json!({ "action": "pullBranch", "boxId": box_id });
+            let result = background
+                .spawn(async move {
+                    gpui_gxserver_rpc_result("/api/cloudBoxes", &params, Duration::from_secs(300))
+                })
+                .await;
+            let _ = this.update(cx, |this, cx| match result {
+                Ok(value) => {
+                    let text = |key: &str| value[key].as_str().unwrap_or_default().to_string();
+                    let title = if value["created"] == true {
+                        format!("Pulled {} into a new worktree", text("branch"))
+                    } else {
+                        format!("Updated {} from {name}", text("branch"))
+                    };
+                    let detail = match value["note"].as_str() {
+                        Some(note) => format!("{} · {note}", text("path")),
+                        None => text("path"),
+                    };
+                    this.dispatch_gpui_workspace_action_toast("success", &title, &detail, cx);
+                }
+                Err(error) => {
+                    this.dispatch_gpui_workspace_action_toast(
+                        "warning",
+                        "Couldn't pull the branch",
+                        &error,
+                        cx,
+                    );
+                }
             });
         })
         .detach();

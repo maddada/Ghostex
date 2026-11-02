@@ -300,10 +300,23 @@ pub(crate) async fn start_cloud_box_move(
             "Cloud Boxes is turned off. Turn it on in Settings › Extensions.",
         ));
     }
-    let picks = picks_from(
+    let mut picks = picks_from(
         start.get("cloudBox").and_then(Value::as_object),
         draft_picks(&session),
     );
+    // The first message's pictures go onto the box with it (`boot_steps::send_images`).
+    picks.image_paths = start
+        .get("imagePaths")
+        .and_then(Value::as_array)
+        .map(|paths| {
+            paths
+                .iter()
+                .filter_map(Value::as_str)
+                .filter(|path| !path.trim().is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     if !super::draft_worktree::begin_cloud_box_move(
         &project_id,
         &session_id,

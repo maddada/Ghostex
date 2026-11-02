@@ -477,7 +477,7 @@ async fn session_steps(
         let context = context.clone();
         let provider = ops.provider();
         let prepared = step(state, &box_id, Step::PrepareSession, move || {
-            let request = boot_steps::prepare_request(
+            let mut request = boot_steps::prepare_request(
                 &prepare_state,
                 &prepare_target.box_id,
                 &draft,
@@ -487,6 +487,9 @@ async fn session_steps(
                 context.worktree,
                 provider,
             )?;
+            // The first message's pictures, from this computer onto the box.
+            request.image_paths =
+                boot_steps::send_images(&prepare_ops, &prepare_target, &request.image_paths)?;
             let result = boot_steps::prepare_session(&prepare_ops, &prepare_target, &request)?;
             Ok((request, result))
         })
