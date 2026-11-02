@@ -19,6 +19,8 @@
 - **The new chat's project and worktree bar** hides as soon as you send the first message.
 - **Message from and Message to cards** lose their Go to session button: click the session's name instead, which now works for every card.
 - **The question popup** takes the chat's colours and fits the whole form.
+- **The menus above the chat box** (Resources, Workers, Links and the others) use the same lighter frosted glass as the sidebar's menus.
+- **The voice agent panel is frosted glass** like the Notifications menu, with its controls in the header and your conversation on the same glass.
 
 ### 🤖 Agents
 
