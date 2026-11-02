@@ -635,6 +635,11 @@ offers Unsnooze or Unpark when you hover it. The phone picks its own layout in
 its Settings > Sessions list (Unified or Project, starting from the computer's
 choice), with its own Group by project and Show Working section switches: Unified
 there lists every computer's sessions together, Project one computer at a time.
+On the phone, Unified hides the computer tabs: Computers in the menu at the top
+of the Sessions list picks a computer, adds one or opens Manage computers. A
+computer that can't connect shows its name and the problem over the list, with
+Reconnect and Remote Settings. Add project asks which computer when you have
+several, and a project's New session asks when that project is on several.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
@@ -645,7 +650,8 @@ Filter) puts every machine's sessions of one repository under one header, with
 that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
 Drag a header to arrange the groups; the order is saved per repository across
 machines, and a new project lands after the arranged ones, A to Z. The "+" on a
-header starts a session there. A project you hid in the Project sidebar leaves this
+header starts a session there, after a menu of its machines when several have it.
+A project you hid in the Project sidebar leaves this
 list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
 Filter offers Show Hidden, Group by Project and Working Section here, and Collapse
 All folds the project groups while they are on.
@@ -663,7 +669,9 @@ machine that has it. The project goes to Recent Projects, where Quick Access >
 Projects reopens it; its sessions keep running out of sight until then. Picking
 a project in Quick Access > Projects also filters to it. Next to the filter are
 Add project and New session, which opens the new-session picker (agents,
-Browser, Terminal) in the filtered project when the filter is one project.
+Browser, Terminal) in the filtered project when the filter is one project,
+without making it your open project; the session starts as a draft, and the bar
+above its message box changes the project or machine.
 Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
