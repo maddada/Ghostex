@@ -17,6 +17,7 @@ hex = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "tiff"] }
 ghostex-paths = { path = "../packages/paths" }
 ghostex-gx-protocol = { path = "../packages/gx-protocol" }
+ghostex-gx-cloud = { path = "../packages/gx-cloud" }
 ghostex-docs = { path = "../packages/project-docs" }
 ghostex-find = { path = "../packages/find" }
 ghostex-settings-catalog = { path = "../packages/settings-catalog" }

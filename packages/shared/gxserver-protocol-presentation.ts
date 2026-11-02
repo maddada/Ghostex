@@ -1,3 +1,4 @@
+import type { GxserverPresentationCloudBox } from './gxserver-protocol-cloud-boxes';
 import type { DelayedSendAgentReference } from './delayed-send';
 import type { GxserverProjectId, GxserverSessionId, GxserverZmxSessionName } from './gxserver-protocol-core';
 import type {
@@ -414,6 +415,8 @@ export interface GxserverPresentationSession {
   agentbox?: GxserverPresentationAgentbox;
   /** Present only for a Claude cloud session: the agent runs on claude.ai's computers. */
   claudeCloud?: GxserverPresentationClaudeCloud;
+  /** Present only for a Cloud Box session, or a draft whose tray picked Cloud Box (☁ badge). */
+  cloudBox?: GxserverPresentationCloudBox;
   /** The session's OSC 7501 program status; absent when it has no records to show. */
   programStatus?: GxserverProgramStatus;
   actions: GxserverPresentationSessionActions;

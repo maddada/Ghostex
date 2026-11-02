@@ -919,6 +919,10 @@ pub struct PresentationSession {
     /// Present only for a Claude cloud session: the agent runs on claude.ai's computers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_cloud: Option<PresentationClaudeCloud>,
+    /// Present only for a Cloud Box session (on the box's gxserver) or a draft whose tray picked
+    /// Cloud Box (on home gxserver): the ☁ badge and its state dot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_box: Option<crate::cloud_box::PresentationCloudBox>,
     /// Accounts or agents this session can be resumed under; element shape kept loose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub switchable_agents: Option<Value>,

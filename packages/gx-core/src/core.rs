@@ -539,6 +539,8 @@ impl Core {
             | ServerEvent::ServerStopping(_)
             | ServerEvent::ApiRequestHandled(_)
             | ServerEvent::RendererCommand(_)
+            // Cloud Boxes registry pushes: the sidebar merge and box machines own them (W3).
+            | ServerEvent::CloudBoxesChanged(_)
             | ServerEvent::SessionChatSnapshot(_)
             | ServerEvent::SessionChatReplaced(_)
             | ServerEvent::SessionChatAppended(_)

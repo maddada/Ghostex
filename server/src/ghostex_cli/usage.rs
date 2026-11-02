@@ -611,6 +611,10 @@ pub fn usage() -> String {
             "Check agentbox readiness, list boxes, and print a box session's web app or screen URL",
         ),
         format_help_command(
+            "cloud providers | connect | list | create | resume | stop | delete | spend | cap [--json]",
+            "Run agent sessions on Cloud Boxes: connect Instabox or Boat, start, wake, stop and delete boxes, and see this month's spend (ghostex cloud --help)",
+        ),
+        format_help_command(
             "agent-cli status | install <agent> | update <agent> [--json]",
             "Install, update, and check the agent CLIs (claude, codex, cursor, grok, …)",
         ),

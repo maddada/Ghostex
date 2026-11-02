@@ -21,6 +21,7 @@ pub(crate) mod bot_projects;
 pub(crate) mod claude_cloud;
 pub mod cli;
 pub mod close_after_done;
+pub(crate) mod cloud_boxes;
 pub(crate) mod cloud_runner;
 pub(crate) mod codex_rollout_archive;
 pub mod config;

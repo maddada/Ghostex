@@ -10,9 +10,11 @@ pub mod args;
 pub mod attach;
 pub mod automations;
 pub mod board;
+mod box_cli;
 pub mod browser_mcp;
 mod built_in_extensions;
 mod claude_cloud_cli;
+mod cloud_cli;
 mod connectors;
 mod connectors_executor;
 mod connectors_mcp;
@@ -104,7 +106,9 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "agentbox",
     "agents",
     "app-update",
+    "box",
     "claude-cloud",
+    "cloud",
     "coordinator",
     "orchestrator",
     "automations",
@@ -219,7 +223,9 @@ fn is_known_command(name: &str) -> bool {
         "agent-cli",
         "agentbox",
         "agents",
+        "box",
         "claude-cloud",
+        "cloud",
         "coordinator",
         "orchestrator",
         "sessions",
@@ -439,7 +445,9 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             agentbox_cli::run(args)
         }
         "agents" => agents::run(args),
+        "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
+        "cloud" => cloud_cli::run(args),
         // CDXC:Coordinators 2026-10-28 DECISION: user renamed Orchestrator back to Coordinator and made `coordinator` the real command group; `orchestrator` stays as an alias (see ghostex_cli/coordinator/command.rs).
         "coordinator" | "orchestrator" => coordinator::run(args),
         "sessions" | "s" | "list-sessions" | "ls" => sessions::sessions_command(args),

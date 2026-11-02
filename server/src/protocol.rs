@@ -418,6 +418,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Remote-allowed like managedTools beside it: the boxes and the agentbox CLI belong to the machine that owns the project, so a client looking at a remote machine asks that machine. Setup commands come back as text gxserver chose, never text the caller supplied.
         */
         | "/api/agentbox"
+        /*
+        CDXC:CloudBoxes 2026-11-02 WHY:
+        Remote-allowed like agentbox above: the registry, the provider keys and the projects live on the computer that owns them, so the phone (over the paired link) and the GPUI web build ask that computer. Keys are only ever sent in (connect); no action hands one back, and connectInfo returns only a box's own gxserver token.
+        */
+        | "/api/cloudBoxes"
         | "/api/agentAccounts"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
