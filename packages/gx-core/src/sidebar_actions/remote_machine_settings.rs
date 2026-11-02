@@ -72,6 +72,10 @@ pub fn normalize_remote_machine_settings(candidate: Option<&Value>) -> Vec<Value
         if item.get("disabled") == Some(&Value::Bool(true)) {
             machine.insert("disabled".to_string(), Value::Bool(true));
         }
+        // Agent access is on unless turned off, so only `false` is kept.
+        if item.get("agentAccess") == Some(&Value::Bool(false)) {
+            machine.insert("agentAccess".to_string(), Value::Bool(false));
+        }
         if !ssh_identity_file.is_empty() {
             machine.insert(
                 "sshIdentityFile".to_string(),

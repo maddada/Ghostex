@@ -886,7 +886,7 @@ fn pending_delivery(
     })
 }
 
-fn coordinator_is_open(state: &AppState, coordinator: &SessionKey) -> bool {
+pub(super) fn coordinator_is_open(state: &AppState, coordinator: &SessionKey) -> bool {
     let Ok(db) = open_gxserver_database(&state.paths) else {
         return false;
     };
@@ -911,7 +911,7 @@ fn settle_undelivered(state: &AppState, thread: &ThreadRecord, sent_at: &str) {
 /// The same default delivery `ghostex agents send` uses: typed now, picked up by a busy agent at
 /// its next input boundary, and a sleeping coordinator is woken for it. A report retried after a
 /// failure keeps its `sendRequestId`, so one that did arrive is never typed again.
-async fn send_to_coordinator(
+pub(super) async fn send_to_coordinator(
     state: &AppState,
     coordinator: &SessionKey,
     message: &str,

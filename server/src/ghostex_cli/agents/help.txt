@@ -5,7 +5,7 @@ USAGE
   ghostex agents types [--json]
   ghostex agents create <agent-id> [--title <name>] [--project-id <id>]
                        [--task <text> | --body-file <path>] [--allow-hidden]
-                       [--standalone]
+                       [--standalone] [--computer <name>]
   ghostex agents list [--all] [--json]
   ghostex agents send <session-ref> <text> [--interrupt | --queue]
                      [--request-id <id>]
@@ -63,6 +63,21 @@ IDENTITY AND RECIPIENTS
   Remote create also requires --project-id. Global references route to their
   server through configured connections; sender identity remains your own.
   create, send, and close return JSON; --json is also accepted for errors.
+
+OTHER COMPUTERS
+  When the user has connected another computer (Settings > Remote > Remote
+  machines on either side), any agent here can use its sessions, and its
+  agents can use this computer's. `ghostex computers` lists them.
+    ghostex sessions --computer <name>       its projects (ids) and sessions
+    ghostex agents types --computer <name>
+    ghostex agents list --all --computer <name>
+    ghostex agents create <agent-id> --computer <name> --project-id <id> --task "..."
+  A session ref from that computer (S…:P…:G…) goes there by itself, so send,
+  close, read-session-chat, read-text and the other session verbs take it
+  unchanged; replies to you use your own ref the same way. Run by a
+  coordinator, create --computer makes the session one of its threads.
+  --computer takes the name, the start of it, or the server id. A computer
+  whose Agent access switch is off refuses with a plain error.
 
 SENDER BLOCK
   send and create --task/--body-file attach your identity automatically, after

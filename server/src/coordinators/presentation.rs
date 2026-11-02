@@ -104,6 +104,9 @@ pub fn insert_coordinator_presentation_payload(
             thread.map(|thread| (thread, raw.as_ref())),
             &generated_at,
         );
+        if is_coordinator {
+            super::remote_threads::insert_coordinator_remote_threads(session, db, &key);
+        }
     }
 }
 
@@ -128,4 +131,11 @@ pub fn insert_coordinator_session_projection(
         thread.as_ref().map(|thread| (thread, Some(raw_session))),
         &now_iso(),
     );
+    if is_coordinator {
+        super::remote_threads::insert_coordinator_remote_threads(
+            presentation_session,
+            db,
+            &(project_id, session_id),
+        );
+    }
 }

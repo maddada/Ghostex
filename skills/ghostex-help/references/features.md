@@ -3107,6 +3107,15 @@ version of the Projects features in Cursor and Claude Code.
   what needs you. Nobody has to poll. A thread reports only this way: Ghostex
   refuses a thread's messages to its own coordinator in the middle of a turn
   and tells it to end its turn with its report.
+- **Threads on another computer**: a coordinator can start a thread on a
+  computer this one is connected to (Settings > Remote > Remote machines): ask
+  it to, for example "run this on Omarchy". The thread uses that computer's
+  project with the same name (or the one you name), its agents and its
+  folders, sits under the coordinator in the sidebar with the computer's name
+  after its title in reports, and reports back like any thread. While the
+  computer is not connected, its reports wait. From a terminal: `ghostex
+  coordinator start-thread --computer <name> --title "<title>" --task "<task>"
+  [--project-id <id>]`.
 - **Work that never arrives is caught**: when the coordinator starts a thread,
   it waits until the thread has actually taken its brief before saying it is
   under way, and says "pending" with the reason when it has not yet. Ghostex
@@ -3574,6 +3583,13 @@ sessions, so any client can control agents on any machine.
   press Cancel. The machine appears as a sidebar section with its own
   projects and sessions; its terminals stream into the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
+  Agents can use a connected machine too: any agent on this computer can
+  start, message and read sessions there, and the machine's agents can do the
+  same on this computer, while the connection is up (`ghostex computers` lists
+  them; agents add `--computer <name>` to `ghostex sessions`, `ghostex agents
+  create` and `ghostex coordinator start-thread`). Connecting is the
+  permission: turn **Agent access** off in the machine's Edit dialog to stop
+  agents on either computer from using the other.
   Files and folders you drop onto a remote terminal or add with its attach
   (paperclip) button are uploaded to that computer first, so the terminal gets
   references the agent there can open.

@@ -617,6 +617,10 @@ impl SidebarViewModel {
                     }
                 }
             }
+            // The project's coordinators' threads on other computers, nested under them.
+            let remote_threads =
+                remote_thread_rows(&mut state, store, &rows, effective, &row_context);
+            rows.extend(remote_threads);
             // A project's facts are kept until the project row, the overlays, or the host's git
             // numbers move.
             let project_dirty = meta_dirty
@@ -899,6 +903,82 @@ fn resolve_row(
         .or_default()
         .insert(session_id.to_string(), row.clone());
     Some(row)
+}
+
+/// The rows of the threads `rows`' coordinators run on other computers, each built from that
+/// computer's own session and marked as the coordinator's thread. A computer whose rows are not in
+/// the store (not connected from this app) shows none.
+///
+/// CDXC:RemoteMachines 2026-11-03 WHY:
+/// The thread's own computer does not know it is a thread (the link lives with the coordinator, and that computer may run an older gxserver), so its row carries no coordinator fields; the coordinator's `coordinatorRemoteThreads` names it, and the row is taken from that machine's store like a Cloud Box row, reusing the cross-machine row cache, which a change to that session clears.
+/// SEE-ALSO: server/src/coordinators/remote_threads.rs (the field), resolve_box_row below (the same cache).
+fn remote_thread_rows(
+    state: &mut CacheState,
+    store: &PresentationStore,
+    rows: &[RowRef],
+    inputs: &SidebarInputs,
+    context: &RowContext<'_>,
+) -> Vec<RowRef> {
+    let mut threads = Vec::new();
+    for coordinator in rows
+        .iter()
+        .filter(|row| row.row.is_coordinator && !row.row.coordinator_remote_threads.is_empty())
+    {
+        let Some(parent) = coordinator.row.key.clone() else {
+            continue;
+        };
+        for thread in &coordinator.row.coordinator_remote_threads {
+            let Some(machine) = store
+                .machines()
+                .find(|(_, entry)| {
+                    entry
+                        .loaded()
+                        .is_some_and(|loaded| loaded.server_id == thread.server_id)
+                })
+                .map(|(machine, _)| machine.clone())
+                .filter(|machine| *machine != parent.machine)
+            else {
+                continue;
+            };
+            let key = SessionKey {
+                machine,
+                project_id: thread.project_id.clone(),
+                session_id: thread.session_id.clone(),
+            };
+            if let Some(row) = state.box_rows.get(&key).filter(|row| {
+                row.row.coordinator_parent.as_ref() == Some(&parent)
+                    && row.row.thread_state == thread.thread_state
+            }) {
+                threads.push(row.clone());
+                continue;
+            }
+            let Some(session) = store
+                .machine(&key.machine)
+                .and_then(|entry| entry.effective_session(&key.project_id, &key.session_id))
+            else {
+                continue;
+            };
+            let sidebar_id = key.to_sidebar_session_id();
+            let mut row = session_row(
+                key.clone(),
+                &session,
+                super::inputs::CloseAfterDoneInput::from_session(&session).as_ref(),
+                inputs.host.local_delayed_sends.get(&sidebar_id),
+                context,
+            );
+            row.coordinator_parent = Some(parent.clone());
+            row.thread_state = thread.thread_state.clone();
+            state.next_row_id += 1;
+            state.work.rows_built += 1;
+            let row = RowRef {
+                id: state.next_row_id,
+                row: Arc::new(row),
+            };
+            state.box_rows.insert(key, row.clone());
+            threads.push(row);
+        }
+    }
+    threads
 }
 
 /// A Cloud Box session's row in its home project: built like any row from the box machine's

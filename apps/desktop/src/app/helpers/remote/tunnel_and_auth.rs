@@ -43,6 +43,7 @@ pub(crate) fn gpui_open_remote_gxserver_tunnel(
                 child: tunnel.child,
                 liveness: GpuiRemoteTunnelLiveness::default(),
                 this_computer: false,
+                reverse_tunnel: None,
             });
         }
         // A tunnel that is still running bound its port (ExitOnForwardFailure), so another port

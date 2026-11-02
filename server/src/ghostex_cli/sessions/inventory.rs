@@ -346,6 +346,10 @@ pub(super) fn is_active_gxserver_inventory_project(project: &Value) -> bool {
 }
 
 pub(super) fn should_use_local_gxserver_state_fallback(flags: &Flags) -> bool {
+    // Another computer's sessions are never this computer's saved ones.
+    if flags.contains("computer") {
+        return false;
+    }
     let server = flags
         .text("server")
         .or_else(|| std::env::var("GHOSTEX_GXSERVER_SERVER").ok())

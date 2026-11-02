@@ -25,6 +25,11 @@ pub(crate) fn inventory_flags(flags: &Flags, reference: &str) -> CliResult<Flags
         let target = rpc::resolve_gxserver_server_target(&flags, &json!({"globalRef": reference}))?;
         if target.kind == "local" {
             flags.insert_text("server", "local");
+        } else if target.kind == "computer" {
+            if let Some(server_id) = &target.server_id {
+                flags.0.remove("server");
+                flags.insert_text("computer", server_id);
+            }
         } else if let Some(profile) = target.profile_id {
             flags.insert_text("server", &profile);
         } else {

@@ -541,6 +541,11 @@ pub fn coordinator_view(
         .iter()
         .map(|thread| thread_view(repository, thread))
         .collect::<Result<Vec<_>, _>>()?;
+    threads.extend(
+        super::remote_threads::list_remote_threads_for(db, &coordinator.key())?
+            .iter()
+            .map(super::remote_threads::remote_thread_view),
+    );
     let order = |state: &str| match state {
         "waiting" => ThreadState::Waiting.order(),
         "finished" => ThreadState::Finished.order(),

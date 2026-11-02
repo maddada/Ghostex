@@ -1041,6 +1041,14 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Refresh reads the HTML file a page was published from on this computer and replaces the page, so like publishing it is for this computer's own clients only: the desktop app asks here, or through its tunnel for a remote machine's page (visual_pages/source.rs).
         */
         "/api/readVisualPageSource" | "/api/refreshVisualPage" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
+        "/api/registerConnectedComputer"
+        | "/api/unregisterConnectedComputer"
+        | "/api/listConnectedComputers" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: a coordinator's threads on another computer are linked on the coordinator's own computer, by its own CLI, so only this computer's clients may change them.
+        "/api/linkRemoteCoordinatorThread"
+        | "/api/updateRemoteCoordinatorThread"
+        | "/api/listRemoteCoordinatorThreads" => full_local(path),
         /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key

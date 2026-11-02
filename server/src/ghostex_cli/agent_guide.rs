@@ -22,6 +22,7 @@ Other agents
 - Quick help inside your turn: your own built-in subagents.
 - Agents the user can see and talk to (another model, Codex beside Claude): `ghostex agents --help` (create, send, close; read replies with `ghostex read-session-chat <ref> --json`).
 - A bigger job split across several agents: offer to make this session a coordinator with `ghostex coordinator promote`. A coordinator starts threads with `ghostex coordinator start-thread` and is told when each finishes, so it never polls their terminals. Already a coordinator or a thread? Skip this.
+- On another computer the user connected (`ghostex computers`): add `--computer <name>` to `ghostex sessions`, `agents create` and `coordinator start-thread`; its session refs work as they are.
 
 Secrets
 - A password, API key or token: `ghostex secret request --label <what> --reason <why>`. Never ask for it in chat.

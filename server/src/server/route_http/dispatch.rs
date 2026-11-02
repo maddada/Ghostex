@@ -9,7 +9,8 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use crate::{
-    auth::is_authorized_headers,
+    auth::{bearer_token, is_authorized_headers},
+    connected_computers::{authorize_peer_token, PeerAuthorization},
     extensions::serve_extension_static,
     protocol::{
         endpoint_for, is_remote_endpoint_allowed, protocol_mismatch_error, rpc_error,
@@ -92,6 +93,22 @@ pub(in crate::server) async fn route_http(
     {
         let query = parts.uri.query().map(str::to_string);
         return crate::connectors::serve_oauth_redirect(state.clone(), query).await;
+    }
+
+    if path.starts_with(crate::connected_computers::RELAY_ROUTE_PREFIX) {
+        if !is_authorized_headers(&parts.headers, &state.auth_token) {
+            return routed_json(
+                Some(crate::connected_computers::RELAY_ROUTE_PREFIX.to_string()),
+                StatusCode::UNAUTHORIZED,
+                rpc_error(
+                    "unauthorized",
+                    "Only this computer's own agents can reach its connected computers.",
+                    Some(request_id),
+                ),
+            );
+        }
+        return crate::connected_computers::relay(method, &path, parts.headers, body, request_id)
+            .await;
     }
 
     let endpoint = endpoint_for(&path);
@@ -201,9 +218,43 @@ pub(in crate::server) async fn route_http(
     let token_extension_id = state
         .extension_registry
         .authorize_api_token(&parts.headers, &endpoint.path);
+    /*
+    CDXC:RemoteMachines 2026-11-03 WHY:
+    A connected computer's agents reach this gxserver with the token this computer gave that computer (`registerConnectedComputer`), never this computer's own token, so turning off its Agent access or disconnecting it cuts them off at once. That token opens only the endpoints a remote client may already use (`RemoteAllowed`: sessions, chats, coordinators), not this computer's settings, auth or relay.
+    */
+    let peer = (endpoint.requires_auth
+        && token_extension_id.is_none()
+        && !is_authorized_headers(&parts.headers, &state.auth_token))
+    .then(|| bearer_token(&parts.headers).and_then(authorize_peer_token))
+    .flatten();
+    match &peer {
+        Some(PeerAuthorization::AccessOff { name }) => {
+            let this = crate::connected_computers::this_computer_name();
+            return crate::connected_computers::peer_refusal(
+                "agentAccessOff",
+                format!("{this} has Agent access for this computer turned off. Turn on Agent access for {name} in {this}'s Settings > Remote > Remote machines."),
+                request_id,
+            );
+        }
+        Some(PeerAuthorization::Allowed { .. })
+            if endpoint.permission != crate::protocol::ApiPermission::RemoteAllowed =>
+        {
+            return crate::connected_computers::peer_refusal(
+                "forbidden",
+                format!(
+                    "Agents on another computer can't use {} on {}.",
+                    endpoint.path,
+                    crate::connected_computers::this_computer_name()
+                ),
+                request_id,
+            );
+        }
+        _ => {}
+    }
     if endpoint.requires_auth
         && !is_authorized_headers(&parts.headers, &state.auth_token)
         && token_extension_id.is_none()
+        && peer.is_none()
     {
         return routed_json(
             Some(endpoint.path),

@@ -13,7 +13,7 @@ USAGE
   ghostex coordinator start-thread --title <title> (--task <text> | --body-file <path>)
                               [--agent <agent-id> [--allow-hidden]] [--model <m>] [--effort <e>]
                               [--worktree [--base-branch <branch>]] [--project-id <id>]
-                              [--coordinator <ref>] [--json]
+                              [--computer <name>] [--coordinator <ref>] [--json]
   ghostex coordinator link <session-ref> [--task <text>] [--coordinator <ref>]
   ghostex coordinator unlink <thread-ref> [--coordinator <ref>] [--json]
   ghostex coordinator rename-self "<title>" [--json]
@@ -98,6 +98,14 @@ THREADS
   the thread has the work. Do not resend a pending brief: if it never
   arrives, Ghostex sends the coordinator "Ghostex thread report: your message
   did not reach it.", and does the same for a follow-up that never arrives.
+  --computer <name> starts the thread on another computer this one is
+  connected to (`ghostex computers` lists them): in its project with the
+  coordinator's project name unless --project-id names one of its projects,
+  with its agents and models. It sits under the coordinator in the sidebar,
+  and its turn-end and waiting reports arrive like a local thread's, with the
+  computer's name after its title. Its ref names that computer, so agents
+  send, read-session-chat, resolve, reopen and unlink take it unchanged.
+  While the computer is not connected its reports wait.
   link adopts a session that already exists as a thread. unlink does the
   opposite: the session stops being a thread and becomes an ordinary session
   of its project, shown as its own sidebar row, with no more thread reports to

@@ -741,6 +741,8 @@ pub(super) struct MachineDraft {
     pub(super) ssh_user: String,
     pub(super) wsl_distribution: String,
     pub(super) disabled: bool,
+    /// The machine's Agent access switch is off (it is on by default).
+    pub(super) agent_access_off: bool,
 }
 
 fn base36(mut value: u128) -> String {
@@ -793,6 +795,7 @@ pub(super) fn machine_draft_from_settings(machine: &Value) -> MachineDraft {
         ssh_user: text(machine, "sshUser").unwrap_or_default(),
         wsl_distribution: text(machine, "wslDistribution").unwrap_or_default(),
         disabled: machine.get("disabled").and_then(Value::as_bool) == Some(true),
+        agent_access_off: machine.get("agentAccess").and_then(Value::as_bool) == Some(false),
     }
 }
 
@@ -865,6 +868,7 @@ pub(super) fn normalize_remote_machine_draft(draft: &MachineDraft) -> Option<Val
         "sshUser": draft.ssh_user,
         "wslDistribution": wsl_distribution,
         "disabled": draft.disabled,
+        "agentAccess": !draft.agent_access_off,
     }]);
     ghostex_gx_core::normalize_remote_machine_settings(Some(&candidate))
         .into_iter()

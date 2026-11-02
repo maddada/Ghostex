@@ -78,8 +78,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     Delivery::Queue
                 };
             }
-            "--body-file" | "--server" | "--task" | "--title" | "--project-id" | "--request-id"
-            | "--account" => {
+            "--body-file" | "--server" | "--computer" | "--task" | "--title" | "--project-id"
+            | "--request-id" | "--account" => {
                 let value = args
                     .next()
                     .filter(|value| !value.starts_with("--") && !value.is_empty())
@@ -97,6 +97,8 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     if slot.replace(value.clone()).is_some() {
                         return Err(CliError::Other(format!("Provide {arg} only once.")));
                     }
+                } else if arg == "--computer" {
+                    parsed.flags.insert_text("computer", value);
                 } else {
                     parsed.flags.insert_text("server", value);
                 }
@@ -155,14 +157,16 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
                     parsed.command
                 )));
             }
-            if parsed.command == "whoami" && (parsed.all || parsed.flags.contains("server")) {
+            let elsewhere = parsed.flags.contains("server") || parsed.flags.contains("computer");
+            if parsed.command == "whoami" && (parsed.all || elsewhere) {
                 return Err(CliError::Other(
-                    "whoami identifies the caller; --all and --server are not accepted.".into(),
+                    "whoami identifies the caller; --all, --server and --computer are not accepted."
+                        .into(),
                 ));
             }
-            if parsed.command == "list" && parsed.flags.contains("server") && !parsed.all {
+            if parsed.command == "list" && elsewhere && !parsed.all {
                 return Err(CliError::Other(
-                    "Use list --all --server <profile> to list another server.".into(),
+                    "Use list --all --computer <name> to list another computer's agents.".into(),
                 ));
             }
             if parsed.command == "types" && parsed.all {
@@ -204,6 +208,14 @@ pub(super) fn parse(args: &[String]) -> CliResult<Arguments> {
             {
                 return Err(CliError::Other(
                     "Creating on --server requires --project-id.".into(),
+                ));
+            }
+            if parsed.command == "create"
+                && parsed.flags.contains("computer")
+                && parsed.project_id.is_none()
+            {
+                return Err(CliError::Other(
+                    "Creating on another computer needs --project-id: one of its projects (ghostex sessions --computer <name> lists them with their ids).".into(),
                 ));
             }
         }

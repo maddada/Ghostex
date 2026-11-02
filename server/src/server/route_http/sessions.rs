@@ -466,6 +466,29 @@ pub(super) async fn route_sessions_http(
                 },
             )
         }
+        path if crate::coordinators::REMOTE_THREAD_ENDPOINTS.contains(&path) => {
+            let path = endpoint.path.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    let output = crate::coordinators::handle_remote_thread_endpoint(
+                        &path,
+                        db,
+                        state.metadata.server_id.as_str(),
+                        params,
+                    )?;
+                    if let Some((project_id, session_id)) = &output.changed_coordinator {
+                        schedule_presentation_session_delta(
+                            &state, db, repository, project_id, session_id,
+                        )?;
+                    }
+                    Ok(output.result)
+                },
+            )
+        }
         "/api/readCoordinatorPlaybook"
         | "/api/setCoordinatorPlaybook"
         | "/api/readCoordinatorGuide" => {

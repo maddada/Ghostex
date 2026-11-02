@@ -551,10 +551,15 @@ pub struct SessionRow {
     pub menu_facts: SessionMenuFacts,
     /// The session is a coordinator (it starts and supervises thread sessions).
     pub is_coordinator: bool,
-    /// The coordinator this session is a thread of, on the same machine.
+    /// The coordinator this session is a thread of: on the same machine, or (for a thread a
+    /// coordinator started on another computer) the coordinator's machine.
     pub coordinator_parent: Option<SessionKey>,
     /// A thread's state: `waiting`, `working`, `finished`, `sleeping`, `closed` or `done`.
     pub thread_state: Option<String>,
+    /// A coordinator's threads on other computers, which the list nests under it from those
+    /// computers' own rows.
+    pub coordinator_remote_threads:
+        Vec<ghostex_gx_protocol::presentation::PresentationRemoteThread>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
     /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray

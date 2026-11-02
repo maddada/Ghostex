@@ -17,6 +17,7 @@ mod built_in_extensions;
 mod claude_cloud_cli;
 mod cloud_attach;
 mod cloud_cli;
+mod computers;
 mod connectors;
 mod connectors_executor;
 mod connectors_mcp;
@@ -106,6 +107,7 @@ pub fn run() -> i32 {
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
     "agent-guide",
+    "computers",
     "help",
     "accounts",
     "agent-cli",
@@ -388,6 +390,7 @@ fn is_known_command(name: &str) -> bool {
         "web",
         "ports",
         "resources",
+        "computers",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -431,6 +434,8 @@ fn is_known_command(name: &str) -> bool {
 }
 
 fn run_command(name: &str, args: &[String]) -> CliResult<()> {
+    let routed = computers::args_for_session_on_another_computer(name, args);
+    let args: &[String] = routed.as_deref().unwrap_or(args);
     use actions::{
         run_bridge_action, run_message_bridge_action, run_resolved_session_bridge_action,
         BridgeOptions, Parser,
@@ -456,6 +461,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             agentbox_cli::run(args)
         }
         "agents" => agents::run(args),
+        "computers" => computers::run(args),
         "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
         "cloud" => cloud_cli::run(args),

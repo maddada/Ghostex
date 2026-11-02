@@ -90,6 +90,27 @@ pub(super) fn create(args: &Arguments) -> CliResult<Value> {
     // CDXC:Coordinators 2026-10-15 DECISION: User: "a new thread ... that i just chat to about this ... maybe could be a thread not actually under you but separate in the sidebar, better." `--standalone` skips the link, so the session is a plain sidebar row that reports to nobody.
     if args.standalone {
         result["coordinatorThread"] = json!(false);
+    } else if let (true, Some(caller)) = (
+        flags.contains("computer"),
+        caller.clone().or_else(|| identity::caller().ok()),
+    ) {
+        // A session on another computer becomes a thread of a coordinator here, linked here.
+        let mut local = flags.clone();
+        local.0.remove("computer");
+        let linked = call_gxserver_rpc(
+            "/api/linkRemoteCoordinatorThread",
+            &json!({
+                "coordinatorProjectId": caller["projectId"], "coordinatorSessionId": caller["sessionId"],
+                "serverId": reference.split(':').next().unwrap_or_default(),
+                "projectId": session["projectId"], "sessionId": session["sessionId"],
+                "task": body.as_deref().unwrap_or_default(), "title": args.title.as_deref().unwrap_or_default(),
+                "onlyIfCoordinator": true,
+            }),
+            &local,
+        );
+        if linked.is_ok_and(|linked| linked["linked"] == json!(true)) {
+            result["coordinatorThread"] = json!(true);
+        }
     } else if let Some(caller) = caller.clone().or_else(|| identity::caller().ok()) {
         let linked = call_gxserver_rpc(
             "/api/linkCoordinatorThread",

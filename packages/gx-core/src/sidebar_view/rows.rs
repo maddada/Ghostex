@@ -376,6 +376,10 @@ pub(crate) fn session_row(
             _ => None,
         },
         thread_state: session.coordinator_thread_state.clone(),
+        coordinator_remote_threads: session
+            .coordinator_remote_threads
+            .clone()
+            .unwrap_or_default(),
         agentbox: session
             .agentbox
             .as_ref()
