@@ -35,6 +35,14 @@ pub const BUNDLED_GHOSTEX_AGENT_SKILLS: J = J::Arr(&[
         ("tier", J::Str("recommended")),
     ]),
     J::Obj(&[
+        ("command", J::Str("ghostex agent-guide install-skill")),
+        ("description", J::Str("Tell agents that can't get Ghostex's launch note (OpenCode, Gemini, Cursor and others) what Ghostex can do for them: pages, questions and charts in the chat, its browser, other agents and its skills. They read the details from ghostex agent-guide only when you ask for one of those things.")),
+        ("id", J::Str("agentGuide")),
+        ("name", J::Str("Ghostex Agent Guide")),
+        ("skillName", J::Str("ghostex-agent-guide")),
+        ("tier", J::Str("recommended")),
+    ]),
+    J::Obj(&[
         ("command", J::Str("ghostex visual install-skill")),
         ("description", J::Str("Let agents show charts, stats and tables right in the chat, and open HTML mockups from a card. Agents use it only when you call $ghostex-visuals.")),
         ("id", J::Str("visuals")),
@@ -152,6 +160,14 @@ pub const VISIBLE_BUNDLED_GHOSTEX_AGENT_SKILLS: J = J::Arr(&[
         ("id", J::Str("help")),
         ("name", J::Str("Ghostex Help")),
         ("skillName", J::Str("ghostex-help")),
+        ("tier", J::Str("recommended")),
+    ]),
+    J::Obj(&[
+        ("command", J::Str("ghostex agent-guide install-skill")),
+        ("description", J::Str("Tell agents that can't get Ghostex's launch note (OpenCode, Gemini, Cursor and others) what Ghostex can do for them: pages, questions and charts in the chat, its browser, other agents and its skills. They read the details from ghostex agent-guide only when you ask for one of those things.")),
+        ("id", J::Str("agentGuide")),
+        ("name", J::Str("Ghostex Agent Guide")),
+        ("skillName", J::Str("ghostex-agent-guide")),
         ("tier", J::Str("recommended")),
     ]),
     J::Obj(&[

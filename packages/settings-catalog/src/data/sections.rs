@@ -423,6 +423,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
             "chatSendOnPick",
             "chatAnswersWaitForIdle",
             "chatPageOpenTarget",
+            "agentGhostexNote",
             "orchestratorAllEfforts",
             "orchestratorPlaybook",
             "readAloudVoice",
@@ -529,6 +530,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
         "tools",
         &[
             "webLinkOpenTarget",
+            "agentPreviewBrowser",
             "sessionLinkOpenTarget",
             "browserPagesInViewRow",
             "codeServerLinkVscodeUserConfig",
@@ -693,6 +695,7 @@ pub const MAIN_SETTINGS_SCROLL_TARGET_SETTING_KEYS: &[(&str, &[&str])] = &[
         "browser",
         &[
             "webLinkOpenTarget",
+            "agentPreviewBrowser",
             "sessionLinkOpenTarget",
             "browserPagesInViewRow",
         ],
@@ -819,6 +822,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
             "chatSendOnPick",
             "chatAnswersWaitForIdle",
             "chatPageOpenTarget",
+            "agentGhostexNote",
             "orchestratorAllEfforts",
             "orchestratorPlaybook",
             "readAloudVoice",
@@ -923,6 +927,7 @@ pub const MAIN_SETTINGS_SECTION_SETTING_KEYS: &[(&str, &[&str])] = &[
         "tools",
         &[
             "webLinkOpenTarget",
+            "agentPreviewBrowser",
             "sessionLinkOpenTarget",
             "browserPagesInViewRow",
             "codeServerLinkVscodeUserConfig",

@@ -407,6 +407,12 @@ view from the strip.
   permissions > Forget all answers lets every site ask again (if that workspace's Browser
   hasn't opened a page yet, it applies when it does). If the sign-in gave up
   while the question was open, try it again.
+  Agents open pages in (Settings > Files & Links > Browser, default Ask) is
+  where an agent opens a page it built for you, such as a website preview: the
+  Ghostex Browser or your default browser. While it is Ask, the agent asks you
+  the first time and offers to save your answer here; once set, agents use it
+  without asking. Setting: `agentPreviewBrowser` (`ask`, `internal-browser`,
+  `system-default-browser`).
 - **Linear and Jira**: open either view from the **+** menu. Paste the workspace,
   project, team, or board URL you want as its home. Ghostex identifies the workspace
   from the address and preserves the full URL, including filters. Previously used
@@ -2099,6 +2105,20 @@ Heading colour strength (Settings > Chat > Marked handovers, under the style, an
 Coordinators answer without markers (Settings > Chat, an advanced setting, off by default and not recommended) makes coordinators started or resumed afterwards answer normally, while their threads still mark the reports they send them.
 Settings: `markedHandovers`, `markedHandoversStyle` (`labels`, `rule`,
 `badge`), `markedHandoversEmoji`, `markedHandoversHeadingStrength`, `orchestratorPlainReplies`.
+
+Tell agents about Ghostex (Settings > Chat, on by default) gives every agent
+session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
+pages, question forms, charts and graphs in the chat, open pages the agent
+builds in its own browser, run other agents and install Ghostex skills. The
+agent uses it only when you ask for one of those things, and then reads the
+details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
+and Factory Droid at launch; other agents (OpenCode, Gemini CLI, Cursor and
+the rest) get the same note from the Ghostex Agent Guide skill (`ghostex
+agent-guide install-skill`). A change applies to sessions started or resumed
+afterwards. Agents can also ask Ghostex Help themselves with `ghostex help ask
+"<question>"`, which starts (or reuses) a Ghostex Help chat in the Ghostex
+project and prints its answer. Setting: `agentGhostexNote`; CLI: `ghostex
+agent-guide`, `ghostex help ask "<question>" [--new]`.
 
 Catch me up: turn on Catch me up button (Settings > Chat, off by default) and
 the chat box shows a Catch me up button at its top right while it is empty, on

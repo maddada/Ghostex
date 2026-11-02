@@ -41,6 +41,11 @@ pub const GHOSTEX_AGENT_SKILL_NAMES: &[&str] = &[
     */
     "ghostex-secrets",
     /*
+    CDXC:AgentGuide 2026-11-02 WHY:
+    `$ghostex-agent-guide` carries the Ghostex note (agents/ghostex_note.rs) as its description, for agents Ghostex can't hand a system prompt at launch (OpenCode, Gemini, Cursor, Copilot, Amp and the rest), so it is the second bundled skill agents may pick up on their own. Its body only sends the agent to `ghostex agent-guide`, so it stays current with the CLI.
+    */
+    "ghostex-agent-guide",
+    /*
     CDXC:Coordinators 2026-10-17 WHY:
     The orchestrator playbook is a bundled skill gxserver installs when an orchestrator is created or promoted (coordinators/role.rs), so it is listed here for the startup refresh from GitHub main, but left out of the default install set (`ORCHESTRATOR_ONLY_GHOSTEX_AGENT_SKILL_NAMES`): an ordinary session never needs it.
     */

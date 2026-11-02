@@ -2,6 +2,7 @@ mod account_login;
 mod accounts;
 pub mod actions;
 mod agent_cli;
+mod agent_guide;
 pub mod agent_sync;
 mod agentbox_cli;
 mod agents;
@@ -25,6 +26,7 @@ pub mod editors;
 pub mod extensions;
 mod feedback;
 pub mod guide;
+mod help_ask;
 mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
@@ -103,6 +105,8 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "agent-guide",
+    "help",
     "accounts",
     "agent-cli",
     "agentbox",
@@ -403,6 +407,7 @@ fn is_known_command(name: &str) -> bool {
         "move-codex-session",
         "install-move-codex-session-skill",
         "guide",
+        "agent-guide",
         "agent-sync",
         "feedback",
         "notify",
@@ -975,6 +980,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             skills::install_move_codex_session_skill_command(args)
         }
         "guide" => guide::guide_command(args),
+        "agent-guide" => agent_guide::agent_guide_command(args),
         "voice" => voice::voice_command(args),
         "agent-sync" => agent_sync::agent_sync_command(args),
         "install-help-skill" => skills::install_help_skill_command(args),
@@ -988,10 +994,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "logs" => diagnostics::logs_command(args),
         "hookless-activity" => hookless_activity::hookless_activity_command(args),
         "bundle" => diagnostics::bundle_command(args),
-        "help" => {
-            println!("{}", usage::usage());
-            Ok(())
-        }
+        "help" => help_ask::help_command(args),
         other if automations::is_automation_command(other) => {
             automations::run_automation_command(other, args)
         }

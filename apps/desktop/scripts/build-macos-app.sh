@@ -186,6 +186,7 @@ bundled_cli_skill_assets=(
 	ghostex-manage-beads
 	ghostex-visuals
 	ghostex-secrets
+	ghostex-agent-guide
 	ghostex-orchestrator
 )
 

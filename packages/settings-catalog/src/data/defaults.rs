@@ -573,6 +573,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
+    // CDXC:AgentGuide 2026-11-02 DECISION: User (Q1066): the short Ghostex note goes to every agent session Ghostex starts, "on by default (with a setting to turn it off)".
+    ("agentGhostexNote", J::Bool(true)),
+    // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.
+    ("agentPreviewBrowser", J::Str("ask")),
     // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "force the marked handovers for coordinators/orchestrator threads and their children by default and make it disabled by default for non-orchestrator/child threads". This switch covers every other session and stays off by default; threads mark regardless, orchestrators unless `orchestratorPlainReplies` is on.
     ("markedHandovers", J::Bool(false)),
     // CDXC:MarkedHandovers 2026-10-17 DECISION: User: "please allow launching an orchestrator without the reply style so the orchestrator answers normally. but put "Not recommended" and make it an advanced setting". Off by default, so orchestrators keep marking their handovers; their threads mark their reports either way.

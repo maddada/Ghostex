@@ -398,6 +398,14 @@ pub fn usage() -> String {
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
         format_help_command("guide --help", "Show Ghostex Help skill setup"),
+        format_help_command(
+            "agent-guide",
+            "Print what an agent running in Ghostex can do: pages, questions and charts in the chat, the browser, other agents, secrets, Ghostex skills",
+        ),
+        format_help_command(
+            "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",
+            "Ask a Ghostex Help session (the default prompt agent with the ghostex-help skill) and print its answer once it finishes",
+        ),
     ]
     .join("\n");
 
