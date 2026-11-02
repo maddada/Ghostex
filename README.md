@@ -58,6 +58,8 @@
   </a>
 </p>
 
+<p align="center"><sub>Want an animated wallpaper behind Ghostex like these? Try <a href="https://wallspace.app/">Wallspace</a> on macOS (free, recommended), <a href="https://github.com/rocksdanister/lively">Lively Wallpaper</a> on Windows (free, open source) or <a href="https://github.com/jeffshee/hidamari">Hidamari</a> on Linux (free, open source). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub></p>
+
 Ghostex is built for developers who keep many agents alive at once. A chat view for every agent, a native Rust/GPUI shell, embedded Chromium panes, and a mobile app share one workspace, and every session survives restarts.
 
 ## Features
