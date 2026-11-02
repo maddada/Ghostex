@@ -1,5 +1,5 @@
-//! The card a failed API call becomes: the tone card with the failure's glyph, the agent's own
-//! words, and the retry gxserver runs for it. Which rows get it, the titles, the status and the
+//! The card a failed API call becomes: the tone card with the failure's glyph, a plain sentence
+//! with the agent's own words behind Details, and the retry gxserver runs for it. Which rows get it, the titles, the status and the
 //! buttons come from the chat core (packages/gx-chat-core/src/transcript/api_errors.rs, the
 //! 2026-10-15 decision there); this file only lays it out. The phone draws the same card in
 //! apps/mobile/app/src/chat/native/transcript/ApiErrorCard.tsx.
@@ -108,6 +108,7 @@ impl NativeChatView {
             self.book_api_error_tick(cx);
         }
         let note = text(status, "note");
+        // The retry line sits in the body so Retry now and Stop retrying get the footer row to themselves (Q1118).
         let status_row = (!label.is_empty()).then(|| {
             div()
                 .flex()
@@ -157,27 +158,36 @@ impl NativeChatView {
             .role(gpui::Role::Alert)
             .aria_label(text(card, "title"))
             .w_full()
-            .child(self.tone_card(
-                ToneCardParts {
-                    look,
-                    title: text(card, "title"),
-                    detail: String::new(),
-                    trailing: Vec::new(),
-                    body: vec![
-                        div()
+            .child(
+                self.tone_card(
+                    ToneCardParts {
+                        look,
+                        title: text(card, "title"),
+                        detail: String::new(),
+                        trailing: Vec::new(),
+                        body: [div()
                             .text_size(px(12.0 * s))
                             .line_height(px(17.0 * s))
                             .text_color(p.muted)
-                            .child(text(card, "detail"))
-                            .into_any_element(),
-                    ],
-                    footer_start: status_row.into_iter().collect(),
-                    footer_end: buttons,
-                },
-                None,
-                None,
-                p,
-            ))
+                            .child(text(card, "body"))
+                            .into_any_element()]
+                        .into_iter()
+                        .chain(status_row)
+                        .chain(self.details_toggle(
+                            &format!("api-error:{}", text(card, "messageId")),
+                            vec![text(card, "detail")],
+                            p,
+                            cx,
+                        ))
+                        .collect(),
+                        footer_start: Vec::new(),
+                        footer_end: buttons,
+                    },
+                    None,
+                    None,
+                    p,
+                ),
+            )
             .into_any_element()
     }
 

@@ -52,8 +52,18 @@ pub(crate) fn agent_start_failure(
     session_id: &str,
     screen_text: &str,
 ) -> Option<SessionChatTerminalNotice> {
-    let notice = agent_start_failure_notice(screen_text)?;
+    let mut notice = agent_start_failure_notice(screen_text)?;
     let session = repository.get_session(project_id, session_id).ok()??;
+    // The card names the agent (Q1122): "Claude Code couldn't start", not "The agent couldn't start".
+    let agent = crate::session_chat_follower::session_chat_agent_for_session(&session);
+    let agent_name = match agent.as_deref() {
+        Some("claude") => Some("Claude Code"),
+        Some(agent) => crate::agents::default_agent_session_title_name(agent),
+        None => None,
+    };
+    if let Some(agent_name) = agent_name {
+        notice.title = format!("{agent_name} couldn't start");
+    }
     // A box runs its agent where this computer's process table cannot see it.
     if crate::agentbox::is_agentbox_session(&session) || conversation_written(&session) {
         return None;
@@ -92,7 +102,7 @@ fn with_missing_agent_command(notice: SessionChatTerminalNotice) -> SessionChatT
         let mut notice = notice;
         notice.title = format!("{agent_name} is ready to start again");
         notice.detail = Some(format!(
-            "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise. A message you send meanwhile waits in the chat and goes out once the agent is up."
+            "{agent_name} was installed with mise, which this terminal hadn't set up. Try again starts it through mise."
         ));
         return notice;
     }

@@ -449,12 +449,12 @@ pub(super) async fn escalate_undelivered_send(
             SESSION_CHAT_NOTICE_DELIVERY_FAILED,
             SessionChatTerminalNoticeSeverity::Warning,
             SessionChatTerminalNoticeSource::Watchdog,
-            "Your message might not have reached the agent",
+            "Did your message arrive?",
         )
-        .with_detail("Nothing was recorded in the session transcript in the 10 seconds after this message was sent, so delivery could not be confirmed. Open the terminal to make sure it arrived.")
+        .with_detail("Ghostex couldn't confirm the agent got it. Check the terminal.")
         .with_screen_tail(screen_tail)
         .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-            "Open terminal",
+            "Terminal view",
         )]),
     };
     publish_watchdog_notice(probe, notice, publish);

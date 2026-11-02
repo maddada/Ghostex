@@ -468,3 +468,94 @@ fn tone_card_actions(actions: Vec<AnyElement>, s: f32) -> Div {
         .gap(px(8.0 * s))
         .children(actions)
 }
+
+impl NativeChatView {
+    /// The card's Details toggle: a quiet "Details" text button that opens the terminal's own words
+    /// (a notice's `details` and `errorLines`, an API error's line) in a mono box on the card's row
+    /// surface. `None` when there is nothing to show.
+    /// CDXC:SessionChat 2026-11-03 DECISION: User (Q1136): raw terminal output sits behind a Details toggle on the card, never in its sentences; the same toggle is on the phone.
+    /// SEE-ALSO: apps/mobile/app/src/chat/native/cards/DetailsToggle.tsx, server/src/session_chat_notice/types.rs (`details`).
+    pub(super) fn details_toggle(
+        &self,
+        key: &str,
+        lines: Vec<String>,
+        p: &ChatAppearance,
+        cx: &mut gpui::Context<Self>,
+    ) -> Option<AnyElement> {
+        let lines: Vec<String> = lines
+            .into_iter()
+            .map(|line| line.trim().to_string())
+            .filter(|line| !line.is_empty())
+            .collect();
+        if lines.is_empty() {
+            return None;
+        }
+        let s = p.scale;
+        let key = format!("{key}:details");
+        let open = self.expanded.contains(&key);
+        let motion = self.disclosure_frame(&key, open, cx);
+        let body_key = key.clone();
+        let mut toggle = div().flex().flex_col().gap(px(8.0 * s)).child(
+            div()
+                .id(gpui::ElementId::Name(
+                    format!("details-toggle:{key}").into(),
+                ))
+                .tab_index(0)
+                .role(gpui::Role::Button)
+                .aria_label(if open { "Hide details" } else { "Show details" })
+                .flex()
+                .items_center()
+                .self_start()
+                .gap(px(4.0 * s))
+                .chat_cursor_pointer()
+                .h(px(22.0 * s))
+                .text_size(px(13.0 * s))
+                .text_color(p.muted)
+                .hover(|style| style.text_color(p.foreground))
+                .child("Details")
+                .child(
+                    gpui::svg()
+                        .path(if open {
+                            "titlebar/chevron-down.svg"
+                        } else {
+                            "titlebar/chevron-right.svg"
+                        })
+                        .size(px(12.0 * s))
+                        .text_color(p.muted),
+                )
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    if !this.expanded.remove(&key) {
+                        this.expanded.insert(key.clone());
+                    }
+                    cx.notify();
+                })),
+        );
+        if open || motion.is_some() {
+            toggle = toggle.child(
+                self.disclosure_body_motion(
+                    &body_key,
+                    motion,
+                    8.0 * s,
+                    div()
+                        .id(gpui::ElementId::Name(
+                            format!("details-text:{body_key}").into(),
+                        ))
+                        .max_h(px(240.0 * s))
+                        .overflow_y_scroll()
+                        .rounded(px(8.0 * s))
+                        .border_1()
+                        .border_color(p.control_border)
+                        .bg(p.card_row)
+                        .p(px(10.0 * s))
+                        .font_family(crate::app::native_chat::fonts::CHAT_MONO)
+                        .text_size(px(12.0 * s))
+                        .line_height(px(17.0 * s))
+                        .text_color(p.card_muted)
+                        .child(lines.join("\n"))
+                        .into_any_element(),
+                ),
+            );
+        }
+        Some(toggle.into_any_element())
+    }
+}

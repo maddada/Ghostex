@@ -22,6 +22,9 @@ pub fn notice_tone(notice: &TerminalNotice) -> &'static str {
             return "approval";
         }
         "usageLimit" | "resumePrompt" | "sessionPausedPrompt" | "queuedInput" => return "wait",
+        // A sign-in the user is finishing ("Finish signing in", Q1103 and Q1107) is a wait; gxserver
+        // sends it as a warning, and an expired login stays an error.
+        "loginExpired" if notice.severity == "warning" => return "wait",
         _ => {}
     }
     match notice.severity.as_str() {

@@ -17,10 +17,9 @@ pub fn detect_workspace_trust_prompt(
     agent: SessionChatOptionAgent,
     text: &str,
 ) -> Option<SessionChatTerminalNotice> {
-    let (name, agent_id, evidence) = match agent {
-        SessionChatOptionAgent::Claude => ("Claude Code", "claude", "Quick safety check:"),
+    let (agent_id, evidence) = match agent {
+        SessionChatOptionAgent::Claude => ("claude", "Quick safety check:"),
         SessionChatOptionAgent::Antigravity => (
-            "Antigravity CLI",
             "antigravity",
             "Antigravity CLI requires permission to read, edit, and execute files here.",
         ),
@@ -93,13 +92,13 @@ pub fn detect_workspace_trust_prompt(
             SESSION_CHAT_NOTICE_TRUST_PROMPT,
             SessionChatTerminalNoticeSeverity::Warning,
             SessionChatTerminalNoticeSource::Screen,
-            format!("{name} is waiting for folder trust"),
+            "Trust this folder?",
         )
         .with_detail(lines[heading + 1..first_row?].join("\n"))
         .with_screen_tail(crate::session_chat_notice::session_chat_terminal_screen_tail(text))
         .with_choices(choices)
         .with_actions(vec![SessionChatTerminalNoticeAction::switch_to_terminal(
-            "Open terminal",
+            "Terminal view",
         )]),
     )
 }

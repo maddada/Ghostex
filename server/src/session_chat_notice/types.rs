@@ -7,9 +7,12 @@ use super::*;
 /// The agent cannot talk to its provider until the user signs in again.
 pub const SESSION_CHAT_NOTICE_LOGIN_EXPIRED: &str = "loginExpired";
 /// The title of the `loginExpired` notice for a Claude login whose organization disabled
-/// subscription access: the account itself is unusable, so the fix is another account.
-pub const CLAUDE_ACCOUNT_DISABLED_TITLE: &str =
-    "This Claude account's subscription access is disabled";
+/// subscription access: the account itself is unusable, so the fix is another account. A session on
+/// a saved account names it instead (session_chat_account_sign_in.rs).
+pub const CLAUDE_ACCOUNT_DISABLED_TITLE: &str = "This account can't use Claude";
+/// That notice's detail, which stays the same whatever the title names, so it is what marks the
+/// notice (`account_disabled`).
+pub const CLAUDE_ACCOUNT_DISABLED_DETAIL: &str = "Its organization turned off Claude access. Ghostex moves this chat to another account when you send, or switch now.";
 /// A workspace/directory trust dialog is blocking the composer.
 pub const SESSION_CHAT_NOTICE_TRUST_PROMPT: &str = "trustPrompt";
 /// A sibling blocking dialog about settings/permissions.
@@ -269,9 +272,13 @@ pub struct SessionChatTerminalNotice {
     pub severity: SessionChatTerminalNoticeSeverity,
     pub title: String,
     pub detail: Option<String>,
+    /// The terminal's own line the card is about ("● Login expired · Please run /login"), drawn behind the card's Details toggle (`details`), never in `detail`.
+    /// CDXC:SessionChat 2026-11-03 DECISION: User (Q1136): raw terminal output goes only behind a Details toggle on the card or in Terminal view, never in the card's sentences.
+    /// SEE-ALSO: apps/desktop/src/app/native_chat/tone_card.rs (`details_toggle`), apps/mobile/app/src/chat/native/cards/DetailsToggle.tsx.
+    pub details: Option<String>,
     /// SGR-stripped last visible lines, for the card's collapsible evidence.
     pub screen_tail: Option<String>,
-    /// The few lines that say why, drawn on the card itself (`errorLines`): what a failed start printed, without the shell prompt it left.
+    /// The few lines that say why, behind the card's Details toggle (`errorLines`): what a failed start printed, without the shell prompt it left.
     pub error_lines: Option<String>,
     /// The command an approval card asks to run, drawn under its title while the card is folded (`approvalCommand`, read by the chat core's `collapsedDetail`).
     pub approval_command: Option<String>,
@@ -311,6 +318,7 @@ impl SessionChatTerminalNotice {
             severity,
             title: title.into(),
             detail: None,
+            details: None,
             screen_tail: None,
             error_lines: None,
             approval_command: None,
@@ -332,6 +340,11 @@ impl SessionChatTerminalNotice {
     pub fn with_detail(mut self, detail: impl Into<String>) -> Self {
         let detail = detail.into();
         self.detail = (!detail.trim().is_empty()).then_some(detail);
+        self
+    }
+
+    pub fn with_details(mut self, details: Option<String>) -> Self {
+        self.details = details.filter(|details| !details.trim().is_empty());
         self
     }
 
@@ -405,6 +418,7 @@ impl SessionChatTerminalNotice {
                 && self.severity == other.severity
                 && self.title == other.title
                 && self.detail == other.detail
+                && self.details == other.details
                 && self.error_lines == other.error_lines
                 && self.approval_command == other.approval_command
                 && self.permission_request == other.permission_request
@@ -464,7 +478,7 @@ impl SessionChatTerminalNotice {
     /// subscription access); only another account fixes it. See `accounts/disabled.rs`.
     pub fn account_disabled(&self) -> bool {
         self.kind == SESSION_CHAT_NOTICE_LOGIN_EXPIRED
-            && self.title == CLAUDE_ACCOUNT_DISABLED_TITLE
+            && self.detail.as_deref() == Some(CLAUDE_ACCOUNT_DISABLED_DETAIL)
     }
 
     /// Claude's usage-limit chooser ("What do you want to do?", "You've hit your limit" with its
@@ -495,6 +509,10 @@ impl SessionChatTerminalNotice {
                 .map(|dialog| dialog.id.as_str())
                 .unwrap_or_else(|| self.detail.as_deref().unwrap_or_default())
         );
+        if let Some(details) = self.details.as_deref() {
+            identity.push('\u{1f}');
+            identity.push_str(details);
+        }
         if let Some(lock) = &self.conversation_lock {
             identity.push('\u{1f}');
             identity.push_str(&json!(lock).to_string());
@@ -535,6 +553,9 @@ impl SessionChatTerminalNotice {
         map.insert("title".to_string(), json!(self.title));
         if let Some(detail) = self.detail.as_deref() {
             map.insert("detail".to_string(), json!(detail));
+        }
+        if let Some(details) = self.details.as_deref() {
+            map.insert("details".to_string(), json!(details));
         }
         if let Some(screen_tail) = self.screen_tail.as_deref() {
             map.insert("screenTail".to_string(), json!(screen_tail));

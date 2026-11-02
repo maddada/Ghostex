@@ -77,17 +77,11 @@ pub(crate) struct SendFailure {
 /// SEE-ALSO: session_chat_queue.rs (`fail_prompt` reports every row that fails), session_chat_send/send_http.rs, session_chat_notice/watchdog_store.rs (`resolve_session_chat_terminal_notice`), packages/gx-core/src/sidebar_view/rows.rs, apps/desktop/src/notification_feed/mod.rs, packages/gx-chat-core/src/questions/document.rs.
 pub(crate) fn send_failed_notice(failure: &SendFailure) -> SessionChatTerminalNotice {
     let guide = match failure.next {
-        SendFailureNext::RetryOrFix => {
-            "Retry sends it again as things stand. Fix it restarts the agent on this same conversation, then sends it."
-        }
-        SendFailureNext::Fix => {
-            "Fix it restarts the agent on this same conversation, then sends it."
-        }
-        SendFailureNext::StartFresh => {
-            "Start fresh starts the agent on a new conversation in this session, then sends it."
-        }
+        SendFailureNext::RetryOrFix => "Retry, or Fix it to restart the agent and send it.",
+        SendFailureNext::Fix => "Fix it restarts the agent and sends it.",
+        SendFailureNext::StartFresh => "Start fresh starts the agent over and sends it.",
     };
-    let terminal = SessionChatTerminalNoticeAction::switch_to_terminal("Open terminal");
+    let terminal = SessionChatTerminalNoticeAction::switch_to_terminal("Terminal view");
     let actions = match failure.next {
         SendFailureNext::RetryOrFix => vec![
             SessionChatTerminalNoticeAction::retry_send(),
@@ -106,7 +100,7 @@ pub(crate) fn send_failed_notice(failure: &SendFailure) -> SessionChatTerminalNo
         SESSION_CHAT_NOTICE_DELIVERY_FAILED,
         SessionChatTerminalNoticeSeverity::Error,
         SessionChatTerminalNoticeSource::Watchdog,
-        "Your message was not sent",
+        "Message not sent",
     )
     .with_detail(format!("{} {guide}", failure.reason))
     .with_actions(actions);
@@ -124,7 +118,7 @@ pub(crate) fn send_failure_reason(step: &str, heal_gave_up: Option<&str>) -> Str
     // The clear's own wording names no cause, and "the agent has no conversation to resume" was
     // only in the log (GitHub #374, example 4).
     let step = if step == "The terminal draft could not be cleared and verified." {
-        "Text in the agent's terminal input box could not be cleared, so the message was not typed."
+        "The agent's input box had text in it that Ghostex couldn't clear."
     } else {
         step
     };
@@ -941,7 +935,7 @@ mod tests {
     #[test]
     fn the_card_carries_the_logged_reason_and_keeps_its_time() {
         let notice = send_failed_notice(&failure(SendFailureNext::RetryOrFix));
-        assert_eq!(notice.title, "Your message was not sent");
+        assert_eq!(notice.title, "Message not sent");
         assert!(notice
             .detail
             .as_deref()
@@ -959,7 +953,7 @@ mod tests {
         );
         assert_eq!(
             reason,
-            "Text in the agent's terminal input box could not be cleared, so the message was not typed. This session has no saved conversation to resume, so Ghostex could not restart the agent."
+            "The agent's input box had text in it that Ghostex couldn't clear. This session has no saved conversation to resume, so Ghostex could not restart the agent."
         );
     }
 

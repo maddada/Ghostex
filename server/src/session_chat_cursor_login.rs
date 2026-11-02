@@ -76,16 +76,16 @@ pub fn detect_cursor_sign_in(text: &str) -> Option<SessionChatTerminalNotice> {
         return Some(
             SessionChatTerminalNotice::new(
                 SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
-                SessionChatTerminalNoticeSeverity::Warning,
+                SessionChatTerminalNoticeSeverity::Info,
                 SessionChatTerminalNoticeSource::Screen,
                 "Sign in to Cursor",
             )
             .with_input_blocking(true)
-            .with_detail("Cursor isn't signed in on this computer. Sign in to start chatting: Cursor opens its sign-in page in your browser, and this card shows the link in case it doesn't.")
+            .with_detail("Cursor isn't signed in on this computer. Sign in to start chatting; your browser opens Cursor's sign-in page.")
             .with_screen_tail(session_chat_terminal_screen_tail(text))
             .with_actions(vec![
                 SessionChatTerminalNoticeAction::send_keys("signIn", "Sign in", "\r"),
-                SessionChatTerminalNoticeAction::switch_to_terminal("Open terminal"),
+                SessionChatTerminalNoticeAction::switch_to_terminal("Terminal view"),
             ]),
         );
     }

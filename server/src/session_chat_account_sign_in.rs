@@ -1,5 +1,5 @@
 //! CDXC:AgentProviders 2026-10-26 DECISION:
-//! User: "i'm seeing this appear on a thread because my account was logged out. please add a button to allow me to login there!" The sign-in error card (Claude's "Login expired · Please run /login", Codex's failed token refresh) offers Reconnect, the label Settings > Accounts gives the same sign-in. On a session that runs on a saved account it runs that account's Settings sign-in (accounts/setup.rs: `ghostex account-login claude --account N`, or `xswap login N`) in the background, so the browser opens on the computer, and once the login is saved it restarts the session on its own conversation the way Switch account does: the card goes away and nothing is retyped. Other sessions on that account showing the same card restart with it. A Claude session on its own login (a plain `claude`) gets Reconnect as `/login` typed into the agent, whose sign-in screens the chat already shows as a card; Codex has no /login, so a Codex session on its own login keeps Terminal view only.
+//! User: "i'm seeing this appear on a thread because my account was logged out. please add a button to allow me to login there!" The sign-in error card (Claude's "Login expired · Please run /login", Codex's failed token refresh) offers a sign-in button, labeled Sign in again since the user picked the simpler card text on 2026-11-03 (Q1102; it was Reconnect, the label Settings > Accounts gives the same sign-in). On a session that runs on a saved account it runs that account's Settings sign-in (accounts/setup.rs: `ghostex account-login claude --account N`, or `xswap login N`) in the background, so the browser opens on the computer, and once the login is saved it restarts the session on its own conversation the way Switch account does: the card goes away and nothing is retyped. Other sessions on that account showing the same card restart with it. A Claude session on its own login (a plain `claude`) gets Sign in as `/login` typed into the agent, whose sign-in screens the chat already shows as a card; Codex has no /login, so a Codex session on its own login keeps Terminal view only.
 //! WHY: Typing /login into a session on a saved account would sign in its shared session profile only, leaving claude-swap's saved login (which every later start of the account reads) as broken as before, and could sign in a different account into that slot.
 //! SEE-ALSO: session_chat_agent_restart.rs (the `restartAgent` answer carries `reconnectAccount`), accounts/login_expired.rs (the account shows Needs sign-in until then), packages/gx-chat-core/src/questions/terminal_prompts.rs (click only, never a shortcut).
 
@@ -16,11 +16,14 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::server::AppState;
 use crate::session_chat_notice::{
     SessionChatTerminalNotice, SessionChatTerminalNoticeAction,
-    SessionChatTerminalNoticeActionKind, SESSION_CHAT_NOTICE_ACTION_RECONNECT,
+    SessionChatTerminalNoticeActionKind, SessionChatTerminalNoticeSeverity,
+    SESSION_CHAT_NOTICE_ACTION_RECONNECT,
 };
 use crate::storage::open_gxserver_database;
 
-const LABEL: &str = "Reconnect";
+const LABEL: &str = "Sign in again";
+/// The button on the card of a Claude session on its own login, which types `/login`.
+const OWN_LOGIN_LABEL: &str = "Sign in";
 
 /// How long a Reconnect waits for the browser sign-in before giving up, as the Sign in restart does.
 const SIGN_IN_WAIT: Duration = Duration::from_secs(30 * 60);
@@ -66,25 +69,29 @@ fn session_account(
         .find(|account| account.id == id)
 }
 
-/// How the card names the account: "account 4 (name@example.com)".
+/// How the log names the account: "account 4 (name@example.com)".
 fn account_label(account: &SavedAccount) -> String {
-    let email = match account.provider {
-        Provider::Claude => crate::session_chat_notice::claude_slot_email(&account.selector)
-            .unwrap_or_else(|| account.name.clone()),
-        Provider::Codex => account.name.clone(),
-    };
-    if email.is_empty() {
-        format!("account {}", account.selector)
-    } else {
-        format!("account {} ({email})", account.selector)
+    match account_email(account) {
+        Some(email) => format!("account {} ({email})", account.selector),
+        None => format!("account {}", account.selector),
     }
 }
 
-/// The terminal's own words the classifier appended to the detail (`Terminal: "…"`).
-fn evidence(detail: Option<&str>) -> &str {
-    detail
-        .and_then(|detail| detail.rfind(" Terminal: \"").map(|at| &detail[at..]))
-        .unwrap_or_default()
+fn account_email(account: &SavedAccount) -> Option<String> {
+    match account.provider {
+        Provider::Claude => crate::session_chat_notice::claude_slot_email(&account.selector)
+            .or_else(|| Some(account.name.clone())),
+        Provider::Codex => Some(account.name.clone()),
+    }
+    .filter(|email| email.contains('@'))
+}
+
+/// How the card names the account: its email, or "Account 4" while emails are hidden.
+fn card_name(account: &SavedAccount) -> String {
+    crate::session_chat_notice::card_account_name(
+        &account.selector,
+        account_email(account).as_deref(),
+    )
 }
 
 /// Puts Reconnect on a sign-in error card (session_chat_options/detection.rs), and says what a
@@ -95,7 +102,7 @@ pub(crate) fn enrich_notice(
     session_id: &str,
     notice: &mut SessionChatTerminalNotice,
 ) {
-    if !notice.sign_in_error() {
+    if !notice.sign_in_error() && !notice.account_disabled() {
         return;
     }
     let (Ok(Some(project)), Ok(Some(session))) = (
@@ -108,24 +115,27 @@ pub(crate) fn enrich_notice(
         return;
     };
     let Some(account) = session_account(repository.db, provider, &session) else {
-        if provider == Provider::Claude {
+        if provider == Provider::Claude && notice.sign_in_error() {
             notice.actions.insert(
                 0,
                 SessionChatTerminalNoticeAction::send_keys(
                     SESSION_CHAT_NOTICE_ACTION_RECONNECT,
-                    LABEL,
+                    OWN_LOGIN_LABEL,
                     "/login\r",
                 ),
             );
         }
         return;
     };
+    if notice.account_disabled() {
+        notice.title = format!("{} can't use Claude", card_name(&account));
+        return;
+    }
     let agent = match provider {
         Provider::Claude => "Claude Code",
         Provider::Codex => "Codex",
     };
-    let label = account_label(&account);
-    let evidence = evidence(notice.detail.as_deref()).to_string();
+    let name = card_name(&account);
     let running = SIGN_INS.lock().ok().and_then(|sign_ins| {
         sign_ins.get(&key(project_id, session_id)).map(|sign_in| {
             (
@@ -135,28 +145,40 @@ pub(crate) fn enrich_notice(
             )
         })
     });
-    let detail = match running {
-        Some((true, running, _)) => format!(
-            "Finish signing in to {} in the browser Ghostex opened. This session restarts on its own conversation as soon as the login is saved.",
-            if running.is_empty() { &label } else { &running }
+    // CDXC:AgentProviders 2026-11-03 DECISION: User picked the simpler card text (Q1102 to Q1104): "<account> is signed out" with what happened and what to do; while the browser sign-in is open the card is a wait ("Finish signing in") without its sign-in button; after a failed one it says "Sign-in didn't finish" and offers Try again. The account is its email, or "Account N" with emails hidden (`card_account_name`).
+    let (title, detail, button) = match running {
+        Some((true, _, _)) => {
+            notice.severity = SessionChatTerminalNoticeSeverity::Warning;
+            (
+                "Finish signing in".to_string(),
+                format!("Finish signing in to {name} in your browser. The chat continues as soon as you're done."),
+                None,
+            )
+        }
+        Some((false, _, Some(error))) => (
+            "Sign-in didn't finish".to_string(),
+            format!("{name} is still signed out. {error} Try again, or switch to another account."),
+            Some("Try again"),
         ),
-        Some((false, _, Some(error))) => format!(
-            "{agent} could not sign in with the saved login of {label}. The last Reconnect didn't finish: {error} Choose Reconnect to try again, or switch this session to another account.{evidence}"
-        ),
-        _ => format!(
-            "{agent} could not sign in with the saved login of {label}. Choose Reconnect to restart this session on its own conversation; Ghostex opens a browser sign-in first unless that login has worked again since. Automatic queued delivery is paused while this error applies.{evidence}"
+        _ => (
+            format!("{name} is signed out"),
+            format!("{agent}'s login for this account expired. Sign in again, or switch this chat to another account. Queued messages wait until then."),
+            Some(LABEL),
         ),
     };
+    notice.title = title;
     notice.detail = Some(detail);
-    notice.actions.insert(
-        0,
-        SessionChatTerminalNoticeAction {
-            id: SESSION_CHAT_NOTICE_ACTION_RECONNECT.to_string(),
-            label: LABEL.to_string(),
-            kind: SessionChatTerminalNoticeActionKind::RestartAgent,
-            send: None,
-        },
-    );
+    if let Some(button) = button {
+        notice.actions.insert(
+            0,
+            SessionChatTerminalNoticeAction {
+                id: SESSION_CHAT_NOTICE_ACTION_RECONNECT.to_string(),
+                label: button.to_string(),
+                kind: SessionChatTerminalNoticeActionKind::RestartAgent,
+                send: None,
+            },
+        );
+    }
 }
 
 /// What a Reconnect signs in to.
@@ -546,21 +568,5 @@ async fn restart_sessions(
             ),
             &[],
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn keeps_the_terminal_words_the_card_quoted() {
-        let detail = "Claude Code could not authenticate a previous request. Open the terminal and run /login. Terminal: \"Login expired · Please run /login\"";
-        assert_eq!(
-            evidence(Some(detail)),
-            " Terminal: \"Login expired · Please run /login\""
-        );
-        assert_eq!(evidence(Some("No quote here.")), "");
-        assert_eq!(evidence(None), "");
     }
 }

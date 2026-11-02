@@ -157,18 +157,14 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
-        // What a failed start printed (`errorLines` from gxserver), so the card says why without the terminal.
-        if !collapsed && notice["errorLines"].is_string() {
-            body.push(
-                div()
-                    .id("notice-error-lines")
-                    .font_family(crate::app::native_chat::fonts::CHAT_MONO)
-                    .text_size(px(12.0 * p.scale))
-                    .line_height(px(17.0 * p.scale))
-                    .text_color(p.card_muted)
-                    .child(text(notice, "errorLines"))
-                    .into_any_element(),
-            );
+        // The terminal's own words (`details`) and what a failed start printed (`errorLines`), behind Details.
+        if !collapsed {
+            body.extend(self.details_toggle(
+                &key,
+                vec![text(notice, "details"), text(notice, "errorLines")],
+                p,
+                cx,
+            ));
         }
         if answerable {
             let mut rows = div()
