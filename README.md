@@ -1,6 +1,7 @@
 <div align="center">
 
 # <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" valign="middle" /></a> Ghostex <br>The Best Native Agents Workspace
+
 </div>
 
 <p align="center">
