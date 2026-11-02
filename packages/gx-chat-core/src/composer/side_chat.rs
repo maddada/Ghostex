@@ -6,7 +6,7 @@
 //! User: a "Side chat" button in the chat composer's More actions puts a "Side Chat" pill in the chat box, and the user can delete the pill. The pill is the `/btw ` prefix itself, drawn as a reference pill, so drafts and other devices need nothing new. Sending a side chat switches Side chat off: the pill leaves with the message (supersedes the 2026-09-27 choice to keep it after a send).
 //!
 //! CDXC:SideChats 2026-11-02 DECISION:
-//! User: replace the agent CLI's `/btw` everywhere with t3code-style side chats. What is sent with the Side Chat pill, or typed as `/btw <question>`, forks the session into a side chat that starts with that question and opens beside the chat; it never reaches the main agent. Supersedes Side chat sending `/btw` to Claude (its answer card above the chat box) and switching Codex chats to the terminal (2026-09-30). Offered for every agent Ghostex can fork, and not in a side chat itself.
+//! User: replace the agent CLI's `/btw` everywhere with side chats. What is sent with the Side Chat pill, or typed as `/btw <question>`, forks the session into a side chat that starts with that question and opens beside the chat; it never reaches the main agent. Supersedes Side chat sending `/btw` to Claude (its answer card above the chat box) and switching Codex chats to the terminal (2026-09-30). Offered for every agent Ghostex can fork, and not in a side chat itself.
 //! SEE-ALSO: apps/desktop/src/app/native_chat/actions.rs, apps/mobile/app/src/chat/native/composer/menus.ts, server/src/side_chats/mod.rs.
 
 use crate::menus::option_menus::DraftAgent;
