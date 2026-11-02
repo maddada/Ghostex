@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::transcript::jsstr::js_trim;
+use crate::transcript::links::{drive_path_without_leading_slash, file_uri_path};
 
 /// Trailing editor coordinates on a path: `:913`, `:913-940`, or `:42:8`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -105,7 +106,9 @@ pub fn classify_link_href(href: &str) -> LinkTarget {
         return LinkTarget::Url(trimmed.to_string());
     }
     if lowered.starts_with("file://") {
-        return LinkTarget::File(file_path_from_href(&trimmed["file://".len()..]));
+        return LinkTarget::File(file_path_from_href(file_uri_path(
+            &trimmed["file://".len()..],
+        )));
     }
     if !is_windows_drive_path(trimmed) && has_uri_scheme(&split_file_position(trimmed).0) {
         return LinkTarget::Inert;
@@ -119,7 +122,7 @@ pub fn file_position_from_href(href: &str) -> Option<FilePosition> {
 }
 
 fn file_path_from_href(href: &str) -> String {
-    split_file_position(&decoded_file_href(href)).0
+    split_file_position(&drive_path_without_leading_slash(decoded_file_href(href))).0
 }
 
 /// `decodeURI`, which decodes every `%XX` except the ones that spell a reserved delimiter.

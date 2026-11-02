@@ -124,6 +124,7 @@ pub const CATALOG: &[CatalogStore] = &[
     store("codeWrap", "ghostex.sessionChat.codeWrap", false, Local),
     store("verbose", "ghostex.sessionChat.verbose.", true, Records),
     store("summary", "ghostex.sessionChat.summary.", true, Records),
+    store("simple", "ghostex.sessionChat.simple.", true, Records),
     store(
         "tasksCollapsed",
         "ghostex.chat.agentTasks.collapsed",

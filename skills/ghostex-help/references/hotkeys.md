@@ -12,7 +12,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Focus Chat Box | unassigned |  | none |  | Move the keyboard to the chat box of the chat session you are in. | `focusChatComposer` |
 | Copy Last Code Block | `cmd+shift+;` |  | none |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
 | Copy Last Reply | `cmd+shift+c` |  | none |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |
-| Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary mode on or off in the chat session you are in. | `toggleChatSummaryMode` |
+| Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary view on in the chat session you are in, or off again to Normal view. | `toggleChatSummaryMode` |
 | Maximize Chat Box | `ctrl+alt+m` | `cmd+alt+shift+m` | none |  | Maximize the chat box of the chat session you are in, or restore it. | `toggleChatComposerMaximized` |
 | Files and Links | `ctrl+alt+l` | `cmd+alt+shift+l` | none |  | Show or hide the files and links mentioned in the chat session you are in. | `toggleChatFilesLinks` |
 | Toggle Voice Agent | `ctrl+alt+v` | `cmd+alt+shift+v` | `ctrl+alt+v` | `cmd+alt+shift+v` | Start a spoken conversation with the voice agent, or end the one that is running. | `toggleVoiceAgent` |
@@ -135,9 +135,9 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Find | `cmd+f` |  | `cmd+f` | `cmd+shift+f` | Find text in the focused terminal, browser page, chat or file. On Windows and Linux, Ctrl+F also finds anywhere but in a terminal. | `findInFocusedView` |
 | Find Next | `cmd+g` |  | none |  | Go to the next match of Find in a browser page. | `findNextInBrowser` |
 | Find Previous | `cmd+shift+g` |  | none |  | Go to the previous match of Find in a browser page. | `findPreviousInBrowser` |
-| Zoom In | `cmd+=` |  | `cmd+=` |  | Make the focused terminal, browser page or picture bigger. | `zoomInFocusedView` |
-| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make the focused terminal, browser page or picture smaller. | `zoomOutFocusedView` |
-| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Return the focused terminal, browser page or picture to its normal size. | `resetFocusedViewZoom` |
+| Zoom In | `cmd+=` |  | `cmd+=` |  | Make the focused terminal, browser page, picture or Files document bigger. | `zoomInFocusedView` |
+| Zoom Out | `cmd+-` |  | `cmd+-` |  | Make the focused terminal, browser page, picture or Files document smaller. | `zoomOutFocusedView` |
+| Reset Zoom | `cmd+0` |  | `cmd+0` |  | Return the focused terminal, browser page, picture or Files document to its normal size. | `resetFocusedViewZoom` |
 | Close Tab | `cmd+w` |  | `cmd+w` | `cmd+shift+w` | Close the focused terminal tab, browser tab or view tab. | `closeFocusedSurface` |
 | New Window | `cmd+shift+n` |  | `cmd+shift+n` |  | Open another Ghostex window. | `openNewWindow` |
 | Focus Mode | `cmd+ctrl+f` |  | `cmd+ctrl+f` |  | Show only the focused pane of the Agents view, or bring the other panes back. | `toggleAgentsFocusMode` |

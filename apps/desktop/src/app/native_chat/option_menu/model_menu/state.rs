@@ -1,10 +1,14 @@
 use super::super::super::state::NativeChatView;
 use super::super::window::{ChatOptionMenu, ChatOptionMenuPanel};
 use super::style::{
-    BAR_HEIGHT, BUTTON_GAP, CARD_WIDTH, ERROR_HEIGHT, HINTS_HEIGHT, LIST_HEIGHT, TRAIT_ROW_HEIGHT,
-    button_lines,
+    BAR_HEIGHT, BUTTON_GAP, CARD_WIDTH, ERROR_HEIGHT, HINTS_HEIGHT, LIST_HEIGHT, SEARCH_HEIGHT,
+    TRAIT_ROW_HEIGHT, button_lines,
 };
-use gpui::{Bounds, Context, Entity, Pixels, ScrollStrategy, UniformListScrollHandle, Window};
+use gpui::{
+    AppContext as _, Bounds, Context, Entity, Focusable as _, Pixels, ScrollStrategy, Subscription,
+    UniformListScrollHandle, Window,
+};
+use gpui_component::input::{InputEvent, InputState};
 use serde_json::{Value, json};
 
 /// CDXC:SessionChat 2026-09-21 SEE-ALSO:
@@ -20,6 +24,10 @@ pub(in crate::app::native_chat::option_menu) struct ModelMenuState {
     pub(super) last_row: Option<String>,
     /// When Left or Right last hit an end, which plays the Reasoning button's shake.
     pub(super) shake_at: Option<std::time::Instant>,
+    /// The search field a list longer than six models shows (`searchEnabled`); its text is the
+    /// core's `modelMenuView` query.
+    pub(super) search: Entity<InputState>,
+    _search_subscription: Subscription,
 }
 
 fn live_view(menu: &Entity<ChatOptionMenu>, cx: &gpui::App) -> Value {
@@ -36,6 +44,7 @@ fn shape(view: &Value) -> Value {
     json!({
         "lines": button_lines(view["traits"].as_array().map_or(0, Vec::len)).0,
         "error": view["error"].is_string(),
+        "search": view["searchEnabled"] == true,
     })
 }
 
@@ -59,7 +68,12 @@ pub(in crate::app::native_chat::option_menu) fn menu_height(marker: &Value) -> f
     } else {
         0.0
     };
-    2.0 + BAR_HEIGHT + error + LIST_HEIGHT + tray + HINTS_HEIGHT - 14.0
+    let search = if marker["search"] == true {
+        SEARCH_HEIGHT
+    } else {
+        0.0
+    };
+    2.0 + BAR_HEIGHT + search + error + LIST_HEIGHT + tray + HINTS_HEIGHT - 14.0
 }
 
 impl ModelMenuState {
@@ -73,6 +87,31 @@ impl ModelMenuState {
         let view = live_view(menu, cx);
         // Key presses reach the card only through the window's native keyboard owner, which a GPUI focus handle alone does not claim (native_chat/focus.rs).
         crate::app::native_chat::focus::reclaim_keyboard_focus(window);
+        // A card re-placed while a filter is typed keeps it.
+        let query = view["query"].as_str().unwrap_or_default().to_owned();
+        let placeholder = view["placeholder"].as_str().unwrap_or_default().to_owned();
+        let search = cx.new(|cx| {
+            InputState::new(window, cx)
+                .placeholder(placeholder)
+                .default_value(query)
+        });
+        let search_subscription = cx.subscribe_in(
+            &search,
+            window,
+            |panel: &mut ChatOptionMenuPanel, input, event: &InputEvent, _, cx| {
+                if matches!(event, InputEvent::Change) {
+                    let query = input.read(cx).value().to_string();
+                    if let Some(state) = panel.model_menu.as_mut() {
+                        state.active = 0;
+                        state.scroll.scroll_to_item(0, ScrollStrategy::Top);
+                    }
+                    panel.model_menu_send(json!({"type":"modelMenuView","query":query}), cx);
+                }
+            },
+        );
+        if view["searchEnabled"] == true {
+            search.read(cx).focus_handle(cx).focus(window, cx);
+        }
         Some(Self {
             active: selected_row(&view),
             view,
@@ -80,6 +119,8 @@ impl ModelMenuState {
             scroll: UniformListScrollHandle::new(),
             last_row: None,
             shake_at: None,
+            search,
+            _search_subscription: search_subscription,
         })
     }
 
@@ -221,7 +262,10 @@ impl ChatOptionMenuPanel {
         }
         let mut marker = shape(&next);
         let current = &self.rows[0]["modelMenu"];
-        if marker["lines"] != current["lines"] || marker["error"] != current["error"] {
+        if marker["lines"] != current["lines"]
+            || marker["error"] != current["error"]
+            || marker["search"] != current["search"]
+        {
             marker["reopen"] = true.into();
             let depth = self.depth;
             self.menu.update(cx, |menu, cx| {

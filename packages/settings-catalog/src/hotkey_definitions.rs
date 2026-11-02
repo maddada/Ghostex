@@ -57,7 +57,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "toggleChatSummaryMode",
         title: "Toggle Summary Mode",
-        description: "Turn Summary mode on or off in the chat session you are in.",
+        description: "Turn Summary view on in the chat session you are in, or off again to Normal view.",
         default_key: "ctrl+alt+s",
         windows_linux_default_key: Some("cmd+alt+shift+s"),
         alternate_default_keys: &[],
@@ -1442,7 +1442,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "zoomInFocusedView",
         title: "Zoom In",
-        description: "Make the focused terminal, browser page or picture bigger.",
+        description: "Make the focused terminal, browser page, picture or Files document bigger.",
         default_key: "cmd+=",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1452,7 +1452,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "zoomOutFocusedView",
         title: "Zoom Out",
-        description: "Make the focused terminal, browser page or picture smaller.",
+        description: "Make the focused terminal, browser page, picture or Files document smaller.",
         default_key: "cmd+-",
         windows_linux_default_key: None,
         alternate_default_keys: &[],
@@ -1462,7 +1462,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "resetFocusedViewZoom",
         title: "Reset Zoom",
-        description: "Return the focused terminal, browser page or picture to its normal size.",
+        description: "Return the focused terminal, browser page, picture or Files document to its normal size.",
         default_key: "cmd+0",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

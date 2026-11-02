@@ -43,7 +43,13 @@ pub fn rpc_settled(
     if let Some(effects) = crate::questions::later::rpc_settled(state, request_id, outcome) {
         return Some(effects);
     }
-    if let Some(effects) = crate::questions::resource_modal::rpc_settled(state, request_id, outcome) {
+    if let Some(effects) = crate::questions::resource_modal::rpc_settled(state, request_id, outcome)
+    {
+        return Some(effects);
+    }
+    if let Some(effects) =
+        crate::questions::recorded_answers::rpc_settled(state, request_id, outcome)
+    {
         return Some(effects);
     }
     if state

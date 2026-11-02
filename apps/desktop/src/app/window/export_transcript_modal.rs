@@ -371,6 +371,7 @@ fn family_display_name(family: &str) -> &str {
         "cursor" => "Cursor",
         "grok" => "Grok",
         "antigravity" => "Antigravity CLI",
+        "opencode" => "OpenCode",
         other => other,
     }
 }

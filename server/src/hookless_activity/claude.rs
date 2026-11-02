@@ -34,11 +34,18 @@ const IDLE_REMINDER_MS: i64 = 60_000;
 const TURN_END_SETTLE: Duration = Duration::from_millis(400);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct PaneState {
-    pid: u32,
-    status: String,
+pub(super) struct PaneState {
+    pub(super) pid: u32,
+    pub(super) status: String,
     waiting_for: Option<String>,
-    conversation: Option<String>,
+    pub(super) conversation: Option<String>,
+    /// The pane's zmx name `S..-P..-G..`, the hook store's `surfaceId`.
+    pub(super) surface: String,
+    /// Where the conversation's transcript is looked for.
+    pub(super) config_dir: PathBuf,
+    pub(super) cwd: Option<String>,
+    /// Claude sits at its prompt with background shells still running (record status `shell`).
+    pub(super) shells_running: bool,
 }
 
 struct TurnEnd {
@@ -49,17 +56,25 @@ struct TurnEnd {
     due: Instant,
 }
 
+/// The session records on disk, each read again only when its file changed, and the
+/// `claude attach` clients that write none.
+#[derive(Default)]
+pub(super) struct SessionRecords {
+    files: HashMap<PathBuf, (SystemTime, Value)>,
+    attach: super::attach::AttachClients,
+}
+
 #[derive(Default)]
 pub(super) struct ClaudeObserver {
-    files: HashMap<PathBuf, (SystemTime, Value)>,
-    owners: HashMap<u32, Option<(String, String)>>,
+    /// The zmx pane each `claude` process hangs below, by pid.
+    owners: HashMap<u32, Option<String>>,
     panes: HashMap<(String, String), PaneState>,
     turn_ends: Vec<TurnEnd>,
     /// When each pane idle after a turn gets Claude's idle reminder (ms since the epoch).
     reminders: HashMap<(String, String), i64>,
 }
 
-fn session_dirs(home: &Path) -> Vec<PathBuf> {
+pub(super) fn session_dirs(home: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![home.join(".claude").join("sessions")];
     let profiles = crate::accounts::claude_resets::swap_root(home).join("sessions");
     if let Ok(entries) = std::fs::read_dir(profiles) {
@@ -69,16 +84,16 @@ fn session_dirs(home: &Path) -> Vec<PathBuf> {
 }
 
 #[cfg(unix)]
-fn process_alive(pid: u32) -> bool {
+fn process_alive(pid: u32, _record: &Value) -> bool {
     pid > 1 && unsafe { libc::kill(pid as libc::pid_t, 0) } == 0
 }
 
-#[cfg(not(unix))]
-fn process_alive(_pid: u32) -> bool {
-    false
+#[cfg(windows)]
+fn process_alive(pid: u32, record: &Value) -> bool {
+    crate::agent_hooks::claude_record_process_running(pid, record["procStart"].as_str())
 }
 
-fn text(record: &Value, key: &str) -> Option<String> {
+pub(super) fn text(record: &Value, key: &str) -> Option<String> {
     record[key]
         .as_str()
         .map(str::trim)
@@ -86,9 +101,13 @@ fn text(record: &Value, key: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-/// The Ghostex pane `S..-P..-G..` a `claude` process hangs below.
-fn pane_of(pid: u32) -> Option<(String, String)> {
-    let name = crate::agent_hooks::zmx_session_owning_agent(pid)?;
+/// The zmx name of the Ghostex pane a `claude` process hangs below.
+fn pane_of(pid: u32) -> Option<String> {
+    crate::agent_hooks::zmx_session_owning_agent(pid)
+}
+
+/// The (project id, session id) of a Ghostex pane's zmx name `S..-P..-G..`.
+fn pane_from_zmx_name(name: &str) -> Option<(String, String)> {
     let mut parts = name.split('-');
     let (Some(_server), Some(project), Some(session), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
@@ -114,23 +133,14 @@ fn waiting_event(waiting_for: Option<&str>) -> Option<&'static str> {
 
 /// One live `claude` process's session record and the config folder it was found in.
 pub(super) struct LiveRecord {
-    config_dir: PathBuf,
-    record: Value,
+    pub(super) config_dir: PathBuf,
+    pub(super) record: Value,
 }
 
-impl ClaudeObserver {
-    pub(super) fn poll(&mut self, home: &Path) -> Vec<ActivityEvent> {
-        let live = self.read_records(home);
-        self.step(&live, &mut pane_of)
-    }
-
-    /// The Ghostex panes (project id, session id) a live `claude` is shown in right now.
-    pub(super) fn panes(&self) -> impl Iterator<Item = &(String, String)> {
-        self.panes.keys()
-    }
-
-    /// The records of every live `claude` process, in `~/.claude` and every cswap profile.
-    fn read_records(&mut self, home: &Path) -> Vec<LiveRecord> {
+impl SessionRecords {
+    /// The records of every live `claude` process, in `~/.claude` and every cswap profile. With
+    /// `attach_clients`, also one made up for each `claude attach` client (attach.rs).
+    pub(super) fn read(&mut self, home: &Path, attach_clients: bool) -> Vec<LiveRecord> {
         let mut seen = HashSet::new();
         for dir in session_dirs(home) {
             let Ok(entries) = std::fs::read_dir(&dir) else {
@@ -167,13 +177,14 @@ impl ClaudeObserver {
             }
         }
         self.files.retain(|path, _| seen.contains(path));
-        self.files
+        let mut live: Vec<LiveRecord> = self
+            .files
             .iter()
             .filter(|(_, (_, record))| {
                 record["pid"]
                     .as_u64()
                     .and_then(|pid| u32::try_from(pid).ok())
-                    .is_some_and(process_alive)
+                    .is_some_and(|pid| process_alive(pid, record))
             })
             .map(|(path, (_, record))| LiveRecord {
                 // `<config>/sessions/<pid>.json`
@@ -184,16 +195,37 @@ impl ClaudeObserver {
                     .unwrap_or_default(),
                 record: record.clone(),
             })
-            .collect()
+            .collect();
+        if attach_clients {
+            let made_up = self.attach.records(home, &live);
+            live.extend(made_up);
+        }
+        live
+    }
+}
+
+impl ClaudeObserver {
+    pub(super) fn poll(&mut self, live: &[LiveRecord]) -> Vec<ActivityEvent> {
+        self.step(live, &mut pane_of)
+    }
+
+    /// The Ghostex panes (project id, session id) a live `claude` is shown in right now.
+    pub(super) fn panes(&self) -> impl Iterator<Item = &(String, String)> {
+        self.panes.keys()
+    }
+
+    /// Every pane a live `claude` is shown in, with what it shows.
+    pub(super) fn pane_states(&self) -> impl Iterator<Item = (&(String, String), &PaneState)> {
+        self.panes.iter()
     }
 
     /// Turns the live records into hook events by comparing each pane with what it showed on the
-    /// last pass. `pane_lookup` finds the Ghostex pane a `claude` process hangs below; the
-    /// conversation always comes from the record, never from a hook.
+    /// last pass. `pane_lookup` finds the zmx name of the Ghostex pane a `claude` process hangs
+    /// below; the conversation always comes from the record, never from a hook.
     fn step(
         &mut self,
         live: &[LiveRecord],
-        pane_lookup: &mut dyn FnMut(u32) -> Option<(String, String)>,
+        pane_lookup: &mut dyn FnMut(u32) -> Option<String>,
     ) -> Vec<ActivityEvent> {
         let jobs: HashMap<String, &Value> = live
             .iter()
@@ -216,12 +248,15 @@ impl ClaudeObserver {
                 continue;
             };
             live_pids.insert(pid);
-            let Some(pane) = self
+            let Some(surface) = self
                 .owners
                 .entry(pid)
                 .or_insert_with(|| pane_lookup(pid))
                 .clone()
             else {
+                continue;
+            };
+            let Some(pane) = pane_from_zmx_name(&surface) else {
                 continue;
             };
             // A terminal showing a daemon-hosted conversation: that conversation's record speaks.
@@ -231,14 +266,26 @@ impl ClaudeObserver {
             let Some(status) = text(shown, "status") else {
                 continue;
             };
+            // CDXC:AgentHooks 2026-11-02 WHY:
+            // Claude 2.1.316 writes `shell` while it sits at the prompt with a background shell still running ("1 shell still running"), so a turn ending that way never went `idle` and never reported its Stop. It is idle for activity; the shells stay known as running (`shells_running`, and the transcript's own launches for the roster), and the shell finishing later is no event.
+            let shells_running = status == "shell";
+            let status = if shells_running {
+                "idle".to_string()
+            } else {
+                status
+            };
+            let cwd = text(shown, "cwd");
             let next = PaneState {
                 pid,
                 status,
+                shells_running,
                 waiting_for: text(shown, "waitingFor"),
                 conversation: text(shown, "sessionId"),
+                surface,
+                config_dir: config_dir.clone(),
+                cwd: cwd.clone(),
             };
             live_panes.insert(pane.clone());
-            let cwd = text(shown, "cwd");
             // Looked up only when the pane has news: a conversation with no transcript yet is
             // searched for in every project folder.
             let transcript = std::cell::OnceCell::new();
@@ -340,7 +387,7 @@ impl ClaudeObserver {
                         self.reminders
                             .insert(pane.clone(), since + IDLE_REMINDER_MS);
                         self.turn_ends.push(TurnEnd {
-                            event: make("Stop"),
+                            event: make("Stop").with("shellsRunning", json!(next.shells_running)),
                             conversation: next.conversation.clone(),
                             config_dir: config_dir.clone(),
                             cwd: cwd.clone(),
@@ -435,16 +482,12 @@ fn settle_turn_end(end: TurnEnd) -> ActivityEvent {
     event
 }
 
-fn transcript_path(config_dir: &Path, cwd: Option<&str>, conversation: &str) -> Option<PathBuf> {
-    if let Some(cwd) = cwd {
-        let folder: String = cwd
-            .chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-            .collect();
-        let path = config_dir
-            .join("projects")
-            .join(folder)
-            .join(format!("{conversation}.jsonl"));
+pub(super) fn transcript_path(
+    config_dir: &Path,
+    cwd: Option<&str>,
+    conversation: &str,
+) -> Option<PathBuf> {
+    if let Some(path) = cwd.map(|cwd| expected_transcript_path(config_dir, cwd, conversation)) {
         if path.is_file() {
             return Some(path);
         }
@@ -452,8 +495,24 @@ fn transcript_path(config_dir: &Path, cwd: Option<&str>, conversation: &str) -> 
     crate::agent_transcripts::find_claude_transcript(conversation)
 }
 
+/// Where Claude writes a conversation started in `cwd`, written yet or not.
+pub(super) fn expected_transcript_path(
+    config_dir: &Path,
+    cwd: &str,
+    conversation: &str,
+) -> PathBuf {
+    let folder: String = cwd
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    config_dir
+        .join("projects")
+        .join(folder)
+        .join(format!("{conversation}.jsonl"))
+}
+
 /// Whether a transcript's first lines are the `/clear` that started it.
-fn opened_by_clear(path: &Path) -> bool {
+pub(super) fn opened_by_clear(path: &Path) -> bool {
     let mut head = Vec::new();
     std::fs::File::open(path)
         .and_then(|file| file.take(64 * 1024).read_to_end(&mut head))
@@ -594,9 +653,7 @@ mod tests {
     }
 
     fn step(observer: &mut ClaudeObserver, live: &[LiveRecord]) -> Vec<ActivityEvent> {
-        observer.step(live, &mut |_| {
-            Some((PANE.0.to_string(), PANE.1.to_string()))
-        })
+        observer.step(live, &mut |_| Some(format!("S1-{}-{}", PANE.0, PANE.1)))
     }
 
     fn names(events: &[ActivityEvent]) -> Vec<(String, Option<String>, Option<String>)> {
@@ -773,6 +830,59 @@ mod tests {
                 start(&hosted, "clear"),
                 ("UserPromptSubmit".to_string(), Some(hosted.clone()), None),
             ]
+        );
+    }
+
+    #[test]
+    fn a_turn_that_ends_with_a_shell_still_running_reports_its_stop() {
+        let fixture = Fixture::new("shell");
+        let conversation = id();
+        fixture.write_transcript(".claude", &conversation);
+        let mut observer = ClaudeObserver::default();
+        step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "idle")],
+        );
+        step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "busy")],
+        );
+        // Claude 2.1.316: at the prompt, "1 shell still running".
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "shell")],
+        );
+        assert!(
+            events.is_empty(),
+            "the turn end waits for its transcript lines"
+        );
+        std::thread::sleep(TURN_END_SETTLE + Duration::from_millis(50));
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "shell")],
+        );
+        assert_eq!(
+            names(&events),
+            vec![("Stop".to_string(), Some(conversation.clone()), None)]
+        );
+        assert_eq!(events[0].payload.get("shellsRunning"), Some(&json!(true)));
+        let pane = (PANE.0.to_string(), PANE.1.to_string());
+        assert!(observer.panes[&pane].shells_running);
+        assert_eq!(observer.panes[&pane].status, "idle");
+        // The shell finishing is no event; a new prompt is a new turn.
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "idle")],
+        );
+        assert!(events.is_empty());
+        assert!(!observer.panes[&pane].shells_running);
+        let events = step(
+            &mut observer,
+            &[fixture.record(".claude", 100, &conversation, "busy")],
+        );
+        assert_eq!(
+            names(&events),
+            vec![("UserPromptSubmit".to_string(), Some(conversation), None)]
         );
     }
 

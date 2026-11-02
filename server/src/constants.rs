@@ -89,6 +89,17 @@ pub const GXSERVER_CAPABILITIES: &[&str] = &[
     */
     "sessionAgentNotes",
     /*
+    CDXC:Coordinators 2026-11-02 WHY:
+    A handed-off orchestrator keeps its staged handoff draft for its Chat box
+    instead of having it typed into its terminal while `/ghostex-orchestrator`
+    starts (title_generation/first_input_draft.rs). An older remote daemon types
+    it into the terminal on top of the skill line, so a client handing an
+    orchestrator off to another computer checks this before it stages a draft
+    there, and sends the handoff with the orchestrator's first message instead.
+    SEE-ALSO: apps/desktop/src/app/gx_store/git/export_transcript.rs (`git_start_handoff_session`).
+    */
+    "coordinatorHandoffDraft",
+    /*
     CDXC:Spaces 2026-08-27:
     Spaces are the daemon-owned saved sidebar filter. Same split as the flags
     above: the presentation snapshot's `capabilities` object is what clients

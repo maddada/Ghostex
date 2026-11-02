@@ -120,16 +120,14 @@ fn video_available() -> bool {
 }
 
 /// CDXC:Theming 2026-09-25 DECISION:
-/// User: "let's enable transparency on windows please also if possible. like it works on mac exactly." The glass controls show on macOS and Windows (and Linux since 2026-09-27), and on Windows turning glass on takes effect at the next launch (`note_main_window_background` in apps/desktop/src/app/helpers/window_glass.rs).
-/// `windowGlassStatusNote`: why the window stays opaque when the system's own switch blocks glass,
-/// otherwise the Windows restart note.
+/// User: "let's enable transparency on windows please also if possible. like it works on mac exactly." The glass controls show on macOS and Windows (and Linux since 2026-09-27), and on Windows turning glass on took effect at the next launch until 2026-11-02, when it became live (CDXC:Theming 2026-11-02 on `live_glass_window_creation_background` in apps/desktop/src/app/helpers/window_glass.rs).
+/// `windowGlassStatusNote`: why the window stays opaque when the system's own switch blocks glass.
 fn status_note(blocked: bool) -> &'static str {
     let windows = cfg!(target_os = "windows");
     match (blocked, windows) {
-        (false, true) => " On Windows, turning it on takes effect the next time Ghostex starts.",
-        (false, false) => "",
+        (false, _) => "",
         (true, true) => {
-            " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque. Turn it on there, then restart Ghostex."
+            " Transparency effects is off in Windows Settings > Personalization > Colors, so the window stays opaque until you turn it on there."
         }
         (true, false) => {
             " Reduce transparency is on in System Settings > Accessibility > Display, so the window stays opaque until you turn it off."

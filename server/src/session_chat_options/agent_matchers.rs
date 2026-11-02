@@ -217,7 +217,7 @@ fn codex_footer_model(segment: &str) -> Option<(String, String, std::str::Split<
 /// names no effort, so none is reported and the model's own default stands.
 const CODEX_DEFAULT_EFFORT_WORD: &str = "default";
 
-/// CDXC:AgentScreenDetection 2026-11-02 DECISION: User: "Fix the Codex footer matcher so it accepts 'Fast' in any case." Apply the same case-insensitive reading to effort and default words so their casing cannot discard the model either.
+/// CDXC:AgentScreenDetection 2026-11-02 WHY: Newer Codex prints "Fast" with a capital F ("GPT-6.1-Sol xhigh Fast"); an exact lowercase match dropped the whole segment, so the model and effort were lost and a pending Fast or model change blocked the queue. Effort and default words get the same case-insensitive reading so their casing cannot discard the model either.
 pub(super) fn match_codex_segment(segment: &str) -> Option<SessionChatDetectedSelection> {
     let (model, label, mut tokens) = codex_footer_model(segment)?;
     let mut selection = SessionChatDetectedSelection {

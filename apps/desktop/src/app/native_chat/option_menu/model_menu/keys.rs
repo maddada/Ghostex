@@ -12,6 +12,11 @@ struct ModelMenuKeysRegistered(Option<String>);
 impl gpui::Global for ModelMenuKeysRegistered {}
 
 pub(super) const KEY_CONTEXT: &str = "ChatModelMenu";
+/// The picker's search field, which holds focus on a long list.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// The field's own bindings (Up, Down, Left, Right, Enter, Tab, Escape) sit deeper than the card's and would win, so these keys are bound again for the field inside the card; bound later at the same depth, they reach the picker first. Letters are not, so they type.
+const SEARCH_KEY_CONTEXT: &str = "ChatModelMenu > Input";
 
 /// The card holds focus the whole visit and claims its keys as an action in its own context, the
 /// way the composer does (keyboard.rs).
@@ -21,7 +26,7 @@ pub(super) fn register(cx: &mut gpui::App) {
         return;
     }
     cx.set_global(KeysBound);
-    let keys = [
+    let navigation = [
         "up",
         "down",
         "ctrl-p",
@@ -36,27 +41,29 @@ pub(super) fn register(cx: &mut gpui::App) {
     ]
     .into_iter()
     .map(str::to_owned)
-    .chain((1..=9).map(|slot| format!("alt-{slot}")))
-    .chain(
-        BUTTON_LETTERS
-            .iter()
-            .map(|(_, letter)| letter.to_lowercase()),
-    );
-    let bindings: Vec<_> = keys
-        .map(|key| {
-            crate::app::hotkeys::gpui_runtime_key_binding(
-                &key,
-                ModelMenuKey { key: key.clone() },
-                Some(KEY_CONTEXT),
-                cx,
-            )
-        })
+    .chain((1..=9).map(|slot| format!("alt-{slot}")));
+    let letters = BUTTON_LETTERS
+        .iter()
+        .map(|(_, letter)| letter.to_lowercase());
+    let binding = |key: String, context: &str| {
+        crate::app::hotkeys::gpui_runtime_key_binding(
+            &key,
+            ModelMenuKey { key: key.clone() },
+            Some(context),
+            cx,
+        )
+    };
+    let bindings: Vec<_> = navigation
+        .clone()
+        .chain(letters)
+        .map(|key| binding(key, KEY_CONTEXT))
+        .chain(navigation.map(|key| binding(key, SEARCH_KEY_CONTEXT)))
         .collect();
     cx.bind_keys(bindings);
 }
 
 /// CDXC:SessionChat 2026-09-24 DECISION:
-/// User: each footer button's hotkey is "just the letter in a filled circle floating to the bottom right of the icon": R Reasoning, C Context, F Fast mode, A Account ("i want a as hotkey for accounts"). The picker has no search field ("just remove the search it's useless"), so the plain letter is the key; it works like a click, and pressing it again closes a side list it opened.
+/// User: each footer button's hotkey is "just the letter in a filled circle floating to the bottom right of the icon": R Reasoning, C Context, F Fast mode, A Account ("i want a as hotkey for accounts"). The picker had no search field ("just remove the search it's useless"), so the plain letter is the key; on a list long enough for the 2026-11-02 search field (`MODEL_MENU_SEARCH_THRESHOLD` in gx-chat-core), letters type into the field instead.
 const BUTTON_LETTERS: [(&str, &str); 4] = [
     ("reasoning", "R"),
     ("context", "C"),
@@ -125,7 +132,17 @@ impl ChatOptionMenuPanel {
         };
         let rows = state.rows().len();
         let count = rows + state.traits().len();
+        let search_enabled = state.view["searchEnabled"] == true;
         match key {
+            // Escape empties a typed filter first; only an empty one closes the picker.
+            "escape" if search_enabled && !state.search.read(cx).value().is_empty() => {
+                state
+                    .search
+                    .update(cx, |input, cx| input.set_value("", window, cx));
+                state.active = 0;
+                state.scroll.scroll_to_item(0, ScrollStrategy::Top);
+                self.model_menu_send(json!({"type":"modelMenuView","query":""}), cx);
+            }
             "escape" | "toggle" => self.menu.update(cx, |menu, cx| menu.close(None, cx)),
             "tab" | "shift-tab" => {
                 let tabs = state.view["tabs"].as_array().cloned().unwrap_or_default();
@@ -142,7 +159,12 @@ impl ChatOptionMenuPanel {
                     (current + tabs.len() - 1) % tabs.len()
                 };
                 let tab = tabs[next]["id"].clone();
-                self.model_menu_send(json!({"type":"modelMenuView","tab":tab}), cx);
+                if search_enabled {
+                    state
+                        .search
+                        .update(cx, |input, cx| input.set_value("", window, cx));
+                }
+                self.model_menu_send(json!({"type":"modelMenuView","tab":tab,"query":""}), cx);
             }
             "up" | "ctrl-p" | "down" | "ctrl-n" if count > 0 => {
                 let up = key == "up" || key == "ctrl-p";
@@ -204,6 +226,9 @@ impl ChatOptionMenuPanel {
                 }
             }
             _ if key.len() == 1 => {
+                if search_enabled {
+                    return false;
+                }
                 let letter = key.to_uppercase();
                 let Some(index) = state.traits().iter().position(|setting| {
                     setting["icon"]

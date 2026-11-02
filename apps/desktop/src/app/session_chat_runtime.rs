@@ -47,6 +47,7 @@ impl GhostexGpuiApp {
                     .values()
                     .flat_map(|parked| parked.native_views.values()),
             )
+            .chain(self.side_panel_chat_views())
             .cloned()
             .collect::<Vec<_>>();
         let mut machines = vec![crate::app::gx_chat::LOCAL_MACHINE_ID.to_string()];

@@ -106,6 +106,11 @@ impl ComposerChromeState {
         self.generation
     }
 
+    /// How many stashed prompts this chat has, uncapped (the badge shows at most 9).
+    pub fn stashed_prompt_count(&self) -> usize {
+        self.stashed_prompt_count
+    }
+
     /// Whether the note read is worth making at all.
     pub fn wants_note_read(&self) -> bool {
         !self.note_owned

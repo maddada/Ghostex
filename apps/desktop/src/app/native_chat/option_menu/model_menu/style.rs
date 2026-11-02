@@ -6,6 +6,8 @@ pub(super) const FLYOUT_WIDTH: f32 = 232.0;
 pub(crate) const CARD_RADIUS: f32 = 12.0;
 pub(super) const ITEM_RADIUS: f32 = 8.0;
 pub(super) const BAR_HEIGHT: f32 = 40.0;
+/// The search field under the tabs, drawn only on a long list.
+pub(super) const SEARCH_HEIGHT: f32 = 36.0;
 /// The model list keeps one height whatever the tab holds, so switching tabs never moves the card.
 pub(super) const LIST_HEIGHT: f32 = 216.0;
 pub(super) const TRAIT_ROW_HEIGHT: f32 = 30.0;

@@ -12,10 +12,11 @@
 //! CDXC:SessionChat 2026-10-30 DECISION:
 //! User: "i only see 42 resources here for your session but i have waaaay more can u please somehow remember the number?" and "i also want to be able to see any of the inline html files that were posted in a thread". The pill showed 42 because it counted only the rows the chat had loaded (the newest 300 messages, more as the reader scrolls up) while the conversation held several hundred forms and pages. gxserver now keeps a resource index per session, fed by the same incremental transcript read that counts open questions, stored in its own table so it survives restarts, compaction and a partly loaded chat, and backfilled once from the transcript off every UI path. A coordinator's index also lists the pages its threads posted (`ThreadRef`), resolved threads included.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ghostex_gx_protocol::ChatMessage;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::transcript::open_questions::{Asker, AskerKind};
 use crate::transcript::prose::prose_markdown;
@@ -64,6 +65,58 @@ pub struct ResourceEntry {
     /// page that ends there holds the whole turn (`questions/resource_modal.rs`, "Go to chat").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_end: Option<u64>,
+}
+
+/// The forms (`kind` `form`) or question pages (`page`) the index (the chat's `resourceIndex`)
+/// records as settled, by id, with how: `answered` or `withdrawn`. The index reads the whole
+/// conversation, so it settles a loaded question whose answer or withdrawal is outside the rows the
+/// chat has loaded (a jump read's window ends at the question's turn, before its answer). Its
+/// `answered` also counts answers waiting in the session's queue, as the pill does.
+pub fn settled_by_index<'a>(index: &'a [Value], kind: &str) -> HashMap<&'a str, &'a str> {
+    index
+        .iter()
+        .filter(|entry| entry.get("kind").and_then(Value::as_str) == Some(kind))
+        .filter_map(|entry| {
+            let status = entry.get("status").and_then(Value::as_str)?;
+            let id = entry.get("id").and_then(Value::as_str)?;
+            matches!(status, "answered" | "withdrawn").then_some((id, status))
+        })
+        .collect()
+}
+
+/// Marks the loaded askers the index records as settled (`settled_by_index`): answered, or
+/// withdrawn when the loaded rows do not say answered. The loaded rows can hold a question without
+/// its answer (a jump read's window, a reload), and a Q-tag link, the ? pill and the Resources row
+/// all read these marks, so a tag whose answer is outside the loaded rows reads answered, not amber.
+pub fn settle_loaded(askers: &mut [Asker], index: &[Value]) {
+    if index.is_empty() {
+        return;
+    }
+    let forms = settled_by_index(index, "form");
+    let pages = settled_by_index(index, "page");
+    for asker in askers.iter_mut() {
+        let settled = match asker.kind {
+            AskerKind::Form => &forms,
+            AskerKind::Page => &pages,
+        };
+        match settled.get(asker.id.as_str()) {
+            Some(&"answered") => asker.answered = true,
+            Some(&"withdrawn") if !asker.answered => asker.obsolete = true,
+            _ => {}
+        }
+    }
+}
+
+/// Whether the index records the form's answers in the transcript itself (where its answers
+/// message starts), not only in the queue: the answers can be read back by
+/// `readSessionChatResource` and stay given whatever happens to the queue.
+pub fn answered_in_transcript(index: &[Value], id: &str) -> bool {
+    index.iter().any(|entry| {
+        entry.get("id").and_then(Value::as_str) == Some(id)
+            && entry.get("kind").and_then(Value::as_str) == Some("form")
+            && entry.get("status").and_then(Value::as_str) == Some("answered")
+            && entry.get("answersOffset").is_some_and(Value::is_u64)
+    })
 }
 
 /// The resources one assistant reply holds, in order, with no status yet (`settle` decides it).
@@ -291,6 +344,33 @@ mod tests {
         let answered = index(&messages, &[id("Q1")]);
         assert_eq!(status(&answered, "Q1"), "answered");
         assert_eq!(status(&answered, "Q3"), "waiting");
+    }
+
+    /// A Q-tag whose form's answer or withdrawal is outside the loaded rows reads as the index
+    /// records it, not open.
+    #[test]
+    fn tags_read_what_the_index_records() {
+        use crate::transcript::open_questions::{askers, linkable_tags, TagState};
+        let messages = [
+            reply("m1", 1, &form("Q1", "One")),
+            reply("m2", 2, &form("Q2", "Two")),
+            reply("m3", 3, &form("Q3", "Three")),
+        ];
+        let mut loaded = askers(&messages, &[]);
+        let states = |askers: &[Asker]| -> Vec<TagState> {
+            linkable_tags(askers)
+                .into_iter()
+                .map(|tag| tag.state)
+                .collect()
+        };
+        assert_eq!(states(&loaded), [TagState::Open; 3]);
+        let entry = |at: usize, status: &str| serde_json::json!({"id": loaded[at].id, "kind": "form", "status": status});
+        let recorded = vec![entry(0, "answered"), entry(1, "withdrawn")];
+        settle_loaded(&mut loaded, &recorded);
+        assert_eq!(
+            states(&loaded),
+            [TagState::Answered, TagState::Withdrawn, TagState::Open]
+        );
     }
 
     #[test]

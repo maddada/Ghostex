@@ -9,6 +9,7 @@ pub(crate) const WEB_REMOTE_MACHINES_UNAVAILABLE: &str =
 
 /// The desktop's failure sentence for a remote request, which the account pages answer with when a group names no reachable machine.
 pub(crate) const GPUI_REMOTE_GXSERVER_REQUEST_FAILED: &str = "Remote gxserver request failed.";
+pub(crate) const GPUI_REMOTE_HOOKS_UPDATE_REQUIRED: &str = "Remote Ghostex needs an update.";
 
 /// What a waited caller's failure toast says, as on the desktop: here always the refusal.
 pub(crate) fn gpui_remote_sidebar_rpc_failure_reason(error: &str, _fallback: &str) -> String {

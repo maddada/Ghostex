@@ -23,7 +23,7 @@ use serde_json::{Map, Value};
 use crate::document::{
     AccountStatus, AsyncQuestions, ChatPill, ComposerActions, ComposerChrome, ComposerOverflow,
     DeferredWorkRow, Draft, EmptyState, HostAction, IncomingDraft, Interaction, InterruptToast,
-    LoadingNotice, NewSessionWelcome, Note, QuestionCard, Queue, TerminalTail, ViewState,
+    LoadingNotice, NewSessionWelcome, Note, QuestionCard, Queue, TerminalTail, ViewChip, ViewState,
     WorkingCard, WorkingStrip,
 };
 
@@ -220,11 +220,19 @@ pub struct Document {
     pub agent_tasks_panel: Tri<Value>,
     /// A coordinator's Threads panel, or `null`. Family f.
     pub coordinator_threads_panel: Tri<Value>,
+    /// The Side chats pill's menu (`extras::side_chats::project`), or `null`. Family f.
+    pub side_chats_panel: Tri<Value>,
+    /// A side chat's own bar (`{ parentSessionId, parentTitle }`), or `null`. Family f.
+    pub side_chat_of: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,
     /// The pills on the working card, each opening the menu of one of the panels above. Family f.
     pub chat_pills: Vec<ChatPill>,
+    /// The view modes that are on, as status chips at the left of the chat box's pill strip.
+    /// Family f.
+    #[serde(default)]
+    pub view_chips: Vec<ViewChip>,
     /// The working card right above the composer. Family f.
     pub working_card: WorkingCard,
     /// The subagent viewer, or `null` when closed. Family f.
@@ -260,6 +268,10 @@ pub struct Document {
 
     // ---- modes and loading -----------------------------------------------
     pub summary_mode: bool,
+    /// The chat's one view level, `summary`, `normal` or `detailed` (`transcript::view_level`);
+    /// the renderers draw from it rather than from the records below.
+    #[serde(default)]
+    pub view_level: String,
     /// The user's verbose override, or `null` to follow the setting.
     pub verbose_override: Option<bool>,
     /// The user's Simple override for this chat, or `null` to follow the setting.

@@ -23,6 +23,8 @@ pub mod statusline;
 mod tests;
 #[cfg(windows)]
 pub(crate) mod windows;
+#[cfg(any(windows, test))]
+mod wmx_pane;
 mod zcode;
 
 pub(crate) use ancestor_session::adopt_ancestor_session_routing;
@@ -31,8 +33,11 @@ pub use api::{
     install_agent_hooks, read_agent_hook_status, repair_installed_agent_hook_paths,
     uninstall_agent_hooks,
 };
+pub(crate) use hook_store::write_claude_surface_record;
 pub use notify_runtime::run_notify_hook;
 pub(crate) use resolution::read_claude_hook_surface_records;
 pub(crate) use resolution::read_codex_hook_session_identities;
 pub use statusline::run_statusline_hook;
+#[cfg(windows)]
+pub(crate) use wmx_pane::claude_record_process_running;
 pub(crate) use zcode::zcode_settings_files;

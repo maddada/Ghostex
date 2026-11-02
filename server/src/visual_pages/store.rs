@@ -54,9 +54,12 @@ pub(super) fn write_page(
     let dir = visual_pages_dir(gxserver_state_dir);
     fs::create_dir_all(&dir)?;
     let id = new_page_id();
+    // A page published from now on may be pictured for its card before anyone opens it; pages
+    // published before had no such mark and never are (`thumbnail.rs`).
     let mut record = json!({
         "title": title,
         "createdAt": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "pictureInBackground": true,
         "sessionRef": session_ref
             .map(|value| clip_chars(value, VISUAL_PAGE_SESSION_REF_MAX_CHARS)),
     });

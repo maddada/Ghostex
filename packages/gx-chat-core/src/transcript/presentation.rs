@@ -141,6 +141,8 @@ pub fn project_message(
         Some((_, rest)) if !rest.is_empty() => rest.as_str(),
         _ => body.as_str(),
     };
+    // A side chat's first message: the bubble shows the question, not the note to its agent.
+    let user_words = crate::composer::side_chat::without_side_chat_note(user_words);
     let user_markdown = is_user.then(|| normalize_user_message_markdown(user_words));
     // Review comment blocks show as the pills they were sent from (`review_comments.rs`); copying
     // the message still gives the full blocks.
@@ -323,6 +325,14 @@ pub fn project_message(
         "images".to_string(),
         Value::Array(images.iter().map(image_source).collect()),
     );
+    // A slash command is the user's bubble with its text in monospace (`is_slash_command_line`).
+    projected.insert(
+        "slashCommand".to_string(),
+        (is_user
+            && suppressed.is_null()
+            && crate::transcript::local_command::is_slash_command_line(&copy_text))
+        .into(),
+    );
     projected.insert("suppressed".to_string(), suppressed);
     projected.insert(
         "apiError".to_string(),
@@ -402,6 +412,12 @@ pub fn project_message(
     projected.insert(
         "simpleToolLabel".to_string(),
         tool_count_label(call_rows).into(),
+    );
+    // The pictures the message's calls opened from disk, which its turn's fold keeps showing
+    // (`read_images.rs`).
+    projected.insert(
+        "readImages".to_string(),
+        Value::Array(crate::transcript::read_images::message_read_images(&rows)),
     );
     projected.insert("tools".to_string(), Value::Array(rows));
     projected.insert("toolFold".to_string(), tool_fold(&tool_pairs));
@@ -565,6 +581,9 @@ pub struct ProjectionScope<'a> {
     /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's calls project as one
     /// card (`tool_card.rs`).
     pub tool_cards: bool,
+    /// [`TranscriptViewState::picture_digests`]: which pictures read from disk the user already
+    /// showed (`read_images.rs`).
+    pub picture_digests: &'a std::collections::HashMap<String, u64>,
 }
 
 /// The session's line-break rule, which the subagent viewer shares: a child runs the same agent.
@@ -588,6 +607,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
     let answered: Vec<String> = sent.iter().map(|answers| answers.page_id.clone()).collect();
     let mut found = askers(&state.messages.composed, &answered);
     crate::transcript::open_questions::mark_skipped(&mut found, &sent);
+    crate::questions::resource_index::settle_loaded(&mut found, &state.session.resource_index);
     crate::transcript::open_questions::mark_inherited(
         &mut found,
         &state.messages.composed,
@@ -611,6 +631,7 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::new(),
         tool_cards: view.tool_cards,
+        picture_digests: &view.picture_digests,
     }
 }
 
@@ -1016,6 +1037,21 @@ pub(crate) fn build_items(
     latest_reply: Option<usize>,
 ) -> Vec<TranscriptItem> {
     let scope = builder.scope;
+    let mut items = turn_items(builder, projection, running_thinking, first, latest_reply);
+    let seen =
+        crate::transcript::read_images::SeenPictures::new(scope.messages, scope.picture_digests);
+    crate::transcript::read_images::bubble_read_images(&mut items, &seen);
+    items
+}
+
+fn turn_items(
+    builder: &mut Builder,
+    projection: &TranscriptProjection,
+    running_thinking: &crate::transcript::thinking_card::RunningThinking,
+    first: usize,
+    latest_reply: Option<usize>,
+) -> Vec<TranscriptItem> {
+    let scope = builder.scope;
     let live_card = scope
         .tool_cards
         .then(|| crate::transcript::tool_card::live_card_id(scope.messages, scope.working))
@@ -1072,6 +1108,7 @@ pub(crate) fn build_items(
                         .iter()
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row))
                         .collect(),
+                    read_images: Vec::new(),
                 }
             })
             .collect()
@@ -1215,6 +1252,7 @@ pub(crate) fn build_items(
                         .final_message
                         .as_ref()
                         .map(|message| builder.message_or_placeholder(message, eager, Draw::Row)),
+                    read_images: Vec::new(),
                 }
             })
             .collect()

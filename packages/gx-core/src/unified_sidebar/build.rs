@@ -267,7 +267,7 @@ pub fn came_back_ms(row: &SessionRow) -> i64 {
 /// `draftStatus`, the pencil on its row), whether or not its chat box holds text.
 ///
 /// CDXC:Sidebar 2026-10-30 DECISION:
-/// User: "when a session is like this one in the unified sidebar then it should be placed in a new area at the top of the sidebar called "Drafts"", pointing at an empty pencil card ("Claude Session"; a draft holding text is retitled from that text, so that card had none). Every never-sent session is a draft card, typed into or not, unlike the Project sidebar's Drafts section, which holds only drafts with text (CDXC:Drafts 2026-09-15 in sidebar_view/ordering.rs). The Drafts shelf sits at the very top, above Pinned, open, newest first, and is left out when empty. A pinned, snoozed or parked draft stays in its own place, as in the Project sidebar. The first message sent clears the marker and the session joins the list by the usual order; typing alone never moves a card.
+/// User: "when a session is like this one in the unified sidebar then it should be placed in a new area at the top of the sidebar called "Drafts"", pointing at an empty pencil card ("Claude Session"; a draft holding text is retitled from that text, so that card had none). Every never-sent session is a draft card, typed into or not, as in the Project sidebar's Drafts section since CDXC:Drafts 2026-11-02 (sidebar_view/ordering.rs). The Drafts shelf sits at the very top, above Pinned, open, newest first, and is left out when empty. A pinned, snoozed or parked draft stays in its own place, as in the Project sidebar. The first message sent clears the marker and the session joins the list by the usual order; typing alone never moves a card.
 pub fn is_unified_draft(row: &SessionRow) -> bool {
     row.is_draft
 }

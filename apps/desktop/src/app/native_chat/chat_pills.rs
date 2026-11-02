@@ -51,6 +51,7 @@ pub(super) struct ChatPillBounds {
     tasks: Rc<Cell<Bounds<Pixels>>>,
     subagents: Rc<Cell<Bounds<Pixels>>>,
     background: Rc<Cell<Bounds<Pixels>>>,
+    side_chats: Rc<Cell<Bounds<Pixels>>>,
     /// The Resources pill, which the question list (questions_list.rs) opens against.
     resources: Rc<Cell<Bounds<Pixels>>>,
     /// The Links pill (links_pill.rs), which the session's links list lines up with.
@@ -63,6 +64,7 @@ impl ChatPillBounds {
             "threads" => self.threads.clone(),
             "tasks" => self.tasks.clone(),
             "background" => self.background.clone(),
+            SIDE_CHATS_PILL => self.side_chats.clone(),
             super::questions_list::QUESTIONS_MENU => self.resources.clone(),
             _ => self.subagents.clone(),
         }
@@ -139,12 +141,20 @@ fn running_dot(s: f32) -> AnyElement {
     .into_any_element()
 }
 
+/// The Stashed pill's id (gx-chat-core extras/chat_pills.rs `stashed_pill`): it opens Saved Prompts
+/// rather than a menu of its own.
+const STASHED_PILL: &str = "stashed";
+
+/// The Side chats pill's id (gx-chat-core extras/side_chats.rs); its menu is side_chats.rs.
+const SIDE_CHATS_PILL: &str = ghostex_gx_chat_core::extras::side_chats::SIDE_CHATS_PILL;
+
 /// The menu-toggle key of a pill (menu_toggle.rs).
 fn trigger_id(id: &str) -> &'static str {
     match id {
         "threads" => "chat-pill-threads",
         "tasks" => "chat-pill-tasks",
         "background" => "chat-pill-background",
+        SIDE_CHATS_PILL => "chat-pill-side-chats",
         // The Resources pill opens the question list.
         super::questions_list::QUESTIONS_MENU => super::questions_list::QUESTIONS_TRIGGER,
         super::resource_modal::RESOURCE_MODAL_MENU => super::resource_modal::RESOURCE_MODAL_TRIGGER,
@@ -156,8 +166,11 @@ fn icon(id: &str) -> &'static str {
     match id {
         "threads" => "titlebar/users-group.svg",
         "resources" => "titlebar/stack.svg",
+        // The More actions row's own icon for Stash prompt (actions.rs).
+        STASHED_PILL => "titlebar/stack-push.svg",
         "tasks" => "titlebar/list-check.svg",
         "background" => "titlebar/terminal-2.svg",
+        SIDE_CHATS_PILL => "titlebar/messages.svg",
         _ => "titlebar/users.svg",
     }
 }
@@ -184,6 +197,7 @@ fn panel_menu_height(id: &str, snapshot: &Value) -> Option<f32> {
             "backgroundTasksPanel",
             super::background_tasks::background_menu_height,
         ),
+        SIDE_CHATS_PILL => ("sideChatsPanel", super::side_chats::side_chats_menu_height),
         _ => return None,
     };
     let panel = &snapshot[key];
@@ -443,6 +457,11 @@ impl NativeChatView {
             })
             .on_click(cx.listener(move |this, _, window, cx| {
                 cx.stop_propagation();
+                if id == STASHED_PILL {
+                    // The list the Stash prompt row opens from an empty chat box (toolbar.rs).
+                    this.host("stashedPrompts", json!({}), cx);
+                    return;
+                }
                 this.toggle_pill_menu(&id, bounds.get(), window, cx);
                 if id == super::questions_list::QUESTIONS_MENU && this.chat_menu_is_open(trigger) {
                     this.keep_question_ages_current(cx);
@@ -531,6 +550,7 @@ impl NativeChatView {
             "tasks" => self.tasks_menu_body(p, cx),
             "subagents" => self.fleet_menu_body(p, cx),
             "background" => self.background_menu_body(p),
+            SIDE_CHATS_PILL => self.side_chats_menu_body(p, cx),
             super::questions_list::QUESTIONS_MENU => self.questions_menu_body(p, window, cx),
             super::resource_modal::RESOURCE_MODAL_MENU => self.resource_modal_body(p, window, cx),
             super::session_details::SESSION_DETAILS_MENU => {

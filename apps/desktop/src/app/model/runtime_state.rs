@@ -58,6 +58,9 @@ pub(crate) struct GpuiRemoteGxserverCapabilities {
     /// The daemon says it cannot resolve its session host, so no session can start there. An older
     /// answer without the tool list reads as not missing.
     pub(crate) zmx_missing: bool,
+    /// The daemon keeps a handed-off orchestrator's staged draft for its Chat box instead of typing
+    /// it into the terminal while `/ghostex-orchestrator` starts (`coordinatorHandoffDraft`).
+    pub(crate) coordinator_handoff_draft: bool,
 }
 
 pub(crate) struct GpuiRemoteGxserverConnection {
@@ -106,6 +109,13 @@ pub(crate) struct GpuiRemoteGxserverRequestTarget {
     pub(crate) execution_target: GpuiRemoteExecutionTarget,
     pub(crate) local_port: u16,
     pub(crate) token: String,
+}
+
+impl GpuiRemoteGxserverRequestTarget {
+    /// The daemon can take a handed-off orchestrator's draft (`coordinatorHandoffDraft`).
+    pub(crate) fn stages_coordinator_handoff_draft(&self) -> bool {
+        self.capabilities.coordinator_handoff_draft
+    }
 }
 
 /// CDXC:RemoteMachines 2026-09-25 WHY:
@@ -429,9 +439,12 @@ impl ProjectScopedWorkareaAvailability {
                         _ => false,
                     }
             }
-            TitlebarMode::Manage | TitlebarMode::Terminal | TitlebarMode::Changes => {
-                self.project_context.has_project_scoped_workareas()
-            }
+            // A side chat tab's own condition (the project has one open) is the app's:
+            // `titlebar_mode_available` in app/workarea/view_visibility.rs.
+            TitlebarMode::Manage
+            | TitlebarMode::Terminal
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => self.project_context.has_project_scoped_workareas(),
         }
     }
 
@@ -548,7 +561,8 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             | TitlebarMode::Browser
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
-            | TitlebarMode::Changes => {
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => {
                 return None;
             }
         })

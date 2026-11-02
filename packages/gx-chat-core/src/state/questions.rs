@@ -99,6 +99,9 @@ pub struct QuestionsState {
     pub resource_modal: Option<crate::questions::resource_modal::ResourceModal>,
     /// A "Go to chat" waiting for its item to be among the loaded rows.
     pub resource_go: Option<crate::questions::resource_modal::ResourceGo>,
+    /// Loaded forms' answers read back from outside the loaded rows
+    /// (`crate::questions::recorded_answers`).
+    pub recorded_answers: crate::questions::recorded_answers::RecordedAnswers,
 }
 
 /// One question form's picks while it is open, and its send.

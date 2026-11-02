@@ -178,6 +178,11 @@ impl GhostexGpuiApp {
         if self.handle_session_details_host_action(session_id, action, &message, window, cx) {
             return;
         }
+        // A page card on screen whose page has no picture yet (visual_page_background_pictures.rs).
+        if action == "pictureUnopenedPage" {
+            self.picture_unopened_page(session_id, &message, cx);
+            return;
+        }
         // The working card's Links pill (native_chat/links_pill.rs) opens the session's links list.
         if action == "sessionLinks" {
             if let (Some(key), Some(anchor)) = (
@@ -662,12 +667,22 @@ impl GhostexGpuiApp {
             return;
         }
         // CDXC:Coordinators 2026-10-08 WHY: a row of a coordinator's Threads panel opens that thread the way a fork branch opens, by focusing and revealing it in the sidebar; gxserver already resumed it when it was closed (server/src/server/coordinator_open_http.rs), so the action carries no lifecycleState and nothing is woken here. Supersedes the 2026-09-30 note that this host woke it.
-        // An agent message card's Go to session focuses the other session the same way.
+        // A session name's pill on an agent message card focuses the other session the same way.
         if action == "selectForkBranch"
             || action == "openCoordinatorThread"
             || action == "openAgentSession"
         {
             self.select_session_chat_fork_branch(session_id, &message, cx);
+            return;
+        }
+        // A side chat opens as a tab of the side panel (side_chat_panel/), and a deleted one's
+        // tab closes.
+        if action == "openSideChat" {
+            self.open_side_chat_from_host_action(session_id, &message, window, cx);
+            return;
+        }
+        if action == "sideChatDeleted" {
+            self.close_deleted_side_chat_tab(session_id, &message, window, cx);
             return;
         }
         let request = match action {

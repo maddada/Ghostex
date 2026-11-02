@@ -548,9 +548,13 @@ view from the strip.
   Settings > File opening decides where a file opens from Quick Access, a chat
   link, a terminal link or `ghostex open <file>`: one dropdown for HTML,
   Markdown and images, one for every other file (code and text). Both offer Files (the default), the built-in
-  VS Code view, and the editor apps Ghostex knows (VS Code, Cursor, Zed, the
+  VS Code view, System App (the app your computer opens that file type with, on
+  Windows, macOS and Linux), and the editor apps Ghostex knows (VS Code, Cursor, Zed, the
   JetBrains IDEs and the rest); an editor that is not installed on this computer
-  is listed but cannot be picked. If you had changed the old Markdown, HTML or
+  is listed but cannot be picked. A remote session's file cannot reach this
+  computer's apps, so System App opens it in VS Code instead. A chat file link can be a
+  plain path, a `file://` URL or, on Windows, `C:/...`, `/C:/...` or
+  `file:///C:/...`; all of them open the same file. If you had changed the old Markdown, HTML or
   Images setting, the first dropdown reads As before and keeps those choices
   until you pick something else. Videos and audio keep their own Files or system
   app choice; AVIF pictures follow the first dropdown, and PDFs, fonts and
@@ -582,6 +586,13 @@ view from the strip.
   buttons, opens it in the chat's full-window picture viewer: click to zoom in
   steps, drag to pan, and Escape or a click beside the picture closes it. Every
   picture opens at its opening size; the zoom isn't kept for the next one.
+  To make the text of a Markdown, text or code file bigger, press Cmd+= and
+  Cmd+- (Ctrl on Windows and Linux) with the file open in Files; Cmd+0 goes
+  back to 100%. This steps Default files zoom (%) in Settings > Interface >
+  Text (70% to 200%, 5% steps), the same way the chat's zoom works: every open
+  file and the Changes diff change size together, the line numbers grow with
+  the text, and the level is saved (`filesZoomPercent`). Terminals, browser
+  pages and the chat keep their own zoom.
 - **Terminal**: a command terminal in the view panel that works like the
   Commands pane, only on the right beside your sessions instead of below them.
   It has its own tab bar with a **+** for new terminals, Cmd+Shift+T for another
@@ -594,7 +605,7 @@ view from the strip.
 
 Related settings: `terminalViewWidthMode`, `webLinkOpenTarget`,
 `documentFileOpenTarget`, `otherFileOpenTarget`, `videoFileOpenTarget`,
-`audioFileOpenTarget`, `docsOpenFilesAsTabs`, the Auto Sleep rows
+`audioFileOpenTarget`, `docsOpenFilesAsTabs`, `filesZoomPercent`, the Auto Sleep rows
 (`autoSleep*IdleMinutes`, `keepViewsLoaded`), the Search in Files hotkey (`searchProjectFiles`), and
 Settings > Extensions.
 
@@ -613,7 +624,8 @@ repository on this computer and a remote one is one project. Sessions are
 ordered by when they last came back to you (started, sent a message, or a
 finished turn), never by output while an agent works; pinned sessions come
 first, and above them a Drafts section holds every session nobody has sent a
-message to yet (the pencil), newest first, until its first message is sent.
+message to yet (the pencil), newest first, until its first message is sent;
+it opens on its own whenever a new session lands in it.
 Working, Snoozed and Parked fold into shelves at the bottom. Working holds
 sessions whose agent works or still runs something in the background, while the
 Working section switch (`unifiedWorkingSection`, on by default, under the
@@ -623,6 +635,11 @@ offers Unsnooze or Unpark when you hover it. The phone picks its own layout in
 its Settings > Sessions list (Unified or Project, starting from the computer's
 choice), with its own Group by project and Show Working section switches: Unified
 there lists every computer's sessions together, Project one computer at a time.
+On the phone, Unified hides the computer tabs: Computers in the menu at the top
+of the Sessions list picks a computer, adds one or opens Manage computers. A
+computer that can't connect shows its name and the problem over the list, with
+Reconnect and Remote Settings. Add project asks which computer when you have
+several, and a project's New session asks when that project is on several.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
@@ -633,7 +650,8 @@ Filter) puts every machine's sessions of one repository under one header, with
 that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
 Drag a header to arrange the groups; the order is saved per repository across
 machines, and a new project lands after the arranged ones, A to Z. The "+" on a
-header starts a session there. A project you hid in the Project sidebar leaves this
+header starts a session there, after a menu of its machines when several have it.
+A project you hid in the Project sidebar leaves this
 list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
 Filter offers Show Hidden, Group by Project and Working Section here, and Collapse
 All folds the project groups while they are on.
@@ -651,7 +669,9 @@ machine that has it. The project goes to Recent Projects, where Quick Access >
 Projects reopens it; its sessions keep running out of sight until then. Picking
 a project in Quick Access > Projects also filters to it. Next to the filter are
 Add project and New session, which opens the new-session picker (agents,
-Browser, Terminal) in the filtered project when the filter is one project.
+Browser, Terminal) in the filtered project when the filter is one project,
+without making it your open project; the session starts as a draft, and the bar
+above its message box changes the project or machine.
 Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
@@ -997,14 +1017,17 @@ where they are while you open, change and close views.
   on the wrong model. Hover the session to read why, then pick a model again in
   the chat's model menu (the same one, or another); once it applies, the dot
   clears and the waiting messages are sent.
-- New sessions appear at the top of Sessions for 10 minutes. After that,
-  a session with unsent text that has not received its first message moves
-  into Drafts, below Pinned and above Sessions. Drafts starts collapsed;
-  expand it to continue a draft. Choose Pin to move a draft into Pinned
-  without sending or changing its text. Unpin returns it to Drafts after
-  the 10-minute window, or to Sessions while still new. Sending its first
-  message returns an unpinned draft to Sessions; pinned drafts stay in
-  Pinned. Empty sessions remain in Sessions. No setting is required.
+- A new session goes straight into Drafts, below Pinned and above Sessions,
+  and stays there until its first message is sent or its agent starts
+  working, whether it is empty or holds unsent text. Drafts starts collapsed,
+  but it opens on its own whenever a new session lands there (New Agent
+  Session, the New Thread picker, a project's agent button, or one made
+  elsewhere), and a session you start in this window is selected and scrolled
+  into view. If you collapse Drafts again it stays collapsed until the next new session.
+  Choose Pin to move a draft into Pinned without sending or changing its
+  text; Unpin returns it to Drafts. Sending its first message moves an
+  unpinned draft to Sessions; pinned drafts stay in Pinned. No setting is
+  required.
 - Parking is enabled by default. Right-click a session and choose Park, or
   select several sessions and choose Park Selected, to move them into the
   collapsible Parked section at the bottom. Use Unpark or Unpark Selected to
@@ -1080,7 +1103,7 @@ ready. Custom tags then appear in the same drag list as the built-in ones: drag
 to reorder, use the switch or eye to hide them from menus and filters, and the
 trash button to delete one (sessions that carried it become untagged). The
 mobile app shows the same tags. `ghostex tag-session <selector> <tag>` accepts a
-custom tag by name. Claude and Codex name their own sessions; Ghostex
+custom tag by name. Claude, Codex and OpenCode name their own sessions; Ghostex
 syncs those names without running a first-prompt title job or blocking terminal
 input. If Codex has not named a session about a minute after a prompt, Ghostex
 names it in the background with the Title Generation Agent, without blocking
@@ -1088,6 +1111,8 @@ typing, and Codex's own name replaces it if Codex names the session later.
 Pi uses the Title Generation Agent for first-prompt names. OMP names its own
 sessions once a prompt says enough to name, and Ghostex syncs that name; renaming
 an OMP session from Ghostex sends OMP's own `/rename <name>`, which OMP keeps.
+An OpenCode session takes the name OpenCode holds for it, including a name it
+gained after the session opened, such as one written through OpenCode's API.
 Manual Generate Name and `/rename` in chat remain available for Claude and Codex.
 In the Rename dialog, a name of up to 70 characters renames directly. Paste
 longer text, or leave the box empty, and Generate name turns that text (or,
@@ -1315,6 +1340,20 @@ or right edge for a round previous or next button; on the phone swipe sideways
 (when not zoomed in) or tap the buttons at the sides. A counter such as 3 / 6
 shows where you are, each picture opens fitted to the window, and Escape (or a
 click beside the picture) closes it.
+When the agent opens a picture file (Claude's Read, Codex's view image,
+OpenCode's read, or any agent reading an image), its row in the chat shows a
+small thumbnail of it. When the turn folds into "Worked for …" or "Previous
+turn", the pictures it read stay in view inside that card, under its title,
+and the card counts them ("3 images") beside its tool calls. Other closed folds
+(summary mode's "Active work", a step's folded tool calls) keep theirs under
+the fold. The thumbnails sit on one row; when there are more than fit, scroll
+it sideways with the mouse wheel or a sideways trackpad swipe (swipe on the
+phone). Clicking one opens the picture viewer, and the arrows step through them
+with the chat's other pictures. The picture is read from the computer the
+session runs on, so it works for remote sessions and on the phone; a file that
+has since been deleted shows a small missing-picture square. A picture you
+already pasted or attached in your own message isn't shown a second time when
+the agent reads it.
 Dictate is the microphone button in the chat box (always shown, right next to
 Send) and on the terminal bar, on a Mac, Windows and Linux: press it, talk, and press it
 again to stop. In the chat session you are in, Option+Ctrl+D (Ctrl+Alt+Shift+D on
@@ -1430,18 +1469,27 @@ chats, `/compact` summarizes the conversation to reduce context, just like
 In Claude Code, Codex, and OpenCode chats, start a message with `!` to run a shell command
 in that agent's session, for example `! pwd`. The command and its output appear
 in the chat.
-In Claude Code chats, `/btw <question>` asks a side question without stopping
-the agent's work. Side chat in the chat box's More actions does the same: it puts
-a Side Chat pill in the chat box, and sending the message turns it off again.
-Typing `/btw` on its own and pressing Enter also turns Side chat on; nothing is sent.
-The answer opens in a card above the chat box, with Copy, Fork
-(continue the side question as a background agent) and Close; a long answer
-shows Show all. You can't reply to a side question: close its card to message
-the main agent again. After Close the side question stays in the chat, folded where
-you asked it, and opens again on click. It is not added to the conversation.
-Codex chats have Side chat and `/btw` too, but Codex answers in a side conversation
-in its terminal, so sending one switches to Terminal View. Your next chat message,
-or switching back to Chat View on the computer, closes the side conversation first.
+A side chat is a separate conversation beside the main one: ask something on the
+side without interrupting or derailing the agent's work. Side chat in the chat
+box's More actions puts a Side Chat pill in the chat box (typing `/btw` on its own
+and pressing Enter does the same); sending a message with the pill, or typing
+`/btw <question>`, forks the session into a side chat that starts with that
+question. The main agent never sees it. A side chat knows the conversation up to
+that point, works in the same folder, and starts in ask-before-edits (Manual for
+Claude, Ask for approval for Codex) whatever mode the main session runs in. It
+opens as a tab in the side panel (its own chat screen on the phone), and you can
+keep talking in it. Side chats are not sessions in the sidebar: the main chat's
+**Side chats** pill, in the strip at the top of the chat box, lists them, and its
+dot shows when one is waiting for an answer or an approval (the main session's
+sidebar card shows that too). In the pill's menu, or the bar at the top of a side
+chat, **Bring back** sends what was said in the side chat to the main session as
+one message (a busy agent reads it at its next pause, and a sleeping one is
+woken for it), and **Delete**
+stops and removes the side chat. A side chat can't start another side chat.
+Side chats work with every agent Ghostex can fork (Claude Code, Codex, Pi,
+Empryo, Copilot and Grok Build). From the CLI: `ghostex side-chat start
+"<question>" --session <session>`, `ghostex side-chat list`, `ghostex side-chat
+bring-back --session <side chat>` and `ghostex side-chat delete --session <side chat>`.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
 Claude Code's permission mode (Bypass permissions, Auto, Manual, Accept edits or
@@ -1501,6 +1549,11 @@ of its terminal screen, and support streamed replies, reasoning, tool results,
 image attachments, questions, permissions, queued prompts, and conversation
 rewind. Install its hooks in Settings > Agents, then open a new OpenCode session
 to connect it.
+Installing the hooks also adds a "ghostex" OpenCode theme with a see-through
+background, so OpenCode's terminal shows the window's glass like Claude Code and
+Codex, in colours that match Ghostex's light and dark terminal. Ghostex turns it
+on only when you have not picked an OpenCode theme yourself; to go back, pick
+another theme in OpenCode (Ctrl+P, then Switch theme).
 The model picker shows the models available from your OpenCode providers and
 their reasoning levels; the mode control selects Build or Plan. Left-click a
 model to save the default, or right-click to apply it only to this session.
@@ -1634,7 +1687,9 @@ Agents can show charts, tables, stat tiles, and short text layouts right in the
 chat, drawn in the chat's own colors on desktop, web, and mobile. For things a
 chart can't show, such as a UI mockup or a small interactive tool, the agent
 writes an HTML page and the chat shows a card for it with a small preview
-picture of the page, the same on desktop, web, and mobile. The picture is taken
+picture of the page, the same on desktop, web, and mobile. Pages share one
+look: a soft dusk backdrop in dark mode (a soft dawn in light) with frosted
+glass cards and choices. The picture is taken
 the first time you open the page in the Ghostex desktop app (and again after you
 answer it); until then the card shows the page's file name. On desktop the card opens
 the page where Settings > Chat > Open chat pages in says: Popup (the default), a
@@ -1677,7 +1732,10 @@ it. A question you leave blank is sent to the agent as skipped, so it moves on
 without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
-for anything else you want the agent to know. Send (or Ctrl+Enter, Cmd+Enter
+for anything else you want the agent to know. You can paste a picture (a
+screenshot or a copied image) into any note or text box, in a form or a
+question page: it shows as an Image #1 pill and goes to the agent with your
+answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent
 as a message; the chat shows them as a card, and the form then reads Answered.
 Answers from question forms and chat pages send like normal chat messages; a busy
@@ -1863,9 +1921,11 @@ The card keeps updating while the workflow runs. Click or tap an agent to read
 its whole transcript, and use Show full script under the card to see the script
 Claude ran. The card stays in the chat after the workflow finishes, even when the
 turn that started it is folded.
-Slash commands sent from chat stay in the conversation after a reload, together
-with any captured output. Long command output expands when clicked; model, effort,
-Fast mode, and compaction results keep their status rows.
+A slash command shows as your own message, with the command in monospace, whether
+you sent it from chat or typed it in the terminal, and it stays in the conversation
+after a reload. What the command printed shows as a short note under it; click or
+tap a note with more than one line to see the whole output. Model, effort, Fast
+mode, and compaction results keep their status rows.
 During `/compact`, Claude, Codex, Cursor, and Grok Build show a compaction card above the input.
 Cursor's `/summarize` and Hermes's `/compress` use the same flow. Claude shows its reported progress;
 Codex, Cursor, Grok Build, and Hermes show a looping bar. A Hermes `/compress` sent from chat that
@@ -1933,8 +1993,8 @@ the agent.
 When an assistant message
 has tool calls, click its text or the chevron beside it to expand the tools directly
 under that message. Its full text and formatting stay visible when collapsed;
-links and code controls keep their own actions. A chat at the Verbose or
-Detailed level (More actions > View) opens these tools by default, along with
+links and code controls keep their own actions. A chat in Detailed view
+(More actions > View) opens these tools by default, along with
 each finished turn's "Worked for" log; close
 one with a click and it stays closed. A tool call the agent described (for
 example "Search for config files") is named by that description in every mode,
@@ -1942,7 +2002,7 @@ in the reply's own font and a slightly dimmer colour, instead of the tool's name
 and its command; click the row to see the full command and its result. File writes and code
 edits appear outside the tool groups while the agent works. As soon as the agent
 finishes a turn, its tool work folds away under "Worked for Xs" above the final
-reply (open by default at the Detailed and Verbose levels); click that
+reply (open by default in Detailed view); click that
 line to open or close it. When a turn shows
 "Worked for", all its file changes are grouped in a collapsed "N files changed"
 section directly below it. Older history loads with completed turns already
@@ -1992,24 +2052,26 @@ also toggle the diff. After expanding or collapsing, the header stays visible;
 chat scrolls to it if needed. This covers Claude's Write and Edit tools and Codex's apply_patch
 changes.
 
-More actions > View picks the chat's detail level, one of Simple, Detailed and
-Verbose, and holds the Summary switch. The View row names the level that is on,
-and adds "Summary" while Summary mode is on.
+More actions > View picks one view for the chat: Summary, Normal or Detailed.
+Picking one turns the others off, and the View row names the one in use.
 
-Simple is the level new chats start at. Tool groups
+Normal is the view new chats start in. Tool groups
 without a message above them collapse to a tool-call count, tool rows hide
 command previews, and the work under each reply stays folded until you open it;
 expand a tool to inspect its full input and result. File edits
 collapse under "Edited 1 file" or "Edited X files", counting each path once; expand
 the row to see the usual file and diff cards. Detailed shows the tool calls and
-file edits under each reply, folded; Verbose opens them. The level is kept per
-chat (the `simple` and `verbose` records in the chat's own storage). The settings
-keys `sessionChatSimpleMode` (on by default) and `sessionChatVerboseMode` only say
-which level a chat starts at and have no Settings row. Summary mode shows the
-Simple look while it is on; turning it off gives the chat its picked level back,
-and picking a level while Summary is on turns Summary off. The phone app has
-Simple mode too, under More actions > View in its chat box or in its Settings >
-Chat; the phone keeps its own switch, also on by default.
+file edits under each reply, open. Summary is described below. The view is kept
+per chat, so a chat you set to Detailed stays Detailed. Turning Summary off, by
+any route, always goes back to Normal. To have new chats start in Detailed, turn
+on Settings > Chat > Advanced > Default to Detailed view (`sessionChatDetailedView`).
+
+While a chat is in Summary or Detailed view, a "Summary view" or "Detailed view"
+chip sits at the left of the strip along the top of the chat box; hover it and
+click its X (or click the chip) to go back to Normal. A chip alone is enough to
+show the strip. The phone app has the same View choice in its chat box's More
+actions, the same chip (its X always shows; tap the chip), and the same Default
+to Detailed view switch in its Settings > Advanced.
 
 While the agent is working, its thinking shows as a closed "Thinking…" card with the newest finished line beside it, so it never pushes the rest of the chat away; click (or tap) the card to read the whole thought, which keeps the newest lines in view as they arrive, and click again to close it. The commands the thought runs stay in view below the card, and when the turn ends everything folds into its "Previous turn" card as before. This works the same for every agent, on the computer, the web and the phone.
 
@@ -2111,13 +2173,17 @@ never folded, so you can scroll up through every page. Messages to and from othe
 agents (a coordinator's thread reports, messages from other sessions) open no
 turn of their own: they fold into the "Agent reply" of your own prompt, so the
 summary reads as your conversation.
-Turn Summary mode on or off under More actions > View, where its row shows the
+Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in
 Settings > Hotkeys.
 Stash prompt is in More actions, second from the bottom: it stashes what is in
 the chat box, or, with an empty chat box, opens your stashed prompts; the row
-shows how many are stashed.
+shows how many are stashed. While this chat has stashed prompts, a Stashed pill
+with their number sits in the pill strip along the chat box's top edge, after
+Resources, Workers and the other pills (before the Links pill); click or tap it
+to open the stashed prompts (Saved Prompts on the computer, Saved prompts on the
+phone). Alt+S (Option+S on macOS) is the Stash Prompt shortcut in a chat too.
 The Maximize button's tooltip shows the Maximize Chat Box shortcut (Option+Ctrl+M
 on macOS, Ctrl+Alt+Shift+M on Windows and Linux), which maximizes the chat box of
 the chat you are in, or restores it. The Prompt Editor shortcut (Ctrl+G on macOS,
@@ -2143,22 +2209,29 @@ comes with a 1M or a 200K context window: picking it from another model always
 starts on 1M, and the pill only names the window when it is 200K
 ("Opus 5.5 High · 200K"). Click it to open the model picker: a row of agent tabs
 with a starred Favorites tab first, the models of the chosen tab (starred ones
-first, in their usual order),
+first, in alphabetical order, then the rest in their usual order),
 and along the bottom a button each for the reasoning level (brain), the context
 window (chart bars) and Fast mode (bolt). Clicking the context window or Fast
 mode button switches it; the reasoning button opens a short list to the side. A
 button the current model has no choice for is dimmed: reasoning and context
 window read Default, and Fast mode reads Off. Grok Build's fast model (Grok 4.7
 Fast) is not its own row: pick Grok 4.7 and switch Fast mode on or off. Auto, where an agent offers it,
-always sits at the top of that agent's list. Older versions of a model (GPT 6 Sol
+sits at the top of that agent's list, below any starred models. A tab with more
+than six models (OpenCode, Pi and Cursor, for example) has a search field above
+the list: type part of a model's name or id ("sonnet", "gpt 6") to narrow it,
+with matching starred models still first. Older versions of a model (GPT 6 Sol
 once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
 the tab; click it to show them, or star one to keep it at the top. Codex,
-Cursor, Grok Build and Antigravity's lists come from the CLI installed on that computer, so
-new models show up without a Ghostex update. Click a row's star to keep that
+Cursor, Grok Build, Antigravity and OpenCode's lists come from the agent installed on that computer, so
+new models show up without a Ghostex update. The OpenCode tab is there in every
+thread and lists the models of the providers you set up in OpenCode; an OpenCode
+thread lists the ones its own folder can use. Click a row's star to keep that
 model on the Favorites tab; hover the info icon that appears on a row to read
 what that model is for. In a session that has started, another agent's tab
 shows a small handoff badge: picking one of its models hands the conversation
-off to that agent instead of changing this session's model. With more than one signed-in Claude or Codex account, an Account
+off to that agent instead of changing this session's model. In a new thread
+you have not sent anything in yet, it switches the thread to that agent instead,
+and an OpenCode model becomes the thread's model as soon as OpenCode is up. With more than one signed-in Claude or Codex account, an Account
 button beside Fast mode shows the account in use and opens the list to switch.
 
 The Model & Effort Picker shortcut (Option+P by default on macOS) opens the same
@@ -2169,8 +2242,10 @@ shows; the letter on each bottom button's icon uses it (R Reasoning, C Context,
 F Fast mode, A Account); Tab and Shift+Tab move through the Favorites and agent tabs. Enter applies the highlighted model and level and
 saves them as the agent's default, Option+Enter uses them in this session only and
 leaves the default alone (either one closes the picker, as does clicking a model), and Option+1 to Option+9
-jump the highlight to one of the first nine rows without applying it. Escape closes it
-without changing anything. The key reminder along the bottom lists these.
+jump the highlight to one of the first nine rows without applying it. On a tab
+with a search field, typing goes into the field (so the bottom buttons' letters
+type instead) and the arrows, Tab and Enter still work on the filtered list.
+Escape clears the search, then closes the picker without changing anything. The key reminder along the bottom lists these.
 
 New Claude Code and Codex sessions start on the model and reasoning level you
 last saved as that agent's default, so the pill names it as soon as the chat
@@ -2496,7 +2571,7 @@ between them is temporarily hidden in this dialog.
 Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTheme`,
 `sessionChatFontFamily`, `sessionChatCustomTranscriptWidthEnabled`,
 `sessionChatTranscriptWidthPercent` (Settings > Chat shows them as one Transcript width
-slider that reads Auto until dragged), `sessionChatVerboseMode`,
+slider that reads Auto until dragged), `sessionChatDetailedView`,
 `sessionChatFileEditPreviews`, `sessionChatMutedThinking`, `chatToolCallCards`,
 `sessionChatKeepComposerExpanded`, `sessionChatConfirmEscapeInterrupt`,
 `terminalViewWidthMode` (`match-chat` makes the terminal body the same width
@@ -3737,7 +3812,8 @@ short sound when copying from a terminal, a chat message, the chat composer
 (including its right-click Copy menu), a copy button, or a menu (`copySound`).
 
 The Notifications bell sits in the sidebar's top row, just before the sidebar
-menu button, and shows how many notifications are unread. Click it to open the Notifications
+menu button, and shows how many notifications are unread; the badge turns red while a
+permission or approval request waits for your answer. Click it to open the Notifications
 panel: one row per session, newest first, saying whether the agent finished a
 turn or needs your input, with the last thing it said. Click a row to jump to
 that session and mark it read; hover a row to dismiss it; the header has Next
@@ -3747,8 +3823,11 @@ Cmd+Shift+U jumps to the latest unread notification, and Cmd+Ctrl+U pushes the
 current session to the back of the unread queue and jumps to the next one.
 Clearing a session's attention by selecting it in the sidebar, focusing its
 terminal, or pressing Escape also marks its notification read, including one
-you previously moved to the back of the unread queue. It works the other way
-too: marking a notification read, or using Mark all read, clears the
+you previously moved to the back of the unread queue. A permission or approval
+request stays unread and red in the Notifications panel, with a red dot on its
+sidebar row, until it is answered in the agent. Opening or focusing it, reading
+its screen, or using Mark all read or Clear all does not remove it while it waits.
+For other notifications, marking one read or using Mark all read clears the
 finished or needs-input mark on its session in the sidebar.
 Scripts and agent hooks can post their own rows with
 `ghostex notify --title <text> [--body <text>]`.
@@ -4634,7 +4713,9 @@ and the app uses its own fonts until it is. The phone keeps its own font. To mak
 chat text stronger, use Settings > Interface > Text strength, from the standard colour
 (0%, the default) up to full white in dark mode or full black in light mode, on the
 computer and the phone; muted text, links, code blocks and status colours stay as they are.
-Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatZoomPercent`, `sessionChatTextStrengthPercent`.
+Default files zoom (%) sets the size of a file's text in the Files view and of the
+Changes diff, from 70% to 200%, the way Default chat zoom sets the chat's.
+Settings: `sessionChatFontFamily`, `terminalFontFamily`, `sessionChatZoomPercent`, `filesZoomPercent`, `sessionChatTextStrengthPercent`.
 Colours: Appearance, three preview cards (System, Light, or Dark; System is the
 default and follows the operating system appearance); Dark mode colour and Light
 mode colour, each a row of sixteen small colour squares (Graphite, the default,
@@ -4693,9 +4774,10 @@ blur. With Dark only, light mode stays opaque, so the light-mode picture, video
 and tints are hidden until Always is picked.
 Files, Kanban, the browser, and the code editor stay opaque. Turning on Reduce
 transparency in the macOS accessibility settings, or turning off Transparency effects
-in Windows Settings > Personalization > Colors, always makes the window opaque. On
-Windows, turning glass on takes effect the next time Ghostex starts, and the corners of
-menus and pop-ups follow Windows' own rounding.
+in Windows Settings > Personalization > Colors, always makes the window opaque. Turning
+transparency on or off, or changing any of its choices, applies to every open Ghostex
+window at once, without restarting. On Windows the corners of menus and pop-ups follow
+Windows' own rounding.
 Behind the glass (on macOS, Windows and Linux) is four cards: Desktop and windows (the default) shows everything behind Ghostex. Wallpaper only shows just your desktop wallpaper, so other windows never show through; built-in wallpapers such as Sequoia show as a still picture of that wallpaper, and a solid color wallpaper shows everything behind the window. Picture shows a picture you choose instead, one for dark mode and one for light mode, side by side with Choose and Clear buttons; a mode with no picture shows everything behind the window. Live shows something moving behind the glass, chosen for dark mode and for light mode (only dark mode with Transparency set to Dark only): one of eight calm animations drawn in your theme's colours (Aurora, Ink, Drift, Nebula, Silk, Bokeh, Waves, Mesh), so switching themes or Colourfulness recolours it at once, or, on macOS and Linux, Your video, a .mov, .mp4 or .m4v file you choose, which plays muted, looping and blurred (a mode set to Your video with no file shows everything behind the window). On Windows, Live pauses when Show animations is off in Windows Settings > Accessibility > Visual effects (showing a still frame) and in battery saver. Speed sets how fast the animation moves (a quarter of its pace to twice as fast) and Brightness how bright it glows (60% by default, a soft glow that shows through the tints; every animation is about as bright as the others at the same setting); your own video plays as it is. An animation loops every two minutes without a seam, and changing the animation, theme or brightness, or switching between an animation and your video, fades rather than jumping. Nothing is downloaded. Live pauses whenever Ghostex is in the background, hidden or minimized, while the display sleeps and in Low Power Mode; Reduce Motion shows a still frame; and Play only when plugged in (on by default) pauses it on battery. For Wallpaper, Picture and Your video, Picture position picks Moves with the window (the default: the picture covers the window and moves with it) or Stays with the desktop (the picture stays put while the window moves over it, and can trail the window while you drag it) (`windowGlassSource`, `windowGlassImagePlacement`, `windowGlassImageDark`, `windowGlassImageLight`, `windowGlassLiveStyleDark`, `windowGlassLiveStyleLight`, `windowGlassVideoDark`, `windowGlassVideoLight`, `windowGlassLiveSpeed`, `windowGlassLiveBrightness`, `windowGlassVideoOnlyOnPower`).
 On Linux, transparency works on Xorg and Wayland desktops (the desktop app currently uses XWayland for its embedded pages). Desktop and windows uses your compositor's blur: on Hyprland, keep background blur enabled; on Xorg, run a compositor with transparency and blur support. The compositor controls the blur's strength. Picture and Live animations work without compositor blur. Wallpaper only reads the picture reported by Hyprpaper, swww/awww, GNOME, Cinnamon, MATE or a single-screen Plasma desktop; when no readable picture is available it shows Desktop and windows. Stays with the desktop works on X11 and Hyprland; other native Wayland compositors cannot report the position needed for this mode, so use Moves with the window. Your video requires FFmpeg (included as a Linux package dependency). Live respects battery power, the power-saver profile, and disabled desktop animations (`windowGlass`, `windowGlassSource`, `windowGlassImagePlacement`, `windowGlassVideoOnlyOnPower`).
 While glass is on, four sliders tune it, each in dark mode and in light mode: Sidebar tint and Work area tint set how much of the desktop each area hides, independently, so either can be the darker one; lower shows more of your desktop.

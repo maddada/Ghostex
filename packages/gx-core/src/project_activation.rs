@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use ghostex_gx_protocol::{PresentationSession, PresentationSnapshot, SessionKind, SessionSurface};
+use ghostex_gx_protocol::{PresentationSession, PresentationSnapshot, SessionKind};
 
 use crate::keys::{ProjectKey, SessionKey};
 
@@ -65,9 +65,7 @@ pub fn plan_project_activation(
         .filter(|group| group.project_id == project.project_id)
         .flat_map(|group| group.session_ids.iter())
         .filter_map(|session_id| sessions.get(session_id.as_str()).copied())
-        .filter(|session| {
-            session.visible_in_sidebar_by_default && session.surface != SessionSurface::Commands
-        })
+        .filter(|session| session.listed_in_sidebar())
         .filter_map(|session| {
             let is_agent = match session.kind {
                 SessionKind::Agent => true,

@@ -555,6 +555,9 @@ impl QuickAccessController {
                             command["promptSessionId"].as_str().map(str::to_string),
                             scope,
                         );
+                        if scope.is_none() {
+                            prompts::open_on_session(&mut self.prompts, context.data);
+                        }
                     }
                     QuickAccessTab::Files => self.files = FilesTabState::default(),
                     QuickAccessTab::Commands => {}
@@ -934,9 +937,13 @@ impl QuickAccessController {
                             });
                             if belongs {
                                 self.prompts.scope = PromptsScope::Session;
+                            } else if self.prompts.holding_default_scope {
+                                // It opened on This session, which has nothing: show everything.
+                                self.prompts.scope = PromptsScope::All;
                             }
                         }
                     }
+                    self.prompts.holding_default_scope = false;
                 }
             }
             "saveStashedPromptResult" => {

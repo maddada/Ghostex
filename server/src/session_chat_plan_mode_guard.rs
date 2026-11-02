@@ -96,14 +96,26 @@ pub(crate) fn observe_hook(
     else {
         return;
     };
-    if !first_sighting(tool_use_id) {
-        return;
-    }
     let transcript = text("agentSessionPath").map(str::to_string).or_else(|| {
         result.get("session").and_then(|session| {
             crate::server::session_state_sync::read_runtime_text(session, "agentSessionPath")
         })
     });
+    observe_finished_call(state, project_id, session_id, tool_use_id, transcript);
+}
+
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, asked how to close the gaps that keep Claude's hooks installed: "Everything, including Windows". While Track Claude without its hooks is on, the `PostToolUse` hook of a pane the observer follows drives nothing, so the hook-free observer reads the finished `EnterPlanMode` call off the transcript of a busy session (hookless_activity/plan_mode.rs) and calls this instead, with or without a chat open. A call both paths report acts once.
+pub(crate) fn observe_finished_call(
+    state: &AppState,
+    project_id: String,
+    session_id: String,
+    tool_use_id: &str,
+    transcript: Option<String>,
+) {
+    if !first_sighting(tool_use_id) {
+        return;
+    }
     let state = state.clone();
     let tool_use_id = tool_use_id.to_string();
     std::thread::spawn(move || {

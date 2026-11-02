@@ -4,7 +4,9 @@
 //! the reader sent the page's answers, and Open.
 //!
 //! The picture is taken by the desktop app from the page the first time the user opens it in the
-//! floating page window (`app/visual_page_thumbnails.rs`), stored with the page in gxserver and read
+//! floating page window (`app/visual_page_thumbnails.rs`), or, for a page published since
+//! 2026-11-02, from a hidden browser as soon as its card is drawn in the chat on screen
+//! (`app/visual_page_background_pictures.rs`). It is stored with the page in gxserver and read
 //! through the chat core (`loadPageThumbnail`, answered as a `pageThumbnail` host action), so the web
 //! build and the phone show the same one. Until it exists the window shows a plain placeholder: a
 //! page icon and the file name.
@@ -62,6 +64,8 @@ struct Thumbnail {
     settled: bool,
     /// A read is out, or the wait before the next one is running.
     asking: bool,
+    /// The page's address, as the card that asked shows it.
+    url: String,
 }
 
 /// The pictures of the transcript's page cards, by page id and whether the page was answered when
@@ -89,12 +93,16 @@ impl NativeChatView {
     fn page_thumbnail(
         &self,
         page_id: &str,
+        url: &str,
         answered: bool,
         cx: &Context<Self>,
     ) -> Option<Arc<gpui::Image>> {
         let key = (page_id.to_string(), answered);
         let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
         let entry = entries.entry(key).or_default();
+        if entry.url.is_empty() {
+            entry.url = url.to_string();
+        }
         if !entry.settled && !entry.asking {
             entry.asking = true;
             let page_id = page_id.to_string();
@@ -121,6 +129,13 @@ impl NativeChatView {
             .map(|bytes| Arc::new(gpui::Image::from_bytes(ImageFormat::Png, bytes)));
         let settled = params["settled"].as_bool().unwrap_or(true);
         let retry = params["retryInMs"].as_u64();
+        // The page has no picture and is new enough to be pictured unopened: the card that asked
+        // is drawn, so the desktop pictures it in the background. Each answer offers it again (the
+        // desktop takes each page once per run), so a page let go for now is offered again.
+        let picture_unopened = super::visual_popup::FLOATING_PAGES
+            && image.is_none()
+            && params["backgroundPicture"] == true;
+        let mut unopened_url = None;
         let mut replaced = Vec::new();
         {
             let mut entries = self.visual.page_thumbnails.entries.borrow_mut();
@@ -136,7 +151,18 @@ impl NativeChatView {
                     replaced.push(old);
                 }
                 entry.settled = settled;
+                if picture_unopened && !entry.url.is_empty() {
+                    unopened_url.get_or_insert_with(|| entry.url.clone());
+                }
             }
+        }
+        if let Some(url) = unopened_url {
+            cx.emit(super::state::NativeChatEvent::Host(json!({
+                "type": "sessionChatHostAction",
+                "action": "pictureUnopenedPage",
+                "pageId": page_id.as_str(),
+                "url": url,
+            })));
         }
         // GPUI keeps a decoded copy of each picture it painted until it is told to let it go;
         // the notify below draws the card with its new picture first.
@@ -240,7 +266,7 @@ impl NativeChatView {
         };
         let picture = page_id
             .as_deref()
-            .and_then(|page_id| self.page_thumbnail(page_id, answered, cx));
+            .and_then(|page_id| self.page_thumbnail(page_id, &page.url, answered, cx));
         let detail = match &page.file {
             Some(file) => format!("Interactive page · {file}"),
             None => "Interactive page".to_string(),

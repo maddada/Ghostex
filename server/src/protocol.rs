@@ -384,6 +384,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/createAgentSession"
         | "/api/relocateProject"
         | "/api/forkSession"
+        // Side chats are forks (above) and read and send like chat; they carry project and session ids and the question text.
+        | "/api/startSideChat"
+        | "/api/listSideChats"
+        | "/api/bringBackSideChat"
+        | "/api/deleteSideChat"
         /*
         CDXC:Drafts 2026-08-28:
         Switching a draft's agent is remote-allowed for the same reason

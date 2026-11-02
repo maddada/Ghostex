@@ -213,7 +213,7 @@ pub(super) fn sort_groups(groups: &mut [PresentationGroup]) {
 /// The fields that decide whether a row is in a tab list at all.
 pub(super) fn tab_listing(session: &PresentationSession) -> (bool, &SessionSurface, &SessionKind) {
     (
-        session.visible_in_sidebar_by_default,
+        session.visible_in_sidebar_by_default && session.side_chat_parent_session_id.is_none(),
         &session.surface,
         &session.kind,
     )

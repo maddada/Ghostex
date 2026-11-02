@@ -83,6 +83,9 @@ impl GhostexGpuiApp {
                     ViewStripEntry::Browser(tab) => {
                         self.render_view_strip_browser_tab(tab, slot, showing_browser_tab_id, cx)
                     }
+                    ViewStripEntry::SideChat(tab_id) => {
+                        self.render_view_strip_side_chat_tab(tab_id, slot, cx)
+                    }
                 }
             })
             .collect::<Vec<_>>();
@@ -112,9 +115,19 @@ impl GhostexGpuiApp {
                     this.clear_view_strip_drop_outside(event.bounds, event.event.position, cx);
                 },
             ))
+            .on_drag_move::<DraggedSideChatTab>(cx.listener(
+                |this, event: &gpui::DragMoveEvent<DraggedSideChatTab>, _window, cx| {
+                    this.clear_view_strip_drop_outside(event.bounds, event.event.position, cx);
+                },
+            ))
             .on_drop(cx.listener(|this, dragged: &DraggedViewTab, _window, cx| {
                 this.handle_view_strip_gap_drop(ViewStripTabKey::View(dragged.mode), cx);
             }))
+            .on_drop(
+                cx.listener(|this, dragged: &DraggedSideChatTab, _window, cx| {
+                    this.handle_view_strip_gap_drop(ViewStripTabKey::SideChat(dragged.tab_id), cx);
+                }),
+            )
             .on_drop(
                 cx.listener(|this, dragged: &DraggedBrowserTab, _window, cx| {
                     this.handle_view_strip_gap_drop(ViewStripTabKey::Browser(dragged.tab_id), cx);
@@ -155,9 +168,10 @@ impl GhostexGpuiApp {
             .when(active_mode.is_storybook(), |strip| {
                 strip.children(self.render_storybook_controls(cx))
             })
-            .when(active_mode != TitlebarMode::Source, |strip| {
-                strip.child(self.render_view_tab_strip_pop_out_button(active_mode, cx))
-            })
+            .when(
+                !matches!(active_mode, TitlebarMode::Source | TitlebarMode::SideChat),
+                |strip| strip.child(self.render_view_tab_strip_pop_out_button(active_mode, cx)),
+            )
             .child(self.render_view_tab_strip_expand_button(cx))
             // Where the collapsed header puts them (WORKAREA_HEADER_PINNED_GAP).
             .child(
@@ -337,13 +351,24 @@ impl GhostexGpuiApp {
                 this.update_view_strip_drop_feedback(event.bounds, event.event.position, index, cx);
             },
         ))
+        .on_drag_move::<DraggedSideChatTab>(cx.listener(
+            move |this, event: &gpui::DragMoveEvent<DraggedSideChatTab>, _window, cx| {
+                this.update_view_strip_drop_feedback(event.bounds, event.event.position, index, cx);
+            },
+        ))
         .can_drop(move |value, _window, _cx| {
             value.downcast_ref::<DraggedViewTab>().is_some()
+                || value.downcast_ref::<DraggedSideChatTab>().is_some()
                 || takes_pages && value.downcast_ref::<DraggedBrowserTab>().is_some()
         })
         .on_drop(
             cx.listener(move |this, dragged: &DraggedViewTab, _window, cx| {
                 this.handle_view_strip_drop(ViewStripTabKey::View(dragged.mode), index, cx);
+            }),
+        )
+        .on_drop(
+            cx.listener(move |this, dragged: &DraggedSideChatTab, _window, cx| {
+                this.handle_view_strip_drop(ViewStripTabKey::SideChat(dragged.tab_id), index, cx);
             }),
         )
         .when(takes_pages, |tab| {
@@ -501,13 +526,30 @@ impl GhostexGpuiApp {
                     }
                 },
             ))
+            .on_drag_move::<DraggedSideChatTab>(cx.listener(
+                move |this, event: &gpui::DragMoveEvent<DraggedSideChatTab>, _window, cx| {
+                    if event.bounds.contains(&event.event.position) {
+                        this.set_view_strip_drop_index(Some(tab_count), cx);
+                    }
+                },
+            ))
             .can_drop(move |value, _window, _cx| {
                 value.downcast_ref::<DraggedViewTab>().is_some()
+                    || value.downcast_ref::<DraggedSideChatTab>().is_some()
                     || takes_pages && value.downcast_ref::<DraggedBrowserTab>().is_some()
             })
             .on_drop(
                 cx.listener(move |this, dragged: &DraggedViewTab, _window, cx| {
                     this.handle_view_strip_drop(ViewStripTabKey::View(dragged.mode), tab_count, cx);
+                }),
+            )
+            .on_drop(
+                cx.listener(move |this, dragged: &DraggedSideChatTab, _window, cx| {
+                    this.handle_view_strip_drop(
+                        ViewStripTabKey::SideChat(dragged.tab_id),
+                        tab_count,
+                        cx,
+                    );
                 }),
             )
             .when(takes_pages, |button| {

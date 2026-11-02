@@ -267,8 +267,40 @@ pub(crate) fn apply_session_state_update(
         );
     }
 
+    /*
+    CDXC:SessionTitles 2026-11-02 WHY:
+    OpenCode names its own conversations, and its TUI plugin reports that name on every hook,
+    read from OpenCode's own session record. Its terminal title is written when the TUI opens
+    the conversation, so a name the record gained later (Ghostex's date-prefix normalizer, or
+    any other client renaming through the API) never reached the sidebar: the session kept the
+    name it had when the pane opened, or the placeholder. The record is the name for this agent,
+    as the transcript is for Claude, so an OpenCode hook title for this conversation replaces a
+    stored one. Coordinators and threads keep the name they were given, as they do for metadata,
+    and so does a session the user renamed in Ghostex (`titleSource: "user"`): their rename
+    outranks the agent's own name.
+    */
+    let opencode_title = if identity_update_source == SessionIdentityUpdateSource::Passive {
+        opencode_record_title(&session, next_agent.as_deref(), params, &identity).filter(|title| {
+            read_text_value(&current_with_identity, "title").as_deref() != Some(title.as_str())
+                && current_with_identity
+                    .pointer("/runtimeSettings/titleSource")
+                    .and_then(Value::as_str)
+                    != Some("user")
+                && !crate::coordinators::keeps_its_given_title(
+                    repository.connection(),
+                    &current_with_identity,
+                )
+        })
+    } else {
+        None
+    };
+
     if provisional_fork_title(&current_with_identity).is_some() {
         reason = "fork-provisional-title-preserved".to_string();
+    } else if let Some(title_from_agent) = opencode_title {
+        title = title_from_agent;
+        runtime_settings.insert("titleSource".to_string(), json!("terminal-auto"));
+        reason = "agent-record-title-applied".to_string();
     } else if trusted_resume_title(&current_with_identity).is_none() {
         if let Some(candidate) = select_trusted_title_for_identity(
             &project,
@@ -403,6 +435,31 @@ pub(crate) fn apply_session_state_update(
         );
     }
     Ok((result, updated))
+}
+
+/// The name OpenCode's own session record carries for this conversation, when a hook reports it.
+/// SEE-ALSO: the `CDXC:SessionTitles 2026-11-02` note in `apply_session_state_update`.
+fn opencode_record_title(
+    session: &Value,
+    agent_id: Option<&str>,
+    params: &Map<String, Value>,
+    identity: &ResolvedIdentity,
+) -> Option<String> {
+    // A custom launch profile keeps its configured id; the provider is the CLI underneath it.
+    let provider = agent_id
+        .filter(|agent| !agent.starts_with("custom-"))
+        .map(str::to_string)
+        .or_else(|| session_launch_agent_provider_id(session));
+    if normalize_agent_id(provider.as_deref()).as_deref() != Some("opencode") {
+        return None;
+    }
+    // Only the conversation the hook itself names; a stale terminal title or a sibling client's
+    // report must never rename this row.
+    let event_session_id = read_text(params, "agentSessionId")?;
+    if Some(event_session_id.as_str()) != identity.agent_session_id.as_deref() {
+        return None;
+    }
+    crate::agents::normalize_metadata_title(params.get("title"))
 }
 
 /*

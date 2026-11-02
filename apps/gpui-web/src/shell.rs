@@ -371,6 +371,7 @@ impl Render for GhostexGpuiApp {
         }
         let header = self.render_workarea_header(cx);
         let changes = self.render_web_changes_panel(window, cx);
+        let side_chat = self.render_web_side_chat_panel(cx);
         let terminal_bar =
             (shows_terminal && surface.is_some()).then(|| self.render_terminal_action_bar(cx));
         div()
@@ -438,7 +439,8 @@ impl Render for GhostexGpuiApp {
                                         status.unwrap_or_else(|| "Select a session".to_string()),
                                     ),
                             })
-                            .children(changes),
+                            .children(changes)
+                            .children(side_chat),
                     )
                     .children(terminal_bar),
             )

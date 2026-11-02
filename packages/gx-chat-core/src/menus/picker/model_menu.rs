@@ -34,6 +34,9 @@ pub const MODEL_MENU_FAVORITES_TAB: &str = "favorites";
 /// `AUTO_MODEL_VALUE`: the row the agent picks for you, pinned first on its own tab.
 const AUTO_MODEL_VALUE: &str = "auto";
 pub const MODEL_MENU_SEARCH_PLACEHOLDER: &str = "Search models…";
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User: "for opencode and others that have lots of models please add a filter bar at the top of the model picker so i can search for a model ... let's say if there's more than 6 models then enable these 2 things". A tab listing more than this many models gets the search field (see [`model_menu_search_enabled`]); a shorter one keeps the plain list. This supersedes the 2026-09-24/25 removal of the picker's search ("just remove the search it's useless") for long lists only.
+pub const MODEL_MENU_SEARCH_THRESHOLD: usize = 6;
 pub const MODEL_MENU_SHORTCUT_ROWS: usize = 9;
 
 /// The long-context twin of a model is the same row with another Context Window choice.
@@ -316,10 +319,40 @@ pub fn model_menu_opening_tab(
         .unwrap_or(ModelMenuTabId::Favorites)
 }
 
-/// `matchRank`: 0 for a prefix, 1 for a substring, as the label; the description ranks two below.
-fn match_rank(query: &str, text: &str) -> Option<usize> {
-    let at = text.to_lowercase().find(query)?;
-    Some(if at == 0 { 0 } else { 1 })
+/// Whether the open tab lists enough models to get the search field: the agent's whole lineup
+/// (legacy models included), or every starred model on the favorites tab.
+pub fn model_menu_search_enabled(
+    entries: &ModelMenuEntries,
+    tab: ModelMenuTabId,
+    favorites: &[String],
+) -> bool {
+    let count = match tab {
+        ModelMenuTabId::Favorites => MODEL_MENU_PROVIDERS
+            .into_iter()
+            .flat_map(|provider| entries_of(entries, provider.as_str()).iter())
+            .filter(|entry| is_favorite_entry(entry, favorites))
+            .count(),
+        ModelMenuTabId::Provider(provider) => entries_of(entries, provider.as_str()).len(),
+    };
+    count > MODEL_MENU_SEARCH_THRESHOLD
+}
+
+/// A row's star is saved under its own value, or under its 1M twin's, which is where a model
+/// starred while it came in 1M only (Opus 5.5 before 2026-09-27) keeps it.
+fn is_favorite_entry(entry: &ModelMenuEntry, favorites: &[String]) -> bool {
+    std::iter::once(&entry.value)
+        .chain(entry.variants.iter().map(|variant| &variant.value))
+        .any(|value| favorites.contains(&model_menu_favorite_key(entry.provider.as_str(), value)))
+}
+
+/// `matchRank`: every word of the query must appear in `text`, case-insensitively, so "gpt 6"
+/// finds "GPT-6 Luna"; 0 when `text` starts with the first word, else 1.
+fn match_rank(words: &[&str], text: &str) -> Option<usize> {
+    let text = text.to_lowercase();
+    if words.is_empty() || !words.iter().all(|word| text.contains(word)) {
+        return None;
+    }
+    Some(if text.starts_with(words[0]) { 0 } else { 1 })
 }
 
 /// What the current session is running, for the `selected` flag.
@@ -339,15 +372,7 @@ pub fn model_menu_rows(
     legacy_open: bool,
 ) -> Vec<ModelMenuRow> {
     let favorites_tab = tab == ModelMenuTabId::Favorites;
-    // A row's star is saved under its own value, or under its 1M twin's, which is where a model
-    // starred while it came in 1M only (Opus 5.5 before 2026-09-27) keeps it.
-    let is_favorite = |entry: &ModelMenuEntry| {
-        std::iter::once(&entry.value)
-            .chain(entry.variants.iter().map(|variant| &variant.value))
-            .any(|value| {
-                favorites.contains(&model_menu_favorite_key(entry.provider.as_str(), value))
-            })
-    };
+    let is_favorite = |entry: &ModelMenuEntry| is_favorite_entry(entry, favorites);
     let pool: Vec<&ModelMenuEntry> = if favorites_tab {
         MODEL_MENU_PROVIDERS
             .into_iter()
@@ -363,6 +388,7 @@ pub fn model_menu_rows(
         current.model.as_deref(),
     );
     let query = query.trim().to_lowercase();
+    let words: Vec<&str> = query.split_whitespace().collect();
     let mut ranked: Vec<(&ModelMenuEntry, bool, usize, usize)> = Vec::new();
     for (index, entry) in pool.iter().enumerate() {
         let favorite = is_favorite(entry);
@@ -383,33 +409,34 @@ pub fn model_menu_rows(
             ranked.push((entry, favorite, index, 0));
             continue;
         }
-        let by_label = match_rank(&query, &entry.label);
-        let by_description = match_rank(
-            &query,
-            &format!(
-                "{} {}",
-                entry.description.clone().unwrap_or_default(),
-                entry.label
-            ),
-        );
-        let rank = match (by_label, by_description) {
-            (None, None) => continue,
-            (Some(label), None) => label,
-            (None, Some(description)) => description + 2,
-            (Some(label), Some(description)) => label.min(description + 2),
+        // The label ranks first, then the model id ("gpt-6-luna"), then words split between them.
+        let rank = match_rank(&words, &entry.label)
+            .or_else(|| match_rank(&words, &entry.value).map(|rank| rank + 2))
+            .or_else(|| match_rank(&words, &format!("{} {}", entry.label, entry.value)).map(|_| 4));
+        let Some(rank) = rank else {
+            continue;
         };
         ranked.push((entry, favorite, index, rank));
     }
-    // `pinned`: the user's 2026-09-22 decision in `model-menu.ts` ("make Auto show up at the top
-    // here"): on an agent's own tab Auto sorts above a starred model; a search still ranks it.
+    // CDXC:SessionChat 2026-11-02 DECISION:
+    // User: "we need the ability to add models to favorite to show them at the top of the list (shown in order alphabetical order at the top of the models list)". Starred rows come first, sorted by label case-insensitively (the favorites tab too), then the rest in their usual order (search rank, Auto, catalog order); a search keeps matching stars first. This supersedes Auto sorting above the stars (2026-09-22) and stars keeping catalog order.
     let pinned = |entry: &ModelMenuEntry| !favorites_tab && entry.value == AUTO_MODEL_VALUE;
-    // `sort` by rank, then Auto, then favorites first, then catalog order; stable, as
-    // JavaScript's is.
     ranked.sort_by(|left, right| {
-        left.3
-            .cmp(&right.3)
-            .then_with(|| pinned(right.0).cmp(&pinned(left.0)))
-            .then_with(|| right.1.cmp(&left.1))
+        right
+            .1
+            .cmp(&left.1)
+            .then_with(|| {
+                if left.1 {
+                    left.0
+                        .label
+                        .to_lowercase()
+                        .cmp(&right.0.label.to_lowercase())
+                } else {
+                    left.3
+                        .cmp(&right.3)
+                        .then_with(|| pinned(right.0).cmp(&pinned(left.0)))
+                }
+            })
             .then_with(|| left.2.cmp(&right.2))
     });
     ranked
@@ -452,11 +479,7 @@ pub fn model_menu_legacy_count(
         .filter(|entry| {
             entry.legacy
                 && selected_entry.is_none_or(|selected| selected != *entry)
-                && !std::iter::once(&entry.value)
-                    .chain(entry.variants.iter().map(|variant| &variant.value))
-                    .any(|value| {
-                        favorites.contains(&model_menu_favorite_key(entry.provider.as_str(), value))
-                    })
+                && !is_favorite_entry(entry, favorites)
         })
         .count()
 }
@@ -464,7 +487,7 @@ pub fn model_menu_legacy_count(
 /// `modelMenuEmptyText`.
 pub fn model_menu_empty_text(tab: ModelMenuTabId, query: &str) -> String {
     if !query.trim().is_empty() {
-        return "No models found".to_string();
+        return "No models match".to_string();
     }
     if tab == ModelMenuTabId::Favorites {
         "No starred models yet. Star a model from an agent's tab.".to_string()

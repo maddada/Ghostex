@@ -44,10 +44,11 @@ pub const ROOT_AGENT_PATH: &str = "/root";
 pub struct TranscriptViewState {
     /// Whether the transcript is folded into one row per turn.
     pub summary_mode: bool,
-    /// The user's verbose override, or `None` to follow the setting.
+    /// The chat's saved `verbose` record. Verbose is retired: a chat saved on it reads as Detailed
+    /// (`transcript::view_level`).
     pub verbose_override: Option<bool>,
-    /// The user's Simple override for this chat, or `None` to follow the setting (with
-    /// `verbose_override` the chat's detail level: CDXC:SessionChat 2026-10-29 in transcript/actions.rs).
+    /// The chat's saved `simple` record: `true` is Normal, `false` Detailed, `None` follows the
+    /// Default to Detailed view setting (`transcript::view_level`).
     pub simple_override: Option<bool>,
     /// The session's directory, which shortens the paths on file-change cards.
     ///
@@ -122,6 +123,11 @@ pub struct TranscriptViewState {
     pub deferred_cache: DeferredWorkCache,
     /// The `readSessionChatImage` reads in flight, by request id, with the path asked for.
     pub image_requests: BTreeMap<u64, String>,
+    /// A digest of each picture file's bytes the chat has read, by path: a picture an agent read
+    /// that is the same picture as one the user showed at another path gets no thumbnail
+    /// (`transcript/read_images.rs`). Bumped `picture_digests_revision` when a new pair matches.
+    pub picture_digests: std::collections::HashMap<String, u64>,
+    pub picture_digests_revision: u64,
     /// The `readVisualPageThumbnail` reads in flight, by request id, with the page asked for
     /// ([`crate::transcript::page_thumbnails`]).
     pub page_thumbnail_requests: BTreeMap<u64, String>,
@@ -157,6 +163,8 @@ pub struct TranscriptViewState {
     /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's tool calls project
     /// as one card (`transcript/tool_card.rs`). A change throws the cached projections away.
     pub tool_cards: bool,
+    /// The Default to Detailed view setting, which a chat with no level of its own follows.
+    pub detailed_default: bool,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -250,6 +258,8 @@ impl Default for TranscriptViewState {
             deferred_requests: BTreeMap::new(),
             deferred_cache: DeferredWorkCache::default(),
             image_requests: BTreeMap::new(),
+            picture_digests: Default::default(),
+            picture_digests_revision: 0,
             page_thumbnail_requests: BTreeMap::new(),
             page_thumbnail_attempts: BTreeMap::new(),
             pending_summary_mode: None,
@@ -263,6 +273,7 @@ impl Default for TranscriptViewState {
             session_directory: Vec::new(),
             session_directory_revision: 0,
             tool_cards: false,
+            detailed_default: false,
         }
     }
 }

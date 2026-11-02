@@ -241,6 +241,7 @@ pub(crate) fn gpui_remote_gxserver_capabilities_from_health_response(
     GpuiRemoteGxserverCapabilities {
         code_server_prompt_editor: advertises(GPUI_GXSERVER_CODE_SERVER_PROMPT_EDITOR_CAPABILITY),
         browser_tcp_websocket_v1: advertises("browserTcpWebSocketV1"),
+        coordinator_handoff_draft: advertises("coordinatorHandoffDraft"),
         zmx_missing: value
             .get("tools")
             .and_then(serde_json::Value::as_array)
@@ -279,6 +280,16 @@ mod zmx_health_tests {
         assert!(!capabilities(&tool("available")).zmx_missing);
         // An older daemon's answer says nothing either way.
         assert!(!capabilities(r#"{"capabilities":[]}"#).zmx_missing);
+    }
+
+    #[test]
+    fn only_a_daemon_that_advertises_it_takes_an_orchestrator_handoff_draft() {
+        assert!(
+            capabilities(r#"{"capabilities":["health","coordinatorHandoffDraft"]}"#)
+                .coordinator_handoff_draft
+        );
+        assert!(!capabilities(r#"{"capabilities":["health"]}"#).coordinator_handoff_draft);
+        assert!(!capabilities("{}").coordinator_handoff_draft);
     }
 }
 

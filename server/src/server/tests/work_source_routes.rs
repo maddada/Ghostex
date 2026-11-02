@@ -421,10 +421,23 @@ async fn a_path_holding_a_stored_credential_is_refused_without_showing_it() {
         )
         .await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(error_text(&body), PATH_SPELLS_CREDENTIAL, "{path}");
+        // The refusal quotes the typed path through the mask.
+        let masked = format!(
+            "\"{}\" {PATH_SPELLS_CREDENTIAL}",
+            path.replace("abc123", "••••")
+        );
+        assert_eq!(error_text(&body), masked, "{path}");
+        let logged = logged_errors(&routes);
+        assert!(
+            logged
+                .last()
+                .is_some_and(|logged| says_only(logged, &masked)),
+            "{logged:?}"
+        );
     }
     let log = fs::read_to_string(&routes.paths.log_file).unwrap_or_default();
     assert!(!log.contains("abc123"), "{log}");
+    assert!(log.contains("••••"), "{log}");
     assert_eq!(
         read_work_sources(&open_gxserver_database(&routes.paths).expect("db"))
             .expect("read")
@@ -604,7 +617,11 @@ async fn a_value_that_isnt_secret_and_a_path_never_meet() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(error_text(&body), PATH_SPELLS_CREDENTIAL);
+    // Not secret yet, so the path is quoted as typed.
+    assert_eq!(
+        error_text(&body),
+        format!("\"{spelled}\" {PATH_SPELLS_CREDENTIAL}")
+    );
     assert!(!spelled_folder.join("ran").exists(), "it never ran");
 
     fs::write(open_folder.join("closed"), "").expect("closed");
@@ -674,7 +691,11 @@ async fn a_credential_check_that_makes_a_value_secret_finds_none_in_the_path() {
     )
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-    assert_eq!(error_text(&body), PATH_SPELLS_CREDENTIAL);
+    // Not secret yet, so the path is quoted as typed.
+    assert_eq!(
+        error_text(&body),
+        format!("\"{spelled}\" {PATH_SPELLS_CREDENTIAL}")
+    );
 
     fs::write(open_folder.join("closed"), "").expect("closed");
     let (status, body) = save_logged(&routes, &workspace_id, json!({ "token": "abc123" })).await;

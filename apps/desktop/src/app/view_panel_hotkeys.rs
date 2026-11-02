@@ -31,10 +31,12 @@ impl GhostexGpuiApp {
             return false;
         };
         let entries = self.view_strip_entries();
-        let Some(current) = entries
-            .iter()
-            .position(|entry| *entry == ViewStripEntry::View(mode))
-        else {
+        // Side chats are one mode drawn as many tabs: the one on screen is where the step starts.
+        let current = match mode {
+            TitlebarMode::SideChat => self.side_chat_tab_on_screen().map(ViewStripEntry::SideChat),
+            mode => Some(ViewStripEntry::View(mode)),
+        };
+        let Some(current) = entries.iter().position(|entry| Some(*entry) == current) else {
             return false;
         };
         if entries.len() < 2 {

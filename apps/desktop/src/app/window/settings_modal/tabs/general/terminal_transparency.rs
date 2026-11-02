@@ -60,18 +60,11 @@ pub(super) fn transparency_rows(
                 cx,
             ));
         } else {
-            let restart = if cfg!(target_os = "windows") {
-                " On Windows it takes effect the next time Ghostex starts."
-            } else {
-                ""
-            };
             let spec = g
                 .spec(
                     "terminalBackgroundOpacity",
                     "Background opacity (%)",
-                    &format!(
-                        "Terminals can only be see-through while the window is. Turn on transparency to show what is behind the window through them; it picks Dark only, which you can change under Settings > Interface > Transparency.{restart}"
-                    ),
+                    "Terminals can only be see-through while the window is. Turn on transparency to show what is behind the window through them; it picks Dark only, which you can change under Settings > Interface > Transparency.",
                 )
                 .readout("Needs transparency");
             let control = settings_button(

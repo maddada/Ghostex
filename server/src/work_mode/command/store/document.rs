@@ -91,27 +91,25 @@ impl WorkSources {
             })
     }
 
-    fn from_value(value: &Value) -> Self {
+    fn from_value(value: &Value) -> Option<Self> {
         let workspaces = value
-            .get("workspaces")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flatten()
-            .filter_map(|(workspace_id, command)| {
+            .get("workspaces")?
+            .as_object()?
+            .iter()
+            .map(|(workspace_id, command)| {
                 Some((workspace_id.clone(), WorkspaceCommand::from_value(command)?))
             })
-            .collect();
+            .collect::<Option<BTreeMap<_, _>>>()?;
         let retired = value
-            .get("retired")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(RetiredSource::from_value)
-            .collect();
-        Self {
+            .get("retired")?
+            .as_array()?
+            .iter()
+            .map(RetiredSource::from_value)
+            .collect::<Option<Vec<_>>>()?;
+        Some(Self {
             workspaces,
             retired,
-        }
+        })
     }
 
     fn to_value(&self) -> Value {
@@ -129,8 +127,8 @@ impl WorkSources {
 impl WorkspaceCommand {
     fn from_value(value: &Value) -> Option<Self> {
         let text = |key: &str| value.get(key).and_then(Value::as_str).map(str::to_string);
-        // The stored info is read back through the contract parser, so a record the contract
-        // doesn't accept is dropped rather than half-read.
+        // The stored info is read back through the contract parser. A record the contract doesn't
+        // accept makes the whole store unreadable, so a later write cannot erase its pin.
         let mut info = parse_info(value.get("info")?, &AnswerGuard::NONE).ok()?;
         if let Some(reason) = value.pointer("/info/iconError").and_then(Value::as_str) {
             info.icon = Some(Err(reason.to_string()));
@@ -225,10 +223,17 @@ pub(crate) fn read_work_sources(db: &Connection) -> Result<WorkSources, DomainSt
         )
         .optional()
         .map_err(sql_error)?;
-    Ok(stored
-        .and_then(|text| serde_json::from_str::<Value>(&text).ok())
-        .map(|value| WorkSources::from_value(&value))
-        .unwrap_or_default())
+    let Some(stored) = stored else {
+        return Ok(WorkSources::default());
+    };
+    serde_json::from_str::<Value>(&stored)
+        .ok()
+        .and_then(|value| WorkSources::from_value(&value))
+        .ok_or_else(|| DomainStateError {
+            code: "internalError",
+            // A damaged row can contain a credential. Never quote its text or a parser excerpt.
+            message: "Ticket command store can't be read; no changes were saved.".to_string(),
+        })
 }
 
 pub(crate) fn write_work_sources(

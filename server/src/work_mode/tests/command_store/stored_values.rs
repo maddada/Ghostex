@@ -58,13 +58,21 @@ fn a_path_holding_a_stored_credential_is_refused_before_it_runs() {
             &no_references,
         )
     };
-    assert_eq!(refusal(set(&program)), PATH_SPELLS_CREDENTIAL);
-    // A path the resolver would refuse gets the same words, never the resolver's quote of it.
-    assert_eq!(refusal(set("bin/abc123")), PATH_SPELLS_CREDENTIAL);
+    // The refusal quotes the path through the mask.
+    let masked = format!(
+        "\"{}\" {PATH_SPELLS_CREDENTIAL}",
+        program.replace("abc123", "••••")
+    );
+    assert_eq!(refusal(set(&program)), masked);
+    // A path the resolver would refuse gets the same refusal, never the resolver's quote of it.
+    assert_eq!(
+        refusal(set("bin/abc123")),
+        format!("\"bin/••••\" {PATH_SPELLS_CREDENTIAL}")
+    );
     assert_eq!(store.sources().workspaces[&workspace_id].path, kept);
     // Kept after a clear, the token still keeps the path out.
-    clear_work_source(&store.db, &store.paths, &workspace_id, &no_references).expect("cleared");
-    assert_eq!(refusal(set(&program)), PATH_SPELLS_CREDENTIAL);
+    clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+    assert_eq!(refusal(set(&program)), masked);
     assert!(!ran.exists(), "the program never ran");
     assert!(!store.sources().workspaces.contains_key(&workspace_id));
 }
@@ -85,14 +93,15 @@ fn a_resolved_path_holding_a_stored_credential_is_refused() {
         Ok(()) => None,
         Err(other) => panic!("{other:?}"),
     };
-    // `~/tracker` or a bare name can resolve into a folder that holds it.
+    // `~/tracker` or a bare name can resolve into a folder that holds it. Only the typed path is
+    // quoted (this mask is empty), never the resolved one.
     assert_eq!(
-        refused("~/tracker", Some("/home/abc123/tracker")).as_deref(),
-        Some(PATH_SPELLS_CREDENTIAL)
+        refused("~/tracker", Some("/home/abc123/tracker")),
+        Some(format!("\"~/tracker\" {PATH_SPELLS_CREDENTIAL}"))
     );
     assert_eq!(
-        refused("/opt/abc123/tracker", None).as_deref(),
-        Some(PATH_SPELLS_CREDENTIAL)
+        refused("/opt/abc123/tracker", None),
+        Some(format!("\"/opt/abc123/tracker\" {PATH_SPELLS_CREDENTIAL}"))
     );
     assert_eq!(refused("~/tracker", Some("/home/ana/tracker")), None);
     assert_eq!(refused("/opt/ab/tracker", Some("/opt/ab/tracker")), None);
@@ -154,7 +163,7 @@ fn an_info_holding_a_stored_credential_never_reaches_the_record() {
             "Fixture"
         );
 
-        clear_work_source(&store.db, &store.paths, &workspace_id, &no_references).expect("cleared");
+        clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
         refused_by_the_runner("after a clear");
         assert!(
             !store.sources().workspaces.contains_key(&workspace_id),
@@ -261,7 +270,7 @@ fn a_path_set_while_a_check_runs_is_kept() {
 fn a_clear_error_never_shows_a_stored_value() {
     let store = Store::new();
     let workspace_id = pinned_with_token(&store, "ws-a", "abc123");
-    let failed = clear_work_source(&store.db, &store.paths, &workspace_id, &|| {
+    let failed = clear_work_source(&store.db, &workspace_id, &|| {
         Err(crate::domain::DomainStateError::bad_request(
             "sessions unreadable near abc123",
         ))
@@ -329,7 +338,8 @@ fn a_path_holding_a_stored_value_that_isnt_secret_is_refused_before_it_runs() {
         false,
         &no_references,
     ));
-    assert_eq!(refused, PATH_SPELLS_CREDENTIAL);
+    // Not secret, so not masked: the path is quoted as typed.
+    assert_eq!(refused, format!("\"{program}\" {PATH_SPELLS_CREDENTIAL}"));
     assert!(!ran.exists(), "the program never ran");
     let kept = &store.sources().workspaces[&workspace_id];
     assert_eq!(kept.path, first);

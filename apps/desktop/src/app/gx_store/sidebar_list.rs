@@ -608,6 +608,8 @@ impl GhostexGpuiApp {
         // here once through `gx_store_sidebar_state_changed` when it changes something, and that
         // pass finds the request already taken and does nothing.
         self.gx_store_replay_held_sidebar_reveal(cx);
+        // A new session in Drafts opens it; this may rebuild the list, re-entering here once.
+        self.gx_store_open_arrived_drafts(cx);
         let carry_moved = self
             .gx_store
             .sidebar_list

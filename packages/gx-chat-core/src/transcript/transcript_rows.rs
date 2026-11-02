@@ -176,6 +176,11 @@ pub fn tool_rows(
             ) {
                 row.insert("filePath".to_string(), path.into());
             }
+            // A picture file the call opened shows on its row (`read_images.rs`).
+            let images = crate::transcript::read_images::tool_read_images(pair, working_directory);
+            if !images.is_empty() {
+                row.insert("images".to_string(), Value::Array(images));
+            }
             row.insert("failed".to_string(), pair.result_is_error().into());
             // The row's right edge: a check once the call answered, a cross when it failed, and
             // nothing while it runs; then what failed, and how long the call took.

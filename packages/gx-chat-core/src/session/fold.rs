@@ -265,6 +265,16 @@ pub fn fold_state(previous: Option<&FoldedSnapshot>, incoming: StateCarrier<'_>)
         .clone()
         .or_else(|| previous_side.and_then(|state| state.coordinator_threads.clone()));
 
+    folded.result.state.side_chats = side
+        .side_chats
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.side_chats.clone()));
+
+    folded.result.state.side_chat_of = side
+        .side_chat_of
+        .clone()
+        .or_else(|| previous_side.and_then(|state| state.side_chat_of.clone()));
+
     folded.result.state.agent_message_deliveries = side
         .agent_message_deliveries
         .clone()

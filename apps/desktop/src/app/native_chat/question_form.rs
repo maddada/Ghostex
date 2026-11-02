@@ -38,9 +38,15 @@ pub(super) struct FormInput {
     /// The placeholder it shows, which follows the picks.
     placeholder: String,
     /// It holds the reader's text: typed into, or filled from the saved draft once.
-    settled: bool,
+    pub(super) settled: bool,
     /// Its height when it was last painted, for `form_input_reveal_sync`.
     painted_height: Rc<Cell<f32>>,
+    /// Pasted images still being saved, and why the last paste failed (form_attachments.rs).
+    pub(super) pending: usize,
+    pub(super) paste_error: Option<String>,
+    /// Its pills, parsed from `reference_draft`, the text they were parsed from.
+    pub(super) references: Vec<super::composer_references::ComposerReference>,
+    pub(super) reference_draft: Option<String>,
 }
 
 /// The line under a broken form once Ghostex has asked the agent for it again; the phone
@@ -122,6 +128,7 @@ impl NativeChatView {
             }
         }
         self.form_inputs.retain(|key, _| wanted.contains(key));
+        self.sync_form_references(false, cx);
     }
 
     /// One text box of an open form: made once, its placeholder kept in step, and `change` the
@@ -201,9 +208,13 @@ impl NativeChatView {
             }
         }
         self.modal_form_inputs.retain(|key, _| wanted.contains(key));
+        self.sync_form_references(true, cx);
     }
 
-    fn inputs_mut(&mut self, modal: bool) -> &mut std::collections::HashMap<String, FormInput> {
+    pub(super) fn inputs_mut(
+        &mut self,
+        modal: bool,
+    ) -> &mut std::collections::HashMap<String, FormInput> {
         if modal {
             &mut self.modal_form_inputs
         } else {
@@ -268,7 +279,9 @@ impl NativeChatView {
                 } => this.invoke(json!({"type":"formSkipAll","form":form_id}), cx),
                 InputEvent::PressEnter {
                     secondary: true, ..
-                } => this.invoke(json!({"type":"formSend","form":form_id}), cx),
+                } if !this.form_images_pending(&form_id) => {
+                    this.invoke(json!({"type":"formSend","form":form_id}), cx)
+                }
                 // The modal's boxes keep the keyboard in the modal's own window.
                 InputEvent::Focus if !modal => super::focus::reclaim_keyboard_focus(window),
                 _ => {}
@@ -282,6 +295,10 @@ impl NativeChatView {
                 placeholder: hint,
                 settled,
                 painted_height: Rc::new(Cell::new(0.0)),
+                pending: 0,
+                paste_error: None,
+                references: Vec::new(),
+                reference_draft: None,
             },
         );
     }
@@ -294,6 +311,7 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-10-16 WHY: the list keeps its scroll position while a row grows, so a box at the transcript's bottom edge (the reader scrolled up) slid its newest line under the composer. Only a box that grew moves the list: typing in a box already in view, or one the reader scrolled away from, leaves the transcript alone. A list following its tail already keeps the bottom in view. The phone does the same (apps/mobile/app/src/chat/native/transcript/fieldReveal.ts).
     pub(super) fn form_input_reveal_sync(&self, p: &ChatAppearance) -> AnyElement {
         let list = self.list.clone();
+        let held = self.transcript_focus_field_top.clone();
         let boxes: Vec<_> = self
             .form_inputs
             .values()
@@ -323,6 +341,10 @@ impl NativeChatView {
                     let overflow = bounds.bottom() - visible_bottom;
                     if overflow > px(0.0) && bounds.top() < viewport.bottom() {
                         list.scroll_by(overflow);
+                        // The focused field hold (scroll_bottom.rs) keeps it where this puts it.
+                        if let Some(top) = held.get() {
+                            held.set(Some(top - overflow));
+                        }
                         window.request_animation_frame();
                     }
                 }
@@ -413,7 +435,7 @@ impl NativeChatView {
                     cx,
                 )
             }))
-            .when_some(self.form_notes(id, form, enabled, p), |body, notes| {
+            .when_some(self.form_notes(id, form, enabled, p, cx), |body, notes| {
                 body.child(notes)
             })
             .into_any_element();
@@ -513,7 +535,7 @@ impl NativeChatView {
                     None,
                     enabled.then(|| ("Send answers".to_string(), send_chord())),
                     json!({"type":"formSend","form":id}),
-                    !can_send,
+                    !can_send || self.form_images_pending(id),
                     p,
                     cx,
                 ),
@@ -532,7 +554,9 @@ impl NativeChatView {
                     } else {
                         "formSend"
                     };
-                    this.invoke(json!({"type":action,"form":send_form}), cx);
+                    if action == "formSkipAll" || !this.form_images_pending(&send_form) {
+                        this.invoke(json!({"type":action,"form":send_form}), cx);
+                    }
                     cx.stop_propagation();
                 }
             }))
@@ -727,9 +751,10 @@ impl NativeChatView {
             ));
         }
         let written = text(draft, "other");
-        match self.form_input_entry(&format!("{id}:{index}")) {
-            Some(FormInput { input, .. }) if enabled => {
-                column = column.child(note_box(input, "Note", p));
+        let key = format!("{id}:{index}");
+        match self.form_input_entry(&key) {
+            Some(entry) if enabled => {
+                column = column.child(self.form_box(&key, entry, "Note", p, cx));
             }
             _ if !written.trim().is_empty() => {
                 let shown = if question["text"] == true {
@@ -821,13 +846,15 @@ impl NativeChatView {
         form: &Value,
         enabled: bool,
         p: &ChatAppearance,
+        cx: &Context<Self>,
     ) -> Option<AnyElement> {
         if form["takesNotes"] != true {
             return None;
         }
         let s = p.scale;
-        let content = match self.form_input_entry(&format!("{id}:notes")) {
-            Some(FormInput { input, .. }) if enabled => note_box(input, "Notes", p),
+        let key = format!("{id}:notes");
+        let content = match self.form_input_entry(&key) {
+            Some(entry) if enabled => self.form_box(&key, entry, "Notes", p, cx),
             _ => {
                 let notes = text(form, "notes");
                 if notes.trim().is_empty() {
@@ -867,8 +894,14 @@ fn skip_all_chord() -> String {
     }
 }
 
-/// A question's note box, and the form's notes box: one look.
-fn note_box(input: &Entity<TextareaState>, label: &'static str, p: &ChatAppearance) -> AnyElement {
+/// A question's note box, and the form's notes box: one look. `paste` takes a pasted image
+/// (form_attachments.rs).
+pub(super) fn note_box(
+    input: &Entity<TextareaState>,
+    label: &'static str,
+    paste: impl Fn(&gpui::ClipboardItem, &mut Window, &mut gpui::App) -> bool + 'static,
+    p: &ChatAppearance,
+) -> AnyElement {
     let s = p.scale;
     div()
         .w_full()
@@ -880,6 +913,7 @@ fn note_box(input: &Entity<TextareaState>, label: &'static str, p: &ChatAppearan
         .bg(if p.light { p.background } else { p.card_row })
         .child(
             Textarea::new(input)
+                .on_paste(paste)
                 .aria_label(label)
                 .placeholder_color(p.muted.opacity(0.75))
                 .caret_color(p.foreground)

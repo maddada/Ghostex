@@ -64,6 +64,10 @@ pub async fn run(args: Vec<String>) -> Result<()> {
         return result;
     }
     let command = args.first().map(String::as_str);
+    #[cfg(target_os = "macos")]
+    if command == Some("--recover-after-login") {
+        return crate::server::macos_login_recovery::recover().await;
+    }
     /*
     `setup` is the recovery boundary for an uploaded managed package. It must
     not depend on the existing storage layout being migratable: setup replaces
@@ -241,7 +245,10 @@ pub async fn get_gxserver_status(_build_identity: &str, _version: &str) -> Resul
     Ok(create_stopped_status(metadata))
 }
 
-async fn start_gxserver_background(build_identity: &str, version: &str) -> Result<StatusResponse> {
+pub(crate) async fn start_gxserver_background(
+    build_identity: &str,
+    version: &str,
+) -> Result<StatusResponse> {
     #[cfg(windows)]
     let placement = crate::platform::desktop_session::server_placement()
         .context("find the Windows session gxserver may run in")?;

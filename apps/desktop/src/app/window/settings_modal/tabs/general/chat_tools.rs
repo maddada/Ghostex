@@ -135,8 +135,8 @@ fn chat_section(
     rows.extend(page.toggle(g, s, "chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one card: it counts the calls, says what each one is doing and then did, with its result and time, explains a failure, and folds to one line once the agent writes again. Off keeps the current look.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.", false, cx));
     rows.extend(page.toggle(g, s, "sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape.", false, cx));
-    // CDXC:Settings 2026-10-29 DECISION (cleanup Q11): Simple mode and Verbose mode left Settings; a
-    // chat's More actions > View menu picks Simple, Detailed or Verbose for that chat.
+    // CDXC:Settings 2026-11-02 SEE-ALSO: the user's words on Default to Detailed view (an Advanced row) are in packages/settings-catalog/src/general/chat.rs.
+    rows.extend(page.toggle(g, s, "sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.", false, cx));
     rows.extend(page.toggle(g, s, "chatCatchMeUp", "Catch me up button", "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested.", false, cx));
     rows.extend(page.toggle(g, s, "chatSendOnPick", "Send when you pick an answer", "When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.", false, cx));
     rows.extend(page.toggle(g, s, "chatAnswersWaitForIdle", "Wait for turn end before sending form answers", "Send answers from question forms and chat pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.", false, cx));
@@ -498,7 +498,9 @@ fn file_opening_section(
     let unavailable: Vec<String> = targets
         .iter()
         .map(|option| option.value.clone())
-        .filter(|value| value != "files" && value != "code" && !installed.contains(value))
+        .filter(|value| {
+            !matches!(value.as_str(), "files" | "code" | "system-app") && !installed.contains(value)
+        })
         .collect();
     for option in &mut targets {
         if unavailable.contains(&option.value) {
@@ -510,12 +512,12 @@ fn file_opening_section(
         (
             "documentFileOpenTarget",
             "HTML, Markdown and images",
-            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat, the terminal or `ghostex open`.",
+            ".html, .md and pictures such as .png, .jpg and .svg, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
         (
             "otherFileOpenTarget",
             "Other files",
-            "Code and text files, opened from Quick Access, agent chat, the terminal or `ghostex open`.",
+            "Code and text files, opened from Quick Access, agent chat, the terminal or `ghostex open`. System App opens each in your computer's default app for its type.",
         ),
     ] {
         if !g.visible(s, key) {

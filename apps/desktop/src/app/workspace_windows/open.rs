@@ -54,7 +54,8 @@ pub(crate) fn workspace_window_options(
 ) -> WindowOptions {
     WindowOptions {
         window_bounds: Some(window_bounds),
-        window_background: window_glass_background_appearance(),
+        // Opens where glass can be switched live (CDXC:Theming 2026-11-02 in helpers/window_glass.rs).
+        window_background: live_glass_window_creation_background(),
         display_id,
         window_min_size: Some(size(
             px(GPUI_WINDOW_FRAME_MIN_WIDTH),

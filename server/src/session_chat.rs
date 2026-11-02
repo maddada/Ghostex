@@ -793,6 +793,9 @@ pub struct SessionChatIncrementalState {
     /// The time of the newest row read so far, which a user row appended after it may not
     /// precede (`stamp_user_row_after_predecessor`). Seeded from the tail read like the leaf.
     last_message_timestamp: Option<i64>,
+    /// A Codex rollout's open Thought row, seeded from the tail read like the leaf; `None` leaves
+    /// every row as it is decoded (`session_chat_codex_thoughts.rs`).
+    codex_thoughts: Option<crate::session_chat_codex_thoughts::CodexThoughtStretch>,
 }
 
 impl SessionChatIncrementalState {
@@ -811,6 +814,7 @@ impl SessionChatIncrementalState {
             leaf_row_id: None,
             active_branch_changed: false,
             last_message_timestamp: None,
+            codex_thoughts: None,
         }
     }
 
@@ -828,6 +832,7 @@ impl SessionChatIncrementalState {
         self.leaf_row_id = None;
         self.active_branch_changed = false;
         self.last_message_timestamp = None;
+        self.codex_thoughts = None;
     }
 
     /// Hands the tail read's still-waiting queue entries to the append stream
@@ -953,6 +958,14 @@ impl SessionChatIncrementalState {
         }
     }
 
+    /// Hands the tail read's open Codex Thought row to the append stream. Call AFTER `rebase`.
+    pub(crate) fn seed_codex_thoughts(
+        &mut self,
+        stretch: Option<crate::session_chat_codex_thoughts::CodexThoughtStretch>,
+    ) {
+        self.codex_thoughts = stretch;
+    }
+
     pub fn rebase(&mut self, offset: u64) {
         self.reset();
         self.offset = offset;
@@ -1049,10 +1062,26 @@ pub fn read_incremental_transcript_messages(
                             &mut message,
                             &mut state.last_message_timestamp,
                         );
-                        messages.push(message);
-                        if let Some(on_batch) = on_batch.as_mut() {
-                            if messages.len() >= APPEND_BATCH_MESSAGE_LIMIT {
-                                on_batch(std::mem::take(&mut messages));
+                        let mut waiting_in_batch = None;
+                        if let Some(stretch) = state.codex_thoughts.as_mut() {
+                            let fed = message.id.clone();
+                            message = stretch.feed(message);
+                            // A grown Thought row still waiting in this batch is replaced
+                            // there; one already sent goes again under its id.
+                            if message.id != fed {
+                                waiting_in_batch = messages
+                                    .iter()
+                                    .rposition(|waiting| waiting.id == message.id);
+                            }
+                        }
+                        if let Some(at) = waiting_in_batch {
+                            messages[at] = message;
+                        } else {
+                            messages.push(message);
+                            if let Some(on_batch) = on_batch.as_mut() {
+                                if messages.len() >= APPEND_BATCH_MESSAGE_LIMIT {
+                                    on_batch(std::mem::take(&mut messages));
+                                }
                             }
                         }
                     }

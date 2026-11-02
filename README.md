@@ -1,6 +1,7 @@
 <div align="center">
 
 # <a href="https://ghostex.dev"><img src="media/ghostex-marketplace-icon.png" alt="Ghostex" width="72" valign="middle" /></a> Ghostex <br>The Best Native Agents Workspace
+
 </div>
 
 <p align="center">
@@ -17,6 +18,10 @@
 
 <h3 align="center"><a href="#install"><ins>Download Ghostex</ins></a> &nbsp;·&nbsp; <a href="https://ghostex.dev">Website</a> &nbsp;·&nbsp; <a href="https://youtu.be/QzjFB4J6-8E">Watch the 3-minute tour</a>  &nbsp;·&nbsp; <a href="https://www.youtube.com/watch?v=cJgogrS4mao">Watch the Demo</a></h3>
 
+<br />
+
+<h3 align="center">Lots of useful extensions & views</h3>
+
 <p align="center">
   <a href="media/readme/gx-hero-1.webp">
     <picture>
@@ -25,23 +30,45 @@
   </a>
 </p>
 
+<h3 align="center">Super Customizable & Powerful</h3>
+<p align="center">As minimal or feature-rich as you want it to be</p>
 <p align="center">
-  <a href="media/readme/gx-hero-2.webp">
+  <a href="media/readme/gx-hero-2.jpeg">
     <picture>
-          <img width="960" src="media/readme/gx-hero-2.webp" />
+      <img width="960" src="media/readme/gx-hero-2.jpeg" />
+    </picture>
+  </a>
+</p>
+
+<h3 align="center">First-class Coordinators with Visual Questions</h3>
+<p align="center">Coordinators fully manage your projects for you and spin up threads automatically.</br>Work best with the /ghostex-visuals skill</p>
+<p align="center">
+  <a href="media/readme/gx-hero-7.webp">
+    <picture>
+      <img width="960" src="media/readme/gx-hero-7.webp" />
     </picture>
   </a>
 </p>
 
 <p align="center">
-  <a href="media/readme/gx-hero-3.webp">
+  <a href="media/readme/gx-hero-8.webp">
     <picture>
-      <img width="960" src="media/readme/gx-hero-3.webp" />
+      <img width="960" src="media/readme/gx-hero-8.webp" />
     </picture>
   </a>
 </p>
 
-Ghostex is built for developers who keep many agents alive at once. A chat view for every agent, a native Rust/GPUI shell, embedded Chromium panes, and a mobile app share one workspace, and every session survives restarts.
+<h3 align="center">Fully-featured Editor Built in (with annotations)</h3>
+
+<p align="center">
+  <a href="media/readme/gx-hero-6.jpeg">
+    <picture>
+      <img width="960" src="media/readme/gx-hero-6.jpeg" />
+    </picture>
+  </a>
+</p>
+
+<p align="center"><sub>Want an animated wallpaper behind Ghostex like these? Try <a href="https://wallspace.app/">Wallspace</a> on macOS (free, recommended), <a href="https://github.com/rocksdanister/lively">Lively Wallpaper</a> on Windows (free, open source) or <a href="https://github.com/jeffshee/hidamari">Hidamari</a> on Linux (free, open source; it has no gallery, so add your own videos, for example looping clips from <a href="https://www.pexels.com/search/videos/abstract%20loop/">Pexels Videos</a>, or paste a YouTube link: search for "4K live wallpaper loop"). Move Ghostex to its own desktop or workspace so only the wallpaper sits behind it.</sub></p>
 
 ## Features
 

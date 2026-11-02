@@ -34,7 +34,11 @@ impl GhostexGpuiApp {
     }
 
     pub(crate) fn notify_native_chat_views(&mut self, cx: &mut gpui::Context<Self>) {
-        for view in self.native_chat_views.values() {
+        for view in self
+            .native_chat_views
+            .values()
+            .chain(self.side_panel_chat_views())
+        {
             view.update(cx, |_, cx| cx.notify());
         }
         // The Kanban board, the Automate page and the Bot automations feed are cached views drawn from the same settings.

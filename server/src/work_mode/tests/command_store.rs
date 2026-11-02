@@ -55,14 +55,28 @@ fn check_work_source(
     .result
 }
 
-/// The store's clear, as these tests read it.
+/// The store's clear, as these tests read it. It reads the stored values' mask from the folders
+/// the test database keeps beside it.
 fn clear_work_source(
-    db: &rusqlite::Connection,
-    paths: &GxserverPaths,
+    db: &StoreDb,
     workspace_id: &str,
     references: References,
 ) -> Result<(), WorkSourceError> {
-    crate::work_mode::clear_work_source(db, paths, workspace_id, references).result
+    crate::work_mode::clear_work_source(db, &db.paths, workspace_id, references).result
+}
+
+/// A test's database and the folders its credentials file is in.
+struct StoreDb {
+    database: GxserverDatabase,
+    paths: GxserverPaths,
+}
+
+impl std::ops::Deref for StoreDb {
+    type Target = GxserverDatabase;
+
+    fn deref(&self) -> &GxserverDatabase {
+        &self.database
+    }
 }
 
 struct Store {
@@ -71,7 +85,7 @@ struct Store {
     workspaces: RefCell<HashMap<String, String>>,
     _temp: tempfile::TempDir,
     paths: GxserverPaths,
-    db: GxserverDatabase,
+    db: StoreDb,
     program: PathBuf,
 }
 
@@ -87,8 +101,11 @@ impl Store {
         Self {
             workspaces: RefCell::new(HashMap::new()),
             _temp: temp,
+            db: StoreDb {
+                database: db,
+                paths: paths.clone(),
+            },
             paths,
-            db,
             program,
         }
     }
@@ -162,6 +179,91 @@ fn setting_a_command_pins_its_id_and_keeps_its_info() {
 }
 
 #[test]
+fn a_damaged_command_store_blocks_changes_without_losing_other_pins() {
+    let store = Store::new();
+    store.answer("good");
+    store.set("ws-a", false).expect("first pin");
+    store.set("ws-b", false).expect("second pin");
+    let intact = stored_row(&store);
+    let mut bad_command: Value = serde_json::from_str(&intact).expect("document");
+    bad_command["workspaces"][store.ws("ws-a")]
+        .as_object_mut()
+        .expect("command")
+        .remove("sourceId");
+    let mut bad_retired: Value = serde_json::from_str(&intact).expect("document");
+    bad_retired["retired"] = json!([{ "id": "old-without-format" }]);
+    for damaged in [
+        "{".to_string(),
+        "[]".to_string(),
+        bad_command.to_string(),
+        bad_retired.to_string(),
+    ] {
+        store
+            .db
+            .execute(
+                "UPDATE metadata SET value = ?1 WHERE key = 'workTicketSources'",
+                [&damaged],
+            )
+            .expect("damage row");
+        assert!(read_work_sources(&store.db).is_err());
+        assert!(matches!(
+            store.set("ws-b", false),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert!(matches!(
+            clear_work_source(&store.db, &store.ws("ws-b"), &no_references),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert!(matches!(
+            delete_workspace_work_source(
+                &store.db,
+                &store.paths,
+                &store.ws("ws-b"),
+                &no_references
+            ),
+            Err(WorkSourceError::Storage(_))
+        ));
+        assert_eq!(
+            stored_row(&store),
+            damaged,
+            "the damaged row was not replaced"
+        );
+    }
+    store
+        .db
+        .execute(
+            "UPDATE metadata SET value = ?1 WHERE key = 'workTicketSources'",
+            [&intact],
+        )
+        .expect("restore row");
+    assert_eq!(store.sources().workspaces.len(), 2);
+}
+
+#[test]
+fn a_missing_or_empty_command_store_reads_as_empty_and_every_written_one_reads_back() {
+    let store = Store::new();
+    assert_eq!(store.sources(), WorkSources::default(), "no row yet");
+    write_work_sources(&store.db, &WorkSources::default()).expect("write empty");
+    assert_eq!(store.sources(), WorkSources::default(), "an empty row");
+    // A refused icon is kept as its reason; retired ids keep their format, name and icon.
+    store.answer("bad-icon");
+    let refused_icon = store.set("ws-a", false).expect("pinned");
+    assert!(matches!(refused_icon.info.icon, Some(Err(_))));
+    let mut written = store.sources();
+    assert_eq!(written.workspaces[&store.ws("ws-a")], refused_icon);
+    written.retired = vec![
+        retired(0),
+        RetiredSource {
+            format: IdFormat::KeyNumber,
+            icon: Some("<svg/>".to_string()),
+            ..retired(1)
+        },
+    ];
+    write_work_sources(&store.db, &written).expect("write back");
+    assert_eq!(store.sources(), written);
+}
+
+#[test]
 fn a_command_that_now_calls_itself_otherwise_waits_for_a_switch() {
     let store = Store::new();
     store.answer("good");
@@ -207,7 +309,7 @@ fn a_change_of_id_format_is_refused_here_and_in_another_workspace() {
     let elsewhere = refusal(store.set("ws-b", false));
     assert!(elsewhere.contains("key-number ids"), "{elsewhere}");
     // A retired id keeps its format too.
-    clear_work_source(&store.db, &store.paths, &store.ws("ws-a"), &no_references).expect("cleared");
+    clear_work_source(&store.db, &store.ws("ws-a"), &no_references).expect("cleared");
     assert!(refusal(store.set("ws-b", false)).contains("sends number ids now"));
 }
 
@@ -233,7 +335,7 @@ fn clearing_keeps_the_credentials_and_retires_the_id() {
         stored["workspaceSourceCredentials"][&store.ws("ws-a")]["fixture"],
         json!({ "mode": "good", "token": "tok-store-1" })
     );
-    clear_work_source(&store.db, &store.paths, &store.ws("ws-a"), &no_references).expect("cleared");
+    clear_work_source(&store.db, &store.ws("ws-a"), &no_references).expect("cleared");
     assert!(store.sources().workspaces.is_empty());
     assert_eq!(store.sources().retired[0].id, "fixture");
     assert_eq!(
@@ -241,6 +343,38 @@ fn clearing_keeps_the_credentials_and_retires_the_id() {
         stored,
         "clearing keeps the credentials"
     );
+}
+
+#[test]
+fn a_refused_path_masks_credentials_kept_after_clearing() {
+    let store = Store::new();
+    store.answer("good");
+    let workspace_id = store.ws("ws-a");
+    store.set("ws-a", false).expect("pinned");
+    let secret = "tok-path-903";
+    set_work_source_credentials(
+        &store.db,
+        &store.paths,
+        &workspace_id,
+        json!({ "token": secret }).as_object().expect("values"),
+    )
+    .expect("stored");
+    let path = format!("bin/{secret}");
+    for cleared in [false, true] {
+        if cleared {
+            clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+        }
+        let refused = refusal(set_work_source(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            &path,
+            false,
+            &no_references,
+        ));
+        assert!(refused.contains("bin/••••"), "{refused}");
+        assert!(!refused.contains(secret), "{refused}");
+    }
 }
 
 #[test]
@@ -548,7 +682,7 @@ fn a_refusal_after_a_clear_masks_the_values_it_kept() {
     let workspace_id = store.ws("ws-a");
     store.set("ws-a", false).expect("pinned");
     save(&store, &workspace_id, json!({ "token": "command" })).expect("stored");
-    clear_work_source(&store.db, &store.paths, &workspace_id, &no_references).expect("cleared");
+    clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
     match save(&store, &workspace_id, json!({ "token": "tok-new-6" })) {
         Err(WorkSourceError::Refused(text)) => assert_eq!(text, "Set the ticket •••• first."),
         other => panic!("not refused: {other:?}"),
@@ -902,10 +1036,7 @@ fn retiring_never_fails_past_the_pruning_target_and_keeps_referenced_ids() {
     store.set("ws-b", false).expect("pinned again");
     let mut kept: BTreeSet<String> = BTreeSet::new();
     kept.insert("old-63".to_string());
-    clear_work_source(&store.db, &store.paths, &store.ws("ws-b"), &|| {
-        Ok(kept.clone())
-    })
-    .expect("cleared");
+    clear_work_source(&store.db, &store.ws("ws-b"), &|| Ok(kept.clone())).expect("cleared");
     let sources = store.sources();
     assert_eq!(sources.retired.len(), 64);
     assert!(sources.retired.iter().any(|retired| retired.id == "old-63"));
@@ -1244,7 +1375,7 @@ fn a_failed_reference_read_is_an_error_not_no_references() {
     store.answer("good");
     store.set("ws-a", false).expect("pinned");
     let workspace_id = store.ws("ws-a");
-    let failed = clear_work_source(&store.db, &store.paths, &workspace_id, &|| {
+    let failed = clear_work_source(&store.db, &workspace_id, &|| {
         Err(crate::domain::DomainStateError::bad_request("no sessions"))
     });
     assert!(

@@ -106,14 +106,22 @@ pub(crate) fn run_zmx_start_command(
     let job = MacosZmxLaunchdJob::new(session_name)?;
     job.prepare(&script)?;
 
-    let bootstrap = job.launchctl(&["bootstrap", &job.domain_target, &job.plist_path_string]);
+    let mut domain = MacosZmxLaunchdDomain::Gui;
+    let bootstrap = job.bootstrap(domain);
     if !bootstrap.success {
         if macos_zmx_session_exists(session_name, zmx_executable_path) {
             job.remove_private_launch_script();
             return Ok(zmx_start_observed_success());
         }
-        let _ = job.launchctl(&["bootout", &job.job_target]);
-        let retry = job.launchctl(&["bootstrap", &job.domain_target, &job.plist_path_string]);
+        domain = macos_zmx_retry_domain(
+            &job.launchctl(&["print", &job.domain_target(MacosZmxLaunchdDomain::Gui)]),
+        );
+        // Both labels go: launchd refuses a `gui/<uid>` bootstrap (error 5) while the same label
+        // is still loaded in `user/<uid>` from a session started before the user logged in.
+        for loaded in [MacosZmxLaunchdDomain::Gui, MacosZmxLaunchdDomain::User] {
+            let _ = job.launchctl(&["bootout", &job.job_target(loaded)]);
+        }
+        let retry = job.bootstrap(domain);
         if !retry.success {
             job.remove_private_launch_script();
             return Err(ZmxEndpointError::DependencyUnavailable(format!(
@@ -123,7 +131,7 @@ pub(crate) fn run_zmx_start_command(
         }
     }
 
-    let kickstart = job.launchctl(&["kickstart", &job.job_target]);
+    let kickstart = job.launchctl(&["kickstart", &job.job_target(domain)]);
     if !kickstart.success && !macos_zmx_session_exists(session_name, zmx_executable_path) {
         job.cleanup();
         return Err(ZmxEndpointError::DependencyUnavailable(format!(
@@ -216,6 +224,23 @@ fn zmx_start_observed_success() -> ZmxStartOutcome {
 }
 
 #[cfg(target_os = "macos")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MacosZmxLaunchdDomain {
+    Gui,
+    User,
+}
+
+#[cfg(target_os = "macos")]
+impl MacosZmxLaunchdDomain {
+    fn target(self, uid: u32) -> String {
+        match self {
+            Self::Gui => format!("gui/{uid}"),
+            Self::User => format!("user/{uid}"),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
 struct MacosLaunchctlResult {
     success: bool,
     stderr: String,
@@ -237,8 +262,7 @@ impl MacosLaunchctlResult {
 
 #[cfg(target_os = "macos")]
 struct MacosZmxLaunchdJob {
-    domain_target: String,
-    job_target: String,
+    uid: u32,
     label: String,
     launch_script_path: PathBuf,
     log_path: PathBuf,
@@ -266,8 +290,7 @@ impl MacosZmxLaunchdJob {
         let plist_path = runtime_dir.join(format!("{key}.plist"));
         let plist_path_string = plist_path.to_string_lossy().to_string();
         Ok(Self {
-            domain_target: format!("gui/{uid}"),
-            job_target: format!("gui/{uid}/{label}"),
+            uid,
             label,
             launch_script_path: runtime_dir.join(format!("{key}.sh")),
             log_path: runtime_dir.join(format!("{key}.log")),
@@ -275,6 +298,22 @@ impl MacosZmxLaunchdJob {
             plist_path_string,
             socket_path: macos_zmx_socket_path(session_name),
         })
+    }
+
+    fn domain_target(&self, domain: MacosZmxLaunchdDomain) -> String {
+        domain.target(self.uid)
+    }
+
+    fn job_target(&self, domain: MacosZmxLaunchdDomain) -> String {
+        format!("{}/{}", self.domain_target(domain), self.label)
+    }
+
+    fn bootstrap(&self, domain: MacosZmxLaunchdDomain) -> MacosLaunchctlResult {
+        self.launchctl(&[
+            "bootstrap",
+            &self.domain_target(domain),
+            &self.plist_path_string,
+        ])
     }
 
     fn prepare(&self, start_script: &str) -> ZmxEndpointResult<()> {
@@ -326,6 +365,11 @@ done
   <false/>
   <key>KeepAlive</key>
   <false/>
+  <key>LimitLoadToSessionType</key>
+  <array>
+    <string>Aqua</string>
+    <string>Background</string>
+  </array>
   <key>ProcessType</key>
   <string>Interactive</string>
   <key>StandardOutPath</key>
@@ -366,10 +410,65 @@ done
     }
 
     fn cleanup(&self) {
-        let _ = self.launchctl(&["bootout", &self.job_target]);
+        for domain in [MacosZmxLaunchdDomain::Gui, MacosZmxLaunchdDomain::User] {
+            let _ = self.launchctl(&["bootout", &self.job_target(domain)]);
+        }
         self.remove_private_launch_script();
         let _ = fs::remove_file(&self.plist_path);
         let _ = fs::remove_file(&self.log_path);
+    }
+}
+
+/// CDXC:Zmx 2026-11-02 DECISION: User: "when the Mac is logged out, gxserver should still start sessions by falling back to the user's background launchd domain (`user/<uid>`). Keep `gui/<uid>` first. Fall back only when the gui domain is unavailable". The gui domain counts as unavailable when `launchctl print gui/<uid>` fails: no desktop login (bootstrap error 125), or a gxserver left in an ended login session ("141: Reentrancy avoided"). A `user/<uid>` job is still a zmx session's own launchd job, so the 2026-08-07 coalition and app-replacement reasons above hold; the user domain outlives both logout and the next login, and its jobs can read the login Keychain once the user is logged in.
+#[cfg(target_os = "macos")]
+fn macos_zmx_retry_domain(gui_domain_probe: &MacosLaunchctlResult) -> MacosZmxLaunchdDomain {
+    if gui_domain_probe.success {
+        MacosZmxLaunchdDomain::Gui
+    } else {
+        MacosZmxLaunchdDomain::User
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_launchd_domain_tests {
+    use super::*;
+
+    fn probe(success: bool, stderr: &str) -> MacosLaunchctlResult {
+        MacosLaunchctlResult {
+            success,
+            stderr: stderr.to_string(),
+            stdout: String::new(),
+        }
+    }
+
+    #[test]
+    fn domains_name_the_uid() {
+        assert_eq!(MacosZmxLaunchdDomain::Gui.target(501), "gui/501");
+        assert_eq!(MacosZmxLaunchdDomain::User.target(501), "user/501");
+    }
+
+    #[test]
+    fn a_readable_gui_domain_keeps_the_retry_in_gui() {
+        // The first bootstrap failed for another reason, such as the label still loaded in user/<uid>.
+        assert_eq!(
+            macos_zmx_retry_domain(&probe(true, "")),
+            MacosZmxLaunchdDomain::Gui
+        );
+    }
+
+    #[test]
+    fn an_unavailable_gui_domain_falls_back_to_the_user_domain() {
+        for stderr in [
+            "Could not find domain for user gui: 501",
+            "Bad request.\nDomain does not support specified action",
+            "Bad request.\n141: Reentrancy avoided",
+        ] {
+            assert_eq!(
+                macos_zmx_retry_domain(&probe(false, stderr)),
+                MacosZmxLaunchdDomain::User,
+                "{stderr}"
+            );
+        }
     }
 }
 

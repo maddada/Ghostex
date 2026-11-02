@@ -827,7 +827,7 @@ impl GhostexGpuiApp {
             .iter()
             .filter_map(|entry| match entry {
                 ViewStripEntry::Browser(tab) => Some(tab.tab_id),
-                ViewStripEntry::View(_) => None,
+                ViewStripEntry::View(_) | ViewStripEntry::SideChat(_) => None,
             })
             .collect::<Vec<_>>();
         self.remove_browser_surface(tab_id, cx);

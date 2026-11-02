@@ -161,7 +161,7 @@ impl GhostexGpuiApp {
             .into_iter()
             .filter_map(|entry| match entry {
                 ViewStripEntry::View(mode) => Some(mode),
-                ViewStripEntry::Browser(_) => None,
+                ViewStripEntry::Browser(_) | ViewStripEntry::SideChat(_) => None,
             })
             .collect()
     }
@@ -197,7 +197,10 @@ impl GhostexGpuiApp {
         }
         self.open_views.push(mode);
         // Browser has a tab of its own in the strip only while its pages have their own row;
-        // otherwise its pages are placed as they open.
+        // otherwise its pages are placed as they open. Side chats are always their own tabs.
+        if mode == TitlebarMode::SideChat {
+            return;
+        }
         if mode != TitlebarMode::Browser || self.browser_pages_in_view_row {
             self.append_view_strip_tab(ViewStripTabKey::View(mode));
         }
@@ -255,6 +258,10 @@ impl GhostexGpuiApp {
     ) {
         let (mode, pane_id) = match successor {
             Some(ViewStripEntry::View(mode)) => (mode, None),
+            Some(ViewStripEntry::SideChat(tab_id)) => {
+                self.view_strip_layout.active_side_chat = Some(tab_id);
+                (TitlebarMode::SideChat, None)
+            }
             Some(ViewStripEntry::Browser(tab)) => {
                 // The page's pane is looked up again, as `show_view_strip_entry` does.
                 let Some(pane_id) =
@@ -315,6 +322,9 @@ impl GhostexGpuiApp {
     ) {
         if mode == TitlebarMode::Agents || !self.open_views.contains(&mode) {
             return;
+        }
+        if mode == TitlebarMode::SideChat {
+            return self.close_current_side_chat_tab(window, cx);
         }
         let shown = mode == self.active_mode;
         // The Browser view takes all of its pages with it; the one on screen is where the search

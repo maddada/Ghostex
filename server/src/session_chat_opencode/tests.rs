@@ -487,3 +487,26 @@ fn live_service_pagination_rewind_children_and_shell() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
 }
+
+/// The lineup every thread's OpenCode tab lists (issue #390) is built from `/api/model` the same
+/// way as an OpenCode thread's own.
+#[test]
+fn lineup_entry_keys_rows_by_provider_and_keeps_their_variants() {
+    let entry = lineup_entry(&json!({"location":{"directory":"/home"},"data":[
+        {"id":"particle-ai/particle-1","providerID":"openrouter","name":"Particle-1","variants":[{"id":"low"},{"id":"high"}],"limit":{"context":200000}},
+        {"id":"big-pickle","providerID":"opencode","name":" ","variants":[]}
+    ]}))
+    .unwrap();
+    assert_eq!(entry["name"], "OpenCode");
+    assert_eq!(
+        entry["models"][0]["value"],
+        "openrouter/particle-ai/particle-1"
+    );
+    assert_eq!(entry["models"][0]["label"], "Particle-1");
+    assert_eq!(entry["models"][0]["efforts"], json!(["low", "high"]));
+    assert_eq!(entry["models"][0]["contextWindow"], 200000);
+    // A model OpenCode names with a blank string is labelled by its id, so the catalog stays valid.
+    assert_eq!(entry["models"][1]["label"], "big-pickle");
+    assert_eq!(entry["efforts"], json!(["high", "low"]));
+    assert!(lineup_entry(&json!({"data": null})).is_none());
+}

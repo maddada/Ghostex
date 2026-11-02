@@ -191,48 +191,65 @@ impl GhostexGpuiApp {
             .unwrap_or(1.0);
         // The menu hangs below the card, as a Project sidebar row's does.
         let owner = crate::app::native_sidebar::menus::MenuOwner::default();
-        row.on_prepaint(crate::app::native_sidebar::menus::record_menu_owner(&owner))
-            .on_hover(cx.listener(move |app, hovered: &bool, _, cx| {
-                let current =
-                    app.native_sidebar.hovered_session.as_deref() == Some(hover_id.as_str());
-                if *hovered && !current {
-                    app.native_sidebar.hovered_session = Some(hover_id.clone());
-                    cx.notify();
-                } else if !*hovered && current {
-                    app.native_sidebar.hovered_session = None;
-                    cx.notify();
+        let record_owner = crate::app::native_sidebar::menus::record_menu_owner(&owner);
+        // A card waiting to be scrolled to (a new session in Drafts, gx_store/draft_arrivals.rs)
+        // reports where it was drawn, as a Project sidebar row does.
+        let reveal = self
+            .native_sidebar
+            .pending_reveal
+            .as_ref()
+            .is_some_and(|request| request.session_id == session_id)
+            .then(|| (cx.entity().downgrade(), session_id.clone()));
+        row.on_prepaint(move |bounds, window, app| {
+            record_owner(bounds, window, app);
+            if let Some((view, reveal_id)) = reveal
+                && let Some(view) = view.upgrade()
+            {
+                view.update(app, |this, cx| {
+                    this.reveal_native_session_bounds(&reveal_id, bounds, scale, window, cx)
+                });
+            }
+        })
+        .on_hover(cx.listener(move |app, hovered: &bool, _, cx| {
+            let current = app.native_sidebar.hovered_session.as_deref() == Some(hover_id.as_str());
+            if *hovered && !current {
+                app.native_sidebar.hovered_session = Some(hover_id.clone());
+                cx.notify();
+            } else if !*hovered && current {
+                app.native_sidebar.hovered_session = None;
+                cx.notify();
+            }
+        }))
+        .on_click(
+            cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
+                cx.stop_propagation();
+                let modifiers = event.modifiers();
+                if modifiers.shift || modifiers.platform || modifiers.control {
+                    return;
                 }
-            }))
-            .on_click(
-                cx.listener(move |app, event: &gpui::ClickEvent, window, cx| {
-                    cx.stop_propagation();
-                    let modifiers = event.modifiers();
-                    if modifiers.shift || modifiers.platform || modifiers.control {
-                        return;
-                    }
-                    app.close_sidebar_extension_view(window, cx);
-                    app.dispatch_native_sidebar_ui(
-                        json!({"type": "selectSession", "sessionId": session_id, "mode": "focus"}),
-                        cx,
-                    );
-                    let _ = app.react_to_native_sidebar_session_click(&session_id, cx);
-                    app.reveal_floating_sessions(cx);
-                }),
-            )
-            .on_mouse_down(
-                MouseButton::Right,
-                cx.listener(move |_, event: &gpui::MouseDownEvent, window, cx| {
-                    cx.stop_propagation();
-                    Self::show_native_sidebar_context_menu(
-                        &menu,
-                        owner.get(),
-                        event.position,
-                        scale,
-                        window,
-                        cx,
-                    );
-                }),
-            )
+                app.close_sidebar_extension_view(window, cx);
+                app.dispatch_native_sidebar_ui(
+                    json!({"type": "selectSession", "sessionId": session_id, "mode": "focus"}),
+                    cx,
+                );
+                let _ = app.react_to_native_sidebar_session_click(&session_id, cx);
+                app.reveal_floating_sessions(cx);
+            }),
+        )
+        .on_mouse_down(
+            MouseButton::Right,
+            cx.listener(move |_, event: &gpui::MouseDownEvent, window, cx| {
+                cx.stop_propagation();
+                Self::show_native_sidebar_context_menu(
+                    &menu,
+                    owner.get(),
+                    event.position,
+                    scale,
+                    window,
+                    cx,
+                );
+            }),
+        )
     }
 
     /// A card: three lines, or two when there is no branch or pull request to show.

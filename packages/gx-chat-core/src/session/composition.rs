@@ -58,39 +58,28 @@ fn normalized_text(message: &ChatMessage) -> String {
         .to_string()
 }
 
-/// `surfaceSkillInvocationUserTurns`.
+/// `surfaceSkillInvocationUserTurns`: every slash command recorded as a user turn becomes the
+/// user's own bubble.
 ///
-/// Claude-family harnesses record a slash input's user turn as a `<command-name>` envelope, hidden
-/// by the noise filter, correctly, for the agent's own commands, since a local command marker is
-/// shown instead. But a skill invocation IS the user's chat turn, and `/compact`'s marker retires
-/// when compaction finishes, so those durable transcript records must be converted back into
-/// readable user turns.
+/// Claude-family harnesses record a slash input's user turn as a `<command-name>` envelope, and
+/// gxserver replays the commands it archived for every other agent in the same shape
+/// (`local-command:` rows, and the live `app-command-local:` acknowledgement before them).
 ///
 /// CDXC:SessionChat 2026-09-27 WHY:
 /// A slash command sent from chat reaches the transcript three ways: Claude's own envelope while
 /// the chat is live, gxserver's archived row (`local-command:`) once a read has merged the archive
-/// over it, and the live acknowledgement (`app-command-local:`) before either. Only Claude's
-/// envelope was surfaced, and against the five default commands rather than the agent's own
-/// catalog, so a skill sent from chat was a bubble while live but a grey "Slash command" row after
-/// a reload, and a built-in such as `/usage` the other way round. Every shape now follows one
-/// rule: the agent's built-in commands stay command rows, anything else (a skill, a custom
-/// command) is the user's turn.
-pub fn surface_skill_invocation_user_turns(
-    messages: &[ChatMessage],
-    catalog_command_names: &[String],
-    agent: Option<&str>,
-) -> Vec<ChatMessage> {
-    surface_skill_invocation_user_turns_in(messages.to_vec(), catalog_command_names, agent)
+/// over it, and the live acknowledgement (`app-command-local:`) before either. Every shape follows
+/// one rule, so a command never changes look between live and reload.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, about the grey "Slash command · /rename …" and "Local command output · …" rows: "i dont like how these look, they dont look like the other parts of the chat transcript". They picked "D. Your bubble, then a note" and "Yes, every agent": every slash command, built-in or skill, typed in the chat or in the terminal, for every agent, is the user's own bubble with the command in monospace (`slash_command_markdown` in `transcript/local_command.rs`), and its printed output is a status note under it (`suppressed_turn_presentation` in `transcript/noise.rs`). Supersedes the 2026-09-27 rule that kept the agent's built-in commands as `Slash command` rows. The model, effort and Fast mode controls' commands stay hidden: their result row is the one record.
+pub fn surface_skill_invocation_user_turns(messages: &[ChatMessage]) -> Vec<ChatMessage> {
+    surface_skill_invocation_user_turns_in(messages.to_vec())
 }
 
 /// [`surface_skill_invocation_user_turns`] on a list the caller owns, rewritten in place rather
 /// than copied twice.
-pub fn surface_skill_invocation_user_turns_in(
-    mut messages: Vec<ChatMessage>,
-    catalog_command_names: &[String],
-    agent: Option<&str>,
-) -> Vec<ChatMessage> {
-    let built_in = crate::composer::slash_commands::slash_commands_for_agent(agent);
+pub fn surface_skill_invocation_user_turns_in(mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
     for message in &mut messages {
         let plain_text = message
             .blocks
@@ -105,15 +94,9 @@ pub fn surface_skill_invocation_user_turns_in(
         let catalog_name = envelope.name.trim_start_matches('/').to_lowercase();
         // CDXC:SessionChat 2026-09-26 WHY:
         // The model, effort and Fast mode controls type `/model`, `/effort` and `/fast`; their
-        // result row is the one user-facing record. Claude 2.1.283's command list leaves `/effort`
-        // out, so a session-only effort change surfaced as a "/effort" user bubble.
-        if catalog_name != "compact"
-            && (catalog_command_names.contains(&catalog_name)
-                || matches!(catalog_name.as_str(), "model" | "effort" | "fast")
-                || built_in
-                    .iter()
-                    .any(|command| command.name.eq_ignore_ascii_case(&catalog_name)))
-        {
+        // result row is the one user-facing record, so the command row stays hidden
+        // (`classify_suppressed_turn`).
+        if matches!(catalog_name.as_str(), "model" | "effort" | "fast") {
             continue;
         }
         // The harness canonicalizes a plugin skill to `/plugin:name`, but the user typed the
@@ -168,8 +151,7 @@ pub fn pending_transcript(state: &ChatState, boundaried: &[ChatMessage]) -> Vec<
     rows
 }
 
-/// What `boundaried` depends on: the transport list, the markers and the agent (whose built-in
-/// commands decide which slash turns surface).
+/// What `boundaried` depends on: the transport list, the markers and the agent.
 ///
 /// Keyed on the list's own revision rather than the composition identity, which also moves for
 /// every streamed update, app-command field and pending echo: each of those rebuilt and re-sorted
@@ -211,25 +193,20 @@ pub struct ComposeKey {
 
 /// Rebuilds `state.messages.boundaried` when the transcript or the markers changed, and keeps it
 /// otherwise: the `assembled` / `surfaced` / `boundaried` memos of `controller.ts`.
-pub fn refresh_boundaried(state: &mut ChatState, catalog: &[String]) {
+pub fn refresh_boundaried(state: &mut ChatState) {
     let key = BoundariedKey::of(state);
     if state.messages.boundaried_key.as_ref() == Some(&key) {
         return;
     }
-    state.messages.boundaried = boundaried_transcript(state, catalog);
+    state.messages.boundaried = boundaried_transcript(state);
     state.messages.boundaried_key = Some(key);
 }
 
 /// Rebuilds `state.messages.composed` when one of the memo's dependencies changed, and keeps it
 /// otherwise. Bumps `compose_generation` on every rebuild, which is the new array the TypeScript
 /// memo hands back.
-pub fn compose_cached(
-    state: &mut ChatState,
-    catalog: &[String],
-    preview_text: Option<&str>,
-    working: bool,
-) {
-    refresh_boundaried(state, catalog);
+pub fn compose_cached(state: &mut ChatState, preview_text: Option<&str>, working: bool) {
+    refresh_boundaried(state);
     let key = ComposeKey {
         identity: state.messages.composition_identity,
         working,
@@ -248,7 +225,7 @@ pub fn compose_cached(
         return;
     }
     let previous = std::mem::take(&mut state.messages.composed);
-    let (composed, part) = compose_after(state, catalog, preview_text, working, previous);
+    let (composed, part) = compose_after(state, preview_text, working, previous);
     state.messages.composed = composed;
     state.messages.transcript_part = Some(part);
     state.messages.compose_key = Some(key);
@@ -259,12 +236,8 @@ pub fn compose_cached(
 ///
 /// This is `boundaried` in the TypeScript, and it is what every later step measures against.
 /// [`refresh_boundaried`] keeps the answer on the state; this is the rebuild.
-pub fn boundaried_transcript(state: &ChatState, catalog: &[String]) -> Vec<ChatMessage> {
-    let surfaced = surface_skill_invocation_user_turns_in(
-        assembled_messages(&state.messages.list),
-        catalog,
-        state.session.agent.as_deref(),
-    );
+pub fn boundaried_transcript(state: &ChatState) -> Vec<ChatMessage> {
+    let surfaced = surface_skill_invocation_user_turns_in(assembled_messages(&state.messages.list));
     apply_marker_boundaries_in(surfaced, &state.pending.markers)
 }
 
@@ -291,13 +264,8 @@ pub struct TranscriptPart {
 ///
 /// Everything with no authoritative record yet rides in the tail, in the order `controller.ts`
 /// builds it; the head is the transcript with the archived local commands reconciled into it.
-pub fn compose(
-    state: &ChatState,
-    catalog: &[String],
-    preview_text: Option<&str>,
-    working: bool,
-) -> Vec<ChatMessage> {
-    compose_after(state, catalog, preview_text, working, Vec::new()).0
+pub fn compose(state: &ChatState, preview_text: Option<&str>, working: bool) -> Vec<ChatMessage> {
+    compose_after(state, preview_text, working, Vec::new()).0
 }
 
 /// [`compose`], given the list the last composition built: when the head is built from the same
@@ -309,7 +277,6 @@ pub fn compose(
 /// milliseconds per event on a long chat for rows that had not changed.
 fn compose_after(
     state: &ChatState,
-    catalog: &[String],
     preview_text: Option<&str>,
     working: bool,
     previous: Vec<ChatMessage>,
@@ -319,7 +286,7 @@ fn compose_after(
         if state.messages.boundaried_key.as_ref() == Some(&BoundariedKey::of(state)) {
             &state.messages.boundaried
         } else {
-            rebuilt = boundaried_transcript(state, catalog);
+            rebuilt = boundaried_transcript(state);
             &rebuilt
         };
     let queue = state.session.queue_prompts.clone().unwrap_or_default();
@@ -419,8 +386,6 @@ fn compose_after(
         unreconciled_terminal_statuses(&state.pending.terminal_status_messages, boundaried);
     tail.extend(surface_skill_invocation_user_turns(
         &app_commands_as_messages(&state.session.app_commands, transcript),
-        catalog,
-        state.session.agent.as_deref(),
     ));
     tail.extend(marker_messages);
 

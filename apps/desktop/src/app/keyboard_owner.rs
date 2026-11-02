@@ -284,6 +284,12 @@ impl GhostexGpuiApp {
                     }
                 } else if !self.view_page_on_screen(mode) {
                     ShellKeyboardOwner::Nothing
+                } else if mode == TitlebarMode::SideChat {
+                    // The side chat on screen takes the keys in its composer, as an Agents chat does.
+                    match self.side_panel_chat_on_screen_shell_session() {
+                        Some(session_id) => ShellKeyboardOwner::ChatComposer(session_id),
+                        None => ShellKeyboardOwner::GpuiViewPanelSurface,
+                    }
                 } else if self.website_home_setup_visible(mode)
                     || mode == TitlebarMode::Kanban
                     || mode == TitlebarMode::Manage
@@ -416,7 +422,10 @@ impl GhostexGpuiApp {
                 self.hold_unfocused_keyboard_on_root(window, cx);
             }
             ShellKeyboardOwner::ChatComposer(session_id) => {
-                if !self.native_chat_views.contains_key(&session_id) {
+                if self
+                    .native_chat_view_for_shell_session(session_id)
+                    .is_none()
+                {
                     // Native input can take focus before its background runtime restores the draft.
                     self.hold_unfocused_keyboard_on_root(window, cx);
                     return;
@@ -525,7 +534,7 @@ impl GhostexGpuiApp {
             surface.update(cx, |surface, _| surface.focus());
             return;
         }
-        let Some(view) = self.native_chat_views.get(&session_id).cloned() else {
+        let Some(view) = self.native_chat_view_for_shell_session(session_id) else {
             return;
         };
         self.reclaim_gpui_root_for_native_chat_composer(window);

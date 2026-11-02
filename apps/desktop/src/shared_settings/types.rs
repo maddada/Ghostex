@@ -48,6 +48,7 @@ impl SharedFileOpenTarget {
     pub fn from_settings_value(value: Option<&str>) -> Self {
         match value.map(str::trim) {
             Some("code") => Self::Code,
+            Some("system-app") => Self::SystemApp,
             Some(id)
                 if !id.is_empty()
                     && id != "files"

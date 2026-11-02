@@ -55,6 +55,7 @@ impl ProjectEditorAutoSleepEpochs {
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => None,
         }
@@ -71,6 +72,7 @@ impl ProjectEditorAutoSleepEpochs {
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => {
                 return None;
@@ -127,6 +129,7 @@ impl ProjectEditorAutoSleepPolicySnapshot {
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => None,
         }
@@ -209,7 +212,12 @@ impl GpuiProjectViewState {
             .open_views
             .iter()
             .filter(|_| !pages_in_row)
-            .filter(|mode| !matches!(mode, TitlebarMode::Agents | TitlebarMode::Browser))
+            .filter(|mode| {
+                !matches!(
+                    mode,
+                    TitlebarMode::Agents | TitlebarMode::Browser | TitlebarMode::SideChat
+                )
+            })
             .map(|mode| ViewStripTabKey::View(*mode));
         let pages = tabs
             .tab_ids_by_pane()
@@ -221,6 +229,7 @@ impl GpuiProjectViewState {
         layout.write_projection(&drawn, |key| match key {
             ViewStripTabKey::View(mode) => open_views.contains(mode),
             ViewStripTabKey::Browser(tab_id) => tabs.tab(*tab_id).is_some(),
+            ViewStripTabKey::SideChat(_) => true,
         });
         let key = ViewStripTabKey::Browser(tab_id);
         layout.order.retain(|existing| *existing != key);
@@ -317,6 +326,7 @@ impl ProjectEditorShellModel {
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work => None,
         }
     }
@@ -341,6 +351,7 @@ impl ProjectEditorShellModel {
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work => None,
         }
     }

@@ -4,7 +4,10 @@
 //! system card) that the renderers lay out as is.
 //!
 //! CDXC:SessionChat 2026-10-12 DECISION:
-//! User: the morning's "proposed" agent message cards (a 240px card with a quote box and a footer) were "too large now ... make them smaller like before. i dont like the new style". From the mockup page (docs/2026-10-11/agent-message-cards/smaller-received-cards.html) the user picked D, one line: every message between agents (received, sent, and a subagent's reply alike) is a single row with the agent's own logo (a small arrow badge: prose grey coming in, sky going out), its sentence, then the time and the status; clicking the row opens the whole message under it. Go to session shows on hover (on the phone, inside the opened message). Queued, Waiting for agent and Not sent say so in their colour. User (2026-10-18), for every one-line card: "no need for the chevron for all of them and i like the pills on the right side instead of this", so the row has no chevron and the status is a pill shaped like the turn fold's "1 tool call" (the SessionChat 2026-10-18 DECISION on `SINGLE_LINE_CARD` in apps/desktop/src/app/native_chat/cards.rs), superseding the chevron and the bare status; then "these dont look all the same too", so Delivered is a green check with its word in that pill, like "Answered", superseding the first round's bare green check. Kept from the first round: "please show the icons of the different agents", "instead of Open api refactor just say 'Go to session'", and no purple for incoming messages ("use color usually used for incoming chat messages"). The row reads the same collapsed and expanded ("keep the text when the message from x agent the same when it's collapsed as the one we show when it's expanded"). Supersedes the same day's "<session title> + first line" rows: "This should say: Message from "Section labels wrap and link" and remove the "Ghostex thread report: finished its turn. Its fin..." part (summary of message) do same thing for Message to "Xyz" also please". So the row is one sentence with no preview: `Message from "<session title>"` / `Message to "<session title>"`, the title quoted; with no title the agent's name, unquoted (`Message from Codex`); nothing known reads `Message from another agent` / `Message to another agent`, never the raw reference; one command that sends the same message to several sessions (a loop, or several sends in one call) is ONE row, `Message to 2 sessions`, whose opened message lists each recipient; a subagent's reply is `Message from Explore subagent` (`Message from a subagent` untyped). The title is the other session's, from the host's session list first.
+//! User: the morning's "proposed" agent message cards (a 240px card with a quote box and a footer) were "too large now ... make them smaller like before. i dont like the new style". From the mockup page (docs/2026-10-11/agent-message-cards/smaller-received-cards.html) the user picked D, one line: every message between agents (received, sent, and a subagent's reply alike) is a single row with the agent's own logo (a small arrow badge: prose grey coming in, sky going out), its sentence, then the time and the status; clicking the row opens the whole message under it. Go to session shows on hover (on the phone, inside the opened message), superseded by the 2026-11-02 DECISION below. Queued, Waiting for agent and Not sent say so in their colour. User (2026-10-18), for every one-line card: "no need for the chevron for all of them and i like the pills on the right side instead of this", so the row has no chevron and the status is a pill shaped like the turn fold's "1 tool call" (the SessionChat 2026-10-18 DECISION on `SINGLE_LINE_CARD` in apps/desktop/src/app/native_chat/cards.rs), superseding the chevron and the bare status; then "these dont look all the same too", so Delivered is a green check with its word in that pill, like "Answered", superseding the first round's bare green check. Kept from the first round: "please show the icons of the different agents", "instead of Open api refactor just say 'Go to session'", and no purple for incoming messages ("use color usually used for incoming chat messages"). The row reads the same collapsed and expanded ("keep the text when the message from x agent the same when it's collapsed as the one we show when it's expanded"). Supersedes the same day's "<session title> + first line" rows: "This should say: Message from "Section labels wrap and link" and remove the "Ghostex thread report: finished its turn. Its fin..." part (summary of message) do same thing for Message to "Xyz" also please". So the row is one sentence with no preview: `Message from "<session title>"` / `Message to "<session title>"`, the title quoted; with no title the agent's name, unquoted (`Message from Codex`); nothing known reads `Message from another agent` / `Message to another agent`, never the raw reference; one command that sends the same message to several sessions (a loop, or several sends in one call) is ONE row, `Message to 2 sessions`, whose opened message lists each recipient; a subagent's reply is `Message from Explore subagent` (`Message from a subagent` untyped). The title is the other session's, from the host's session list first.
+//!
+//! CDXC:SessionChat 2026-11-02 DECISION:
+//! User: "let's remove "Go to session" button since we already can click on the session's name to jump to it ... in the "Message from" and "Message to" header cards basically". The header cards no longer carry a Go to session button on any client (desktop, GPUI web, phone); the session's name (the card's `pill`) opens the session. Supersedes the hover button (phone: inside the opened message) of the 2026-10-12 decision above. Follow-up the same day: a card whose other session has no known title (`Message from Codex`, `Message from another agent`) draws that name as the same pill, so no card loses its way to jump.
 //! SEE-ALSO: agent_message.rs and sent_message.rs read the messages and name the other session (the host's session list first, `Event::SessionDirectoryChanged`); apps/desktop/src/app/native_chat/inter_agent_message.rs and apps/mobile/app/src/chat/native/transcript/AgentMessageCards.tsx draw the card.
 
 use serde_json::{json, Value};
@@ -13,7 +16,7 @@ use crate::extras::agents::{agent_icon_id, default_agent_by_id};
 use crate::transcript::jsstr::js_trim;
 use crate::transcript::session_mentions::card_pill;
 
-/// The jump button's label, whichever session it opens.
+/// A session pill's tooltip, whichever session it opens.
 pub const GO_TO_SESSION: &str = "Go to session";
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -53,7 +56,7 @@ fn status(label: &str, hint: &str, tone: &str, icon: &str) -> Value {
     })
 }
 
-/// The session a `<machine>:<project>:<session>` reference names, for the jump button.
+/// The session a `<machine>:<project>:<session>` reference names; the card's pill opens it.
 fn session_target(reference: &str) -> Value {
     let reference = js_trim(reference);
     let parts: Vec<&str> = reference.split(':').collect();
@@ -63,8 +66,9 @@ fn session_target(reference: &str) -> Value {
     json!({ "projectId": parts[1], "sessionId": parts[2], "label": GO_TO_SESSION })
 }
 
-/// The other session's pill after `prefix`, when the card knows its title and can open it; `Null`
-/// otherwise, and the renderers draw the plain sentence (`name`).
+/// The other session's pill after `prefix`, when the card can open it; `Null` otherwise, and the
+/// renderers draw the plain sentence (`name`). `title` is the session's title, else the agent's
+/// name (`Message from Codex`), else `another agent`: the name is always clickable.
 fn titled_pill(
     prefix: &str,
     title: &str,
@@ -73,9 +77,13 @@ fn titled_pill(
     session: &Value,
     gone: bool,
 ) -> Value {
-    if js_trim(title).is_empty() || !session.is_object() {
+    if !session.is_object() {
         return Value::Null;
     }
+    let title = match js_trim(title) {
+        "" => "another agent",
+        title => title,
+    };
     card_pill(
         prefix,
         title,
@@ -203,7 +211,11 @@ pub fn dress_received(message: &mut Value) {
     let coordinator = inter["coordinator"] == true;
     let pill = titled_pill(
         "Message from",
-        &session_title,
+        if session_title.is_empty() {
+            &agent
+        } else {
+            &session_title
+        },
         &icon,
         coordinator,
         &session,
@@ -479,11 +491,8 @@ fn recipient_phrase(recipient: &Value) -> String {
     }
 }
 
-/// A recipient's pill, when a session title names it.
+/// A recipient's pill: its title, or the agent's name when no title names it.
 fn recipient_pill(prefix: &str, recipient: &Value, icon: &Value, session: &Value) -> Value {
-    if recipient["titled"] != true {
-        return Value::Null;
-    }
     titled_pill(
         prefix,
         &recipient_label(recipient),
@@ -608,6 +617,25 @@ mod pill_logo_tests {
         dress_sent(&mut single);
         assert_eq!(single["card"]["agentIcon"], "codex");
         assert_eq!(single["card"]["pill"]["logo"], false);
+    }
+
+    /// A card whose other session has no title still draws its name as the clickable pill.
+    #[test]
+    fn an_untitled_session_is_still_a_clickable_pill() {
+        let mut received = json!({
+            "interAgentMessage": {"agentId": "codex", "replyTo": "S90:P3lv0:G1"},
+        });
+        dress_received(&mut received);
+        let pill = &received["interAgentMessage"]["card"]["pill"];
+        assert_eq!(pill["label"], "Codex");
+        assert_eq!(pill["session"]["sessionId"], "G1");
+
+        let mut sent = json!({
+            "recipients": [{"agentId": "codex", "name": "Codex", "globalRef": "S90:P3lv0:G2"}],
+        });
+        dress_sent(&mut sent);
+        assert_eq!(sent["card"]["pill"]["label"], "Codex");
+        assert_eq!(sent["card"]["pill"]["session"]["sessionId"], "G2");
     }
 }
 

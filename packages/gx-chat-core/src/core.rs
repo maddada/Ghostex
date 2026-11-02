@@ -131,6 +131,9 @@ impl ChatCore {
                 &self.context,
             ));
         }
+        // Any call that hands the agent a message ends the new chat's worktree tray, whichever
+        // family made it (a form answer, Send now), before this turn's document is built.
+        crate::menus::draft_worktree::note_first_message(&mut self.state, false, &effects);
         self.republish();
         // Read aloud's speech rides after the publish that shows it (`read_aloud/playback.rs`).
         effects.append(&mut self.state.read_aloud.outbox);
@@ -310,15 +313,7 @@ impl ChatCore {
         // once the transcript retired it.
         crate::session::before_compose(&mut self.state, &self.context);
         let working = crate::session::working::is_working(&self.state);
-        crate::session::composition::compose_cached(
-            &mut self.state,
-            &crate::session::constants::DEFAULT_COMMAND_CATALOG
-                .iter()
-                .map(|name| (*name).to_string())
-                .collect::<Vec<_>>(),
-            None,
-            working,
-        );
+        crate::session::composition::compose_cached(&mut self.state, None, working);
         // `presentation.update(state.messages, …)` runs here in `publish`, on the list the
         // composition above has just produced.
         crate::transcript::rows::refresh(&mut self.state, &self.context);

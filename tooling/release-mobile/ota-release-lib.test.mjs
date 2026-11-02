@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from 'vitest';
 
 import {
   bundledMainChanges,
   fetchServed,
+  manifestAssetKey,
   nativeChanges,
   parseManifestResponse,
   parsePlatforms,
   planOtaRelease,
+  unreachableAssetKeys,
   verifyExport,
 } from './ota-release-lib.mjs';
 
@@ -203,5 +207,29 @@ describe('bundledMainChanges', () => {
       'packages/gx-chat-wasm/README.md',
     ];
     expect(bundledMainChanges(changed)).toEqual(changed.slice(0, 5));
+  });
+});
+
+describe('manifestAssetKey', () => {
+  const bytes = Buffer.from('<!doctype html><title>chat core</title>');
+  const md5 = createHash('md5').update(bytes).digest('hex');
+
+  // Issue #393: the key must be the MD5 Metro registers the asset under, or the app never finds it.
+  it('is the MD5 of the bytes, which expo export also names the file', () => {
+    expect(manifestAssetKey(bytes, `assets/${md5}`)).toBe(md5);
+    expect(manifestAssetKey(bytes, `assets/${md5}`)).not.toBe(createHash('sha256').update(bytes).digest('hex'));
+  });
+
+  it('refuses an export whose file name is not that MD5', () => {
+    expect(() => manifestAssetKey(bytes, 'assets/chat-core.html')).toThrow(/MD5/);
+  });
+});
+
+describe('unreachableAssetKeys', () => {
+  it('names SHA-256 keys from updates published before the issue #393 fix', () => {
+    const sha = 'a'.repeat(64);
+    const md5 = 'b'.repeat(32);
+    expect(unreachableAssetKeys({ assets: [{ key: md5 }, { key: sha }] })).toEqual([sha]);
+    expect(unreachableAssetKeys({ assets: [{ key: md5 }] })).toEqual([]);
   });
 });

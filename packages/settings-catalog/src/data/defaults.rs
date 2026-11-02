@@ -538,11 +538,11 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     // CDXC:SessionChat 2026-10-31 DECISION: User: "add a slider to pick the color of the text how strong it is (color of text in the chat now is not full white, i have user wanting it to be full white". 0% is today's colour, so nobody's look changes until they move it; 100% is full white in dark mode and full black in light mode.
     ("sessionChatTextStrengthPercent", J::Num(0.0)),
     ("sessionChatZoomPercent", J::Num(100.0)),
+    ("filesZoomPercent", J::Num(100.0)),
     ("sessionChatCustomTranscriptWidthEnabled", J::Bool(false)),
     ("sessionChatTranscriptWidthPercent", J::Num(75.0)),
-    ("sessionChatVerboseMode", J::Bool(false)),
-    // CDXC:SessionChat 2026-09-27 DECISION: User: "make simple mode default enabled in the gpui app". A saved `false` still wins; only chats with no saved choice start simple.
-    ("sessionChatSimpleMode", J::Bool(true)),
+    // CDXC:SessionChat 2026-11-02 DECISION: User: "in settings i think we have setting for verbose, make that about defaulting to detailed view but make sure it's in advanced". Off, new chats open Normal (supersedes 2026-09-27's Simple mode by default, which this inherits as the off state); a saved `sessionChatVerboseMode` true or `sessionChatSimpleMode` false reads as on (`migrate_chat_view_default`).
+    ("sessionChatDetailedView", J::Bool(false)),
     ("sessionChatFileEditPreviews", J::Bool(false)),
     // CDXC:SessionChat 2026-10-16 DECISION: User, on a tester's request to draw the agent's thinking grey and its output white as terminals do: "Sure please do it as a toggle (disabled by default) so we can check how it looks." Off keeps the unified look; on, thinking takes the theme's muted text colour and replies its full foreground, in the desktop, web and phone chats.
     ("sessionChatMutedThinking", J::Bool(false)),

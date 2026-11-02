@@ -1,7 +1,7 @@
 use super::super::window::ChatOptionMenuPanel;
 use super::style::{
     BAR_HEIGHT, BUTTON_GAP, ERROR_HEIGHT, HINTS_HEIGHT, ITEM_RADIUS, LIST_HEIGHT, Palette, ROW_GAP,
-    TRAIT_ROW_HEIGHT, button_lines,
+    SEARCH_HEIGHT, TRAIT_ROW_HEIGHT, button_lines,
 };
 use crate::app::native_chat::appearance::ChatAppearance;
 use gpui::prelude::FluentBuilder as _;
@@ -9,6 +9,7 @@ use gpui::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
     StatefulInteractiveElement as _, Styled as _, div, px, svg, uniform_list,
 };
+use gpui_component::input::Input;
 use serde_json::{Value, json};
 
 /// A footer button's tooltip with the core's note wraps at this width, inside the picker's small window.
@@ -82,7 +83,10 @@ impl ChatOptionMenuPanel {
                         gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
                     })
                     .on_click(cx.listener(move |panel, _, _, cx| {
-                        panel.model_menu_send(json!({"type":"modelMenuView","tab":id}), cx);
+                        panel.model_menu_send(
+                            json!({"type":"modelMenuView","tab":id,"query":""}),
+                            cx,
+                        );
                     }))
                     .child(icon.opacity(if active { 1.0 } else { 0.72 }))
                     .when(handoff, |tab| {
@@ -585,6 +589,7 @@ impl ChatOptionMenuPanel {
             window.request_animation_frame();
         }
         let scroll = state.scroll.clone();
+        let search = state.search.clone();
         let count = state.rows().len();
         let list = if count == 0 {
             div()
@@ -646,6 +651,38 @@ impl ChatOptionMenuPanel {
             .text_color(palette.text)
             .text_size(px(13.0 * scale))
             .child(self.render_model_tabs(&view, &appearance, &palette, cx))
+            .when(view["searchEnabled"] == true, |card| {
+                card.child(
+                    div()
+                        .flex_shrink_0()
+                        .h(px(SEARCH_HEIGHT * scale))
+                        .px(px(10.0 * scale))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * scale))
+                        .border_b_1()
+                        .border_color(palette.ink(0.08))
+                        .child(
+                            svg()
+                                .path("titlebar/search.svg")
+                                .size(px(13.0 * scale))
+                                .text_color(palette.muted),
+                        )
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Input::new(&search)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .w_full()
+                                    .p_0()
+                                    .text_size(px(13.0 * scale))
+                                    .text_color(palette.text)
+                                    .placeholder_color(palette.muted.opacity(0.6)),
+                            ),
+                        ),
+                )
+            })
             .when_some(view["error"].as_str(), |card, error| {
                 // A choice the agent's own list could not offer is said here, where it was made.
                 card.child(

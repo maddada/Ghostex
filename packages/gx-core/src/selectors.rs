@@ -5,7 +5,7 @@ use std::borrow::Cow;
 
 use ghostex_gx_protocol::{
     LifecycleState, PresentationProject, PresentationSession, SessionActivity, SessionKind,
-    SessionSurface, WorkspaceSessionGroup,
+    WorkspaceSessionGroup,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -404,11 +404,7 @@ fn push_project_tab_refs<'a>(
                 .any(|subgroup| subgroup.session_ids.contains(session_id));
             let listed = loaded
                 .server_session(project_id, session_id)
-                .is_some_and(|session| {
-                    session.visible_in_sidebar_by_default
-                        && session.surface != SessionSurface::Commands
-                        && is_tab_kind(session)
-                });
+                .is_some_and(|session| session.listed_in_sidebar() && is_tab_kind(session));
             let duplicate = groups_seen > 1 && refs.contains(&(project_id, session_id.as_str()));
             if listed
                 && !in_subgroup

@@ -6,7 +6,7 @@ use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, ClipboardItem, Context, FontWeight, InteractiveElement as _, IntoElement,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _, Window, div,
-    px, rems,
+    px,
 };
 use gpui_component::input::Editor;
 use gpui_component::scroll::ScrollbarMode;
@@ -750,8 +750,10 @@ impl GhostexGpuiApp {
                             // gutter keeps its own few pixels on the left.
                             .pt(px(0.))
                             .font_family(p.mono_font.clone())
-                            .text_sm()
-                            .line_height(rems(1.25)),
+                            // The input text size and rows (14px on 20px), scaled by the Files
+                            // zoom (`text_zoom.rs`).
+                            .text_size(px(crate::ui_fonts::files_text_size()))
+                            .line_height(px(20.0 * crate::ui_fonts::files_zoom_scale())),
                     ),
             )
             .children(find)

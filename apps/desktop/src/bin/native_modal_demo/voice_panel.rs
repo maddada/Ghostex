@@ -39,6 +39,7 @@ impl VoicePanelDemo {
             text: ink.opacity(0.90),
             muted: ink.opacity(0.55),
             border: ink.opacity(if self.light { 0.10 } else { 0.12 }),
+            raised: ink.opacity(0.07),
             background: if self.light {
                 rgba(0xfafafaf7).into()
             } else {

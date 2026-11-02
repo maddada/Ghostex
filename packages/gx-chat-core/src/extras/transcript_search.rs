@@ -198,6 +198,17 @@ fn message_segments(
     let tools_default = folds.work_open || message["toolsOpen"] == true;
     if body.is_empty() {
         tool_segments(message, folds, in_work_fold, out);
+    } else if reasoning && has_tools && message["thinkingCard"]["calls"].is_string() {
+        // A running thought folds its calls behind its line (`thinking_card.rs`); its text opens
+        // on its own, so only the line and the calls it folds are searched.
+        let key = format!("reasoning:{id}");
+        out.push(Segment {
+            text: str_of(&message["thinkingCard"], "preview"),
+            label: Some(key.clone()),
+        });
+        if folds.open(&key, tools_default) {
+            tool_segments(message, folds, in_work_fold, out);
+        }
     } else if reasoning && has_tools {
         // A reasoning headline owns the tools that followed it: the headline shows, the thought's
         // tail and the tools open behind it.

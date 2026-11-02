@@ -108,6 +108,17 @@ impl NativeChatView {
                     cx,
                 );
                 rows.push(self.disclosure_body_motion(&key, motion, ROW_GAP * p.scale, body));
+            } else if let Some(pictures) = self.read_picture_strip(
+                &format!("{key}:read"),
+                &message["readImages"],
+                super::read_pictures::FOLDED_CALLS_INSET,
+                p.background,
+                p,
+                cx,
+            ) {
+                // The closed group keeps the pictures its calls read in view (gx-chat-core
+                // `read_images.rs`).
+                rows.push(pictures);
             }
             return rows;
         }
@@ -189,8 +200,26 @@ impl NativeChatView {
             .filter(|index| fold["visible"][*index] == true)
             .collect();
         let (above, below) = split(&kept);
+        // The pictures the folded calls read stay in view under the toggle (gx-chat-core
+        // `read_images.rs`).
+        let folded_pictures: Vec<Value> = (0..tools.len())
+            .filter(|index| fold["visible"][*index] != true)
+            .filter_map(|index| tools[index]["images"].as_array())
+            .flatten()
+            .cloned()
+            .collect();
         let mut rows = self.tool_row_list(&id, &tools, &above, p, cx);
-        rows.push(self.tool_fold_toggle(run_key, label, false, p, cx));
+        rows.push(self.tool_fold_toggle(run_key.clone(), label, false, p, cx));
+        if let Some(pictures) = self.read_picture_strip(
+            &format!("{run_key}:read"),
+            &Value::Array(folded_pictures),
+            super::read_pictures::FOLDED_CALLS_INSET,
+            p.background,
+            p,
+            cx,
+        ) {
+            rows.push(pictures);
+        }
         rows.extend(self.tool_row_list(&id, &tools, &below, p, cx));
         rows
     }
@@ -667,6 +696,12 @@ impl NativeChatView {
                 })
                 .into_any_element()
         });
+        // The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`).
+        if let Some(pictures) =
+            self.read_pictures(&key, &tool["images"], ROW_PAD_X + TILE + 8.0, p, cx)
+        {
+            row = row.child(pictures);
+        }
         if (expanded || motion.is_some()) && has_detail {
             if let Some(body) = self.tool_detail_body(&key, message_id, index, tool, p, cx) {
                 row = row.child(self.disclosure_body_motion(&key, motion, 4.0 * s, body));

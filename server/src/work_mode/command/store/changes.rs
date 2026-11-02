@@ -35,7 +35,8 @@ const NOTHING_TO_CHECK: &str = "This workspace has no ticket command to check.";
 
 /// A path the workspace's command can't be set to: it would be kept and shown with a stored
 /// credential in it. Names no value, like `refuse_unmaskable`'s refusals.
-pub(crate) const PATH_SPELLS_CREDENTIAL: &str = "This path can't be used: it contains the value of a credential this workspace keeps, which Ghostex can't hide in the command's path.";
+/// Why a path holding a stored value is refused; the refusal quotes the typed path before it.
+pub(crate) const PATH_SPELLS_CREDENTIAL: &str = "can't be used: it contains the value of a credential this workspace keeps, which Ghostex can't hide in the command's path.";
 
 /// An `info` answer that can't be kept: its id, an ID key or a credential name holds a stored
 /// credential, which the record would keep as it is. Names no value.
@@ -56,9 +57,6 @@ pub(crate) const SAVED_BUT_SHORT_SECRET_UNREMOVABLE: &str = "Ghostex saved the v
 
 const CHANGED_MEANWHILE: &str =
     "The ticket command's setup changed while it was being checked; try again.";
-
-const STORED_VALUES_UNREADABLE: &str =
-    "Ghostex couldn't read the credentials already stored, so it changed nothing; try again.";
 
 static WRITER: Mutex<()> = Mutex::new(());
 
@@ -401,6 +399,9 @@ fn run_and_pin(
                 .map(|command| command.path.clone())
                 .ok_or_else(|| WorkSourceError::Refused(NOTHING_TO_CHECK.to_string()))?,
         };
+        // A cleared command keeps its credentials, but has no declarations for `plan.env`.
+        // `stored` holds those retained values too, so a path that spells one is refused before
+        // it resolves, and a refused path is quoted only through `stored.mask`.
         refuse_path_spelling(stored, &typed_path, None)?;
         let resolved = resolve_command_path(&typed_path).map_err(WorkSourceError::Refused)?;
         refuse_path_spelling(stored, &typed_path, Some(&resolved))?;
@@ -741,11 +742,8 @@ fn stored_values(
 ) -> Result<StoredValues, WorkSourceError> {
     let mut mask = CommandEnv::default();
     let mut values = Vec::new();
-    let unreadable = || WorkSourceError::Refused(STORED_VALUES_UNREADABLE.to_string());
-    let command = read_work_sources(db)
-        .map_err(|_| unreadable())?
-        .workspaces
-        .remove(workspace_id);
+    // An unreadable store answers in its own fixed words, which quote nothing it holds.
+    let command = read_work_sources(db)?.workspaces.remove(workspace_id);
     let stored = read_workspace_source_credentials(paths, workspace_id).map_err(|error| {
         WorkSourceError::Refused(format!(
             "Ghostex couldn't read the credentials already stored, so it changed nothing: {error}"
@@ -1078,7 +1076,7 @@ fn answer_kept_as_is(info: &CommandInfo) -> Vec<(&'static str, &str)> {
 /// keeps both as they are, and only a credential's own refusal keeps a value out of them
 /// (`refuse_unmaskable`), so a path holding a value stored already is refused here, before it is
 /// run or kept. The typed path is checked before it is resolved too, so the resolver's refusal
-/// never quotes one.
+/// never quotes one; this refusal quotes only the typed path.
 pub(crate) fn refuse_path_spelling(
     stored: &StoredValues,
     typed: &str,
@@ -1086,7 +1084,10 @@ pub(crate) fn refuse_path_spelling(
 ) -> Result<(), WorkSourceError> {
     let resolved = resolved.map(|path| path.display().to_string());
     if stored.found_in(typed) || resolved.is_some_and(|path| stored.found_in(&path)) {
-        return Err(WorkSourceError::Refused(PATH_SPELLS_CREDENTIAL.to_string()));
+        // The typed path, never the resolved one, leaves through the change's mask: what it still shows is a value that isn't secret or has 1 or 2 characters, which the workspace shows openly anyway.
+        return Err(WorkSourceError::Refused(format!(
+            "\"{typed}\" {PATH_SPELLS_CREDENTIAL}"
+        )));
     }
     Ok(())
 }

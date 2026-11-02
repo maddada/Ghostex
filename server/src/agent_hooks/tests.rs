@@ -15,8 +15,9 @@ use super::config::{
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
-    inspect_agent_hook_installation, install_notify_hook, is_notify_hook_current,
-    json_contains_hook_command, migrate_hook_session_sidecars, read_json_object, remove_json_hook,
+    ghostex_theme_file, inspect_agent_hook_installation, install_ghostex_opencode_theme,
+    install_notify_hook, is_notify_hook_current, json_contains_hook_command,
+    migrate_hook_session_sidecars, read_json_object, remove_json_hook,
     remove_retired_opencode_plugin, set_executable_permissions, uninstall_marked_yaml_hook,
     uninstall_plugin_file_hook,
 };
@@ -747,6 +748,53 @@ fn uninstall_removes_plugin_yaml_and_opencode_ghostex_content_only() {
         opencode_config.get("plugin"),
         Some(&json!(["./plugins/other.js", "not-ghostex"]))
     );
+}
+
+#[test]
+fn opencode_theme_is_named_only_when_no_theme_is_chosen() {
+    let temp = tempfile::tempdir().expect("tempdir");
+
+    // No cli.json yet: the theme file is written and named.
+    let fresh = temp.path().join("fresh");
+    install_ghostex_opencode_theme(&fresh).expect("fresh install");
+    let theme = serde_json::from_str::<Value>(
+        &fs::read_to_string(ghostex_theme_file(&fresh)).expect("theme file"),
+    )
+    .expect("theme json");
+    assert_eq!(theme["base"]["background"]["base"], "transparent");
+    let config = serde_json::from_str::<Value>(
+        &fs::read_to_string(fresh.join("cli.json")).expect("fresh cli.json"),
+    )
+    .expect("fresh json");
+    assert_eq!(config["theme"], json!({ "name": "ghostex" }));
+
+    // A cli.json without a theme name keeps its other settings, comments and theme mode.
+    let unnamed = temp.path().join("unnamed");
+    write_test_file(
+        &unnamed.join("cli.json"),
+        "{\n  // keep this note\n  \"plugins\": [\"file:///plugins/other/\"],\n  \"theme\": { \"mode\": \"light\" },\n  \"keybinds\": { \"editor_open\": \"ctrl+g\" }\n}\n",
+    );
+    install_ghostex_opencode_theme(&unnamed).expect("unnamed install");
+    let text = fs::read_to_string(unnamed.join("cli.json")).expect("unnamed cli.json");
+    assert!(text.contains("// keep this note"));
+    let config = crate::session_chat_opencode::read_config(&text).expect("unnamed json");
+    assert_eq!(
+        config["theme"],
+        json!({ "mode": "light", "name": "ghostex" })
+    );
+    assert_eq!(config["plugins"], json!(["file:///plugins/other/"]));
+    assert_eq!(config["keybinds"]["editor_open"], "ctrl+g");
+
+    // A theme the user picked (Ctrl+P saves it as theme.name) is never replaced.
+    let chosen = temp.path().join("chosen");
+    let chosen_text = "{\n  \"theme\": { \"name\": \"github\", \"mode\": \"dark\" }\n}\n";
+    write_test_file(&chosen.join("cli.json"), chosen_text);
+    install_ghostex_opencode_theme(&chosen).expect("chosen install");
+    assert_eq!(
+        fs::read_to_string(chosen.join("cli.json")).expect("chosen cli.json"),
+        chosen_text
+    );
+    assert!(ghostex_theme_file(&chosen).is_file());
 }
 
 #[test]

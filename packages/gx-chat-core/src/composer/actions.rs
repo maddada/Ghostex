@@ -243,7 +243,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                     return effects;
                 }
             }
-            crate::composer::send::begin(
+            let effects = crate::composer::send::begin(
                 state,
                 context,
                 match action.kind {
@@ -255,7 +255,15 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 draft_version(action),
                 image_paths,
                 action.param("interrupt").and_then(Value::as_bool) == Some(true),
-            )
+            );
+            // The first message has left the box: the worktree tray goes now, not when the agent
+            // gets it (CDXC:Worktrees 2026-11-02 in menus/draft_worktree.rs). A send refused on
+            // the spot comes straight back and left nothing.
+            let refused = effects.iter().any(|effect| {
+                matches!(effect, Effect::HostAction { action, .. } if action == "submissionFailed")
+            });
+            crate::menus::draft_worktree::note_first_message(state, !refused, &[]);
+            effects
         }
         ActionKind::Handoff => crate::composer::send::handoff(
             state,

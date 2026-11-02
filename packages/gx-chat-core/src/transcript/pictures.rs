@@ -46,10 +46,12 @@ pub fn transcript_pictures<'a>(items: impl IntoIterator<Item = &'a TranscriptIte
                 earlier_replies,
                 work,
                 outcome,
+                read_images,
                 ..
             } => {
                 add(user);
                 work.iter().for_each(|message| add(message));
+                add(&read_images_row(read_images));
                 outcome.iter().for_each(|message| add(message));
                 earlier_replies.iter().for_each(|message| add(message));
                 if let Some(message) = final_message {
@@ -60,9 +62,11 @@ pub fn transcript_pictures<'a>(items: impl IntoIterator<Item = &'a TranscriptIte
                 work,
                 artifacts,
                 final_message,
+                read_images,
                 ..
             } => {
                 work.iter().for_each(|message| add(message));
+                add(&read_images_row(read_images));
                 artifacts.iter().for_each(|message| add(message));
                 if let Some(message) = final_message {
                     add(message);
@@ -95,13 +99,21 @@ pub fn picture_gallery<'a>(
     }
 }
 
-/// One message's pictures: its `images` row, then the image marks in its `text`.
+/// A turn's strip of pictures read from disk, as a message whose thumbnail row it is: it stands
+/// in for the folded rows (or the rows the server still holds back) at the fold's place.
+fn read_images_row(read_images: &[Value]) -> Value {
+    serde_json::json!({ "images": read_images })
+}
+
+/// One message's pictures: its `images` row, the pictures its tool calls opened from disk
+/// (`readImages`, `read_images.rs`), then the image marks in its `text`.
 fn message_pictures(message: &Value) -> Vec<Value> {
-    let mut pictures: Vec<Value> = message
-        .get("images")
-        .and_then(Value::as_array)
+    let mut pictures: Vec<Value> = ["images", "readImages"]
+        .iter()
+        .filter_map(|key| message.get(*key).and_then(Value::as_array))
+        .flatten()
         .cloned()
-        .unwrap_or_default();
+        .collect();
     if let Some(text) = message.get("text").and_then(Value::as_str) {
         pictures.extend(marked_pictures(text));
     }
@@ -206,6 +218,7 @@ mod tests {
                 outcome: vec![],
                 latest_reply: true,
                 cards: vec![],
+                read_images: vec![],
             },
             TranscriptItem::Message {
                 message: message("a2", vec![], "```md\n![not a picture](/code.png)\n```"),
@@ -237,6 +250,42 @@ mod tests {
             .pop()
             .unwrap();
         assert_eq!(picture_gallery(&items, &next).index, 1);
+    }
+
+    #[test]
+    fn pictures_a_turn_read_follow_its_prompt_in_the_order_they_were_read() {
+        let mut work = json!({"id": "w", "images": [], "text": ""});
+        work["readImages"] = json!([file("/read-1.png"), file("/read-2.png")]);
+        let items = vec![
+            TranscriptItem::Message {
+                message: message("u1", vec![file("/prompt.png")], ""),
+            },
+            TranscriptItem::CompletedWork {
+                id: "u1".into(),
+                label: "Worked for 4s".into(),
+                stats: vec![],
+                files_card: Value::Null,
+                files: vec![],
+                files_label: String::new(),
+                simple_files_label: String::new(),
+                expandable: true,
+                deferred: None,
+                work: vec![Arc::new(work)],
+                questions: vec![],
+                sent_messages: vec![],
+                workflows: vec![],
+                artifacts: vec![],
+                final_message: Some(message("f", vec![], "done")),
+                // The folded work's pictures and one only the server's held-back rows name.
+                read_images: vec![file("/read-1.png"), file("/read-2.png"), file("/held.png")],
+            },
+        ];
+        assert_eq!(
+            paths(&transcript_pictures(&items)),
+            ["/prompt.png", "/read-1.png", "/read-2.png", "/held.png"]
+        );
+        let gallery = picture_gallery(&items, &file("/read-2.png"));
+        assert_eq!(gallery.index, 2);
     }
 
     #[test]

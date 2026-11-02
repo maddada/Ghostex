@@ -215,6 +215,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     {
         republish_session_chat(state, &project_id, &session_id);
     }
+    super::side_chat_http::refresh_side_chats(state, &db, &repository);
     let Ok(mut memory) = memory.lock() else {
         return Vec::new();
     };
@@ -328,7 +329,9 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
         } else if hook_state != ThreadState::Working
             && hook_state != ThreadState::Sleeping
             && thread.observed_working
+            && coordinators::thread_prompt(&session).is_none()
         {
+            // CDXC:Coordinators 2026-11-02 WHY: A question or permission prompt keeps the asking turn open in the transcript, so the transcript check read a Claude thread stuck on a permission prompt as working and its orchestrator got no "waiting for an answer" until someone's screen read recorded a screen wait (tester report, 2026-11-02). The stored card the hook wrote is the stronger evidence, so the transcript is not asked while one is shown.
             // Only a thread about to be reported pays for the transcript read.
             let working = memory
                 .transcript_gates
@@ -939,7 +942,7 @@ async fn send_to_coordinator(
 /// Re-sends an open chat its current state, now carrying a refreshed Threads panel (or, for the
 /// delivery watch, its settled agent messages); the same frame a queue change sends, without its
 /// presentation delta.
-pub(super) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
     let key = session_observer_key(project_id, session_id);
     let options = state
         .session_chat_option_cache
@@ -1030,6 +1033,8 @@ pub(crate) fn prepare_coordinator_create_params(
     if !params.get("coordinator").is_some_and(Value::is_object) {
         return Ok(params);
     }
+    let skill_only_start = coordinators::coordinator_create_request(&params)?
+        .is_some_and(|request| request.first_request.is_empty());
     let runtime = params
         .entry("runtimeSettings".to_string())
         .or_insert_with(|| Value::Object(Map::new()));
@@ -1038,6 +1043,12 @@ pub(crate) fn prepare_coordinator_create_params(
             coordinators::COORDINATOR_ROLE_SETTING.to_string(),
             json!(coordinators::COORDINATOR_ROLE_SKILL),
         );
+        if skill_only_start {
+            runtime.insert(
+                coordinators::COORDINATOR_SKILL_ONLY_START_SETTING.to_string(),
+                json!(true),
+            );
+        }
     }
     Ok(params)
 }
@@ -1171,4 +1182,33 @@ pub(crate) fn handle_coordinator_http(
         }
     }
     Ok(output.result)
+}
+
+#[cfg(test)]
+mod skill_only_start_tests {
+    use super::prepare_coordinator_create_params;
+    use serde_json::{json, Map, Value};
+
+    fn prepared(coordinator: Value) -> Value {
+        let params = json!({ "coordinator": coordinator });
+        let params: Map<String, Value> = params.as_object().unwrap().clone();
+        Value::Object(prepare_coordinator_create_params(&params).unwrap())
+    }
+
+    #[test]
+    fn a_coordinator_without_a_first_request_is_marked_skill_only() {
+        let params = prepared(json!({ "goal": "Ship it" }));
+        assert_eq!(
+            params["runtimeSettings"]["coordinatorSkillOnlyStart"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn a_coordinator_with_a_first_request_is_not() {
+        let params = prepared(json!({ "firstRequest": "Fix the build" }));
+        assert!(params["runtimeSettings"]
+            .get("coordinatorSkillOnlyStart")
+            .is_none());
+    }
 }

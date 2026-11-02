@@ -230,6 +230,7 @@ pub fn partition_completed_work(messages: &[ChatMessage]) -> (Vec<ChatMessage>, 
             || (message.role == ChatRole::User && !is_background_task_row(message))
             || suppressed_turn_label(message).as_deref() == Some("Interrupted")
             || is_setting_status(message)
+            || crate::transcript::open_questions::asks_questions(message)
         {
             visible_artifacts.push(message.clone());
         } else {
@@ -580,6 +581,23 @@ mod tests {
             "the message itself, words and all"
         );
         assert!(turns[1].cards.is_empty());
+    }
+
+    /// A form the agent asked before it kept working stays below the finished turn's fold, so the
+    /// ? pill's jump lands on a card the reader can see.
+    #[test]
+    fn a_finished_turn_keeps_its_question_replies_out_of_the_fold() {
+        let work = vec![
+            row("w1", "assistant", &format!("One question first:\n\n{FORM}")),
+            row("w2", "assistant", "Running the checks now."),
+        ];
+        let (visible, folded) = partition_completed_work(&work);
+        let ids = |rows: &[ChatMessage]| rows.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&visible), ["w1"]);
+        assert_eq!(ids(&folded), ["w2"]);
+        let withdraw = "```questions\n{\"withdraw\":[\"Q1\"]}\n```";
+        let (visible, _) = partition_completed_work(&[row("w3", "assistant", withdraw)]);
+        assert!(visible.is_empty(), "a withdrawal asks nothing");
     }
 
     #[test]

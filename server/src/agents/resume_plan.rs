@@ -329,6 +329,13 @@ pub(crate) fn to_agent_resume_input(
             })
         })
         .or_else(|| base_command.clone());
+    // A side chat wakes in ask-before-edits as it started (CDXC:SideChats 2026-11-02 in
+    // server/src/side_chats/launch.rs).
+    let runtime_command = match (agent_id.as_deref(), crate::side_chats::parent_of(session)) {
+        (Some(agent_id), Some(_)) => runtime_command
+            .map(|command| crate::side_chats::ask_before_edits_command(&command, agent_id)),
+        _ => runtime_command,
+    };
     // The workspace's own gh and gws sign-ins (crate::connectors), on this run only.
     let runtime_command = runtime_command.map(|command| {
         let command = crate::connectors::with_project_cli_env_for_resume(

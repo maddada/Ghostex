@@ -44,28 +44,84 @@ pub(crate) struct HandoffTarget {
 pub(crate) struct HandoffCoordinator {
     pub(crate) goal: String,
     pub(crate) instructions: String,
+    /// The source computer's gxserver gave neither the export's `coordinator` nor a
+    /// `/api/readCoordinator` answer, so the new orchestrator starts without its Goal and Standing
+    /// instructions and the user is told so.
+    pub(crate) context_lost: bool,
+    /// Sent with the orchestrator's first message (`coordinator.firstRequest`) instead of staged as
+    /// a draft: the handoff's lead-in, for a destination gxserver that would type a staged draft
+    /// into the terminal while the skill starts (`coordinatorHandoffDraft`).
+    pub(crate) first_request: Option<String>,
 }
 
 impl HandoffCoordinator {
-    pub(crate) fn from_export_answer(
-        answer: &Value,
-        fallback_is_coordinator: bool,
-    ) -> Option<Self> {
-        if let Some(coordinator) = answer.get("coordinator").and_then(Value::as_object) {
-            let text = |key: &str| {
-                coordinator
-                    .get(key)
-                    .and_then(Value::as_str)
-                    .unwrap_or_default()
-                    .to_string()
-            };
-            return Some(Self {
-                goal: text("goal"),
-                instructions: text("instructions"),
-            });
+    fn from_object(coordinator: &serde_json::Map<String, Value>) -> Self {
+        let text = |key: &str| {
+            coordinator
+                .get(key)
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        };
+        Self {
+            goal: text("goal"),
+            instructions: text("instructions"),
+            ..Self::default()
         }
-        fallback_is_coordinator.then(Self::default)
     }
+
+    /// The export's own `coordinator` (gxserver 10.43 and later).
+    pub(crate) fn from_export_answer(answer: &Value) -> Option<Self> {
+        answer
+            .get("coordinator")
+            .and_then(Value::as_object)
+            .map(Self::from_object)
+    }
+
+    /// `/api/readCoordinator`'s answer, only when it is this session's own record: the endpoint
+    /// answers a thread with its orchestrator's.
+    pub(crate) fn from_read_answer(answer: &Value, session_id: &str) -> Option<Self> {
+        answer
+            .get("coordinator")
+            .and_then(Value::as_object)
+            .filter(|coordinator| {
+                coordinator.get("sessionId").and_then(Value::as_str) == Some(session_id)
+            })
+            .map(Self::from_object)
+    }
+}
+
+/// The orchestrator a handoff of `session` carries, read from its export's answer. An older
+/// gxserver's export has no `coordinator`, so an orchestrator row's Goal and Standing instructions
+/// are read with `/api/readCoordinator` on the same computer; when that fails too, the handoff
+/// still starts an orchestrator, marked [`HandoffCoordinator::context_lost`].
+pub(super) async fn handoff_coordinator(
+    remote: calls::Remote,
+    answer: &Value,
+    is_coordinator: bool,
+    session: &SessionKey,
+) -> Option<HandoffCoordinator> {
+    if let Some(coordinator) = HandoffCoordinator::from_export_answer(answer) {
+        return Some(coordinator);
+    }
+    if !is_coordinator {
+        return None;
+    }
+    let read = calls::call(
+        remote,
+        "/api/readCoordinator",
+        json!({ "projectId": session.project_id, "sessionId": session.session_id }),
+        None,
+    )
+    .await;
+    Some(
+        read.ok()
+            .and_then(|answer| HandoffCoordinator::from_read_answer(&answer, &session.session_id))
+            .unwrap_or(HandoffCoordinator {
+                context_lost: true,
+                ..HandoffCoordinator::default()
+            }),
+    )
 }
 
 /// The session the open dialog is about.
@@ -326,12 +382,19 @@ impl GhostexGpuiApp {
         });
         cx.spawn(async move |this, cx| {
             let result = calls::call(
-                target,
+                target.clone(),
                 "/api/exportSessionTranscript",
                 params,
                 remote.then_some(EXPORT_TIMEOUT),
             )
             .await;
+            let coordinator = match &result {
+                Ok(answer) => {
+                    handoff_coordinator(target, answer, request.is_coordinator, &request.session)
+                        .await
+                }
+                Err(_) => None,
+            };
             let _ = this.update(cx, |this, cx| {
                 let still_open = this
                     .gx_store
@@ -367,7 +430,7 @@ impl GhostexGpuiApp {
                             .get("agent")
                             .and_then(Value::as_str)
                             .map(str::to_string),
-                        HandoffCoordinator::from_export_answer(&answer, request.is_coordinator),
+                        coordinator,
                         markdown,
                     ))
                 });
@@ -604,11 +667,41 @@ impl GhostexGpuiApp {
     ) -> gpui::Task<Result<SessionKey, String>> {
         let settings = crate::shared_settings::shared_sidebar_settings_snapshot();
         let object = settings.object();
-        let coordinator_launch = coordinator.and_then(|coordinator| {
+        let mut coordinator_launch = coordinator.and_then(|coordinator| {
             agent
                 .coordinator_family()
                 .map(|family| (family, coordinator))
         });
+        let mut draft = Some(draft);
+        if let Some((_, coordinator)) = coordinator_launch.as_mut() {
+            if coordinator.context_lost {
+                self.git_toast(
+                    GitToastLevel::Warning,
+                    "Goal and Standing instructions not kept",
+                    ToastOptions::described(
+                        "The orchestrator's computer did not say what they were, so the new orchestrator starts without them. Add them again in its details.",
+                    ),
+                    cx,
+                );
+            }
+            // An older gxserver there would type a staged draft into the terminal while
+            // `/ghostex-orchestrator` starts (CDXC:Coordinators `coordinatorHandoffDraft`).
+            if scope
+                .remote
+                .as_ref()
+                .is_some_and(|target| !target.stages_coordinator_handoff_draft())
+            {
+                coordinator.first_request = draft.take();
+                self.git_toast(
+                    GitToastLevel::Info,
+                    "Handoff sent with the orchestrator's first message",
+                    ToastOptions::described(
+                        "That computer's Ghostex is older, so the conversation link goes with the orchestrator's first message instead of waiting in its message box. Update Ghostex there to keep it as a draft.",
+                    ),
+                    cx,
+                );
+            }
+        }
         let open_in_chat = coordinator_launch.is_some()
             || crate::app::helpers::gpui_preferred_agent_interface_override_from_settings(
                 object,
@@ -641,7 +734,7 @@ impl GhostexGpuiApp {
             scope,
             agent,
             PromptAgentLaunch {
-                first_user_input_draft: Some(draft),
+                first_user_input_draft: draft,
                 agent_model,
                 agent_effort,
                 open_in_chat,
@@ -651,5 +744,48 @@ impl GhostexGpuiApp {
             },
             cx,
         )
+    }
+}
+
+#[cfg(test)]
+mod handoff_coordinator_tests {
+    use super::HandoffCoordinator;
+    use serde_json::json;
+
+    #[test]
+    fn an_export_carries_the_orchestrators_goal_and_instructions() {
+        let answer = json!({
+            "path": "/x.md",
+            "coordinator": { "goal": "Ship it", "instructions": "One module per thread." },
+        });
+        assert_eq!(
+            HandoffCoordinator::from_export_answer(&answer),
+            Some(HandoffCoordinator {
+                goal: "Ship it".to_string(),
+                instructions: "One module per thread.".to_string(),
+                ..HandoffCoordinator::default()
+            })
+        );
+        assert_eq!(
+            HandoffCoordinator::from_export_answer(&json!({ "path": "/x.md" })),
+            None
+        );
+    }
+
+    #[test]
+    fn a_read_coordinator_answer_counts_only_for_the_session_itself() {
+        let answer = json!({
+            "coordinator": {
+                "sessionId": "S1",
+                "goal": "Ship it",
+                "instructions": "Keep it small.",
+            },
+        });
+        assert_eq!(
+            HandoffCoordinator::from_read_answer(&answer, "S1").map(|c| c.goal),
+            Some("Ship it".to_string())
+        );
+        // `/api/readCoordinator` answers a thread with its orchestrator's record.
+        assert_eq!(HandoffCoordinator::from_read_answer(&answer, "T9"), None);
     }
 }

@@ -41,6 +41,16 @@ impl GhostexGpuiApp {
                 .or_default()
                 .insert((session.project_id.clone(), session.session_id.clone()));
         }
+        // The side chat beside it is a chat on screen too (`web_host/side_chat.rs`).
+        if let Some(session) = self
+            .web_side_chat_shown()
+            .filter(|session| session.machine == MachineId::Local)
+        {
+            shown
+                .entry(None)
+                .or_default()
+                .insert((session.project_id.clone(), session.session_id.clone()));
+        }
         let calls = self.chat_grid_claims.report.changes(shown);
         self.web_send_chat_grid_calls(calls, cx);
         if !self.chat_grid_claims.renewing {

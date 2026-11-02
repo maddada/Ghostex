@@ -1,9 +1,12 @@
 //! Page card pictures: a small PNG of a published page, taken by the desktop app from the page
-//! while the user has it open and stored here, so the chat card on every client (desktop, the GPUI
+//! while the user has it open (or, for a page published since 2026-11-02, in a hidden browser once
+//! its card is on screen) and stored here, so the chat card on every client (desktop, the GPUI
 //! web build, the phone) shows the same picture.
 //!
 //! CDXC:SessionChat 2026-10-11 DECISION:
-//! User picked "B · Window preview" for the card a published page gets in the chat (docs/2026-10-10/chat-cards-questions/01-page-card.html): a window bar with dots and the file name, a scaled-down picture of the page fading out at its bottom, then the title, "Interactive page · file.html" and Open; the green Answered pill stays. For the picture the user chose "the desktop app snapshots it", and then rejected rendering pages off-screen for it: the picture is taken only from a page the user opened in the desktop's floating page window, with no hidden or off-screen browser and without starting the web runtime. An answered page is pictured again the next time it is opened (a republished page is a new page with a new id). Until a page has a picture its card shows a plain placeholder: the window bar, the file name and a page icon.
+//! User picked "B · Window preview" for the card a published page gets in the chat (docs/2026-10-10/chat-cards-questions/01-page-card.html): a window bar with dots and the file name, a scaled-down picture of the page fading out at its bottom, then the title, "Interactive page · file.html" and Open; the green Answered pill stays. For the picture the user chose "the desktop app snapshots it". An answered page is pictured again the next time it is opened (a republished page is a new page with a new id). Until a page has a picture its card shows a plain placeholder: the window bar, the file name and a page icon.
+//! CDXC:SessionChat 2026-11-02 DECISION:
+//! User: "we don't show the preview until after i open it. let's please open it in the bg just to capture the screenshot (if cef is already installed). but only do this for new ones that come into view in the active session basically not old ones before this update so we dont go and capture a ton of old ones and slow the machine". This supersedes the 2026-10-11 rule that a page is pictured only from the floating page window the user opened (no hidden browser, no runtime start for it): a page published since this change carries `pictureInBackground` in its record, and while it has no picture this read answers `backgroundPicture: true`, which the desktop takes as leave to load the page in a hidden browser and picture it once its card is drawn in the chat on screen (apps/desktop/src/app/visual_page_background_pictures.rs). Pages published before carry no mark and are still pictured only when opened.
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The capture is apps/desktop/src/app/visual_page_thumbnails.rs (with apps/desktop/src/cef/shell/page_screenshot.rs); the card's asking rules are packages/gx-chat-core/src/transcript/page_thumbnails.rs and visual/page-card.json; the cards are drawn by apps/desktop/src/app/native_chat/page_card.rs and apps/mobile/app/src/chat/native/transcript/PageCard.tsx.
 //! CDXC:ServerApi 2026-10-11 WHY:
@@ -132,9 +135,11 @@ pub(crate) fn handle_store_http(
 }
 
 /// `/api/readVisualPageThumbnail` `{pageId, withPicture?}`: the page's picture for its chat card,
-/// as `{pageId, png, capturedAt, stale, gone}`. `png` is base64 or null (always null with
-/// `withPicture: false`, which the desktop uses to ask whether to take one); `stale` means the page
-/// has no picture or was answered since it, `gone` that the page no longer exists.
+/// as `{pageId, png, capturedAt, stale, gone, backgroundPicture}`. `png` is base64 or null (always
+/// null with `withPicture: false`, which the desktop uses to ask whether to take one); `stale`
+/// means the page has no picture or was answered since it, `gone` that the page no longer exists,
+/// and `backgroundPicture` that the page has no picture and was published late enough to be
+/// pictured without being opened.
 pub(crate) fn handle_read_http(
     state: &AppState,
     endpoint_path: String,
@@ -153,19 +158,35 @@ pub(crate) fn handle_read_http(
         );
     };
     let with_picture = params.get("withPicture").and_then(Value::as_bool) != Some(false);
-    let state_dir = &state.paths.root_dir;
-    let result = match read_record(state_dir, &id) {
+    let result = picture_state(&state.paths.root_dir, &id, with_picture);
+    routed_json(
+        Some(endpoint_path),
+        StatusCode::OK,
+        rpc_success(request_id, result),
+    )
+}
+
+/// The read's answer for page `id` (`handle_read_http`).
+fn picture_state(state_dir: &Path, id: &str, with_picture: bool) -> Value {
+    match read_record(state_dir, id) {
         None => {
-            json!({ "pageId": id, "png": null, "capturedAt": null, "stale": false, "gone": true })
+            json!({
+                "pageId": id,
+                "png": null,
+                "capturedAt": null,
+                "stale": false,
+                "gone": true,
+                "backgroundPicture": false,
+            })
         }
         Some(record) => {
             let captured_at = record
                 .get("thumbnailAt")
                 .and_then(Value::as_str)
-                .filter(|_| thumbnail_path(state_dir, &id).is_file());
+                .filter(|_| thumbnail_path(state_dir, id).is_file());
             let png = captured_at
                 .filter(|_| with_picture)
-                .and_then(|_| fs::read(thumbnail_path(state_dir, &id)).ok())
+                .and_then(|_| fs::read(thumbnail_path(state_dir, id)).ok())
                 .map(|bytes| base64::engine::general_purpose::STANDARD.encode(bytes));
             json!({
                 "pageId": id,
@@ -173,14 +194,11 @@ pub(crate) fn handle_read_http(
                 "capturedAt": captured_at,
                 "stale": captured_at.is_none() || answered_since_picture(&record),
                 "gone": false,
+                "backgroundPicture": captured_at.is_none()
+                    && record.get("pictureInBackground").and_then(Value::as_bool) == Some(true),
             })
         }
-    };
-    routed_json(
-        Some(endpoint_path),
-        StatusCode::OK,
-        rpc_success(request_id, result),
-    )
+    }
 }
 
 /// A PNG whose header names a picture of a sensible size.
@@ -212,4 +230,54 @@ fn bad_request(endpoint_path: String, request_id: String, message: &str) -> Rout
         request_id,
         DomainStateError::bad_request(message),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_pages_published_since_background_pictures_may_be_pictured_unopened() {
+        let dir = tempfile::tempdir().unwrap();
+        let id =
+            super::super::store::write_page(dir.path(), "Page", "<p>page</p>", None, None).unwrap();
+        assert_eq!(
+            picture_state(dir.path(), &id, false)["backgroundPicture"],
+            true
+        );
+        // A page published before carries no mark.
+        let path = visual_pages_dir(dir.path()).join(format!("{id}.json"));
+        let mut record: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        record
+            .as_object_mut()
+            .unwrap()
+            .remove("pictureInBackground");
+        fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            picture_state(dir.path(), &id, false)["backgroundPicture"],
+            false
+        );
+        // Gone.
+        assert_eq!(
+            picture_state(dir.path(), "0123456789abcdef0123456789abcdef", false)
+                ["backgroundPicture"],
+            false
+        );
+    }
+
+    #[test]
+    fn a_pictured_page_is_not_pictured_unopened_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let id =
+            super::super::store::write_page(dir.path(), "Page", "<p>page</p>", None, None).unwrap();
+        fs::write(thumbnail_path(dir.path(), &id), b"png").unwrap();
+        let path = visual_pages_dir(dir.path()).join(format!("{id}.json"));
+        let mut record: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        record["thumbnailAt"] = json!("2026-11-02T00:00:00.000Z");
+        fs::write(&path, serde_json::to_vec(&record).unwrap()).unwrap();
+        assert_eq!(
+            picture_state(dir.path(), &id, false)["backgroundPicture"],
+            false
+        );
+    }
 }

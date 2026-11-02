@@ -58,6 +58,36 @@ pub fn normalize_local_command_messages(messages: &[ChatMessage]) -> Vec<ChatMes
     normalized
 }
 
+/// A user turn that is one slash command (`/rename Fix parser`, `/review`, `/plugin:skill args`):
+/// one line, a `/` and a command name, then nothing or a space and its arguments. A path
+/// (`/Users/me/notes.md`) is not one: its name runs into a second `/`.
+///
+/// The projection marks such a bubble `slashCommand` and every renderer draws its text in the
+/// chat's monospace (`surface_skill_invocation_user_turns` turns the harness's envelopes into this
+/// text). SEE-ALSO: apps/desktop/src/app/native_chat/transcript.rs,
+/// apps/mobile/app/src/chat/native/transcript/MessageRow.tsx (`UserMessage`).
+pub fn is_slash_command_line(text: &str) -> bool {
+    let trimmed = text.trim();
+    let Some(rest) = trimmed.strip_prefix('/') else {
+        return false;
+    };
+    if trimmed.contains('\n') {
+        return false;
+    }
+    let name_len = rest
+        .bytes()
+        .take_while(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b':' | b'.')
+        })
+        .count();
+    name_len > 0
+        && rest.as_bytes()[0].is_ascii_alphanumeric()
+        && rest[name_len..]
+            .chars()
+            .next()
+            .is_none_or(char::is_whitespace)
+}
+
 /// The tool name a `!` shell command's card carries; the name makes it a command tool, so the card
 /// gets the terminal glyph and its Command and Result blocks.
 pub const SHELL_COMMAND_TOOL_NAME: &str = "Shell";

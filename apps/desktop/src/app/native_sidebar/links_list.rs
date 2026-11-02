@@ -967,7 +967,14 @@ impl Render for SessionLinksList {
             .rounded(px(8.0))
             .border_1()
             .border_color(titlebar_popup_menu_border_color())
-            .bg(popup_window_surface(titlebar_background()))
+            // The dropdown (the chat's Links pill, the header's "+N") is a pill-strip menu and takes the
+            // sidebar menus' surface (`popup_menu_surface` has the user's words); the hovered row's
+            // card keeps the chrome-coloured fill.
+            .bg(if card {
+                popup_window_surface(titlebar_background())
+            } else {
+                popup_menu_surface()
+            })
             .text_color(chrome_ink())
             // The card stays while the pointer is on it and closes once it leaves both the card
             // and its row (window/session_links_card.rs).

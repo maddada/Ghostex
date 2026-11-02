@@ -271,3 +271,114 @@ fn a_message_delivered_mid_turn_is_stamped_after_the_row_before_it() {
     let _ = fs::remove_file(&path);
     let _ = fs::remove_file(&snapshot);
 }
+
+/// CDXC:SessionChat 2026-11-02: a Codex turn's reasoning summaries join into one Thought row in
+/// the tail window, and the append stream sends that row again, grown, under its first id
+/// (`session_chat_codex_thoughts.rs`).
+#[test]
+fn codex_summaries_join_into_one_thought_row_across_tail_and_append() {
+    let reasoning = |text: &str| {
+        format!(
+            r#"{{"type":"response_item","payload":{{"type":"reasoning","summary":[{{"type":"summary_text","text":"{text}"}}]}}}}"#
+        )
+    };
+    let call = |id: &str| {
+        format!(
+            r#"{{"type":"response_item","payload":{{"type":"function_call","name":"exec_command","arguments":"{{}}","call_id":"{id}"}}}}"#
+        )
+    };
+    let output = |id: &str| {
+        format!(
+            r#"{{"type":"response_item","payload":{{"type":"function_call_output","call_id":"{id}","output":"ok"}}}}"#
+        )
+    };
+    let path = write_temp_transcript(&[
+        r#"{"type":"session_meta","payload":{"id":"s1"}}"#,
+        r#"{"type":"event_msg","payload":{"type":"user_message","message":"check the settings"}}"#,
+        &reasoning("**Checking agent configuration**"),
+        &call("c1"),
+        &output("c1"),
+        &reasoning("**Checking permission configuration**"),
+        &call("c2"),
+    ]);
+    let tail = read_session_chat_transcript_tail_file(
+        &path,
+        300,
+        decode_codex_transcript_line,
+        false,
+        None,
+        None,
+        None,
+    )
+    .expect("tail read");
+    let roles: Vec<SessionChatRole> = tail
+        .messages
+        .iter()
+        .map(|message| message.role.clone())
+        .collect();
+    assert_eq!(
+        roles,
+        [
+            SessionChatRole::User,
+            SessionChatRole::Reasoning,
+            SessionChatRole::Assistant,
+            SessionChatRole::Tool,
+            SessionChatRole::Assistant,
+        ]
+    );
+    let thought = tail.messages[1].clone();
+    assert_eq!(
+        thought.blocks,
+        vec![text_block(
+            "**Checking agent configuration**\n\n**Checking permission configuration**\n"
+        )]
+    );
+
+    let mut state = SessionChatIncrementalState::new();
+    state.rebase(tail.consumed_to);
+    state.seed_codex_thoughts(tail.codex_thoughts.clone());
+    {
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .open(&path)
+            .expect("open for append");
+        for line in [
+            output("c2"),
+            reasoning("**Checking session model options**"),
+            r#"{"type":"event_msg","payload":{"type":"agent_message","message":"Both look fine."}}"#
+                .to_string(),
+            reasoning("**Summarising**"),
+        ] {
+            writeln!(file, "{line}").expect("append line");
+        }
+    }
+    let appended = read_incremental_transcript_messages(
+        &path,
+        &mut state,
+        decode_codex_transcript_line,
+        None,
+        None,
+        None,
+        None,
+    )
+    .expect("forward read");
+    let rows: Vec<(String, SessionChatRole)> = appended
+        .iter()
+        .map(|message| (message.id.clone(), message.role.clone()))
+        .collect();
+    assert_eq!(rows.len(), 4);
+    // The grown row keeps its first id and offset, so the chat replaces it in place.
+    assert_eq!(rows[1], (thought.id.clone(), SessionChatRole::Reasoning));
+    assert_eq!(appended[1].byte_offset, thought.byte_offset);
+    assert_eq!(
+        appended[1].blocks,
+        vec![text_block(
+            "**Checking agent configuration**\n\n**Checking permission configuration**\n\n**Checking session model options**\n"
+        )]
+    );
+    // The reply sentence closed the stretch: the next summary is a row of its own.
+    assert_eq!(rows[2].1, SessionChatRole::Assistant);
+    assert_ne!(rows[3].0, thought.id);
+    assert_eq!(appended[3].blocks, vec![text_block("**Summarising**")]);
+    let _ = fs::remove_file(&path);
+}

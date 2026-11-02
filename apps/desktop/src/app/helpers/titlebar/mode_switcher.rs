@@ -148,7 +148,10 @@ pub(crate) fn titlebar_mode_view_tab_hidden_settings_key(
         TitlebarMode::Changes => Some(CHANGES_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::Terminal => Some(TERMINAL_VIEW_TAB_HIDDEN_SETTINGS_KEY),
         TitlebarMode::BotFeed => Some(BOT_AUTOMATIONS_HIDDEN_SETTINGS_KEY),
-        TitlebarMode::Agents | TitlebarMode::Work | TitlebarMode::Extension(_) => None,
+        TitlebarMode::Agents
+        | TitlebarMode::Work
+        | TitlebarMode::SideChat
+        | TitlebarMode::Extension(_) => None,
     }
 }
 

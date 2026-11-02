@@ -298,9 +298,7 @@ pub(crate) fn recent_projects(
                 Some(loaded) => loaded
                     .server_sessions()
                     .filter(|session| {
-                        session.project_id == project_id
-                            && session.visible_in_sidebar_by_default
-                            && session.surface.as_str() != "commands"
+                        session.project_id == project_id && session.listed_in_sidebar()
                     })
                     .count() as i64,
                 None => session_count(project.get("sessionCount")),

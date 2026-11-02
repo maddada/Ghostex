@@ -12,6 +12,7 @@ use crate::*;
 pub(crate) enum ViewStripEntry {
     View(TitlebarMode),
     Browser(ViewStripBrowserTab),
+    SideChat(SideChatTabId),
 }
 
 impl ViewStripEntry {
@@ -19,6 +20,7 @@ impl ViewStripEntry {
         match self {
             Self::View(mode) => ViewStripTabKey::View(mode),
             Self::Browser(tab) => ViewStripTabKey::Browser(tab.tab_id),
+            Self::SideChat(tab_id) => ViewStripTabKey::SideChat(tab_id),
         }
     }
 }
@@ -44,7 +46,14 @@ impl GhostexGpuiApp {
             .copied()
             .filter(|mode| Some(*mode) == leaving || self.titlebar_mode_available(*mode))
             .filter(|mode| pages_in_row || *mode != TitlebarMode::Browser)
+            // Side chats are drawn as their own tabs, never as one `SideChat` view tab.
+            .filter(|mode| *mode != TitlebarMode::SideChat)
             .map(ViewStripEntry::View);
+        let side_chats = self
+            .view_strip_layout
+            .side_chat_tabs()
+            .map(ViewStripEntry::SideChat)
+            .collect::<Vec<_>>();
         let pages = if pages_in_row {
             Vec::new()
         } else if leaving == Some(TitlebarMode::Browser)
@@ -57,6 +66,7 @@ impl GhostexGpuiApp {
         self.in_view_strip_order(
             views
                 .chain(pages.into_iter().map(ViewStripEntry::Browser))
+                .chain(side_chats)
                 .collect(),
             ViewStripEntry::key,
         )
@@ -94,6 +104,9 @@ impl GhostexGpuiApp {
             TitlebarMode::Browser if !self.browser_pages_in_view_row => {
                 self.browser_page_on_screen().map(ViewStripTabKey::Browser)
             }
+            TitlebarMode::SideChat => self
+                .side_chat_tab_on_screen()
+                .map(ViewStripTabKey::SideChat),
             mode => Some(ViewStripTabKey::View(mode)),
         }
     }
@@ -185,6 +198,7 @@ impl GhostexGpuiApp {
                     self.open_browser_tab_from_view_strip(pane_id, tab.tab_id, window, cx);
                 }
             }
+            ViewStripEntry::SideChat(tab_id) => self.show_side_chat_tab(tab_id, window, cx),
         }
     }
 
@@ -283,6 +297,8 @@ impl GhostexGpuiApp {
             .write_projection(drawn, |key| match key {
                 ViewStripTabKey::View(mode) => open_views.contains(mode),
                 ViewStripTabKey::Browser(tab_id) => browser_tabs.tab(*tab_id).is_some(),
+                // The order is the list of open side chats, so its keys stay until closed.
+                ViewStripTabKey::SideChat(_) => true,
             });
     }
 
@@ -392,7 +408,9 @@ impl GhostexGpuiApp {
     /// its pages, it keeps its own slot.
     fn sync_open_views_to_view_strip_order(&mut self) {
         let browser_in_strip = self.browser_pages_in_view_row;
-        let ranked_slot = |mode: &TitlebarMode| browser_in_strip || *mode != TitlebarMode::Browser;
+        let ranked_slot = |mode: &TitlebarMode| {
+            (browser_in_strip || *mode != TitlebarMode::Browser) && *mode != TitlebarMode::SideChat
+        };
         let views = self
             .open_views
             .iter()

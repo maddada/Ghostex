@@ -700,3 +700,68 @@ async fn export_session_transcript_includes_coordinator_goal_and_instructions() 
     let plain_body = response_json(exported_plain.response).await;
     assert!(plain_body["result"].get("coordinator").is_none());
 }
+
+#[tokio::test]
+async fn export_session_transcript_fails_when_the_coordinator_read_fails() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("transcript.jsonl");
+    fs::write(
+        &transcript_path,
+        "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":\"Hello\"}}\n",
+    )
+    .expect("write transcript");
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Ghostex", "path": temp.path() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("session created");
+    let session_id = session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    // An unreadable coordinators table: the export must not answer as if the session were no
+    // orchestrator, which would hand an orchestrator off as a plain session.
+    db.execute_batch("DROP TABLE coordinators")
+        .expect("drop coordinators");
+    drop(db);
+
+    let exported = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({ "params": { "projectId": project_id, "sessionId": session_id } }),
+        ),
+        "export-unreadable-coordinator".to_string(),
+    )
+    .await;
+    assert_ne!(exported.response.status(), StatusCode::OK);
+}

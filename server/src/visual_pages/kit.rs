@@ -39,7 +39,8 @@
 //! the eyebrow, title and lede, and the kit puts the reader's Dark / Light switch beside the title
 //! on a v2 page. The kit also styles headings, code, tables and a few components (`.gx-eyebrow`,
 //! `.gx-lede`, `.gx-callout`, `.gx-card`, `.gx-grid`, `.gx-figure`, `.gx-frame`, `.gx-seg`,
-//! `.gx-button`, `<gx-tabs>`), all at low specificity so a page's own CSS wins. Every colour is a
+//! `.gx-button`, `<gx-tabs>`, and for options compared side by side `.gx-options`, `.gx-ribbon`,
+//! `.gx-chips`/`.gx-chip` and `.gx-stats`/`.gx-stat`), all at low specificity so a page's own CSS wins. Every colour is a
 //! theme token (theme.rs `THEME_STYLE`). A page that paints its own background in the other theme
 //! moves the theme to match ("follow paint") and gets no switch.
 //!
@@ -58,7 +59,7 @@
 //! reopening the page brings them back.
 //!
 //! CDXC:SessionChat 2026-10-11 DECISION:
-//! User: "please same style for the html modal also and the inline questions": each question is a "Clear ask, clear answer" card like the chat's (apps/desktop/src/app/native_chat/ask_card.rs): a tile beside the tag chip and title (see the later decision on the yellow "?"), picks that turn green with it, options that light up amber when picked (the mockup Pick button too), and a footer bar with the status and a filled send button showing its key. It takes the chat card's own colours too: its light-grey Recommended badge and send button and its bright labels and titles at medium weight. The card is darker ("The colors are too light for the bg of the question cards please make it darker", then "background for the whole question component still too light"), and its amber is quieter ("please make the yellow more subtle"); the chat's cards then took both ("yellow + dark all"): a picked option, the tile, the mockup ring and the Picked button take a light amber tint instead of a strong one or a solid fill. Only the tile stays beside the tag chip and title, since a page spreads its questions between mockups.
+//! User: "please same style for the html modal also and the inline questions": each question is a "Clear ask, clear answer" card like the chat's (apps/desktop/src/app/native_chat/ask_card.rs): a tile beside the tag chip and title (see the later decision on the yellow "?"), picks that turn green with it, options that light up amber when picked (the mockup Pick button too), and a footer bar with the status and a filled send button showing its key. It keeps the chat card's light-grey Recommended badge and send button and its bright labels and titles at medium weight, and a picked option, the tile, the mockup ring and the Picked button take a light amber tint instead of a strong one or a solid fill ("please make the yellow more subtle"). Its colours are now frosted glass rather than the chat card's (CDXC:SessionChat 2026-11-02 DECISION in theme.rs). Only the tile stays beside the tag chip and title, since a page spreads its questions between mockups.
 //! User, about the yellow "?" tile at the left of every question heading: "remove this yellow thing here please so i can tell what i answered and what i didn't answer". A question shows the green check as soon as it has an answer (a pick made, text typed, or a restored draft). After the page is sent, an answered question keeps the green check and one left blank keeps the plain tile. User (2026-10-19): "can we make this match the look of other icons we just worked on please?", so that tile is the chat's shared one (the SessionChat 2026-10-18 DECISION on `SINGLE_LINE_CARD` in apps/desktop/src/app/native_chat/cards.rs: 28px neutral tile, question-bubble glyph, a 12px green check badge), superseding the tinted green and muted squares. Then, of the empty slot an unanswered question kept: "fix this not showing an icon here, should show one with this color question mark #D2A024", so a question still waiting shows the chat's waiting tile (the checklist glyph with a #D2A024 "?" badge, Q305) until it has an answer, superseding the empty slot from "remove this yellow thing here please"; the green check still tells an answered question from a waiting one.
 //! User picked from the looks page: a question's tag is a filled chip ("make it show like eyebrow"), and a choice keeps its radio or checkbox with the letter as a muted keycap on the right; the in-chat form (apps/desktop/src/app/native_chat/question_form.rs, the phone's QuestionForm.tsx) matches. User (2026-10-19): "please move the Q294 to be right aligned same row as the question", so the chip sits at the right end of the title's first line and a long title wraps beside it, superseding the chip above the title.
 //! User: Ctrl+Enter (Cmd+Enter on macOS) presses the page's send button from anywhere on it, a note box included; the in-chat form does the same.
@@ -80,8 +81,8 @@
 /// CDXC:SessionChat 2026-10-29 DECISION:
 /// User, after typing a long note under a picked variant made its box (and the variant's whole section) grow sideways to the width of the wide band: "i dont like how writing a lot here makes this text area expand in width even tho there's spaces for it to be able to wrap the text. please let's not do this, we should just wrap when text in a line gets long (this is in inline htmls)". Every kit text box keeps the width it has when empty, wraps, and grows only in height. The boxes are `width:0;min-width:100%` instead of `width:100%`: a percentage width inside a content-sized parent (the variant section under `<gx-wide>` is `fit-content`) counts as the text's own width when the parent is measured, so `field-sizing:content` made the parent as wide as the text, while a zero width with a percentage minimum adds nothing to that measure and then fills the parent.
 ///
-/// CDXC:SessionChat 2026-10-11 SEE-ALSO:
-/// The question card's `--gx-card`, `--gx-footer`, `--gx-option`, `--gx-card-border`, `--gx-option-border`, `--gx-card-muted`, `--gx-control` and `--gx-fg` tokens (theme.rs `THEME_STYLE`, per theme since 2026-10-27) are the chat card's palette (apps/desktop/src/app/native_chat/appearance.rs: `foreground`, `card_muted`, `control_primary`, `card_panel`, `card_row`, `card_footer`, `input_border`, `control_border`), worked out from the default page background by the same rule the chat uses on its own (dark mode lifts the card 3.5%, its rows 1.5% and the footer 2.5% toward white) and written out per theme, so a page that redefines `--background` no longer moves them. The phone's copy is apps/mobile/app/src/chat/native/transcript/theme.ts. Change them together.
+/// CDXC:SessionChat 2026-11-02 SEE-ALSO:
+/// The question card's text tokens (`--gx-fg`, `--gx-card-muted`, `--gx-control`) are still the chat card's (apps/desktop/src/app/native_chat/appearance.rs `foreground`, `card_muted`, `control_primary`; the phone's copy is apps/mobile/app/src/chat/native/transcript/theme.ts), so change those together. Its surfaces (`--gx-card`, `--gx-footer`, `--gx-option`, `--gx-card-border`, `--gx-option-border`) are the page's frosted glass instead (theme.rs, CDXC:SessionChat 2026-11-02 DECISION) and no longer follow the chat card.
 pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text)}
 gx-page{display:grid}
@@ -109,14 +110,26 @@ gx-page>gx-wide,gx-questions>gx-wide{display:flex}
 :where(gx-page,gx-questions) :where(td){border-bottom:1px solid var(--gx-line);padding:10px;vertical-align:top}
 :where(gx-page>header,gx-questions>header){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:16px;row-gap:12px;align-items:start;margin-bottom:12px}
 :where(gx-page>header>*,gx-questions>header>*){grid-column:1}
-.gx-eyebrow{display:block;font:600 12px/1.3 var(--font-sans);letter-spacing:.08em;text-transform:uppercase;color:var(--gx-accent)}
+.gx-eyebrow{display:inline-flex;align-items:center;gap:7px;width:max-content;max-width:100%;box-sizing:border-box;padding:4px 11px;border-radius:999px;border:1px solid var(--gx-line-strong);background:var(--gx-surface);font:700 11px/1.3 var(--font-sans);letter-spacing:.12em;text-transform:uppercase;color:var(--gx-pick)}
 .gx-lede{font-size:17px;line-height:1.6;color:var(--gx-muted)}
 .gx-muted{color:var(--gx-muted)}
 .gx-callout{padding:14px 18px;border-radius:12px;background:color-mix(in srgb,var(--gx-tone,var(--gx-accent)) 10%,var(--gx-bg));color:var(--gx-text)}
 .gx-callout[data-tone=warn]{--gx-tone:var(--gx-warn)}.gx-callout[data-tone=good]{--gx-tone:var(--gx-good)}.gx-callout[data-tone=bad]{--gx-tone:var(--gx-bad)}
 .gx-callout :where(b,strong),.gx-card :where(b,strong){color:var(--gx-fg)}
-.gx-card{padding:18px 20px;border-radius:16px;background:var(--gx-surface)}
+.gx-card{padding:18px 20px;border-radius:16px;background:var(--gx-card);border:1px solid var(--gx-card-border);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 .gx-grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--gx-grid-min,240px)),1fr))}
+.gx-options{display:grid;gap:14px;align-items:stretch;grid-template-columns:repeat(auto-fit,minmax(min(100%,var(--gx-option-min,250px)),1fr))}
+gx-wide>.gx-options{width:100%}
+.gx-options>*{min-width:0;margin:0}
+.gx-options>[data-question][data-choice]{display:flex;flex-direction:column;gap:10px}
+.gx-ribbon{position:absolute;top:-10px;left:50%;transform:translateX(-50%);padding:2px 10px;border-radius:999px;background:var(--gx-pick);color:var(--gx-bg);font:750 10px/1.6 var(--font-sans);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+.gx-chips{display:flex;flex-wrap:wrap;gap:6px}
+.gx-chip{display:inline-flex;flex:none;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;border:1px solid var(--gx-line);background:var(--gx-surface);color:var(--gx-text);font-size:12px;line-height:1.5;white-space:nowrap}
+.gx-chip b,.gx-stat b{color:var(--gx-fg);font-weight:650}
+.gx-stats{display:grid;gap:6px;grid-template-columns:repeat(auto-fit,minmax(72px,1fr))}
+.gx-stat{min-width:0;padding:7px 10px 6px;border-radius:10px;border:1px solid var(--gx-line);background:var(--gx-surface)}
+.gx-stat small{display:block;font-size:10px;font-weight:650;letter-spacing:.1em;text-transform:uppercase;color:var(--gx-muted)}
+.gx-stat b{display:block;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .gx-figure{display:flex;flex-direction:column;gap:10px}
 .gx-figure>img{display:block;max-width:100%;height:auto;border-radius:12px;border:1px solid var(--gx-line)}
 .gx-figure figcaption{font-size:13px;line-height:1.5;color:var(--gx-muted)}
@@ -135,7 +148,7 @@ body>.gx-theme-switch{position:absolute;top:12px;right:12px}
 gx-tabs{display:flex;flex-direction:column;gap:14px;min-width:0}
 gx-tabs>.gx-seg{align-self:flex-start}
 gx-tabs>[data-tab][hidden]{display:none!important}
-gx-question{display:block;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-card-muted);border-radius:14px;padding:12px 14px 14px}
+gx-question{display:block;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-card-muted);border-radius:16px;padding:12px 14px 14px;box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 gx-questions gx-question{width:100%;box-sizing:border-box;min-width:0}
 .gx-q-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .gx-q-tile{position:relative;flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:8px;color:color-mix(in srgb,var(--gx-fg) 80%,transparent);background:color-mix(in srgb,var(--gx-fg) 6%,transparent)}
@@ -157,14 +170,14 @@ gx-question.gx-unanswered .gx-q-badge.gx-ask,gx-question.gx-unanswered .gx-q-bad
 .gx-choice{display:flex;gap:12px;align-items:flex-start;width:100%;box-sizing:border-box;margin:0;text-align:left;padding:10px 12px;border:1px solid var(--gx-option-border);border-radius:10px;background:var(--gx-option);color:var(--gx-fg);font:inherit;font-size:14px;line-height:20px;cursor:pointer}
 .gx-choice:hover:not(:disabled):not([aria-checked=true]){border-color:color-mix(in srgb,var(--gx-fg) 14%,transparent);background:color-mix(in srgb,var(--gx-fg) 3%,var(--gx-option))}
 .gx-choice:focus-visible{outline:none;border-color:var(--ring);box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 20%,transparent)}
-.gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--warning) 32%,transparent);background:color-mix(in srgb,var(--warning) 4%,var(--gx-card))}
+.gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--gx-pick) 55%,transparent);background:color-mix(in srgb,var(--gx-pick) 9%,transparent)}
 .gx-choice:disabled{cursor:default}
 .gx-choice:disabled:not([aria-checked=true]){opacity:.55}
 .gx-mark{flex-shrink:0;width:16px;height:16px;margin-top:2px;box-sizing:border-box;border:1.5px solid color-mix(in srgb,var(--gx-muted) 70%,transparent);border-radius:50%}
 .gx-choice[role=checkbox] .gx-mark{border-radius:4px}
-.gx-choice[aria-checked=true] .gx-mark{border-color:color-mix(in srgb,var(--warning) 85%,transparent);background:color-mix(in srgb,var(--warning) 85%,transparent);box-shadow:inset 0 0 0 3px var(--gx-card)}
-.gx-choice[role=checkbox][aria-checked=true] .gx-mark{box-shadow:inset 0 0 0 2px var(--gx-card)}
-gx-question.gx-answered .gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--success) 55%,transparent);background:color-mix(in srgb,var(--success) 8%,var(--gx-card))}
+.gx-choice[aria-checked=true] .gx-mark{border-color:var(--gx-pick);background:radial-gradient(circle,var(--gx-pick) 0 3.5px,transparent 4px)}
+.gx-choice[role=checkbox][aria-checked=true] .gx-mark{background:var(--gx-pick);box-shadow:inset 0 0 0 2px var(--gx-bg)}
+gx-question.gx-answered .gx-choice[aria-checked=true]{border-color:color-mix(in srgb,var(--success) 55%,transparent);background:color-mix(in srgb,var(--success) 9%,transparent)}
 gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(--success);background:var(--success)}
 .gx-letter{flex:none;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;margin-top:1px;border:1px solid color-mix(in srgb,var(--gx-fg) 12%,transparent);border-radius:5px;background:color-mix(in srgb,var(--gx-bg) 50%,transparent);font:500 11px/16px var(--font-mono);color:var(--gx-muted);text-align:center}
 .gx-choice[aria-checked=true] .gx-letter{color:var(--gx-fg)}
@@ -179,19 +192,30 @@ gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(
 .gx-note::placeholder,.gx-text::placeholder{color:var(--gx-muted)}
 .gx-note[readonly],.gx-text[readonly]{resize:none}
 .gx-note[hidden],.gx-text[hidden]{display:none}
+.gx-pills{display:flex;flex-wrap:wrap;gap:4px 10px;margin:6px 0 0}
+.gx-pills[hidden]{display:none}
+.gx-pill{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:100%;font:500 13.5px/20px var(--font-sans);color:#8cb59e}
+html[data-gx-theme=light] .gx-pill{color:#5f9878}
+.gx-pill svg{flex:none;width:15px;height:15px}
+.gx-pill-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;padding:0;border:0;border-radius:4px;background:none;color:var(--gx-muted);font:inherit;line-height:1;cursor:pointer}
+.gx-pill-x:hover{background:color-mix(in srgb,var(--gx-fg) 10%,transparent);color:var(--gx-fg)}
+.gx-paste{margin:4px 0 0;font-size:12.5px;color:var(--gx-muted)}
+.gx-paste[hidden]{display:none}
+.gx-paste.gx-error{color:var(--destructive)}
 .gx-has-pick{display:flex;align-items:center;gap:8px}
 .gx-pick{display:inline-flex;flex:none;align-items:center;gap:4px;margin-left:auto;padding:2px 10px;vertical-align:middle;border:1px solid var(--gx-line-strong);border-radius:999px;background:transparent;color:var(--gx-text);font:500 12px/1.5 var(--font-sans);cursor:pointer}
 .gx-pick:hover:not(:disabled):not([aria-pressed=true]){background:var(--gx-surface);color:var(--gx-fg)}
-.gx-pick[aria-pressed=true]{background:color-mix(in srgb,var(--warning) 12%,transparent);border-color:color-mix(in srgb,var(--warning) 40%,transparent);color:var(--warning)}
-.gx-pick[aria-pressed=true]:hover:not(:disabled),.gx-pick[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--warning) 20%,transparent);border-color:color-mix(in srgb,var(--warning) 55%,transparent);color:var(--warning)}
+.gx-pick[aria-pressed=true]{background:color-mix(in srgb,var(--gx-pick) 14%,transparent);border-color:color-mix(in srgb,var(--gx-pick) 50%,transparent);color:var(--gx-pick)}
+.gx-pick[aria-pressed=true]:hover:not(:disabled),.gx-pick[aria-pressed=true]:active:not(:disabled){background:color-mix(in srgb,var(--gx-pick) 22%,transparent);border-color:color-mix(in srgb,var(--gx-pick) 62%,transparent);color:var(--gx-pick)}
 .gx-pick:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 35%,transparent)}
 .gx-pick:disabled{cursor:default}
 .gx-pick:disabled:not([aria-pressed=true]){opacity:.5}
 .gx-option-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-weight:600}
-[data-question][data-choice]:not(h1,h2,h3,h4,h5,h6){box-sizing:content-box;padding:14px;border:2px solid transparent;border-radius:16px}
+[data-question][data-choice]:not(h1,h2,h3,h4,h5,h6){box-sizing:content-box;padding:14px;border:2px solid var(--gx-card-border);border-radius:18px;transition:border-color .18s,box-shadow .18s}
+:where([data-question][data-choice]:not(h1,h2,h3,h4,h5,h6)){position:relative;background:var(--gx-card);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 :where([data-question][data-choice]:not(h1,h2,h3,h4,h5,h6)){max-width:calc(100% - 32px)}
-[data-question][data-choice].gx-picked:not(h1,h2,h3,h4,h5,h6){border-color:color-mix(in srgb,var(--warning) 40%,transparent)}
-.gx-send{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding:10px 14px;border:1px solid var(--gx-card-border);border-radius:14px;background:var(--gx-footer)}
+[data-question][data-choice].gx-picked:not(h1,h2,h3,h4,h5,h6){border-color:color-mix(in srgb,var(--gx-pick) 78%,transparent);box-shadow:0 0 0 5px color-mix(in srgb,var(--gx-pick) 10%,transparent),var(--gx-glass-shadow)}
+.gx-send{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;padding:10px 14px;border:1px solid var(--gx-card-border);border-radius:16px;background:var(--gx-footer);box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
 .gx-send-button{display:inline-flex;align-items:center;gap:6px;margin-left:auto;height:28px;box-sizing:border-box;padding:0 11px;font:inherit;font-size:13px;font-weight:500;border-radius:8px;border:1px solid var(--gx-control);background:var(--gx-control);color:var(--gx-bg);cursor:pointer}
 .gx-send-button:hover:not(:disabled){opacity:.9}
 .gx-send-button:disabled{opacity:.5;cursor:default}
@@ -211,8 +235,12 @@ gx-question.gx-answered .gx-choice[aria-checked=true] .gx-mark{border-color:var(
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has
 /// loaded, after `PAGE_API` (theme.rs) has its answered state.
+///
+/// CDXC:Clipboard 2026-11-02 DECISION:
+/// User: "i also want to be able to paste images into the notes of questions in inline html or the inline questions you send please. when i paste an image now nothing happens. pls fix. (it can just show like this like we show it in chat: [Image #1](…/2026-11-02_Ghostex_06-18-47@2x.png)". An image pasted into a note or text box is saved on the computer through the page's own `/image` route (images.rs, beside the chat's pasted images) and written into the box as `[Image #N](path)`, the reference a chat message carries, so the answers carry it and the agent can open the file. The numbers count across every box of the page, which all go in one answers message. A textarea cannot draw a pill inside its text, so each box lists its images under it as pills (the chat's image icon and colour, the path in the tooltip, × removes the reference). The in-chat form does the same with the composer's own pills (apps/desktop/src/app/native_chat/form_attachments.rs).
 pub(super) const KIT_SCRIPT: &str = r#"<script>(function(){
 var OTHER="Other / none of these",SKIPPED="skipped";
+var IMAGE_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 8h.01"/><path d="M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"/><path d="m3 16 5-5c.928-.893 2.072-.893 3 0l5 5"/><path d="m14 14 1-1c.928-.893 2.072-.893 3 0l3 3"/></svg>';
 var TILE_ICON='<svg class="gx-q-wait" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5 3.6 5.6 5.5 3.6M2.5 10.5l1.1 1.1 1.9-2M8 4.6h5.5M8 10.6h5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="gx-q-done" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.6 6.2a1.5 1.5 0 1 1 2.1 1.4c-.5.2-.7.5-.7 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="10" r=".7" fill="currentColor"/></svg><span class="gx-q-badge gx-ask"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.4 3.6a1.7 1.7 0 1 1 2.4 1.5c-.5.25-.8.55-.8 1.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="5" cy="8.1" r=".8" fill="currentColor"/></svg></span><span class="gx-q-badge gx-check"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5.2 4.2 7.4 8 2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
 function kids(node){return Array.prototype.slice.call(node.childNodes);}
@@ -406,11 +434,46 @@ function setup(root){
     /* Once sent, the page shows what went: no picks and no notes. */
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
-  function lock(){questions.forEach(function(q){q.lock();});syncOptions();button.disabled=true;skipAll.remove();label.textContent="Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent="Sent to the agent.";}
+  function lock(){questions.forEach(function(q){q.lock();});syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent="Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent="Sent to the agent.";}
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
+  /* Pasted images: see the Clipboard DECISION on KIT_SCRIPT. */
+  var pendingImages=0,base=location.pathname.replace(/\/+$/,"");
+  function boxes(){return Array.prototype.slice.call(root.querySelectorAll("textarea.gx-note,textarea.gx-text"));}
+  function nextImage(){var top=0;boxes().forEach(function(t){t.value.replace(/\[Image #(\d+)\]\(/g,function(_,n){top=Math.max(top,+n);});});return top+1;}
+  function edited(area){area.dispatchEvent(new Event("input",{bubbles:true}));}
+  function pills(area){
+    var row=area.__gxPills;if(!row){row=el("div","gx-pills");area.after(row);area.__gxPills=row;}
+    row.textContent="";var re=/\[(Image #\d+)\]\(((?:\\.|[^)\\\r\n])*)\)/g,m;
+    while((m=re.exec(area.value))){
+      var pill=el("span","gx-pill"),start=m.index,end=re.lastIndex;pill.innerHTML=IMAGE_ICON;pill.append(el("span",null,m[1]));pill.setAttribute("data-gx-tip",m[2]);
+      if(!area.readOnly){var x=el("button","gx-pill-x","\u00d7");x.type="button";x.setAttribute("aria-label","Remove "+m[1]);x.addEventListener("click",(function(s,e){return function(){var v=area.value;if(s>0&&v.charAt(s-1)===" ")s--;else if(v.charAt(e)===" ")e++;area.value=v.slice(0,s)+v.slice(e);edited(area);};})(start,end));pill.append(x);}
+      row.append(pill);
+    }
+    row.hidden=!row.childNodes.length||area.hidden;
+  }
+  function allPills(){boxes().forEach(pills);}
+  function hint(area,text,error){var h=area.__gxHint;if(!h){h=el("div","gx-paste");(area.__gxPills||area).after(h);area.__gxHint=h;}h.textContent=text||"";h.classList.toggle("gx-error",!!error);h.hidden=!text;}
+  function upload(file){return fetch(base+"/image",{method:"POST",body:new Blob([file])}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){if(r.ok&&j.ok&&j.path)return j.path;throw new Error(j.error||"The pasted image could not be saved.");});});}
+  root.addEventListener("input",function(e){if(e.target&&e.target.matches&&e.target.matches("textarea.gx-note,textarea.gx-text"))pills(e.target);},true);
+  root.addEventListener("paste",function(e){
+    var area=e.target;if(!area||!area.matches||!area.matches("textarea.gx-note,textarea.gx-text")||area.readOnly||button.disabled)return;
+    var files=[];Array.prototype.forEach.call(e.clipboardData&&e.clipboardData.items||[],function(i){if(i.kind==="file"&&/^image\//.test(i.type)){var f=i.getAsFile();if(f)files.push(f);}});
+    if(!files.length)return;
+    e.preventDefault();
+    var original=area.value,start=area.selectionStart,end=area.selectionEnd,paths=[];pendingImages++;hint(area,files.length>1?"Saving the pasted images…":"Saving the pasted image…");
+    files.reduce(function(chain,f){return chain.then(function(){return upload(f).then(function(p){paths.push(p);});});},Promise.resolve()).then(function(){hint(area,"");},function(error){hint(area,error&&error.message||"The pasted image could not be saved.",true);}).then(function(){
+      pendingImages--;if(!paths.length)return;
+      /* Typing went on while it saved: the selection taken at the paste no longer fits, so the references go at the end. */
+      var v=area.value,s=v===original?start:v.length,en=v===original?end:s;
+      paths.forEach(function(p){var ref="[Image #"+nextImage()+"]("+p+")",lead=s>0&&!/\s/.test(v.charAt(s-1))?" ":"",ins=lead+ref+" ";v=v.slice(0,s)+ins+v.slice(en);s=en=s+ins.length;area.value=v;});
+      if(document.activeElement===area)area.setSelectionRange(s,s);edited(area);
+    });
+  },true);
+  allPills();
   function send(out,sent){
+    if(pendingImages){status.classList.add("gx-error");status.textContent="Wait for the pasted image to finish saving.";return;}
     button.disabled=true;status.classList.remove("gx-error");status.textContent="Sending…";
     /* A send that can't reach Ghostex keeps trying with everything left as typed, and says so (PAGE_API's submit). */
     ghostex.submit(out,function(message){status.classList.add("gx-error");status.textContent=message;}).then(function(){if(sent)sent();lock();},function(error){button.disabled=false;status.classList.add("gx-error");status.textContent=error&&error.message||"Your answers were not sent.";});

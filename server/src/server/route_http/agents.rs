@@ -41,6 +41,7 @@ pub(super) async fn route_agents_http(
         | "/api/updateAgentSettings"
         | "/api/readAgentResumePlan"
         | "/api/forkSession"
+        | "/api/startSideChat"
         | "/api/switchDraftAgent"
         | "/api/draftRunLocation"
         | "/api/switchSessionAgent"
@@ -50,6 +51,9 @@ pub(super) async fn route_agents_http(
         | "/api/updateAgentActivity"
         | "/api/ingestAgentHookEvent" => {
             handle_agent_http(&state, endpoint.path, request_id, &body_json).await
+        }
+        "/api/listSideChats" | "/api/bringBackSideChat" | "/api/deleteSideChat" => {
+            handle_side_chat_http(&state, endpoint.path, request_id, &body_json).await
         }
         "/api/readAgentHookStatus" | "/api/installAgentHooks" | "/api/uninstallAgentHooks" => {
             handle_agent_hook_http(&state, endpoint.path, request_id, &body_json)

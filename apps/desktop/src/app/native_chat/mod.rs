@@ -44,6 +44,7 @@ mod files_links;
 mod focus;
 pub(crate) mod fonts;
 mod fork_branches;
+mod form_attachments;
 pub(crate) mod frosted_overlay_window;
 pub(crate) mod image_viewer;
 mod images;
@@ -64,6 +65,7 @@ mod question_form;
 mod question_ping;
 mod questions_list;
 pub(crate) mod queue;
+mod read_pictures;
 mod reference_menu;
 mod resource_modal;
 mod rewind;
@@ -75,6 +77,7 @@ mod runtime_worker;
 mod scroll_bottom;
 mod scrollbar;
 mod search;
+mod side_chats;
 mod side_question;
 mod startup_delivery;
 mod status_rows;
@@ -141,7 +144,7 @@ mod workflow_card;
 mod working_card;
 mod working_spark;
 
-mod zoom;
+pub(crate) mod zoom;
 
 mod save_markdown;
 

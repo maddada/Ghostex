@@ -180,6 +180,12 @@ pub struct PageScreenshot {
     pub picture: futures::channel::oneshot::Receiver<Option<String>>,
 }
 
+/// A page's answer to `wait_for_page_settled` on its way (`shell/page_screenshot.rs`); never made
+/// here.
+pub struct PageSettled {
+    pub settled: futures::channel::oneshot::Receiver<Option<String>>,
+}
+
 /// A page's DevTools target id on its way (`shell/page_target_id.rs`); never made here.
 pub struct PageTargetId {
     pub target_id: futures::channel::oneshot::Receiver<Option<String>>,
@@ -213,6 +219,10 @@ impl CefBrowser {
         _height: f64,
         _scale: f64,
     ) -> Option<PageScreenshot> {
+        None
+    }
+
+    pub fn wait_for_page_settled(&self, _timeout_ms: u64) -> Option<PageSettled> {
         None
     }
 

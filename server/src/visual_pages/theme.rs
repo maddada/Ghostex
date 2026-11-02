@@ -3,7 +3,7 @@ macro_rules! light_tokens {
     () => {
         concat!(
             "color-scheme:light;",
-            "--background:#ffffff;--foreground:#262626;",
+            "--background:#f3efea;--foreground:#262626;",
             "--muted:#f1f1f1;--muted-foreground:#626262;",
             "--card:#ffffff;--card-foreground:#262626;",
             "--border:rgba(0,0,0,0.14);--input:rgba(0,0,0,0.16);--ring:#737373;",
@@ -13,12 +13,14 @@ macro_rules! light_tokens {
             "--code-background:#f6f8fa;--code-foreground:#1f2328;",
             "--chart-1:#2563eb;--chart-2:#d97706;--chart-3:#059669;",
             "--chart-4:#db2777;--chart-5:#7c3aed;--chart-6:#0891b2;",
-            "--gx-bg:#ffffff;--gx-surface:#f4f4f5;--gx-raised:#ffffff;",
-            "--gx-line:rgba(0,0,0,0.08);--gx-line-strong:rgba(0,0,0,0.14);",
+            "--gx-bg:#f3efea;--gx-surface:rgba(255,255,255,0.55);--gx-raised:rgba(255,255,255,0.78);",
+            "--gx-line:rgba(70,45,30,0.09);--gx-line-strong:rgba(70,45,30,0.15);",
             "--gx-fg:#18181b;--gx-text:#3f3f46;--gx-muted:#71717b;",
-            "--gx-accent:#2563eb;--gx-warn:#a16207;--gx-good:#047857;--gx-bad:#b91c1c;--gx-code-bg:#f4f4f5;",
-            "--gx-card:#ffffff;--gx-footer:#ffffff;--gx-option:#ffffff;",
-            "--gx-card-border:#e7e7e7;--gx-option-border:#e7e7e7;",
+            "--gx-accent:#2563eb;--gx-warn:#a16207;--gx-good:#047857;--gx-bad:#b91c1c;--gx-code-bg:rgba(255,255,255,0.62);--gx-pick:#c2661c;",
+            "--gx-card:rgba(255,255,255,0.62);--gx-footer:rgba(255,255,255,0.68);--gx-option:rgba(255,255,255,0.5);",
+            "--gx-card-border:rgba(90,60,40,0.13);--gx-option-border:rgba(90,60,40,0.1);",
+            "--gx-glass-shadow:0 14px 36px rgba(120,80,50,0.12);--gx-glass-dim:rgba(250,247,242,0.7);",
+            "--gx-backdrop:radial-gradient(60% 50% at 85% 100%,rgba(240,170,120,0.28),transparent 70%),radial-gradient(55% 45% at 5% 0%,rgba(140,165,215,0.3),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(230,140,110,0.16),transparent 70%),linear-gradient(180deg,#eef0f6 0%,#f1edf0 45%,#f6ece3 100%);",
             "--gx-card-muted:#71717b;--gx-control:#18181b;",
             "--gx-tip-bg:#fcfcfc;--gx-tip-fg:#292929;--gx-tip-border:rgba(0,0,0,0.12)"
         )
@@ -34,9 +36,16 @@ macro_rules! light_tokens {
 /// change: the reader's Dark / Light switch, or the page's own painted background ("follow paint").
 /// The media query only covers a page whose scripts never ran.
 ///
-/// Neutrals come from the app's default theme (`packages/core-ui/styles/theme.css` for dark,
+/// Text colours come from the app's default theme (`packages/core-ui/styles/theme.css` for dark,
 /// `packages/core-ui/styles/modals-light.css` for light); status colors from the chat's status
-/// tones (`packages/gx-chat-core/visual/status-tone.json`).
+/// tones (`packages/gx-chat-core/visual/status-tone.json`). The page itself is the glass look
+/// below: a painted backdrop (`--gx-backdrop`, a toned-down dusk in dark, a soft dawn in light)
+/// under translucent surfaces that the kit frosts.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User picked "A. Real glass, your wallpaper" on the page asking how every page should look as good as the screenshot page (issues-1027/showcase), with the note "a and skill adjustments also. i like this one you just gave me a lot for example … i love the glassy selections". Every page now paints a toned-down dusk (dark) or dawn (light) behind frosted question cards, choices, note boxes, send bar and tied option sections, with a warm amber (`--gx-pick`) for picks. This supersedes the 2026-10-11 rule that the question card takes the chat card's own colours. Pages that paint their own background keep it.
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// The page window's page is a windowed CEF browser, and CEF paints a windowed browser opaque whatever its background colour says (only off-screen browsers can be transparent), so a page can't show the app's own glass through itself. The desktop's page window hands the page the picture behind its glass instead (`data-gx-glass`, CDXC:SessionChat 2026-11-02 DECISION in apps/desktop/src/app/window/visual_page_modal/glass.rs), and every other client paints the dusk or dawn.
 ///
 /// CDXC:SessionChat 2026-10-27 DECISION:
 /// User picked the v2 page template from the plan page (issues-1027/page-template): the "Editorial" look, a 720px column with a wide band up to 1120px, Ghostex's theme plus a Dark / Light switch on the page, "follow paint" when a page paints the other theme, and the same template for pages meant for other people. The kit's question cards keep their decided look; only their colours stop depending on `light-dark()` and on the page's `--background`.
@@ -46,7 +55,7 @@ macro_rules! light_tokens {
 pub(super) const THEME_STYLE: &str = concat!(
     "<style id=\"ghostex-theme\">",
     ":where(:root){color-scheme:dark;",
-    "--background:#0e0e0e;--foreground:#c8cdd5;",
+    "--background:#1c1e2b;--foreground:#c8cdd5;",
     "--muted:#2a2a2a;--muted-foreground:#747b85;",
     "--card:#252525;--card-foreground:#c8cdd5;",
     "--border:rgba(255,255,255,0.11);--input:rgba(255,255,255,0.15);--ring:#737373;",
@@ -61,13 +70,15 @@ pub(super) const THEME_STYLE: &str = concat!(
     "--font-mono:\"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;",
     // The page template's tokens (kit.rs): widths, surfaces, text and tones.
     "--gx-text-width:720px;--gx-wide-width:1120px;--gx-gutter:24px;",
-    "--gx-bg:#0e0e0e;--gx-surface:#171718;--gx-raised:#1c1c1d;",
-    "--gx-line:rgba(255,255,255,0.08);--gx-line-strong:rgba(255,255,255,0.14);",
+    "--gx-bg:#1c1e2b;--gx-surface:rgba(255,244,234,0.06);--gx-raised:rgba(255,244,234,0.1);",
+    "--gx-line:rgba(255,232,214,0.09);--gx-line-strong:rgba(255,232,214,0.17);",
     "--gx-fg:#fcfcfc;--gx-text:#c8cdd5;--gx-muted:#8b919a;",
-    "--gx-accent:#7da4f8;--gx-warn:#d2a024;--gx-good:#34d399;--gx-bad:#fb7185;--gx-code-bg:#141414;",
-    // The question card's palette, the chat card's (apps/desktop/src/app/native_chat/appearance.rs).
-    "--gx-card:#161616;--gx-footer:#141414;--gx-option:#121212;",
-    "--gx-card-border:rgba(255,255,255,0.08);--gx-option-border:rgba(255,255,255,0.06);",
+    "--gx-accent:#7da4f8;--gx-warn:#d2a024;--gx-good:#34d399;--gx-bad:#fb7185;--gx-code-bg:rgba(12,10,18,0.42);--gx-pick:#f2b06f;",
+    // The question card's glass and the painted backdrop behind every page (CDXC:SessionChat 2026-11-02 DECISION above).
+    "--gx-card:rgba(40,35,52,0.5);--gx-footer:rgba(40,35,52,0.56);--gx-option:rgba(255,244,234,0.035);",
+    "--gx-card-border:rgba(255,228,204,0.13);--gx-option-border:rgba(255,228,204,0.09);",
+    "--gx-glass-shadow:0 16px 40px rgba(12,8,16,0.28);--gx-glass-dim:rgba(18,16,26,0.52);",
+    "--gx-backdrop:radial-gradient(60% 50% at 82% 100%,rgba(226,138,88,0.2),transparent 70%),radial-gradient(55% 45% at 8% 0%,rgba(92,122,176,0.22),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(184,82,58,0.16),transparent 70%),linear-gradient(180deg,#1b2131 0%,#222437 32%,#2b2639 60%,#352a35 84%,#3a2b2c 100%);",
     "--gx-card-muted:#b4b8bf;--gx-control:#e5e5e5;",
     // The app's tooltip bubble without window glass (apps/desktop/src/app/helpers/titlebar/chrome_colors.rs
     // `apply_gpui_component_theme`: the menu colour, darkened in dark mode; its border and text).
@@ -78,8 +89,12 @@ pub(super) const THEME_STYLE: &str = concat!(
     ":where(:root[data-gx-theme=light]){",
     light_tokens!(),
     "}",
-    "html{background:var(--background);color:var(--foreground);font-family:var(--font-sans);",
+    "html{background-color:var(--background);background-image:var(--gx-backdrop,none);background-attachment:fixed;min-height:100%;color:var(--foreground);font-family:var(--font-sans);",
     "font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}",
+    // The picture behind the app's glass, when the desktop's page window hands one over
+    // (apps/desktop/src/app/window/visual_page_modal/glass.rs), dimmed under the page's cards.
+    "html[data-gx-glass]{background-image:linear-gradient(var(--gx-glass-dim),var(--gx-glass-dim)),var(--gx-glass-picture);",
+    "background-size:auto,var(--gx-glass-size,cover);background-position:0 0,var(--gx-glass-position,center);background-repeat:no-repeat}",
     "body{margin:0;padding:16px}",
     // A page laid out by the template's container (kit.rs) has its own gutters.
     ":where(body:has(>gx-page,>gx-questions)){padding:0}",

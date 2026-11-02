@@ -443,6 +443,8 @@ export interface GxserverPresentationSession {
   coordinatorProjectId?: GxserverProjectId;
   coordinatorSessionId?: GxserverSessionId;
   coordinatorThreadState?: 'waiting' | 'working' | 'finished' | 'sleeping' | 'closed' | 'done';
+  /** The main session this session is a side chat of; side chats are left out of the session lists. */
+  sideChatParentSessionId?: string;
   /** Stable Action identity used to reuse an existing command-surface session. */
   commandId?: string;
   attention?: GxserverPresentationAttentionState;

@@ -13,6 +13,7 @@
 //! CDXC:SessionChat 2026-10-09 WHY:
 //! The page is loaded with `#gx-theme=light|dark`, which the bootstrap every published page starts with (server/src/visual_pages/theme.rs) reads before first paint, so the page wears the app's appearance rather than the system's. Links the page opens go to the reader's browser, so the window only ever shows the page itself.
 //! SEE-ALSO: apps/desktop/src/app/visual_page_modal_lifecycle.rs (open and close), apps/desktop/src/app/native_chat/visual.rs (the card), packages/gx-visual (the `open` mark).
+mod glass;
 pub(crate) mod open_timing;
 mod page;
 mod source;
@@ -305,6 +306,13 @@ impl GpuiVisualPageModalWindow {
             Ok(surface) => {
                 *shown_surface.borrow_mut() = Some(surface.downgrade());
                 surface.read(cx).add_page_script(page::PAGE_SCRIPT);
+                let mut page_bounds = window.bounds();
+                page_bounds.origin.y += px(HEADER_HEIGHT);
+                page_bounds.size.height =
+                    (page_bounds.size.height - px(HEADER_HEIGHT)).max(px(1.0));
+                if let Some(script) = glass::page_glass_script(page_bounds, cx) {
+                    surface.read(cx).add_page_script(&script);
+                }
                 // A CEF page starts 1×1 and only gets its frame when the window paints; give it
                 // the area under the header from the start so it lays out at its real width.
                 let viewport = window.viewport_size();

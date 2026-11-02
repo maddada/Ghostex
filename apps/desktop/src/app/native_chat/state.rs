@@ -258,6 +258,10 @@ pub(crate) struct NativeChatView {
     /// The composer's dictation session, made the first time the reader presses Dictate.
     pub(crate) dictation: super::dictation::Dictation,
     pub(crate) list: gpui::ListState,
+    /// Set while a transcript field has focus: whether tail following resumes when it leaves (scroll_bottom.rs).
+    pub(super) transcript_focus_follow: std::cell::Cell<Option<bool>>,
+    /// Where the focused transcript field was painted, which streaming rows must not move (scroll_bottom.rs).
+    pub(super) transcript_focus_field_top: std::rc::Rc<std::cell::Cell<Option<gpui::Pixels>>>,
     /// The transcript's own cached view, created on the first draw (transcript_host.rs).
     pub(super) transcript_host: Option<Entity<super::transcript_host::TranscriptHost>>,
     /// The composer's own view, which keystrokes notify instead of the chat (composer_host.rs).
@@ -415,6 +419,8 @@ impl NativeChatView {
             in_work_fold: false,
             hide_file_changes: false,
             disclosure_motion: Default::default(),
+            transcript_focus_follow: Default::default(),
+            transcript_focus_field_top: Default::default(),
             in_subagent: false,
             maximized_window: None,
             maximized_wanted: false,
@@ -829,13 +835,14 @@ impl NativeChatView {
             subagent_splice,
         } = output;
         if let Some(splice) = items_splice {
+            let anchor_key = self.transcript_anchor_key();
             // The host ships only the changed window of transcript items (see transcriptItemsSplice in native-host.ts).
             let items = Arc::make_mut(&mut self.items);
             let start = splice.start.min(items.len());
             let end = start.saturating_add(splice.delete_count).min(items.len());
             let inserted_len = splice.items.len();
             items.splice(start..end, splice.items);
-            self.splice_transcript(start, end, inserted_len);
+            self.splice_transcript_keyed(start, end, inserted_len, anchor_key);
             self.notify_if_shown(cx);
         }
         if let Some(markers) = output

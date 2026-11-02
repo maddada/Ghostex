@@ -22,6 +22,7 @@ pub mod save_markdown_paths;
 pub mod search;
 pub mod session_details;
 pub mod settle;
+pub mod side_chats;
 pub mod subagent;
 pub mod subagent_rows;
 pub mod subagent_target;

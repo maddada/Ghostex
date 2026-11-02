@@ -346,11 +346,13 @@ impl SidebarViewModel {
             Cow::Owned(pruned)
         };
         let effective = effective_inputs.as_ref();
+        let side_chat_needs = super::rows::side_chat_needs(store, &machine);
         let row_context = RowContext {
             catalog: &catalog,
             debugging_mode: effective.settings.debugging_mode,
             always_show_state_tooltip: !machine.is_local(),
             session_notes: effective.settings.session_notes_enabled,
+            side_chat_needs: &side_chat_needs,
         };
 
         // 1. Project facts.
@@ -437,6 +439,14 @@ impl SidebarViewModel {
         for (project_id, session_id) in &dirty_rows {
             if let Some(sessions) = rows.get_mut(*project_id) {
                 sessions.remove(*session_id);
+            }
+            // A side chat's questions and approvals show on its main session's row.
+            let parent = store
+                .machine(&machine)
+                .and_then(|entry| entry.effective_session(project_id, session_id))
+                .and_then(|session| session.side_chat_parent_session_id.clone());
+            if let (Some(parent), Some(sessions)) = (parent, rows.get_mut(*project_id)) {
+                sessions.remove(&parent);
             }
         }
         for project in changes

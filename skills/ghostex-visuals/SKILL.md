@@ -361,6 +361,13 @@ Ghostex injects the page's look, so a page that styles itself fights it:
     `<header>`; `<h2>` for sections, `<h3>` for parts.
   - `<div class="gx-callout">` (add `data-tone="warn"`, `"good"` or `"bad"`).
   - `<div class="gx-card">`, several in a `<div class="gx-grid">`.
+  - Options compared side by side: `<div class="gx-options">` holding one tied
+    `<section data-question data-choice>` per option (see Question pages), a
+    `<span class="gx-ribbon">Recommended</span>` on the recommended one,
+    `<div class="gx-chips"><span class="gx-chip"><b>38</b> files</span></div>`
+    for small facts and
+    `<div class="gx-stats"><div class="gx-stat"><small>Time</small><b>28m</b></div></div>`
+    for the numbers each option is judged by.
   - `<figure class="gx-figure">` with an `<img>` or a `.gx-frame`, and a
     `<figcaption>`.
   - `<gx-tabs>` with one child per tab: `<section data-tab="Before">…`. The
@@ -372,12 +379,17 @@ Ghostex injects the page's look, so a page that styles itself fights it:
 
 ### Theme
 
+Ghostex paints every page itself: a soft dusk (dark) or dawn (light)
+backdrop behind frosted glass cards, so never paint `html` or `body`.
 Style what you draw with the theme tokens, so it reads right in dark and
-light: `--gx-bg`, `--gx-surface` (cards, soft fills), `--gx-raised`
-(controls), `--gx-line`, `--gx-line-strong`, `--gx-fg` (titles),
-`--gx-text`, `--gx-muted`, `--gx-accent`, `--gx-warn`, `--gx-good`,
+light: `--gx-bg`, `--gx-surface` (soft fills inside a card), `--gx-raised`
+(controls), `--gx-card` and `--gx-card-border` (a glass panel of your own;
+add `backdrop-filter: blur(22px)`), `--gx-line`, `--gx-line-strong`,
+`--gx-fg` (titles), `--gx-text`, `--gx-muted`, `--gx-accent`, `--gx-pick`
+(the warm amber of a highlight or a pick), `--gx-warn`, `--gx-good`,
 `--gx-bad`, `--gx-code-bg`, `--chart-1` … `--chart-6`, `--font-sans` and
-`--font-mono`.
+`--font-mono`. Never an opaque black or grey slab around your own content:
+it hides the backdrop and reads as a hole in the glass.
 
 A mockup of the app has its own palette: write the dark one on the mockup's
 class and the light one under `[data-gx-theme=light]`, so the reader's switch
@@ -387,6 +399,35 @@ flips the mockups with the page:
 .panel { --p-bg: #141414; --p-text: #e8e8e8; background: var(--p-bg); color: var(--p-text); }
 [data-gx-theme=light] .panel { --p-bg: #f6f6f6; --p-text: #1d1d1d; }
 ```
+
+### Make it look good
+
+A page is judged at a glance, first as the card in the chat, which shows its
+top (the header and the first lines), then in the window. Aim for the look of
+`examples/plan-review.html` beside this skill: copy its shape, not its words.
+
+- **A strong top.** A short `.gx-eyebrow` (area · purpose), a specific `<h1>`
+  that says what is being decided, a one-line `.gx-lede`, and a row of
+  `.gx-chip` facts. The first options start right under it, so the card
+  shows them too.
+- **Compare side by side.** Two to four options in one `.gx-options` row
+  inside `<gx-wide>`, each a tied section: a title (`A. Name`, the kit adds
+  its Pick button), one line on how it works, a small but real picture (a
+  mini UI, lanes on a timeline, a chart, a before and after), and the two or
+  three `.gx-stat` numbers it is judged by. Draw every option on the same
+  scale (the same axis, the same units), so the differences show without
+  reading. Mark the recommended one with a `.gx-ribbon` and `recommended`.
+- **Then one question.** The `<gx-question>` sits directly under the row,
+  its choices in the same order, each with a `<small>` one-line trade-off.
+- **Not too long.** Header, options and question fit roughly one screen.
+  Leave out what the reader won't use to decide: more pages are better than
+  one long one.
+- **Glass, not slabs.** Rely on the kit's cards and tokens; a mockup of the
+  app may keep its own palette, but its frame sits on the glass.
+
+Older Ghostex versions don't have `.gx-options`, `.gx-ribbon`, `.gx-chip` or
+`.gx-stat` and show those blocks plainly, one under another; the page still
+works.
 
 ### Images, sandbox, publishing
 
@@ -443,10 +484,10 @@ and `data-choice` (first bullet below), which gives it a Pick button:
     <h1>Settings redesign</h1>
     <p class="gx-lede">Two layouts for the page, then the header.</p>
   </header>
-  <gx-wide>
+  <gx-wide><div class="gx-options">
     <section data-question="Q1" data-choice="tabs"><h3>A. Tabs</h3><!-- mockup A --></section>
     <section data-question="Q1" data-choice="one page"><h3>B. One long page</h3><!-- mockup B --></section>
-  </gx-wide>
+  </div></gx-wide>
   <gx-question tag="Q1" title="Which layout should I build?">
     <p>Why it matters, in a sentence or two.</p>
     <gx-choice value="tabs" recommended>A. Tabs<small>One page per area.</small></gx-choice>
@@ -493,8 +534,8 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   question compares several variants, put them side by side (or stacked)
   immediately above that question, with nothing in between, and keep them
   compact enough to be seen together with it. Side-by-side variants go in a
-  `.gx-grid` (inside `<gx-wide>` when they are wide), so they stack on a
-  phone. Draw each variant once, in the
+  `.gx-options` row (inside `<gx-wide>`), so they stack on a phone; see
+  Make it look good. Draw each variant once, in the
   page's theme; the reader checks the other theme with the switch. Never
   collect all the mockups first and all the questions at the end.
 - `<gx-question>`: `title`; `tag`, an optional short label such as an issue

@@ -38,29 +38,6 @@ pub(crate) struct Supplemental {
 }
 
 pub(crate) const SUPPLEMENTAL_ROWS: &[Supplemental] = &[
-    // CDXC:Settings 2026-10-29 (cleanup Q11, general/chat.rs): no Settings row; the chat's View menu picks the level per chat.
-    Supplemental {
-        key: "sessionChatSimpleMode",
-        tab: CHAT,
-        group: None,
-        section: "chat",
-        section_title: "Chat",
-        title: "Simple mode by default",
-        subtitle: "New chats open in Simple mode (on by default). More actions > View in a chat picks Simple, Detailed or Verbose for that chat.",
-        options: &[],
-        user_only: false,
-    },
-    Supplemental {
-        key: "sessionChatVerboseMode",
-        tab: CHAT,
-        group: None,
-        section: "chat",
-        section_title: "Chat",
-        title: "Verbose mode by default",
-        subtitle: "New chats open in Verbose mode when Simple mode by default is off. More actions > View in a chat picks the level for that chat.",
-        options: &[],
-        user_only: false,
-    },
     Supplemental {
         key: "agentAcceptAllEnabled",
         tab: AGENTS,

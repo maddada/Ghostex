@@ -36,6 +36,11 @@ pub struct AnswerIndex {
 }
 
 impl AnswerIndex {
+    /// Whether a real transcript row (not this client's echo) carries answers for the page or form.
+    pub fn holds(&self, page_id: &str) -> bool {
+        self.pages.contains_key(page_id)
+    }
+
     fn from_rows(transcript: &[ChatMessage]) -> Self {
         let mut index = Self::default();
         for (at, message) in transcript.iter().enumerate() {

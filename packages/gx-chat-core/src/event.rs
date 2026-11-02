@@ -293,6 +293,10 @@ pub struct ChatSettings {
     /// The Tool call cards setting (`chatToolCallCards`), the same way.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_cards: Option<bool>,
+    /// The Default to Detailed view setting (`sessionChatDetailedView`): the level a chat with no
+    /// level of its own opens in (`transcript::view_level`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detailed_default: Option<bool>,
 }
 
 /// A size or position only the renderer can know, folded back into the document.

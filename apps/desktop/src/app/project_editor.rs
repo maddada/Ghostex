@@ -121,6 +121,10 @@ impl GhostexGpuiApp {
         {
             return Some(GpuiWorkspaceTerminalSessionKey::Local(key));
         }
+        // A side chat in the view panel has no Agents tab; its chat's id names its session here.
+        if let Some(key) = self.side_panel_chat_key_for_shell_session(session_id) {
+            return Some(key);
+        }
         let active_project_id = self.agents_workspace_project_id.as_deref()?;
         let remote_project = gpui_remote_project_reference_from_project_id(active_project_id)?;
         self.remote_attach_sessions

@@ -4,18 +4,19 @@
 //! Ported from the family b arms of `action` in
 //! `packages/shared/session-chat-controller/native-host.ts`, plus `native-message-actions.ts`.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::action::{ActionKind, UserAction};
 use crate::effect::{Effect, OpenTarget};
 use crate::state::{ChatContext, ChatState, OpenRow, RewindRequest};
 use crate::transcript::deferred_work::{
-    DEFERRED_WORK_PAGE_LIMIT, DeferredWalk, WORK_HISTORY_UNREADABLE, WalkStep,
+    DeferredWalk, WalkStep, DEFERRED_WORK_PAGE_LIMIT, WORK_HISTORY_UNREADABLE,
 };
 use crate::transcript::file_position::FilePosition;
 use crate::transcript::jsstr::js_trim;
-use crate::transcript::links::{LinkTarget, classify_link_href, file_position_from_href};
+use crate::transcript::links::{classify_link_href, file_position_from_href, LinkTarget};
 use crate::transcript::rows;
+use crate::transcript::view_level;
 use crate::wire::{ChatRpcMethod, RpcOutcome};
 
 fn param<'a>(action: &'a UserAction, key: &str) -> Option<&'a Value> {
@@ -135,6 +136,48 @@ fn position_effect(href: &str, path: String) -> Effect {
 }
 
 /// Handles one action family b owns.
+/// Makes `level` the chat's one view level (transcript/view_level.rs has the user's words). Summary
+/// writes only its own record, so the chat's Normal or Detailed record stays as saved under it;
+/// Normal and Detailed pin both level records (`simple`, and `verbose` off, Verbose being retired)
+/// and turn Summary off.
+fn set_view_level(state: &mut ChatState, level: &str) -> Vec<Effect> {
+    let session_key = state.identity.session_key.clone();
+    let summary = |state: &mut ChatState, on: bool| {
+        state.transcript_view.pending_summary_mode = Some(on);
+        Effect::WriteStorage {
+            key: crate::composer::storage::summary_key(&session_key),
+            value: Some(crate::composer::storage::encode_summary(on).to_string()),
+            durable: false,
+        }
+    };
+    if level == view_level::SUMMARY {
+        return if state.transcript_view.summary_mode {
+            Vec::new()
+        } else {
+            vec![summary(state, true)]
+        };
+    }
+    let simple = level == view_level::NORMAL;
+    state.transcript_view.pending_simple_override = Some(Some(simple));
+    state.transcript_view.pending_verbose_override = Some(Some(false));
+    let mut effects = vec![
+        Effect::WriteStorage {
+            key: crate::composer::storage::simple_key(&session_key),
+            value: Some(crate::composer::storage::encode_verbose(simple).to_string()),
+            durable: false,
+        },
+        Effect::WriteStorage {
+            key: crate::composer::storage::verbose_key(&session_key),
+            value: Some(crate::composer::storage::encode_verbose(false).to_string()),
+            durable: false,
+        },
+    ];
+    if state.transcript_view.summary_mode {
+        effects.push(summary(state, false));
+    }
+    effects
+}
+
 pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext) -> Vec<Effect> {
     match action.kind {
         ActionKind::RowDetails => {
@@ -142,67 +185,32 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
             state.transcript_view.row_details = rows::row_details(state, context);
             Vec::new()
         }
-        // `summaryMode = await composer('summary', …)`: the mode changes when the WRITE lands,
-        // not when the row is clicked, so a refused write leaves the transcript as it was. The
-        // flip is applied by `crate::transcript::settle` on `Event::StorageWritten`.
+        // Each write lands before its mode changes (`crate::transcript::settle` on
+        // `Event::StorageWritten`), so a refused write leaves the transcript as it was.
+        // Turning Summary off goes to Normal (transcript/view_level.rs has the user's words).
         ActionKind::ToggleSummary => {
-            let next = !state.transcript_view.summary_mode;
-            state.transcript_view.pending_summary_mode = Some(next);
-            vec![Effect::WriteStorage {
-                key: crate::composer::storage::summary_key(&state.identity.session_key),
-                value: Some(crate::composer::storage::encode_summary(next).to_string()),
-                durable: false,
-            }]
+            let next = if state.transcript_view.summary_mode {
+                view_level::NORMAL
+            } else {
+                view_level::SUMMARY
+            };
+            set_view_level(state, next)
         }
-        // `verboseOverride = await composer('verbose', {enabled: command.enabled})`, and the host
-        // answers `request.enabled === true`: a BOOLEAN, never absent. So the gesture always pins
-        // the override, where an absent stored record is what leaves it following the setting.
+        // The retired Verbose switch, from an older renderer: on is Detailed, off Normal.
         ActionKind::SetVerbose => {
             let enabled = param(action, "enabled").and_then(Value::as_bool) == Some(true);
-            state.transcript_view.pending_verbose_override = Some(Some(enabled));
-            vec![Effect::WriteStorage {
-                key: crate::composer::storage::verbose_key(&state.identity.session_key),
-                value: Some(crate::composer::storage::encode_verbose(enabled).to_string()),
-                durable: false,
-            }]
+            set_view_level(
+                state,
+                if enabled {
+                    view_level::DETAILED
+                } else {
+                    view_level::NORMAL
+                },
+            )
         }
-        // CDXC:SessionChat 2026-10-29 DECISION:
-        // User (Settings cleanup Q11): Simple and Verbose left Settings; a chat has one detail level,
-        // Simple, Detailed or Verbose, picked in More actions > View as a single choice instead of
-        // three independent switches. New chats start Simple (the `sessionChatSimpleMode` default).
-        // Picking a level pins both per-session records (`simple`, `verbose`) the way SetVerbose
-        // pins one, and while Summary mode is on it also turns Summary off: Summary shows the
-        // Simple look on its own and gives the chat its picked level back when it is turned off.
         ActionKind::SetDetailLevel => {
-            let (simple, verbose) = match text(action, "level").as_str() {
-                "verbose" => (false, true),
-                "detailed" => (false, false),
-                _ => (true, false),
-            };
-            let session_key = state.identity.session_key.clone();
-            state.transcript_view.pending_simple_override = Some(Some(simple));
-            state.transcript_view.pending_verbose_override = Some(Some(verbose));
-            let mut effects = vec![
-                Effect::WriteStorage {
-                    key: crate::composer::storage::simple_key(&session_key),
-                    value: Some(crate::composer::storage::encode_verbose(simple).to_string()),
-                    durable: false,
-                },
-                Effect::WriteStorage {
-                    key: crate::composer::storage::verbose_key(&session_key),
-                    value: Some(crate::composer::storage::encode_verbose(verbose).to_string()),
-                    durable: false,
-                },
-            ];
-            if state.transcript_view.summary_mode {
-                state.transcript_view.pending_summary_mode = Some(false);
-                effects.push(Effect::WriteStorage {
-                    key: crate::composer::storage::summary_key(&session_key),
-                    value: Some(crate::composer::storage::encode_summary(false).to_string()),
-                    durable: false,
-                });
-            }
-            effects
+            let level = view_level::parse(&text(action, "level"));
+            set_view_level(state, level)
         }
         ActionKind::LoadWork => load_work(state, action),
         ActionKind::RewindOpen => {
@@ -297,7 +305,7 @@ pub fn handle(state: &mut ChatState, action: &UserAction, context: &ChatContext)
                 "paths": param(action, "paths").cloned().unwrap_or_else(|| json!([])),
             })),
         }],
-        // An agent message card's Go to session: the other session, focused like a fork branch.
+        // A session name's pill on an agent message card: the other session, focused like a fork branch.
         ActionKind::OpenAgentSession => {
             let (project_id, session_id) = (text(action, "projectId"), text(action, "sessionId"));
             if project_id.is_empty() || session_id.is_empty() {
@@ -421,6 +429,13 @@ pub fn settle_rpc(state: &mut ChatState, request_id: u64, outcome: &RpcOutcome) 
         // `loadImage`'s arm catches for itself and pushes `chatImage/failed`
         // (`native-host.ts:1509`), so a picture that has gone does not raise the error bar.
         state.core.claim_refusal();
+        if let Some(bytes) = result
+            .as_ref()
+            .and_then(|image| image.get("base64Data"))
+            .and_then(Value::as_str)
+        {
+            crate::transcript::read_images::note_picture_bytes(state, &path, bytes);
+        }
         return vec![Effect::HostAction {
             action: "chatImage".to_string(),
             params: Box::new(match &result {
@@ -525,4 +540,72 @@ fn open_mentioned_session(
         action: "openAgentSession".to_string(),
         params: Box::new(json!({ "projectId": project_id, "sessionId": session_id })),
     }]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle;
+    use crate::action::{ActionKind, UserAction};
+    use crate::state::{ChatContext, ChatState};
+    use serde_json::json;
+
+    fn act(kind: ActionKind, level: Option<&str>) -> UserAction {
+        let mut action = UserAction::new(kind);
+        if let Some(level) = level {
+            action.params.insert("level".to_string(), json!(level));
+        }
+        action
+    }
+
+    /// Picking Normal or Detailed turns Summary off; picking Summary leaves the level records alone.
+    #[test]
+    fn view_levels_are_one_choice() {
+        let context = ChatContext::default();
+        let mut state = ChatState::default();
+        state.transcript_view.summary_mode = true;
+        handle(
+            &mut state,
+            &act(ActionKind::SetDetailLevel, Some("detailed")),
+            &context,
+        );
+        assert_eq!(state.transcript_view.pending_summary_mode, Some(false));
+        assert_eq!(
+            state.transcript_view.pending_simple_override,
+            Some(Some(false))
+        );
+        assert_eq!(
+            state.transcript_view.pending_verbose_override,
+            Some(Some(false))
+        );
+
+        let mut state = ChatState::default();
+        state.transcript_view.simple_override = Some(false);
+        let effects = handle(
+            &mut state,
+            &act(ActionKind::SetDetailLevel, Some("summary")),
+            &context,
+        );
+        assert_eq!(effects.len(), 1, "only the summary record is written");
+        assert_eq!(state.transcript_view.pending_summary_mode, Some(true));
+        assert_eq!(state.transcript_view.pending_simple_override, None);
+    }
+
+    /// Turning Summary off always lands on Normal, whatever level was saved under it.
+    #[test]
+    fn summary_off_goes_to_normal() {
+        let context = ChatContext::default();
+        let mut state = ChatState::default();
+        state.transcript_view.summary_mode = true;
+        state.transcript_view.simple_override = Some(false);
+        handle(&mut state, &act(ActionKind::ToggleSummary, None), &context);
+        assert_eq!(state.transcript_view.pending_summary_mode, Some(false));
+        assert_eq!(
+            state.transcript_view.pending_simple_override,
+            Some(Some(true))
+        );
+        assert_eq!(
+            state.transcript_view.pending_verbose_override,
+            Some(Some(false))
+        );
+    }
 }

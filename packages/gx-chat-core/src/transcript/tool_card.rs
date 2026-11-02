@@ -296,6 +296,11 @@ fn tool_entry(
         .into(),
     );
     entry.insert("time".to_string(), "".into());
+    // The pictures the call opened from disk, drawn under the entry like a plain row's
+    // (`read_images.rs`).
+    if let Some(images) = row.get("images") {
+        entry.insert("images".to_string(), images.clone());
+    }
     Value::Object(entry)
 }
 

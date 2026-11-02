@@ -91,6 +91,8 @@ export interface SessionChatDeferredWork {
   endId: string;
   messageCount: number;
   filePaths: string[];
+  /** Picture files the held-back rows opened from disk (gx-chat-core `read_images.rs`); absent when none. */
+  imagePaths?: string[];
 }
 
 export interface SessionChatHistoryReadParams {

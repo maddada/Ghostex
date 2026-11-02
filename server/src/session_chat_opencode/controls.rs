@@ -67,22 +67,28 @@ pub(crate) fn model_catalog(client: &Client, info: &Value) -> Result<Value, Doma
         .ok_or_else(|| error("OpenCode session has no directory."))?;
     let encoded: String = url::form_urlencoded::byte_serialize(directory.as_bytes()).collect();
     let response = client.request("GET", &format!("/api/model?directory={encoded}"), None)?;
-    let models = response["data"]
-        .as_array()
-        .ok_or_else(|| error("Invalid OpenCode model catalog."))?;
+    let entry = lineup_entry(&response).ok_or_else(|| error("Invalid OpenCode model catalog."))?;
+    Ok(
+        json!({"schemaVersion":1,"updatedAt":"2026-09-25","effortLabels":{},"agents":{"opencode":entry}}),
+    )
+}
+
+/// The catalog agent entry for an answer of OpenCode's `/api/model`: one row per model, keyed
+/// `provider/model` as `select` sends it, with the variants it offers as its efforts. Shared by a
+/// thread's own lineup and the one gxserver serves to every thread (`agent_model_lineups.rs`).
+pub(crate) fn lineup_entry(response: &Value) -> Option<Value> {
+    let models = response["data"].as_array()?;
     let rows: Vec<Value> = models.iter().filter_map(|model| {
         let provider = model["providerID"].as_str()?;
         let name = model["id"].as_str()?;
         let variants: Vec<_> = model["variants"].as_array().into_iter().flatten()
             .filter_map(|v| v["id"].as_str()).collect();
-        Some(json!({"value":format!("{provider}/{name}"),"label":model["name"].as_str().unwrap_or(name),"efforts":variants,"contextWindow":model["limit"]["context"]}))
+        Some(json!({"value":format!("{provider}/{name}"),"label":model["name"].as_str().filter(|label| !label.trim().is_empty()).unwrap_or(name),"efforts":variants,"contextWindow":model["limit"]["context"]}))
     }).collect();
     let efforts: std::collections::BTreeSet<&str> = rows
         .iter()
         .flat_map(|row| row["efforts"].as_array().into_iter().flatten())
         .filter_map(Value::as_str)
         .collect();
-    Ok(
-        json!({"schemaVersion":1,"updatedAt":"2026-09-25","effortLabels":{},"agents":{"opencode":{"name":"OpenCode","efforts":efforts,"models":rows}}}),
-    )
+    Some(json!({"name":"OpenCode","efforts":efforts,"models":rows}))
 }

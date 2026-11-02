@@ -151,8 +151,10 @@ pub(crate) fn render_markdown_body(
     let focus_target = body.live.clone();
     let gutter_width = super::gutter::gutter_width(body.line_numbers);
     let available = f32::from(body.scroll.bounds().size.width);
+    // The reading column grows with the Files zoom, so a zoomed document keeps its line length.
+    let content_max_width = CONTENT_MAX_WIDTH * crate::ui_fonts::files_zoom_scale();
     let natural = if body.constrain {
-        available.min(CONTENT_MAX_WIDTH + gutter_width)
+        available.min(content_max_width + gutter_width)
     } else {
         available
     };
@@ -171,7 +173,7 @@ pub(crate) fn render_markdown_body(
                 div()
                     .w_full()
                     .when(body.constrain, |row| {
-                        row.max_w(px(CONTENT_MAX_WIDTH + gutter_width))
+                        row.max_w(px(content_max_width + gutter_width))
                     })
                     .when_some(held, |row, width| {
                         row.flex_shrink_0().w(px(width)).max_w(px(width))
@@ -187,7 +189,7 @@ pub(crate) fn render_markdown_body(
                             .relative()
                             .flex_1()
                             .min_w_0()
-                            .text_size(px(crate::ui_fonts::FILES_TEXT_SIZE))
+                            .text_size(px(crate::ui_fonts::files_text_size()))
                             .text_color(text_color)
                             .font_family(if body.source {
                                 super::fonts::DOCS_MONO

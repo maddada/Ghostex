@@ -129,8 +129,61 @@ pub(crate) fn inspect_opencode_hook(hooks: &HookPaths, config_dir: &Path) -> Hoo
             || retired,
         current_hook_installed: plugin_source(hooks).is_ok_and(|expected| expected == text)
             && config.contains(PLUGIN_DIRECTORY)
-            && !retired,
+            && !retired
+            && ghostex_theme_current(config_dir),
     }
+}
+
+const GHOSTEX_THEME: &str = include_str!("opencode_ghostex_theme.json");
+const GHOSTEX_THEME_NAME: &str = "ghostex";
+
+/// OpenCode 2 lists every `themes/*.json` in its config folder by file name.
+pub(crate) fn ghostex_theme_file(config_dir: &Path) -> std::path::PathBuf {
+    config_dir
+        .join("themes")
+        .join(format!("{GHOSTEX_THEME_NAME}.json"))
+}
+
+/// Whether cli.json names a theme. OpenCode 2 saves a theme picked with Ctrl+P as `theme.name`
+/// there, and starts on its own `opencode` theme when none is named.
+fn theme_chosen(config: &Value) -> bool {
+    let name = match config.get("theme") {
+        Some(Value::Object(theme)) => theme.get("name").and_then(Value::as_str),
+        Some(Value::String(name)) => Some(name.as_str()),
+        _ => None,
+    };
+    name.is_some_and(|name| !name.trim().is_empty())
+}
+
+/// An unreadable cli.json counts as current: installing would refuse it the same way.
+fn ghostex_theme_current(config_dir: &Path) -> bool {
+    read_file_text(&ghostex_theme_file(config_dir)) == GHOSTEX_THEME
+        && read_cli_config(&config_dir.join("cli.json"))
+            .map_or(true, |config| theme_chosen(&config))
+}
+
+/// CDXC:AgentProviders 2026-11-02 DECISION:
+/// User: "is there any actual way to make the bg of opencode transparent? (like claude code and codex are)", and chose "Yes, a Ghostex theme with transparent backgrounds". Ghostex installs a `ghostex` OpenCode theme (the screen, panels and diff context are `transparent` so the terminal's own background and glass show; the colours are the GitHub Dark and GitHub Light palettes Ghostex's terminal uses, picked by OpenCode from the terminal's light or dark mode) and names it in cli.json only when no theme is named there, so a theme the user picked with Ctrl+P or wrote by hand is never replaced and the rest of cli.json is kept.
+///
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// The theme is OpenCode 2's own document format rather than the older flat one: an older-format theme with every background transparent leaves dialogs (Ctrl+P, model picker) without a fill, so the text under them reads through, and only the newer format can give `@dialog` a solid background. OpenCode blends the session tab strip into an opaque colour taken from the transparent colour's own RGB, so selected tabs get a solid fill and light mode uses a transparent white (`#ffffff00`): the strip then matches a black or white terminal instead of drawing a black band in light mode. A per-launch override (`OPENCODE_CLI_CONFIG_CONTENT`) was not used: it is merged over cli.json on every read, so it would beat the user's Ctrl+P pick.
+pub(crate) fn install_ghostex_opencode_theme(config_dir: &Path) -> Result<(), DomainStateError> {
+    let theme_path = ghostex_theme_file(config_dir);
+    if read_file_text(&theme_path) != GHOSTEX_THEME {
+        crate::session_chat_opencode::write_config_file(&theme_path, GHOSTEX_THEME)?;
+    }
+    let config_path = config_dir.join("cli.json");
+    let config = read_cli_config(&config_path)?;
+    if theme_chosen(&config) {
+        return Ok(());
+    }
+    let mut theme = config
+        .get("theme")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    theme.insert("name".into(), json!(GHOSTEX_THEME_NAME));
+    crate::session_chat_opencode::patch_config(&config_path, "theme", &Value::Object(theme))
 }
 
 pub(super) fn uninstall_opencode_hook(
@@ -197,6 +250,7 @@ pub(super) fn install_opencode_hook(
     fs::create_dir_all(&plugin_dir).map_err(io_error)?;
     fs::write(&plugin_path, plugin_source(hook_paths)?).map_err(io_error)?;
     crate::session_chat_opencode::patch_config(&config_path, "plugins", &config["plugins"])?;
+    install_ghostex_opencode_theme(&config_dir)?;
     remove_retired_opencode_plugin(&config_dir)?;
     Ok(vec![path_string(&plugin_path)])
 }

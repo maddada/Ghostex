@@ -56,7 +56,44 @@ pub(super) fn write_hook_store(
     entry.insert("cwd".to_string(), json!(cwd));
     entry.insert("transcriptPath".to_string(), json!(transcript_path));
     entry.insert("isRestorable".to_string(), json!(true));
+    // The hook's parent is the short-lived wrapper shell, so its pid differs on every event: record it, but never compare it.
+    store_entry(
+        hook_state_dir,
+        agent_key,
+        session_id,
+        entry,
+        parent_process_id(),
+    );
+}
 
+/// CDXC:AgentHooks 2026-11-02 DECISION:
+/// User, asked how to close the gaps that keep Claude's hooks installed: "Everything, including Windows". Resume repair (`agents/resume_plan/claude_identity.rs`) reads every conversation a pane showed from `claude-hook-sessions.json`, which only Claude's hooks wrote. While Track Claude without its hooks is on, the hook-free observer writes the same entry (conversation, project, pane, cwd, transcript path, time) for every conversation it sees a pane show, so the repair works with no hooks.
+pub(crate) fn write_claude_surface_record(
+    hook_state_dir: &Path,
+    conversation: &str,
+    workspace_id: &str,
+    surface_id: &str,
+    cwd: Option<&str>,
+    transcript_path: Option<&str>,
+    pid: u32,
+) {
+    let mut entry = Map::new();
+    entry.insert("sessionId".to_string(), json!(conversation));
+    entry.insert("workspaceId".to_string(), json!(workspace_id));
+    entry.insert("surfaceId".to_string(), json!(surface_id));
+    entry.insert("cwd".to_string(), json!(cwd.unwrap_or_default()));
+    entry.insert("transcriptPath".to_string(), json!(transcript_path));
+    entry.insert("isRestorable".to_string(), json!(true));
+    store_entry(hook_state_dir, "claude", conversation, entry, pid);
+}
+
+fn store_entry(
+    hook_state_dir: &Path,
+    agent_key: &str,
+    session_id: &str,
+    mut entry: Map<String, Value>,
+    pid: u32,
+) {
     let store_path = hook_state_dir.join(format!("{agent_key}-hook-sessions.json"));
     if entry_is_current(&read_store(&store_path), session_id, &entry) {
         return;
@@ -90,8 +127,7 @@ pub(super) fn write_hook_store(
     if entry_is_current(&data, session_id, &entry) {
         return;
     }
-    // The hook's parent is the short-lived wrapper shell, so its pid differs on every event: record it, but never compare it.
-    entry.insert("pid".to_string(), json!(parent_process_id()));
+    entry.insert("pid".to_string(), json!(pid));
     entry.insert("updatedAt".to_string(), json!(now_seconds()));
     let object = data.as_object_mut().expect("object");
     let sessions = object

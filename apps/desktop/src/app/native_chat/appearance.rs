@@ -40,12 +40,13 @@ pub(crate) struct ChatAppearance {
     pub(crate) scale: f32,
     pub(crate) font: String,
     pub(crate) light: bool,
-    pub(crate) verbose: bool,
+    /// The Normal look (Simple renamed), which Summary shows too: tool runs and file edits fold
+    /// behind one-line labels.
     pub(crate) simple: bool,
     /// The folds under each agent message (a reply's tool calls, a thought's tools, a finished
-    /// turn's "Worked" log) start open: in verbose mode, and whenever Simple mode is off.
+    /// turn's "Worked" log) start open: in Detailed view.
     ///
-    /// CDXC:SessionChat 2026-10-14 DECISION: User: "if the user disables simple mode we should expand what's under the areas under each agent message by default". With Simple mode off the work under each reply starts open as verbose mode's does; closing one sticks as a manual toggle does, each tool row's own output stays closed, and Simple mode keeps its folds.
+    /// CDXC:SessionChat 2026-10-14 DECISION: User: "if the user disables simple mode we should expand what's under the areas under each agent message by default". In Detailed view (Simple mode off, now) the work under each reply starts open; closing one sticks as a manual toggle does, each tool row's own output stays closed, and Normal keeps its folds. Verbose, which opened them too, is retired (gx-chat-core transcript/view_level.rs).
     /// SEE-ALSO: apps/mobile/app/src/chat/native/transcript/Transcript.tsx (`workOpen`).
     pub(crate) work_open: bool,
     pub(crate) file_previews: bool,
@@ -196,23 +197,9 @@ impl ChatAppearance {
         let color = |dark, light_color| rgb(if light { light_color } else { dark }).into();
         let text = ChatTextColors::for_variant(light);
         let enabled = |name| settings.get(name).and_then(serde_json::Value::as_bool) == Some(true);
-        // CDXC:SessionChat 2026-10-29 DECISION (Settings cleanup Q11, gx-chat-core transcript/actions.rs):
-        // the detail level is per chat (`simpleOverride` and `verboseOverride`; a new chat follows
-        // the Simple mode by default and Verbose mode by default keys, Simple on by default), and
-        // Summary mode shows the Simple look until it is turned off again.
-        let summary = state["summaryMode"].as_bool() == Some(true);
-        let verbose = !summary
-            && state["verboseOverride"]
-                .as_bool()
-                .unwrap_or_else(|| enabled("sessionChatVerboseMode"));
-        // A missing key means the shared default, which is on (defaults.ts, CDXC:SessionChat 2026-09-27).
-        let simple = summary
-            || state["simpleOverride"].as_bool().unwrap_or_else(|| {
-                settings
-                    .get("sessionChatSimpleMode")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(true)
-            });
+        // The chat's one view level comes from the core (gx-chat-core transcript/view_level.rs has
+        // the user's words): only Detailed drops the Normal look; Summary shows it too.
+        let simple = state["viewLevel"].as_str() != Some("detailed");
         // The transcript and its cards share one backing tone derived from the chat's own theme
         // variant (the chat may be dark while the app is light), see session_chat_background_for_chrome.
         let background_rgb = work_area_background_for_variant(settings, light);
@@ -306,9 +293,8 @@ impl ChatAppearance {
             // is not installed leaves the chat on it.
             font: CHAT_BODY_FONT.to_string(),
             light,
-            verbose,
             simple,
-            work_open: verbose || !simple,
+            work_open: !simple,
             file_previews: enabled("sessionChatFileEditPreviews"),
             muted_thinking: enabled("sessionChatMutedThinking"),
             marked_sections: super::marked_sections::MarkerStyle::from_settings(settings),

@@ -143,6 +143,14 @@ export const storageCatalog = Object.freeze({
     binary,
     disk
   ),
+  simple: define(
+    'simple',
+    'Chat Normal or Detailed view',
+    'packages/gx-chat-core/src/composer/storage.rs',
+    'ghostex.sessionChat.simple.',
+    binary,
+    disk
+  ),
   tasksCollapsed: define(
     'tasksCollapsed',
     'Chat task panel',

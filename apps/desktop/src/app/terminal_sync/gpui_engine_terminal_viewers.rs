@@ -30,7 +30,7 @@ pub(crate) struct GpuiTerminalChatClaimState {
 }
 
 impl GhostexGpuiApp {
-    fn agents_terminal_chat_is_visible(&self, session_id: TerminalSessionId) -> bool {
+    pub(crate) fn agents_terminal_chat_is_visible(&self, session_id: TerminalSessionId) -> bool {
         self.agents_chat_mode_sessions.contains(&session_id)
             && self.agents_workspace_visible()
             && self

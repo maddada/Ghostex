@@ -32,6 +32,7 @@ fn row_with(session_notes: bool) -> crate::sidebar_view::view::SessionRow {
         debugging_mode: false,
         always_show_state_tooltip: false,
         session_notes,
+        side_chat_needs: &Default::default(),
     };
     let key = SessionKey {
         machine: MachineId::Local,

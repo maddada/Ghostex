@@ -39,8 +39,10 @@ use serde_json::{Value, json};
 use super::super::gx_rpc;
 use super::terminal::REMOTE_TIMEOUT;
 use crate::GhostexGpuiApp;
+use crate::app::helpers::gpui_remote_machine_name_from_settings;
 use crate::app::remote_conn::sidebar_rpc::{
-    GpuiRemoteSidebarRpcMode, gpui_remote_sidebar_rpc_failure_reason,
+    GPUI_REMOTE_HOOKS_UPDATE_REQUIRED, GpuiRemoteSidebarRpcMode,
+    gpui_remote_sidebar_rpc_failure_reason,
 };
 use crate::shared_settings;
 
@@ -52,7 +54,27 @@ const REMOTE_START_TIMEOUT: Duration = Duration::from_secs(15);
 /// What a hook check or an install answered.
 enum HookAnswer {
     Status(Value),
-    Failed,
+    Failed(String),
+}
+
+fn hook_failure_message(error: &str, remote_name: Option<&str>) -> String {
+    if error == GPUI_REMOTE_HOOKS_UPDATE_REQUIRED {
+        return format!(
+            "Update Ghostex on {}, then try again.",
+            remote_name.unwrap_or("the remote computer")
+        );
+    }
+    let message = error
+        .trim()
+        .chars()
+        .filter(|ch| !ch.is_control())
+        .take(180)
+        .collect::<String>();
+    if message.is_empty() || message == "Remote gxserver request failed." {
+        "Could not reach the remote computer. Reconnect it and try again.".to_string()
+    } else {
+        message
+    }
 }
 
 impl GhostexGpuiApp {
@@ -229,6 +251,8 @@ impl GhostexGpuiApp {
     }
 
     /// `confirmAgentHookLaunch(message)`: the Hooks Required dialog's answer.
+    ///
+    /// CDXC:AgentHooks 2026-11-02 DECISION: User: "make the toast say why it failed (timeout, the remote's error text, or which agent didn't install), short and in plain words."
     pub(super) fn gx_store_confirm_agent_hook_launch(
         &mut self,
         message: &Value,
@@ -266,6 +290,9 @@ impl GhostexGpuiApp {
             .as_deref()
             .and_then(ProjectKey::parse_sidebar_group_id)
             .and_then(|project| project.machine.remote_id().map(str::to_string));
+        let remote_name = remote
+            .as_deref()
+            .and_then(gpui_remote_machine_name_from_settings);
         let install = self.gx_store_hook_call(
             remote,
             "/api/installAgentHooks",
@@ -277,34 +304,43 @@ impl GhostexGpuiApp {
             let answer = install.await;
             let _ = this.update(cx, |this, cx| {
                 let title = format!("Could not install {agent_name} hooks");
-                let HookAnswer::Status(result) = answer else {
-                    this.gx_store_create_toast(
-                        "error",
-                        &title,
-                        Some("Open Settings > Agents > Agent Hooks and try again."),
-                        cx,
-                    );
-                    return;
+                let result = match answer {
+                    HookAnswer::Status(result) => result,
+                    HookAnswer::Failed(error) => {
+                        this.gx_store_create_toast(
+                            "error",
+                            &title,
+                            Some(&hook_failure_message(&error, remote_name.as_deref())),
+                            cx,
+                        );
+                        return;
+                    }
                 };
-                let installed =
-                    result
-                        .get("agents")
-                        .and_then(Value::as_array)
-                        .is_some_and(|rows| {
-                            rows.iter().any(|row| {
-                                row.get("agentId").and_then(Value::as_str)
-                                    == Some(hook_agent_id.as_str())
-                                    && row.get("status").and_then(Value::as_str)
-                                        == Some("installed")
-                            })
-                        });
-                if !installed {
-                    this.gx_store_create_toast(
-                        "error",
-                        &title,
-                        Some("Open Settings > Agents > Agent Hooks to review the hook status."),
-                        cx,
-                    );
+                let status = result
+                    .get("agents")
+                    .and_then(Value::as_array)
+                    .and_then(|rows| {
+                        rows.iter().find(|row| {
+                            row.get("agentId").and_then(Value::as_str)
+                                == Some(hook_agent_id.as_str())
+                        })
+                    })
+                    .and_then(|row| row.get("status"))
+                    .and_then(Value::as_str);
+                if status != Some("installed") {
+                    let computer = remote_name
+                        .clone()
+                        .unwrap_or_else(|| "this computer".to_string());
+                    let reason = match status {
+                        Some("cliMissing") => {
+                            format!("Ghostex could not find the {agent_name} CLI on {computer}.")
+                        }
+                        Some("updateRequired") => {
+                            format!("{agent_name} hooks still need an update on {computer}.")
+                        }
+                        _ => format!("{agent_name} hooks were not installed on {computer}."),
+                    };
+                    this.gx_store_create_toast("error", &title, Some(&reason), cx);
                     return;
                 }
                 this.gx_store_launch_agent_from_sidebar(
@@ -341,14 +377,14 @@ impl GhostexGpuiApp {
                 cx.background_executor().spawn(async move {
                     match task.await {
                         Ok(value) => HookAnswer::Status(value),
-                        Err(_) => HookAnswer::Failed,
+                        Err(error) => HookAnswer::Failed(error),
                     }
                 })
             }
             None => cx.background_executor().spawn(async move {
                 match gx_rpc(None, path, params).await {
                     Ok(value) => HookAnswer::Status(value),
-                    Err(_) => HookAnswer::Failed,
+                    Err(error) => HookAnswer::Failed(error.message),
                 }
             }),
         }

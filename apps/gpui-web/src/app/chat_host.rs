@@ -50,7 +50,7 @@ impl GhostexGpuiApp {
             }
             // A row of a coordinator's Threads panel: that thread's chat, on the same machine.
             // gxserver resumed it first when it was closed (`openCoordinatorThread`). An agent
-            // message card's Go to session opens the other session's chat the same way.
+            // message card's session-name pill opens the other session's chat the same way.
             Some("openCoordinatorThread" | "openAgentSession") => {
                 let text = |key: &str| {
                     message[key]
@@ -69,6 +69,31 @@ impl GhostexGpuiApp {
                         false,
                         cx,
                     );
+                }
+            }
+            // A side chat opens in the panel beside the chat (`web_host/side_chat.rs`), the
+            // desktop's side panel tab; a deleted one's panel closes.
+            Some(action @ ("openSideChat" | "sideChatDeleted")) => {
+                let text = |key: &str| {
+                    message[key]
+                        .as_str()
+                        .or_else(|| message["params"][key].as_str())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                };
+                if let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId"))
+                {
+                    let side_chat = SessionKey {
+                        machine: session.machine.clone(),
+                        project_id,
+                        session_id,
+                    };
+                    if action == "openSideChat" {
+                        self.web_open_side_chat(side_chat, cx);
+                    } else {
+                        self.web_close_side_chat(Some(&side_chat), cx);
+                    }
                 }
             }
             // A command in a reply: a new terminal in the session's folder that runs it (or only
@@ -161,16 +186,6 @@ impl GhostexGpuiApp {
                     && let Some(window) = web_sys::window()
                 {
                     let _ = window.open_with_url_and_target(url, "_blank");
-                }
-            }
-            Some("setSimpleMode") => {
-                if let Some(enabled) = message["enabled"].as_bool() {
-                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
-                        .object()
-                        .clone();
-                    settings.insert("sessionChatSimpleMode".into(), enabled.into());
-                    crate::shared_settings::install(settings);
-                    cx.refresh_windows();
                 }
             }
             // The model picker's "pick it in the CLI": the terminal, with the desktop's hint.
@@ -351,7 +366,7 @@ impl GhostexGpuiApp {
                 let (provider, model) = (text("provider"), text("model"));
                 if matches!(
                     provider,
-                    "claude" | "codex" | "cursor" | "grok" | "antigravity"
+                    "claude" | "codex" | "cursor" | "grok" | "antigravity" | "opencode"
                 ) && !model.is_empty()
                 {
                     let effort = text("effort");

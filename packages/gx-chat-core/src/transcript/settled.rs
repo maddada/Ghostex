@@ -72,6 +72,8 @@ struct SettledKey {
     working_directory: Option<String>,
     session_directory_revision: u64,
     tool_cards: bool,
+    /// A picture an agent read turned out to be one the user showed (`read_images.rs`).
+    picture_digests_revision: u64,
 }
 
 /// What one row tells the question scans (`scope`'s askers, `questionForms`, `pageAnswers`).
@@ -442,6 +444,7 @@ impl SettledPrefix {
             working_directory: view.working_directory.clone(),
             session_directory_revision: view.session_directory_revision,
             tool_cards: view.tool_cards,
+            picture_digests_revision: view.picture_digests_revision,
         }
     }
 
@@ -731,6 +734,7 @@ impl SettledPrefix {
                 .collect()
         };
         mark_skipped(&mut found, &sent);
+        crate::questions::resource_index::settle_loaded(&mut found, &state.session.resource_index);
         // `mark_inherited`, with the prefix's times kept rather than searched for.
         if let Some(forked_at) = state.session.forked_at {
             for asker in found.iter_mut() {
@@ -1258,6 +1262,7 @@ fn build_after(
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(forms),
         tool_cards: view.tool_cards,
+        picture_digests: &view.picture_digests,
     };
 
     // Turns a newer accepted prompt has closed since the prefix was settled join it, one chunk
@@ -1497,7 +1502,8 @@ fn build_after(
         false,
     );
     let worked_turn = latest_worked_turn(&projection.items, working);
-    let minimap = if minimap_shows(settled.summary_turns() + projection.summary_turns.len()) {
+    // The rail counts its dashes, not the turns: a turn the user did not open gets none.
+    let minimap = {
         let turns: Vec<_> = projection
             .summary_turns
             .iter()
@@ -1512,9 +1518,11 @@ fn build_after(
             &turns,
             &item_index(&items, settled.item_count()),
         ));
-        rows
-    } else {
-        Vec::new()
+        if minimap_shows(rows.len()) {
+            rows
+        } else {
+            Vec::new()
+        }
     };
     // The call an approval waits on is the newest one: in the stretch, or the prefix has to be
     // built with the mark.
@@ -1646,5 +1654,6 @@ pub fn scope<'a>(state: &'a ChatState, view: &'a TranscriptViewState) -> Project
         backfilled: &view.backfilled,
         question_forms: std::cell::OnceCell::from(scans.marked_forms()),
         tool_cards: view.tool_cards,
+        picture_digests: &view.picture_digests,
     }
 }

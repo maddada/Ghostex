@@ -325,6 +325,12 @@ impl CefSurface {
         self.browser.capture_page_top(width, height, scale)
     }
 
+    /// Answers once the page has loaded with its web fonts and pictures, or after `timeout_ms`,
+    /// saying whether it is at its top (`cef/shell/page_screenshot.rs`).
+    pub(crate) fn wait_for_page_settled(&self, timeout_ms: u64) -> Option<cef::PageSettled> {
+        self.browser.wait_for_page_settled(timeout_ms)
+    }
+
     pub(crate) fn browser_identifier(&self) -> i32 {
         self.browser.identifier()
     }

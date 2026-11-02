@@ -78,6 +78,8 @@ pub(crate) struct GhostexGpuiApp {
     pub(crate) native_changes: Option<Entity<crate::app::native_changes::ChangesView>>,
     pub(crate) native_changes_preset: Option<crate::app::native_changes::ChangesPreset>,
     pub(crate) changes_open: bool,
+    /// The side chat drawn beside the chat (`web_host/side_chat.rs`), opened by `openSideChat`.
+    pub(crate) side_chat_open: Option<ghostex_gx_core::SessionKey>,
     pub(crate) changes_width: f32,
     /// Handoff / Export's Reveal path; an export never lands on a page's disk, so it stays empty.
     pub(crate) pending_export_transcript_reveal_path: Option<String>,
@@ -124,6 +126,7 @@ impl GhostexGpuiApp {
             native_changes: None,
             native_changes_preset: None,
             changes_open: false,
+            side_chat_open: None,
             changes_width: 620.0,
             chat_presentations: HashMap::new(),
             terminals: HashMap::new(),

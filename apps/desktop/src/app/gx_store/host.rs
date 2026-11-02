@@ -188,6 +188,8 @@ pub(crate) struct GxStoreHost {
     pub(super) indicators: super::indicators::IndicatorsHost,
     /// The Unified sidebar's per-machine lists, alive only while it is selected (unified_sidebar.rs).
     pub(crate) unified_sidebar: super::unified_sidebar::UnifiedSidebarHost,
+    /// The drafts each sidebar last drew, to open Drafts for a new one (draft_arrivals.rs).
+    pub(crate) draft_arrivals: super::draft_arrivals::DraftArrivalsHost,
     /// The collection a project move just created, which the renderer opens its Rename on. Held
     /// here rather than carried from the old projection's publish, because the create is the
     /// store's now and the publish would not know about it.

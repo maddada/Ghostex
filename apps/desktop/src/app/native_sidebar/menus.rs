@@ -846,7 +846,7 @@ impl GhostexGpuiApp {
                 continue;
             }
             let surface = if frosted {
-                popup_window_surface(background)
+                popup_menu_surface()
             } else {
                 background
             };

@@ -28,7 +28,10 @@ impl SharedSidebarSettingsSnapshot {
         }
     }
 
-    pub fn from_object(object: Map<String, Value>) -> Self {
+    pub fn from_object(mut object: Map<String, Value>) -> Self {
+        // Every reader (the chats, the Settings page) sees Default to Detailed view filled in from
+        // the default keys it replaced (CDXC:SessionChat 2026-11-02 in the settings catalog).
+        ghostex_settings_catalog::migrate_chat_view_default(&mut object);
         let content_hash = hash_settings_object(&object);
         Self {
             revision: 0,
@@ -38,10 +41,11 @@ impl SharedSidebarSettingsSnapshot {
     }
 
     pub(crate) fn with_signal(
-        object: Map<String, Value>,
+        mut object: Map<String, Value>,
         revision: u64,
         content_hash: u64,
     ) -> Self {
+        ghostex_settings_catalog::migrate_chat_view_default(&mut object);
         Self {
             revision,
             content_hash,

@@ -51,8 +51,14 @@ pub(crate) struct DocsComposer {
     /// The note being edited, if this is an edit rather than a new note.
     pub(crate) editing: Option<String>,
     /// Where the composer opens (the selection, or the global-comment button), in window
-    /// coordinates.
+    /// coordinates. A composer about text in the document follows `range` instead.
     pub(crate) anchor: Bounds<Pixels>,
+    /// The source range the note is about (the selection, or the edited note's text), which the
+    /// composer is placed beside on every draw (`composer_placement.rs`).
+    pub(crate) range: Option<std::ops::Range<usize>>,
+    /// The document already scrolled (or did not need to) to show the text and the composer
+    /// together; it scrolls once, when the composer opens.
+    pub(crate) revealed: bool,
 }
 
 /// The composer's text field and the window it was made in. A text field starts its caret, and
@@ -244,23 +250,32 @@ impl GhostexGpuiApp {
         initial: &str,
         cx: &mut Context<Self>,
     ) {
-        let (quote, anchor, text) = if let Some(id) = editing.as_deref() {
-            let Some(note) = self
-                .native_docs_active_notes()
-                .iter()
-                .find(|note| note.id == id)
-            else {
+        let (quote, anchor, range, text) = if let Some(id) = editing.as_deref() {
+            let notes = self.native_docs_active_notes();
+            let Some(index) = notes.iter().position(|note| note.id == id) else {
                 return;
             };
+            let note = &notes[index];
             let anchor = global_anchor.unwrap_or_default();
-            (note.quote.clone(), anchor, note.note.clone())
+            // The edited note's text in the document, so the composer opens beside it.
+            let range = self
+                .native_docs
+                .note_ranges
+                .iter()
+                .find(|found| found.annotation_index == index)
+                .map(|found| found.range.clone());
+            (note.quote.clone(), anchor, range, note.note.clone())
         } else if let Some(anchor) = global_anchor {
-            (String::new(), anchor, initial.to_string())
+            (String::new(), anchor, None, initial.to_string())
         } else {
             let Some((quote, anchor)) = self.native_docs_selection_quote(cx) else {
                 return;
             };
-            (quote, anchor, initial.to_string())
+            let range = self
+                .native_docs
+                .active_document()
+                .and_then(|document| Some(document.live.as_ref()?.read(cx).selected_range()));
+            (quote, anchor, range, initial.to_string())
         };
         let placeholder = if quote.is_empty() {
             "Add a global comment"
@@ -274,6 +289,8 @@ impl GhostexGpuiApp {
             quote,
             editing,
             anchor,
+            range,
+            revealed: false,
         });
         self.native_docs_notify(cx);
     }

@@ -44,6 +44,7 @@ pub mod prose;
 pub mod question_exchange;
 pub mod question_forms;
 pub mod raw_html;
+pub mod read_images;
 pub mod rows;
 pub mod run_command;
 pub mod script_loops;
@@ -68,6 +69,7 @@ pub mod tool_summary;
 pub mod transcript;
 pub mod transcript_rows;
 pub mod turns;
+pub mod view_level;
 pub mod work_summary;
 pub mod workflow_card;
 

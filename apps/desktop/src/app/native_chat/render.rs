@@ -112,6 +112,7 @@ impl Render for NativeChatView {
             window.request_animation_frame();
         }
         self.sync_disclosure_anchor(window);
+        self.sync_transcript_focus_anchor(window, cx);
         /*
         CDXC:SessionChat 2026-09-18 WHY:
         React's maximized composer is a fixed overlay across the whole chat pane, so nothing of the
@@ -197,6 +198,8 @@ impl Render for NativeChatView {
         let subagent_viewer = self.render_subagent_viewer(&p, window, cx);
         let edit_menu = self.edit_menu(window, cx);
         let session_details_dock = self.render_session_details_dock(&p, window, cx);
+        // A side chat says whose it is, with Bring back and Delete (side_chats.rs).
+        let side_chat_bar = self.side_chat_bar(&p, cx);
         let pane_bounds = self.session_details_pane_bounds();
         let chat = div()
             .id("native-session-chat")
@@ -283,6 +286,7 @@ impl Render for NativeChatView {
                     )
                 },
             )
+            .children(side_chat_bar)
             // The search bar is a sibling region above the list, never an overlay on it.
             .when_some(search_bar, |this, bar| this.child(bar))
             // The transcript (or the welcome that stands in for an empty one), carrying the fork

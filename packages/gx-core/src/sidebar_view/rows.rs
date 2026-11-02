@@ -4,9 +4,12 @@
 //! (`createGxserverPresentationSidebarSession`) and the deleted sidebar page's `model.ts`
 //! (`projectNativeSidebarSession`).
 
+use std::collections::HashMap;
+
 use ghostex_gx_protocol::{LifecycleState, PresentationSession, SessionKind};
 
-use crate::keys::SessionKey;
+use crate::keys::{MachineId, SessionKey};
+use crate::presentation_store::PresentationStore;
 
 use super::agents::{resolve_agent_icon, BROWSER_AGENT_ICON};
 use super::inputs::{BrowserTabInput, CloseAfterDoneInput, DelayedSendInput};
@@ -28,6 +31,41 @@ pub(crate) struct RowContext<'a> {
     /// The Session notes extension is on; while it is off a row carries no note, so neither its
     /// dot nor its tooltip line draws and the note itself stays saved.
     pub(crate) session_notes: bool,
+    /// What the side chats of each main session wait on (`side_chat_needs`).
+    pub(crate) side_chat_needs: &'a HashMap<(String, String), SideChatNeeds>,
+}
+
+/// The questions and approvals a main session's side chats wait on, shown on its own row.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct SideChatNeeds {
+    pub(crate) questions: u64,
+    pub(crate) approval: bool,
+}
+
+/// CDXC:SideChats 2026-11-02 WHY:
+/// A side chat is not a row of the session lists, so a question or approval it waits on would go unseen; its main session's row counts them as its own, the way a coordinator's row counts its threads' approvals.
+pub(crate) fn side_chat_needs(
+    store: &PresentationStore,
+    machine: &MachineId,
+) -> HashMap<(String, String), SideChatNeeds> {
+    let mut needs: HashMap<(String, String), SideChatNeeds> = HashMap::new();
+    let Some(loaded) = store.loaded(machine) else {
+        return needs;
+    };
+    for session in loaded.server_sessions() {
+        let Some(parent) = session.side_chat_parent_session_id.as_ref() else {
+            continue;
+        };
+        if session.pending_question_count == 0 && !session.awaiting_approval {
+            continue;
+        }
+        let entry = needs
+            .entry((session.project_id.clone(), parent.clone()))
+            .or_default();
+        entry.questions += session.pending_question_count;
+        entry.approval |= session.awaiting_approval;
+    }
+    needs
 }
 
 /// `gpui-browser:<project>:<tab>`.
@@ -122,6 +160,11 @@ pub(crate) fn session_row(
     local_delayed_send: Option<&DelayedSendInput>,
     context: &RowContext<'_>,
 ) -> SessionRow {
+    let side_chats = context
+        .side_chat_needs
+        .get(&(key.project_id.clone(), key.session_id.clone()))
+        .copied()
+        .unwrap_or_default();
     let lifecycle_state = sidebar_lifecycle_state(&session.lifecycle_state);
     let provider = provider_session_state(session);
     let is_live = provider == "exists";
@@ -167,8 +210,8 @@ pub(crate) fn session_row(
         terminal_title: session.terminal_title.as_deref(),
         detail: session.subtitle.as_deref(),
         session_note: session_note.as_deref(),
-        pending_question_count: session.pending_question_count,
-        awaiting_approval: session.awaiting_approval,
+        pending_question_count: session.pending_question_count + side_chats.questions,
+        awaiting_approval: session.awaiting_approval || side_chats.approval,
         activity: session.activity.as_str(),
         delayed_send_remaining_label: delayed
             .as_ref()
@@ -265,8 +308,8 @@ pub(crate) fn session_row(
         // One red dot says something went wrong and needs the user, whichever it was.
         model_selection_failed: failure.is_some(),
         program_status_failed,
-        pending_question_count: session.pending_question_count,
-        awaiting_approval: session.awaiting_approval,
+        pending_question_count: session.pending_question_count + side_chats.questions,
+        awaiting_approval: session.awaiting_approval || side_chats.approval,
         agent_icon: agent_icon.map(str::to_string),
         session_kind: Some(session_kind),
         lifecycle_state: lifecycle_state.to_string(),

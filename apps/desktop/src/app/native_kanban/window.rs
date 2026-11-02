@@ -28,8 +28,8 @@ use crate::app::consts::{WINDOW_CONTROLS_LEADING_RESERVE, WORKAREA_HEADER_HEIGHT
 #[cfg(target_os = "macos")]
 use crate::app::helpers::titlebar_project_text_color;
 use crate::app::helpers::{
-    CHROME_LIGHT_APPEARANCE, chrome_ink, glass_clear, set_detached_board_glass_window,
-    sync_detached_board_window_glass, titlebar_svg_icon, window_glass_background_appearance,
+    CHROME_LIGHT_APPEARANCE, chrome_ink, glass_clear, live_glass_window_creation_background,
+    set_detached_board_glass_window, sync_detached_board_window_glass, titlebar_svg_icon,
     workspace_background_color, workspace_column_background,
 };
 use crate::app::model::TitlebarMode;
@@ -157,7 +157,7 @@ impl GhostexGpuiApp {
             #[cfg(target_os = "macos")]
             app_owns_titlebar_drag: true,
             // The board takes part in window glass as it does in the panel (window_glass.rs).
-            window_background: window_glass_background_appearance(),
+            window_background: live_glass_window_creation_background(),
             window_min_size: Some(size(
                 px(DETACHED_BOARD_MIN_WIDTH),
                 px(DETACHED_BOARD_MIN_HEIGHT),
