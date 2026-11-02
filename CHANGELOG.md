@@ -2,6 +2,62 @@
 
 ## Unreleased
 
+## 10.44.0 - 2026-11-03
+
+**Ghostex 10.44.0 is out.** Agents on two connected computers can run sessions on each other, closing a coordinator or a busy agent asks first, Cloud Boxes is on for everyone with Instabox and Boat, agents can ask you privately for a password or key, Ghostex cleans up its old files by itself, and chat cards say what happened in plain words.
+
+### 🌐 Remote computers
+
+- **Agents control sessions on a connected computer, both ways.** A coordinator can start threads on another computer and get their reports, and that computer's agents can start, message, read, sleep, wake and close sessions on this one while the connection is up. Turn Agent access off in the machine's Edit dialog to stop it. Both computers need Ghostex 10.44 or later.
+- **The floating button's panel lists each remote machine,** with its agents when it's connected and a Connect row when it isn't, and the floating button and menu bar count only this computer and computers connected right now.
+- **The pairing QR stays hidden until you click it,** and Copy as text sits right under it.
+- **Easy Connect keeps working on the computer that hosts it,** so paired phones keep its address.
+- **Linux: every package includes tailcat,** so Easy Connect and Cloud Boxes work without installing it yourself.
+
+### 🧭 Coordinators
+
+- **Closing a coordinator or a busy agent asks first,** naming what closes, from every way to close a session. A coordinator closes its open threads with it, and restoring it from Previous Sessions brings them back under it.
+- **OpenCode coordinators start on the model and effort you choose,** with a search field for long model lists.
+- **The New Coordinator dialog's agent list closes when you pick one,** and Model and Effort appear for every agent that takes them, thanks to @OliverJEvans (#395).
+
+### ☁️ Cloud Boxes
+
+- **Cloud Boxes is on by default on every computer,** Windows included. Run a new chat on an Instabox or Boat machine: pick Cloud Box beside This folder in the new chat, choose a snapshot, provider and size with its price, and the chat opens on the box once it boots.
+- **Each box session gets its own branch,** Pull branch brings it home as a worktree project, and pictures in the first message go with it.
+- **Box sessions show in their project in the sidebar** with a cloud badge, a stopped box's chat still opens, and sending a message wakes it.
+- **The box chip in the header** shows the box's state, time and cost, with its terminal, snapshots, Open PR and Stop. Settings > Cloud Boxes sets providers, spending, timers and agent logins.
+
+### 🤖 Agents
+
+- **Agents learn what Ghostex can do from a short note** (pages, question forms, charts, its own browser, other agents), read the details from `ghostex agent-guide` and can ask Ghostex Help with `ghostex help ask`. Turn it off in Settings > Chat > Tell agents about Ghostex.
+- **Agents ask which browser you prefer for previews** once, Ghostex's own browser or your usual one, and remember the answer.
+- **Agents can ask you for a password, key or token privately.** A private card on the computer and the phone takes it, and it never goes into the chat. Settings > Secrets adds 1Password accounts to read keys from.
+- **New accounts show in the sidebar,** and the accounts area starts pinned until you unpin it.
+
+### 💬 Chat
+
+- **Chat cards say what happened in plain words,** with the agent's raw lines behind Details, retry buttons on their own row, and accounts named by email unless you hide it.
+- **The API error card says Ghostex keeps retrying** only while another try is coming.
+- **Question cards and pages use a quiet Recommended mark,** and chat pages follow the window's wallpaper tint live with a darker dark mode.
+- **A mentioned session shows its full title** in the chat box.
+- **Search by Prompt's toolbar fits its window,** switching to icons or a … menu so the search field is never cut off.
+
+### 📱 On the phone
+
+- **Reply quotes the words you selected** when you select part of a message and pick Reply.
+- **Android: Scan code reads the computer's pairing QR again,** with a coarser QR phones read easily from a screen, thanks to @knigaperevodchik (#394).
+- **Android: the terminal no longer crashes** when its history shrinks while you're scrolled up (#398).
+- **The Saved prompts sheet loads once** instead of flashing while the agent works, and the paste sheet points at Copy as text under the QR.
+
+### 🩹 Fixes and polish
+
+- **Ghostex deletes its own old files once a day:** old screenshots, logs, crash reports, backups, published pages, unread Codex copies and long-closed sessions, keeping pinned and favorite sessions and anything you pasted. Diagnostic log areas stop after 3 days at most.
+- **The Environment card in Session details shows the session's RAM.**
+- **Dialogs inside Settings use your theme's raised surface** instead of black.
+- **macOS: Caps Lock types capitals in terminals.**
+- **Windows: Antigravity's background checks no longer pop up a terminal window,** thanks to @DaveW001 (#397).
+- **A forked session stays in Previous Sessions** when it kept working after the fork.
+
 ## 10.43.0 - 2026-11-02
 
 **Ghostex 10.43.0 is out.** Side chats, thumbnails of the pictures an agent opens, one view choice of Summary, Normal or Detailed, an OpenCode tab in every model picker with a see-through OpenCode theme, zoom for files, and a calmer chat while agents stream.
