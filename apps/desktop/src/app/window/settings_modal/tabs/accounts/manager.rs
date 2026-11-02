@@ -284,10 +284,18 @@ impl AccountsTab {
             None,
             move |page: &mut Self, _window, cx| {
                 let this = cx.weak_entity();
+                let (client, store) = (page.client.clone(), page.store.clone());
+                let added = selector.clone();
                 page.account_request(
                     serde_json::json!({ "operation": "register", "provider": provider, "selector": selector, "shareHistory": true }),
                     Some(Box::new(move |ok, cx| {
                         if ok {
+                            super::show_added_account_in_sidebar(
+                                &client,
+                                &store,
+                                |a| a.provider() == provider && a.selector() == added,
+                                cx,
+                            );
                             let _ = this.update(cx, |page, cx| {
                                 page.pane = None;
                                 cx.notify();

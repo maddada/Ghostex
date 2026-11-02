@@ -2393,6 +2393,10 @@ view, with **Sign in to claude.ai** or **Sign out** (see Claude cloud
 sessions). Changes save as you
 make them; Sign in again and Remove sit at the
 bottom, and Remove asks first and says how many sessions use the account.
+A newly added account starts with Show usage in the sidebar on. The accounts'
+usage sits pinned at the bottom of the sidebar by default; click the usage button
+on the sidebar's bottom row to unpin it (it then shows only while you hover the
+button), and click it again to pin it back. Ghostex remembers your choice.
 Turn Enabled off to keep an account you no longer use (for example one whose
 subscription ended) saved but out of use: it shows dimmed with a Disabled tag,
 Ghostex never starts new sessions on it, switches to it at a limit or offers it
