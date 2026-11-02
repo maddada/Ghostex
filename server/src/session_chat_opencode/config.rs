@@ -67,12 +67,18 @@ pub(crate) fn patch_config(path: &Path, key: &str, value: &Value) -> Result<(), 
             object.append(key, input(value));
         }
     }
+    write_config_file(path, &root.to_string())
+}
+
+/// Replaces an OpenCode file through a synced temp file, so a crash leaves the old or the new
+/// contents (see `patch_config`).
+pub(crate) fn write_config_file(path: &Path, text: &str) -> Result<(), DomainStateError> {
     let directory = path
         .parent()
         .ok_or_else(|| error("Invalid OpenCode configuration path."))?;
     fs::create_dir_all(directory).map_err(|e| error(e.to_string()))?;
     let mut temp = tempfile::NamedTempFile::new_in(directory).map_err(|e| error(e.to_string()))?;
-    temp.write_all(root.to_string().as_bytes())
+    temp.write_all(text.as_bytes())
         .map_err(|e| error(e.to_string()))?;
     temp.as_file()
         .sync_all()

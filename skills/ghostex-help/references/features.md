@@ -1519,6 +1519,11 @@ of its terminal screen, and support streamed replies, reasoning, tool results,
 image attachments, questions, permissions, queued prompts, and conversation
 rewind. Install its hooks in Settings > Agents, then open a new OpenCode session
 to connect it.
+Installing the hooks also adds a "ghostex" OpenCode theme with a see-through
+background, so OpenCode's terminal shows the window's glass like Claude Code and
+Codex, in colours that match Ghostex's light and dark terminal. Ghostex turns it
+on only when you have not picked an OpenCode theme yourself; to go back, pick
+another theme in OpenCode (Ctrl+P, then Switch theme).
 The model picker shows the models available from your OpenCode providers and
 their reasoning levels; the mode control selects Build or Plan. Left-click a
 model to save the default, or right-click to apply it only to this session.
