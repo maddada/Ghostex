@@ -82,7 +82,7 @@ pub(crate) async fn handle_tailcat_http(
                         format!("tailcat state update failed: {error}"),
                     )
                 })?;
-            Ok((record, read_tailcat_status_payload(&db, &runtime)))
+            Ok((record, read_tailcat_status_payload(&paths, &db, &runtime)))
         }
     })
     .await;

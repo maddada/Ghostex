@@ -93,7 +93,7 @@ impl TailcatRuntime {
             self.set_last_error(None);
             return;
         }
-        let Some(binary_path) = resolve_tailcat_binary() else {
+        let Some(binary_path) = resolve_host_tailcat_binary(paths) else {
             self.stop();
             self.set_last_error(Some(
                 "The tailcat binary was not found. Install tailcat or set GHOSTEX_TAILCAT_BIN."
@@ -106,6 +106,13 @@ impl TailcatRuntime {
             self.stop();
             self.set_last_error(Some(format!(
                 "Could not create the tailcat server key: {error}"
+            )));
+            return;
+        }
+        if let Err(error) = record_host_tailcat_binary(paths, &binary_path) {
+            self.stop();
+            self.set_last_error(Some(format!(
+                "Could not record the Easy Connect helper: {error}"
             )));
             return;
         }

@@ -12,6 +12,11 @@ pub fn tailcat_key_file(paths: &GxserverPaths) -> PathBuf {
     paths.tailcat_dir.join("server.private.json")
 }
 
+/// The path of the tailcat that hosts Easy Connect with the key above (`resolve_host_tailcat_binary`).
+pub fn tailcat_host_binary_file(paths: &GxserverPaths) -> PathBuf {
+    paths.tailcat_dir.join("host-binary.txt")
+}
+
 pub fn tailcat_address_file(paths: &GxserverPaths) -> PathBuf {
     paths.tailcat_dir.join("address.txt")
 }
