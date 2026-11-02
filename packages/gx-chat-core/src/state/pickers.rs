@@ -65,6 +65,18 @@ pub struct PickersState {
     pub fork_branches: ForkBranchesState,
     /// The context meter, its editor and its status line.
     pub context: ContextState,
+    /// An OpenCode model picked in a draft running another agent, waiting for the switch to land.
+    pub draft_handoff_model: Option<DraftHandoffModel>,
+}
+
+/// A model the draft's next agent starts on, queued once the chat reads the session as that
+/// agent (`crate::menus::picker::settle`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct DraftHandoffModel {
+    pub provider: crate::menus::picker::model_picker::ModelPickerProvider,
+    pub selection: crate::menus::picker::model_picker::ModelPickerSelection,
+    /// Past this the switch is taken to have failed and the pick is dropped.
+    pub until_ms: i64,
 }
 
 impl PickersState {

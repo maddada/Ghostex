@@ -30,23 +30,7 @@ use crate::wire::ChatRpcMethod;
 pub fn observe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
     let now_ms = context.now_millis();
     let mut effects = Vec::new();
-    // The session's own lineup (OpenCode's model API, a Hermes profile's session store), which
-    // gxserver sends with the detected options for that session's agent alone.
-    if let Some(catalog) = state
-        .session
-        .selected_options
-        .as_ref()
-        .and_then(|v| v.get("modelCatalog"))
-        .and_then(crate::menus::catalog::parse_agent_model_catalog)
-    {
-        for (agent_id, agent) in catalog.agents {
-            if state.menus.model_catalog.agents.get(&agent_id) != Some(&agent) {
-                state.menus.model_catalog.agents.insert(agent_id, agent);
-                state.menus.model_catalog_generation =
-                    state.menus.model_catalog_generation.wrapping_add(1);
-            }
-        }
-    }
+    adopt_session_lineup(state);
     rebuild_option_store(state, now_ms);
     apply_detection(state);
     state.menus.options.expire(now_ms);
@@ -133,6 +117,33 @@ pub fn observe(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         }
     }
     effects
+}
+
+/// The session's own lineup (OpenCode's model API for the thread's folder, a Hermes profile's
+/// session store, Pi's CLI), which gxserver sends with the detected options for that session's
+/// agent alone, takes that agent's place in the catalog the menus draw from.
+///
+/// CDXC:AgentProviders 2026-11-02 WHY: a pushed catalog replaces the whole lineup, and it now
+/// carries an OpenCode entry of its own, so the push is followed by this fold again
+/// (`picker::settle`); otherwise an OpenCode thread showed the computer's lineup instead of its
+/// folder's until its next read.
+pub(crate) fn adopt_session_lineup(state: &mut ChatState) {
+    let Some(catalog) = state
+        .session
+        .selected_options
+        .as_ref()
+        .and_then(|v| v.get("modelCatalog"))
+        .and_then(crate::menus::catalog::parse_agent_model_catalog)
+    else {
+        return;
+    };
+    for (agent_id, agent) in catalog.agents {
+        if state.menus.model_catalog.agents.get(&agent_id) != Some(&agent) {
+            state.menus.model_catalog.agents.insert(agent_id, agent);
+            state.menus.model_catalog_generation =
+                state.menus.model_catalog_generation.wrapping_add(1);
+        }
+    }
 }
 
 /// The two `schedule(() => chat.refresh(), delay)` after a draft-agent switch

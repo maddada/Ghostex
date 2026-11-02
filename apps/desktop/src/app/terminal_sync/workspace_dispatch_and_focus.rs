@@ -342,7 +342,7 @@ impl GhostexGpuiApp {
         // The picked model must name a model family and a model (`normalizeGpuiWorkspaceTerminalRuntimeAction`).
         let provider_known = matches!(
             provider,
-            "claude" | "codex" | "cursor" | "grok" | "antigravity"
+            "claude" | "codex" | "cursor" | "grok" | "antigravity" | "opencode"
         );
         if !provider_known || model.trim().is_empty() {
             return false;

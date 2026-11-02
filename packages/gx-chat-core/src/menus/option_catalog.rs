@@ -754,6 +754,21 @@ fn build_opencode_catalog(
     result
 }
 
+/// CDXC:AgentProviders 2026-11-02 DECISION:
+/// User (issue #390, "fix this too"): OpenCode shows as a tab in the model pill of every thread, a new draft and a running thread of another agent alike, with its real models, and a pick hands the thread to OpenCode as every other agent's tab does. gxserver serves the lineup OpenCode itself lists (`server/src/agent_model_lineups.rs`), and an OpenCode thread's own lineup for its folder replaces it (`menus::lifecycle::adopt_session_lineup`). Until either has arrived (a gxserver that predates it, or one whose OpenCode never answered) the tab lists OpenCode's own free model, which every OpenCode can run without a provider set up, so the tab is never missing.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/picker/settle.rs (`deliver_draft_handoff_model`).
+fn opencode_fallback_agent() -> CatalogAgent {
+    CatalogAgent {
+        name: "OpenCode".to_string(),
+        models: vec![CatalogModel {
+            value: "opencode/big-pickle".to_string(),
+            label: "Big Pickle".to_string(),
+            ..CatalogModel::default()
+        }],
+        ..CatalogAgent::default()
+    }
+}
+
 /// CDXC:AgentProviders 2026-10-17 WHY:
 /// Cursor CLI has no command that returns to Agent mode (`/plan` only enters Plan, `/ask` and
 /// `/debug` toggle), so the Mode pill presses Shift+Tab, which cycles Agent → Plan → Debug → Ask in
@@ -1148,7 +1163,12 @@ pub fn session_option_catalog(
         fn(&AgentModelCatalog, &CatalogAgent) -> SessionOptionCatalog,
     ) = match agent_id {
         "claude" | "openclaude" => ("claude", build_claude_catalog),
-        "opencode" => ("opencode", build_opencode_catalog),
+        "opencode" => {
+            return Some(match catalog.agents.get("opencode") {
+                Some(agent) => build_opencode_catalog(catalog, agent),
+                None => build_opencode_catalog(catalog, &opencode_fallback_agent()),
+            });
+        }
         "codex" => ("codex", build_codex_catalog),
         "cursor" | "cursor-cli" => ("cursor", build_cursor_catalog),
         "grok" | "grok-build" => ("grok", build_grok_catalog),

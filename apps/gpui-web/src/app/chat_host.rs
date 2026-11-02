@@ -341,7 +341,7 @@ impl GhostexGpuiApp {
                 let (provider, model) = (text("provider"), text("model"));
                 if matches!(
                     provider,
-                    "claude" | "codex" | "cursor" | "grok" | "antigravity"
+                    "claude" | "codex" | "cursor" | "grok" | "antigravity" | "opencode"
                 ) && !model.is_empty()
                 {
                     let effort = text("effort");

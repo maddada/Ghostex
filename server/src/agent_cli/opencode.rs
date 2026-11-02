@@ -185,6 +185,18 @@ pub(crate) fn launch_executable(home: &Path) -> Result<Option<PathBuf>, ()> {
     found
 }
 
+/// The OpenCode 2 program itself, for what gxserver asks it (its model lineup); `None` when no
+/// OpenCode 2 is installed. An install-on-demand wrapper is never followed, as in `find_launch`.
+pub(crate) fn opencode2_program(home: &Path) -> Option<PathBuf> {
+    match launch_executable(home) {
+        Ok(Some(path)) => Some(path),
+        Ok(None) => process::resolve("opencode", home)
+            .and_then(|found| crate::agent_hooks::on_demand::probe_target(&found, "opencode", home))
+            .and_then(|found| real_executable(&found, home)),
+        Err(()) => None,
+    }
+}
+
 fn forget_launch() {
     if let Ok(mut cached) = LAUNCH.lock() {
         *cached = None;

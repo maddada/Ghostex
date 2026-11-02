@@ -183,15 +183,28 @@ fn model_menu_pick_action(
                 );
                 let carry =
                     |value: &str| (launchable && !value.is_empty()).then(|| value.to_string());
-                return match agent_id {
-                    Some(agent_id) => crate::menus::actions::switch_draft_agent_with(
-                        state,
-                        &agent_id,
-                        carry(&model),
-                        carry(&effort),
-                    ),
-                    None => Vec::new(),
+                let Some(agent_id) = agent_id else {
+                    return Vec::new();
                 };
+                let effects = crate::menus::actions::switch_draft_agent_with(
+                    state,
+                    &agent_id,
+                    carry(&model),
+                    carry(&effort),
+                );
+                // OpenCode takes its model once it runs (`settle::deliver_draft_handoff_model`).
+                if provider == crate::menus::picker::model_picker::ModelPickerProvider::OpenCode
+                    && !model.is_empty()
+                    && state.menus.draft_agent_switch.is_some()
+                {
+                    state.pickers.draft_handoff_model = Some(crate::state::DraftHandoffModel {
+                        provider,
+                        selection: ModelPickerSelection { model, effort },
+                        until_ms: context.now_millis()
+                            + crate::menus::picker::settle::DRAFT_HANDOFF_MODEL_MS,
+                    });
+                }
+                return effects;
             }
             vec![Effect::HostAction {
                 action: "handoffToModel".to_string(),

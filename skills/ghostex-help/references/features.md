@@ -2195,12 +2195,16 @@ the list: type part of a model's name or id ("sonnet", "gpt 6") to narrow it,
 with matching starred models still first. Older versions of a model (GPT 6 Sol
 once GPT 6.1 Sol is out, for example) sit under Legacy models at the bottom of
 the tab; click it to show them, or star one to keep it at the top. Codex,
-Cursor, Grok Build and Antigravity's lists come from the CLI installed on that computer, so
-new models show up without a Ghostex update. Click a row's star to keep that
+Cursor, Grok Build, Antigravity and OpenCode's lists come from the agent installed on that computer, so
+new models show up without a Ghostex update. The OpenCode tab is there in every
+thread and lists the models of the providers you set up in OpenCode; an OpenCode
+thread lists the ones its own folder can use. Click a row's star to keep that
 model on the Favorites tab; hover the info icon that appears on a row to read
 what that model is for. In a session that has started, another agent's tab
 shows a small handoff badge: picking one of its models hands the conversation
-off to that agent instead of changing this session's model. With more than one signed-in Claude or Codex account, an Account
+off to that agent instead of changing this session's model. In a new thread
+you have not sent anything in yet, it switches the thread to that agent instead,
+and an OpenCode model becomes the thread's model as soon as OpenCode is up. With more than one signed-in Claude or Codex account, an Account
 button beside Fast mode shows the account in use and opens the list to switch.
 
 The Model & Effort Picker shortcut (Option+P by default on macOS) opens the same

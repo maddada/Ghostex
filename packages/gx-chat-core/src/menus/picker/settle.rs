@@ -77,6 +77,7 @@ pub fn settle(
                 };
                 state.menus.model_catalog_generation =
                     state.menus.model_catalog_generation.wrapping_add(1);
+                crate::menus::lifecycle::adopt_session_lineup(state);
             }
             for agent in ContextDetailsAgent::ALL {
                 let value = read.context_preferences.get(agent.as_str());
@@ -96,6 +97,7 @@ pub fn settle(
                 // it in unconditionally, so the option store rebuilds even on an identical push.
                 state.menus.model_catalog_generation =
                     state.menus.model_catalog_generation.wrapping_add(1);
+                crate::menus::lifecycle::adopt_session_lineup(state);
             }
         }
         Event::ContextPreferencesChanged {
@@ -175,9 +177,44 @@ pub fn settle(
     if state.core.timer_fired(MODEL_OUTBOX_TIMER) {
         state.pickers.model_selection.retry_at_ms = None;
     }
+    effects.extend(deliver_draft_handoff_model(state, context));
     effects.extend(settle_outbox_delivery(state, context));
     effects.extend(arm_timers(state, context));
     effects
+}
+
+/// How long an OpenCode model picked in a draft waits for the switch to OpenCode to land.
+pub const DRAFT_HANDOFF_MODEL_MS: i64 = 60_000;
+
+/// CDXC:AgentProviders 2026-11-02 WHY:
+/// OpenCode 2 has no launch model flag (`server/src/agents/launch_plan.rs` refuses one), so an OpenCode model picked in a draft running another agent cannot ride the draft switch the way a Claude or Codex model does. It waits until the chat reads the session as OpenCode and can queue a model, then goes into the durable outbox for this session only, and gxserver retries it until OpenCode's conversation takes it. Without this the switched draft started on OpenCode's own default, not the model that was picked.
+fn deliver_draft_handoff_model(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
+    let Some(pending) = state.pickers.draft_handoff_model.clone() else {
+        return Vec::new();
+    };
+    if context.now_millis() > pending.until_ms {
+        state.pickers.draft_handoff_model = None;
+        return Vec::new();
+    }
+    if state.menus.draft_agent_switch.is_some() {
+        return Vec::new();
+    }
+    let ready = state
+        .pickers
+        .model_menu_context
+        .as_ref()
+        .is_some_and(|menu| menu.provider == Some(pending.provider) && !menu.disabled);
+    if !ready {
+        return Vec::new();
+    }
+    state.pickers.draft_handoff_model = None;
+    queue_model_selection(
+        state,
+        pending.selection,
+        Some(pending.provider),
+        ModelSelectionScope::Session,
+        context.random_id(0),
+    )
 }
 
 /// The one read of the branch family. An empty answer, an error, or a daemon that predates the
