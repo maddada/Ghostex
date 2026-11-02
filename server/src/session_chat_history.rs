@@ -358,6 +358,7 @@ impl Turn {
             || question
             || sent_message
             || visible
+            || (reply && asks_questions(&message))
             || message
                 .async_questions
                 .as_ref()
@@ -394,6 +395,26 @@ impl Turn {
         }
         result
     }
+}
+
+/// A reply holding a question form or a question page: a collapsed turn keeps it, as it keeps an
+/// AskUserQuestion call (CDXC:SessionChat 2026-11-02 on gx-chat-core's
+/// `transcript::open_questions::asks_questions`).
+fn asks_questions(message: &SessionChatMessage) -> bool {
+    let fenced = message.blocks.iter().any(|block| {
+        matches!(block, SessionChatBlock::Text { text }
+            if (text.contains("```") || text.contains("~~~"))
+                && (text.contains("questions") || text.contains("visual")))
+    });
+    fenced
+        && serde_json::to_value(message)
+            .ok()
+            .and_then(|value| {
+                serde_json::from_value::<ghostex_gx_protocol::ChatMessage>(value).ok()
+            })
+            .is_some_and(|message| {
+                ghostex_gx_chat_core::transcript::open_questions::asks_questions(&message)
+            })
 }
 
 /// CDXC:SessionChat 2026-09-30 WHY:
@@ -560,6 +581,54 @@ mod read_image_tests {
         assert_eq!(
             work["imagePaths"],
             json!(["/shots/a.png", "/shots/b.jpg", "/shots/c.png"])
+        );
+    }
+}
+
+#[cfg(test)]
+mod question_reply_tests {
+    use super::*;
+
+    fn row(id: &str, role: &str, blocks: Value) -> SessionChatMessage {
+        serde_json::from_value(json!({
+            "id": id, "role": role, "blocks": blocks, "timestamp": null, "source": "transcript",
+        }))
+        .expect("a chat row")
+    }
+
+    /// A turn that asked in a form and then kept working keeps the form's reply out of its
+    /// deferred work, so the chat holds the card the ? pill counts.
+    #[test]
+    fn a_folded_turn_keeps_the_reply_that_asks() {
+        let form = "Before I go on:\n\n```questions\n{\"questions\":[{\"tag\":\"Q1\",\"title\":\"Ship it?\",\"choices\":[\"Yes\",\"No\"]}]}\n```";
+        let rows = [
+            row("f1", "assistant", json!([{"type": "text", "text": form}])),
+            row(
+                "n1",
+                "assistant",
+                json!([{"type": "text", "text": "Running the checks."}]),
+            ),
+            row(
+                "c1",
+                "assistant",
+                json!([{"type": "tool-call", "name": "Bash", "callId": "c1", "input": {"command": "true"}}]),
+            ),
+            row("a1", "assistant", json!([{"type": "text", "text": "done"}])),
+        ];
+        let mut turn = Turn::default();
+        for message in rows.iter().rev() {
+            turn.push(message.clone(), false);
+        }
+        let prompt = row("u1", "user", json!([{"type": "text", "text": "go"}]));
+        let ids: Vec<String> = turn
+            .finish(Some(prompt), 0)
+            .iter()
+            .filter_map(|row| row["id"].as_str().map(str::to_string))
+            .collect();
+        assert_eq!(
+            ids,
+            ["a1", "f1", "u1"],
+            "the final reply, the form, the prompt"
         );
     }
 }

@@ -245,6 +245,21 @@ pub fn asker_entries(messages: &[ChatMessage], prior: &[Found]) -> Vec<Found> {
     found
 }
 
+/// Whether an agent's reply asks the reader something: it holds a ```questions form or a question
+/// page's card. A finished turn keeps such a reply in view (`transcript/turns.rs`
+/// `partition_completed_work`), and gxserver never defers it into a collapsed turn's work
+/// (server/src/session_chat_history.rs), so the ? pill, a Q-tag link and Resources reach its card.
+///
+/// CDXC:SessionChat 2026-11-02 WHY:
+/// The ? pill counted a question its click could not show: an agent that asks in a form and then keeps working (tool calls, then a last "done") ended its turn with the form among the folded work, so gxserver left it out of history pages and the snapshot until the fold opened, and the chat drew it inside the closed "Previous turn". The pill's jump and "Go to chat" then landed on a fold or on nothing. Such a reply now stays like an AskUserQuestion call and an image do, as summary mode already draws it in full (`turns::content_rows`).
+/// SEE-ALSO: server/src/session_chat_history.rs (`Turn::push`), transcript/turns.rs (`partition_completed_work`).
+pub fn asks_questions(message: &ChatMessage) -> bool {
+    message.role == ChatRole::Assistant
+        && asker_entries(std::slice::from_ref(message), &[])
+            .iter()
+            .any(|found| matches!(found, Found::Asker(_)))
+}
+
 /// The askers `found` holds, each marked answered, superseded, obsolete and withdrawn by what came
 /// after it: the deciding half of [`askers`].
 pub fn settle_askers(found: &[Found], answered: &[String]) -> Vec<Asker> {

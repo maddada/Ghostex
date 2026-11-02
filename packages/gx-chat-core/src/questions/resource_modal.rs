@@ -104,16 +104,20 @@ fn holder_message(state: &ChatState, id: &str) -> Option<String> {
         .map(|message| message.id.clone())
 }
 
-/// Scrolls the chat to the item's loaded reply, and closes the modal.
+/// Scrolls the chat to the item's loaded reply, and closes the modal; `None` when no row holds
+/// that reply yet (its window is read in by the item's place instead).
 fn scroll_to(
     state: &mut ChatState,
     context: &ChatContext,
     id: &str,
     message_id: &str,
-) -> Vec<Effect> {
+) -> Option<Vec<Effect>> {
+    if !crate::questions::open_questions::jump_to_row(state, context, message_id, id, None) {
+        return None;
+    }
     close(state);
     state.questions.resource_go = None;
-    crate::questions::open_questions::jump_to_row(state, context, message_id, id, None)
+    Some(Vec::new())
 }
 
 fn entry_of(
@@ -318,7 +322,9 @@ pub fn fetched_answers<'a>(state: &'a ChatState, id: &str) -> Option<&'a PageAns
 /// button shows it loading), then scrolled to when it is among the rows.
 pub fn go_to(state: &mut ChatState, context: &ChatContext, id: &str) -> Vec<Effect> {
     if let Some(message_id) = holder_message(state, id) {
-        return scroll_to(state, context, id, &message_id);
+        if let Some(effects) = scroll_to(state, context, id, &message_id) {
+            return effects;
+        }
     }
     let offset = entry_of(state, id).and_then(|entry| jump_end(&entry));
     state.questions.resource_go = Some(ResourceGo {
@@ -342,7 +348,9 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         return Vec::new();
     }
     if let Some(message_id) = holder_message(state, &go.id) {
-        return scroll_to(state, context, &go.id, &message_id);
+        if let Some(effects) = scroll_to(state, context, &go.id, &message_id) {
+            return effects;
+        }
     }
     if state.messages.loading_earlier || state.messages.load_earlier_request.is_some() {
         return Vec::new();
@@ -378,8 +386,9 @@ pub fn after_refresh(state: &mut ChatState, context: &ChatContext) {
         return;
     }
     if let Some(message_id) = holder_message(state, &go.id) {
-        let _ = scroll_to(state, context, &go.id, &message_id);
-        return;
+        if scroll_to(state, context, &go.id, &message_id).is_some() {
+            return;
+        }
     }
     state.questions.resource_go = None;
     if let Some(modal) = state
