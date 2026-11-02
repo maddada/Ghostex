@@ -107,12 +107,15 @@ fn a_finished_claude_turn_keeps_the_pictures_it_read_under_its_fold() {
         "The toast overlaps the composer.",
     ));
     let items = items(&state_with("claude", rows));
-    let (work, read_images) = items
+    let (work, read_images, stats) = items
         .iter()
         .find_map(|item| match item {
             TranscriptItem::CompletedWork {
-                work, read_images, ..
-            } => Some((work, read_images)),
+                work,
+                read_images,
+                stats,
+                ..
+            } => Some((work, read_images, stats)),
             _ => None,
         })
         .expect("the finished turn folds");
@@ -121,6 +124,8 @@ fn a_finished_claude_turn_keeps_the_pictures_it_read_under_its_fold() {
         paths(read_images),
         ["/shots/toast-before.png", "/shots/toast-after.png"]
     );
+    // The card's counts start with what its strip holds.
+    assert_eq!(stats[0], json!({"kind": "images", "label": "2 images"}));
     // Each Read row carries its own thumbnail.
     let row_images: Vec<Vec<String>> = work
         .iter()

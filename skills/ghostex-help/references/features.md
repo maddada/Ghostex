@@ -1335,9 +1335,12 @@ click beside the picture) closes it.
 When the agent opens a picture file (Claude's Read, Codex's view image,
 OpenCode's read, or any agent reading an image), its row in the chat shows a
 small thumbnail of it. When the turn folds into "Worked for …" or "Previous
-turn" (or summary mode's "Active work" is closed), the pictures it read stay in
-view as a row of thumbnails under the fold, all of them, wrapping onto more
-lines. Clicking one opens the picture viewer, and the arrows step through them
+turn", the pictures it read stay in view inside that card, under its title,
+and the card counts them ("3 images") beside its tool calls. Other closed folds
+(summary mode's "Active work", a step's folded tool calls) keep theirs under
+the fold. The thumbnails sit on one row; when there are more than fit, scroll
+it sideways with the mouse wheel or a sideways trackpad swipe (swipe on the
+phone). Clicking one opens the picture viewer, and the arrows step through them
 with the chat's other pictures. The picture is read from the computer the
 session runs on, so it works for remote sessions and on the phone; a file that
 has since been deleted shows a small missing-picture square. A picture you

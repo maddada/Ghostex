@@ -174,9 +174,14 @@ impl NativeChatView {
                     // (gx-chat-core `read_images.rs`).
                     if !expanded && motion.is_none() {
                         let pictures = serde_json::Value::Array(read_images.clone());
-                        if let Some(strip) =
-                            self.read_pictures(&format!("{key}:read"), &pictures, 4.0, &p, cx)
-                        {
+                        if let Some(strip) = self.read_picture_strip(
+                            &format!("{key}:read"),
+                            &pictures,
+                            4.0,
+                            p.background,
+                            &p,
+                            cx,
+                        ) {
                             row = row.child(strip);
                         }
                     }
@@ -569,10 +574,11 @@ impl NativeChatView {
                         );
                         row = row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                     }
-                } else if let Some(pictures) = self.read_pictures(
+                } else if let Some(pictures) = self.read_picture_strip(
                     &format!("{key}:read"),
                     &message["readImages"],
                     super::read_pictures::FOLDED_CALLS_INSET,
+                    p.background,
                     p,
                     cx,
                 ) {
@@ -657,10 +663,11 @@ impl NativeChatView {
                             row =
                                 row.child(self.disclosure_body_motion(&key, motion, 8.0 * s, body));
                         }
-                    } else if let Some(pictures) = self.read_pictures(
+                    } else if let Some(pictures) = self.read_picture_strip(
                         &format!("{key}:read"),
                         &message["readImages"],
                         super::read_pictures::FOLDED_CALLS_INSET,
+                        p.background,
                         p,
                         cx,
                     ) {

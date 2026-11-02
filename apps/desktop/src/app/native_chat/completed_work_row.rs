@@ -79,7 +79,17 @@ impl NativeChatView {
             .borrow_mut()
             .arrived(&id, !expanded, cx.reduce_motion());
         let motion = self.disclosure_frame(&id, expanded, cx);
-        let heading = self.work_summary(item, &id, expanded, p, cx);
+        // The closed card keeps the pictures its rows read in view, under its header (gx-chat-core
+        // `read_images.rs`); opened, each row shows its own.
+        let card = &*SINGLE_LINE_CARD;
+        let card_fill = card.solid_fill(p);
+        let pictures = (!expanded && motion.is_none())
+            .then(|| {
+                let pictures = serde_json::Value::Array(read_images.clone());
+                self.read_picture_strip(&format!("{id}:read"), &pictures, 0.0, card_fill, p, cx)
+            })
+            .flatten();
+        let heading = self.work_summary(item, &id, expanded, pictures, p, cx);
         // Every row of a finished turn hides its own writes; they belong to the turn's
         // "N files changed" fold below the heading (file_change_card.rs). Rows that are still
         // folding keep theirs until they are gone, as they were a moment ago.
@@ -115,11 +125,7 @@ impl NativeChatView {
                 )]
             })
         } else {
-            // The closed fold keeps the pictures its rows read in view (gx-chat-core
-            // `read_images.rs`); opened, each row shows its own.
-            let pictures = serde_json::Value::Array(read_images.clone());
-            self.read_pictures(&format!("{id}:read"), &pictures, 4.0, p, cx)
-                .map(|strip| vec![strip])
+            None
         };
         self.hide_file_changes = true;
         let files = self.completed_files_fold(item, p, cx);
@@ -182,6 +188,7 @@ impl NativeChatView {
         item: &TranscriptItem,
         id: &str,
         expanded: bool,
+        pictures: Option<AnyElement>,
         p: &ChatAppearance,
         cx: &Context<Self>,
     ) -> AnyElement {
@@ -213,6 +220,7 @@ impl NativeChatView {
             let tone = if failed { p.error() } else { p.card_muted };
             let icon = match kind {
                 "files" => "titlebar/pencil.svg",
+                "images" => "titlebar/photo.svg",
                 "failed" | "recovered" => "titlebar/alert-triangle.svg",
                 _ => "titlebar/tool.svg",
             };
@@ -279,7 +287,19 @@ impl NativeChatView {
                                 cx.notify();
                             }))
                     }),
-            );
+            )
+            // The pictures the closed turn read, under its header past a hairline (gx-chat-core
+            // `read_images.rs`, where the user's decision is).
+            .when_some(pictures, |bar, pictures| {
+                bar.child(
+                    div()
+                        .border_t(px(s))
+                        .border_color(card.hairline(p))
+                        .px(px(card.padding_x * s))
+                        .py(px(8.0 * s))
+                        .child(pictures),
+                )
+            });
         bar.into_any_element()
     }
 

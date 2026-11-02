@@ -177,10 +177,11 @@ impl NativeChatView {
                             .child(self.disclosure_body_motion(&calls_key, motion, 4.0 * s, body)),
                     );
                 }
-            } else if let Some(pictures) = self.read_pictures(
+            } else if let Some(pictures) = self.read_picture_strip(
                 &format!("{calls_key}:read"),
                 &message["readImages"],
                 super::read_pictures::FOLDED_CALLS_INSET,
+                p.background,
                 p,
                 cx,
             ) {

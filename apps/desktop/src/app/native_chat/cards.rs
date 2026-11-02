@@ -93,6 +93,16 @@ impl SingleLineCard {
         (self.height - 2.0) * s
     }
 
+    /// The shell's hairline colour, for a divider inside an opened card.
+    pub(super) fn hairline(&self, p: &ChatAppearance) -> gpui::Hsla {
+        p.foreground.opacity(self.border_alpha)
+    }
+
+    /// The shell's fill laid over the transcript, for an edge fade inside the card.
+    pub(super) fn solid_fill(&self, p: &ChatAppearance) -> gpui::Hsla {
+        p.background.blend(p.input.opacity(self.fill_input_alpha))
+    }
+
     /// The fold's look: its fill, hairline and radius. The shell's border is one scaled pixel,
     /// which `header_height` leaves room for.
     pub(super) fn shell<E: Styled>(&self, element: E, p: &ChatAppearance) -> E {

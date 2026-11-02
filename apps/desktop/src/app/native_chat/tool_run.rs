@@ -108,10 +108,11 @@ impl NativeChatView {
                     cx,
                 );
                 rows.push(self.disclosure_body_motion(&key, motion, ROW_GAP * p.scale, body));
-            } else if let Some(pictures) = self.read_pictures(
+            } else if let Some(pictures) = self.read_picture_strip(
                 &format!("{key}:read"),
                 &message["readImages"],
                 super::read_pictures::FOLDED_CALLS_INSET,
+                p.background,
                 p,
                 cx,
             ) {
@@ -209,10 +210,11 @@ impl NativeChatView {
             .collect();
         let mut rows = self.tool_row_list(&id, &tools, &above, p, cx);
         rows.push(self.tool_fold_toggle(run_key.clone(), label, false, p, cx));
-        if let Some(pictures) = self.read_pictures(
+        if let Some(pictures) = self.read_picture_strip(
             &format!("{run_key}:read"),
             &Value::Array(folded_pictures),
             super::read_pictures::FOLDED_CALLS_INSET,
+            p.background,
             p,
             cx,
         ) {

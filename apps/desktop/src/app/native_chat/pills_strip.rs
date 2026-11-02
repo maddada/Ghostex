@@ -28,10 +28,26 @@ use web_time::Instant;
 const STRIP_HEIGHT: f32 = 22.0 + 2.0 * 5.0;
 
 /// The width of the fade at an edge that hides pills (unscaled).
-const PILLS_FADE: f32 = 24.0;
+pub(super) const PILLS_FADE: f32 = 24.0;
 
 /// The band's tint over the box's fill.
 const STRIP_TINT: f32 = 0.035;
+
+/// The ramp over a sideways scroller's edge that hides more: `edge`'s colour at the edge, clear
+/// `width` in. The read-picture strips fade the same way (read_pictures.rs).
+pub(super) fn edge_fade(toward_left: bool, edge: gpui::Hsla, width: f32) -> gpui::Div {
+    let ramp = div().absolute().top_0().bottom_0().w(px(width));
+    let ramp = if toward_left {
+        ramp.left_0()
+    } else {
+        ramp.right_0()
+    };
+    ramp.bg(gpui::linear_gradient(
+        90.0,
+        gpui::linear_color_stop(if toward_left { edge } else { edge.opacity(0.0) }, 0.0),
+        gpui::linear_color_stop(if toward_left { edge.opacity(0.0) } else { edge }, 1.0),
+    ))
+}
 
 /// What the strip measured and is animating.
 #[derive(Default)]
@@ -339,19 +355,7 @@ impl NativeChatView {
         let fades = self.pills_strip.fades.clone();
         let (left, right) = fades.get();
         let chat = cx.entity_id();
-        let fade = |toward_left: bool| {
-            let ramp = div().absolute().top_0().bottom_0().w(px(PILLS_FADE * s));
-            let ramp = if toward_left {
-                ramp.left_0()
-            } else {
-                ramp.right_0()
-            };
-            ramp.bg(gpui::linear_gradient(
-                90.0,
-                gpui::linear_color_stop(if toward_left { edge } else { edge.opacity(0.0) }, 0.0),
-                gpui::linear_color_stop(if toward_left { edge.opacity(0.0) } else { edge }, 1.0),
-            ))
-        };
+        let fade = |toward_left: bool| edge_fade(toward_left, edge, PILLS_FADE * s);
         div()
             .relative()
             .flex_1()

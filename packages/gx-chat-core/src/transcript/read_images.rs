@@ -2,7 +2,7 @@
 //! keeps of them.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION:
-//! User: "we need to show image thumbnails when reading images from desk and bubble those image previews up to the transcript". From the options page (Q958 to Q962): a call that read a picture file (Claude's Read, Codex's view image, OpenCode's read, any agent's read of an image) shows the picture as a small 48px thumbnail on its row (Q959 "Small (48 px)"), and when its turn folds ("Worked for …", "Previous turn", summary mode's closed "Active work") the pictures the turn read stay visible as a strip of thumbnails under the fold row (Q958 "On the row, and bubbled up to the turn"), every one of them, wrapping onto more lines (Q961). A thumbnail opens the chat's picture viewer, whose arrows step through these pictures with the rest of the transcript's (Q960), and the phone does the same (Q962). The picture is read where the agent read it: the path goes to the session machine's gxserver (`readSessionChatImage`), never the reader's own disk, and a file that has gone shows the missing-picture placeholder.
+//! User: "we need to show image thumbnails when reading images from desk and bubble those image previews up to the transcript". From the options page (Q958 to Q962): a call that read a picture file (Claude's Read, Codex's view image, OpenCode's read, any agent's read of an image) shows the picture as a small 48px thumbnail on its row (Q959 "Small (48 px)"), and when its turn folds ("Worked for …", "Previous turn", summary mode's closed "Active work") the pictures the turn read stay visible as a strip of thumbnails (Q958 "On the row, and bubbled up to the turn"). The strip first wrapped onto more lines to show every picture (Q961 "Show all of them, wrapping onto more lines"); seeing it under "Previous turn" with no words, the user then chose "C but make them scroll sideways on vertical mouse scroll or horizontal trackpad scroll in case there's more images (like we did for sidepanel tabs basically)": the strip sits inside the folded turn's card under its header, past a hairline, the card's counts start with "N images" (`images_stat`), and it is one row that scrolls sideways when it does not fit, a mouse wheel's vertical turn or a trackpad's sideways swipe moving it, fading at an edge that hides more, superseding the wrapping. A thumbnail opens the chat's picture viewer, whose arrows step through these pictures with the rest of the transcript's (Q960), and the phone does the same (Q962). The picture is read where the agent read it: the path goes to the session machine's gxserver (`readSessionChatImage`), never the reader's own disk, and a file that has gone shows the missing-picture placeholder.
 //! SEE-ALSO: `image_paths_in_call` also feeds the `imagePaths` of an older turn the server kept folded (server/src/session_chat_history.rs). The renderers draw `images` on a tool row and `readImages` under a fold: desktop `native_chat/tool_run.rs`, `tool_card.rs`, `completed_work_row.rs` and `transcript.rs`; phone `ToolRows.tsx`, `ToolCard.tsx` and `TranscriptItemRow.tsx`.
 
 use serde_json::Value;
@@ -396,6 +396,15 @@ fn drop_seen(message: &mut std::sync::Arc<Value>, seen: &SeenPictures<'_>) {
     }
 }
 
+/// The `{kind: "images", label}` count a folded turn's card shows beside its tool calls:
+/// "1 image", "3 images".
+pub fn images_stat(count: usize) -> Value {
+    serde_json::json!({
+        "kind": "images",
+        "label": format!("{count} {}", if count == 1 { "image" } else { "images" }),
+    })
+}
+
 /// Fills each turn's `readImages` from the rows its fold holds (a finished turn's folded work and
 /// the paths of the rows the server still holds back, a running turn's "Active work"), after
 /// taking off every row the pictures the user already showed (`SeenPictures`).
@@ -431,6 +440,7 @@ pub fn bubble_read_images(items: &mut [TranscriptItem], seen: &SeenPictures<'_>)
                 final_message,
                 deferred,
                 read_images,
+                stats,
                 ..
             } => {
                 work.iter_mut()
@@ -451,6 +461,12 @@ pub fn bubble_read_images(items: &mut [TranscriptItem], seen: &SeenPictures<'_>)
                     })
                     .unwrap_or_default();
                 *read_images = turn_read_images(work.iter().map(|row| row.as_ref()), &held_back);
+                // The card's "3 images" count, first among its counts, says what the strip in the
+                // card is.
+                stats.retain(|stat| stat.get("kind").and_then(Value::as_str) != Some("images"));
+                if !read_images.is_empty() {
+                    stats.insert(0, images_stat(read_images.len()));
+                }
             }
             TranscriptItem::Unknown(_) => {}
         }
