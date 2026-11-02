@@ -294,6 +294,7 @@ impl NativeChatView {
     /// CDXC:SessionChat 2026-10-16 WHY: the list keeps its scroll position while a row grows, so a box at the transcript's bottom edge (the reader scrolled up) slid its newest line under the composer. Only a box that grew moves the list: typing in a box already in view, or one the reader scrolled away from, leaves the transcript alone. A list following its tail already keeps the bottom in view. The phone does the same (apps/mobile/app/src/chat/native/transcript/fieldReveal.ts).
     pub(super) fn form_input_reveal_sync(&self, p: &ChatAppearance) -> AnyElement {
         let list = self.list.clone();
+        let held = self.transcript_focus_field_top.clone();
         let boxes: Vec<_> = self
             .form_inputs
             .values()
@@ -323,6 +324,10 @@ impl NativeChatView {
                     let overflow = bounds.bottom() - visible_bottom;
                     if overflow > px(0.0) && bounds.top() < viewport.bottom() {
                         list.scroll_by(overflow);
+                        // The focused field hold (scroll_bottom.rs) keeps it where this puts it.
+                        if let Some(top) = held.get() {
+                            held.set(Some(top - overflow));
+                        }
                         window.request_animation_frame();
                     }
                 }

@@ -112,6 +112,7 @@ impl Render for NativeChatView {
             window.request_animation_frame();
         }
         self.sync_disclosure_anchor(window);
+        self.sync_transcript_focus_anchor(window, cx);
         /*
         CDXC:SessionChat 2026-09-18 WHY:
         React's maximized composer is a fixed overlay across the whole chat pane, so nothing of the
