@@ -128,6 +128,9 @@ pub(crate) struct PromptsTabState {
     pub(crate) tag_error: Option<String>,
     pub(crate) composer: Option<Composer>,
     pub(crate) resolved_default_scope: bool,
+    /// The tab opened with a session to narrow to and no scope pinned, and the library has not
+    /// been read since: nothing is listed until it has, so no row shows before the filter does.
+    pub(crate) holding_default_scope: bool,
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -295,8 +298,33 @@ pub(crate) fn active_prompts(state: &PromptsTabState) -> Option<&Vec<Value>> {
     match state.view {
         PromptsView::Sent => Some(&state.sent),
         PromptsView::Recovered => Some(&state.recovered),
+        PromptsView::Saved if state.holding_default_scope => None,
         PromptsView::Saved => state.prompts.as_ref(),
     }
+}
+
+/// Whether the Saved list is still being read (or held back until its default scope is known),
+/// which draws "Loading saved prompts..." instead of rows.
+pub(crate) fn saved_loading(state: &PromptsTabState) -> bool {
+    state.view == PromptsView::Saved && active_prompts(state).is_none()
+}
+
+/// What a tab that opens for a session with no scope pinned starts on.
+///
+/// CDXC:SavedPrompts 2026-11-02 DECISION:
+/// User, of the Saved Prompts window that the chat's Stashed pill opens: "when i click on 'Stashed' pill we show lots of prompts in the list but then show just the ones i need. please fix this, dont show anything while the filter isn't applied yet". The tab used to open on All projects, paint the library it kept from the last open (or the first read), and only then narrow to "This session" once the read landed. It now opens already on This session, and lists nothing ("Loading saved prompts...") until it knows the session's rows: at once when the kept library already has one of them, otherwise when the fresh read lands, which then falls back to All projects only when the session has none. A scope the launcher pins is never overridden.
+pub(crate) fn open_on_session(state: &mut PromptsTabState, data: &QuickAccessData) {
+    state.holding_default_scope = false;
+    if !has_session_scope(state, data) {
+        return;
+    }
+    state.scope = PromptsScope::Session;
+    let known = state
+        .prompts
+        .iter()
+        .flatten()
+        .any(|prompt| belongs_to_session(prompt, state, data));
+    state.holding_default_scope = !known;
 }
 
 /// Search, then scope, then tag: the order the React modal narrows in.

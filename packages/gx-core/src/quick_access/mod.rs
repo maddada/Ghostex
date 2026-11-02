@@ -17,6 +17,8 @@ mod row_actions;
 mod session_titles;
 mod sessions;
 #[cfg(test)]
+mod prompts_open_tests;
+#[cfg(test)]
 mod sessions_tests;
 mod store_groups;
 mod text;

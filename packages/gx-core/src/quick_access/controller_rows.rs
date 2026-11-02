@@ -705,7 +705,7 @@ impl QuickAccessController {
                     != Some(sessions_query_key(&self.sessions, &self.query).as_str())
             }
             QuickAccessTab::SavedPrompts => {
-                self.prompts.view == PromptsView::Saved && self.prompts.prompts.is_none()
+                prompts::saved_loading(&self.prompts)
             }
             QuickAccessTab::Files => self.files_loading(),
             QuickAccessTab::Commands => false,
