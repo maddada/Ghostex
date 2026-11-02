@@ -5,9 +5,7 @@
 //! `packages/shared/session-chat-controller/controller.ts`.
 
 use crate::session::composition::{pending_transcript, refresh_boundaried};
-use crate::session::constants::{
-    DEFAULT_COMMAND_CATALOG, DELIVERY_UNCONFIRMED, LEFT_QUEUE_RETENTION_MS, TIMER_LEFT_QUEUE,
-};
+use crate::session::constants::{DELIVERY_UNCONFIRMED, LEFT_QUEUE_RETENTION_MS, TIMER_LEFT_QUEUE};
 use crate::session::pending::prune_pending_sends;
 use crate::session::startup_sends::{
     parse_iso_ms, pending_with_startup_sends, settle_rows_gone_from_queue,
@@ -21,11 +19,7 @@ use crate::state::{ChatContext, ChatState};
 /// the event's handlers and `crate::session::composition::compose`, because the composition reads
 /// what it prunes.
 pub fn before_compose(state: &mut ChatState, context: &ChatContext) {
-    let catalog: Vec<String> = DEFAULT_COMMAND_CATALOG
-        .iter()
-        .map(|name| (*name).to_string())
-        .collect();
-    refresh_boundaried(state, &catalog);
+    refresh_boundaried(state);
     crate::session::answer_echoes::observe_queue_updates(state);
     crate::session::answer_echoes::apply_queue_receipts(
         &state.questions.forms,

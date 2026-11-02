@@ -13,9 +13,9 @@ five-minute acknowledgement of what Ghostex typed, this file is the archive of
 what the USER typed.
 
 Each row replays as the envelope the CLI would have written, which is what buys
-these rows their whole presentation for free: the client's noise classifier
-already renders `<command-name>` as a `Slash command` row and
-`<local-command-stdout>` as `Local command output`, already folds `/model` and
+these rows their whole presentation for free: the chat core already draws
+`<command-name>` as the user's own bubble and `<local-command-stdout>` as a
+status note under it (`surface_skill_invocation_user_turns`), already folds `/model` and
 `/effort` into their status pills, and already retires the live app-command
 acknowledgement when a matching envelope reaches the messages. Nothing new
 renders them.

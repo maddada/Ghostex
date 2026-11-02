@@ -464,6 +464,10 @@ impl NativeChatView {
                 .border_color(gpui::transparent_black())
                 .p(px(12.0 * s))
                 .bg(p.input)
+                // A slash command reads as one, in the chat's monospace (gx-chat-core `is_slash_command_line`).
+                .when(message["slashCommand"] == true, |bubble| {
+                    bubble.font_family(super::fonts::CHAT_MONO)
+                })
                 .child(self.prompt_body(&id, message, body.clone(), &bubble_appearance, p, cx))
                 .children(indicator);
             let failed_delivery = self.render_startup_delivery(message, false, p, cx);

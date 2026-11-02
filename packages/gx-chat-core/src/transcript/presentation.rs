@@ -325,6 +325,14 @@ pub fn project_message(
         "images".to_string(),
         Value::Array(images.iter().map(image_source).collect()),
     );
+    // A slash command is the user's bubble with its text in monospace (`is_slash_command_line`).
+    projected.insert(
+        "slashCommand".to_string(),
+        (is_user
+            && suppressed.is_null()
+            && crate::transcript::local_command::is_slash_command_line(&copy_text))
+        .into(),
+    );
     projected.insert("suppressed".to_string(), suppressed);
     projected.insert(
         "apiError".to_string(),

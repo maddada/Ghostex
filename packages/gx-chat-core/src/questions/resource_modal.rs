@@ -786,7 +786,7 @@ mod tests {
         assert!(advance(&mut state, &context).is_empty(), "one retry only");
         let old = serde_json::to_value(reply("old-form", FORM)).unwrap();
         settle(&mut state, request_id, json!([old]));
-        crate::session::composition::compose_cached(&mut state, &[], None, false);
+        crate::session::composition::compose_cached(&mut state, None, false);
         crate::transcript::refresh(&mut state, &context);
         after_refresh(&mut state, &context);
         assert!(state.questions.resource_go.is_none(), "the jump is done");
@@ -834,7 +834,7 @@ mod tests {
         );
         assert!(!state.messages.loading_earlier);
         // The seam composes and refreshes the transcript, then advances the jump.
-        crate::session::composition::compose_cached(&mut state, &[], None, false);
+        crate::session::composition::compose_cached(&mut state, None, false);
         crate::transcript::refresh(&mut state, &context);
         assert!(
             loaded(&state, &id),
