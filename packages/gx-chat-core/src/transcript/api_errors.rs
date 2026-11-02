@@ -285,7 +285,8 @@ pub fn api_error_card(state: &ChatState, context: &ChatContext) -> Value {
         Some("waiting" | "busy" | "done") => "warning",
         _ => "error",
     };
-    let body = if tone == "warning" {
+    // Only while a try is still coming: a stale "Retried at" (`done`) is amber too, but nothing is retrying.
+    let body = if matches!(status["tone"].as_str(), Some("waiting" | "busy")) {
         format!("{} Ghostex keeps retrying.", kind_body(kind))
     } else {
         kind_body(kind).to_string()
