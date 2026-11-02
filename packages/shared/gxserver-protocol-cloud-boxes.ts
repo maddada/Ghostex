@@ -297,7 +297,8 @@ export type GxserverCloudBoxesAction =
   | 'boxIdleStatus'
   | 'boxWorkStatus'
   | 'boxWriteBack'
-  | 'pullBranch';
+  | 'pullBranch'
+  | 'cloudKit';
 
 export const GXSERVER_CLOUD_BOXES_ERROR_CODES = {
   capReached: 'cloudCapReached',
@@ -308,6 +309,7 @@ export const GXSERVER_CLOUD_BOXES_ERROR_CODES = {
   hasUnpushedWork: 'cloudBoxHasUnpushedWork',
   boxInUse: 'cloudBoxInUse',
   wrongState: 'cloudBoxWrongState',
+  kitOff: 'cloudKitOff',
 } as const;
 
 /** Params of each action (every request also carries `action`). */
@@ -354,6 +356,7 @@ export interface GxserverCloudBoxesParams {
   boxWriteBack: { ack?: string[] };
   /** A box session's pushed branch into a worktree of its home project (Q1014). */
   pullBranch: { boxId: string; sessionId?: string };
+  cloudKit: Record<string, never>;
 }
 
 export interface GxserverCloudConnectResult {
@@ -441,6 +444,57 @@ export interface GxserverCloudBoxesResults {
   boxWorkStatus: GxserverBoxWorkStatus;
   boxWriteBack: GxserverBoxWriteBackResult;
   pullBranch: { branch: string; projectId: string; path: string; created: boolean; note?: string };
+  cloudKit: GxserverCloudKit;
+}
+
+/** One secret of `secrets.json` on a box (`BoxSecretFile`, `BoxSecretVar`) and an allowed login (`BoxInjectedAccount`). */
+export interface GxserverBoxSecretFile {
+  path: string;
+  contents: string;
+}
+export interface GxserverBoxSecretVar {
+  name: string;
+  value: string;
+}
+export interface GxserverBoxInjectedAccount {
+  accountId: string;
+  agent: string;
+  name: string;
+  /** `claudeBoxToken` or `codexAuthJson`. */
+  kind: string;
+  value: string;
+}
+
+/**
+ * `cloudKit` (`packages/gx-protocol/src/cloud_box/kit.rs`): what a paired phone keeps to start a box
+ * from a project's Default snapshot while the computer is off (Q1033 D7). Only while Settings ›
+ * Cloud Boxes › "Start boxes from your phone" is on; it carries secrets.
+ */
+export interface GxserverCloudKit {
+  version: number;
+  homeMachineId: string;
+  gxserverVersion: string;
+  issuedAt: string;
+  providers: Array<{ provider: GxserverCloudProviderId; key: string }>;
+  accounts: GxserverBoxInjectedAccount[];
+  allowDeviceKeys: string[];
+  idleStopMinutes: number;
+  projects: Array<{
+    homeProjectId: string;
+    projectKey: string;
+    name: string;
+    repoUrl?: string;
+    baseBranch?: string;
+    snapshot: {
+      snapshotId: string;
+      provider: GxserverCloudProviderId;
+      providerSnapshotId: string;
+      size?: string;
+      name: string;
+    };
+    files: GxserverBoxSecretFile[];
+    vars: GxserverBoxSecretVar[];
+  }>;
 }
 
 /** `cloudBoxesChanged`: `box` is the whole new row (replace; `deleted` = drop); without it refetch. */

@@ -100,6 +100,14 @@ impl HomeProject {
         })
     }
 
+    /// The base branch the project's new-chat bar remembers, if any.
+    pub(super) fn remembered_base_branch(&self) -> Option<String> {
+        self.value
+            .pointer("/runtimeSettings/newChatWorktree/baseBranch")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+    }
+
     /// The project's name, for its folder on a box.
     pub(super) fn name(&self) -> String {
         self.value

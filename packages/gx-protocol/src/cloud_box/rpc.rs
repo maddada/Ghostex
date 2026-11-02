@@ -76,6 +76,9 @@ open_string_enum! {
         /// [`PullBranchParams`] → [`PullBranchResult`]. Brings a box session's pushed branch into a
         /// worktree of its home project on this computer (Q1014).
         PullBranch => "pullBranch",
+        /// → [`super::CloudKit`]. What a paired phone keeps to start boxes with the computer off;
+        /// refused with `cloudKitOff` while "Start boxes from your phone" is off.
+        CloudKit => "cloudKit",
     }
 }
 
@@ -99,6 +102,8 @@ pub mod error_codes {
     pub const BOX_IN_USE: &str = "cloudBoxInUse";
     /// The box is not in a state the action needs (connectInfo on a stopped box).
     pub const WRONG_STATE: &str = "cloudBoxWrongState";
+    /// `cloudKit` while Settings › Cloud Boxes › "Start boxes from your phone" is off.
+    pub const KIT_OFF: &str = "cloudKitOff";
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

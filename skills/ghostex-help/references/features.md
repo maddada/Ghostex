@@ -3768,10 +3768,18 @@ it off hides it everywhere and keeps your boxes and settings.
   wakes it. When every session on a box is archived it stops, and is deleted
   after 7 days unless it has unpushed work. Your boxes lists every box with
   Stop and Delete (a box with unpushed work asks before Delete Anyway).
-- **From your phone**: Start boxes from your phone keeps what a phone needs on
-  your paired phones, so they can start, chat with, wake and stop boxes while
-  this computer is off. Connecting providers, the first snapshot and picking
-  secrets stay on the computer.
+- **From your phone**: cloud sessions sit in their project on the phone too,
+  with the same cloud badge, and open in chat without waking the box; sending
+  a message wakes it. The box pill under a cloud chat's header shows its
+  running time and about-$ cost; long-press it (or the session's row) for
+  Stop, Pull branch, Open PR and Delete. A project's agent menu starts with
+  Where: This computer or Cloud Box, remembered per project like the new-chat
+  bar. Start boxes from your phone keeps what a phone needs on your paired
+  phones, so while this computer is off the agent menu offers Start Claude (or
+  Codex) on a Cloud Box…, which starts a box from the project's Default
+  snapshot, and the phone can chat with, wake, stop and delete boxes.
+  Connecting providers, the first snapshot and picking secrets stay on the
+  computer.
 - **More providers (agentbox)**: under Advanced on Settings > Cloud Boxes,
   boxes run through agentbox, a free open-source command line tool
   (https://github.com/madarco/agentbox), on this computer with Docker, on

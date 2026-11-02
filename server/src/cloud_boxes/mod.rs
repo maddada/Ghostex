@@ -13,6 +13,7 @@ mod docker;
 pub(crate) mod endpoint;
 mod events;
 mod http;
+mod kit;
 mod lifecycle;
 mod local_provider;
 mod ops;

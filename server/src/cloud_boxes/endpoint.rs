@@ -15,7 +15,7 @@ use serde_json::{Map, Value};
 
 use super::params::{blocking, to_value, typed};
 use super::{
-    agent_logins, connect, create, events, lifecycle, project, providers, reconcile, registry,
+    agent_logins, connect, create, events, kit, lifecycle, project, providers, reconcile, registry,
     secret_files, snapshots, spend,
 };
 use crate::domain::DomainStateError;
@@ -265,6 +265,11 @@ pub(crate) async fn dispatch(
                 )
                 .await?,
             )
+        }
+        CloudBoxesAction::CloudKit => {
+            let task_state = state.clone();
+            let kit = blocking(move || kit::kit(&task_state)).await??;
+            to_value(&kit)
         }
         CloudBoxesAction::Other(other) => Err(DomainStateError::bad_request(format!(
             "\"{other}\" is not a Cloud Boxes action."

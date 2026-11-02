@@ -8,6 +8,7 @@ pub mod http;
 pub mod ids;
 pub mod instabox;
 pub mod install;
+pub mod json_api;
 pub mod local;
 pub mod metadata;
 pub mod pkce;
