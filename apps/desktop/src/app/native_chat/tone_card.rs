@@ -273,8 +273,9 @@ impl NativeChatView {
                         .bg(footer_shade)
                         .rounded_b(inner_radius)
                         .children(parts.footer_start)
-                        .child(div().flex_1())
-                        .children(parts.footer_end),
+                        .when(!parts.footer_end.is_empty(), |footer| {
+                            footer.child(tone_card_actions(parts.footer_end, s))
+                        }),
                 )
             })
             .into_any_element()
@@ -450,4 +451,20 @@ pub(super) fn command_box(command: String, shell: bool, p: &ChatAppearance) -> A
                 .child(div().flex_1().min_w_0().child(command)),
         )
         .into_any_element()
+}
+
+/// CDXC:SessionChat 2026-11-02 WHY: The footer's actions are one group that fills what the footer leaves and wraps inside itself,
+/// right aligned on every line. A spacer between them and the wrapping footer pushed the first line of a four-button notice right
+/// in a narrow chat and started the wrapped line at the left.
+/// SEE-ALSO: apps/mobile/app/src/chat/native/cards/ToneCard.tsx
+fn tone_card_actions(actions: Vec<AnyElement>, s: f32) -> Div {
+    div()
+        .flex_auto()
+        .min_w_0()
+        .flex()
+        .flex_wrap()
+        .justify_end()
+        .items_center()
+        .gap(px(8.0 * s))
+        .children(actions)
 }
