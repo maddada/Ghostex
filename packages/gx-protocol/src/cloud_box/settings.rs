@@ -149,4 +149,8 @@ pub struct PresentationCloudBox {
         skip_serializing_if = "std::ops::Not::not"
     )]
     pub pending: bool,
+    /// The branch the box session was put on ([`SessionCloudBoxRuntime::branch`]), which its
+    /// git row may not carry: clients read it for Pull branch and Open PR.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
 }

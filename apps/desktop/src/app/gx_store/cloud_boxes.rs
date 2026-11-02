@@ -473,13 +473,19 @@ fn cloud_box_local_port(machine_id: &str, info: &CloudBoxConnectInfo) -> Result<
     }
 }
 
-/// The branch a box session works on, as its git row says.
+/// The branch a box session works on, as its git row says, else the one the box put it on.
 fn session_branch(session: &ghostex_gx_core::protocol::PresentationSession) -> Option<String> {
-    let value: Value = serde_json::to_value(session.git_status.as_ref()?).ok()?;
-    value
-        .get("branch")
-        .and_then(Value::as_str)
-        .map(str::to_string)
+    session
+        .git_status
+        .as_ref()
+        .and_then(|git_status| serde_json::to_value(git_status).ok())
+        .and_then(|value| {
+            value
+                .get("branch")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        })
+        .or_else(|| session.cloud_box.as_ref()?.branch.clone())
 }
 
 /// Whether a session key is on a box machine (for callers outside the store).

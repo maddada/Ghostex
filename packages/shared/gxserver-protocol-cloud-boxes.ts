@@ -270,6 +270,8 @@ export interface GxserverPresentationCloudBox {
   boxName: string;
   homeProjectId?: string;
   pending?: true;
+  /** The branch the box session was put on, which its git row may not carry. */
+  branch?: string;
 }
 
 export type GxserverCloudBoxesAction =

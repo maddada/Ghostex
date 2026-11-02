@@ -18,7 +18,11 @@ use crate::metadata::{self, BoxMetadata};
 
 /// The base image of a blank local box (overridable with [`BASE_IMAGE_ENV`]). Debian rather than
 /// Alpine so the agent CLIs W2 installs find glibc.
-pub const BASE_IMAGE: &str = "debian:bookworm-slim";
+///
+/// CDXC:CloudBoxes 2026-11-02 WHY: `debian:bookworm-slim` has no git, so every blank local box
+/// failed at "Fetching the code and starting the agent" ("Can't run git"). The official
+/// `buildpack-deps:bookworm-scm` is the same Debian with git, curl, ca-certificates and procps.
+pub const BASE_IMAGE: &str = "buildpack-deps:bookworm-scm";
 pub const BASE_IMAGE_ENV: &str = "GHOSTEX_CLOUD_BOXES_LOCAL_IMAGE";
 /// Override for the Linux gxserver package folder copied into each box.
 pub const PACKAGE_DIR_ENV: &str = "GHOSTEX_CLOUD_BOXES_LOCAL_PACKAGE";

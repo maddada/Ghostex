@@ -486,7 +486,19 @@ impl GhostexGpuiApp {
                         session_id: session_id.clone(),
                         title: session.title.clone(),
                         agent_id: session.agent_id.clone(),
-                        branch: None,
+                        // The git row's branch, else the one the box put the session on (the
+                        // desktop's `session_branch`); `None` here wiped what the other clients reported.
+                        branch: session
+                            .git_status
+                            .as_ref()
+                            .and_then(|git_status| serde_json::to_value(git_status).ok())
+                            .and_then(|value| {
+                                value
+                                    .get("branch")
+                                    .and_then(|branch| branch.as_str())
+                                    .map(str::to_string)
+                            })
+                            .or_else(|| session.cloud_box.as_ref()?.branch.clone()),
                         agent_session_id: session.agent_session_id.clone(),
                         last_active_at: Some(session.updated_at.clone())
                             .filter(|updated_at| !updated_at.is_empty()),

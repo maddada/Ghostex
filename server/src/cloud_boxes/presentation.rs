@@ -30,6 +30,7 @@ pub(crate) fn presentation_cloud_box_value(session: &Value) -> Option<Value> {
             box_name: String::new(),
             home_project_id: None,
             pending: true,
+            branch: None,
         };
         return serde_json::to_value(presentation).ok();
     }
@@ -45,6 +46,10 @@ pub(crate) fn presentation_cloud_box_value(session: &Value) -> Option<Value> {
         box_name: String::new(),
         home_project_id: runtime.home_project_id,
         pending: false,
+        // CDXC:CloudBoxes 2026-11-02 WHY: the box's gxserver publishes no git row for its sessions,
+        // so Pull branch and Open PR stayed disabled on every client; the branch prepare-session made
+        // is in the session's own record.
+        branch: runtime.branch,
     };
     serde_json::to_value(presentation).ok()
 }
