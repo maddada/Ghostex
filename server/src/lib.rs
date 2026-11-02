@@ -253,6 +253,7 @@ pub mod sidebar_project_collections;
 pub mod sidebar_spaces;
 pub mod source_control;
 pub mod storage;
+pub(crate) mod storage_cleanup;
 pub mod tailcat;
 pub mod tcp_listeners;
 pub(crate) mod team_sync;

@@ -22,6 +22,47 @@ pub(super) fn visual_pages_dir(gxserver_state_dir: &Path) -> PathBuf {
     gxserver_state_dir.join(VISUAL_PAGES_DIR_NAME)
 }
 
+/// CDXC:ServerDaemon 2026-11-03 DECISION:
+/// User chose: a published page is deleted 90 days after it was published, with its record and its card picture; its card in an old chat then no longer opens.
+const PAGE_MAX_AGE: std::time::Duration =
+    std::time::Duration::from_secs(90 * crate::storage_cleanup::DAY.as_secs());
+
+/// Deletes every page published more than [`PAGE_MAX_AGE`] ago (`<id>.html`, `<id>.json`,
+/// `<id>.png`), measured from the page file, which is written once when the page is published.
+pub(crate) fn prune_old_pages(
+    gxserver_state_dir: &Path,
+    now: std::time::SystemTime,
+) -> crate::storage_cleanup::Tally {
+    use crate::storage_cleanup::{is_older, remove_file, Since, Tally};
+    let dir = visual_pages_dir(gxserver_state_dir);
+    let mut tally = Tally::default();
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return tally;
+    };
+    let _guard = RECORD_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some(id) = name.strip_suffix(".html").filter(|id| is_page_id(id)) else {
+            continue;
+        };
+        let page = entry.path();
+        let old = fs::metadata(&page)
+            .is_ok_and(|metadata| is_older(&metadata, Since::Modified, PAGE_MAX_AGE, now));
+        if !old {
+            continue;
+        }
+        for extension in ["html", "json", "png"] {
+            let path = dir.join(format!("{id}.{extension}"));
+            if let Ok(metadata) = fs::metadata(&path) {
+                remove_file(&path, &metadata, &mut tally);
+            }
+        }
+    }
+    tally
+}
+
 /// 128 random bits from the operating system's generator, as 32 lowercase hex characters.
 fn new_page_id() -> String {
     let mut bytes = [0u8; 16];

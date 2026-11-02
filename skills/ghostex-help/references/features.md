@@ -4889,8 +4889,8 @@ switch it off in Settings > Extensions, or `debuggingHidden`, to drop the page).
 Enable that switch to see Diagnostic logs. Diagnostic logs has one switch per area (terminals,
 sidebar, chat, modals, board, remote machines, agent activity, prompt editor,
 app lifecycle, server requests) and one Turn logs off after choice (15 min,
-1 hour, or Never) shared by all of them; warnings, errors, and crashes are
-always captured. Open the page with `ghostex settings open --tab debugging`.
+1 hour, or 3 days) shared by all of them, so no area stays on longer than 3 days;
+warnings, errors, and crashes are always captured. Open the page with `ghostex settings open --tab debugging`.
 Settings that depend on a setting above them have an indented ↳ before their
 name. They appear when the parent setting enables them.
 In the Settings table of contents, click a page or section title to go there.
@@ -4902,6 +4902,18 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
 `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, the `keepAwake*` rows,
 `showBetaFeatures`, `debuggingMode`.
+
+## Disk space and automatic cleanup
+
+Ghostex deletes old files it made by itself, once a day, so its data folders do not keep
+growing. It removes screenshots agents saved more than 60 days ago (folders named
+`release-*` or `youtube-*` are kept, and images you pasted into chats or board cards are
+never removed), published chat pages after 90 days, log files nothing has written for
+14 days, crash reports after 30 days, backups taken before a data migration after 30 days,
+Ghostex's copies of compressed Codex chats nobody opened for 30 days (opening the chat
+again rebuilds its copy), and closed sessions idle for 90 days from the closed sessions
+list (pinned and favorite sessions stay, and the agent's own conversation files are not
+touched). There is no setting for it.
 
 ## Sending feedback
 

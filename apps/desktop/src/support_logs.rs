@@ -598,6 +598,63 @@ pub fn prune_gpui_support_logs() {
     }
 }
 
+/// The longest a diagnostic area stays on (Settings > Debugging, "Turn logs off after").
+const DIAGNOSTIC_AREA_MAX_ON: Duration = Duration::from_secs(3 * 24 * 60 * 60);
+
+/// Gives every diagnostic area that is on with no end time (the retired "Never" choice, or an
+/// older client's) an end [`DIAGNOSTIC_AREA_MAX_ON`] from now, saved through the settings
+/// service. Runs with the startup retention pass.
+///
+/// SEE-ALSO: packages/settings-catalog/src/data/diagnostic_logging.rs (CDXC:Diagnostics 2026-11-03).
+pub fn bound_open_ended_diagnostic_areas() {
+    let snapshot = shared_settings::shared_sidebar_settings_snapshot();
+    let mut object = snapshot.object().clone();
+    let Some(scenarios) = object
+        .get_mut("diagnosticLogging")
+        .and_then(|logging| logging.get_mut("scenarios"))
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    let expires_at = iso8601_from_epoch_seconds(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .saturating_add(DIAGNOSTIC_AREA_MAX_ON)
+            .as_secs() as i64,
+    );
+    let mut changed = false;
+    for state in scenarios.values_mut() {
+        let open_ended = match state {
+            serde_json::Value::Bool(enabled) => *enabled,
+            serde_json::Value::Object(fields) => {
+                fields.get("enabled").and_then(serde_json::Value::as_bool) == Some(true)
+                    && fields
+                        .get("expiresAt")
+                        .and_then(serde_json::Value::as_str)
+                        .is_none_or(|value| value.trim().is_empty())
+            }
+            _ => false,
+        };
+        if open_ended {
+            *state = serde_json::json!({ "enabled": true, "expiresAt": expires_at });
+            changed = true;
+        }
+    }
+    if changed {
+        if let Err(error) = shared_settings::write_shared_sidebar_settings_object(object) {
+            log::error!(
+                "Could not give the open-ended diagnostic log areas an end time: {error:?}"
+            );
+        }
+    }
+}
+
+fn iso8601_from_epoch_seconds(epoch_seconds: i64) -> String {
+    let (year, month, day, hour, minute, second) = civil_from_epoch(epoch_seconds);
+    format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.000Z")
+}
+
 fn trim_log_to_retained_lines(path: &Path, max_lines: usize) -> std::io::Result<()> {
     if !path.exists() {
         return Ok(());

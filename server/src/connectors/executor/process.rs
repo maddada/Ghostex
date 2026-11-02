@@ -114,6 +114,7 @@ fn start(
     let data_dir = settings::data_dir(paths, workspace);
     create_private_dir(&data_dir)?;
     stop_leftover(&data_dir);
+    discard_previous_traces(&data_dir);
     if TcpListener::bind(("127.0.0.1", settings.port)).is_err() {
         return Err(format!(
             "Port {} is taken by another program, and this workspace's Executor needs it (its app sign-ins come back there). Close that program and try again.",
@@ -157,6 +158,12 @@ fn start(
         }
         std::thread::sleep(Duration::from_millis(300));
     }
+}
+
+/// CDXC:ServerDaemon 2026-11-03 DECISION:
+/// User chose: delete Executor's trace database and stop it from piling up. Executor (2.0.0-beta.22) always records its own traces and logs into `diagnostics/motel`, with no setting to turn that off and no size limit (657 MB after five days), and Ghostex never reads it. Each start clears the last run's database while Executor is stopped, so only the current run's traces exist.
+fn discard_previous_traces(data_dir: &Path) {
+    let _ = fs::remove_dir_all(data_dir.join("diagnostics").join("motel"));
 }
 
 fn create_private_dir(dir: &Path) -> Result<(), String> {

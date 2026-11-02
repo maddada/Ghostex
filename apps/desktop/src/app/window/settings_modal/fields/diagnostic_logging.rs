@@ -109,8 +109,10 @@ fn scenario_duration(value: &Value, scenario: &str) -> &'static str {
     if state.get("enabled").and_then(Value::as_bool) != Some(true) {
         return "off";
     }
+    // An area turned on before the 3-day limit existed has no end yet; the desktop gives it one
+    // a minute after launch (`support_logs::bound_open_ended_diagnostic_areas`).
     let Some(expires_at) = state.get("expiresAt").and_then(Value::as_str) else {
-        return "always";
+        return "3d";
     };
     let Some(expires_ms) = parse_iso_ms(expires_at) else {
         return "off";
@@ -121,8 +123,10 @@ fn scenario_duration(value: &Value, scenario: &str) -> &'static str {
     }
     if expires_ms - now <= 30 * 60 * 1000 {
         "15m"
-    } else {
+    } else if expires_ms - now <= 2 * 60 * 60 * 1000 {
         "1h"
+    } else {
+        "3d"
     }
 }
 
@@ -131,7 +135,9 @@ fn scenario_state(duration: &str) -> Value {
     match duration {
         "15m" => json!({ "enabled": true, "expiresAt": iso_string(now_ms() + 15 * 60 * 1000) }),
         "1h" => json!({ "enabled": true, "expiresAt": iso_string(now_ms() + 60 * 60 * 1000) }),
-        "always" => json!({ "enabled": true }),
+        "3d" => {
+            json!({ "enabled": true, "expiresAt": iso_string(now_ms() + 3 * 24 * 60 * 60 * 1000) })
+        }
         _ => json!({ "enabled": false }),
     }
 }
@@ -228,8 +234,8 @@ pub(crate) fn diagnostic_logging_field<V: SettingsPage>(
                 .iter()
                 .map(|id| scenario_duration(value, id))
                 .collect();
-            if durations.contains(&"always") {
-                "always".to_string()
+            if durations.contains(&"3d") {
+                "3d".to_string()
             } else {
                 durations
                     .first()
