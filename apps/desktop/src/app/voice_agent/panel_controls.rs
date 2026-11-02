@@ -28,6 +28,8 @@ pub(crate) struct ControlColors {
     pub(crate) muted: Hsla,
     pub(crate) border: Hsla,
     pub(crate) background: Hsla,
+    /// A neutral button's fill: the frosted dialogs' raised wash under window glass.
+    pub(crate) raised: Hsla,
 }
 
 /// How the hold button looks, from what holding would do now.
@@ -72,11 +74,7 @@ pub(crate) fn hold_button(
             rgba(0x38bdf8ff).into(),
             rgba(0x0b1220ff).into(),
         ),
-        HoldLook::Unavailable => (
-            colors.ink.opacity(0.07),
-            colors.ink.opacity(0.07),
-            colors.muted.opacity(0.7),
-        ),
+        HoldLook::Unavailable => (colors.raised, colors.raised, colors.muted.opacity(0.7)),
     };
     let held = look == HoldLook::Held;
     let label = tooltip.clone();
@@ -89,9 +87,14 @@ pub(crate) fn hold_button(
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(8.0))
+        // The panel's other buttons' radius (`RESOURCE_CONTROL_RADIUS`, which this file can't name
+        // because the preview binary compiles it too).
+        .rounded(px(5.0))
         .bg(fill)
         .cursor_default()
+        .when(look == HoldLook::Unavailable, |this| {
+            this.border_1().border_color(colors.border)
+        })
         .when(held, |this| {
             this.border_2()
                 .border_color(rgba(0x38bdf866))

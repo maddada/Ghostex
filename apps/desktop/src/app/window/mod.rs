@@ -39,7 +39,7 @@ pub(crate) mod remote_setup_modal;
 pub(crate) mod remote_sites;
 pub(crate) mod rename_session_modal;
 pub(crate) mod rename_worktree_modal;
-mod resources_style;
+pub(crate) mod resources_style;
 pub(crate) mod session_handoff_modal;
 pub(crate) mod session_links_card;
 pub(crate) mod session_note_modal;

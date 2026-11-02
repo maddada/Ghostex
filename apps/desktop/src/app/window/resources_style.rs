@@ -7,9 +7,9 @@ use crate::*;
 /// User: the Tips, Resources, Dev servers and Notifications dropdowns get the Ask Ghostex menu's roundness instead of a hard square look, with the layout unchanged, and they take the background colour the sidebar shows instead of the near-black menu fill.
 /// The panel matches the menu's 8px corners and cards its 6px rows; small buttons, chips and icon tiles take a slightly smaller radius so they stay proportionate.
 /// SEE-ALSO: titlebar/popup_menu_builders.rs `titlebar_popup_menu_with_scroll_behavior`, helpers/titlebar/chrome_colors.rs `titlebar_background`.
-pub(super) const RESOURCE_PANEL_RADIUS: f32 = 8.0;
+pub(crate) const RESOURCE_PANEL_RADIUS: f32 = 8.0;
 pub(super) const RESOURCE_CARD_RADIUS: f32 = 6.0;
-pub(super) const RESOURCE_CONTROL_RADIUS: f32 = 5.0;
+pub(crate) const RESOURCE_CONTROL_RADIUS: f32 = 5.0;
 
 /// The frame alone paints the panel fill: a square child fill would cover its rounded corners.
 /// `titlebar_background` is the sidebar's own flat base, the solid counterpart of the gradient the
@@ -26,7 +26,7 @@ pub(super) fn resource_panel_frame() -> gpui::Div {
         .text_color(chrome_ink())
 }
 
-pub(super) fn resource_header() -> gpui::Div {
+pub(crate) fn resource_header() -> gpui::Div {
     h_flex()
         .relative()
         .h(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT))
@@ -43,7 +43,7 @@ pub(super) fn resource_header() -> gpui::Div {
 /// Under window glass these panels take the dialogs' washes on the darker panel frost
 /// (CDXC:AppModal 2026-10-29 on `frosted_dialog_fill`): the cards at the panel wash, their edges and
 /// the header's line at the hairline.
-pub(super) fn resource_glass_washes() -> super::native_modal_kit::FrostedDialogWashes {
+pub(crate) fn resource_glass_washes() -> super::native_modal_kit::FrostedDialogWashes {
     super::native_modal_kit::frosted_dialog_washes(chrome_uses_light_appearance())
 }
 

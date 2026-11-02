@@ -26,6 +26,9 @@ use crate::app::helpers::*;
 #[cfg(not(target_os = "windows"))]
 use crate::app::native_chat::child_window::move_child_window;
 use crate::app::render::workarea_header::workarea_header_bottom_y;
+use crate::app::window::resources_style::{
+    RESOURCE_CONTROL_RADIUS, RESOURCE_PANEL_RADIUS, resource_glass_washes, resource_header,
+};
 use crate::app::window::settings_modal::catalog::settings_catalog;
 use crate::app::window::*;
 use crate::*;
@@ -54,7 +57,6 @@ const PANEL_EDGE: f32 = 6.0;
 const DRAG_THRESHOLD: f32 = 3.0;
 /// Within this distance of the transcript's end, new lines keep it scrolled to the end.
 const FOLLOW_SLACK: f32 = 24.0;
-const PANEL_RADIUS: f32 = 12.0;
 /// How long the main window's size must hold before the panel is placed again.
 const REPOSITION_DELAY: std::time::Duration = std::time::Duration::from_millis(160);
 
@@ -77,10 +79,16 @@ const MEMORY_ACCENT: u32 = 0xa78bfaff;
 /// The panel's colours for the chrome's appearance.
 struct PanelColors {
     background: Hsla,
+    /// The panel's outer edge.
+    edge: Hsla,
+    /// The hairlines under the header and above the footer, and the edges inside the panel.
     border: Hsla,
     ink: Hsla,
     text: Hsla,
     muted: Hsla,
+    /// A neutral button at rest and hovered (Mute, the hold button, Start again).
+    raised: Hsla,
+    raised_hover: Hsla,
 }
 
 impl PanelColors {
@@ -91,22 +99,37 @@ impl PanelColors {
             muted: self.muted,
             border: self.border,
             background: self.background,
+            raised: self.raised,
         }
     }
 
+    /// CDXC:VoiceMode 2026-11-02 DECISION: User: "please make the voice agent panel transparent like the notifications menu please ... and also should match it's style", then picked "A. The Notifications glass, exactly" and, for captions while talking, "Same glass everywhere". The panel takes the bell dropdown's own surface, blur, edge, 8px corners, 34px header with full-height cells split by hairlines, footer hairline and washes (`popup_window_panel_surface`, `apply_frosted_menu_blur`, `resource_header`, `resource_glass_washes`), with no extra tint behind the transcript; Hang up stays solid red. Without window glass it is the dropdown's solid sidebar colour, as the bell's is. Supersedes the panel's own near-solid #1e1e21 (light #fafafa) at 97% with 12px corners.
+    /// SEE-ALSO: app/window/titlebar_notifications_panel.rs, app/window/resources_style.rs.
     fn resolve() -> Self {
-        let light = chrome_uses_light_appearance();
-        let ink: Hsla = if light { gpui::black() } else { gpui::white() };
+        let ink: Hsla = chrome_ink().into();
+        let glass = window_glass_active();
+        let washes = resource_glass_washes();
         Self {
-            background: if light {
-                rgba(0xfafafaf7).into()
+            background: popup_window_panel_surface(titlebar_background()),
+            edge: titlebar_popup_menu_border_color(),
+            border: if glass {
+                washes.hairline.into()
             } else {
-                rgba(0x1e1e21f7).into()
+                ink.opacity(0.12)
             },
-            border: ink.opacity(if light { 0.10 } else { 0.12 }),
             ink,
-            text: ink.opacity(0.90),
-            muted: ink.opacity(0.55),
+            text: ink.opacity(0.94),
+            muted: ink.opacity(0.58),
+            raised: if glass {
+                washes.raised.into()
+            } else {
+                ink.opacity(0.07)
+            },
+            raised_hover: if glass {
+                washes.raised_hover.into()
+            } else {
+                ink.opacity(0.13)
+            },
         }
     }
 }
@@ -170,6 +193,9 @@ pub(crate) struct VoicePanelWindow {
     app: WeakEntity<GhostexGpuiApp>,
     snapshot: PanelSnapshot,
     scroll: ScrollHandle,
+    /// The window's background as last set; the panel stays open while window glass is turned on
+    /// or off, so its render follows the setting.
+    background: WindowBackgroundAppearance,
     drag: Option<PanelDrag>,
     /// The hold button is held down; releasing the mouse anywhere in the panel ends the hold.
     holding_talk: bool,
@@ -183,6 +209,16 @@ pub(crate) struct VoicePanelWindow {
 fn speed_label(speed: f32) -> String {
     let text = format!("{speed:.1}");
     format!("{}×", text.strip_suffix(".0").unwrap_or(&text))
+}
+
+/// Under window glass the panel's window blurs what is behind it, as the bell dropdown's does
+/// (`titlebar/popup_lifecycle.rs`).
+fn panel_background_appearance() -> WindowBackgroundAppearance {
+    if window_glass_active() {
+        WindowBackgroundAppearance::Blurred
+    } else {
+        WindowBackgroundAppearance::Transparent
+    }
 }
 
 /// The panel's frame in the main window's content coordinates, for a window of `main` size, at
@@ -292,12 +328,13 @@ impl GhostexGpuiApp {
             is_resizable: false,
             is_minimizable: false,
             titlebar: None,
-            window_background: WindowBackgroundAppearance::Transparent,
+            window_background: panel_background_appearance(),
             ..Default::default()
         };
         self.voice_agent.panel = cx
             .open_window(options, move |panel_window, cx| {
-                panel_window.set_background_corner_radius(px(PANEL_RADIUS));
+                panel_window.set_background_corner_radius(px(RESOURCE_PANEL_RADIUS));
+                apply_frosted_menu_blur(panel_window);
                 remove_gpui_app_toast_popup_window_chrome(panel_window, main_window_native_view);
                 cx.new(|_| {
                     let scroll = ScrollHandle::new();
@@ -306,6 +343,7 @@ impl GhostexGpuiApp {
                         app,
                         snapshot,
                         scroll,
+                        background: panel_background_appearance(),
                         drag: None,
                         holding_talk: false,
                         speed_trigger: Default::default(),
@@ -697,11 +735,7 @@ impl VoicePanelWindow {
                 gpui::white(),
             )
         } else {
-            (
-                colors.ink.opacity(0.07),
-                colors.ink.opacity(0.13),
-                colors.text,
-            )
+            (colors.raised, colors.raised_hover, colors.text)
         };
         h_flex()
             .id(id)
@@ -711,7 +745,8 @@ impl VoicePanelWindow {
             .px(px(if label.is_some() { 10.0 } else { 7.0 }))
             .gap(px(6.0))
             .items_center()
-            .rounded(px(8.0))
+            .rounded(px(RESOURCE_CONTROL_RADIUS))
+            .when(!danger, |this| this.border_1().border_color(colors.border))
             .bg(fill)
             .text_color(foreground)
             .text_size(px(12.5))
@@ -798,15 +833,11 @@ impl VoicePanelWindow {
                 .bg(color)
                 .into_any_element()
         };
-        h_flex()
+        let pickers = matches!(snapshot.phase, VoicePhase::Starting | VoicePhase::Live);
+        // The bell dropdown's header: 34px with a hairline under it, the title on the left and
+        // full-height cells split by hairlines on the right.
+        resource_header()
             .id("voice-panel-header")
-            .h(px(36.0))
-            .flex_shrink_0()
-            .px(px(12.0))
-            .gap(px(8.0))
-            .items_center()
-            .border_b_1()
-            .border_color(colors.border)
             .cursor(if self.drag.as_ref().is_some_and(|drag| drag.moved) {
                 CursorStyle::ClosedHand
             } else {
@@ -824,26 +855,29 @@ impl VoicePanelWindow {
                 }),
             )
             .child(
-                div()
-                    .flex()
-                    .size(px(14.0))
-                    .items_center()
-                    .justify_center()
-                    .child(indicator),
-            )
-            .child(
                 h_flex()
                     .flex_1()
                     .min_w_0()
-                    .gap(px(6.0))
+                    .pl(px(12.0))
+                    .pr(px(8.0))
+                    .gap(px(8.0))
                     .items_center()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_shrink_0()
+                            .size(px(14.0))
+                            .items_center()
+                            .justify_center()
+                            .child(indicator),
+                    )
                     .child(
                         div()
                             .min_w_0()
                             .truncate()
                             .text_size(px(13.0))
-                            .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(colors.text)
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(colors.ink.opacity(0.96))
                             .child(label),
                     )
                     .children(
@@ -852,38 +886,64 @@ impl VoicePanelWindow {
                             .map(|lit| controls::keycap("Space", lit, colors.controls())),
                     ),
             )
-            .child(self.voice_button(snapshot, colors, cx))
-            .when(
-                matches!(snapshot.phase, VoicePhase::Starting | VoicePhase::Live),
-                |this| {
-                    this.child(self.speed_button(snapshot, colors, cx))
-                        .child(self.settings_button(colors, cx))
-                },
-            )
+            .child(self.voice_button(snapshot, colors, !pickers, cx))
+            .when(pickers, |this| {
+                this.child(self.speed_button(snapshot, colors, cx))
+                    .child(self.settings_button(colors, cx))
+            })
             .into_any_element()
+    }
+
+    /// One of the header's full-height cells, as the bell dropdown draws its actions
+    /// (`render_notification_header_action`): a hairline on its left, 12px text at 78% ink and a
+    /// 14% wash under the pointer. The last cell follows the panel's top-right corner.
+    fn header_cell(
+        id: &'static str,
+        colors: &PanelColors,
+        last: bool,
+        active: bool,
+    ) -> gpui::Stateful<gpui::Div> {
+        let ink = colors.ink;
+        h_flex()
+            .id(id)
+            .h_full()
+            .flex_shrink_0()
+            .px(px(8.0))
+            .gap(px(4.0))
+            .items_center()
+            .justify_center()
+            .border_l_1()
+            .border_color(colors.border)
+            .when(last, |this| {
+                this.rounded_tr(px(RESOURCE_PANEL_RADIUS - 1.0))
+            })
+            .whitespace_nowrap()
+            .text_size(px(TITLEBAR_POPUP_READING_HEADER_BUTTON_TEXT_SIZE))
+            .text_color(ink.opacity(if active { 0.94 } else { 0.78 }))
+            .when(active, |this| this.bg(ink.opacity(0.14)))
+            .cursor_default()
+    }
+
+    /// The header cells' icon colour, the bell dropdown's 78% ink.
+    fn header_icon_color(colors: &PanelColors) -> Hsla {
+        colors.ink.opacity(0.78)
     }
 
     /// The gear right of the speed button: opens the voice settings menu (what muting bills).
     fn settings_button(&self, colors: &PanelColors, cx: &mut Context<Self>) -> AnyElement {
-        let muted = colors.muted;
-        let hover = colors.ink.opacity(0.08);
+        let ink = colors.ink;
         let trigger = self.settings_trigger.clone();
         let open_menu = move |this: &mut Self, cx: &mut Context<Self>| {
             if let Some(bounds) = this.settings_trigger.get() {
                 this.run(PanelAction::ToggleSettingsMenu(bounds), cx);
             }
         };
-        h_flex()
-            .id("voice-panel-settings")
+        Self::header_cell("voice-panel-settings", colors, true, false)
             .role(gpui::Role::Button)
             .aria_label(SharedString::new_static("Voice settings"))
-            .flex_shrink_0()
-            .size(px(20.0))
-            .items_center()
-            .justify_center()
-            .rounded(px(5.0))
-            .cursor_default()
-            .hover(move |this| this.bg(hover))
+            .w(px(TITLEBAR_POPUP_READING_HEADER_HEIGHT))
+            .px_0()
+            .hover(move |this| this.bg(ink.opacity(0.14)))
             .on_prepaint(move |bounds, _, _| trigger.set(Some(bounds)))
             .on_mouse_down(
                 MouseButton::Left,
@@ -899,7 +959,11 @@ impl VoicePanelWindow {
                     let _ = panel.update(cx, |this, cx| open_menu(this, cx));
                 }
             })
-            .child(titlebar_svg_icon(ICON_SETTINGS, 12.0, muted))
+            .child(titlebar_svg_icon(
+                ICON_SETTINGS,
+                14.0,
+                Self::header_icon_color(colors),
+            ))
             .into_any_element()
     }
 
@@ -912,31 +976,20 @@ impl VoicePanelWindow {
         colors: &PanelColors,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let muted = colors.muted;
-        let hover = colors.ink.opacity(0.08);
+        let ink = colors.ink;
         let trigger = self.speed_trigger.clone();
         let open_menu = move |this: &mut Self, cx: &mut Context<Self>| {
             if let Some(bounds) = this.speed_trigger.get() {
                 this.run(PanelAction::ToggleSpeedMenu(bounds), cx);
             }
         };
-        h_flex()
-            .id("voice-panel-speed")
+        Self::header_cell("voice-panel-speed", colors, false, false)
             .role(gpui::Role::Button)
             .aria_label(SharedString::from(format!(
                 "Speaking speed {}. Change the speed",
                 speed_label(snapshot.speed)
             )))
-            .flex_shrink_0()
-            .h(px(20.0))
-            .px(px(5.0))
-            .gap(px(3.0))
-            .items_center()
-            .rounded(px(5.0))
-            .text_size(px(10.5))
-            .text_color(muted)
-            .cursor_default()
-            .hover(move |this| this.bg(hover))
+            .hover(move |this| this.bg(ink.opacity(0.14)).text_color(ink.opacity(0.94)))
             .on_prepaint(move |bounds, _, _| trigger.set(Some(bounds)))
             .on_mouse_down(
                 MouseButton::Left,
@@ -953,7 +1006,11 @@ impl VoicePanelWindow {
                 }
             })
             .child(speed_label(snapshot.speed))
-            .child(titlebar_svg_icon(ICON_CHEVRON, 9.0, muted))
+            .child(titlebar_svg_icon(
+                ICON_CHEVRON,
+                11.0,
+                Self::header_icon_color(colors),
+            ))
             .into_any_element()
     }
 
@@ -962,6 +1019,7 @@ impl VoicePanelWindow {
         &self,
         snapshot: &PanelSnapshot,
         colors: &PanelColors,
+        last: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let label = match (&snapshot.provider, &snapshot.voice) {
@@ -973,27 +1031,16 @@ impl VoicePanelWindow {
         let pickable =
             !snapshot.voice_options.is_empty() && matches!(snapshot.phase, VoicePhase::Live);
         let open = snapshot.voice_picker_open;
-        let muted = colors.muted;
-        let hover = colors.ink.opacity(0.08);
-        h_flex()
-            .id("voice-panel-voice")
-            .flex_shrink_0()
-            .h(px(24.0))
-            .px(px(6.0))
-            .gap(px(5.0))
-            .items_center()
-            .rounded(px(6.0))
-            .text_size(px(11.5))
-            .text_color(if open { colors.text } else { muted })
-            .when(open, |this| this.bg(hover))
-            .child(titlebar_svg_icon(ICON_HEADSET, 12.0, muted))
+        let ink = colors.ink;
+        let icon = Self::header_icon_color(colors);
+        Self::header_cell("voice-panel-voice", colors, last, open)
+            .child(titlebar_svg_icon(ICON_HEADSET, 14.0, icon))
             .child(label)
             .when(pickable, |this| {
                 this.role(gpui::Role::Button)
                     .aria_label(SharedString::new_static("Change the voice"))
-                    .cursor_default()
-                    .hover(move |this| this.bg(hover))
-                    .child(titlebar_svg_icon(ICON_CHEVRON, 11.0, muted))
+                    .hover(move |this| this.bg(ink.opacity(0.14)).text_color(ink.opacity(0.94)))
+                    .child(titlebar_svg_icon(ICON_CHEVRON, 11.0, icon))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|_, _: &MouseDownEvent, window, cx| {
@@ -1258,7 +1305,7 @@ impl VoicePanelWindow {
                             .text_size(px(12.5))
                             .line_height(px(17.0))
                             .text_color(if you {
-                                colors.text.opacity(0.78)
+                                colors.ink.opacity(0.78)
                             } else {
                                 colors.text
                             })
@@ -1345,19 +1392,27 @@ impl VoicePanelWindow {
             .flex_1()
             .min_h_0()
             .when_some(memory, |this, memory| this.child(memory))
+            // Laid out like the bell dropdown's "No notifications yet" (`render_notifications_empty_state`).
             .when(empty, |this| {
                 this.child(
                     v_flex()
                         .flex_1()
                         .items_center()
                         .justify_center()
-                        .gap(px(4.0))
+                        .gap(px(6.0))
                         .px(px(24.0))
                         .text_center()
+                        .child(titlebar_svg_icon(
+                            ICON_MIC,
+                            32.0,
+                            colors.ink.opacity(0.35),
+                        ))
                         .child(
                             div()
+                                .mt(px(4.0))
                                 .text_size(px(13.0))
-                                .text_color(colors.text)
+                                .font_weight(gpui::FontWeight::MEDIUM)
+                                .text_color(colors.ink.opacity(0.86))
                                 .child(match snapshot.phase {
                                     VoicePhase::Live => "Go ahead, I'm listening.",
                                     _ => "Starting the voice agent…",
@@ -1367,7 +1422,7 @@ impl VoicePanelWindow {
                             div()
                                 .text_size(px(11.5))
                                 .line_height(px(16.0))
-                                .text_color(colors.muted)
+                                .text_color(colors.ink.opacity(0.50))
                                 .child("Ask what your agents are doing, send one a prompt, answer a question, or start a new agent."),
                         ),
                 )
@@ -1713,7 +1768,16 @@ impl VoicePanelWindow {
 }
 
 impl Render for VoicePanelWindow {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let background = panel_background_appearance();
+        if background != self.background {
+            window.set_background_appearance(background);
+            self.background = background;
+        }
+        // The panel stays open, so it follows the Menu blur slider here rather than at open
+        // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
+        #[cfg(target_os = "macos")]
+        apply_frosted_menu_blur(window);
         let snapshot = &self.snapshot;
         let colors = PanelColors::resolve();
         v_flex()
@@ -1722,9 +1786,9 @@ impl Render for VoicePanelWindow {
             .aria_label(SharedString::new_static("Voice agent"))
             .size_full()
             .overflow_hidden()
-            .rounded(px(PANEL_RADIUS))
+            .rounded(px(RESOURCE_PANEL_RADIUS))
             .border_1()
-            .border_color(colors.border)
+            .border_color(colors.edge)
             .bg(colors.background)
             .font_family(crate::ui_fonts::UI_FONT)
             .child(self.header(snapshot, &colors, cx))
