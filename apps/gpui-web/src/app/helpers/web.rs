@@ -116,6 +116,11 @@ pub(crate) fn popup_window_surface(color: gpui::Hsla) -> gpui::Hsla {
     color
 }
 
+/// The desktop's `popup_menu_surface` (chrome_colors.rs): the sidebar menus' fill, solid on a page.
+pub(crate) fn popup_menu_surface() -> gpui::Hsla {
+    crate::app::helpers::titlebar_popup_menu_background()
+}
+
 /// A page has no window glass, so a menu keeps its solid fill.
 pub(crate) fn frosted_menu_fill(color: gpui::Hsla) -> gpui::Hsla {
     color

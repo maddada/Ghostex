@@ -482,10 +482,8 @@ impl Render for ChatOptionMenuPanel {
             }
             body = body.child(item);
         }
-        // A menu the chat box's pill strip opened takes the Links list's surface and edge.
-        //
-        // CDXC:SessionChat 2026-10-29 DECISION:
-        // User, of the strip's menus: "make all those menus have same bg too please (i like the one we have in Links menu there)". Resources, Workers, Tasks, Subagents and Background draw on the Links list's fill (`popup_window_surface(titlebar_background())`) with its border colour (native_sidebar/links_list.rs); other chat menus keep the chat's menu tone.
+        // A menu the chat box's pill strip opened takes the sidebar menus' surface and edge
+        // (`popup_menu_surface` has the user's words).
         let strip_menu = self
             .menu
             .read(cx)
@@ -493,9 +491,7 @@ impl Render for ChatOptionMenuPanel {
             .is_some_and(|pill| pill.starts_with("chat-pill-"));
         let (surface, edge) = if strip_menu {
             (
-                crate::app::helpers::popup_window_surface(
-                    crate::app::helpers::titlebar_background(),
-                ),
+                crate::app::helpers::popup_menu_surface(),
                 crate::app::helpers::titlebar_popup_menu_border_color(),
             )
         } else {

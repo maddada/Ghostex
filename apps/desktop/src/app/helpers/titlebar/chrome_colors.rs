@@ -126,6 +126,15 @@ pub(crate) fn titlebar_popup_menu_background() -> Hsla {
     rgb(GPUI_MENU_BACKGROUND_RGB.load(Ordering::Relaxed)).into()
 }
 
+/// The surface of a menu in a window of its own: the sidebar's dropdown menus' fill, frosted under
+/// window glass (`popup_window_surface`).
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, of the chat box's pill strip: "these panels in the pills bar above the composer are darker than this menu. please make those pill panels have same bg as the dropdown menu in the sidebar". The sidebar's menus and every menu the strip opens (Resources, Workers, Tasks, Subagents, Background and Links) take this one surface. Supersedes the 2026-10-29 decision that put the strip's menus on the Links list's chrome-coloured fill.
+pub(crate) fn popup_menu_surface() -> Hsla {
+    popup_window_surface(titlebar_popup_menu_background())
+}
+
 pub(crate) fn titlebar_popup_menu_foreground() -> Hsla {
     rgb(if titlebar_uses_light_theme() {
         0x292929
