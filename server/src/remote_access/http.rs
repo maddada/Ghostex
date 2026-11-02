@@ -101,7 +101,7 @@ pub(crate) async fn handle_remote_access_http(
                     let text = encode_easy_connect_code(&code);
                     result.insert(
                         "easyConnect".to_string(),
-                        json!({ "payload": pairing_link(&text), "text": text, "code": code }),
+                        json!({ "payload": easy_connect_pairing_link(&code), "text": text, "code": code }),
                     );
                 }
                 if let Some((host, ip)) = cached_tailscale_status().reachable_address() {
