@@ -2122,7 +2122,8 @@ the whole app, remembered across restarts). When the chat is wide enough the
 panel sits beside it as its own column and the conversation moves over to make
 room; when it is too narrow the panel opens as a floating card under the ring,
 and a click on the chat closes it. Its cards: Environment (this computer or the
-box the session runs in, its folder, branch and account); Context (how full the
+box the session runs in, its folder, branch and account, and how much memory
+the session's processes use while it runs on this computer); Context (how full the
 context window is, with Claude's own breakdown into messages, memory files,
 skills, tools and free space; Ghostex asks a silent read-only copy of the
 session, so nothing is typed into it and no tokens are spent, and it counts

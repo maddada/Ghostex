@@ -575,6 +575,7 @@ impl NativeChatView {
                 Some("folder") => Some("titlebar/folder.svg"),
                 Some("branch") => Some("titlebar/git-branch.svg"),
                 Some("user") => Some("titlebar/user.svg"),
+                Some("memory") => Some("titlebar/cpu.svg"),
                 _ if id == "memory" => Some("titlebar/file-text.svg"),
                 _ => None,
             };
