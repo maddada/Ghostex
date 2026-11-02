@@ -637,6 +637,8 @@ pub struct GhostexGpuiApp {
     pub(crate) native_automate: Option<Entity<crate::app::native_automate::NativeAutomateView>>,
     /// The Changes view (app/native_changes/), made the first time it is drawn.
     pub(crate) native_changes: Option<Entity<crate::app::native_changes::ChangesView>>,
+    /// The chat views of the view panel's side chat tabs (app/side_chat_panel/), by tab.
+    pub(crate) side_panel_chats: HashMap<SideChatTabId, crate::app::side_chat_panel::SidePanelChat>,
     /// What an entry point asked the Changes view to show when it next draws.
     pub(crate) native_changes_preset: Option<crate::app::native_changes::ChangesPreset>,
     /// The Bot automations feed page, cached like Automate's (`app/native_bot_feed/host.rs`).

@@ -215,6 +215,7 @@ fn tick(state: &AppState, memory: &Mutex<SupervisorMemory>) -> Vec<Delivery> {
     {
         republish_session_chat(state, &project_id, &session_id);
     }
+    super::side_chat_http::refresh_side_chats(state, &db, &repository);
     let Ok(mut memory) = memory.lock() else {
         return Vec::new();
     };
@@ -941,7 +942,7 @@ async fn send_to_coordinator(
 /// Re-sends an open chat its current state, now carrying a refreshed Threads panel (or, for the
 /// delivery watch, its settled agent messages); the same frame a queue change sends, without its
 /// presentation delta.
-pub(super) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
+pub(crate) fn republish_session_chat(state: &AppState, project_id: &str, session_id: &str) {
     let key = session_observer_key(project_id, session_id);
     let options = state
         .session_chat_option_cache

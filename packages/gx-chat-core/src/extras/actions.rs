@@ -79,6 +79,28 @@ pub fn handle_with_ids(
         .into_iter()
         .collect(),
 
+        ActionKind::OpenSideChat => {
+            crate::extras::side_chats::open(text(action, "projectId"), text(action, "sessionId"))
+                .into_iter()
+                .collect()
+        }
+        ActionKind::BringBackSideChat | ActionKind::DeleteSideChat => {
+            let target = action
+                .param("sessionId")
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let call = if action.kind == ActionKind::BringBackSideChat {
+                crate::extras::side_chats::SideChatCall::BringBack(target)
+            } else {
+                crate::extras::side_chats::SideChatCall::Delete(target)
+            };
+            vec![crate::extras::side_chats::call(
+                &mut state.extras.panels,
+                call,
+                next_request_id(),
+            )]
+        }
+
         ActionKind::SearchOpen => {
             search::open(&mut state.extras.search);
             Vec::new()

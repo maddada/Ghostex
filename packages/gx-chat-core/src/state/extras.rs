@@ -84,6 +84,9 @@ pub struct PanelsState {
     pub threads_all_request: Option<(u64, String)>,
     /// The `openCoordinatorThread` in flight for a clicked thread row; a newer click replaces it.
     pub threads_open_request: Option<u64>,
+    /// The side chat call in flight (`extras::side_chats`): Bring back or Delete, and the side
+    /// chat it names.
+    pub side_chat_request: Option<(u64, crate::extras::side_chats::SideChatCall)>,
     /// The grouped background-task row is unfolded to its tasks; folded by default, per chat.
     pub background_tasks_open: bool,
 }
@@ -99,6 +102,7 @@ impl Default for PanelsState {
             threads_all: None,
             threads_all_request: None,
             threads_open_request: None,
+            side_chat_request: None,
             background_tasks_open: false,
         }
     }

@@ -10,8 +10,8 @@ use crate::extras::welcome::{
     welcome_agent_icon, welcome_agent_name,
 };
 use crate::extras::{
-    chat_pills, coordinator_threads, panels, save_markdown, search, subagent, terminal_tail,
-    working_card, working_strip,
+    chat_pills, coordinator_threads, panels, save_markdown, search, side_chats, subagent,
+    terminal_tail, working_card, working_strip,
 };
 use crate::state::{ChatContext, ChatState};
 
@@ -53,6 +53,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &fleet_strip,
         &background,
     );
+    let side_chats_panel = side_chats::project(state.session.side_chats.as_ref());
+    if let Some(pill) = side_chats::pill(&side_chats_panel) {
+        into.chat_pills.insert(0, pill);
+    }
     into.chat_pills.extend(chat_pills::stashed_pill(
         state.composer.chrome.stashed_prompt_count(),
     ));
@@ -63,6 +67,8 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     into.agent_fleet_strip = Tri::Value(fleet_strip);
     into.agent_tasks_panel = Tri::Value(tasks_panel);
     into.coordinator_threads_panel = Tri::Value(threads_panel);
+    into.side_chats_panel = Tri::Value(side_chats_panel);
+    into.side_chat_of = Tri::Value(side_chats::bar(state.session.side_chat_of.as_ref()));
     into.background_tasks_panel = Tri::Value(background);
     into.terminal_tail = terminal_tail::project(&extras.terminal_tail);
     into.subagent = Tri::Value(subagent::project(state));

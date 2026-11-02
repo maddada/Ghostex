@@ -68,6 +68,8 @@ impl GhostexGpuiApp {
                 }
             }
             TitlebarMode::Work => self.work_view_available(),
+            // Side chats are on screen only as tabs: the mode exists while this project has one.
+            TitlebarMode::SideChat => self.has_side_chat_tabs(),
             _ => self
                 .project_scoped_workarea_availability()
                 .titlebar_mode_available(mode),

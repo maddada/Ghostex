@@ -84,6 +84,19 @@ impl GhostexGpuiApp {
 
     fn gx_store_chat_grid_sessions(&self) -> ShownSessions {
         let mut shown = ShownSessions::new();
+        // A side chat in the view panel is a chat on screen too (app/side_chat_panel/).
+        let side_chat = self.side_panel_chat_shown_key().map(|key| match key {
+            GpuiWorkspaceTerminalSessionKey::Local(key) => (None, key.project_id, key.session_id),
+            GpuiWorkspaceTerminalSessionKey::Remote(key) => {
+                (Some(key.remote_machine_id), key.project_id, key.session_id)
+            }
+        });
+        if let Some((machine, project_id, session_id)) = side_chat {
+            shown
+                .entry(machine)
+                .or_default()
+                .insert((project_id, session_id));
+        }
         if !self.agents_workspace_visible() {
             return shown;
         }

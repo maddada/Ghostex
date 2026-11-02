@@ -11,6 +11,7 @@ mod host_messages;
 mod modals;
 mod project_path_actions;
 mod session_links;
+mod side_chat;
 mod toasts;
 mod work_view;
 mod workspace;

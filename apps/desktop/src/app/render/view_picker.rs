@@ -81,6 +81,7 @@ fn view_picker_description(mode: TitlebarMode) -> (gpui::SharedString, Option<gp
         TitlebarMode::Changes => "Review the diff, comment for the agent and commit.",
         TitlebarMode::BotFeed => "Every Hermes cron run, one channel per job.",
         TitlebarMode::Work => "Your tickets, issues and PRs.",
+        TitlebarMode::SideChat => "Ask about a session without interrupting it.",
         TitlebarMode::Extension(id) => {
             let Some(view) = gpui_custom_view(id).filter(|view| !view.url.is_empty()) else {
                 return ("".into(), None);
@@ -444,6 +445,9 @@ fn view_picker_shortcut(mode: TitlebarMode) -> Option<char> {
         TitlebarMode::Changes => Some('G'),
         TitlebarMode::Terminal => Some('T'),
         TitlebarMode::Work => Some('W'),
-        TitlebarMode::Agents | TitlebarMode::BotFeed | TitlebarMode::Extension(_) => None,
+        TitlebarMode::Agents
+        | TitlebarMode::BotFeed
+        | TitlebarMode::SideChat
+        | TitlebarMode::Extension(_) => None,
     }
 }

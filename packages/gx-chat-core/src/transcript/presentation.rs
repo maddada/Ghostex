@@ -141,6 +141,8 @@ pub fn project_message(
         Some((_, rest)) if !rest.is_empty() => rest.as_str(),
         _ => body.as_str(),
     };
+    // A side chat's first message: the bubble shows the question, not the note to its agent.
+    let user_words = crate::composer::side_chat::without_side_chat_note(user_words);
     let user_markdown = is_user.then(|| normalize_user_message_markdown(user_words));
     // Review comment blocks show as the pills they were sent from (`review_comments.rs`); copying
     // the message still gives the full blocks.

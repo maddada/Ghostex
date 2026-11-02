@@ -37,6 +37,15 @@ impl GhostexGpuiApp {
                 .or_default()
                 .insert((session.project_id.clone(), session.session_id.clone()));
         }
+        if let Some(session) = self
+            .web_side_chat_shown()
+            .filter(|session| session.machine == MachineId::Local)
+        {
+            shown
+                .entry(None)
+                .or_default()
+                .insert((session.project_id.clone(), session.session_id.clone()));
+        }
         let calls = self.shown_sessions.report.changes(shown);
         self.web_send_hold_calls(calls, cx);
         if !self.shown_sessions.renewing {

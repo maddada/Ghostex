@@ -271,6 +271,13 @@ pub(crate) fn project_presentation_session(
     command text and launch settings remain outside presentation snapshots.
     */
     insert_optional_string(&mut output, "commandId", string_field(session, "commandId"));
+    // A side chat names its main session; the session lists leave it out (CDXC:SideChats
+    // 2026-11-02 in server/src/side_chats/mod.rs).
+    insert_optional_string(
+        &mut output,
+        "sideChatParentSessionId",
+        crate::side_chats::parent_of(session),
+    );
     output.insert("createdAt".to_string(), value_field(session, "createdAt"));
     insert_optional_js_truthy_value(&mut output, "cwd", session.get("cwd").cloned());
     /*
@@ -351,6 +358,12 @@ pub(crate) fn project_presentation_session(
     output.insert("isPinned".to_string(), value_field(session, "isPinned"));
     output.insert("isParked".to_string(), value_field(session, "isParked"));
     merge_object(&mut output, title);
+    // A side chat is named by its question, not by the name its forked agent reports.
+    if let Some(side_chat_title) = crate::side_chats::side_chat_title(session) {
+        for key in ["title", "primaryTitle", "displayTitle"] {
+            output.insert(key.to_string(), Value::String(side_chat_title.clone()));
+        }
+    }
     // In work mode a session the person never renamed is titled by its branch.
     if let Some(branch_title) = crate::work_mode::work_display_title(
         project,

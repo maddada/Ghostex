@@ -262,7 +262,7 @@ pub struct TurnLifecycle {
 /// | Key | Absent means |
 /// | --- | --- |
 /// | `prompt`, `terminalNotice`, `terminalActivity`, `agentFleet`, `agentTasks` | CLEARED |
-/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `agentMessageDeliveries` | UNCHANGED |
+/// | `selectedOptions`, `draft`, `appCommands`, `returnedPrompt`, `coordinatorThreads`, `sideChats`, `agentMessageDeliveries` | UNCHANGED |
 /// | `queue` | the daemon has no queue support (present even when empty otherwise) |
 /// | `screenProbed` | not probed yet (sticky once true) |
 /// | `agentSessionId` | snapshot or replaced: cleared; state: unchanged |
@@ -305,6 +305,15 @@ pub struct ChatSideState {
     /// session; the Threads panel above its composer. Absent means unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_threads: Option<Value>,
+    /// This session's side chats (`[{ projectId, sessionId, title, working, lifecycleState,
+    /// needsApproval?, needsAnswer?, unread? }]`, server/src/side_chats/panel.rs), carried once it
+    /// has had one; the Side chats pill above its composer. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chats: Option<Value>,
+    /// For a side chat, its main session (`{ sessionId, title }`); the "Side chat of" bar with
+    /// Bring back and Delete. Absent means unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chat_of: Option<Value>,
     /// How the messages this session's agent sent with `ghostex agents send` and left waiting
     /// ended, by `sendRequestId` (`{ "<id>": { state: "delivered" | "failed", failure? } }`;
     /// server/src/agent_message_deliveries.rs). Absent means unchanged.

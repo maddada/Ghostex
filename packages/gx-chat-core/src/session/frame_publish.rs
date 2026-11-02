@@ -89,6 +89,14 @@ pub fn side_state_moves(
             .as_ref()
             .is_some_and(|threads| session.coordinator_threads.as_ref() != Some(threads))
         || side
+            .side_chats
+            .as_ref()
+            .is_some_and(|rows| session.side_chats.as_ref() != Some(rows))
+        || side
+            .side_chat_of
+            .as_ref()
+            .is_some_and(|parent| session.side_chat_of.as_ref() != Some(parent))
+        || side
             .agent_message_deliveries
             .as_ref()
             .is_some_and(|deliveries| session.agent_message_deliveries.as_ref() != Some(deliveries))

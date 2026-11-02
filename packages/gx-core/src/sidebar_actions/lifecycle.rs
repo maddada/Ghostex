@@ -35,7 +35,7 @@ use crate::selectors::QUICK_AUTOMATIONS_PROJECT_ID;
 
 use super::resolve::text_field;
 
-use ghostex_gx_protocol::{LifecycleState, SessionSurface};
+use ghostex_gx_protocol::LifecycleState;
 
 /// How long an accepted transition may stay overlaid before the daemon's own row must have
 /// arrived.
@@ -401,9 +401,7 @@ fn transition_session_ids(core: &Core, session: &SessionKey) -> Vec<String> {
                 // the project is asleep.
                 let listed = loaded
                     .server_session(&session.project_id, session_id)
-                    .is_some_and(|row| {
-                        row.visible_in_sidebar_by_default && row.surface != SessionSurface::Commands
-                    });
+                    .is_some_and(|row| row.listed_in_sidebar());
                 if listed && !entry.is_session_hidden(&session.project_id, session_id) {
                     push(&mut ordered, session_id);
                 }

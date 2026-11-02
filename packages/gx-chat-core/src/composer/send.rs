@@ -81,6 +81,13 @@ pub fn begin(
         return vec![submission_failed(mode, text)];
     }
     let version = version.map(|version| unconsumed_version(state, context, version));
+    // A side chat starts now whatever the main agent is doing: it is never queued behind it.
+    let side_chat = crate::composer::side_chat::starts_side_chat(state, text);
+    let mode = if side_chat && mode == SubmissionMode::Queue {
+        SubmissionMode::Send
+    } else {
+        mode
+    };
     let send_request_id = submission_send_request_id(state, context, mode, text);
     let capabilities = crate::composer::document::queue(state).capabilities;
     let steps = match submission_steps(
@@ -115,7 +122,7 @@ pub fn begin(
         });
     }
     phases.push(SendPhase::MarkSubmitted);
-    let interrupt = interrupt && interrupts_turn(state, mode);
+    let interrupt = interrupt && !side_chat && interrupts_turn(state, mode);
     if interrupt {
         raise_interrupted_toast(state, context);
     }
@@ -164,6 +171,11 @@ fn raise_interrupted_toast(state: &mut ChatState, context: &ChatContext) {
 /// CDXC:SessionChat 2026-10-07 DECISION:
 /// User: "When I press Enter to send a message and there's an image (or maybe even without an image), the text I wrote doesn't instantly disappear from the chat box and appear in the chat transcript. Please fix this, I want this to be INSTANT." The echo (or the "Ran /x" marker, or the queued row) is drawn and published on the Enter itself, before the draft save, the gxserver draft push and the send that follow it; the closing publish of the send's chain (`CoreState::publish_awaits`) had held it until gxserver finished typing the message, about 1.2 seconds. A failed or refused send drops it again and the composer gets the text back with the error, as before.
 fn draw_at_enter(state: &mut ChatState, context: &ChatContext, submission: &mut Submission) {
+    // A side chat's question shows in the side chat, not in this transcript.
+    if crate::composer::side_chat::starts_side_chat(state, &submission.text) {
+        submission.drawn = true;
+        return;
+    }
     let body = match submission.mode {
         SubmissionMode::Send => Some(submission.text.clone()),
         SubmissionMode::Compact => Some("/compact".to_string()),
@@ -412,6 +424,19 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
                 let echoed = crate::composer::review_comments::expand_review_comments(&body);
                 let drawn = draw_agent_send(state, context, &echoed, &images);
                 adopt_send(state, drawn);
+            }
+            if let Some(question) = (phase == SendPhase::SendText)
+                .then(|| crate::composer::side_chat::side_chat_question(&body))
+                .flatten()
+                .filter(|_| crate::composer::side_chat::side_chat_available(state))
+            {
+                let request_id = state.core.allocate_request_id();
+                wait_request(state, request_id);
+                return vec![Effect::SendRpc {
+                    request_id,
+                    method: ChatRpcMethod::StartSideChat,
+                    params: Box::new(json!({ "question": question, "draftVersion": version })),
+                }];
             }
             if hold_for_gate(state, context) {
                 return Vec::new();
@@ -693,6 +718,31 @@ pub fn settle_request(
                 ));
                 state.session.synced_draft_revision += 1;
             }
+            // A Side chat send lists and opens the side chat it started.
+            let started_side_chat = state
+                .composer
+                .submitting
+                .as_ref()
+                .is_some_and(|submission| {
+                    submission.phases.first() == Some(&SendPhase::SendText)
+                        && crate::composer::side_chat::side_chat_question(&submission.text)
+                            .is_some()
+                });
+            if started_side_chat {
+                crate::extras::side_chats::note_started(state, result);
+            }
+            if let Some(opened) = state
+                .composer
+                .submitting
+                .as_ref()
+                .filter(|submission| submission.phases.first() == Some(&SendPhase::SendText))
+                .filter(|submission| {
+                    crate::composer::side_chat::side_chat_question(&submission.text).is_some()
+                })
+                .and_then(|_| crate::extras::side_chats::opened_by_start(result))
+            {
+                effects.push(opened);
+            }
             if let Some(submission) = state.composer.submitting.as_mut() {
                 let sent = submission.phases.first().copied();
                 submission.request = None;
@@ -820,15 +870,6 @@ fn finish(state: &mut ChatState) -> Vec<Effect> {
             "version": submission.version,
         })),
     }];
-    if submission.mode == SubmissionMode::Send
-        && !submission.handoff
-        && crate::composer::side_chat::sent_side_chat_opens_terminal(state, &submission.text)
-    {
-        effects.push(Effect::HostAction {
-            action: "switchToTerminal".to_string(),
-            params: Box::new(json!({})),
-        });
-    }
     if submission.handoff {
         effects.push(Effect::HostAction {
             action: "draftHandoffToTerminalComplete".to_string(),

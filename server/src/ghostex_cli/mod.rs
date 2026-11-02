@@ -48,6 +48,7 @@ mod sessions_brief;
 pub mod settings;
 mod settings_hotkeys;
 mod show;
+mod side_chats;
 pub mod skills;
 pub mod tailcat;
 pub mod tailcat_tunnel;
@@ -316,6 +317,7 @@ fn is_known_command(name: &str) -> bool {
         "slack",
         "link-session",
         "link",
+        "side-chat",
         "delayed-send",
         "close-after-done",
         "send-text",
@@ -719,6 +721,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         }
         "link-session" => work_mode::link_session_command(args),
         "link" => session_links::link_command(args),
+        "side-chat" => side_chats::side_chat_command(args),
         "delayed-send" => {
             // `--cancel` clears the armed automation; otherwise the parser
             // accepts the timer and both agent-completion trigger modes.

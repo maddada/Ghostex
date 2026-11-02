@@ -19,6 +19,19 @@ pub(crate) fn fork_session(
     db: &Connection,
     context: &ZmxServerContext,
 ) -> Result<AgentEndpointOutput, AgentEndpointError> {
+    fork_session_as(repository, lifecycle, db, context, None)
+}
+
+/// A fork, or with `side_chat_question` a side chat of the session (server/src/side_chats/): the
+/// same fork, hidden from the session lists, started in ask-before-edits and named after its
+/// question.
+pub(crate) fn fork_session_as(
+    repository: &DomainRepository<'_>,
+    lifecycle: &LifecycleParams,
+    db: &Connection,
+    context: &ZmxServerContext,
+    side_chat_question: Option<&str>,
+) -> Result<AgentEndpointOutput, AgentEndpointError> {
     let project = require_project(repository, &lifecycle.project_id)?;
     let source_session = require_session(repository, lifecycle)?;
     /*
@@ -40,8 +53,17 @@ pub(crate) fn fork_session(
         .into());
     }
     crate::agentbox::refuse_for_agentbox_session(&source_session, "Fork")?;
+    if side_chat_question.is_some() && crate::side_chats::parent_of(&source_session).is_some() {
+        return Err(DomainStateError::bad_request(
+            "A side chat can't start another side chat. Start it from the main session.",
+        )
+        .into());
+    }
     let settings = read_agent_settings(db)?;
-    let plan = build_agent_fork_plan(&project, &source_session, &settings);
+    let mut plan = build_agent_fork_plan(&project, &source_session, &settings);
+    if side_chat_question.is_some() {
+        side_chat_plan(&mut plan);
+    }
     if plan
         .get("startupText")
         .and_then(Value::as_str)
@@ -61,6 +83,9 @@ pub(crate) fn fork_session(
         .into());
     }
     let mut fork_params = create_agent_fork_session_params(&project, &source_session, &plan);
+    if let Some(question) = side_chat_question {
+        crate::side_chats::mark_fork_params(&mut fork_params, &lifecycle.session_id, question);
+    }
     let empryo_fork = plan
         .get("empryoForkSessionId")
         .and_then(Value::as_str)
@@ -151,6 +176,26 @@ pub(crate) fn fork_session(
             }
         }),
     })
+}
+
+/// The fork's command in ask-before-edits (`side_chats::ask_before_edits_command`), and the
+/// startup text that types it.
+fn side_chat_plan(plan: &mut Value) {
+    let agent_id = plan
+        .get("agentId")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let Some(command) = plan
+        .get("primaryCommand")
+        .and_then(Value::as_str)
+        .map(|command| crate::side_chats::ask_before_edits_command(command, &agent_id))
+    else {
+        return;
+    };
+    plan["primaryCommand"] = json!(command);
+    plan["displayCommand"] = json!(command);
+    plan["startupText"] = json!(as_atuin_ignored_shell_input(&command));
 }
 
 pub(crate) fn build_agent_fork_plan(

@@ -220,6 +220,10 @@ pub struct Document {
     pub agent_tasks_panel: Tri<Value>,
     /// A coordinator's Threads panel, or `null`. Family f.
     pub coordinator_threads_panel: Tri<Value>,
+    /// The Side chats pill's menu (`extras::side_chats::project`), or `null`. Family f.
+    pub side_chats_panel: Tri<Value>,
+    /// A side chat's own bar (`{ parentSessionId, parentTitle }`), or `null`. Family f.
+    pub side_chat_of: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

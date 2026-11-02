@@ -744,6 +744,7 @@ impl GhostexGpuiApp {
         self.reconcile_claude_cloud_chat_pages(&visible_session_ids, cx);
         self.resume_visible_native_chat_runtimes(cx);
         self.schedule_native_chat_prewarm(cx);
+        self.reconcile_side_panel_chats(cx);
     }
 
     #[track_caller]

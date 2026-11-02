@@ -84,6 +84,10 @@ pub struct SessionState {
     /// A coordinator's threads (`{ threads }`); present only for a coordinator.
     /// Unchanged on omission.
     pub coordinator_threads: Option<Value>,
+    /// This session's side chats (`[{ projectId, sessionId, title, ... }]`); unchanged on omission.
+    pub side_chats: Option<Value>,
+    /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
+    pub side_chat_of: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
@@ -159,6 +163,8 @@ impl Default for SessionState {
             app_commands: Vec::new(),
             returned_prompt: None,
             coordinator_threads: None,
+            side_chats: None,
+            side_chat_of: None,
             agent_message_deliveries: None,
             screen_probed: false,
             server_working: false,

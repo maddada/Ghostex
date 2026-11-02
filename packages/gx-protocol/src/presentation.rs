@@ -945,6 +945,10 @@ pub struct PresentationSession {
     /// `finished`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_thread_state: Option<String>,
+    /// The main session this session is a side chat of (server/src/side_chats/); a side chat is
+    /// left out of every session list and shown from its main chat's Side chats pill.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side_chat_parent_session_id: Option<String>,
 
     // Title block.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
@@ -1045,6 +1049,16 @@ pub struct PresentationSession {
     /// When the armed session closes, while it shows Done.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub close_after_done_deadline_at: Option<String>,
+}
+
+impl PresentationSession {
+    /// Whether the session is a row of the session lists: a workspace session the daemon shows by
+    /// default, and not a side chat (those are reached from their main chat's Side chats pill).
+    pub fn listed_in_sidebar(&self) -> bool {
+        self.visible_in_sidebar_by_default
+            && self.surface != SessionSurface::Commands
+            && self.side_chat_parent_session_id.is_none()
+    }
 }
 
 fn is_false(value: &bool) -> bool {

@@ -1458,18 +1458,27 @@ chats, `/compact` summarizes the conversation to reduce context, just like
 In Claude Code, Codex, and OpenCode chats, start a message with `!` to run a shell command
 in that agent's session, for example `! pwd`. The command and its output appear
 in the chat.
-In Claude Code chats, `/btw <question>` asks a side question without stopping
-the agent's work. Side chat in the chat box's More actions does the same: it puts
-a Side Chat pill in the chat box, and sending the message turns it off again.
-Typing `/btw` on its own and pressing Enter also turns Side chat on; nothing is sent.
-The answer opens in a card above the chat box, with Copy, Fork
-(continue the side question as a background agent) and Close; a long answer
-shows Show all. You can't reply to a side question: close its card to message
-the main agent again. After Close the side question stays in the chat, folded where
-you asked it, and opens again on click. It is not added to the conversation.
-Codex chats have Side chat and `/btw` too, but Codex answers in a side conversation
-in its terminal, so sending one switches to Terminal View. Your next chat message,
-or switching back to Chat View on the computer, closes the side conversation first.
+A side chat is a separate conversation beside the main one: ask something on the
+side without interrupting or derailing the agent's work. Side chat in the chat
+box's More actions puts a Side Chat pill in the chat box (typing `/btw` on its own
+and pressing Enter does the same); sending a message with the pill, or typing
+`/btw <question>`, forks the session into a side chat that starts with that
+question. The main agent never sees it. A side chat knows the conversation up to
+that point, works in the same folder, and starts in ask-before-edits (Manual for
+Claude, Ask for approval for Codex) whatever mode the main session runs in. It
+opens as a tab in the side panel (its own chat screen on the phone), and you can
+keep talking in it. Side chats are not sessions in the sidebar: the main chat's
+**Side chats** pill, in the strip at the top of the chat box, lists them, and its
+dot shows when one is waiting for an answer or an approval (the main session's
+sidebar card shows that too). In the pill's menu, or the bar at the top of a side
+chat, **Bring back** sends what was said in the side chat to the main session as
+one message (a busy agent reads it at its next pause, and a sleeping one is
+woken for it), and **Delete**
+stops and removes the side chat. A side chat can't start another side chat.
+Side chats work with every agent Ghostex can fork (Claude Code, Codex, Pi,
+Empryo, Copilot and Grok Build). From the CLI: `ghostex side-chat start
+"<question>" --session <session>`, `ghostex side-chat list`, `ghostex side-chat
+bring-back --session <side chat>` and `ghostex side-chat delete --session <side chat>`.
 Claude panels such as `/status` and `/usage` show as clickable tabs, tables and
 usage meters instead of terminal text.
 Claude Code's permission mode (Bypass permissions, Auto, Manual, Accept edits or

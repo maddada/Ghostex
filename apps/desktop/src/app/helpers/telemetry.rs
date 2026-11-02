@@ -117,6 +117,8 @@ pub(crate) fn gpui_telemetry_surface_for_titlebar_mode(
         TitlebarMode::Terminal => Some(GpuiTelemetrySurface::Terminal),
         TitlebarMode::BotFeed => Some(GpuiTelemetrySurface::Automations),
         TitlebarMode::Work => Some(GpuiTelemetrySurface::Work),
+        // Not a surface of the telemetry spec: a side chat is a chat, not a view.
+        TitlebarMode::SideChat => None,
         mode if mode.is_claude_web() => Some(GpuiTelemetrySurface::Claude),
         TitlebarMode::Extension(id) => Some(GpuiTelemetrySurface::Extension(id)),
     }

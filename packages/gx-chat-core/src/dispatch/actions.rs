@@ -173,6 +173,9 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::ToggleCoordinatorThreadsMore
         | ActionKind::ToggleBackgroundTasks
         | ActionKind::OpenCoordinatorThread
+        | ActionKind::OpenSideChat
+        | ActionKind::BringBackSideChat
+        | ActionKind::DeleteSideChat
         | ActionKind::SearchOpen
         | ActionKind::SearchClose
         | ActionKind::SearchQuery
@@ -308,6 +311,9 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
+            | ActionKind::OpenSideChat
+            | ActionKind::BringBackSideChat
+            | ActionKind::DeleteSideChat
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery
@@ -361,6 +367,9 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::ToggleCoordinatorThreadsMore
             | ActionKind::ToggleBackgroundTasks
             | ActionKind::OpenCoordinatorThread
+            | ActionKind::OpenSideChat
+            | ActionKind::BringBackSideChat
+            | ActionKind::DeleteSideChat
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery

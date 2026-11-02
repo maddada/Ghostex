@@ -364,6 +364,7 @@ impl GhostexGpuiApp {
                 native_app_modal: None,
                 native_automate: None,
                 native_changes: None,
+                side_panel_chats: HashMap::new(),
                 native_changes_preset: None,
                 native_bot_feed: None,
                 work_view: Default::default(),

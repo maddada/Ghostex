@@ -250,6 +250,11 @@ pub(super) fn emit_state_frame(
                 &config.project_id,
                 &config.session_id,
             );
+            crate::side_chats::insert_side_chats(
+                &mut frame,
+                &config.project_id,
+                &config.session_id,
+            );
             crate::agent_message_deliveries::insert_agent_message_deliveries(
                 &mut frame,
                 &config.project_id,
@@ -329,6 +334,11 @@ pub(super) fn emit_snapshot_frame(
             insert_optional_app_commands(&mut frame, config);
             insert_optional_returned_prompt(&mut frame, config);
             crate::coordinators::insert_coordinator_threads(
+                &mut frame,
+                &config.project_id,
+                &config.session_id,
+            );
+            crate::side_chats::insert_side_chats(
                 &mut frame,
                 &config.project_id,
                 &config.session_id,

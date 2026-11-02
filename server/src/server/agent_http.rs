@@ -167,13 +167,16 @@ pub(crate) fn dispatch_agent_http_blocking(
                 );
             }
             // CDXC:SessionChat 2026-10-07 WHY: a fork's Empryo window joins the engine of the session it was forked from, the case where Empryo 3.9.1 opens the engine's tab without the window's own (seen live 2026-10-07: the fork's first send was held until a manual sleep and wake). The fork's terminal starts inside the fork call, which cannot restart it, so the fork gets the same one rejoin restart a create does.
-            if endpoint_path == "/api/forkSession" {
+            if endpoint_path == "/api/forkSession" || endpoint_path == "/api/startSideChat" {
                 if let Some(session) = result.pointer("/fork/session") {
                     crate::session_chat_empryo_tabs::select_empryo_own_tab_after_start(
                         session,
                         Some(state.clone()),
                     );
                 }
+            }
+            if endpoint_path == "/api/startSideChat" {
+                after_side_chat_start(state, &params, &result);
             }
             if endpoint_path == "/api/ingestAgentHookEvent" {
                 schedule_codex_title_fallback(state, &params, &result);

@@ -308,7 +308,8 @@ impl GhostexGpuiApp {
                     | TitlebarMode::Browser
                     | TitlebarMode::Terminal
                     | TitlebarMode::BotFeed
-                    | TitlebarMode::Changes => {
+                    | TitlebarMode::Changes
+                    | TitlebarMode::SideChat => {
                         return false;
                     }
                 };

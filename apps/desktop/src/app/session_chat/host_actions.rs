@@ -670,6 +670,16 @@ impl GhostexGpuiApp {
             self.select_session_chat_fork_branch(session_id, &message, cx);
             return;
         }
+        // A side chat opens as a tab of the side panel (side_chat_panel/), and a deleted one's
+        // tab closes.
+        if action == "openSideChat" {
+            self.open_side_chat_from_host_action(session_id, &message, window, cx);
+            return;
+        }
+        if action == "sideChatDeleted" {
+            self.close_deleted_side_chat_tab(session_id, &message, window, cx);
+            return;
+        }
         let request = match action {
             "rename" => TerminalAgentActionRequest::Rename,
             "sleep" => TerminalAgentActionRequest::Sleep,

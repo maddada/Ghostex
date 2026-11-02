@@ -111,6 +111,7 @@ impl GhostexGpuiApp {
                 | TitlebarMode::Manage
                 | TitlebarMode::BotFeed
                 | TitlebarMode::Changes
+                | TitlebarMode::SideChat
                 | TitlebarMode::Work
                 | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             };
@@ -176,6 +177,7 @@ impl GhostexGpuiApp {
             | TitlebarMode::Manage
             | TitlebarMode::BotFeed
             | TitlebarMode::Changes
+            | TitlebarMode::SideChat
             | TitlebarMode::Work
             | TitlebarMode::Extension(_) => ShellFocusTarget::ProjectEditorSurface(mode),
             TitlebarMode::Agents | TitlebarMode::Terminal => return false,

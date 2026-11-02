@@ -439,9 +439,12 @@ impl ProjectScopedWorkareaAvailability {
                         _ => false,
                     }
             }
-            TitlebarMode::Manage | TitlebarMode::Terminal | TitlebarMode::Changes => {
-                self.project_context.has_project_scoped_workareas()
-            }
+            // A side chat tab's own condition (the project has one open) is the app's:
+            // `titlebar_mode_available` in app/workarea/view_visibility.rs.
+            TitlebarMode::Manage
+            | TitlebarMode::Terminal
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => self.project_context.has_project_scoped_workareas(),
         }
     }
 
@@ -558,7 +561,8 @@ impl ProjectWorkareaCefSurfaceSlotKey {
             | TitlebarMode::Browser
             | TitlebarMode::Terminal
             | TitlebarMode::BotFeed
-            | TitlebarMode::Changes => {
+            | TitlebarMode::Changes
+            | TitlebarMode::SideChat => {
                 return None;
             }
         })

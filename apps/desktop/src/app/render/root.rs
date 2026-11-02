@@ -407,7 +407,7 @@ impl Render for GhostexGpuiApp {
                     .focused(cx)
                     .is_none_or(|focused| focused == this.root_action_focus_handle)
                     && let ShellKeyboardOwner::ChatComposer(session_id) = this.shell_keyboard_owner()
-                    && let Some(chat) = this.native_chat_views.get(&session_id).cloned()
+                    && let Some(chat) = this.native_chat_view_for_shell_session(session_id)
                     && !chat.read(cx).chat_text_field_focused(window, cx)
                 {
                     chat.update(cx, |chat, cx| chat.composer_key_down(event, window, cx));
@@ -747,6 +747,29 @@ impl Render for GhostexGpuiApp {
                     if let Some(mode) = this.view_tab_mode_for_index(action.mode_index) {
                         this.close_view_tab(mode, window, cx);
                     }
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &BringBackGpuiSideChatTab, _window, cx| {
+                    this.invoke_side_chat_tab_action(
+                        SideChatTabId(action.tab_id),
+                        "bringBackSideChat",
+                        cx,
+                    );
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &DeleteGpuiSideChatTab, _window, cx| {
+                    this.invoke_side_chat_tab_action(
+                        SideChatTabId(action.tab_id),
+                        "deleteSideChat",
+                        cx,
+                    );
+                }),
+            )
+            .on_action(
+                cx.listener(|this, action: &CloseGpuiSideChatTab, window, cx| {
+                    this.close_side_chat_tab(SideChatTabId(action.tab_id), window, cx);
                 }),
             )
             .on_action(

@@ -71,6 +71,31 @@ impl GhostexGpuiApp {
                     );
                 }
             }
+            // A side chat opens in the panel beside the chat (`web_host/side_chat.rs`), the
+            // desktop's side panel tab; a deleted one's panel closes.
+            Some(action @ ("openSideChat" | "sideChatDeleted")) => {
+                let text = |key: &str| {
+                    message[key]
+                        .as_str()
+                        .or_else(|| message["params"][key].as_str())
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(str::to_string)
+                };
+                if let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId"))
+                {
+                    let side_chat = SessionKey {
+                        machine: session.machine.clone(),
+                        project_id,
+                        session_id,
+                    };
+                    if action == "openSideChat" {
+                        self.web_open_side_chat(side_chat, cx);
+                    } else {
+                        self.web_close_side_chat(Some(&side_chat), cx);
+                    }
+                }
+            }
             // A command in a reply: a new terminal in the session's folder that runs it (or only
             // types it, for Paste), the desktop's `run_session_chat_command_in_terminal`.
             Some(action @ ("runInTerminal" | "pasteInTerminal")) => {

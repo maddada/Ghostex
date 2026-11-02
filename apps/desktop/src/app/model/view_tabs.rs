@@ -11,19 +11,74 @@ pub(crate) struct DraggedViewTab {
     pub(crate) mode: TitlebarMode,
 }
 
-/// One tab of the view panel's strip, whichever kind it is: a view, or one of the Browser's pages.
+/// The payload GPUI carries while a side chat tab is being dragged along the strip.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DraggedSideChatTab {
+    pub(crate) tab_id: SideChatTabId,
+}
+
+/// One tab of the view panel's strip, whichever kind it is: a view, one of the Browser's pages, or
+/// a side chat.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ViewStripTabKey {
     View(TitlebarMode),
     Browser(BrowserTabId),
+    SideChat(SideChatTabId),
+}
+
+/// A side chat's tab, standing for the side chat's session key (`SideChatTabId::key`). The strip's
+/// keys are `Copy`, so the session key is interned once per app run and the tab carries its number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct SideChatTabId(pub(crate) u64);
+
+fn side_chat_tab_keys() -> &'static std::sync::Mutex<Vec<ghostex_gx_core::SessionKey>> {
+    static KEYS: std::sync::OnceLock<std::sync::Mutex<Vec<ghostex_gx_core::SessionKey>>> =
+        std::sync::OnceLock::new();
+    KEYS.get_or_init(Default::default)
+}
+
+impl SideChatTabId {
+    /// The tab id of `key`, the same one every time this app run asks.
+    pub(crate) fn for_key(key: &ghostex_gx_core::SessionKey) -> Self {
+        let mut keys = side_chat_tab_keys()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let index = match keys.iter().position(|known| known == key) {
+            Some(index) => index,
+            None => {
+                keys.push(key.clone());
+                keys.len() - 1
+            }
+        };
+        Self(index as u64 + 1)
+    }
+
+    /// The side chat's session.
+    pub(crate) fn key(self) -> Option<ghostex_gx_core::SessionKey> {
+        let keys = side_chat_tab_keys()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        keys.get(usize::try_from(self.0.checked_sub(1)?).ok()?)
+            .cloned()
+    }
+
+    /// The saved form: the sidebar session id, which names the machine, project and session.
+    fn to_shell_state_string(self) -> Option<String> {
+        self.key().map(|key| key.to_sidebar_session_id())
+    }
+
+    fn from_shell_state_string(value: &str) -> Option<Self> {
+        ghostex_gx_core::SessionKey::parse_sidebar_session_id(value).map(|key| Self::for_key(&key))
+    }
 }
 
 impl ViewStripTabKey {
-    fn to_shell_state_string(self) -> String {
-        match self {
+    fn to_shell_state_string(self) -> Option<String> {
+        Some(match self {
             Self::View(mode) => format!("view:{}", mode.element_slug()),
             Self::Browser(tab_id) => format!("browser:{}", tab_id.0),
-        }
+            Self::SideChat(tab_id) => format!("sideChat:{}", tab_id.to_shell_state_string()?),
+        })
     }
 
     /// The Browser's own key is kept: it places the strip's Browser tab while its pages are in a
@@ -31,8 +86,11 @@ impl ViewStripTabKey {
     fn from_shell_state_string(value: &str) -> Option<Self> {
         if let Some(slug) = value.strip_prefix("view:") {
             return TitlebarMode::from_slug(slug)
-                .filter(|mode| *mode != TitlebarMode::Agents)
+                .filter(|mode| !matches!(mode, TitlebarMode::Agents | TitlebarMode::SideChat))
                 .map(Self::View);
+        }
+        if let Some(session) = value.strip_prefix("sideChat:") {
+            return SideChatTabId::from_shell_state_string(session).map(Self::SideChat);
         }
         value
             .strip_prefix("browser:")
@@ -49,10 +107,14 @@ impl ViewStripTabKey {
 /// project-owned like the open views are, because browser tab ids are per project. With
 /// `browserPagesInViewRow` on (off by default) the pages are drawn and dragged in their own row
 /// (`render/browser_page_tabs.rs`) but keep their places in this one order.
+///
+/// CDXC:SideChats 2026-11-02 DECISION:
+/// User: side chats appear in the side panel instead of using what the agent CLI offers; several can be open as tabs. A side chat's tab exists exactly while its key is in `order` (nothing else lists them, so `write_projection` never drops one), and `active_side_chat` says which one `TitlebarMode::SideChat` shows. Both are saved per project by ids only; the title is read from the store each time the tab is drawn.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct GpuiViewStripLayout {
     pub(crate) order: Vec<ViewStripTabKey>,
     pub(crate) pinned: Vec<ViewStripTabKey>,
+    pub(crate) active_side_chat: Option<SideChatTabId>,
 }
 
 /// The most tabs `GpuiViewStripLayout::in_drawn_order` places by scanning the stored order; see its
@@ -163,6 +225,7 @@ impl GpuiViewStripLayout {
             let mode = match key {
                 ViewStripTabKey::View(mode) => mode,
                 ViewStripTabKey::Browser(_) => TitlebarMode::Browser,
+                ViewStripTabKey::SideChat(_) => TitlebarMode::SideChat,
             };
             if !modes.contains(&mode) {
                 modes.push(mode);
@@ -183,16 +246,35 @@ impl GpuiViewStripLayout {
         modes
     }
 
+    /// The side chats open in this strip, in stored order.
+    pub(crate) fn side_chat_tabs(&self) -> impl Iterator<Item = SideChatTabId> + '_ {
+        self.order.iter().filter_map(|key| match key {
+            ViewStripTabKey::SideChat(tab_id) => Some(*tab_id),
+            _ => None,
+        })
+    }
+
+    pub(crate) fn has_side_chat_tab(&self, tab_id: SideChatTabId) -> bool {
+        self.order.contains(&ViewStripTabKey::SideChat(tab_id))
+    }
+
     pub(crate) fn to_shell_state_json(&self) -> serde_json::Value {
         let keys = |keys: &[ViewStripTabKey]| {
             keys.iter()
-                .map(|key| serde_json::Value::String(key.to_shell_state_string()))
+                .filter_map(|key| key.to_shell_state_string().map(serde_json::Value::String))
                 .collect::<Vec<_>>()
         };
-        serde_json::json!({
+        let mut value = serde_json::json!({
             "order": keys(&self.order),
             "pinned": keys(&self.pinned),
-        })
+        });
+        if let Some(session) = self
+            .active_side_chat
+            .and_then(SideChatTabId::to_shell_state_string)
+        {
+            value["activeSideChat"] = serde_json::Value::String(session);
+        }
+        value
     }
 
     pub(crate) fn from_shell_state(value: Option<&serde_json::Value>) -> Self {
@@ -212,9 +294,16 @@ impl GpuiViewStripLayout {
             }
             keys
         };
+        let order = keys("order");
+        let active_side_chat = value
+            .and_then(|value| value.get("activeSideChat"))
+            .and_then(serde_json::Value::as_str)
+            .and_then(SideChatTabId::from_shell_state_string)
+            .filter(|tab_id| order.contains(&ViewStripTabKey::SideChat(*tab_id)));
         Self {
-            order: keys("order"),
+            order,
             pinned: keys("pinned"),
+            active_side_chat,
         }
     }
 }
@@ -300,6 +389,7 @@ mod tests {
             let layout = GpuiViewStripLayout {
                 order,
                 pinned: vec![page(3), page(1)],
+                active_side_chat: None,
             };
             let mut available: Vec<_> = (0..count).rev().map(page).collect();
             available.push(page(20_000));
@@ -321,6 +411,7 @@ mod tests {
                 page(2),
             ],
             pinned: Vec::new(),
+            active_side_chat: None,
         };
         let available = vec![
             view(TitlebarMode::Manage),
@@ -357,6 +448,7 @@ mod tests {
                 view(TitlebarMode::Automate),
             ],
             pinned: Vec::new(),
+            active_side_chat: None,
         };
         let open_views = [
             TitlebarMode::Manage,
@@ -383,6 +475,7 @@ mod tests {
                 page(2),
             ],
             pinned: Vec::new(),
+            active_side_chat: None,
         };
         let open_views = [
             TitlebarMode::Browser,
@@ -428,6 +521,7 @@ mod tests {
                 view(TitlebarMode::Kanban),
             ],
             pinned: Vec::new(),
+            active_side_chat: None,
         };
         layout.write_projection(
             &[

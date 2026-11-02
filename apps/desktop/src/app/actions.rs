@@ -390,6 +390,25 @@ pub(crate) struct ToggleGpuiViewStripTabPinned {
     pub(crate) browser_tab_id: Option<u64>,
 }
 
+/// A side chat tab's right-click rows (`app/side_chat_panel/`). `tab_id` is its `SideChatTabId`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct BringBackGpuiSideChatTab {
+    pub(crate) tab_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct DeleteGpuiSideChatTab {
+    pub(crate) tab_id: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
+#[action(namespace = ghostex_gpui, no_json)]
+pub(crate) struct CloseGpuiSideChatTab {
+    pub(crate) tab_id: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Action)]
 #[action(namespace = ghostex_gpui, no_json)]
 pub(crate) struct PopOutGpuiViewTab {
