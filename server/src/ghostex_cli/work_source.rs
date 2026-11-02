@@ -3,6 +3,7 @@
 //! clears it, and stores one of its credentials read from stdin, like `issues linear-key`.
 
 use std::io::{BufRead, IsTerminal, Write};
+use std::path::{Component, Path};
 
 use serde_json::{json, Map, Value};
 
@@ -27,7 +28,7 @@ pub(super) fn work_source_command(rest: &[String], flags: &Flags) -> CliResult<(
             let path = rest
                 .get(1)
                 .ok_or_else(|| CliError::Other("Pass the command's path. ".to_string() + USAGE))?;
-            params.insert("path".to_string(), json!(path));
+            params.insert("path".to_string(), json!(path_to_send(path)));
             params.insert("switch".to_string(), json!(flags.truthy("switch")));
             rpc::call_gxserver_rpc("/api/setWorkSource", &Value::Object(params), flags)
                 .map_err(with_switch_hint)?
@@ -71,6 +72,27 @@ pub(super) fn work_source_command(rest: &[String], flags: &Flags) -> CliResult<(
         Some(error) => Err(CliError::Other(error.to_string())),
         None => Ok(()),
     }
+}
+
+/// The path `set` sends for `typed`. The server refuses a relative path that isn't a bare name,
+/// since its own current folder isn't one the user knows; the CLI knows the user's, so it makes
+/// such a path absolute (`std::path::absolute`: on Windows with the system's own rules, a
+/// drive-relative `C:tools\x.ps1` or `C:x.ps1` included; elsewhere joined to the current folder,
+/// symlinks left as they are). A bare name (looked up on PATH), `~` and `~/…` (the server
+/// expands them) and an absolute path are sent as typed, and so is a path `absolute` can't make
+/// absolute, which the server then refuses in its own words.
+fn path_to_send(typed: &str) -> String {
+    let trimmed = typed.trim();
+    let path = Path::new(trimmed);
+    let drive_prefixed = matches!(path.components().next(), Some(Component::Prefix(_)));
+    let bare_name = !trimmed.contains('/') && !trimmed.contains('\\') && !drive_prefixed;
+    if trimmed.starts_with('~') || path.is_absolute() || bare_name {
+        return typed.to_string();
+    }
+    std::path::absolute(path)
+        .ok()
+        .and_then(|absolute| absolute.into_os_string().into_string().ok())
+        .unwrap_or_else(|| typed.to_string())
 }
 
 /// The server's refusal of a changed id, followed by how to accept it. It names no path and no
@@ -121,6 +143,39 @@ mod tests {
 
     fn refused(message: &str) -> CliError {
         rpc::rpc_error(json!({ "ok": false, "error": "badRequest", "message": message }))
+    }
+
+    #[test]
+    fn a_relative_path_is_sent_under_the_current_folder() {
+        let folder = std::env::current_dir().expect("current folder");
+        for (typed, under) in [("./tracker.sh", "tracker.sh"), ("bin/source", "bin/source")] {
+            let sent = path_to_send(typed);
+            assert!(Path::new(&sent).is_absolute(), "{sent}");
+            assert_eq!(Path::new(&sent), folder.join(under));
+        }
+        // Looked up on PATH, expanded by the server, or already absolute: sent as typed, even
+        // where `absolute` would drop a `.`.
+        let absolute = folder.join(".").join("tracker").display().to_string();
+        for typed in ["tracker", "~", "~/bin/x", absolute.as_str()] {
+            assert_eq!(path_to_send(typed), typed);
+        }
+    }
+
+    /// Windows' own forms; these run only on Windows.
+    #[cfg(windows)]
+    #[test]
+    fn a_windows_relative_path_is_sent_absolute() {
+        let folder = std::env::current_dir().expect("current folder");
+        assert_eq!(Path::new(&path_to_send(r".\x.ps1")), folder.join("x.ps1"));
+        // Drive-relative: absolute on drive C, from that drive's own current folder.
+        for (typed, end) in [("C:x.ps1", r"x.ps1"), (r"C:dir\x.ps1", r"dir\x.ps1")] {
+            let sent = path_to_send(typed);
+            assert!(Path::new(&sent).is_absolute(), "{sent}");
+            assert!(sent.starts_with(r"C:\") && sent.ends_with(end), "{sent}");
+        }
+        for typed in [r"C:\tools\x.ps1", r"\\server\share\x.ps1"] {
+            assert_eq!(path_to_send(typed), typed);
+        }
     }
 
     #[test]
