@@ -91,7 +91,6 @@ impl NativeChatView {
         // and summarized modes off. React reached that by mounting its own list inside the dialog;
         // GPUI shares one renderer, so the child's rows drop both modes here.
         if !main {
-            p.verbose = false;
             p.simple = false;
             p.work_open = false;
         }

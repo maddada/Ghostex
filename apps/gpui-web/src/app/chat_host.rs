@@ -163,16 +163,6 @@ impl GhostexGpuiApp {
                     let _ = window.open_with_url_and_target(url, "_blank");
                 }
             }
-            Some("setSimpleMode") => {
-                if let Some(enabled) = message["enabled"].as_bool() {
-                    let mut settings = crate::shared_settings::shared_sidebar_settings_snapshot()
-                        .object()
-                        .clone();
-                    settings.insert("sessionChatSimpleMode".into(), enabled.into());
-                    crate::shared_settings::install(settings);
-                    cx.refresh_windows();
-                }
-            }
             // The model picker's "pick it in the CLI": the terminal, with the desktop's hint.
             Some("agentPickerTerminalView") => {
                 self.web_show_terminal(true, cx);

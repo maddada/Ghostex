@@ -138,6 +138,9 @@ pub(super) fn chat_settings() -> ChatSettings {
             .get("sessionChatTextStrengthPercent")
             .and_then(Value::as_f64),
         tool_cards: object.get("chatToolCallCards").and_then(Value::as_bool),
+        detailed_default: object
+            .get("sessionChatDetailedView")
+            .and_then(Value::as_bool),
     }
 }
 

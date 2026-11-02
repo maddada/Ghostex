@@ -13,6 +13,7 @@ pub(crate) fn chat() -> Section {
             row("sessionChatTranscriptWidthPercent", "Transcript width", "The centered transcript's width on wide panes. Auto matches the prompt composer; drag to set a percentage of the pane instead. The prompt composer keeps its standard width either way."),
             row("sessionChatFileEditPreviews", "Show file edit previews", "Show the first seven code lines in each file edit. Turn off to show only the path and change counts."),
             row("chatToolCallCards", "Tool call cards (preview)", "Show each run of tool calls as one card: it counts the calls, says what each one is doing and then did, with its result and time, explains a failure, and folds to one line once the agent writes again. Off keeps the current look."),
+            row("sessionChatDetailedView", "Default to Detailed view", "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat."),
             row("sessionChatKeepComposerExpanded", "Keep chat box expanded while scrolling", "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end."),
             row("sessionChatConfirmEscapeInterrupt", "Press Escape twice to interrupt", "While the agent is working, the first Escape asks you to press Escape again within 2 seconds before it interrupts. Turn off to interrupt on the first Escape."),
             row("chatCatchMeUp", "Catch me up button", "Show a Catch me up button at the top right of the chat box while it is empty. It has your Title Generation Agent (a small, cheap model) read the session's last 30 agent messages and shows where the session stands: what needs you, what is done, in progress or untested."),
@@ -36,9 +37,7 @@ pub(crate) fn chat() -> Section {
     )
 }
 
-/// CDXC:Settings 2026-10-29 DECISION (cleanup Q11): Simple mode and Verbose mode left Settings; the
-/// chat's More actions > View menu picks one level per chat (Simple, Detailed or Verbose), and new
-/// chats open Simple. Their keys stay (help/supplemental.rs) so a saved preference still applies.
+/// CDXC:Settings 2026-11-02 DECISION: User: "in settings i think we have setting for verbose, make that about defaulting to detailed view but make sure it's in advanced". The chat's More actions > View menu picks Summary, Normal or Detailed per chat, and the one Advanced row Default to Detailed view (`sessionChatDetailedView`) decides how new chats open; the retired Simple and Verbose default keys migrate into it (`migrate_chat_view_default`). Supersedes 2026-10-29's cleanup Q11 that left no row.
 /// Q18: Show notification on terminal bell moved here from the Terminal section.
 /// CDXC:Settings 2026-10-29 DECISION (wording Q25): the five marked-handover rows are their own
 /// section of the Chat page instead of sitting loose in the Chat list.

@@ -75,6 +75,21 @@ pub struct ChatPill {
     pub aria_label: String,
 }
 
+/// One status chip at the left of the chat box's pill strip (`extras::chat_pills::view_chips`): a
+/// view mode that is on, with the action that turns it off.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewChip {
+    /// `summary` or `detailed`.
+    pub id: String,
+    /// "Summary view" or "Detailed view".
+    pub label: String,
+    /// What a screen reader says for the chip's turn-off button.
+    pub aria_label: String,
+    /// The action the chip (or its hover X) dispatches to turn the mode off.
+    pub command: Value,
+}
+
 /// The agent terminal's last lines, offered when the chat cannot explain what is happening.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -159,6 +159,9 @@ fn route(state: &mut ChatState, event: &Event, context: &ChatContext) -> Vec<Eff
             if let Some(enabled) = settings.tool_cards {
                 crate::transcript::tool_card::set_enabled(&mut state.transcript_view, enabled);
             }
+            if let Some(detailed) = settings.detailed_default {
+                state.transcript_view.detailed_default = detailed;
+            }
             state.core.request_publish();
             Vec::new()
         }
@@ -265,6 +268,9 @@ pub fn boot_read(
         }
         if let Some(enabled) = settings.tool_cards {
             crate::transcript::tool_card::set_enabled(&mut state.transcript_view, enabled);
+        }
+        if let Some(detailed) = settings.detailed_default {
+            state.transcript_view.detailed_default = detailed;
         }
     }
     let config = state.session.boot_config.clone().unwrap_or_default();

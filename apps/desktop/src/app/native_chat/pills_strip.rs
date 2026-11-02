@@ -6,15 +6,19 @@
 //! in and shrinks away with the chat box's own ease. Each pill opens its menu above the box, lined up
 //! with the pill.
 //!
+//! The strip's left holds the view status chip ("Summary view" or "Detailed view"), pinned there
+//! while the pills scroll (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
+//!
 //! CDXC:SessionChat 2026-10-29 SEE-ALSO:
 //! The user's words (option E) are on packages/gx-chat-core/src/extras/chat_pills.rs. The phone draws the same strip in apps/mobile/app/src/chat/native/cards/PillsStrip.tsx.
 
 use super::{appearance::ChatAppearance, state::NativeChatView};
+use crate::app::native_chat::cursor::ChatCursor as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
     Animation, AnimationExt as _, AnyElement, Bounds, Context, InteractiveElement as _,
     IntoElement, ParentElement as _, Pixels, ScrollHandle, StatefulInteractiveElement as _,
-    Styled as _, canvas, div, point, px, relative,
+    Styled as _, canvas, div, point, px, relative, svg,
 };
 use serde_json::Value;
 use std::{cell::Cell, rc::Rc, time::Duration};
@@ -119,14 +123,75 @@ impl NativeChatView {
         pills
     }
 
-    /// Whether the strip shows: the transcript has rows and a pill or timer calls for it.
+    /// The view status chip at the strip's left: a click goes back to Normal view, and it shows an X
+    /// while hovered (gx-chat-core extras/chat_pills.rs `view_chips` has the user's words).
+    fn view_chips(&self, p: &ChatAppearance, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let s = p.scale;
+        let chips = self.snapshot["viewChips"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        chips
+            .into_iter()
+            .map(|chip| {
+                let id = chip["id"].as_str().unwrap_or_default().to_string();
+                let group = format!("chat-view-chip-{id}");
+                let command = chip["command"].clone();
+                div()
+                    .id(gpui::ElementId::Name(group.clone().into()))
+                    .group(group.clone())
+                    .role(gpui::Role::Button)
+                    .aria_label(chip["ariaLabel"].as_str().unwrap_or_default().to_string())
+                    .flex()
+                    .items_center()
+                    .flex_shrink_0()
+                    .gap(px(4.0 * s))
+                    .pl(px(8.0 * s))
+                    .pr(px(5.0 * s))
+                    .py(px(2.0 * s))
+                    .rounded_full()
+                    // A pill's height (its border included), quieter: a faint fill, no outline.
+                    .border(px(s))
+                    .border_color(gpui::transparent_black())
+                    .bg(p.foreground.opacity(0.04))
+                    .text_size(px(11.5 * s))
+                    .line_height(px(16.0 * s))
+                    .whitespace_nowrap()
+                    .text_color(p.card_muted.opacity(0.85))
+                    .chat_cursor_pointer()
+                    .hover(|style| style.bg(p.foreground.opacity(0.07)))
+                    .child(chip["label"].as_str().unwrap_or_default().to_string())
+                    .child(
+                        // Its room is kept while hidden, so the hover moves nothing.
+                        svg()
+                            .path("titlebar/x.svg")
+                            .size(px(10.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.foreground)
+                            .opacity(0.0)
+                            .group_hover(group, |style| style.opacity(0.75)),
+                    )
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        cx.stop_propagation();
+                        this.invoke(command.clone(), cx);
+                    }))
+                    .into_any_element()
+            })
+            .collect()
+    }
+
+    /// Whether the strip shows: the transcript has rows and a pill, timer or view chip calls for it.
     pub(super) fn pills_strip_shown(&self) -> bool {
         let armed = self
             .armed_actions
             .as_array()
             .is_some_and(|actions| !actions.is_empty());
+        let chips = self.snapshot["viewChips"]
+            .as_array()
+            .is_some_and(|chips| !chips.is_empty());
         self.list.item_count() > 0
             && (armed
+                || chips
                 || self.links_pill.is_some()
                 || self.snapshot["workingCard"]["pills"]
                     .as_array()
@@ -175,10 +240,10 @@ impl NativeChatView {
             return None;
         }
         let left_bottom = super::scroll_bottom::transcript_left_bottom(&self.list);
-        let pills = if shown {
-            self.strip_pills(p, cx)
+        let (chips, pills) = if shown {
+            (self.view_chips(p, cx), self.strip_pills(p, cx))
         } else {
-            Vec::new()
+            (Vec::new(), Vec::new())
         };
         let row = div()
             .flex()
@@ -215,6 +280,18 @@ impl NativeChatView {
                     .px(px(10.0 * s))
                     .flex()
                     .items_center()
+                    .gap(px(8.0 * s))
+                    // The chips stay pinned left; the pills scroll in what is left beside them.
+                    .when(!chips.is_empty(), |band| {
+                        band.child(
+                            div()
+                                .flex()
+                                .items_center()
+                                .flex_shrink_0()
+                                .gap(px(6.0 * s))
+                                .children(chips),
+                        )
+                    })
                     .child(self.pills_strip_scroll(row, edge, p, cx)),
             )
             // The hairline under the band, the box's border colour.

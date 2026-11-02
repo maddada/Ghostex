@@ -12,7 +12,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Focus Chat Box | unassigned |  | none |  | Move the keyboard to the chat box of the chat session you are in. | `focusChatComposer` |
 | Copy Last Code Block | `cmd+shift+;` |  | none |  | Copy the last code block the agent wrote in the chat session you are in. | `copyLastChatCodeBlock` |
 | Copy Last Reply | `cmd+shift+c` |  | none |  | Copy the agent's last reply in the chat session you are in. | `copyLastChatReply` |
-| Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary mode on or off in the chat session you are in. | `toggleChatSummaryMode` |
+| Toggle Summary Mode | `ctrl+alt+s` | `cmd+alt+shift+s` | none |  | Turn Summary view on in the chat session you are in, or off again to Normal view. | `toggleChatSummaryMode` |
 | Maximize Chat Box | `ctrl+alt+m` | `cmd+alt+shift+m` | none |  | Maximize the chat box of the chat session you are in, or restore it. | `toggleChatComposerMaximized` |
 | Files and Links | `ctrl+alt+l` | `cmd+alt+shift+l` | none |  | Show or hide the files and links mentioned in the chat session you are in. | `toggleChatFilesLinks` |
 | Toggle Voice Agent | `ctrl+alt+v` | `cmd+alt+shift+v` | `ctrl+alt+v` | `cmd+alt+shift+v` | Start a spoken conversation with the voice agent, or end the one that is running. | `toggleVoiceAgent` |

@@ -67,51 +67,35 @@ impl NativeChatView {
         self.show_chat_menu(rows, trigger, 240.0, window, cx);
     }
 
-    /// CDXC:SessionChat 2026-09-27 DECISION:
-    /// User: combine Simple, Verbose and Summary modes in the More actions menu. One View row opens a submenu with the three modes as independent checks, and its detail names the modes that are on. Since 2026-10-20 this is the only Summary control (toolbar.rs `COMPOSER_CONTROLS`). The phone's View row holds the same three modes (apps/mobile/app/src/chat/native/composer/menus.ts).
-    /// CDXC:SessionChat 2026-10-29 DECISION:
-    /// User (Settings cleanup Q11): the View submenu is one choice of detail level, Simple, Detailed
-    /// or Verbose ("call the 2nd option Detailed"), plus the Summary switch; while Summary is on the
-    /// Simple look shows and picking a level turns Summary off (gx-chat-core transcript/actions.rs).
-    /// Supersedes 2026-09-27's three independent checks.
-    fn view_modes_row(&self, appearance: &super::appearance::ChatAppearance) -> Value {
-        let summary = self
-            .composer_control_available("summary")
-            .then(|| self.snapshot["summaryMode"] == true);
-        let level = if appearance.verbose {
-            "verbose"
-        } else if appearance.simple {
-            "simple"
-        } else {
-            "detailed"
-        };
-        let mut modes: Vec<Value> = [
-            ("simple", "Simple", "titlebar/leaf.svg"),
+    /// The View row: one choice of Summary, Normal and Detailed (gx-chat-core
+    /// transcript/view_level.rs has the user's words); picking one turns the others off. Summary
+    /// shows only where this chat has it (`composer_control_available("summary")`), and is the
+    /// only Summary control besides its hotkey and the strip's chip (toolbar.rs `COMPOSER_CONTROLS`).
+    /// The phone's View row holds the same three (apps/mobile/app/src/chat/native/composer/menus.ts).
+    ///
+    /// CDXC:SessionChat 2026-11-02 SEE-ALSO: supersedes 2026-09-27's three independent checks and 2026-10-29's Simple, Detailed or Verbose level with a Summary switch on top.
+    fn view_modes_row(&self) -> Value {
+        let summary_available = self.composer_control_available("summary");
+        let level = self.snapshot["viewLevel"].as_str().unwrap_or("normal");
+        let modes: Vec<Value> = [
+            ("summary", "Summary", "titlebar/list-check.svg"),
+            ("normal", "Normal", "titlebar/leaf.svg"),
             ("detailed", "Detailed", "titlebar/list-details.svg"),
-            ("verbose", "Verbose", "titlebar/eye-filled.svg"),
         ]
         .into_iter()
+        .filter(|(value, _, _)| *value != "summary" || summary_available)
         .map(|(value, label, icon)| {
-            json!({"label":label,"iconPath":icon,"checked":level == value,"command":{"type":"setDetailLevel","level":value}})
+            let mut row = json!({"label":label,"iconPath":icon,"checked":level == value,"command":{"type":"setDetailLevel","level":value}});
+            if value == "summary" {
+                row["hotkeyAction"] = json!("toggleChatSummaryMode");
+            }
+            row
         })
         .collect();
-        if let Some(summary) = summary {
-            let summary_icon = if summary {
-                "titlebar/list-check.svg"
-            } else {
-                "titlebar/list-details.svg"
-            };
-            modes.push(json!({"label":"Summary mode","hotkeyAction":"toggleChatSummaryMode","iconPath":summary_icon,"checked":summary,"command":{"type":"toggleSummary"}}));
-        }
-        let level_name = match level {
-            "verbose" => "Verbose",
-            "simple" => "Simple",
-            _ => "Detailed",
-        };
-        let detail = if summary == Some(true) {
-            format!("{level_name}, Summary")
-        } else {
-            level_name.to_string()
+        let detail = match level {
+            "summary" => "Summary",
+            "detailed" => "Detailed",
+            _ => "Normal",
         };
         json!({"label":"View","iconPath":"titlebar/eye.svg","detail":detail,"openOnHover":false,"children":modes})
     }
@@ -212,7 +196,6 @@ impl NativeChatView {
         if self.chat_menu_toggled_shut(MORE_ACTIONS_TRIGGER, cx) {
             return;
         }
-        let appearance = super::appearance::ChatAppearance::current(&self.snapshot);
         let mut rows = Vec::new();
         if self.snapshot["composerOverflow"]["optionsOverflowed"] == true {
             rows.push(json!({"heading":true,"label":"Model settings"}));
@@ -234,7 +217,7 @@ impl NativeChatView {
         }
         rows.push(json!({"heading":true,"label":"Chat"}));
         rows.extend(self.fork_branches_row());
-        rows.push(self.view_modes_row(&appearance));
+        rows.push(self.view_modes_row());
         rows.extend(self.read_aloud_rows());
         // Side chat: the core offers it only for agents that take `/btw` (composer/side_chat.rs).
         if let Some(prefix) = self.snapshot["sideChat"].as_str() {

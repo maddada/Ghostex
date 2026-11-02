@@ -31,11 +31,10 @@ use crate::jsnum::js_safe_integer;
 pub const DRAFTS_STORE: &str = "drafts";
 /// The per-session summary-mode flag.
 pub const SUMMARY_STORE: &str = "summary";
-/// The per-session verbose override.
+/// The per-session record of the retired Verbose level; `"1"` reads as Detailed.
 pub const VERBOSE_STORE: &str = "verbose";
-/// The per-session Simple override (`"1"`, `"0"` or absent, like `verbose`): with `verbose` it is
-/// the chat's detail level, Simple, Detailed or Verbose (CDXC:SessionChat 2026-10-29 DECISION in
-/// transcript/actions.rs). The phone keeps its own Simple switch and never reads this store.
+/// The per-session Normal record (`"1"` Normal, `"0"` Detailed, absent follows Default to Detailed
+/// view): with `summary` and `verbose` it is the chat's one view level (transcript/view_level.rs).
 pub const SIMPLE_STORE: &str = "simple";
 /// `composer('submitted', {text, version})`: clear the stored draft when it still holds the
 /// submitted revision, record the send in the host's sent history, and flush.
@@ -157,7 +156,11 @@ pub fn decode_summary(raw: Option<&str>) -> bool {
 
 /// What the summary record is written as.
 pub fn encode_summary(summary_mode: bool) -> &'static str {
-    if summary_mode { "1" } else { "0" }
+    if summary_mode {
+        "1"
+    } else {
+        "0"
+    }
 }
 
 /// `"1"` and `"0"` pin the override; anything else follows the Ghostex setting.
@@ -171,7 +174,11 @@ pub fn decode_verbose(raw: Option<&str>) -> Option<bool> {
 
 /// What the verbose record is written as.
 pub fn encode_verbose(verbose: bool) -> &'static str {
-    if verbose { "1" } else { "0" }
+    if verbose {
+        "1"
+    } else {
+        "0"
+    }
 }
 
 /// `ghostex.sessionChat.summary.<sessionKey>`, as the store plus the suffix the host prefixes.

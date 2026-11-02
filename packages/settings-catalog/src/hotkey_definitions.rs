@@ -57,7 +57,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "toggleChatSummaryMode",
         title: "Toggle Summary Mode",
-        description: "Turn Summary mode on or off in the chat session you are in.",
+        description: "Turn Summary view on in the chat session you are in, or off again to Normal view.",
         default_key: "ctrl+alt+s",
         windows_linux_default_key: Some("cmd+alt+shift+s"),
         alternate_default_keys: &[],

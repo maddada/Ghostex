@@ -21,7 +21,9 @@
 
 use serde_json::Value;
 
-use crate::document::ChatPill;
+use serde_json::json;
+
+use crate::document::{ChatPill, ViewChip};
 use crate::questions::open_questions::OpenQuestions;
 
 fn text(value: &Value, key: &str) -> String {
@@ -133,9 +135,29 @@ pub fn chat_pills(
     pills
 }
 
+/// The status chip at the left of the chat box's pill strip for a view level that is not Normal:
+/// "Summary view" or "Detailed view", whose X (or a click on it) goes back to Normal.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User, of the empty left side of the pill strip: "i want to show some status related stuff there, for example if I enabled summary mode, show "Summary view" there with an x that appears next to it when i hover so we can disable it easily. same for if verbose is enabled". Then Verbose was retired and the levels became one choice (transcript/view_level.rs), so the chips are "Summary view" and "Detailed view", at most one at a time, and each one's X sets Normal. A chip alone is enough to show the strip. The chips are quieter than the pills on the right, the same height, and stay pinned left while the pills scroll; the X shows on hover on the desktop and always on the phone (apps/mobile/app/src/chat/native/cards/PillsStrip.tsx).
+pub fn view_chips(level: &str) -> Vec<ViewChip> {
+    use crate::transcript::view_level::{DETAILED, SUMMARY};
+    let (id, label) = match level {
+        SUMMARY => (SUMMARY, "Summary view"),
+        DETAILED => (DETAILED, "Detailed view"),
+        _ => return Vec::new(),
+    };
+    vec![ViewChip {
+        id: id.to_string(),
+        label: label.to_string(),
+        aria_label: format!("{label}. Turn off for Normal view"),
+        command: json!({"type": "setDetailLevel", "level": "normal"}),
+    }]
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{chat_pills, OpenQuestions};
+    use super::{chat_pills, view_chips, OpenQuestions};
     use serde_json::{json, Value};
 
     /// Resources comes first, ahead of Threads (the renderers' ? pill sits before both), and only
@@ -251,5 +273,27 @@ mod tests {
             &Value::Null,
         )[0];
         assert_eq!((pill.running, pill.waiting.as_str()), (true, "question"));
+    }
+
+    #[test]
+    fn view_chips_name_the_level_unless_it_is_normal() {
+        assert!(view_chips("normal").is_empty(), "Normal has no chip");
+        let summary = &view_chips("summary")[0];
+        assert_eq!(
+            (summary.id.as_str(), summary.label.as_str()),
+            ("summary", "Summary view")
+        );
+        let detailed = &view_chips("detailed")[0];
+        assert_eq!(
+            (detailed.id.as_str(), detailed.label.as_str()),
+            ("detailed", "Detailed view")
+        );
+        // Either X goes back to Normal.
+        for chip in [summary, detailed] {
+            assert_eq!(
+                chip.command,
+                serde_json::json!({"type": "setDetailLevel", "level": "normal"})
+            );
+        }
     }
 }

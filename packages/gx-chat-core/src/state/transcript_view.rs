@@ -44,10 +44,11 @@ pub const ROOT_AGENT_PATH: &str = "/root";
 pub struct TranscriptViewState {
     /// Whether the transcript is folded into one row per turn.
     pub summary_mode: bool,
-    /// The user's verbose override, or `None` to follow the setting.
+    /// The chat's saved `verbose` record. Verbose is retired: a chat saved on it reads as Detailed
+    /// (`transcript::view_level`).
     pub verbose_override: Option<bool>,
-    /// The user's Simple override for this chat, or `None` to follow the setting (with
-    /// `verbose_override` the chat's detail level: CDXC:SessionChat 2026-10-29 in transcript/actions.rs).
+    /// The chat's saved `simple` record: `true` is Normal, `false` Detailed, `None` follows the
+    /// Default to Detailed view setting (`transcript::view_level`).
     pub simple_override: Option<bool>,
     /// The session's directory, which shortens the paths on file-change cards.
     ///
@@ -162,6 +163,8 @@ pub struct TranscriptViewState {
     /// Settings > Chat > Tool call cards (`chatToolCallCards`): each message's tool calls project
     /// as one card (`transcript/tool_card.rs`). A change throws the cached projections away.
     pub tool_cards: bool,
+    /// The Default to Detailed view setting, which a chat with no level of its own follows.
+    pub detailed_default: bool,
 }
 
 /// One message's full projection, with the source it was built from.
@@ -270,6 +273,7 @@ impl Default for TranscriptViewState {
             session_directory: Vec::new(),
             session_directory_revision: 0,
             tool_cards: false,
+            detailed_default: false,
         }
     }
 }

@@ -6,7 +6,7 @@
 //! rewind sheet).
 
 use ghostex_gx_protocol::Tri;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::document::Document;
 use crate::state::{ChatContext, ChatState, RewindRequest};
@@ -70,6 +70,7 @@ fn rewind_projection(request: &RewindRequest) -> Value {
 pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     let view = &state.transcript_view;
     into.summary_mode = view.summary_mode;
+    into.view_level = crate::transcript::view_level::view_level(view).to_string();
     into.verbose_override = view.verbose_override;
     into.simple_override = view.simple_override;
     let askers;

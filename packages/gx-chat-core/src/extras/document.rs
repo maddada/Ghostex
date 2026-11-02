@@ -53,6 +53,9 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         &fleet_strip,
         &background,
     );
+    into.view_chips = chat_pills::view_chips(crate::transcript::view_level::view_level(
+        &state.transcript_view,
+    ));
     into.working_card = working_card::working_card(state, &into.working_strip, &into.chat_pills);
     into.agent_fleet_strip = Tri::Value(fleet_strip);
     into.agent_tasks_panel = Tri::Value(tasks_panel);

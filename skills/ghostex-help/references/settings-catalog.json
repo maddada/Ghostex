@@ -91,6 +91,19 @@
       "agentWritable": true
     },
     {
+      "key": "sessionChatDetailedView",
+      "title": "Default to Detailed view",
+      "subtitle": "New chats open in Detailed view, with the work under each agent reply shown. Off, they open in Normal view. More actions > View in a chat picks Summary, Normal or Detailed for that chat.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": false,
+      "advanced": true,
+      "agentWritable": true
+    },
+    {
       "key": "sessionChatKeepComposerExpanded",
       "title": "Keep chat box expanded while scrolling",
       "subtitle": "Keep the desktop chat box at full size while you scroll the transcript instead of shrinking it as you scroll up and growing it back at the end.",
@@ -275,30 +288,6 @@
       "sectionTitle": "Chat",
       "type": "boolean",
       "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "sessionChatSimpleMode",
-      "title": "Simple mode by default",
-      "subtitle": "New chats open in Simple mode (on by default). More actions > View in a chat picks Simple, Detailed or Verbose for that chat.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": true,
-      "agentWritable": true
-    },
-    {
-      "key": "sessionChatVerboseMode",
-      "title": "Verbose mode by default",
-      "subtitle": "New chats open in Verbose mode when Simple mode by default is off. More actions > View in a chat picks the level for that chat.",
-      "tab": "chat",
-      "tabTitle": "Chat",
-      "section": "chat",
-      "sectionTitle": "Chat",
-      "type": "boolean",
-      "default": false,
       "agentWritable": true
     },
     {
@@ -11984,7 +11973,7 @@
     {
       "id": "toggleChatSummaryMode",
       "title": "Toggle Summary Mode",
-      "description": "Turn Summary mode on or off in the chat session you are in.",
+      "description": "Turn Summary view on in the chat session you are in, or off again to Normal view.",
       "defaultKey": "ctrl+alt+s",
       "windowsLinuxDefaultKey": "cmd+alt+shift+s",
       "retiredDefaultKeys": [

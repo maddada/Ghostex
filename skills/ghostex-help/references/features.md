@@ -1951,8 +1951,8 @@ the agent.
 When an assistant message
 has tool calls, click its text or the chevron beside it to expand the tools directly
 under that message. Its full text and formatting stay visible when collapsed;
-links and code controls keep their own actions. A chat at the Verbose or
-Detailed level (More actions > View) opens these tools by default, along with
+links and code controls keep their own actions. A chat in Detailed view
+(More actions > View) opens these tools by default, along with
 each finished turn's "Worked for" log; close
 one with a click and it stays closed. A tool call the agent described (for
 example "Search for config files") is named by that description in every mode,
@@ -1960,7 +1960,7 @@ in the reply's own font and a slightly dimmer colour, instead of the tool's name
 and its command; click the row to see the full command and its result. File writes and code
 edits appear outside the tool groups while the agent works. As soon as the agent
 finishes a turn, its tool work folds away under "Worked for Xs" above the final
-reply (open by default at the Detailed and Verbose levels); click that
+reply (open by default in Detailed view); click that
 line to open or close it. When a turn shows
 "Worked for", all its file changes are grouped in a collapsed "N files changed"
 section directly below it. Older history loads with completed turns already
@@ -2010,24 +2010,26 @@ also toggle the diff. After expanding or collapsing, the header stays visible;
 chat scrolls to it if needed. This covers Claude's Write and Edit tools and Codex's apply_patch
 changes.
 
-More actions > View picks the chat's detail level, one of Simple, Detailed and
-Verbose, and holds the Summary switch. The View row names the level that is on,
-and adds "Summary" while Summary mode is on.
+More actions > View picks one view for the chat: Summary, Normal or Detailed.
+Picking one turns the others off, and the View row names the one in use.
 
-Simple is the level new chats start at. Tool groups
+Normal is the view new chats start in. Tool groups
 without a message above them collapse to a tool-call count, tool rows hide
 command previews, and the work under each reply stays folded until you open it;
 expand a tool to inspect its full input and result. File edits
 collapse under "Edited 1 file" or "Edited X files", counting each path once; expand
 the row to see the usual file and diff cards. Detailed shows the tool calls and
-file edits under each reply, folded; Verbose opens them. The level is kept per
-chat (the `simple` and `verbose` records in the chat's own storage). The settings
-keys `sessionChatSimpleMode` (on by default) and `sessionChatVerboseMode` only say
-which level a chat starts at and have no Settings row. Summary mode shows the
-Simple look while it is on; turning it off gives the chat its picked level back,
-and picking a level while Summary is on turns Summary off. The phone app has
-Simple mode too, under More actions > View in its chat box or in its Settings >
-Chat; the phone keeps its own switch, also on by default.
+file edits under each reply, open. Summary is described below. The view is kept
+per chat, so a chat you set to Detailed stays Detailed. Turning Summary off, by
+any route, always goes back to Normal. To have new chats start in Detailed, turn
+on Settings > Chat > Advanced > Default to Detailed view (`sessionChatDetailedView`).
+
+While a chat is in Summary or Detailed view, a "Summary view" or "Detailed view"
+chip sits at the left of the strip along the top of the chat box; hover it and
+click its X (or click the chip) to go back to Normal. A chip alone is enough to
+show the strip. The phone app has the same View choice in its chat box's More
+actions, the same chip (its X always shows; tap the chip), and the same Default
+to Detailed view switch in its Settings > Advanced.
 
 While the agent is working, its thinking shows as a closed "Thinking…" card with the newest finished line beside it, so it never pushes the rest of the chat away; click (or tap) the card to read the whole thought, which keeps the newest lines in view as they arrive, and click again to close it. The commands the thought runs stay in view below the card, and when the turn ends everything folds into its "Previous turn" card as before. This works the same for every agent, on the computer, the web and the phone.
 
@@ -2129,7 +2131,7 @@ never folded, so you can scroll up through every page. Messages to and from othe
 agents (a coordinator's thread reports, messages from other sessions) open no
 turn of their own: they fold into the "Agent reply" of your own prompt, so the
 summary reads as your conversation.
-Turn Summary mode on or off under More actions > View, where its row shows the
+Pick Summary under More actions > View, where its row shows the
 Toggle Summary Mode shortcut (Option+Ctrl+S on macOS, Ctrl+Alt+Shift+S on Windows
 and Linux), which switches it from anywhere in that chat and can be changed in
 Settings > Hotkeys.
@@ -2519,7 +2521,7 @@ between them is temporarily hidden in this dialog.
 Related settings: `hideAccountEmails`, `preferredAgentInterface`, `sessionChatTheme`,
 `sessionChatFontFamily`, `sessionChatCustomTranscriptWidthEnabled`,
 `sessionChatTranscriptWidthPercent` (Settings > Chat shows them as one Transcript width
-slider that reads Auto until dragged), `sessionChatVerboseMode`,
+slider that reads Auto until dragged), `sessionChatDetailedView`,
 `sessionChatFileEditPreviews`, `sessionChatMutedThinking`, `chatToolCallCards`,
 `sessionChatKeepComposerExpanded`, `sessionChatConfirmEscapeInterrupt`,
 `terminalViewWidthMode` (`match-chat` makes the terminal body the same width
