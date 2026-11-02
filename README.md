@@ -28,7 +28,15 @@
 <p align="center">
   <a href="media/readme/gx-hero-2.webp">
     <picture>
-          <img width="960" src="media/readme/gx-hero-2.webp" />
+          <img width="960" src="media/readme/gx-hero-4.jpeg" />
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <a href="media/readme/gx-hero-5.webp">
+    <picture>
+          <img width="960" src="media/readme/gx-hero-5.jpeg" />
     </picture>
   </a>
 </p>
