@@ -1014,7 +1014,7 @@ impl NativeChatView {
         Some(row.into_any_element())
     }
 
-    fn image_tile(
+    pub(super) fn image_tile(
         &mut self,
         message_id: &str,
         images: &[Value],

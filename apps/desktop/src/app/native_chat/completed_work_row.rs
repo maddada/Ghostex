@@ -66,6 +66,7 @@ impl NativeChatView {
             workflows,
             artifacts,
             final_message,
+            read_images,
             ..
         } = item
         else {
@@ -114,7 +115,11 @@ impl NativeChatView {
                 )]
             })
         } else {
-            None
+            // The closed fold keeps the pictures its rows read in view (gx-chat-core
+            // `read_images.rs`); opened, each row shows its own.
+            let pictures = serde_json::Value::Array(read_images.clone());
+            self.read_pictures(&format!("{id}:read"), &pictures, 4.0, p, cx)
+                .map(|strip| vec![strip])
         };
         self.hide_file_changes = true;
         let files = self.completed_files_fold(item, p, cx);

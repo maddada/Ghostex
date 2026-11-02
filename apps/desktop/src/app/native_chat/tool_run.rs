@@ -667,6 +667,12 @@ impl NativeChatView {
                 })
                 .into_any_element()
         });
+        // The picture the call opened from disk, under its label (gx-chat-core `read_images.rs`).
+        if let Some(pictures) =
+            self.read_pictures(&key, &tool["images"], ROW_PAD_X + TILE + 8.0, p, cx)
+        {
+            row = row.child(pictures);
+        }
         if (expanded || motion.is_some()) && has_detail {
             if let Some(body) = self.tool_detail_body(&key, message_id, index, tool, p, cx) {
                 row = row.child(self.disclosure_body_motion(&key, motion, 4.0 * s, body));

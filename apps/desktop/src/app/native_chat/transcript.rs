@@ -110,6 +110,7 @@ impl NativeChatView {
                 outcome,
                 latest_reply,
                 cards,
+                read_images,
             } => {
                 let reply = final_message.as_deref().filter(|reply| reply.is_object());
                 // A running turn's "Active work" fold starts open and has a key of its own, so
@@ -170,6 +171,16 @@ impl NativeChatView {
                             cx,
                         ),
                     );
+                    // The closed "Active work" fold keeps the pictures its rows read in view
+                    // (gx-chat-core `read_images.rs`).
+                    if !expanded && motion.is_none() {
+                        let pictures = serde_json::Value::Array(read_images.clone());
+                        if let Some(strip) =
+                            self.read_pictures(&format!("{key}:read"), &pictures, 4.0, &p, cx)
+                        {
+                            row = row.child(strip);
+                        }
+                    }
                     if expanded || motion.is_some() {
                         let mut body = div().flex().flex_col().w_full().gap(px(8.0 * s));
                         for message in fold_rows {

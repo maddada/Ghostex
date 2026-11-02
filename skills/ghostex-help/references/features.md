@@ -1322,6 +1322,17 @@ or right edge for a round previous or next button; on the phone swipe sideways
 (when not zoomed in) or tap the buttons at the sides. A counter such as 3 / 6
 shows where you are, each picture opens fitted to the window, and Escape (or a
 click beside the picture) closes it.
+When the agent opens a picture file (Claude's Read, Codex's view image,
+OpenCode's read, or any agent reading an image), its row in the chat shows a
+small thumbnail of it. When the turn folds into "Worked for …" or "Previous
+turn" (or summary mode's "Active work" is closed), the pictures it read stay in
+view as a row of thumbnails under the fold, all of them, wrapping onto more
+lines. Clicking one opens the picture viewer, and the arrows step through them
+with the chat's other pictures. The picture is read from the computer the
+session runs on, so it works for remote sessions and on the phone; a file that
+has since been deleted shows a small missing-picture square. A picture you
+already pasted or attached in your own message isn't shown a second time when
+the agent reads it.
 Dictate is the microphone button in the chat box (always shown, right next to
 Send) and on the terminal bar, on a Mac, Windows and Linux: press it, talk, and press it
 again to stop. In the chat session you are in, Option+Ctrl+D (Ctrl+Alt+Shift+D on

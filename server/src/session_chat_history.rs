@@ -276,6 +276,10 @@ struct Turn {
     deferred: usize,
     final_found: bool,
     files: BTreeSet<String>,
+    /// The picture files the turn's calls opened, oldest first, and the calls whose result
+    /// failed (rows arrive newest first, so a result is seen before its call).
+    images: Vec<String>,
+    failed_calls: BTreeSet<String>,
 }
 
 impl Turn {
@@ -286,6 +290,36 @@ impl Turn {
         }
         self.count += 1;
         for block in &message.blocks {
+            if let SessionChatBlock::ToolResult {
+                is_error: Some(true),
+                call_id: Some(id),
+                ..
+            } = block
+            {
+                self.failed_calls.insert(id.clone());
+            }
+            if let SessionChatBlock::ToolCall {
+                name,
+                input,
+                call_id,
+            } = block
+            {
+                // The thumbnails the folded turn shows before it is opened (CDXC:SessionChat
+                // 2026-11-02 in packages/gx-chat-core/src/transcript/read_images.rs).
+                let failed = call_id
+                    .as_ref()
+                    .is_some_and(|id| self.failed_calls.contains(id));
+                if !failed {
+                    for path in ghostex_gx_chat_core::transcript::read_images::image_paths_in_call(
+                        name, input, None,
+                    )
+                    .into_iter()
+                    .rev()
+                    {
+                        self.images.insert(0, path);
+                    }
+                }
+            }
             if let SessionChatBlock::ToolCall { name, input, .. } = block {
                 collect_file_paths(name, input, &mut self.files);
             }
@@ -346,6 +380,15 @@ impl Turn {
             if self.deferred > 0 {
                 value["deferredWork"] = json!({"beforeOffset": before, "startId": user.id,
                     "endId": self.end_id, "completedAt": self.completed_at, "messageCount": self.count, "filePaths": self.files});
+                let mut image_paths: Vec<&String> = Vec::new();
+                for path in &self.images {
+                    if !image_paths.contains(&path) {
+                        image_paths.push(path);
+                    }
+                }
+                if !image_paths.is_empty() {
+                    value["deferredWork"]["imagePaths"] = json!(image_paths);
+                }
             }
             result.push(value);
         }
@@ -437,5 +480,86 @@ fn collect_patch_paths(patch: &str, paths: &mut BTreeSet<String>) {
     }
     if let Some(path) = current {
         paths.insert(path);
+    }
+}
+
+#[cfg(test)]
+mod read_image_tests {
+    use super::*;
+
+    fn row(id: &str, role: &str, blocks: Value) -> SessionChatMessage {
+        serde_json::from_value(json!({
+            "id": id, "role": role, "blocks": blocks, "timestamp": null, "source": "transcript",
+        }))
+        .expect("a chat row")
+    }
+
+    /// A turn the history keeps folded names the pictures its held-back rows read, oldest first,
+    /// leaving out a read that failed (CDXC:SessionChat 2026-11-02 in
+    /// packages/gx-chat-core/src/transcript/read_images.rs).
+    #[test]
+    fn a_folded_turn_names_the_pictures_its_rows_read() {
+        let rows = [
+            row(
+                "c1",
+                "assistant",
+                json!([{"type": "tool-call", "name": "Read", "callId": "c1",
+                "input": {"file_path": "/shots/a.png"}}]),
+            ),
+            row(
+                "r1",
+                "tool",
+                json!([{"type": "tool-result", "callId": "c1", "output": "ok"}]),
+            ),
+            row(
+                "c2",
+                "assistant",
+                json!([{"type": "tool-call", "name": "exec", "callId": "c2",
+                "input": "await tools.view_image({path:\"/shots/b.jpg\"}); await tools.view_image({path:\"/shots/c.png\"});"}]),
+            ),
+            row(
+                "r2",
+                "tool",
+                json!([{"type": "tool-result", "callId": "c2", "output": "ok"}]),
+            ),
+            row(
+                "c3",
+                "assistant",
+                json!([{"type": "tool-call", "name": "Read", "callId": "c3",
+                "input": {"file_path": "/shots/gone.png"}}]),
+            ),
+            row(
+                "r3",
+                "tool",
+                json!([{"type": "tool-result", "callId": "c3", "output": "missing", "isError": true}]),
+            ),
+            row(
+                "c4",
+                "assistant",
+                json!([{"type": "tool-call", "name": "Read", "callId": "c4",
+                "input": {"file_path": "/shots/a.png"}}]),
+            ),
+            row(
+                "r4",
+                "tool",
+                json!([{"type": "tool-result", "callId": "c4", "output": "ok"}]),
+            ),
+            row(
+                "a1",
+                "assistant",
+                json!([{"type": "text", "text": "Done."}]),
+            ),
+        ];
+        let mut turn = Turn::default();
+        for message in rows.iter().rev() {
+            turn.push(message.clone(), false);
+        }
+        let prompt = row("u1", "user", json!([{"type": "text", "text": "look"}]));
+        let rows = turn.finish(Some(prompt), 0);
+        let work = &rows.last().expect("the prompt row")["deferredWork"];
+        assert_eq!(
+            work["imagePaths"],
+            json!(["/shots/a.png", "/shots/b.jpg", "/shots/c.png"])
+        );
     }
 }

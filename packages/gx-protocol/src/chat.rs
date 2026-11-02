@@ -162,6 +162,14 @@ pub struct DeferredWork {
     pub message_count: u64,
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub file_paths: Vec<String>,
+    /// The picture files the held-back rows opened from disk, which the turn's fold shows as
+    /// thumbnails before it is opened (gx-chat-core `transcript/read_images.rs`).
+    #[serde(
+        default,
+        deserialize_with = "crate::de::null_as_default",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub image_paths: Vec<String>,
 }
 
 /// One transcript row: the server's `SessionChatMessage` plus the client-only `deferredWork`.
