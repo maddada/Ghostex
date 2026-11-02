@@ -1251,7 +1251,7 @@ fn start_gxserver_tailcat_tunnel(
     plan: &TailcatForwardPlan,
     flags: &Flags,
 ) -> CliResult<TailcatTunnel> {
-    let Some(binary_path) = crate::tailcat::resolve_tailcat_binary() else {
+    let Some(binary_path) = crate::tailcat::resolve_client_tailcat_binary() else {
         return Err(tailcat_missing_error(target));
     };
     let tunnel = start_tailcat_tunnel(&binary_path, plan)?;
@@ -1291,8 +1291,9 @@ fn start_gxserver_tailcat_tunnel(
 
 fn tailcat_missing_error(target: &Target) -> CliError {
     CliError::Connection(format!(
-        "Could not set up tailcat gxserver profile{} because the \"tailcat\" executable was not found. Install it with \"go install github.com/tailscale/tailcat/cmd/tailcat@latest\", or point GHOSTEX_TAILCAT_BIN at it.",
-        target.profile_suffix()
+        "Could not set up tailcat gxserver profile{} because no \"tailcat\" {} or newer was found. Install it in Settings › Remote › Easy Connect, or point GHOSTEX_TAILCAT_BIN at one.",
+        target.profile_suffix(),
+        ghostex_paths::tailcat::TAILCAT_MIN_VERSION
     ))
 }
 

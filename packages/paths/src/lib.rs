@@ -10,6 +10,7 @@ pub mod portable;
 pub mod powershell;
 pub mod same_folder;
 pub mod settings_file;
+pub mod tailcat;
 pub mod tool_path;
 
 #[cfg(not(target_os = "windows"))]

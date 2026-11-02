@@ -3777,7 +3777,8 @@ it off hides it everywhere and keeps your boxes and settings.
   bar. Start boxes from your phone keeps what a phone needs on your paired
   phones, so while this computer is off the agent menu offers Start Claude (or
   Codex) on a Cloud Box…, which starts a box from the project's Default
-  snapshot, and the phone can chat with, wake, stop and delete boxes.
+  snapshot (not once this month's spend the computer last saw reached the
+  monthly cap), and the phone can chat with, wake, stop and delete boxes.
   Connecting providers, the first snapshot and picking secrets stay on the
   computer.
 - **More providers (agentbox)**: under Advanced on Settings > Cloud Boxes,

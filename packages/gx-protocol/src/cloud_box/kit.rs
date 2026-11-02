@@ -61,7 +61,7 @@ pub struct CloudKitProject {
 }
 
 /// `cloudKit` → this.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CloudKit {
     pub version: u64,
@@ -81,4 +81,27 @@ pub struct CloudKit {
     pub idle_stop_minutes: u64,
     #[serde(default)]
     pub projects: Vec<CloudKitProject>,
+    /// The monthly cap and the spend this computer last read, so the phone refuses a new box at
+    /// the cap while the computer is off.
+    #[serde(default)]
+    pub spend: CloudKitSpend,
+}
+
+/// The cap rule's inputs as of the kit (D8).
+///
+/// CDXC:CloudBoxes 2026-11-02 DECISION: the user chose that with the computer off the kit carries
+/// the cap and the last spend seen, and the phone refuses a new box once that spend reached the
+/// cap (100%), as the computer does; running boxes are never touched. A kit from an earlier month
+/// says nothing about this month, so the phone checks only a kit whose `month` is the current one.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudKitSpend {
+    /// `YYYY-MM`, UTC, of `total_usd`.
+    #[serde(default)]
+    pub month: String,
+    #[serde(default)]
+    pub total_usd: f64,
+    /// Absent: no cap.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cap_usd: Option<f64>,
 }

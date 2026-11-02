@@ -63,10 +63,11 @@ pub(crate) fn attach(
             let address = info.tailcat_address.clone().ok_or_else(|| {
                 CliError::Other("The box has no tailcat address yet.".to_string())
             })?;
-            let binary = crate::tailcat::binary::resolve_tailcat_binary().ok_or_else(|| {
-                CliError::Other(
-                    "Easy Connect (tailcat) is not installed on this computer.".to_string(),
-                )
+            let binary = crate::tailcat::binary::resolve_client_tailcat_binary().ok_or_else(|| {
+                CliError::Other(format!(
+                    "Easy Connect (tailcat {} or newer) is not installed on this computer. Install it in Settings › Remote › Easy Connect.",
+                    ghostex_paths::tailcat::TAILCAT_MIN_VERSION
+                ))
             })?;
             let local_port = std::net::TcpListener::bind((GXSERVER_LOCAL_API_HOST, 0))
                 .and_then(|listener| listener.local_addr())

@@ -495,6 +495,8 @@ export interface GxserverCloudKit {
     files: GxserverBoxSecretFile[];
     vars: GxserverBoxSecretVar[];
   }>;
+  /** The cap and the spend the computer last read: the phone refuses a new box at the cap (D8). */
+  spend: { month: string; totalUsd: number; capUsd?: number };
 }
 
 /** `cloudBoxesChanged`: `box` is the whole new row (replace; `deleted` = drop); without it refetch. */

@@ -20,6 +20,9 @@ use std::{
 
 use crate::app::helpers::*;
 use crate::*;
+use ghostex_paths::tailcat::{
+    TAILCAT_MIN_VERSION, managed_tailcat_binary, tailcat_version_supported,
+};
 
 /*
 CDXC:RemotePairing 2026-09-03:
@@ -38,7 +41,7 @@ same paths that terminate the machine's gxserver connection (disconnect,
 watchdog, app quit) and by a failed connect. A machine whose forwarder is not
 running resolves to an empty SSH host, which is deliberately not dialable.
 
-The binary is located in the same order as `server/src/tailcat/binary.rs`: explicit override, PATH, the helper installed through Settings, `~/go/bin`, then Homebrew.
+The binary is the first of: explicit override, the helper Ghostex installs (Settings), PATH, `~/go/bin`, then Homebrew, that is at least `TAILCAT_MIN_VERSION` (`gpui_resolve_easy_connect_binary`).
 */
 
 pub(crate) const GPUI_EASY_CONNECT_FORWARD_HOST: &str = "127.0.0.1";
@@ -134,11 +137,22 @@ pub(crate) fn gpui_start_easy_connect_forward(
     if address_blob.is_empty() || address_blob.chars().any(char::is_whitespace) {
         return Err("The saved Easy Connect address is invalid.".to_string());
     }
-    let Some(binary_path) = gpui_resolve_easy_connect_binary() else {
-        return Err(
-            "Easy Connect is not installed on this computer. Open Settings → Remote → Easy Connect and click Install Easy Connect, then reconnect the machine."
-                .to_string(),
-        );
+    let binary_path = match gpui_resolve_easy_connect_binary() {
+        EasyConnectBinary::Ready(path) => path,
+        EasyConnectBinary::TooOld(path, version) => {
+            request_easy_connect_install();
+            return Err(format!(
+                "Easy Connect's helper on this computer ({version} at {}) is older than {TAILCAT_MIN_VERSION} and can't reach this machine. Ghostex is installing the current one (Settings → Remote → Easy Connect shows its progress); reconnect when it finishes.",
+                path.display()
+            ));
+        }
+        EasyConnectBinary::Missing => {
+            request_easy_connect_install();
+            return Err(
+                "Easy Connect is not installed on this computer. Ghostex is installing it now (Settings → Remote → Easy Connect shows its progress); reconnect when it finishes."
+                    .to_string(),
+            );
+        }
     };
     let preferred_port =
         with_registry(|registry| registry.last_ports.get(remote_machine_id).copied());
@@ -233,13 +247,41 @@ fn gpui_bind_easy_connect_listener(preferred_port: Option<u16>) -> Result<TcpLis
 }
 
 // ---------------------------------------------------------------------------
-// Binary resolution — same order as server/src/tailcat/binary.rs.
+// Binary resolution: a tailcat new enough to dial current servers.
 // ---------------------------------------------------------------------------
 
-pub(crate) fn gpui_resolve_easy_connect_binary() -> Option<PathBuf> {
-    easy_connect_binary_candidates()
-        .into_iter()
-        .find(|candidate| is_executable_file(candidate))
+/// What the lookup found: a helper to dial with, an older one that cannot complete a handshake
+/// with a current server (its path and version), or none.
+pub(crate) enum EasyConnectBinary {
+    Ready(PathBuf),
+    TooOld(PathBuf, String),
+    Missing,
+}
+
+/// The first candidate whose `tailcat version` is at least `TAILCAT_MIN_VERSION`.
+///
+/// CDXC:RemotePairing 2026-11-02 WHY: Ghostex's own install comes first and an older helper
+/// anywhere (a `go install` in `~/go/bin`, Homebrew) is skipped, never replaced: a v0.4.0 client
+/// pings a v0.6.0 Cloud Box but never completes its handshake (`ghostex_paths::tailcat`).
+pub(crate) fn gpui_resolve_easy_connect_binary() -> EasyConnectBinary {
+    let mut too_old: Option<(PathBuf, String)> = None;
+    for candidate in easy_connect_binary_candidates() {
+        if !is_executable_file(&candidate) {
+            continue;
+        }
+        match easy_connect_binary_version(&candidate) {
+            Some(version) if tailcat_version_supported(&version) => {
+                return EasyConnectBinary::Ready(candidate);
+            }
+            version => {
+                too_old.get_or_insert((candidate, version.unwrap_or_else(|| "unknown".into())));
+            }
+        }
+    }
+    match too_old {
+        Some((path, version)) => EasyConnectBinary::TooOld(path, version),
+        None => EasyConnectBinary::Missing,
+    }
 }
 
 fn easy_connect_binary_candidates() -> Vec<PathBuf> {
@@ -249,18 +291,15 @@ fn easy_connect_binary_candidates() -> Vec<PathBuf> {
     {
         candidates.push(PathBuf::from(value));
     }
+    // CDXC:RemotePairing 2026-09-05 SEE-ALSO: server/src/tailcat/binary.rs installs the Settings helper at this shared per-user location.
+    candidates.push(managed_tailcat_binary(
+        &ghostex_paths::GhostexPaths::resolve().data_dir,
+    ));
     if let Some(path) = env::var_os("PATH") {
         candidates.extend(
             env::split_paths(&path).map(|directory| directory.join(easy_connect_executable_name())),
         );
     }
-    // CDXC:RemotePairing 2026-09-05 SEE-ALSO: server/src/tailcat/binary.rs installs the Settings helper at this shared per-user location.
-    candidates.push(
-        ghostex_paths::GhostexPaths::resolve()
-            .data_dir
-            .join("tailcat/bin")
-            .join(easy_connect_executable_name()),
-    );
     if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
         candidates.push(
             home.join("go")
@@ -270,6 +309,80 @@ fn easy_connect_binary_candidates() -> Vec<PathBuf> {
     }
     candidates.push(PathBuf::from("/opt/homebrew/bin").join(easy_connect_executable_name()));
     candidates
+}
+
+/// Versions already read, by path, with the file's size and change time when they were read.
+type VersionCache = HashMap<PathBuf, (u64, Option<std::time::SystemTime>, Option<String>)>;
+static VERSIONS: Mutex<Option<VersionCache>> = Mutex::new(None);
+const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// `tailcat version`'s first line, read once per file (and again when the file changes).
+fn easy_connect_binary_version(path: &Path) -> Option<String> {
+    let metadata = fs::metadata(path).ok()?;
+    let stamp = (metadata.len(), metadata.modified().ok());
+    if let Some((len, modified, version)) = VERSIONS
+        .lock()
+        .ok()
+        .and_then(|cache| cache.as_ref()?.get(path).cloned())
+        && (len, modified) == stamp
+    {
+        return version;
+    }
+    let version = read_easy_connect_binary_version(path);
+    if let Ok(mut cache) = VERSIONS.lock() {
+        cache
+            .get_or_insert_with(HashMap::new)
+            .insert(path.to_path_buf(), (stamp.0, stamp.1, version.clone()));
+    }
+    version
+}
+
+fn read_easy_connect_binary_version(path: &Path) -> Option<String> {
+    let mut child = gpui_background_command(path)
+        .arg("version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = std::time::Instant::now() + VERSION_TIMEOUT;
+    while child.try_wait().ok()?.is_none() {
+        if std::time::Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return None;
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+    let output = child.wait_with_output().ok()?;
+    let version = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    (!version.is_empty()).then_some(version)
+}
+
+/// Asks this computer's gxserver, once per app run, to install the current helper (the job
+/// Settings › Remote › Easy Connect › Install runs), so a missing or old helper heals itself.
+fn request_easy_connect_install() {
+    static REQUESTED: AtomicBool = AtomicBool::new(false);
+    if REQUESTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    thread::spawn(|| {
+        if gpui_gxserver_rpc_result(
+            "/api/installTailcat",
+            &serde_json::json!({}),
+            Duration::from_secs(30),
+        )
+        .is_err()
+        {
+            // Asked again on the next connect.
+            REQUESTED.store(false, Ordering::SeqCst);
+        }
+    });
 }
 
 fn easy_connect_executable_name() -> &'static str {

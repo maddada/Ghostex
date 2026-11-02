@@ -42,11 +42,30 @@ fn tailcat_binary_candidates() -> Vec<PathBuf> {
     candidates
 }
 
+/// The helper this computer dials a box or an Easy Connect machine with: Ghostex's own install
+/// first, then the serving lookup's other candidates, whichever is at least
+/// `ghostex_paths::tailcat::TAILCAT_MIN_VERSION` (an older client never completes a v0.6.0
+/// server's handshake). `None` when none is.
+///
+/// CDXC:RemotePairing 2026-11-02 WHY: serving keeps [`resolve_tailcat_binary`]'s order on purpose:
+/// moving this computer's own Easy Connect server to another helper version changes its address
+/// (v0.6.0 adds a pre-shared key) and would cut off phones paired with the old one. Dialing out
+/// has no such state, so it takes the newest-enough helper and leaves an old one where it is.
+/// SEE-ALSO: apps/desktop/src/app/helpers/remote/easy_connect_forward.rs (the desktop's same rule).
+pub fn resolve_client_tailcat_binary() -> Option<PathBuf> {
+    let mut candidates = vec![managed_tailcat_binary()];
+    candidates.extend(tailcat_binary_candidates());
+    candidates
+        .into_iter()
+        .filter(|candidate| is_executable_file(candidate))
+        .find(|candidate| {
+            read_tailcat_binary_version(candidate)
+                .is_some_and(|version| ghostex_paths::tailcat::tailcat_version_supported(&version))
+        })
+}
+
 pub(crate) fn managed_tailcat_binary() -> PathBuf {
-    ghostex_paths::GhostexPaths::resolve()
-        .data_dir
-        .join("tailcat/bin")
-        .join(executable_name())
+    ghostex_paths::tailcat::managed_tailcat_binary(&ghostex_paths::GhostexPaths::resolve().data_dir)
 }
 
 fn executable_name() -> &'static str {

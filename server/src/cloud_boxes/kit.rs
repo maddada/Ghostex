@@ -12,8 +12,8 @@
 
 use ghostex_gx_protocol::cloud_box::{
     error_codes, setting_keys, CloudKit, CloudKitProject, CloudKitProvider, CloudKitSnapshot,
-    CloudProviderConnectionState, CloudProviderId, CloudSnapshotStatus, ProjectCloudBoxSettings,
-    CLOUD_KIT_VERSION,
+    CloudKitSpend, CloudProviderConnectionState, CloudProviderId, CloudSnapshotStatus,
+    ProjectCloudBoxSettings, CLOUD_KIT_VERSION,
 };
 use serde_json::Value;
 
@@ -124,5 +124,13 @@ pub(super) fn kit(state: &AppState) -> Result<CloudKit, DomainStateError> {
         allow_device_keys: boot_steps::allowed_device_keys(state),
         idle_stop_minutes: boot_steps::idle_stop_minutes(state),
         projects,
+        spend: {
+            let spend = super::spend::read_spend(state);
+            CloudKitSpend {
+                month: spend.month,
+                total_usd: spend.total_usd,
+                cap_usd: spend.cap_usd,
+            }
+        },
     })
 }
