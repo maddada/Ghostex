@@ -30,8 +30,8 @@
   </a>
 </p>
 
-<h3 align="center">As minimal or feature-rich as you want it to be</h3>
-
+<h3 align="center">Super Customizable & Powerful</h3>
+<p align="center">As minimal or feature-rich as you want it to be</p>
 <p align="center">
   <a href="media/readme/gx-hero-2.jpeg">
     <picture>
