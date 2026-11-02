@@ -131,6 +131,9 @@ impl ChatCore {
                 &self.context,
             ));
         }
+        // Any call that hands the agent a message ends the new chat's worktree tray, whichever
+        // family made it (a form answer, Send now), before this turn's document is built.
+        crate::menus::draft_worktree::note_first_message(&mut self.state, false, &effects);
         self.republish();
         // Read aloud's speech rides after the publish that shows it (`read_aloud/playback.rs`).
         effects.append(&mut self.state.read_aloud.outbox);

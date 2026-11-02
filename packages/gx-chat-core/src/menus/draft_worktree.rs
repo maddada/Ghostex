@@ -62,6 +62,9 @@ pub struct DraftWorktreeState {
     /// The message the move carries, put back in the box if it fails.
     pub message: Option<String>,
     pub status: Option<MoveStatus>,
+    /// This chat sent its first message (any way: Enter, Tab to queue, Compact, a form or question
+    /// answer, Send now), so the tray is gone for good ([`note_first_message`]).
+    pub sent: bool,
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -82,6 +85,58 @@ fn box_picked(state: &ChatState) -> bool {
     crate::menus::run_location::row(state)
         .and_then(|row| text(&row, "selected"))
         .is_some_and(|selected| selected != crate::menus::run_location::LOCAL_RUN_LOCATION)
+}
+
+/*
+CDXC:Worktrees 2026-11-02 DECISION:
+User: "please as soon as i send the first message in a thread, then stop showing this bar". The tray
+used to follow the draft marker, which gxserver removes only once the prompt reaches the agent, so it
+stayed above the box while a first message was queued or still on its way. It now goes the moment a
+first message leaves this chat and never comes back for that session: this chat latches it on the
+send itself (and on every call that carries a message), and the session's own transcript or queue
+holding a message says the same to a chat opened later or on another device. Only a move into a
+worktree keeps it, to show that move's progress or give the message back. A chat that has sent
+nothing keeps it. The phone runs this core, so its tray follows the same rule.
+*/
+/// Whether this session has sent a message already, by this chat or any other.
+fn has_sent(state: &ChatState) -> bool {
+    state.menus.draft_worktree.sent
+        || state
+            .messages
+            .list
+            .iter()
+            .any(|message| message.role == ghostex_gx_protocol::ChatRole::User)
+        || state
+            .session
+            .queue_prompts
+            .as_ref()
+            .is_some_and(|prompts| !prompts.is_empty())
+}
+
+/// The gxserver calls that carry a message to the agent.
+fn carries_a_message(method: &ChatRpcMethod) -> bool {
+    matches!(
+        method,
+        ChatRpcMethod::SendSessionChatMessage
+            | ChatRpcMethod::QueueSessionChatPrompt
+            | ChatRpcMethod::SendSessionChatQueuedPrompt
+            | ChatRpcMethod::AnswerSessionChatPrompt
+    )
+}
+
+/// Latches the first message: from a send this chat started (`submitted`), or from any effect of
+/// this turn that hands the agent a message. Runs on every turn, before the document is built.
+pub fn note_first_message(state: &mut ChatState, submitted: bool, effects: &[Effect]) {
+    if state.menus.draft_worktree.sent {
+        return;
+    }
+    let carried = effects.iter().any(
+        |effect| matches!(effect, Effect::SendRpc { method, .. } if carries_a_message(method)),
+    );
+    if submitted || carried {
+        state.menus.draft_worktree.sent = true;
+        state.core.request_render();
+    }
 }
 
 fn moving(state: &ChatState) -> bool {
@@ -304,7 +359,7 @@ pub fn tray(state: &ChatState) -> Option<Value> {
     let tray = &state.menus.draft_worktree;
     let answer = tray.answer.as_ref()?;
     let moving = moving(state);
-    if !moving && (!is_draft(state) || box_picked(state)) {
+    if !moving && (!is_draft(state) || box_picked(state) || has_sent(state)) {
         return None;
     }
     let available = answer.get("available").and_then(Value::as_bool) == Some(true);
@@ -672,6 +727,80 @@ mod tests {
         assert_eq!(
             tray(&state).expect("tray")["status"]["message"],
             "Pick an existing worktree first."
+        );
+    }
+
+    #[test]
+    fn the_tray_goes_with_the_first_message_however_it_is_sent_and_never_comes_back() {
+        // A draft that has sent nothing keeps it.
+        let mut state = draft_state();
+        answered(&mut state, json!({}));
+        note_first_message(&mut state, false, &[]);
+        assert!(tray(&state).is_some());
+
+        // Enter, Tab to queue or Compact: the send itself, before any call answers.
+        note_first_message(&mut state, true, &[]);
+        assert!(tray(&state).is_none());
+        // Still a draft (gxserver has not promoted it yet), and still gone.
+        assert!(is_draft(&state));
+        note_first_message(&mut state, false, &[]);
+        assert!(tray(&state).is_none());
+
+        // A form or question answer, or Send now: the call that carries it.
+        for method in [
+            ChatRpcMethod::AnswerSessionChatPrompt,
+            ChatRpcMethod::SendSessionChatQueuedPrompt,
+            ChatRpcMethod::QueueSessionChatPrompt,
+            ChatRpcMethod::SendSessionChatMessage,
+        ] {
+            let mut state = draft_state();
+            answered(&mut state, json!({}));
+            note_first_message(
+                &mut state,
+                false,
+                &[Effect::SendRpc {
+                    request_id: 1,
+                    method,
+                    params: Box::new(json!({})),
+                }],
+            );
+            assert!(tray(&state).is_none());
+        }
+
+        // A chat opened later, or on the phone, sees the session's queued or recorded message.
+        let mut state = draft_state();
+        answered(&mut state, json!({}));
+        state.session.queue_prompts = Some(vec![json!({ "id": "q1", "text": "hi" })]);
+        assert!(tray(&state).is_none());
+        let mut state = draft_state();
+        answered(&mut state, json!({}));
+        state.messages.list.push(
+            serde_json::from_value(json!({
+                "id": "m1",
+                "role": "user",
+                "blocks": [],
+                "timestamp": null,
+                "source": "transcript",
+            }))
+            .expect("a user row"),
+        );
+        assert!(tray(&state).is_none());
+    }
+
+    #[test]
+    fn a_move_into_a_worktree_keeps_the_tray_for_its_progress_and_its_failure() {
+        let mut state = draft_state();
+        answered(&mut state, json!({ "mode": "newWorktree" }));
+        let effects = intercept_send(&mut state, "fix it", &[]).expect("the move");
+        note_first_message(&mut state, false, &effects);
+        assert_eq!(
+            tray(&state).expect("progress")["status"]["state"],
+            "creating"
+        );
+        let _ = give_back(&mut state, "Worktree setup command failed.".to_string());
+        assert_eq!(
+            tray(&state).expect("the reason")["status"]["state"],
+            "failed"
         );
     }
 
