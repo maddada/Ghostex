@@ -223,3 +223,77 @@ fn empryos_allow_deny_card_leaves_escape_unanswered() {
     assert_eq!(notice["secondaryChoice"], Value::Null);
     assert_eq!(notice["collapsedChoices"], json!([0, 1]));
 }
+
+#[test]
+fn a_stored_approval_steps_aside_while_a_live_notice_holds_a_typed_draft() {
+    let mut duplicate_cards = Vec::new();
+    for (agent, kind, title, screen) in [
+        (
+            "omp",
+            "ompInputBlocked",
+            "OMP is waiting for tool approval",
+            "╭─ Allow tool: bash ─────╮\n│ Command: echo approval-test │\n│   Approve │\n│ ❯ Deny and send message │\n├────────────────────────┤\n│ ⏎ deny and send · ⎋ deny │\n╰────────────────────────╯\n──────────────────────────\n N\n──────────────────────────",
+        ),
+        (
+            "codex",
+            "codexInputBlocked",
+            "Codex is waiting for terminal interaction",
+            "Review the pending command\n N\nEnter to continue · Esc to cancel",
+        ),
+    ] {
+        let mut chat = Chat::open();
+        let prompt = json!({
+            "kind": "approval",
+            "tool": "bash",
+            "summary": "echo approval-test",
+            "toolUseId": "approval-1",
+        });
+        chat.seq += 1;
+        let frame: ChatStateFrame = serde_json::from_value(json!({
+            "projectId": PROJECT,
+            "sessionId": SESSION,
+            "serverId": "server-1",
+            "protocolVersion": 1,
+            "epoch": 1,
+            "seq": chat.seq,
+            "status": "ready",
+            "agent": agent,
+            "prompt": prompt,
+        }))
+        .expect("the stored approval frame parses");
+        chat.drive(Event::Frame(Box::new(ChatFrame::State(Box::new(frame)))));
+        assert_eq!(chat.document()["questionCard"]["visible"], true, "{agent}");
+
+        let mut notice = approval("echo approval-test");
+        notice["kind"] = json!(kind);
+        notice["title"] = json!(title);
+        notice["screenTail"] = json!(screen);
+        chat.seq += 1;
+        let frame: ChatStateFrame = serde_json::from_value(json!({
+            "projectId": PROJECT,
+            "sessionId": SESSION,
+            "serverId": "server-1",
+            "protocolVersion": 1,
+            "epoch": 1,
+            "seq": chat.seq,
+            "status": "ready",
+            "agent": agent,
+            "prompt": prompt,
+            "terminalNotice": notice,
+        }))
+        .expect("the typed draft frame parses");
+        chat.drive(Event::Frame(Box::new(ChatFrame::State(Box::new(frame)))));
+        let document = chat.document();
+        assert!(chat.card_shown(), "{agent}: the draft notice has the keyboard");
+        assert_eq!(document["prompt"], prompt, "{agent}: approval stays stored");
+        let card_count = usize::from(document["noticeVisible"] == true)
+            + usize::from(document["questionCard"]["visible"] == true);
+        if card_count != 1 || document["questionCard"]["visible"] != false {
+            duplicate_cards.push((agent, card_count));
+        }
+    }
+    assert!(
+        duplicate_cards.is_empty(),
+        "the draft notice must be the only card: {duplicate_cards:?}"
+    );
+}
