@@ -484,7 +484,7 @@ pub fn evidence_priority(source: Option<&str>) -> i32 {
     }
 }
 
-/// `applyDetectedChoice`.
+/// `applyDetectedChoice`: compares the evidence sources before the capture times.
 fn apply_detected_choice(
     state: &OptionState,
     descriptor_id: &str,

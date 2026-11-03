@@ -118,6 +118,10 @@ pub fn model_menu_pick(
 ///
 /// `provider_catalogs` holds each provider's session option catalog for the whole menu: building
 /// one per row was most of the document's cost on every publish.
+///
+/// CDXC:SessionChat 2026-11-03 WHY:
+/// A row starts on the session's level, else the model's default, else the middle of its list, and both renderers draw the session's own row's start as the level the session runs at (the Reasoning button's value and its marked level). An OMP session whose level gxserver had not read therefore showed the middle level as OMP's ("High" while OMP ran at low). OMP's own row now starts on no level (`""`) while that level is unknown or is none of the row's levels (OMP's Auto arrives as `auto`, which the Reasoning button names Auto): no level is marked, a pick from the row carries no level (gxserver then types `/switch` alone; with no level reported at all, a pick of the model already running changes nothing), and Left and Right on the desktop start from an end of the list. Other agents keep the fallback.
+/// SEE-ALSO: `effort_for` and `reasoning_for` in apps/desktop/src/app/native_chat/option_menu/model_menu/state.rs and the phone's `modelMenuState.ts` read the row's level; server/src/session_chat_pi_models.rs `omp_transcript_level` reports OMP's level.
 fn model_menu_row_efforts(
     row: &ModelMenuRow,
     context: &ModelMenuContext,
@@ -201,7 +205,11 @@ fn model_menu_row_efforts(
             .filter(|value| efforts.iter().any(|effort| effort.value == *value))
             .map(str::to_string)
     };
-    let effort = offered(context.effort_value.as_deref())
+    let current = offered(context.effort_value.as_deref());
+    if current.is_none() && row.selected && row.entry.provider == ModelPickerProvider::Omp {
+        return (efforts, String::new());
+    }
+    let effort = current
         .or_else(|| offered(default_value.as_deref()))
         .unwrap_or_else(|| efforts[efforts.len() / 2].value.clone());
     (efforts, effort)

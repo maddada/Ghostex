@@ -675,7 +675,8 @@ fn build_catalog(
 
 /// The detection layer for a Pi or OMP session: the lineup, and the model the transcript last
 /// recorded (`model_change`), which is exact where the statusline is not: Pi drops the provider
-/// when the footer is narrow or only one provider is logged in, and OMP prints only the name.
+/// when the footer is narrow or only one provider is logged in, and OMP prints only the name. For
+/// OMP also the level its transcript last recorded ([`omp_transcript_level`]).
 pub fn read_pi_family_selection(
     repository: &DomainRepository<'_>,
     project_id: &str,
@@ -742,6 +743,15 @@ pub fn read_pi_family_selection(
                 context_window,
             )
         });
+    let effort = status
+        .as_ref()
+        .filter(|_| family == PiFamilyAgent::Omp)
+        .and_then(omp_transcript_level)
+        .map(|level| SessionChatDetectedChoice {
+            label: level.clone(),
+            value: level,
+            source: SessionChatOptionEvidence::Transcript,
+        });
     Some(SessionChatDetectedSelection {
         // The lineup's name for the model (`GPT-5.5`), as the picker's own row reads.
         model: model.map(|value| SessionChatDetectedChoice {
@@ -751,11 +761,25 @@ pub fn read_pi_family_selection(
             value,
             source: SessionChatOptionEvidence::Transcript,
         }),
+        effort,
         context_usage,
         pi_status,
         model_catalog: catalog,
         ..SessionChatDetectedSelection::default()
     })
+}
+
+/// CDXC:AgentProviders 2026-11-03 WHY:
+/// OMP's level reached the chat only from its composer head, which the `pi` composer and a `box` composer with a custom status line do not draw in a form the footer grammar reads. A level set by a typed `/switch <model>:<level>`, by OMP itself, or by a pick made on another client stayed unknown, and the model menu showed its fallback, the middle of the level list, as the level OMP ran at ("High" while OMP ran at low).
+/// OMP appends a `thinking_level_change` for every level change, synchronously, before it answers (`setThinkingLevel` in OMP 18.13.3 `session/model-controls.ts`); the model pick already counts on the same record. While OMP's Auto chooses the level (`configured: "auto"`) the record holds only what Auto resolved to, so the reading is `auto`, as OMP's own footer label and the pick's skip rule read it, never the resolved level. It is reported rather than left out because a chat keeps the last level it was told: leaving it out kept a fixed level picked before `/effort auto` marked as current. OMP writes the file at its first reply; until then no level is reported.
+/// SEE-ALSO: `OmpRecord` in server/src/session_chat_provider_model_picker.rs, `model_menu_row_efforts` in packages/gx-chat-core/src/menus/picker/projection.rs, `apply_detected_options` in packages/gx-chat-core/src/menus/option_values.rs.
+fn omp_transcript_level(
+    status: &crate::session_chat_pi_status::PiTranscriptStatus,
+) -> Option<String> {
+    if status.configured_thinking_level.as_deref() == Some("auto") {
+        return Some("auto".to_string());
+    }
+    status.thinking_level.clone()
 }
 
 fn transcript_path(
@@ -982,4 +1006,162 @@ pub(crate) fn pi_family_terminal_labels(agent: PiFamilyAgent, value: &str) -> Ve
         labels.push(id);
     }
     labels
+}
+
+#[cfg(test)]
+mod omp_level_tests {
+    use serde_json::{json, Value};
+
+    use crate::domain::DomainRepository;
+    use crate::paths::get_gxserver_paths;
+    use crate::session_chat_options::{SessionChatDetectedOptions, SessionChatOptionAgent};
+    use crate::storage::{initialize_gxserver_storage, open_gxserver_database};
+
+    const OPUS: &str = "anthropic/claude-opus-5-5";
+    const HAIKU: &str = "anthropic/claude-haiku-5-5";
+
+    /// OMP writes the session header, then its default model and start level (`configured: null`),
+    /// followed by each model and level change.
+    fn session_start() -> Vec<String> {
+        vec![
+            r#"{"type":"session","version":3,"id":"01a1a079-7d2d-73cc-9cc9-7551a069de86","timestamp":"2026-11-03T08:14:38.893Z","cwd":"/tmp/infra"}"#.to_string(),
+            format!(
+                r#"{{"type":"model_change","id":"ce40c69b","parentId":null,"timestamp":"2026-11-03T08:14:38.946Z","runtime":{{"version":"18.13.3"}},"model":"{OPUS}","resolvedModelIsFallback":false}}"#
+            ),
+            r#"{"type":"thinking_level_change","id":"92ce9eb1","parentId":"ce40c69b","timestamp":"2026-11-03T08:14:38.946Z","runtime":{"version":"18.13.3"},"thinkingLevel":"medium","configured":null}"#.to_string(),
+        ]
+    }
+
+    fn model_change(model: &str) -> String {
+        format!(
+            r#"{{"type":"model_change","id":"68e4bbda","parentId":"b15a3c11","timestamp":"2026-11-03T08:15:36.165Z","runtime":{{"version":"18.13.3"}},"model":"{model}","role":"temporary","resolvedModelIsFallback":false}}"#
+        )
+    }
+
+    fn level_change(level: &str, configured: &str) -> String {
+        format!(
+            r#"{{"type":"thinking_level_change","id":"4c9b7c5c","parentId":"68e4bbda","timestamp":"2026-11-03T08:15:36.165Z","runtime":{{"version":"18.13.3"}},"thinkingLevel":"{level}","configured":"{configured}"}}"#
+        )
+    }
+
+    /// The `effort` gxserver publishes in an OMP session's `selectedOptions` while OMP's footer is
+    /// not readable, for a transcript holding `records`; `None` is a session OMP has not written
+    /// its transcript for yet.
+    fn published_level(records: Option<Vec<String>>) -> Value {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().join("gxserver")));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        let repository = DomainRepository::new(&db, "S1");
+        let transcript = temp.path().join("omp-session.jsonl");
+        if let Some(records) = records {
+            std::fs::write(&transcript, records.join("\n") + "\n").expect("write the transcript");
+        }
+        let project = repository
+            .create_project(
+                json!({ "name": "Infrastructure", "path": temp.path() })
+                    .as_object()
+                    .expect("project params"),
+            )
+            .expect("create project");
+        let project_id = project["projectId"].as_str().expect("project id");
+        let session = repository
+            .create_session(
+                json!({
+                    "agentId": "omp",
+                    "kind": "agent",
+                    "projectId": project_id,
+                    "runtimeSettings": {
+                        "agentName": "omp",
+                        "agentSessionPath": transcript.to_string_lossy(),
+                    },
+                    "title": "OMP Session",
+                })
+                .as_object()
+                .expect("session params"),
+                false,
+            )
+            .expect("create session");
+        let row = |id: &str, name: &str| {
+            json!({
+                "provider": "anthropic",
+                "id": id,
+                "name": name,
+                "thinking": ["low", "medium", "high", "max"],
+            })
+        };
+        let _lineup = super::serve_test_omp_lineup(Some(&[
+            row("claude-opus-5-5", "Claude Opus 5.5"),
+            row("claude-haiku-5-5", "Claude Haiku 5.5"),
+        ]));
+        let selection = super::read_pi_family_selection(
+            &repository,
+            project_id,
+            session["sessionId"].as_str().expect("session id"),
+            SessionChatOptionAgent::Omp,
+        )
+        .expect("the lineup alone is a reading");
+        SessionChatDetectedOptions::new(selection).to_value()["effort"].clone()
+    }
+
+    fn transcript(changes: &[String]) -> Option<Vec<String>> {
+        Some(
+            session_start()
+                .into_iter()
+                .chain(changes.iter().cloned())
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_typed_switch_with_a_level_is_reported_as_omps_level() {
+        // `/switch anthropic/claude-haiku-5-5:low` sent from the chat.
+        assert_eq!(
+            published_level(transcript(&[
+                model_change(HAIKU),
+                level_change("low", "low")
+            ])),
+            json!({ "value": "low", "label": "low", "source": "transcript" })
+        );
+    }
+
+    #[test]
+    fn a_menu_pick_is_reported_at_the_level_it_ended_on() {
+        // A pick types `/switch` (OMP moves to the model's default level), then `/effort low`.
+        assert_eq!(
+            published_level(transcript(&[
+                model_change(HAIKU),
+                level_change("max", "max"),
+                level_change("low", "low"),
+            ])),
+            json!({ "value": "low", "label": "low", "source": "transcript" })
+        );
+    }
+
+    #[test]
+    fn omps_start_level_is_reported_before_any_change() {
+        assert_eq!(
+            published_level(transcript(&[])),
+            json!({ "value": "medium", "label": "medium", "source": "transcript" })
+        );
+    }
+
+    #[test]
+    fn auto_after_a_fixed_level_is_reported_as_auto_not_as_what_it_resolved_to() {
+        // `/effort auto` after a fixed Low: OMP records Auto's provisional level with
+        // `configured: "auto"`, and the chat must stop showing Low.
+        assert_eq!(
+            published_level(transcript(&[
+                model_change(HAIKU),
+                level_change("low", "low"),
+                level_change("high", "auto"),
+            ])),
+            json!({ "value": "auto", "label": "auto", "source": "transcript" })
+        );
+    }
+
+    #[test]
+    fn no_level_is_reported_before_omp_writes_its_transcript() {
+        assert_eq!(published_level(None), Value::Null);
+    }
 }

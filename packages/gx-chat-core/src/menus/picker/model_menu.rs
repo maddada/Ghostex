@@ -156,7 +156,8 @@ pub struct ModelMenuRow {
     /// The reasoning levels this row's model offers, which Left and Right step through; empty for
     /// a model without levels. Filled by [`crate::menus::picker::projection::model_menu_projection`].
     pub efforts: Vec<ModelMenuEffort>,
-    /// The level a keyboard pick of this row starts on; empty when `efforts` is.
+    /// The level a keyboard pick of this row starts on; empty when `efforts` is, and on an OMP
+    /// session's own row while OMP's level is unknown or Auto (no level is marked as the current one).
     pub effort: String,
 }
 
