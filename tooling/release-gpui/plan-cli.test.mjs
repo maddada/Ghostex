@@ -182,17 +182,17 @@ describe('plan-cli component identity inference', () => {
     const identities = resolveComponentIdentities({
       baselines: [],
       entries: repo.reader.listTree(repo.head),
-      overrides: { cef: '156.0.14-g4fa4ab5-chromium-156.0.8078.48' },
+      overrides: { cef: '156.0.15-gcf671c0-chromium-156.0.8078.80' },
       readObject: repo.reader.readObject,
       scope: defaultScope(),
       version: '7.8.0',
     });
-    expect(identities.cef).toBe('156.0.14-g4fa4ab5-chromium-156.0.8078.48');
+    expect(identities.cef).toBe('156.0.15-gcf671c0-chromium-156.0.8078.80');
   });
 
   test('infers an identity from a baseline whose recorded composition still matches', () => {
     baseline.provenance.components = {
-      cef: { componentVersion: '156.0.14-g4fa4ab5-chromium-156.0.8078.48' },
+      cef: { componentVersion: '156.0.15-gcf671c0-chromium-156.0.8078.80' },
       'code-server': { componentVersion: '390f119a145e-p2-abc' },
     };
     const identities = resolveComponentIdentities({
@@ -202,12 +202,12 @@ describe('plan-cli component identity inference', () => {
       scope: defaultScope(),
       version: '7.8.0',
     });
-    expect(identities.cef).toBe('156.0.14-g4fa4ab5-chromium-156.0.8078.48');
+    expect(identities.cef).toBe('156.0.15-gcf671c0-chromium-156.0.8078.80');
     expect(identities['code-server']).toBe('390f119a145e-p2-abc');
   });
 
   test("infers nothing once the component's own inputs move", () => {
-    baseline.provenance.components = { cef: { componentVersion: '156.0.14-g4fa4ab5-chromium-156.0.8078.48' } };
+    baseline.provenance.components = { cef: { componentVersion: '156.0.15-gcf671c0-chromium-156.0.8078.80' } };
     repo.setGitlink('.dependencies/cef-rs', '1111111111111111111111111111111111111111');
     const moved = repo.commit('bump cef-rs');
     const identities = resolveComponentIdentities({

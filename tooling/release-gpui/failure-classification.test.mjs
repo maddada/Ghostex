@@ -33,7 +33,7 @@ describe('transient failure classification', () => {
     ['zig-compile', "src/main.zig:42:9: error: expected type 'u32'"],
     ['integrity', 'hash mismatch: expected abc, found def'],
     ['signature', 'codesign failed with exit code 1'],
-    ['ghostex-refusal', 'Refusing to replace cef-156.0.14-g4fa4ab5-chromium-156.0.8078.48-linux-x64.tar.gz'],
+    ['ghostex-refusal', 'Refusing to replace cef-156.0.15-gcf671c0-chromium-156.0.8078.80-linux-x64.tar.gz'],
     ['test-failure', 'FAIL  tooling/release-gpui/plan.test.mjs'],
   ])('never retries the deterministic %s signature', (ruleId, text) => {
     expect(classifyFailure(text)).toEqual({ category: 'fatal', matchedRule: ruleId, retryable: false });

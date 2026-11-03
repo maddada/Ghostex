@@ -7,7 +7,7 @@
 # Create the versioned folder before cargo runs and stage only the distribution inside it: exactly the CEF build the pinned cef-rs expects.
 GHOSTEX_CEF_RS_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.dependencies/cef-rs" && pwd)"
 
-# The CEF build the pinned bindings expect (`156.0.14`): the `+` build metadata
+# The CEF build the pinned bindings expect (`156.0.15`): the `+` build metadata
 # of the cef-rs workspace version, which is what cef-dll-sys downloads.
 ghostex_pinned_cef_build() {
 	local build
