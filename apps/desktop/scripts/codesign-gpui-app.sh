@@ -149,13 +149,23 @@ requires_v8_runtime_entitlements() {
 	[[ -f "$APP_PATH/Contents/Resources/Web/code-server/lib/node" && "$code_path" == "$APP_PATH/Contents/Resources/Web/code-server/lib/node" ]]
 }
 
+# CDXC:RemotePairing 2026-11-03 WHY: macOS privacy settings remember gxserver and zmx by path plus their designated requirement, whose identifier codesign otherwise takes from the file name. Pinning the names they have always shipped with (`gxserver`, `zmx`) keeps every existing grant valid and stops a renamed or repackaged copy from reading as a new program; never change them to reverse-DNS names, which would make every Mac ask again once. SEE-ALSO: `move_release_into_fixed_folder` in server/src/setup.rs, which keeps the path.
 sign_plain_macho() {
-	local code_path="$1"
+	local code_path="$1" code_name
+	code_name="$(basename "$code_path")"
 	if requires_v8_runtime_entitlements "$code_path"; then
 		sign_code \
 			--force \
 			--options runtime \
 			--entitlements "$CEF_ENTITLEMENTS" \
+			"$CODE_SIGN_TIMESTAMP_FLAG" \
+			--sign "$CODE_SIGN_IDENTITY" \
+			"$code_path"
+	elif [[ "$code_name" == "gxserver" || "$code_name" == "zmx" ]]; then
+		sign_code \
+			--force \
+			--options runtime \
+			--identifier "$code_name" \
 			"$CODE_SIGN_TIMESTAMP_FLAG" \
 			--sign "$CODE_SIGN_IDENTITY" \
 			"$code_path"

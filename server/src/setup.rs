@@ -159,7 +159,12 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
 
     stop_existing_gxserver(&package_link);
 
-    activate_release_package(&options.install_root, release_dir, &release_name)?;
+    activate_release_package(
+        &options.install_root,
+        release_dir,
+        &release_name,
+        cfg!(target_os = "macos"),
+    )?;
 
     let local_bin = local_bin_dir();
     if let Some(local_bin) = &local_bin {
@@ -206,7 +211,8 @@ fn run_setup_unix(options: &SetupOptions) -> Result<()> {
     if let Some(upload_path) = &options.upload_path {
         let _ = fs::remove_file(upload_path);
     }
-    println!("gxserver setup complete: {}", release_dir.display());
+    let installed = fs::canonicalize(&package_link).unwrap_or_else(|_| release_dir.clone());
+    println!("gxserver setup complete: {}", installed.display());
     Ok(())
 }
 
@@ -223,12 +229,14 @@ fn release_missing_tool(release_dir: &Path) -> Option<&'static str> {
         .find(|tool| !release_dir.join("bin").join(tool).is_file())
 }
 
-/// Points `package` at the release.
+/// Points `package` at the release, first moving it into the fixed `current` folder when
+/// `fixed_folder` is set (macOS).
 #[cfg(unix)]
 fn activate_release_package(
     install_root: &Path,
     release_dir: &Path,
     release_name: &str,
+    fixed_folder: bool,
 ) -> Result<()> {
     let package_link = install_root.join("package");
     /*
@@ -240,7 +248,59 @@ fn activate_release_package(
         fs::rename(&package_link, &backup)
             .with_context(|| format!("move previous package directory to {}", backup.display()))?;
     }
+    if fixed_folder {
+        let current = move_release_into_fixed_folder(install_root, release_dir, release_name)?;
+        return replace_symlink(&current, &package_link);
+    }
     replace_symlink(release_dir, &package_link)
+}
+
+/// CDXC:RemotePairing 2026-11-03 WHY: macOS privacy settings (Files and Folders, Local Network and the like) remember a program that is not an app by its file path plus its signature. Every install and upgrade unpacks into a new `releases/release-<uuid>` folder, so a Mac running only gxserver (a remote Mac mini) saw a new gxserver and zmx after each Ghostex update, asked for every permission again and filled Privacy & Security with duplicate rows (Discord, 2026-11-03). The release is moved into one fixed `current` folder instead, the way an app update replaces Ghostex.app in place, so the same Developer ID signed programs keep one path and their grants. Running zmx sessions keep their programs (a rename never touches a running file) and their launchd supervisors only watch the session socket. The replaced release stays beside the others for recovery by hand; older replaced copies are removed. Linux has no such permission store and keeps a folder per release.
+#[cfg(unix)]
+fn move_release_into_fixed_folder(
+    install_root: &Path,
+    release_dir: &Path,
+    release_name: &str,
+) -> Result<PathBuf> {
+    const REPLACED_PREFIX: &str = "replaced-by-";
+    let current = install_root.join("current");
+    // A release dir inferred from a `package/bin/gxserver` path is the link, not the folder.
+    let release_dir = &fs::canonicalize(release_dir).unwrap_or_else(|_| release_dir.to_path_buf());
+    // `setup` run again from the installed copy.
+    if fs::canonicalize(&current).ok().as_ref() == Some(release_dir) {
+        return Ok(current);
+    }
+    let releases = install_root.join("releases");
+    let replaced = releases.join(format!("{REPLACED_PREFIX}{release_name}"));
+    let had_current = current.symlink_metadata().is_ok();
+    if had_current {
+        fs::create_dir_all(&releases).context("create releases directory")?;
+        let _ = fs::remove_dir_all(&replaced);
+        fs::rename(&current, &replaced)
+            .with_context(|| format!("move the installed release to {}", replaced.display()))?;
+    }
+    if let Err(error) = fs::rename(release_dir, &current) {
+        if had_current {
+            let _ = fs::rename(&replaced, &current);
+        }
+        return Err(error).with_context(|| {
+            format!(
+                "move release {} to {}",
+                release_dir.display(),
+                current.display()
+            )
+        });
+    }
+    if let Ok(entries) = fs::read_dir(&releases) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name();
+            if path != replaced && name.to_string_lossy().starts_with(REPLACED_PREFIX) {
+                let _ = fs::remove_dir_all(&path);
+            }
+        }
+    }
+    Ok(current)
 }
 
 #[cfg(unix)]
@@ -523,12 +583,68 @@ mod tests {
         let release = root.join("releases/release-good");
         tools(&release, None);
         assert_eq!(release_missing_tool(&release), None);
-        activate_release_package(root, &release, "release-good").expect("activate");
+        activate_release_package(root, &release, "release-good", false).expect("activate");
         assert!(root.join("package").is_symlink());
         assert!(root.join("package/bin/zmx").is_file());
         assert!(root
             .join("package.backup.release-good/bin/zmx")
             .is_symlink());
+    }
+
+    /// Two upgrades on macOS: each release ends up in the same `current` folder, so the programs
+    /// keep one path (and their macOS privacy grants); the release it replaced is kept once, and a
+    /// rerun from the installed copy changes nothing.
+    #[test]
+    fn macos_upgrades_keep_one_program_path() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        let release = |name: &str, build: &str| {
+            let dir = root.join("releases").join(name);
+            fs::create_dir_all(dir.join("bin")).expect("bin");
+            for tool in REMOTE_TOOL_NAMES {
+                fs::write(dir.join("bin").join(tool), build).expect("tool");
+            }
+            dir
+        };
+        let first = release("release-a", "a");
+        activate_release_package(root, &first, "release-a", true).expect("first install");
+        let installed_zmx = fs::canonicalize(root.join("package/bin/zmx")).expect("zmx");
+        assert_eq!(
+            installed_zmx,
+            fs::canonicalize(root).unwrap().join("current/bin/zmx")
+        );
+        assert!(!first.exists());
+
+        let second = release("release-b", "b");
+        activate_release_package(root, &second, "release-b", true).expect("upgrade");
+        assert_eq!(
+            fs::canonicalize(root.join("package/bin/zmx")).unwrap(),
+            installed_zmx
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("package/bin/zmx")).unwrap(),
+            "b"
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("releases/replaced-by-release-b/bin/zmx")).unwrap(),
+            "a"
+        );
+
+        let third = release("release-c", "c");
+        activate_release_package(root, &third, "release-c", true).expect("second upgrade");
+        assert_eq!(
+            fs::canonicalize(root.join("package/bin/gxserver")).unwrap(),
+            installed_zmx.with_file_name("gxserver")
+        );
+        assert!(!root.join("releases/replaced-by-release-b").exists());
+        assert!(root.join("releases/replaced-by-release-c").is_dir());
+
+        activate_release_package(root, &root.join("package"), "package", true).expect("rerun");
+        assert_eq!(
+            fs::read_to_string(root.join("current/bin/zmx")).unwrap(),
+            "c"
+        );
+        assert!(root.join("releases/replaced-by-release-c").is_dir());
     }
 
     #[test]

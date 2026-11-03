@@ -119,6 +119,8 @@ pub fn run(args: &[String]) -> Res<i32> {
     let binary_path = stage_dir.join("bin/gxserver");
     run_checked(Command::new("/usr/bin/xattr").arg("-c").arg(&binary_path))?;
     let mut sign = Command::new("codesign");
+    // The identifier releases pin (CDXC:RemotePairing 2026-11-03 in apps/desktop/scripts/codesign-gpui-app.sh).
+    sign.args(["--identifier", "gxserver"]);
     if sign_identity == "-" {
         sign.args(["--force", "--sign", "-"]);
     } else {
