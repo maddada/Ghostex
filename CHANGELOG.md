@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+## 10.45.0 - 2026-11-03
+
+**Ghostex 10.45.0 is out.** Start a new session in any project on any computer from one picker, connect your own ticket tracker to Work mode, use Voice mode with sessions on your other computers, and hand over only the last few turns of a conversation.
+
+### ✨ New sessions
+
+- **Start a new session anywhere.** The New Thread picker (Cmd+N) names the project it starts in on its top row: click it or press Cmd+N again to pick any project on any computer, with your recent projects first. A project on several computers shows them as chips on its row, starting on the one you used last for it, thanks to @sebastianarena (#359).
+- **The "+" on a project in the Unified filter and on a project group header opens the New Thread picker on that project,** and a project the filter hides joins the filter when you start a session there.
+- **On the phone, the agent menu that starts a session shows its project on top** (tap it to pick any project) and a row of computer chips.
+
+### 🎫 Work mode
+
+- **Connect your own ticket tracker with a ticket command.** Set it with `ghostex issues source set <path>`, store its credentials with `ghostex issues source credential <name>` from stdin (secrets need at least 3 characters), and a session whose branch names one of its tickets shows it on its card and in its links with its title and state. Workspaces connected to a team can't use one, thanks to @lardissone (#396, #402).
+
+### 🎙️ Voice mode
+
+- **Voice mode works with sessions on your connected computers.** It can read them, send them prompts, answer their questions and approvals, stop them, show them and start agents in that computer's projects. A computer whose Agent access is off stays out of reach, and Voice mode tells you why.
+
+### 🤝 Handoff
+
+- **Hand over only the last turns of a conversation.** The History slider in Handoff picks how many recent turns go over (20 by default, remembered), with your earlier prompts listed, or turn on Whole conversation to send everything. On the computer, the web and the phone.
+
+### 🩹 Fixes and polish
+
+- **Clicking a notification switches the sidebar to the session's computer,** and so do the menu bar, Quick Access, the status item, `ghostex focus` and Voice mode when they open a session on another computer, thanks to @lardissone (#401).
+- **Install another agent shows Installing, then Installed,** or the error with Retry.
+- **Line numbers in Files are no longer cut off** on documents with 1,000 lines or more.
+- **The built-in browser updates to Chromium 156.**
+- **Linux: Ctrl+G opens Ghostex's prompt editor instead of vi, so the chat no longer gets stuck behind an editor,** and the false "zmx daemon is not running" alarm is gone, thanks to @isfix (#400).
+- **Linux: Ghostex ships one copy of its keyring library,** thanks to @bet4it (#399).
+
 ## 10.44.0 - 2026-11-03
 
 **Ghostex 10.44.0 is out.** Agents on two connected computers can run sessions on each other, closing a coordinator or a busy agent asks first, Cloud Boxes is on for everyone with Instabox and Boat, agents can ask you privately for a password or key, Ghostex cleans up its old files by itself, and chat cards say what happened in plain words.
