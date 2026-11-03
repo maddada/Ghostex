@@ -503,6 +503,10 @@ pub fn usage() -> String {
             "Create a ticket assigned to you (a Linear ticket, or a GitHub issue when the workspace's tracker is GitHub), or start an agent on a ticket in a worktree on its branch, linked to it; nothing is sent to the agent. --cloud starts a Claude Code cloud session on the ticket's branch instead, with the file's task or one drafted from the ticket, and prints its link",
         ),
         format_help_command(
+            "issues source [set <path> [--switch] | check | clear | credential <name> [--clear]] [--workspace name|id]",
+            "A workspace's ticket command, a program that describes its own tracker: show it, set or re-check its path (it runs the command's info and keeps the id it answers with; --switch accepts a new id), clear it (its credentials stay), or store one of its credentials from stdin (--clear removes it). Only this computer can set it, and a team workspace can't",
+        ),
+        format_help_command(
             "issues tracker [linear|github] [--workspace name|id | --project-id id | --path path]",
             "Show or set the workspace's primary tracker: Linear tickets & projects, or GitHub issues & projects (a team workspace's owners set it for the whole team)",
         ),

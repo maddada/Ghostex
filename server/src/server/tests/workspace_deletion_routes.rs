@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 use super::*;
 use crate::work_mode::{
     command_work_dir, read_credentials, read_work_sources, set_work_source,
-    set_work_source_credentials,
+    set_work_source_credentials, SourcePath,
 };
 
 struct Deletion {
@@ -69,10 +69,11 @@ impl Deletion {
             &db,
             &self.paths,
             &workspace_id,
-            &self.program,
+            SourcePath::Typed(&self.program),
             false,
             &no_references,
         )
+        .result
         .expect("pinned");
         set_work_source_credentials(
             &db,

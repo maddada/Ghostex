@@ -187,15 +187,25 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
     if target.kind == "computer" {
         return false;
     }
-    let Some(rest) = target
-        .base_url
-        .strip_prefix("http://")
-        .or_else(|| target.base_url.strip_prefix("https://"))
-    else {
+    let Ok(url) = url::Url::parse(&target.base_url) else {
         return false;
     };
-    let host = rest.split(['/', ':']).next().unwrap_or("");
-    matches!(host, "127.0.0.1" | "localhost" | "::1" | "[::1]")
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Domain(domain)) => domain == "localhost",
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
+}
+
+/// Whether `target` is the gxserver of the computer this CLI runs on, so a path relative to this
+/// shell's folder means the same file there. An `ssh` or `tailcat` target reaches another
+/// computer through a forward on this one's loopback, so its URL alone would read as local.
+pub fn targets_this_computer(target: &Target) -> bool {
+    !matches!(target.kind.as_str(), "ssh" | "tailcat") && is_local_gxserver_target(target)
 }
 
 pub fn is_gxserver_global_session_ref(value: &str) -> bool {

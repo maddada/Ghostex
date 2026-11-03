@@ -7,6 +7,8 @@ mod project_directories;
 mod protocol_and_routes;
 mod renderer_and_titles;
 #[cfg(unix)]
+mod work_source_routes;
+#[cfg(unix)]
 mod workspace_deletion_routes;
 mod worktree_projects;
 mod worktree_session_routes;
