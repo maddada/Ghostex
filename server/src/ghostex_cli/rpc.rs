@@ -183,24 +183,18 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
     if target.kind == "local" {
         return true;
     }
-    let Some(rest) = target
-        .base_url
-        .strip_prefix("http://")
-        .or_else(|| target.base_url.strip_prefix("https://"))
-    else {
+    let Ok(url) = url::Url::parse(&target.base_url) else {
         return false;
     };
-    let authority = rest.split('/').next().unwrap_or("");
-    // A bracketed IPv6 host (`[::1]:58744`) holds colons of its own, so it ends at its bracket.
-    // One without its closing bracket is malformed, never this computer.
-    let host = match authority.strip_prefix('[') {
-        Some(bracketed) => match bracketed.split_once(']') {
-            Some((host, _)) => host,
-            None => return false,
-        },
-        None => authority.split(':').next().unwrap_or(""),
-    };
-    matches!(host, "127.0.0.1" | "localhost" | "::1")
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Domain(domain)) => domain == "localhost",
+        Some(url::Host::Ipv4(address)) => address.is_loopback(),
+        Some(url::Host::Ipv6(address)) => address.is_loopback(),
+        None => false,
+    }
 }
 
 /// Whether `target` is the gxserver of the computer this CLI runs on, so a path relative to this

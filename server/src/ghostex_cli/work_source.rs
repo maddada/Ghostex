@@ -230,6 +230,24 @@ mod tests {
             "direct",
             "http://[::1]/"
         )));
+        // The expanded spelling of the IPv6 loopback.
+        assert!(rpc::targets_this_computer(&target(
+            "direct",
+            "http://[0:0:0:0:0:0:0:1]:58744"
+        )));
+        // Before an `@`, a loopback name is the URL's userinfo; the request goes to the host after it.
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://[::1]@remote.example:58744"
+        )));
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://localhost@remote.example:58744"
+        )));
+        assert!(!rpc::targets_this_computer(&target(
+            "direct",
+            "http://localhost:58744@remote.example/"
+        )));
         assert!(!rpc::targets_this_computer(&target(
             "direct",
             "http://[fd00::5]:58744"
