@@ -241,7 +241,8 @@ fn settle_fork_branches(state: &mut ChatState, request_id: u64, outcome: &RpcOut
 }
 
 /// Puts a model and effort choice into the durable outbox, unless it would change nothing: the
-/// model menu's pick when it carries a reasoning level.
+/// model menu's pick when it carries a reasoning level. While a failed change holds messages, every
+/// pick goes in ([`crate::menus::picker::hold_card::messages_held`]).
 pub(crate) fn queue_model_selection(
     state: &mut ChatState,
     selection: ModelPickerSelection,
@@ -269,15 +270,17 @@ pub(crate) fn queue_model_selection(
                 .find(|model| model.value == selection.model)
         })
         .is_some_and(|model| model.efforts.is_empty());
-    if model_selection_unchanged(
-        &selection,
-        state.pickers.desired_selection(),
-        current_model.as_deref(),
-        current_effort.as_deref(),
-        provider,
-        effortless,
-        Some(scope),
-    ) {
+    if !crate::menus::picker::hold_card::messages_held(state)
+        && model_selection_unchanged(
+            &selection,
+            state.pickers.desired_selection(),
+            current_model.as_deref(),
+            current_effort.as_deref(),
+            provider,
+            effortless,
+            Some(scope),
+        )
+    {
         return Vec::new();
     }
     // `modelSelection.select(selection, undefined, scope)`: the picker's choice goes into the

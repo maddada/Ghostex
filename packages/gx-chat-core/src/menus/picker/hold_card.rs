@@ -58,6 +58,15 @@ fn hold_inputs(state: &ChatState) -> Option<HoldInputs<'_>> {
     })
 }
 
+/// Whether a failed model change holds at least one queued message, the state the card is drawn
+/// for.
+///
+/// CDXC:SessionChat 2026-11-03 WHY: The card's way out is "Pick a model again", and gxserver releases the held messages only once a new pick applies. The model the user means is usually the one the session still runs, because the failed change never applied, but for agents whose picker has no session-or-default scope (OMP among them) the chat dropped a pick of the running model as a change to nothing: a plain click in `select_option` (menus/actions.rs), and a pick carrying the level the agent already reports in `queue_model_selection` (menus/picker/settle.rs). The menu closed, nothing was queued, and the messages stayed held. While messages are held, such a pick is queued like any other, replaces the failed change, and gxserver applies it the way it applies every pick; once it applies, the hold ends. Outside a hold the earlier rules stay: a pick that changes neither the model, the level nor the scope sends nothing, and the default-scope picks of Claude, Codex and OpenCode are sent as before.
+/// SEE-ALSO: `note_model_selection_failure` in server/src/session_chat_model_selection_alert.rs (picking a model again clears the mark).
+pub fn messages_held(state: &ChatState) -> bool {
+    hold_inputs(state).is_some()
+}
+
 /// The last card built and what it was built from.
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: Every event of a retained chat assembles the document once to test whether anything changed (an unchanged timer tick stops there), and again when it publishes, and building the card's sentence and object on each assembly cost about 25 allocations while nothing changed. The picker's settle keeps the card here and the document shares it while the inputs are the same, as it already does for the provider catalogs (`menus/picker/inputs.rs`); a state the settle has not seen yet still gets a freshly built card.

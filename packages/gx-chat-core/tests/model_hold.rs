@@ -11,7 +11,8 @@ use ghostex_gx_chat_core::menus::picker::hold_card::{
 };
 use ghostex_gx_chat_core::protocol::ChatStateFrame;
 use ghostex_gx_chat_core::{
-    ChatContext, ChatCore, ChatFrame, ChatSnapshotFrame, ComposerBootRead, Event, StartConfig,
+    ChatContext, ChatCore, ChatFrame, ChatRpcMethod, ChatSnapshotFrame, ComposerBootRead, Effect,
+    Event, StartConfig, UserAction,
 };
 use serde_json::{json, Value};
 
@@ -431,4 +432,155 @@ fn a_kept_card_never_outlives_what_it_describes() {
     assert_eq!(card["title"], json!("2 messages are held"));
     chat.core.republish();
     assert_eq!(chat.card()["heldCount"], json!(2));
+}
+
+/// The model the session still runs after the failed change, and the level gxserver reads for it.
+const RUNNING: &str = "anthropic/claude-sonnet-5.5";
+
+fn running_at_low() -> Value {
+    json!({
+        "model": { "value": RUNNING, "label": "Claude Sonnet 5.5", "source": "transcript" },
+        "effort": { "value": "low", "label": "low", "source": "transcript" },
+        "detectedAt": "2026-10-30T12:25:00.000Z",
+    })
+}
+
+impl Chat {
+    /// A gesture as the renderer sends it. A `selectOption` the core hands back is replayed the
+    /// way the desktop host replays it (`gx_chat/effects.rs`). Returns every effect.
+    fn act(&mut self, action: Value) -> Vec<Effect> {
+        let action: UserAction = serde_json::from_value(action).expect("the action parses");
+        let mut effects = self
+            .core
+            .handle(Event::Action(Box::new(action)), ChatContext::at(NOW_MS));
+        let replayed: Vec<UserAction> = effects
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::HostAction { action, params } if action == "selectOption" => {
+                    Some(serde_json::from_value((**params).clone()).expect("a replayable action"))
+                }
+                _ => None,
+            })
+            .collect();
+        for action in replayed {
+            effects.extend(
+                self.core
+                    .handle(Event::Action(Box::new(action)), ChatContext::at(NOW_MS)),
+            );
+        }
+        effects
+    }
+
+    /// The model menu row of `model`.
+    fn row_key(&self, model: &str) -> Value {
+        self.document()["modelMenu"]["rows"]
+            .as_array()
+            .expect("the model menu lists rows")
+            .iter()
+            .find(|row| row["value"] == model)
+            .expect("the model is listed")["key"]
+            .clone()
+    }
+}
+
+/// The model and level of every pick the chat sent gxserver (`selectSessionChatModel`).
+fn sent_picks(effects: &[Effect]) -> Vec<(String, String)> {
+    effects
+        .iter()
+        .filter_map(|effect| match effect {
+            Effect::SendRpc { method, params, .. }
+                if *method == ChatRpcMethod::SelectSessionChatModel =>
+            {
+                Some((
+                    params["model"].as_str().unwrap_or_default().to_string(),
+                    params["effort"].as_str().unwrap_or_default().to_string(),
+                ))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// A click on a row, and Enter on it after the level was moved back to the one shown.
+fn picks_of(chat: &Chat, model: &str, level: &str) -> [Value; 2] {
+    let key = chat.row_key(model);
+    [
+        json!({ "type": "modelMenuPick", "key": key }),
+        json!({ "type": "modelMenuPick", "key": key, "effort": level }),
+    ]
+}
+
+/// The way out the card names: picking the model the session still runs, at the level it reports,
+/// is sent to gxserver, which replaces the failed change with it; the card then goes.
+#[test]
+fn while_messages_are_held_picking_the_running_model_again_is_sent() {
+    for gesture in 0..2 {
+        let mut chat = Chat::open();
+        chat.snapshot(
+            "omp",
+            json!({
+                "queue": [sso()],
+                "pendingModelSelection": failed(),
+                "selectedOptions": running_at_low(),
+            }),
+        );
+        assert_eq!(chat.card()["heldCount"], json!(1));
+        let pick = picks_of(&chat, RUNNING, "low")[gesture].clone();
+        let effects = chat.act(pick);
+        assert_eq!(
+            sent_picks(&effects),
+            [(RUNNING.to_string(), "low".to_string())],
+            "gesture {gesture}"
+        );
+        chat.state(json!({ "pendingModelSelection": selection(RUNNING, "queued", None) }));
+        assert_eq!(chat.card(), Value::Null, "gesture {gesture}");
+    }
+}
+
+/// Without a hold, picking the model and level the session already runs still changes nothing.
+#[test]
+fn without_a_hold_picking_the_running_model_again_changes_nothing() {
+    for gesture in 0..2 {
+        let mut chat = Chat::open();
+        chat.snapshot(
+            "omp",
+            json!({
+                "queue": [],
+                "pendingModelSelection": null,
+                "selectedOptions": running_at_low(),
+            }),
+        );
+        let pick = picks_of(&chat, RUNNING, "low")[gesture].clone();
+        let effects = chat.act(pick);
+        assert!(sent_picks(&effects).is_empty(), "gesture {gesture}");
+        assert!(
+            !effects
+                .iter()
+                .any(|effect| matches!(effect, Effect::WriteStorage { durable: true, .. })),
+            "gesture {gesture}: nothing goes into the outbox"
+        );
+    }
+}
+
+/// While messages are held, picking another model is sent as before.
+#[test]
+fn while_messages_are_held_picking_another_model_is_sent_as_before() {
+    let other = "openrouter/qwen3.8-max";
+    for (gesture, level) in [(0, "low"), (1, "high")] {
+        let mut chat = Chat::open();
+        chat.snapshot(
+            "omp",
+            json!({
+                "queue": [sso()],
+                "pendingModelSelection": failed(),
+                "selectedOptions": running_at_low(),
+            }),
+        );
+        let pick = picks_of(&chat, other, level)[gesture].clone();
+        assert_eq!(
+            sent_picks(&chat.act(pick)),
+            [(other.to_string(), level.to_string())],
+            "gesture {gesture}"
+        );
+    }
 }
