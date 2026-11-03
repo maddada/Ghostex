@@ -211,6 +211,8 @@ sum_tree = { path = "../../.dependencies/zed/crates/sum_tree" }
 blob-decoder = { path = "../../.dependencies/blob-decoder" }
 async-process = { git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d" }
 async-task = { git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e" }
+# Matches .dependencies/zed's oo7 fork rev; keep in sync whenever bumping .dependencies/zed.
+oo7 = { git = "https://github.com/zed-industries/oo7", rev = "731c1215edb6905876c6137ab300428c7b8d7c13" }
 
 # Native regression probe: a real Metal window, no effect textures allocated.
 [[test]]
