@@ -1,7 +1,7 @@
 //! What `run_bounded` adds to a time-boxed run: input on stdin, a stdout cap that fails instead of
-//! cutting, and the end of stderr.
+//! cutting, the end of stderr, and a hook between the start and the wait.
 
-use super::{run_bounded, Keep, RunLimits, Unfinished};
+use super::{run_bounded, run_bounded_after_spawn, Keep, RunLimits, Unfinished};
 use std::{
     process::Command,
     time::{Duration, Instant},
@@ -256,4 +256,34 @@ fn run_output_debug_shows_the_status_and_sizes_never_the_bytes() {
         printed.contains(&format!("{:?}", output.status)),
         "{printed}"
     );
+}
+
+/// The command waits for a file only the hook writes, so it can answer only if the hook ran while
+/// it was running; a hook run after the wait would leave it hanging until the time limit.
+#[test]
+fn the_hook_runs_once_the_command_started_and_before_its_answer() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let started = dir.path().join("started");
+    let output = run_bounded_after_spawn(
+        shell(&format!(
+            "while [ ! -e '{}' ]; do sleep 0.01; done; echo done",
+            started.display()
+        )),
+        limits(None, Keep::AtMost(MIB), Keep::Tail(8192)),
+        || std::fs::write(&started, "").expect("write"),
+    )
+    .expect("answered once the hook ran");
+    assert_eq!(output.stdout, b"done\n");
+}
+
+#[test]
+fn the_hook_runs_when_the_command_never_starts() {
+    let mut ran = false;
+    let answer = run_bounded_after_spawn(
+        Command::new("/nonexistent/ghostex-test-program"),
+        limits(None, Keep::AtMost(MIB), Keep::Tail(8192)),
+        || ran = true,
+    );
+    assert!(matches!(answer, Err(Unfinished::Start(_))));
+    assert!(ran);
 }

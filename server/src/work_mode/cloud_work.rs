@@ -126,6 +126,7 @@ fn plan_cloud_ticket(
     let scope = TicketScope {
         project_id: &project_id,
         workspace_id: crate::workspaces::stored_project_workspace_id(&project),
+        effective_workspace_id: Some(&workspace_id),
         cwd: Some(&project_path),
         credentials: Some(&credentials),
     };

@@ -15,6 +15,8 @@ pub(crate) struct IssuesWorkflowParts {
     pub(crate) linear: bool,
     /// `gh` is signed in: pull requests, GitHub issues and GitHub Projects.
     pub(crate) github: bool,
+    /// The project's workspace has a ticket command and isn't in a team: its tickets on cards.
+    pub(crate) command: bool,
 }
 
 impl IssuesWorkflowParts {
@@ -22,26 +24,70 @@ impl IssuesWorkflowParts {
         Self {
             linear: has_linear_key,
             github: gh_signed_in,
+            command: false,
         }
     }
 
     /// Issues Workflow is on for the project: something is set up.
     pub(crate) fn any(self) -> bool {
-        self.linear || self.github
+        self.linear || self.github || self.command
     }
 }
 
 /// The parts `project` has, from what the background passes last found (the project's Linear key
-/// and `gh auth status`); never blocks.
+/// and `gh auth status`) and its workspace's ticket command as last placed; never blocks.
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// A pinned ticket command alone turns Issues Workflow on for its workspace's projects, as a Linear key or a signed-in `gh` does, so a workspace that tracks only through its command still gets its tickets on cards. Not in a team workspace, where the command is stopped and keeps its settings.
 pub(crate) fn issues_workflow_parts(project: &Value) -> IssuesWorkflowParts {
-    IssuesWorkflowParts::from_setup(
-        super::project_has_linear_key(project),
-        crate::session_git_status::cached_gh_cli_available(),
-    )
+    IssuesWorkflowParts {
+        command: project_ticket_command(project).is_some(),
+        ..IssuesWorkflowParts::from_setup(
+            super::project_has_linear_key(project),
+            crate::session_git_status::cached_gh_cli_available(),
+        )
+    }
 }
 
-/// Whether Issues Workflow is on for `project`: a Linear key applies to it or `gh` is signed in.
-/// The name stays from the per-project switch it replaced.
+/// `PresentationProject.work_source`: the ticket command of the project's workspace, not its
+/// tracker (`isTracker: false`): a command can't be picked as the tracker yet.
+pub(crate) fn presentation_work_source(project: &Value) -> Option<Value> {
+    use base64::Engine;
+    let command = project_ticket_command(project)?;
+    let mut source = Map::new();
+    source.insert("id".to_string(), Value::from(command.source_id.clone()));
+    source.insert("name".to_string(), Value::from(command.info.name.clone()));
+    if let Some(Ok(svg)) = &command.info.icon {
+        source.insert(
+            "icon".to_string(),
+            Value::from(format!(
+                "data:image/svg+xml;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(svg)
+            )),
+        );
+    }
+    source.insert("isTracker".to_string(), Value::Bool(false));
+    Some(Value::Object(source))
+}
+
+/// The ticket command of `project`'s workspace as last placed (`cached_project_workspace_id`),
+/// unless that workspace is in a team.
+pub(crate) fn project_ticket_command(
+    project: &Value,
+) -> Option<std::sync::Arc<super::WorkspaceCommand>> {
+    let workspace_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .and_then(super::cached_project_workspace_id)?;
+    if super::cached_workspace_in_team(&workspace_id) {
+        return None;
+    }
+    super::workspace_command(&workspace_id)
+}
+
+/// Whether Issues Workflow is on for `project`: a Linear key applies to it, `gh` is signed in, or
+/// its workspace has a ticket command outside a team. The name stays from the per-project switch
+/// it replaced.
 pub(crate) fn project_work_mode(project: &Value) -> bool {
     issues_workflow_parts(project).any()
 }

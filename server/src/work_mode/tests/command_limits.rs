@@ -80,6 +80,7 @@ fn only_these_variables_are_passed_through() {
             "TMP",
             "ProgramData",
             "ProgramFiles",
+            "PSModuleAnalysisCachePath",
         ]
     );
 }

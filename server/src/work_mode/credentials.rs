@@ -234,6 +234,11 @@ impl WorkCredentials {
         self.file.get_or_init(|| read_credentials(&self.paths))
     }
 
+    /// Whether the workspace is connected to a team, read from the same folder.
+    pub(crate) fn workspace_has_team(&self, workspace_id: &str) -> bool {
+        crate::team_sync::workspace_has_team(&self.paths, workspace_id)
+    }
+
     /// A workspace's stored values for one ticket command source.
     pub(crate) fn source_fields(
         &self,

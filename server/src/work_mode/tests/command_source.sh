@@ -1,10 +1,11 @@
 #!/bin/sh
 # A command ticket source for the runner's tests. Its credential field `mode`, or a `mode.txt`
 # in the folder it runs in when it has no credentials, picks how it answers. It records its argv,
-# environment and input in that folder.
+# environment and input in that folder, and adds each call's verb to `calls.txt`.
 verb="$1"
 mode="${GHOSTEX_CREDENTIAL_MODE:-$(cat mode.txt 2>/dev/null)}"
 printf '%s\n' "$@" >argv.txt
+printf '%s\n' "$verb" >>calls.txt
 env >env.txt
 if [ "$verb" != info ] && [ "$mode" != late-stdin ]; then
 	cat >stdin.txt
@@ -160,6 +161,23 @@ oversized)
 	;;
 hang)
 	sleep 600
+	;;
+slow)
+	# A good answer, a second late.
+	sleep 1
+	printf '{ "tickets": [ { %s } ] }\n' "$good_ticket"
+	;;
+not-found)
+	echo '{ "tickets": [], "notFound": ["acm-12"] }'
+	;;
+wait-release)
+	# A good answer once a `release` file sits in the folder it runs in.
+	while [ ! -e release ]; do sleep 0.02; done
+	printf '{ "tickets": [ { %s } ] }\n' "$good_ticket"
+	;;
+title-kept)
+	# A title holding a value this source was never given.
+	printf '{ "tickets": [ { "id": "ACM-12", "title": "Renewal for customer-secret", "state": { "group": "todo", "name": "To do customer-secret" } } ] }\n'
 	;;
 answer-held-open)
 	# A whole answer, then it exits while a child it left behind keeps stdout open.

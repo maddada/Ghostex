@@ -64,6 +64,8 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let all_projects = repository.list_projects()?;
     refresh_issues_workflow_setup(&state.paths, &all_projects);
+    // Before the cards are read: which workspace, and so which ticket command, each project uses.
+    crate::work_mode::replace_project_workspaces(&state.paths, &repository, &db)?;
 
     let mut linear_changed = Vec::new();
     if let Ok(mut published) = published_linear_projects().lock() {

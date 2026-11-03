@@ -13,7 +13,7 @@ use std::time::Duration;
 use serde_json::{Map, Value};
 
 use crate::paths::GxserverPaths;
-use crate::platform::process::{run_bounded, Keep, RunLimits, Unfinished};
+use crate::platform::process::{run_bounded_after_spawn, Keep, RunLimits, Unfinished};
 
 use super::*;
 
@@ -55,8 +55,11 @@ pub(crate) const INHERITED_VARS: [&str; 16] = [
     "no_proxy",
 ];
 /// Also passed through on Windows. Compiled everywhere so its tests run on every platform.
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// Without `PSModuleAnalysisCachePath`, Windows PowerShell 5.1 re-analyzes every installed module the first time a `.ps1` source uses a cmdlet: on GitHub's Windows runner the fixture's `info` took 11–34 s that way against 0.35 s with it, past `info`'s 10 s limit. `PSModulePath` stays out on purpose: a PowerShell 7 parent puts its own module folder there, which breaks 5.1 children (see `agent_without_powershell7_modules` in zmx/scripts_windows.rs), and PowerShell rebuilds the default when it is missing.
 #[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) const INHERITED_WINDOWS_VARS: [&str; 14] = [
+pub(crate) const INHERITED_WINDOWS_VARS: [&str; 15] = [
     "SystemRoot",
     "windir",
     "ComSpec",
@@ -71,10 +74,11 @@ pub(crate) const INHERITED_WINDOWS_VARS: [&str; 14] = [
     "TMP",
     "ProgramData",
     "ProgramFiles",
+    "PSModuleAnalysisCachePath",
 ];
 
 /// One process the source can be asked to run.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum CommandVerb {
     Info,
     /// `list` without ids: the open tickets.
@@ -568,7 +572,7 @@ pub(crate) fn command_work_dir(
 
 /// Runs the call and returns its JSON answer.
 pub(crate) fn run_command(call: &CommandCall) -> Result<Value, CommandFailure> {
-    Ok(run_answer(call)?.value)
+    Ok(run_answer(call, || {})?.value)
 }
 
 /// A JSON answer and the stdout it was read from.
@@ -646,7 +650,9 @@ impl InfoFailure {
     }
 }
 
-fn run_answer(call: &CommandCall) -> Result<Answer, RunFailure> {
+/// Runs the call. `after_spawn` runs once the process started or failed to, or is dropped unrun
+/// when the call is refused before that (`run_bounded_after_spawn`).
+fn run_answer(call: &CommandCall, after_spawn: impl FnOnce()) -> Result<Answer, RunFailure> {
     // Not `metadata`: a Windows app execution alias launches fine but fails a followed `stat`.
     if !ghostex_paths::powershell::launchable(call.program) {
         return Err(CommandFailure::NotFound(shown_path(call.env, call.program)).into());
@@ -659,7 +665,8 @@ fn run_answer(call: &CommandCall) -> Result<Answer, RunFailure> {
         // One byte past the tail tells an error output of exactly `STDERR_TAIL` from a longer one.
         stderr: Keep::Tail(STDERR_TAIL + 1),
     };
-    let output = run_bounded(command, limits).map_err(|unfinished| match unfinished {
+    let output = run_bounded_after_spawn(command, limits, after_spawn);
+    let output = output.map_err(|unfinished| match unfinished {
         Unfinished::Start(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
             CommandFailure::NotExecutable(shown_path(call.env, call.program))
         }
@@ -711,7 +718,7 @@ fn info_secrecy(env: &CommandEnv, stdout: &[u8]) -> InfoSecrecy {
 /// secrets of both. Stdout that isn't JSON declares nothing, so the accepted flags apply to it.
 /// A failure carries out what its answer makes secret (`InfoFailure`).
 pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, InfoFailure> {
-    let answer = run_answer(call)
+    let answer = run_answer(call, || {})
         .map_err(|failed| InfoFailure::new(failed.failure, call.env, failed.info.as_ref()))?;
     let secrecy = answer.info.as_ref();
     let env = secrecy.map_or(call.env, |info| &info.env);
@@ -732,7 +739,18 @@ pub(crate) fn command_list(
     format: IdFormat,
     projects: &[CommandProject],
 ) -> Result<CommandList, CommandFailure> {
-    let answer = run_answer(call)?;
+    command_list_after_spawn(call, format, projects, || {})
+}
+
+/// `command_list`, calling `after_spawn` once the process started or failed to
+/// (`run_bounded_after_spawn`); a call refused before that drops it unrun.
+pub(crate) fn command_list_after_spawn(
+    call: &CommandCall,
+    format: IdFormat,
+    projects: &[CommandProject],
+    after_spawn: impl FnOnce(),
+) -> Result<CommandList, CommandFailure> {
+    let answer = run_answer(call, after_spawn)?;
     parse_list(&answer.value, format, projects, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
@@ -743,7 +761,7 @@ pub(crate) fn command_detail(
     format: IdFormat,
     projects: &[CommandProject],
 ) -> Result<CommandDetail, CommandFailure> {
-    let answer = run_answer(call)?;
+    let answer = run_answer(call, || {})?;
     parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
@@ -753,7 +771,7 @@ pub(crate) fn command_create(
     call: &CommandCall,
     format: IdFormat,
 ) -> Result<CommandCreated, CommandFailure> {
-    let answer = run_answer(call)?;
+    let answer = run_answer(call, || {})?;
     parse_created(&answer.value, format, &AnswerGuard::new(call.env))
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }

@@ -217,6 +217,8 @@ pub(crate) fn read_work_item(
             WorkItemRef::Ticket(ticket) => match ticket.source {
                 WorkSourceId::Linear => Some(ticket.id.clone()),
                 WorkSourceId::Github => repo.map(|repo| format!("{repo}#{}", ticket.id)),
+                // A team workspace never uses a ticket command.
+                WorkSourceId::Command(_) => None,
             },
             WorkItemRef::PullRequest(selector) => pull_request_url_parts(selector)
                 .map(|(repo, number)| format!("{}#{number}", repo.to_ascii_lowercase()))
@@ -261,7 +263,7 @@ pub(crate) fn read_work_item(
                 })
             });
         if let (Some(task), WorkItemRef::Ticket(wanted)) = (ticket_task, ticket_ref) {
-            let name = work_source(wanted.source).name();
+            let name = work_source(wanted.source).name(&scope_for(wanted.source));
             match task
                 .join()
                 .unwrap_or_else(|_| Err(format!("{name} read failed.")))
@@ -306,7 +308,8 @@ pub(crate) fn read_work_item(
     });
 
     if let (WorkItemRef::PullRequest(_), Some(pr)) = (item_ref, pull_request.as_ref()) {
-        let known_keys: Vec<(WorkSourceId, Vec<String>)> = WorkSourceId::BUILT_IN
+        let known_keys: Vec<(WorkSourceId, Vec<String>)> = plan
+            .sources()
             .into_iter()
             .map(|source| {
                 (
@@ -319,7 +322,7 @@ pub(crate) fn read_work_item(
             push_ticket(&mut pr_tickets, ticket);
         }
         if let Some(url) = pr.get("url").and_then(Value::as_str) {
-            for source in WorkSourceId::BUILT_IN {
+            for source in plan.sources() {
                 let source_rules = work_source(source);
                 let scope = scope_for(source);
                 if !source_rules.can_read(&scope) {
@@ -345,7 +348,7 @@ pub(crate) fn read_work_item(
                 if source.can_read(&scope) {
                     match source.read_detail(&scope, &first.id, force) {
                         Ok(value) => ticket = Some(value),
-                        Err(error) => errors.push(format!("{}: {error}", source.name())),
+                        Err(error) => errors.push(format!("{}: {error}", source.name(&scope))),
                     }
                 }
             }

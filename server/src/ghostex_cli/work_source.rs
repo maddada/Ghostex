@@ -2,7 +2,6 @@
 //! tracker (crate::work_mode::command). Shows what is set, sets or re-checks the command's path,
 //! clears it, and stores one of its credentials read from stdin, like `issues linear-key`.
 
-use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Component, Path};
 
 use serde_json::{json, Map, Value};
@@ -125,23 +124,11 @@ const SWITCH_HINT: &str =
 
 /// One line from stdin, so a credential never sits in argv or the shell history.
 fn read_credential_line(name: &str) -> CliResult<String> {
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        eprint!("Paste the value of {name} and press Enter: ");
-        let _ = std::io::stderr().flush();
-    }
-    let mut line = String::new();
-    stdin
-        .lock()
-        .read_line(&mut line)
-        .map_err(|error| CliError::Other(format!("Could not read {name}: {error}")))?;
-    let value = line.trim().to_string();
-    if value.is_empty() {
-        return Err(CliError::Other(format!(
-            "No value was given for {name}. Pipe it in, or pass --clear to remove it."
-        )));
-    }
-    Ok(value)
+    super::work_mode::read_stdin_line(
+        &format!("Paste the value of {name} and press Enter: "),
+        name,
+        format!("No value was given for {name}. Pipe it in, or pass --clear to remove it."),
+    )
 }
 
 #[cfg(test)]
@@ -183,7 +170,17 @@ mod tests {
             assert!(Path::new(&sent).is_absolute(), "{sent}");
             assert!(sent.starts_with(r"C:\") && sent.ends_with(end), "{sent}");
         }
-        for typed in [r"C:\tools\x.ps1", r"\\server\share\x.ps1"] {
+        // Root-relative: absolute on the current folder's own drive.
+        let Some(Component::Prefix(drive)) = folder.components().next() else {
+            panic!("{} has no drive", folder.display());
+        };
+        let drive = drive.as_os_str().to_string_lossy();
+        assert_eq!(path_to_send(r"\x.ps1", true), format!(r"{drive}\x.ps1"));
+        for typed in [
+            r"C:\tools\x.ps1",
+            r"\\server\share\x.ps1",
+            r"\\?\C:\tools\x.ps1",
+        ] {
             assert_eq!(path_to_send(typed, true), typed);
         }
     }

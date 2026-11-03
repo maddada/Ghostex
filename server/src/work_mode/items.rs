@@ -48,6 +48,7 @@ impl WorkProjectInput {
         TicketScope {
             project_id: &self.project_id,
             workspace_id: crate::workspaces::stored_project_workspace_id(&self.project),
+            effective_workspace_id: Some(&self.workspace_id),
             cwd: self.path.as_deref(),
             credentials: Some(&self.credentials),
         }
@@ -121,17 +122,33 @@ pub(crate) struct WorkFeedPlan {
     pub(crate) linear: Vec<LinearFeedRequest>,
     /// The checkout `gh` lists each repo from, and the project it stands for.
     pub(crate) github: Vec<(String, String)>,
+    /// The ticket commands of the projects' workspaces (`work_sources_for`).
+    pub(crate) commands: Vec<WorkSourceId>,
 }
 
 impl WorkFeedPlan {
     pub(crate) fn github_cwds(&self) -> Vec<String> {
         self.github.iter().map(|(cwd, _)| cwd.clone()).collect()
     }
+
+    /// The sources its projects read: Linear, GitHub, then their workspaces' ticket commands.
+    pub(crate) fn sources(&self) -> Vec<WorkSourceId> {
+        WorkSourceId::BUILT_IN
+            .into_iter()
+            .chain(self.commands.iter().copied())
+            .collect()
+    }
 }
 
 pub(crate) fn work_feed_plan(projects: &[WorkProjectInput]) -> WorkFeedPlan {
-    let mut plan = WorkFeedPlan::default();
-    for source in WorkSourceId::BUILT_IN {
+    let mut plan = WorkFeedPlan {
+        commands: work_sources_for(projects.iter().map(|input| input.workspace_id.as_str()))
+            .into_iter()
+            .filter(|source| matches!(source, WorkSourceId::Command(_)))
+            .collect(),
+        ..WorkFeedPlan::default()
+    };
+    for source in plan.sources() {
         work_source(source).plan_list(projects, &mut plan);
     }
     // Worktree projects share their repo with the main checkout: the repo is listed once.
@@ -455,10 +472,10 @@ pub(crate) fn build_work_list(projects: &[WorkProjectInput], plan: &WorkFeedPlan
     };
 
     // Every source's tickets: what its feeds brought, then the linked ones they did not.
-    // Each source's known ticket-id prefixes, in `BUILT_IN` order, for matching PRs below.
+    // Each source's known ticket-id prefixes, in `plan.sources()` order, for matching PRs below.
     let mut known_keys: Vec<(WorkSourceId, Vec<String>)> = Vec::new();
     let mut pull_request_url_tickets: HashMap<(String, u64), String> = HashMap::new();
-    for source in WorkSourceId::BUILT_IN {
+    for source in plan.sources() {
         let source_rules = work_source(source);
         let list = source_rules.cached_list(projects, plan);
         errors.extend(list.errors);

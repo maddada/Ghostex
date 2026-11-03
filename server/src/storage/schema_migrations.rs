@@ -1264,4 +1264,8 @@ pub const GXSERVER_STORAGE_MIGRATIONS: &[Migration] = &[
         id: "0053_coordinator_remote_thread_activity",
         sql: include_str!("migrations/0053_coordinator_remote_thread_activity.sql"),
     },
+    Migration {
+        id: "0054_work_ticket_titles",
+        sql: include_str!("migrations/0054_work_ticket_titles.sql"),
+    },
 ];

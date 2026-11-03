@@ -61,10 +61,30 @@ fn failure_log_facts(failure: &CommandFailure) -> Map<String, Value> {
 
 /// One unconditional error line for a failed `info`.
 pub(crate) fn log_work_source_failure(logger: &GxserverLogger, check: &CheckFailure) {
-    let mut details = failure_log_facts(&check.failure);
-    details.insert("verb".to_string(), json!(CommandVerb::Info.word()));
-    details.insert("workspaceId".to_string(), json!(check.workspace_id));
-    if let Some(source_id) = &check.source_id {
+    log_command_failure(
+        logger,
+        CommandVerb::Info,
+        &check.failure,
+        check.duration,
+        &check.workspace_id,
+        check.source_id.as_deref(),
+    );
+}
+
+/// One unconditional error line for a failed call. `workspace_id` and `source_id` are already
+/// through the call's mask (`CommandEnv::shown`).
+pub(crate) fn log_command_failure(
+    logger: &GxserverLogger,
+    verb: CommandVerb,
+    failure: &CommandFailure,
+    duration: std::time::Duration,
+    workspace_id: &str,
+    source_id: Option<&str>,
+) {
+    let mut details = failure_log_facts(failure);
+    details.insert("verb".to_string(), json!(verb.word()));
+    details.insert("workspaceId".to_string(), json!(workspace_id));
+    if let Some(source_id) = source_id {
         details.insert("sourceId".to_string(), json!(source_id));
     }
     let _ = logger.log(GxserverLogInput {
@@ -73,8 +93,8 @@ pub(crate) fn log_work_source_failure(logger: &GxserverLogger, check: &CheckFail
         server_id: None,
         request_id: None,
         client: None,
-        duration_ms: Some(check.duration.as_millis()),
-        error: Some(failure_log_summary(&check.failure).to_string()),
+        duration_ms: Some(duration.as_millis()),
+        error: Some(failure_log_summary(failure).to_string()),
         details: Some(Value::Object(details)),
     });
 }

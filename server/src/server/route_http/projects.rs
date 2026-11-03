@@ -48,7 +48,18 @@ pub(super) async fn route_projects_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let project = repository.update_project(params)?;
+                // A project's workspace is its `launchSettings.workspaceId`, or a worktree's
+                // parent's (`worktree.parentProjectId`): an update that sets either is placed like a
+                // move, under the ticket command store's writer lock (`place_projects_after`).
+                let project = if params.contains_key("launchSettings")
+                    || params.contains_key("worktree")
+                {
+                    crate::work_mode::place_projects_after(&state.paths, repository, db, || {
+                        repository.update_project(params)
+                    })?
+                } else {
+                    repository.update_project(params)?
+                };
                 let project_id = value_text(&project, "projectId")?;
                 schedule_presentation_project_delta(
                     &state,
@@ -254,7 +265,12 @@ pub(super) async fn route_projects_http(
             |repository, db, params, _| {
                 // The CLI's `remove-project` passes --project-id, --path or --name, like `group-project`.
                 let project_id = resolve_sidebar_collection_project_id(repository, params)?;
-                let project = repository.remove_project(&project_id)?;
+                // Its worktrees follow it to another workspace, so it goes like a move
+                // (`place_projects_after`).
+                let project =
+                    crate::work_mode::place_projects_after(&state.paths, repository, db, || {
+                        repository.remove_project(&project_id)
+                    })?;
                 crate::session_chat_queue::forget_session_chat_queue(db, &project_id, None)?;
                 crate::session_chat_queue_attachments::sweep(&state.paths, db);
                 schedule_presentation_project_delta(

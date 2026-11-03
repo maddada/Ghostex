@@ -389,21 +389,30 @@ fn project_selector(flags: &super::args::Flags) -> Map<String, Value> {
 
 /// Reads the key from stdin, so it never lands in shell history or the process list.
 fn read_secret_line() -> CliResult<String> {
+    read_stdin_line(
+        "Paste your Linear API key and press Enter: ",
+        "the key",
+        "No key was given. Pipe it in, or pass --clear to remove the key.".to_string(),
+    )
+}
+
+/// One line from stdin, trimmed, for a value that must not sit in the shell's history (a Linear
+/// key, a ticket command's credential). `prompt` asks for it when stdin is a terminal; `what`
+/// names it in a read error; `missing` is the error for a blank line.
+pub(crate) fn read_stdin_line(prompt: &str, what: &str, missing: String) -> CliResult<String> {
     let stdin = std::io::stdin();
     if stdin.is_terminal() {
-        eprint!("Paste your Linear API key and press Enter: ");
+        eprint!("{prompt}");
         let _ = std::io::stderr().flush();
     }
     let mut line = String::new();
     stdin
         .lock()
         .read_line(&mut line)
-        .map_err(|error| CliError::Other(format!("Could not read the key: {error}")))?;
-    let key = line.trim().to_string();
-    if key.is_empty() {
-        return Err(CliError::Other(
-            "No key was given. Pipe it in, or pass --clear to remove the key.".to_string(),
-        ));
+        .map_err(|error| CliError::Other(format!("Could not read {what}: {error}")))?;
+    let value = line.trim().to_string();
+    if value.is_empty() {
+        return Err(CliError::Other(missing));
     }
-    Ok(key)
+    Ok(value)
 }

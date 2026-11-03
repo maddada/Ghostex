@@ -62,6 +62,18 @@ impl Routes {
         (status, response_json(response.response).await)
     }
 
+    /// `call` through the whole request path, request log included.
+    async fn logged_call(&self, path: &str, params: Value) -> (StatusCode, Value) {
+        let response = handle_http_request(
+            self.state.clone(),
+            rpc_request(path, &self.token, json!({ "params": params })),
+        )
+        .await
+        .expect("answered");
+        let status = response.status();
+        (status, response_json(response).await)
+    }
+
     async fn workspace(&self, name: &str) -> String {
         let (status, body) = self
             .call("/api/createWorkspace", json!({ "name": name }))
@@ -278,6 +290,17 @@ async fn generic_workspace_writes_refuse_a_command_tracker() {
         )
         .await;
     assert_eq!(status, StatusCode::OK);
+    // The refusal is those routes' own: the workspace write the local-only `setWorkTracker` goes
+    // through refuses no tracker text.
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let current = crate::workspaces::read_sidebar_workspaces(&db).expect("workspaces");
+    let patch = json!({ "tracker": "fixture" });
+    assert!(crate::workspaces::update_workspace_in(
+        &current,
+        &workspace_id,
+        patch.as_object().unwrap()
+    )
+    .is_ok());
 }
 
 #[tokio::test]
@@ -1245,6 +1268,77 @@ async fn an_unknown_workspace_is_never_repeated_back() {
     }
 }
 
+/// The tracker and workspace routes answer a workspace they can't find in the same fixed words,
+/// never repeating the typed reference in the answer or the request log.
+#[tokio::test]
+async fn the_tracker_and_workspace_routes_name_no_typed_workspace() {
+    let routes = Routes::new();
+    let typed = "ws-typed-ref-55";
+    let calls = [
+        ("/api/readWorkTracker", json!({ "workspaceId": typed })),
+        (
+            "/api/setWorkTracker",
+            json!({ "workspaceId": typed, "tracker": "github" }),
+        ),
+        (
+            "/api/updateWorkspace",
+            json!({ "workspaceId": typed, "name": "Work" }),
+        ),
+        ("/api/deleteWorkspace", json!({ "workspaceId": typed })),
+        (
+            "/api/moveMachineToWorkspace",
+            json!({ "workspaceId": typed, "machineId": "machine-1" }),
+        ),
+    ];
+    for (path, params) in &calls {
+        let (status, body) = routes.logged_call(path, params.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
+        assert_eq!(
+            error_text(&body),
+            "No workspace matched that id or name.",
+            "{path}"
+        );
+        assert!(!body.to_string().contains(typed), "{path}: {body}");
+    }
+    let logged = logged_errors(&routes);
+    assert_eq!(logged.len(), calls.len(), "{logged:?}");
+    for error in &logged {
+        assert!(!error.contains(typed), "{error}");
+    }
+}
+
+/// A ticket id that isn't one of the command's is refused without quoting it: the id typed here is
+/// the workspace's stored credential, and every request error's message is logged.
+#[tokio::test]
+async fn a_typed_command_ticket_id_is_never_repeated_back() {
+    let routes = Routes::new();
+    routes.answer("good");
+    with_token(&routes, "Work", "tok-typed-77").await;
+    let (status, body) = routes
+        .logged_call(
+            "/api/readWorkItem",
+            json!({ "source": "fixture", "ticketId": "tok-typed-77" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        error_text(&body),
+        "That isn't a fixture ticket ID: a key and a number, like ABC-12."
+    );
+    assert!(!body.to_string().contains("tok-typed-77"), "{body}");
+    let logged = logged_errors(&routes);
+    assert!(
+        logged.iter().any(|error| error.contains("ticket ID")),
+        "the refusal is in the request log: {logged:?}"
+    );
+    assert!(
+        !fs::read_to_string(&routes.paths.log_file)
+            .unwrap_or_default()
+            .contains("tok-typed-77"),
+        "{logged:?}"
+    );
+}
+
 #[tokio::test]
 async fn a_check_runs_on_the_server_with_the_path_it_has() {
     let routes = Routes::new();
@@ -1546,7 +1640,7 @@ async fn nothing_a_credential_save_returns_shows_a_value() {
             stored: json!({}),
             workspace: None,
             values: json!({ "token": "two\nlines" }),
-            answer: Some("API token must be a single line."),
+            answer: Some("API token must be a single line, without a NUL character."),
         },
         Row {
             name: "a value Ghostex can't mask",
@@ -1956,4 +2050,462 @@ fi
         )
         .await;
     assert!(!read.to_string().contains("route-mode-visible"), "{read}");
+}
+
+/// A background read of `fixture`, pinned in `workspace_id`, for `project_id`, paused before its
+/// command starts; then `path` (a project route) with `update`. The change must wait for the
+/// start, land after it, and leave the read keeping nothing; `project_id` is then placed in
+/// `moved_to`.
+async fn update_races_a_paused_read(
+    routes: &Routes,
+    path: &str,
+    workspace_id: &str,
+    project_id: &str,
+    update: Value,
+    moved_to: Option<&str>,
+) {
+    let work_dir = command_work_dir(&routes.paths, Some("fixture")).expect("work dir");
+    fs::write(work_dir.join("mode.txt"), "wait-release").expect("mode");
+    let plan = crate::work_mode::JobPlan {
+        workspace_id: workspace_id.to_string(),
+        source: crate::work_mode::CommandSourceId::known("fixture").expect("interned"),
+        generation: crate::work_mode::work_source_generation(workspace_id),
+    };
+    let job = crate::work_mode::ExactRead {
+        plan: plan.clone(),
+        ids: vec!["ACM-12".to_string()],
+        awaiting_pull_request: Vec::new(),
+        projects: vec![project_id.to_string()],
+        paths: routes.paths.clone(),
+    };
+    let (reached, paused) = std::sync::mpsc::channel();
+    let (resume, release) = std::sync::mpsc::channel();
+    crate::work_mode::hook_before_spawn(
+        workspace_id,
+        crate::work_mode::BeforeSpawn::Pause { reached, release },
+    );
+    let worker = std::thread::spawn(move || crate::work_mode::run_exact_read(&job));
+    paused
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .expect("prepared");
+
+    // A route that moves projects takes the store's writer first (`place_projects_after`); any
+    // other change to a project's placement takes the placement lock in the repository. Either
+    // notice says the change reached a lock the paused read holds.
+    let moving = crate::work_mode::notify_placement_writer(
+        &routes.paths,
+        crate::work_mode::PlacementChange::Move,
+    );
+    let placing = crate::domain::repository::project::notify_project_placement(project_id);
+    let update = tokio::spawn(route_http(
+        routes.state.clone(),
+        rpc_request(path, &routes.token, json!({ "params": update })),
+        "request-update".to_string(),
+    ));
+    tokio::task::spawn_blocking(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while moving.try_recv().is_err() && placing.try_recv().is_err() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the change never reached a lock"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    })
+    .await
+    .expect("joined");
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    assert!(!update.is_finished(), "the update waits for the start");
+    resume.send(()).expect("resume");
+    let response = tokio::time::timeout(std::time::Duration::from_secs(20), update)
+        .await
+        .expect("the update lands once the command started")
+        .expect("joined");
+    assert_eq!(response.response.status(), StatusCode::OK);
+    fs::write(work_dir.join("release"), "").expect("release");
+    fs::remove_file(work_dir.join("mode.txt")).expect("mode back");
+    tokio::task::spawn_blocking(move || worker.join().expect("the read ends"))
+        .await
+        .expect("joined");
+
+    if let Some(moved_to) = moved_to {
+        assert_eq!(
+            crate::work_mode::cached_project_workspace_id(project_id).as_deref(),
+            Some(moved_to)
+        );
+    }
+    assert!(crate::work_mode::cached_command_ticket(&plan, "ACM-12").is_none());
+}
+
+/// Two workspaces, the fixture pinned as `fixture` in the first.
+async fn two_workspaces_pinning_in_the_first(routes: &Routes) -> (String, String) {
+    routes.answer("good");
+    let first = routes.workspace("First").await;
+    let second = routes.workspace("Second").await;
+    let (status, body) = routes
+        .call(
+            "/api/setWorkSource",
+            json!({ "workspaceId": first, "path": routes.program }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    (first, second)
+}
+
+/// A project row made directly, then every project placed.
+fn placed_project(routes: &Routes, params: Value) -> String {
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let repository = crate::domain::DomainRepository::new(&db, "test");
+    let mut params = params;
+    params["path"] = json!(routes.paths.app_data_dir);
+    let project = repository
+        .create_project(params.as_object().unwrap())
+        .expect("project");
+    crate::work_mode::replace_project_workspaces(&routes.paths, &repository, &db).expect("placed");
+    project["projectId"].as_str().unwrap().to_string()
+}
+
+/// `/api/updateProject`, which remote clients may call, can set a project's workspace in its
+/// `launchSettings`: it waits, like a move, for a background read that checked the project's
+/// placement until its command starts, and the read then keeps nothing of its answer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_project_update_that_moves_it_waits_for_a_reads_command_to_start() {
+    let routes = Routes::new();
+    let (first, second) = two_workspaces_pinning_in_the_first(&routes).await;
+    let project_id = placed_project(
+        &routes,
+        json!({ "name": "Racing", "launchSettings": { "workspaceId": first } }),
+    );
+    update_races_a_paused_read(
+        &routes,
+        "/api/updateProject",
+        &first,
+        &project_id,
+        json!({ "projectId": project_id, "launchSettings": { "workspaceId": second } }),
+        Some(&second),
+    )
+    .await;
+}
+
+/// A worktree project is in its parent's workspace, so an update that gives it a parent in
+/// another workspace moves it, and waits the same way.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_worktree_update_to_a_parent_elsewhere_waits_for_a_reads_command_to_start() {
+    let routes = Routes::new();
+    let (first, second) = two_workspaces_pinning_in_the_first(&routes).await;
+    let parent_in_first = placed_project(
+        &routes,
+        json!({ "name": "Main", "launchSettings": { "workspaceId": first } }),
+    );
+    let parent_in_second = placed_project(
+        &routes,
+        json!({ "name": "Other", "launchSettings": { "workspaceId": second } }),
+    );
+    let worktree = placed_project(
+        &routes,
+        json!({ "name": "Branch", "worktree": { "parentProjectId": parent_in_first } }),
+    );
+    assert_eq!(
+        crate::work_mode::cached_project_workspace_id(&worktree),
+        Some(first.clone())
+    );
+    update_races_a_paused_read(
+        &routes,
+        "/api/updateProject",
+        &first,
+        &worktree,
+        json!({ "projectId": worktree, "worktree": { "parentProjectId": parent_in_second } }),
+        Some(&second),
+    )
+    .await;
+}
+
+/// Removing a project moves its worktrees to their own workspace, here the default one, and waits
+/// the same way.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn removing_a_worktrees_parent_waits_for_a_reads_command_to_start() {
+    let routes = Routes::new();
+    let (first, _) = two_workspaces_pinning_in_the_first(&routes).await;
+    let parent = placed_project(
+        &routes,
+        json!({ "name": "Main", "launchSettings": { "workspaceId": first } }),
+    );
+    let worktree = placed_project(
+        &routes,
+        json!({ "name": "Branch", "worktree": { "parentProjectId": parent } }),
+    );
+    update_races_a_paused_read(
+        &routes,
+        "/api/removeProject",
+        &first,
+        &worktree,
+        json!({ "projectId": parent }),
+        Some(crate::workspaces::DEFAULT_WORKSPACE_ID),
+    )
+    .await;
+}
+
+/// Removing a recent project removes its row: a read that checked it waits, and keeps nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn removing_a_recent_project_waits_for_a_reads_command_to_start() {
+    let routes = Routes::new();
+    let (first, _) = two_workspaces_pinning_in_the_first(&routes).await;
+    let project_id = placed_project(
+        &routes,
+        json!({ "name": "Recent", "launchSettings": { "workspaceId": first } }),
+    );
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    crate::domain::DomainRepository::new(&db, "test")
+        .close_project_to_recent(&project_id)
+        .expect("closed to recent");
+    update_races_a_paused_read(
+        &routes,
+        "/api/removeRecentProject",
+        &first,
+        &project_id,
+        json!({ "projectId": project_id }),
+        None,
+    )
+    .await;
+}
+
+/// `/api/addProjectPath` for a folder registered earlier without worktree metadata, which is a
+/// worktree of a project in another workspace, repairs the row into that worktree: it moves to
+/// its parent's workspace, and a read that checked it waits and keeps nothing.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn re_adding_a_path_that_is_a_worktree_elsewhere_waits_for_a_reads_command_to_start() {
+    let routes = Routes::new();
+    let (first, second) = two_workspaces_pinning_in_the_first(&routes).await;
+    let git = |args: &[&str], cwd: &Path| {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.com"])
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("git");
+        assert!(status.success(), "git {args:?}");
+    };
+    let checkout = routes.paths.app_data_dir.join("main-checkout");
+    fs::create_dir_all(&checkout).expect("checkout");
+    git(&["init", "-q", "-b", "main"], &checkout);
+    git(&["commit", "-q", "--allow-empty", "-m", "init"], &checkout);
+    let worktree_path = routes.paths.app_data_dir.join("feature-worktree");
+    git(
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feature",
+            &worktree_path.display().to_string(),
+        ],
+        &checkout,
+    );
+    let checkout = fs::canonicalize(&checkout).expect("canonical");
+    let worktree_path = fs::canonicalize(&worktree_path).expect("canonical");
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let repository = crate::domain::DomainRepository::new(&db, "test");
+    repository
+        .create_project(
+            json!({ "name": "Main", "path": checkout, "launchSettings": { "workspaceId": second } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("parent");
+    let registered = repository
+        .create_project(
+            json!({ "name": "Feature", "path": worktree_path, "launchSettings": { "workspaceId": first } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("registered without worktree metadata");
+    assert!(registered.get("worktree").is_none_or(Value::is_null));
+    let project_id = registered["projectId"].as_str().unwrap().to_string();
+    crate::work_mode::replace_project_workspaces(&routes.paths, &repository, &db).expect("placed");
+    update_races_a_paused_read(
+        &routes,
+        "/api/addProjectPath",
+        &first,
+        &project_id,
+        json!({ "path": worktree_path }),
+        None,
+    )
+    .await;
+    let repaired = repository
+        .get_project(&project_id)
+        .expect("read")
+        .expect("project");
+    assert!(
+        repaired["worktree"]["parentProjectId"].is_string(),
+        "{repaired}"
+    );
+}
+
+/// Moving a project, or deleting the workspace it is in, places it in its new workspace before
+/// the route publishes it, so its cards read that workspace's ticket command at once.
+#[tokio::test]
+async fn a_moved_project_is_placed_in_its_new_workspace_before_it_publishes() {
+    let routes = Routes::new();
+    let first = routes.workspace("First").await;
+    let second = routes.workspace("Second").await;
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let project = crate::domain::DomainRepository::new(&db, "test")
+        .create_project(
+            json!({
+                "name": "Placed",
+                "path": routes.paths.app_data_dir,
+                "launchSettings": { "workspaceId": first },
+            })
+            .as_object()
+            .unwrap(),
+        )
+        .expect("project");
+    let project_id = project["projectId"].as_str().unwrap();
+
+    let (status, body) = routes
+        .call(
+            "/api/moveProjectToWorkspace",
+            json!({ "projectId": project_id, "workspaceId": second }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        crate::work_mode::cached_project_workspace_id(project_id),
+        Some(second.clone())
+    );
+
+    let (status, body) = routes
+        .call("/api/deleteWorkspace", json!({ "workspaceId": second }))
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        crate::work_mode::cached_project_workspace_id(project_id).as_deref(),
+        Some(crate::workspaces::DEFAULT_WORKSPACE_ID)
+    );
+}
+
+/// A session of `workspace_id` with a project of its own.
+fn session_in(routes: &Routes, workspace_id: &str, name: &str) -> (String, String) {
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let repository = crate::domain::DomainRepository::new(&db, "test");
+    let folder = routes.paths.app_data_dir.join(name);
+    fs::create_dir_all(&folder).expect("folder");
+    let project = repository
+        .create_project(
+            json!({ "name": name, "path": folder, "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    let project_id = project["projectId"].as_str().unwrap().to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "projectId": project_id,
+                "kind": "agent",
+                "agentId": "codex",
+                "title": name,
+                "lifecycleState": "running",
+            })
+            .as_object()
+            .unwrap(),
+            false,
+        )
+        .expect("session");
+    (
+        project_id,
+        session["sessionId"].as_str().unwrap().to_string(),
+    )
+}
+
+/// `/api/setSessionWorkLinks`, which remote clients may call, links a session to tickets of its
+/// workspace's ticket command only: not another workspace's, not an id nobody pins, not in a team
+/// workspace. Each id is kept as the command reads it, and one that isn't its is refused without
+/// being quoted.
+#[tokio::test]
+async fn session_links_name_only_the_ticket_command_of_the_sessions_workspace() {
+    let routes = Routes::new();
+    routes.answer("good");
+    let pinned = routes.workspace("Pinned").await;
+    let other = routes.workspace("Other").await;
+    let (status, body) = set_logged(
+        &routes,
+        json!({ "workspaceId": pinned, "path": routes.program }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (project_id, session_id) = session_in(&routes, &pinned, "linked");
+    let (other_project, other_session) = session_in(&routes, &other, "elsewhere");
+    let link = |project_id: &str, session_id: &str, tickets: Value| json!({ "projectId": project_id, "sessionId": session_id, "tickets": tickets });
+
+    let (status, body) = routes
+        .call(
+            "/api/setSessionWorkLinks",
+            link(
+                &project_id,
+                &session_id,
+                json!({ "fixture": ["acm-12", "ACM-12", "ops-3"] }),
+            ),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["result"]["workLinks"],
+        json!({ "tickets": { "fixture": ["ACM-12", "OPS-3"] } })
+    );
+
+    let typed = "tok-typed-link-77";
+    let (status, body) = routes
+        .call(
+            "/api/setSessionWorkLinks",
+            link(&project_id, &session_id, json!({ "fixture": [typed] })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        error_text(&body),
+        "That isn't a fixture ticket ID: a key and a number, like ABC-12."
+    );
+    assert!(!body.to_string().contains(typed), "{body}");
+
+    for (project, session, tickets) in [
+        (
+            &other_project,
+            &other_session,
+            json!({ "fixture": ["ACM-1"] }),
+        ),
+        (
+            &project_id,
+            &session_id,
+            json!({ "never-pinned": ["ACM-1"] }),
+        ),
+    ] {
+        let (status, body) = routes
+            .call("/api/setSessionWorkLinks", link(project, session, tickets))
+            .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(error_text(&body), crate::work_mode::TICKET_LINKS_REFUSED);
+        assert!(!body.to_string().contains("never-pinned"), "{body}");
+    }
+
+    routes.join_team(&pinned);
+    let (status, body) = routes
+        .call(
+            "/api/setSessionWorkLinks",
+            link(&project_id, &session_id, json!({ "fixture": null })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(error_text(&body), crate::work_mode::TICKET_LINKS_REFUSED);
+
+    // What the refusals left: the links set first.
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let session = crate::domain::DomainRepository::new(&db, "test")
+        .get_session(&project_id, &session_id)
+        .expect("read")
+        .expect("session");
+    assert_eq!(
+        session["runtimeSettings"]["workLinks"],
+        json!({ "tickets": { "fixture": ["ACM-12", "OPS-3"] } })
+    );
 }

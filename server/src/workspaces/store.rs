@@ -114,6 +114,11 @@ pub fn workspace_claude_account_id(state: &Value, workspace_id: &str) -> Option<
         .map(str::to_string)
 }
 
+/// What a request is told when no workspace has the id or name it gave. It repeats nothing the
+/// request sent: every domain error's message goes to the request log, and a stale name can
+/// spell a credential the workspace stored.
+pub const NO_SUCH_WORKSPACE: &str = "No workspace matched that id or name.";
+
 /// The workspace `reference` names: a workspace id, else a workspace name (any case), so the
 /// `ghostex workspace` verbs can take either.
 pub fn find_workspace_id(state: &Value, reference: &str) -> Option<String> {
@@ -184,7 +189,6 @@ pub(crate) fn create_workspace_in(
 ) -> Result<(String, Value), DomainStateError> {
     let name = bounded_text(params.get("name"), MAX_NAME_CHARS)
         .ok_or_else(|| DomainStateError::bad_request("A workspace needs a name."))?;
-    refuse_other_trackers(params)?;
     let mut next = state.clone();
     let count = next
         .get("workspaces")
@@ -238,7 +242,6 @@ pub(crate) fn update_workspace_in(
     if params.contains_key("name") && bounded_text(params.get("name"), MAX_NAME_CHARS).is_none() {
         return Err(DomainStateError::bad_request("A workspace needs a name."));
     }
-    refuse_other_trackers(params)?;
     for key in [
         "name",
         "color",
@@ -401,21 +404,6 @@ pub fn normalize_sidebar_workspaces_state(state: &Value) -> Value {
         "order": ordered_ids,
         "workspaces": workspaces,
     })
-}
-
-/// The generic workspace writes, which remote clients may call, set only a built-in tracker. A
-/// workspace's ticket command is set and chosen on its own computer (the decision on the
-/// work-source endpoints in `protocol.rs`), so a command id here is refused instead of dropped.
-fn refuse_other_trackers(params: &Map<String, Value>) -> Result<(), DomainStateError> {
-    match params.get("tracker") {
-        None | Some(Value::Null) => Ok(()),
-        Some(tracker) if matches!(tracker.as_str().map(str::trim), Some("linear" | "github")) => {
-            Ok(())
-        }
-        Some(_) => Err(DomainStateError::bad_request(
-            "tracker must be \"linear\" or \"github\"; a ticket command is set and picked on its own computer.",
-        )),
-    }
 }
 
 fn is_valid_color(color: &str) -> bool {

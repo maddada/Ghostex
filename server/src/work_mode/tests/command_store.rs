@@ -15,6 +15,10 @@ use crate::storage::{initialize_gxserver_storage, open_gxserver_database, Gxserv
 
 use super::*;
 
+mod another_program;
+mod cards;
+mod links;
+mod published;
 mod stored_values;
 
 /// The store's set of a typed path, as these tests read it: its result, whose errors already left
@@ -392,7 +396,14 @@ fn only_declared_single_line_credentials_are_stored() {
         other => panic!("not refused: {other:?}"),
     };
     assert!(refused(json!({ "gone": "x" })).contains("isn't a credential this command asks for"));
-    assert!(refused(json!({ "token": "two\nlines" })).contains("single line"));
+    let not_one_line = "API token must be a single line, without a NUL character.";
+    for value in ["two\nlines", "two\rlines", "tok\u{0}en"] {
+        assert_eq!(
+            refused(json!({ "token": value })),
+            not_one_line,
+            "{value:?}"
+        );
+    }
     assert!(refused(json!({ "token": "x".repeat(4097) })).contains("longer than 4 KB"));
     assert!(refused(json!({ "token": 7 })).contains("must be text or null"));
     assert!(!store
@@ -402,6 +413,21 @@ fn only_declared_single_line_credentials_are_stored() {
         set_work_source_credentials(&store.db, &store.paths, &store.ws("ws-none"), &Map::new()),
         Err(WorkSourceError::Refused(text)) if text == "Set the ticket command first."
     ));
+    // A tab or an ESC inside a value is a valid environment value: it is kept as given.
+    let workspace_id = store.ws("ws-a");
+    for value in ["pass\tword", "tok\u{1b}en"] {
+        set_work_source_credentials(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            json!({ "token": value }).as_object().unwrap(),
+        )
+        .unwrap_or_else(|error| panic!("{value:?}: {error:?}"));
+        assert_eq!(
+            stored_value(&store, &workspace_id, "token").as_deref(),
+            Some(value)
+        );
+    }
 }
 
 #[test]
@@ -1542,17 +1568,14 @@ fn a_value_that_turns_secret_never_stays_raw_in_the_record() {
     assert!(stored_row(&store).contains("vis-val-77"));
     assert!(!is_secret(&stored_command(&store, &workspace_id), "mode"));
 
-    // A failed check that declares `mode` secret: it is secret from then on, and its value never
-    // stays raw in the record.
+    // Another program's failed check that declares `mode` secret says nothing about the pinned
+    // command: its record stays as it is.
     let store = Store::new();
     let workspace_id = store.ws("ws-a");
     pin_with_open_mode(&store, &workspace_id);
-    let failing = script(
-        &store,
-        "failing",
-        r#"printf '{ "credentials": [ { "name": "mode", "label": "Mode" } ] }\n'
-exit 1"#,
-    );
+    const DECLARES_MODE_SECRET: &str = r#"printf '{ "credentials": [ { "name": "mode", "label": "Mode" } ] }\n'
+exit 1"#;
+    let failing = script(&store, "failing", DECLARES_MODE_SECRET);
     let failed = set_work_source(
         &store.db,
         &store.paths,
@@ -1565,6 +1588,17 @@ exit 1"#,
         matches!(failed, Err(WorkSourceError::Failed(_))),
         "{failed:?}"
     );
+    assert!(stored_row(&store).contains("vis-val-77"));
+    assert!(!is_secret(&stored_command(&store, &workspace_id), "mode"));
+
+    // The pinned program's own failed check that declares `mode` secret: it is secret from then
+    // on, and its value never stays raw in the record.
+    script(&store, "open-mode", DECLARES_MODE_SECRET);
+    let failed = check_work_source(&store.db, &store.paths, &workspace_id);
+    assert!(
+        matches!(failed, Err(WorkSourceError::Failed(_))),
+        "{failed:?}"
+    );
     assert!(
         !stored_row(&store).contains("vis-val-77"),
         "{}",
@@ -1572,23 +1606,17 @@ exit 1"#,
     );
     assert!(is_secret(&stored_command(&store, &workspace_id), "mode"));
 
-    // An answer with another id that declares `mode` secret, refused for a Switch.
+    // The pinned program answering with another id that declares `mode` secret, refused for a
+    // Switch.
     let store = Store::new();
     let workspace_id = store.ws("ws-a");
     pin_with_open_mode(&store, &workspace_id);
-    let renamed = script(
+    script(
         &store,
-        "renamed",
+        "open-mode",
         r#"printf '{ "id": "renamed", "name": "Renamed", "ids": { "format": "key-number", "keys": ["ACM"] }, "credentials": [ { "name": "mode", "label": "Mode" } ] }\n'"#,
     );
-    refusal(set_work_source(
-        &store.db,
-        &store.paths,
-        &workspace_id,
-        &renamed,
-        false,
-        &no_references,
-    ));
+    refusal(check_work_source(&store.db, &store.paths, &workspace_id));
     assert!(
         !stored_row(&store).contains("vis-val-77"),
         "{}",
@@ -1751,6 +1779,22 @@ fn a_failed_check_carries_what_the_log_line_needs_masked() {
     store.answer("good");
     store.set("ws-a", false).expect("pinned");
     let workspace_id = store.ws("ws-a");
+    // The pinned program gone: its check names its id.
+    std::fs::remove_file(&store.program).expect("remove program");
+    match check_work_source(&store.db, &store.paths, &workspace_id) {
+        Err(WorkSourceError::Failed(failure)) => {
+            assert!(
+                failure.message.contains("can't find"),
+                "{}",
+                failure.message
+            );
+            assert_eq!(failure.workspace_id, workspace_id);
+            assert_eq!(failure.source_id.as_deref(), Some("fixture"));
+            assert!(failure.duration < std::time::Duration::from_secs(10));
+        }
+        other => panic!("not a failed check: {other:?}"),
+    }
+    // Another program is asked as no source yet, so its failure names none.
     let missing = store
         ._temp
         .path()
@@ -1765,16 +1809,7 @@ fn a_failed_check_carries_what_the_log_line_needs_masked() {
         false,
         &no_references,
     ) {
-        Err(WorkSourceError::Failed(failure)) => {
-            assert!(
-                failure.message.contains("can't find"),
-                "{}",
-                failure.message
-            );
-            assert_eq!(failure.workspace_id, workspace_id);
-            assert_eq!(failure.source_id.as_deref(), Some("fixture"));
-            assert!(failure.duration < std::time::Duration::from_secs(10));
-        }
+        Err(WorkSourceError::Failed(failure)) => assert_eq!(failure.source_id, None),
         other => panic!("not a failed check: {other:?}"),
     }
 }

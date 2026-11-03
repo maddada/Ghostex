@@ -75,9 +75,17 @@ pub(crate) enum Unfinished {
 /// the command left behind holding its output open gets what is left of the time limit, then is
 /// ended (one still holding its input too); what was printed until then is kept, except from a
 /// `Keep::AtMost` stream, whose answer is then cut short and fails the run.
-pub(crate) fn run_bounded(
+pub(crate) fn run_bounded(command: Command, limits: RunLimits) -> Result<RunOutput, Unfinished> {
+    run_bounded_after_spawn(command, limits, || {})
+}
+
+/// `run_bounded`, calling `after_spawn` as soon as `ProcessTree::spawn` returns, whether the
+/// command started or not, and before anything is written to it or read from it. A caller that
+/// must hold a lock until the command starts, and never while it runs, releases it there.
+pub(crate) fn run_bounded_after_spawn(
     mut command: Command,
     limits: RunLimits,
+    after_spawn: impl FnOnce(),
 ) -> Result<RunOutput, Unfinished> {
     command
         .stdin(if limits.stdin.is_some() {
@@ -87,7 +95,9 @@ pub(crate) fn run_bounded(
         })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut tree = ProcessTree::spawn(&mut command).map_err(Unfinished::Start)?;
+    let spawned = ProcessTree::spawn(&mut command);
+    after_spawn();
+    let mut tree = spawned.map_err(Unfinished::Start)?;
     // On a thread of its own: a command that fills its stdout before it reads its input would
     // otherwise wait on this write while it waits on the command. The write ends once the input is
     // in the pipe, or when the last process holding the pipe's other end exits.

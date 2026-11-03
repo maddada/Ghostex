@@ -116,7 +116,10 @@ pub(crate) fn refresh_team_work_tracker(paths: &GxserverPaths, workspace_id: &st
         return false;
     }
     if let Ok(flow) = crate::team_sync::read_team_flow(paths, &workspace_params(workspace_id)) {
-        remember_team_work_tracker(workspace_id, WorkSourceId::from_wire(flow.get("tracker")));
+        remember_team_work_tracker(
+            workspace_id,
+            WorkSourceId::from_wire_built_in(flow.get("tracker")),
+        );
     }
     true
 }
@@ -127,12 +130,13 @@ pub(crate) fn workspace_params(workspace_id: &str) -> Map<String, Value> {
     params
 }
 
-/// The tracker a workspace picked on this computer (the workspaces document), if any.
+/// The tracker a workspace picked on this computer (the workspaces document), if any: Linear or
+/// GitHub, since a ticket command can't be a workspace's tracker yet.
 pub(crate) fn stored_workspace_work_tracker(
     workspaces: &Value,
     workspace_id: &str,
 ) -> Option<WorkSourceId> {
-    WorkSourceId::from_wire(
+    WorkSourceId::from_wire_built_in(
         workspaces
             .get("workspaces")
             .and_then(|workspaces| workspaces.get(workspace_id))

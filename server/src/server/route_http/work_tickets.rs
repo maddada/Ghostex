@@ -166,6 +166,7 @@ fn create_linear_ticket(
             &TicketScope {
                 project_id: &project_id,
                 workspace_id: crate::workspaces::stored_project_workspace_id(&project),
+                effective_workspace_id: None,
                 cwd: None,
                 credentials: Some(&credentials),
             },

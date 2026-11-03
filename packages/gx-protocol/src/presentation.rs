@@ -185,8 +185,9 @@ pub struct PresentationProject {
     /// project and from an older daemon.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bot_runs_today: Option<u64>,
-    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it or
-    /// `gh` is signed in (server/src/work_mode/project.rs). Present only when true.
+    /// Issues Workflow (formerly Work mode) is on for this project: a Linear key applies to it, `gh`
+    /// is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs).
+    /// Present only when true.
     #[serde(
         default,
         deserialize_with = "crate::de::null_as_default",
@@ -227,6 +228,27 @@ pub struct PresentationProject {
         skip_serializing_if = "is_false"
     )]
     pub every_workspace: bool,
+    /// The ticket command of the project's workspace (server/src/work_mode/command/), a source of
+    /// tickets on its sessions' cards. Absent without one, in a team workspace (where it is
+    /// stopped), and from an older daemon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub work_source: Option<PresentationWorkSource>,
+}
+
+/// A workspace's ticket command as a project row shows it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationWorkSource {
+    /// The id its `info` pinned, which its tickets' keys and link kinds start with (`fixture`).
+    pub id: String,
+    /// Its name for the workspace (`info.name`).
+    pub name: String,
+    /// Its icon as a `data:image/svg+xml;base64,…` URL; absent when it has none or it was refused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// Whether it is the workspace's primary tracker; false until a command can be picked as one.
+    #[serde(default, deserialize_with = "crate::de::null_as_default")]
+    pub is_tracker: bool,
 }
 
 impl PresentationProject {
