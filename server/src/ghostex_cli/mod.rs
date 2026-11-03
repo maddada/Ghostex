@@ -372,6 +372,7 @@ fn is_known_command(name: &str) -> bool {
         "send-session-chat-queued-prompt",
         "set-session-chat-draft",
         "export-transcript",
+        "count-transcript-turns",
         "wait-for-text",
         "rename-command",
         "set-visible-count",
@@ -933,6 +934,13 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         */
         "export-transcript" => run_bridge_action(
             "exportSessionTranscript",
+            Parser::ExportTranscript,
+            fail_on_not_ok,
+            args,
+        ),
+        // The History slider's estimate on the phone: the turns and each "last N" size, no file.
+        "count-transcript-turns" => run_bridge_action(
+            "countSessionTranscriptTurns",
             Parser::ExportTranscript,
             fail_on_not_ok,
             args,

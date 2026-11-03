@@ -1296,6 +1296,15 @@ when you open it.
   from this project on that model's agent. Handing off an orchestrator starts the
   new session as an orchestrator with the same Goal and Standing instructions when
   the chosen agent supports orchestrators.
+  Include also holds History. At first the file keeps the last 20 turns, a turn
+  being your message and everything up to your next one, and the slider picks 1,
+  2, 3, 5, 10, 20, 50 or 100 of them. The top of the file then lists what you
+  asked in the older turns, one line each. Turn on **Whole conversation** to keep
+  all of it. Under the slider the dialog says what that comes to, like "10 of 120
+  turns · about 9k tokens (the whole is 87k)", and the Include heading sums it up,
+  like "Last 10 turns · Messages only". History is remembered with the rest, and
+  dragging a session onto another project uses it too. On a computer running a
+  Ghostex from before History, it is hidden and the whole conversation goes.
 - Drag a session onto another project in the Project sidebar to hand it over
   there: a session can't change project, so this starts a new session in that
   project with the conversation attached, the same way Handoff / Export does. The

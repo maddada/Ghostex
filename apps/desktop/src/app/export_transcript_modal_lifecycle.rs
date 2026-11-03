@@ -91,8 +91,15 @@ impl GhostexGpuiApp {
         let mut message = serde_json::Map::new();
         message.insert("requestId".to_string(), serde_json::json!(request_id));
         match command {
-            ExportTranscriptModalCommand::RunExport { include, carry } => {
+            ExportTranscriptModalCommand::RunExport {
+                include,
+                last_turns,
+                carry,
+            } => {
                 message.insert("includeMarkdown".to_string(), serde_json::json!(carry));
+                if let Some(last_turns) = last_turns {
+                    message.insert("lastTurns".to_string(), serde_json::json!(last_turns));
+                }
                 message.insert(
                     "includeCommands".to_string(),
                     serde_json::json!(include.commands),
@@ -107,6 +114,25 @@ impl GhostexGpuiApp {
                 );
                 self.forward_gpui_export_transcript_modal_command_to_sidebar(
                     "runExportSessionTranscript",
+                    &message,
+                    cx,
+                );
+            }
+            ExportTranscriptModalCommand::CountTurns(include) => {
+                message.insert(
+                    "includeCommands".to_string(),
+                    serde_json::json!(include.commands),
+                );
+                message.insert(
+                    "includePatches".to_string(),
+                    serde_json::json!(include.patches),
+                );
+                message.insert(
+                    "includeReasoning".to_string(),
+                    serde_json::json!(include.reasoning),
+                );
+                self.forward_gpui_export_transcript_modal_command_to_sidebar(
+                    "countExportSessionTranscriptTurns",
                     &message,
                     cx,
                 );
@@ -189,6 +215,22 @@ impl GhostexGpuiApp {
             },
         )
         .is_some()
+    }
+
+    /// The computer's turn count for History's hint (gx_store/git/export_transcript.rs).
+    pub(crate) fn push_gpui_export_transcript_turn_count(
+        &mut self,
+        include: ExportTranscriptIncludeOptions,
+        count: ExportTranscriptTurnCount,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.update_native_app_modal(
+            GpuiAppModalKind::ExportTranscriptResult,
+            cx,
+            |modal: &mut GpuiExportTranscriptModalWindow, _window, cx| {
+                modal.set_turn_count(include, count, cx);
+            },
+        );
     }
 
     /// A handoff's branch notice for `target` (gx_store/git/export_handoff_remote.rs).

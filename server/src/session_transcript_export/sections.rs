@@ -84,6 +84,11 @@ pub const DEFAULT_EXPORT_SECTIONS: &[TranscriptExportSection] = &[
 /// Terminal output keeps its LAST N lines with a trim marker above (plan Q5).
 pub const DEFAULT_TERMINAL_OUTPUT_TAIL_LINES: usize = 8;
 
+/// How many of the left-out turns' messages from the user a limited handoff still lists, newest
+/// kept, and how long each line may be.
+pub(super) const EARLIER_PROMPTS_MAX: usize = 100;
+pub(super) const EARLIER_PROMPT_MAX_CHARS: usize = 200;
+
 pub(super) const PATCH_FAILURE_REASON_MAX_CHARS: usize = 160;
 pub(super) const EXPORT_FILE_NAME_SLUG_MAX_CHARS: usize = 60;
 pub(super) const EXPORT_SESSION_ID_PREFIX_CHARS: usize = 8;
@@ -96,6 +101,9 @@ pub(super) const UNIQUE_EXPORT_PATH_ATTEMPTS: usize = 200;
 pub struct SessionTranscriptExportSelection {
     pub sections: Vec<TranscriptExportSection>,
     pub terminal_output_tail_lines: usize,
+    /// Only the conversation's last turns, counted from the end; `None` is all of it. A turn is
+    /// one of your messages and everything up to your next one (`render::RenderedParts`).
+    pub last_turns: Option<usize>,
 }
 
 impl Default for SessionTranscriptExportSelection {
@@ -103,6 +111,7 @@ impl Default for SessionTranscriptExportSelection {
         Self {
             sections: DEFAULT_EXPORT_SECTIONS.to_vec(),
             terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
+            last_turns: None,
         }
     }
 }
@@ -139,6 +148,13 @@ impl SessionTranscriptExportSelection {
         Self {
             sections,
             terminal_output_tail_lines: DEFAULT_TERMINAL_OUTPUT_TAIL_LINES,
+            last_turns: None,
         }
+    }
+
+    /// The same selection, limited to the conversation's last `turns` (`None`: all of it).
+    pub fn with_last_turns(mut self, turns: Option<usize>) -> Self {
+        self.last_turns = turns.filter(|turns| *turns > 0);
+        self
     }
 }

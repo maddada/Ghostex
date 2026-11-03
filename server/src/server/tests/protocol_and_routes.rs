@@ -765,3 +765,109 @@ async fn export_session_transcript_fails_when_the_coordinator_read_fails() {
     .await;
     assert_ne!(exported.response.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn export_session_transcript_counts_turns_and_keeps_the_last_ones() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+    let state = test_app_state(paths.clone());
+    let token = state.auth_token.clone();
+    let transcript_path = temp.path().join("transcript.jsonl");
+    let mut lines = String::new();
+    for turn in 1..=3 {
+        lines.push_str(&format!(
+            "{{\"type\":\"user\",\"message\":{{\"role\":\"user\",\"content\":\"Question {turn}\"}}}}\n\
+             {{\"type\":\"assistant\",\"message\":{{\"role\":\"assistant\",\"content\":[{{\"type\":\"text\",\"text\":\"Answer {turn}\"}}]}}}}\n"
+        ));
+    }
+    fs::write(&transcript_path, lines).expect("write transcript");
+    let db = crate::storage::open_gxserver_database(&paths).expect("open db");
+    let repository = crate::domain::DomainRepository::new(&db, &state.metadata.server_id);
+    let project = repository
+        .create_project(
+            json!({ "name": "Ghostex", "path": temp.path() })
+                .as_object()
+                .expect("project params"),
+        )
+        .expect("project created");
+    let project_id = project["projectId"]
+        .as_str()
+        .expect("projectId")
+        .to_string();
+    let session = repository
+        .create_session(
+            json!({
+                "agentId": "claude",
+                "kind": "agent",
+                "projectId": project_id,
+                "runtimeSettings": {
+                    "agentName": "claude",
+                    "agentSessionPath": transcript_path,
+                },
+                "title": "Session",
+            })
+            .as_object()
+            .expect("session params"),
+            true,
+        )
+        .expect("session created");
+    let session_id = session["sessionId"]
+        .as_str()
+        .expect("sessionId")
+        .to_string();
+    drop(db);
+
+    let counted = route_http(
+        state.clone(),
+        rpc_request(
+            "/api/countSessionTranscriptTurns",
+            &token,
+            json!({ "params": { "projectId": project_id, "sessionId": session_id } }),
+        ),
+        "count".to_string(),
+    )
+    .await;
+    assert_eq!(counted.response.status(), StatusCode::OK);
+    let counts = response_json(counted.response).await["result"].clone();
+    assert_eq!(counts["turns"], json!(3));
+    assert!(counts.get("path").is_none(), "a count writes no file");
+    let sizes = counts["lastTurnsBytes"].as_array().expect("sizes").clone();
+    assert_eq!(sizes.len(), 3);
+    assert_eq!(
+        sizes[2], counts["bytes"],
+        "all three turns is the whole file"
+    );
+
+    let exported = route_http(
+        state,
+        rpc_request(
+            "/api/exportSessionTranscript",
+            &token,
+            json!({
+                "params": {
+                    "includeMarkdown": true,
+                    "lastTurns": 1,
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                }
+            }),
+        ),
+        "export-last-turn".to_string(),
+    )
+    .await;
+    assert_eq!(exported.response.status(), StatusCode::OK);
+    let result = response_json(exported.response).await["result"].clone();
+    assert_eq!(result["turns"], json!(3));
+    assert_eq!(result["keptTurns"], json!(1));
+    assert_eq!(
+        result["bytes"], sizes[0],
+        "the estimate is the written size"
+    );
+    let markdown = result["markdown"].as_str().expect("markdown");
+    assert!(markdown.contains("Answer 3"));
+    assert!(!markdown.contains("Answer 2"));
+    assert!(
+        markdown.contains("- Question 1\n- Question 2\n"),
+        "{markdown}"
+    );
+}

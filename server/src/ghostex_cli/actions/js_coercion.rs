@@ -662,6 +662,17 @@ mod tests {
             parse_export_transcript(&rest, &flags),
             json!({ "sessionId": "S1" })
         );
+
+        let (rest, flags) = parsed(&["S1", "--last-turns", "20"]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1", "lastTurns": 20 })
+        );
+        let (rest, flags) = parsed(&["S1", "--last-turns", "0"]);
+        assert_eq!(
+            parse_export_transcript(&rest, &flags),
+            json!({ "sessionId": "S1" })
+        );
     }
 
     #[test]

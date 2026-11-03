@@ -153,6 +153,9 @@ impl GhostexGpuiApp {
                 "includeMarkdown",
             ],
         );
+        if let Some(last_turns) = command.get("lastTurns").and_then(Value::as_u64) {
+            message.insert("lastTurns".to_string(), json!(last_turns));
+        }
         self.git_export_transcript_modal_command(&Value::Object(message), cx);
         true
     }

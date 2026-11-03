@@ -28,8 +28,26 @@ use super::prompt_agent::PromptAgentLaunch;
 use super::scope::GitScope;
 use super::toasts::ToastOptions;
 use crate::GhostexGpuiApp;
+use crate::app::window::{ExportTranscriptIncludeOptions, ExportTranscriptTurnCount};
 
 const EXPORT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// `countSessionTranscriptTurns`'s answer.
+fn turn_count(answer: &Value) -> ExportTranscriptTurnCount {
+    let number = |value: &Value| value.as_u64().map(|number| number as usize);
+    match (
+        answer.get("turns").and_then(number),
+        answer.get("bytes").and_then(number),
+        answer.get("lastTurnsBytes").and_then(Value::as_array),
+    ) {
+        (Some(turns), Some(whole_bytes), Some(sizes)) => ExportTranscriptTurnCount::Counted {
+            turns,
+            whole_bytes,
+            last_turns_bytes: sizes.iter().filter_map(number).collect(),
+        },
+        _ => ExportTranscriptTurnCount::Failed,
+    }
+}
 
 /// The chat model picker's pick of another agent's model.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -300,6 +318,21 @@ impl GhostexGpuiApp {
                         toggle("includePatches") != Some(false),
                         toggle("includeReasoning") == Some(true),
                         toggle("includeMarkdown") == Some(true),
+                        command.get("lastTurns").and_then(Value::as_u64),
+                        cx,
+                    );
+                }
+            }
+            Some("countExportSessionTranscriptTurns") => {
+                if let Some(request_id) = request_id {
+                    let toggle = |key: &str| command.get(key).and_then(Value::as_bool);
+                    self.git_count_export_turns(
+                        &request_id,
+                        ExportTranscriptIncludeOptions {
+                            commands: toggle("includeCommands") == Some(true),
+                            patches: toggle("includePatches") == Some(true),
+                            reasoning: toggle("includeReasoning") == Some(true),
+                        },
                         cx,
                     );
                 }
@@ -346,6 +379,7 @@ impl GhostexGpuiApp {
         include_patches: bool,
         include_reasoning: bool,
         include_markdown: bool,
+        last_turns: Option<u64>,
         cx: &mut gpui::Context<Self>,
     ) {
         let Some(request) = self
@@ -372,7 +406,7 @@ impl GhostexGpuiApp {
             },
             None => None,
         };
-        let params = json!({
+        let mut params = json!({
             "includeCommands": include_commands,
             "includeMarkdown": include_markdown,
             "includePatches": include_patches,
@@ -380,6 +414,9 @@ impl GhostexGpuiApp {
             "projectId": request.session.project_id,
             "sessionId": request.session.session_id,
         });
+        if let Some(last_turns) = last_turns {
+            params["lastTurns"] = json!(last_turns);
+        }
         cx.spawn(async move |this, cx| {
             let result = calls::call(
                 target.clone(),
@@ -461,6 +498,70 @@ impl GhostexGpuiApp {
                     }
                     Err(error) => this.git_post_export_result(&request.request_id, Err(error), cx),
                 }
+            });
+        })
+        .detach();
+    }
+
+    /// History's count for the open dialog (`/api/countSessionTranscriptTurns` on the computer that
+    /// runs the session). A computer that doesn't know the endpoint is from before the slider.
+    fn git_count_export_turns(
+        &mut self,
+        request_id: &str,
+        include: ExportTranscriptIncludeOptions,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(request) = self
+            .gx_store
+            .git
+            .export
+            .request
+            .clone()
+            .filter(|request| request.request_id == request_id)
+        else {
+            return;
+        };
+        let remote = !request.session.machine.is_local();
+        let target = match request.session.machine.remote_id() {
+            Some(machine_id) => match self.gpui_remote_gxserver_request_target(machine_id) {
+                Some(target) => Some(target),
+                None => {
+                    return self.push_gpui_export_transcript_turn_count(
+                        include,
+                        ExportTranscriptTurnCount::Failed,
+                        cx,
+                    );
+                }
+            },
+            None => None,
+        };
+        let params = json!({
+            "includeCommands": include.commands,
+            "includePatches": include.patches,
+            "includeReasoning": include.reasoning,
+            "projectId": request.session.project_id,
+            "sessionId": request.session.session_id,
+        });
+        cx.spawn(async move |this, cx| {
+            let result = calls::call(
+                target,
+                "/api/countSessionTranscriptTurns",
+                params,
+                remote.then_some(EXPORT_TIMEOUT),
+            )
+            .await;
+            let count = match result {
+                Ok(answer) => turn_count(&answer),
+                Err(error)
+                    if error.code.as_deref() == Some("notFound")
+                        && error.message.starts_with("No gxserver endpoint") =>
+                {
+                    ExportTranscriptTurnCount::Unsupported
+                }
+                Err(_) => ExportTranscriptTurnCount::Failed,
+            };
+            let _ = this.update(cx, |this, cx| {
+                this.push_gpui_export_transcript_turn_count(include, count, cx);
             });
         })
         .detach();
@@ -787,5 +888,29 @@ mod handoff_coordinator_tests {
         );
         // `/api/readCoordinator` answers a thread with its orchestrator's record.
         assert_eq!(HandoffCoordinator::from_read_answer(&answer, "T9"), None);
+    }
+}
+
+#[cfg(test)]
+mod turn_count_tests {
+    use super::turn_count;
+    use crate::app::window::ExportTranscriptTurnCount;
+    use serde_json::json;
+
+    #[test]
+    fn a_count_answer_reads_as_turns_and_sizes_and_anything_else_as_failed() {
+        assert_eq!(
+            turn_count(&json!({"turns": 2, "bytes": 90, "lastTurnsBytes": [40, 90]})),
+            ExportTranscriptTurnCount::Counted {
+                turns: 2,
+                whole_bytes: 90,
+                last_turns_bytes: vec![40, 90],
+            }
+        );
+        // An export's answer (a computer that wrote a file instead) is no count.
+        assert_eq!(
+            turn_count(&json!({"path": "/x.md", "bytes": 90})),
+            ExportTranscriptTurnCount::Failed
+        );
     }
 }

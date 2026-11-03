@@ -101,6 +101,17 @@ pub(super) fn parse_export_transcript(rest: &[String], flags: &Flags) -> Value {
             map.insert(name.to_string(), Value::Bool(parse_boolean(raw)));
         }
     }
+    // `--last-turns N` limits the file to the last N turns; anything not a positive number is all of it.
+    if let Some(turns) = flag_json(flags, "lastTurns")
+        .and_then(|value| {
+            value
+                .as_u64()
+                .or_else(|| value.as_str()?.trim().parse().ok())
+        })
+        .filter(|turns| *turns > 0)
+    {
+        map.insert("lastTurns".to_string(), json!(turns));
+    }
     Value::Object(map)
 }
 

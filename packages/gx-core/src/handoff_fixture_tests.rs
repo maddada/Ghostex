@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use serde_json::{json, Value};
 
 use crate::handoff_prefs::{
+    handoff_history_estimate, handoff_history_stop_index, handoff_include_summary,
     handoff_prefs_json, parse_handoff_prefs, remembered_handoff_destination, HandoffDestination,
 };
 use crate::handoff_target::{
@@ -113,6 +114,31 @@ fn answer(case: &Value) -> Value {
                     "machineId": destination.machine_id,
                     "projectId": destination.project_id,
                 })),
+            })
+        }
+        // The History heading and hint for a saved choice and the computer's count.
+        "history" => {
+            let history = parse_handoff_prefs(&case["saved"]).history;
+            let sizes: Vec<usize> = case["lastTurnsBytes"]
+                .as_array()
+                .map(|sizes| {
+                    sizes
+                        .iter()
+                        .filter_map(Value::as_u64)
+                        .map(|size| size as usize)
+                        .collect()
+                })
+                .unwrap_or_default();
+            json!({
+                "lastTurns": history.last_turns(),
+                "stopIndex": handoff_history_stop_index(history.turns),
+                "summary": handoff_include_summary(&history, text(case, "include")),
+                "estimate": handoff_history_estimate(
+                    &history,
+                    case["turns"].as_u64().unwrap_or_default() as usize,
+                    case["bytes"].as_u64().unwrap_or_default() as usize,
+                    &sizes,
+                ),
             })
         }
         other => panic!("unknown case kind {other}"),

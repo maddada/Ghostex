@@ -6,17 +6,20 @@
 //! SEE-ALSO: packages/core-ui/export-transcript-result-modal.tsx (deleted 2026-10-01) and packages/core-ui/styles/modals.css (the React twin and the `.export-transcript-*` rules mirrored below), apps/desktop/src/app/window/native_modal_kit/ (shared chrome and controls), apps/desktop/src/app/export_transcript_modal_lifecycle.rs (open, close, sidebar bridge), apps/desktop/src/bin/native_modal_demo.rs (standalone preview).
 use super::native_modal_kit::*;
 use ghostex_gx_core::handoff_prefs::{
-    HandoffCard, HandoffDestination, HandoffInclude, HandoffPrefs, handoff_prefs_json,
-    parse_handoff_prefs, remembered_handoff_destination,
+    HANDOFF_HISTORY_STOPS, HandoffCard, HandoffDestination, HandoffHistory, HandoffInclude,
+    HandoffPrefs, handoff_history_estimate, handoff_history_label, handoff_history_stop_index,
+    handoff_include_summary, handoff_prefs_json, parse_handoff_prefs,
+    remembered_handoff_destination,
 };
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
-    AnyElement, App, ClickEvent, Context, FocusHandle, FontWeight, InteractiveElement as _,
-    IntoElement, KeyDownEvent, ParentElement as _, Render, StatefulInteractiveElement as _,
-    Styled as _, Window, div, px,
+    AnyElement, App, Bounds, ClickEvent, Context, FocusHandle, FontWeight, InteractiveElement as _,
+    IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement as _,
+    Pixels, Render, StatefulInteractiveElement as _, Styled as _, Window, div, px, relative,
 };
 use gpui_component::tooltip::Tooltip;
 use gpui_component::{h_flex, v_flex};
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
@@ -71,6 +74,10 @@ const INCLUDE_ROWS: [(&str, &str); 3] = [
     ("File changes", "The patches the agent applied to files."),
     ("Reasoning", "The agent's own reasoning sections."),
 ];
+const HISTORY: &str = "History";
+const WHOLE_CONVERSATION: &str = "Whole conversation";
+const WHOLE_CONVERSATION_DESCRIPTION: &str =
+    "Off, the file keeps the last turns and lists what you asked before them.";
 const SAVED_AS_MARKDOWN: &str = "Saved as Markdown";
 const OPEN_FILE_LOCATION: &str = "Open Location";
 const EXPORT_FAILED: &str = "The transcript export failed.";
@@ -109,6 +116,7 @@ pub(crate) struct ExportTranscriptModalPrefs {
     pub(crate) agent_id: Option<String>,
     pub(crate) destination: Option<ExportTranscriptRemoteTarget>,
     pub(crate) destination_open: bool,
+    pub(crate) history: HandoffHistory,
 }
 
 impl ExportTranscriptModalPrefs {
@@ -133,6 +141,7 @@ impl ExportTranscriptModalPrefs {
                     project_id: destination.project_id,
                 }),
             destination_open: saved.destination_open,
+            history: saved.history,
         }
     }
 
@@ -157,6 +166,7 @@ impl ExportTranscriptModalPrefs {
                     project_id: destination.project_id.clone(),
                 }),
             destination_open: self.destination_open,
+            history: self.history,
         })
     }
 }
@@ -393,14 +403,34 @@ pub(crate) enum ExportTranscriptStage {
     },
 }
 
+/// The computer's count for the History hint (`/api/countSessionTranscriptTurns`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ExportTranscriptTurnCount {
+    Counted {
+        turns: usize,
+        whole_bytes: usize,
+        /// Index `i` is the file's size with the last `i + 1` turns.
+        last_turns_bytes: Vec<usize>,
+    },
+    /// That computer's Ghostex is from before the slider: its export would ignore `lastTurns`,
+    /// so the dialog hides History rather than promise a cut it won't make.
+    Unsupported,
+    Failed,
+}
+
 /// What the dialog asks its host to do. The dialog removes its own window
 /// before sending any command other than `RunExport`.
 pub(crate) enum ExportTranscriptModalCommand {
     /// `carry` asks for the file's text too, which a handoff takes to another computer.
     RunExport {
         include: ExportTranscriptIncludeOptions,
+        /// History's last N turns; `None` is the whole conversation.
+        last_turns: Option<usize>,
         carry: bool,
     },
+    /// Count the conversation's turns under this Include, for History's hint; the host answers
+    /// with [`GpuiExportTranscriptModalWindow::set_turn_count`].
+    CountTurns(ExportTranscriptIncludeOptions),
     StartConversation {
         agent_id: String,
         /// `None` starts it beside the session (Handoff to an agent).
@@ -464,6 +494,13 @@ pub(crate) struct GpuiExportTranscriptModalWindow {
     remembered_agent_id: Option<String>,
     remembered_destination: Option<ExportTranscriptRemoteTarget>,
     include_open: bool,
+    history: HandoffHistory,
+    /// The last count and the Include it was made for; a count for another Include is stale.
+    turn_count: Option<(ExportTranscriptIncludeOptions, ExportTranscriptTurnCount)>,
+    /// The Include the host was last asked to count, so a repeat asks nothing.
+    counted_include: Option<ExportTranscriptIncludeOptions>,
+    slider_bounds: Rc<Cell<Option<Bounds<Pixels>>>>,
+    slider_dragging: bool,
     computer_select: ModalSelect,
     project_select: ModalSelect,
     /// The branch notice's first line, for the target it was read for.
@@ -543,6 +580,11 @@ impl GpuiExportTranscriptModalWindow {
             remembered_agent_id: prefs.agent_id.clone(),
             remembered_destination: prefs.destination.clone(),
             include_open: prefs.include_open,
+            history: prefs.history,
+            turn_count: None,
+            counted_include: None,
+            slider_bounds: Rc::new(Cell::new(None)),
+            slider_dragging: false,
             computer_select: ModalSelect::new(),
             project_select: ModalSelect::new(),
             branch_notice: None,
@@ -552,7 +594,60 @@ impl GpuiExportTranscriptModalWindow {
             _click_away: super::popup_dismissal::close_app_modal_on_click_away(window, cx),
         };
         this.announce_target(cx);
+        this.ask_turn_count(cx);
         this
+    }
+
+    /// Asks the host to count the conversation under the current Include, once per Include.
+    fn ask_turn_count(&mut self, cx: &mut Context<Self>) {
+        if self.counted_include == Some(self.include) {
+            return;
+        }
+        self.counted_include = Some(self.include);
+        (self.host)(ExportTranscriptModalCommand::CountTurns(self.include), cx);
+    }
+
+    /// The host's answer to `CountTurns`.
+    pub(crate) fn set_turn_count(
+        &mut self,
+        include: ExportTranscriptIncludeOptions,
+        count: ExportTranscriptTurnCount,
+        cx: &mut Context<Self>,
+    ) {
+        if include != self.include && count != ExportTranscriptTurnCount::Unsupported {
+            return;
+        }
+        self.turn_count = Some((include, count));
+        self.fit.refit();
+        cx.notify();
+    }
+
+    /// Whether the computer can cut the file to the last turns.
+    fn history_supported(&self) -> bool {
+        !matches!(
+            self.turn_count,
+            Some((_, ExportTranscriptTurnCount::Unsupported))
+        )
+    }
+
+    /// History's hint, once the computer has counted this Include.
+    fn history_estimate(&self) -> Option<String> {
+        match &self.turn_count {
+            Some((
+                include,
+                ExportTranscriptTurnCount::Counted {
+                    turns,
+                    whole_bytes,
+                    last_turns_bytes,
+                },
+            )) if *include == self.include => Some(handoff_history_estimate(
+                &self.history,
+                *turns,
+                *whole_bytes,
+                last_turns_bytes,
+            )),
+            _ => None,
+        }
     }
 
     /// The host's answer to `TargetChanged`: the notice's first line, or `None` when both
@@ -858,6 +953,7 @@ impl GpuiExportTranscriptModalWindow {
                     agent_id: self.remembered_agent_id.clone(),
                     destination: self.remembered_destination.clone(),
                     destination_open: self.remembered_destination.is_some(),
+                    history: self.history,
                 },
             );
         }
@@ -935,7 +1031,41 @@ impl GpuiExportTranscriptModalWindow {
             _ => self.include.reasoning = !self.include.reasoning,
         }
         self.persist_prefs();
+        self.ask_turn_count(cx);
         cx.notify();
+    }
+
+    fn toggle_whole_conversation(&mut self, cx: &mut Context<Self>) {
+        if self.controls_disabled() {
+            return;
+        }
+        self.history.all = !self.history.all;
+        self.persist_prefs();
+        self.fit.refit();
+        cx.notify();
+    }
+
+    /// Moves History's slider to the stop under `x`, a window position.
+    fn slide_history_to(&mut self, x: Pixels, cx: &mut Context<Self>) {
+        let Some(bounds) = self.slider_bounds.get() else {
+            return;
+        };
+        let width = f32::from(bounds.size.width).max(1.0);
+        let fraction = (f32::from(x - bounds.origin.x) / width).clamp(0.0, 1.0);
+        let last = HANDOFF_HISTORY_STOPS.len() - 1;
+        let index = (fraction * last as f32).round() as usize;
+        let turns = HANDOFF_HISTORY_STOPS[index.min(last)];
+        if turns != self.history.turns {
+            self.history.turns = turns;
+            cx.notify();
+        }
+    }
+
+    fn end_history_slide(&mut self, cx: &mut Context<Self>) {
+        if std::mem::take(&mut self.slider_dragging) {
+            self.persist_prefs();
+            cx.notify();
+        }
     }
 
     fn run(&mut self, cx: &mut Context<Self>) {
@@ -950,6 +1080,10 @@ impl GpuiExportTranscriptModalWindow {
         (self.host)(
             ExportTranscriptModalCommand::RunExport {
                 include: self.include,
+                last_turns: self
+                    .history_supported()
+                    .then(|| self.history.last_turns())
+                    .flatten(),
                 carry: self.effective_mode().is_handoff() && self.is_leaving_computer(),
             },
             cx,
@@ -1486,10 +1620,15 @@ impl GpuiExportTranscriptModalWindow {
             .filter(|(_, on)| *on)
             .map(|((label, _), _)| *label)
             .collect();
-        let summary = if chosen.is_empty() {
+        let include_text = if chosen.is_empty() {
             INCLUDE_NOTHING.to_string()
         } else {
             chosen.join(", ")
+        };
+        let summary = if self.history_supported() {
+            handoff_include_summary(&self.history, &include_text)
+        } else {
+            include_text
         };
         let include_open = self.include_open;
         let mut elements = vec![
@@ -1526,6 +1665,9 @@ impl GpuiExportTranscriptModalWindow {
                 )
                 .into_any_element(),
         ];
+        if include_open && self.history_supported() {
+            elements.push(self.render_history(cx));
+        }
         if include_open {
             elements.push(
                 modal_panel(&p)
@@ -1555,6 +1697,164 @@ impl GpuiExportTranscriptModalWindow {
             elements.push(modal_error(&p, message.clone()));
         }
         elements
+    }
+
+    /// CDXC:TranscriptExport 2026-11-03 DECISION:
+    /// User (Q1150, Q1155, Q1156, Q1158): History sits inside Include: a "Whole conversation" switch, and while it is off a slider over the last 1 to 100 turns with its value on the label's line, and under them what the pick holds ("10 of 120 turns · about 9k tokens (the whole is 87k)"). The slider is drawn here rather than taken from GPUI Kit because this dialog also runs in the web build, which has no `gpui_base`.
+    fn render_history(&self, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let disabled = self.controls_disabled();
+        let whole = self.history.all;
+        let mut panel = modal_panel(&p).child(
+            modal_panel_row(
+                &p,
+                WHOLE_CONVERSATION,
+                Some(WHOLE_CONVERSATION_DESCRIPTION),
+                modal_switch(&p, whole, disabled),
+                false,
+            )
+            .id("export-transcript-whole-conversation")
+            .when(!disabled, |this| {
+                this.cursor_pointer()
+                    .on_click(cx.listener(|this, _: &ClickEvent, _window, cx| {
+                        this.toggle_whole_conversation(cx);
+                    }))
+            }),
+        );
+        let estimate = self.history_estimate();
+        if !whole {
+            panel = panel.child(
+                v_flex()
+                    .w_full()
+                    .gap(px(6.0))
+                    .px(px(12.0))
+                    .py(px(9.0))
+                    .border_t_1()
+                    .border_color(hsla(p.hairline))
+                    .child(
+                        h_flex()
+                            .w_full()
+                            .justify_between()
+                            .gap(px(12.0))
+                            .text_size(px(13.0))
+                            .line_height(px(18.57))
+                            .child(div().font_weight(FontWeight::MEDIUM).child(HISTORY))
+                            .child(
+                                div()
+                                    .text_color(hsla(p.muted))
+                                    .child(handoff_history_label(&self.history)),
+                            ),
+                    )
+                    .child(self.render_history_slider(disabled, cx))
+                    .children(estimate.map(|estimate| modal_hint(&p, estimate))),
+            );
+        } else if let Some(estimate) = estimate {
+            panel = panel.child(
+                div()
+                    .px(px(12.0))
+                    .pb(px(9.0))
+                    .child(modal_hint(&p, estimate)),
+            );
+        }
+        panel.into_any_element()
+    }
+
+    /// A 4px track with a dot at each stop, filled up to a 16px thumb.
+    fn render_history_slider(&self, disabled: bool, cx: &mut Context<Self>) -> AnyElement {
+        let p = self.palette;
+        let last = (HANDOFF_HISTORY_STOPS.len() - 1) as f32;
+        let at = handoff_history_stop_index(self.history.turns) as f32 / last;
+        let track = div()
+            .id("export-transcript-history-slider")
+            .relative()
+            .w_full()
+            .h(px(20.0))
+            .when(disabled, |this| this.opacity(0.5))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(8.0))
+                    .left_0()
+                    .w_full()
+                    .h(px(4.0))
+                    .rounded(px(2.0))
+                    .bg(hsla(p.switch_off)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .top(px(8.0))
+                    .left_0()
+                    .w(relative(at))
+                    .h(px(4.0))
+                    .rounded(px(2.0))
+                    .bg(hsla(p.primary)),
+            )
+            .children((0..HANDOFF_HISTORY_STOPS.len()).map(|index| {
+                let fraction = index as f32 / last;
+                div()
+                    .absolute()
+                    .top(px(8.0))
+                    .left(relative(fraction))
+                    .ml(px(-2.0))
+                    .size(px(4.0))
+                    .rounded_full()
+                    .bg(hsla(if fraction <= at {
+                        p.primary_foreground
+                    } else {
+                        p.muted
+                    }))
+                    .opacity(0.6)
+            }))
+            .child(
+                div()
+                    .absolute()
+                    .top(px(2.0))
+                    .left(relative(at))
+                    .ml(px(-8.0))
+                    .size(px(16.0))
+                    .rounded_full()
+                    .border_2()
+                    .border_color(hsla(p.primary))
+                    .bg(hsla(p.background))
+                    .shadow_sm(),
+            )
+            .when(!disabled, |this| {
+                this.cursor_pointer()
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(|this, event: &MouseDownEvent, _window, cx| {
+                            this.slider_dragging = true;
+                            this.slide_history_to(event.position.x, cx);
+                            cx.stop_propagation();
+                        }),
+                    )
+                    .on_mouse_move(cx.listener(|this, event: &MouseMoveEvent, _window, cx| {
+                        if !this.slider_dragging {
+                            return;
+                        }
+                        if event.pressed_button != Some(MouseButton::Left) {
+                            this.end_history_slide(cx);
+                            return;
+                        }
+                        this.slide_history_to(event.position.x, cx);
+                    }))
+                    .on_mouse_up(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _window, cx| this.end_history_slide(cx)),
+                    )
+                    .on_mouse_up_out(
+                        MouseButton::Left,
+                        cx.listener(|this, _, _window, cx| this.end_history_slide(cx)),
+                    )
+            });
+        // Pad the ends so the thumb's half past each end stays inside the panel.
+        h_flex()
+            .w_full()
+            .px(px(8.0))
+            .on_children_prepainted(capture_child_bounds(self.slider_bounds.clone(), 0))
+            .child(track)
+            .into_any_element()
     }
 
     fn render_result(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -1964,6 +2264,10 @@ mod tests {
                 project_id: "acme".to_string(),
             }),
             destination_open: true,
+            history: HandoffHistory {
+                all: false,
+                turns: 50,
+            },
         };
         persist_export_transcript_modal_prefs(&path, &prefs);
         assert_eq!(load_export_transcript_modal_prefs(&path), prefs);

@@ -636,6 +636,7 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         the caller never names a path.
         */
         | "/api/exportSessionTranscript"
+        | "/api/countSessionTranscriptTurns"
         | "/api/sendSessionText"
         | "/api/sendSessionMessage"
         | "/api/sendSessionEnter"

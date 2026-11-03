@@ -90,6 +90,29 @@ pub(crate) async fn handle_export_session_transcript_http(
     request_id: String,
     body: &Value,
 ) -> RoutedResponse {
+    handle_session_transcript_http(state, endpoint_path, request_id, body, false).await
+}
+
+/*
+CDXC:TranscriptExport 2026-11-03 DECISION:
+User (Q1156): the History slider shows "10 of 120 turns · about 9k tokens (the whole is 87k)". countSessionTranscriptTurns answers the conversation's turns and the file's size for every "last N" under the asked-for Include, from the same parse and render as the export, and writes nothing. It is its own endpoint rather than a flag on the export because a computer from before it ignores flags it doesn't know and would write a file; it refuses an endpoint it doesn't know, which tells the client to hide the slider.
+*/
+pub(crate) async fn handle_count_session_transcript_turns_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+) -> RoutedResponse {
+    handle_session_transcript_http(state, endpoint_path, request_id, body, true).await
+}
+
+async fn handle_session_transcript_http(
+    state: &AppState,
+    endpoint_path: String,
+    request_id: String,
+    body: &Value,
+    count_only: bool,
+) -> RoutedResponse {
     let params = match read_domain_rpc_params(body) {
         Ok(params) => params,
         Err(error) => return domain_error_response(endpoint_path, request_id, error),
@@ -147,6 +170,14 @@ pub(crate) async fn handle_export_session_transcript_http(
         .get("includeMarkdown")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    /*
+    CDXC:TranscriptExport 2026-11-03 DECISION:
+    User (Q1150 to Q1156): Include's History slider picks how many of the last turns a handoff carries, and the dialog shows "10 of 120 turns · about 9k tokens". `lastTurns` limits the file (absent: all of it, so older clients export what they always did).
+    */
+    let last_turns = params
+        .get("lastTurns")
+        .and_then(Value::as_u64)
+        .map(|turns| turns as usize);
 
     let resolved = (|| {
         let db = open_gxserver_database(&state.paths).map_err(|error| DomainStateError {
@@ -186,7 +217,54 @@ pub(crate) async fn handle_export_session_transcript_http(
             include_commands,
             include_patches,
             include_reasoning,
-        );
+        )
+        .with_last_turns(last_turns);
+    if count_only {
+        let counted = tokio::task::spawn_blocking(move || {
+            crate::session_transcript_export::count_session_transcript(
+                &crate::session_transcript_export::SessionTranscriptExportRequest {
+                    agent: agent.as_deref(),
+                    agent_session_id: agent_session_id.as_deref(),
+                    agent_session_path: agent_session_path.as_deref(),
+                    session_id: &export_session_id,
+                    session_title: title.as_deref(),
+                    exports_dir: &exports_dir,
+                    selection: Some(&selection),
+                },
+            )
+        })
+        .await;
+        return match counted {
+            Ok(Ok(counts)) => routed_json(
+                Some(endpoint_path),
+                StatusCode::OK,
+                rpc_success(
+                    request_id,
+                    json!({
+                        "turns": counts.turns,
+                        "bytes": counts.whole_bytes,
+                        "lastTurnsBytes": counts.last_turns_bytes,
+                    }),
+                ),
+            ),
+            Ok(Err(error)) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: error.code(),
+                    message: error.to_string(),
+                },
+            ),
+            Err(_) => domain_error_response(
+                endpoint_path,
+                request_id,
+                DomainStateError {
+                    code: "internalError",
+                    message: "The transcript count did not finish.".to_string(),
+                },
+            ),
+        };
+    }
     let exported = match tokio::task::spawn_blocking(move || {
         crate::session_transcript_export::export_session_transcript(
             &crate::session_transcript_export::SessionTranscriptExportRequest {
@@ -240,6 +318,8 @@ pub(crate) async fn handle_export_session_transcript_http(
         json!(outcome.rendered_entries),
     );
     result.insert("parsedEntries".to_string(), json!(outcome.parsed_entries));
+    result.insert("turns".to_string(), json!(outcome.turns));
+    result.insert("keptTurns".to_string(), json!(outcome.kept_turns));
     if let Some(agent) = response_agent.as_deref() {
         result.insert("agent".to_string(), json!(agent));
     }

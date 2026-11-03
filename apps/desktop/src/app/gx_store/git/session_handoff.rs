@@ -129,10 +129,12 @@ impl GhostexGpuiApp {
             stop_first,
             close_source,
         };
-        let include = load_export_transcript_modal_prefs(
+        let prefs = load_export_transcript_modal_prefs(
             &crate::app::session_handoff_modal_lifecycle::gpui_export_transcript_modal_prefs_path(),
-        )
-        .include;
+        );
+        let include = prefs.include;
+        // The same History the dialog remembers; this computer's gxserver is this app's own.
+        let last_turns = prefs.history.last_turns();
         cx.spawn(async move |this, cx| {
             let session = &request.session;
             let mut exported = None;
@@ -183,7 +185,14 @@ impl GhostexGpuiApp {
                         }
                     }
                     SessionHandoffStep::ExportTranscript => {
-                        match export_transcript(session, include, request.is_coordinator).await {
+                        match export_transcript(
+                            session,
+                            include,
+                            last_turns,
+                            request.is_coordinator,
+                        )
+                        .await
+                        {
                             Ok((path, coordinator)) => {
                                 exported = Some(path);
                                 exported_coordinator = coordinator;
@@ -311,22 +320,22 @@ impl GhostexGpuiApp {
 async fn export_transcript(
     session: &SessionKey,
     include: ExportTranscriptIncludeOptions,
+    last_turns: Option<usize>,
     is_coordinator: bool,
 ) -> Result<(String, Option<HandoffCoordinator>), String> {
-    let answer = calls::call(
-        None,
-        "/api/exportSessionTranscript",
-        json!({
-            "includeCommands": include.commands,
-            "includePatches": include.patches,
-            "includeReasoning": include.reasoning,
-            "projectId": session.project_id,
-            "sessionId": session.session_id,
-        }),
-        None,
-    )
-    .await
-    .map_err(|error| error.message)?;
+    let mut params = json!({
+        "includeCommands": include.commands,
+        "includePatches": include.patches,
+        "includeReasoning": include.reasoning,
+        "projectId": session.project_id,
+        "sessionId": session.session_id,
+    });
+    if let Some(last_turns) = last_turns {
+        params["lastTurns"] = json!(last_turns);
+    }
+    let answer = calls::call(None, "/api/exportSessionTranscript", params, None)
+        .await
+        .map_err(|error| error.message)?;
     let path = answer
         .get("path")
         .and_then(Value::as_str)

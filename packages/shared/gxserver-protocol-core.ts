@@ -247,6 +247,7 @@ export type GxserverEndpointPath =
   | '/api/setSessionChatDraft'
   | '/api/acknowledgeSessionChatDraftHandoff'
   | '/api/exportSessionTranscript'
+  | '/api/countSessionTranscriptTurns'
   | '/api/sendSessionText'
   | '/api/sendSessionMessage'
   | '/api/sendSessionEnter'

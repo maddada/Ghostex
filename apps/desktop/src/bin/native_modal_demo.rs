@@ -384,9 +384,13 @@ fn open_export_transcript(demo: &DemoEnv, cx: &mut App) {
     let host_slot = slot.clone();
     let fail = demo.state == "failed";
     let host: ExportTranscriptModalHost = Rc::new(move |command, cx: &mut App| match command {
-        ExportTranscriptModalCommand::RunExport { include, carry } => {
+        ExportTranscriptModalCommand::RunExport {
+            include,
+            last_turns,
+            carry,
+        } => {
             eprintln!(
-                "run export: commands={} patches={} reasoning={} carry={carry}",
+                "run export: commands={} patches={} reasoning={} last_turns={last_turns:?} carry={carry}",
                 include.commands, include.patches, include.reasoning
             );
             let slot = host_slot.clone();
@@ -402,6 +406,33 @@ fn open_export_transcript(demo: &DemoEnv, cx: &mut App) {
         ExportTranscriptModalCommand::StartConversation { agent_id, target } => {
             eprintln!("handoff to {agent_id} at {target:?}");
             cx.quit();
+        }
+        // A 120-turn conversation of about 3.6 KB a turn, a little more with each switch on.
+        ExportTranscriptModalCommand::CountTurns(include) => {
+            let slot = host_slot.clone();
+            cx.defer(move |cx| {
+                let open = slot.borrow().clone();
+                if let Some((window, view)) = open {
+                    let _ = window.update(cx, |_, _window, cx| {
+                        view.update(cx, |modal, cx| {
+                            let turn = 3_600
+                                + 900 * usize::from(include.commands)
+                                + 600 * usize::from(include.patches)
+                                + 400 * usize::from(include.reasoning);
+                            let sizes: Vec<usize> = (1..=120).map(|n| n * turn).collect();
+                            modal.set_turn_count(
+                                include,
+                                ExportTranscriptTurnCount::Counted {
+                                    turns: 120,
+                                    whole_bytes: 120 * turn,
+                                    last_turns_bytes: sizes,
+                                },
+                                cx,
+                            );
+                        })
+                    });
+                }
+            });
         }
         ExportTranscriptModalCommand::TargetChanged(target) => {
             eprintln!("target {target:?}");

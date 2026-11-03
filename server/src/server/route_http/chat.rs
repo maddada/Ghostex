@@ -354,6 +354,15 @@ pub(super) async fn route_chat_http(
             handle_export_session_transcript_http(&state, endpoint.path, request_id, &body_json)
                 .await
         }
+        "/api/countSessionTranscriptTurns" => {
+            crate::session_transcript_export::handle_count_session_transcript_turns_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+            )
+            .await
+        }
         "/api/readSessionTranscriptSizes" => {
             handle_read_session_transcript_sizes_http(&state, endpoint.path, request_id, &body_json)
                 .await
