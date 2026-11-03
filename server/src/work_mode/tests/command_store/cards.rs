@@ -1205,3 +1205,118 @@ fn deleting_a_workspace_deletes_its_titles() {
         None
     );
 }
+
+#[test]
+fn a_hand_set_command_ticket_replaces_the_branchs_and_stays_after_a_clear() {
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "card-hand", "good");
+    let project = project_in(&store, &workspace_id, json!({}));
+    set_branch(project["path"].as_str().unwrap(), "acm-7-other");
+    remember_project_linear_key(project_id(&project), Some(1));
+    let session = session(
+        project_id(&project),
+        "S1",
+        json!({ "tickets": { "card-hand": ["ACM-12"] } }),
+    );
+    let reads = planned_reads(
+        &store,
+        &project,
+        std::slice::from_ref(&session),
+        "card-hand",
+    );
+    assert_eq!(reads.len(), 1);
+    assert_eq!(reads[0].ids, ["ACM-12"]);
+    run_exact_read(&reads[0]);
+    let tickets = card_tickets(&project, &session);
+    assert_eq!(tickets.as_array().map(Vec::len), Some(1), "{tickets}");
+    assert_eq!(tickets[0]["key"], "card-hand:ACM-12");
+    assert_eq!(tickets[0]["source"], "user");
+    assert_eq!(tickets[0]["title"], "Spec the contract");
+
+    clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+    let tickets = card_tickets(&project, &session);
+    assert_eq!(tickets.as_array().map(Vec::len), Some(1), "{tickets}");
+    assert_eq!(tickets[0]["state"], "unavailable");
+    assert_eq!(tickets[0]["source"], "user");
+    assert_eq!(tickets[0]["title"], "Spec the contract");
+}
+
+#[test]
+fn a_ticket_command_turns_issues_workflow_on_and_shows_on_the_project_row() {
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "card-row", "good");
+    let project = project_in(&store, &workspace_id, json!({}));
+    assert!(issues_workflow_parts(&project).command);
+    assert!(project_work_mode(&project));
+    let source = presentation_work_source(&project).expect("a work source");
+    assert_eq!(source["id"], "card-row");
+    assert_eq!(source["name"], "Fixture");
+    assert_eq!(source["isTracker"], false);
+    assert!(source["icon"]
+        .as_str()
+        .is_some_and(|icon| icon.starts_with("data:image/svg+xml;base64,")));
+
+    // A project in a workspace without one has neither.
+    let bare = project_in(&store, &store.ws("ws-bare"), json!({}));
+    assert!(!issues_workflow_parts(&bare).command);
+    assert!(presentation_work_source(&bare).is_none());
+
+    // In a team workspace the command is stopped.
+    join_team(&store, &workspace_id);
+    place(&store);
+    assert!(!issues_workflow_parts(&project).command);
+    assert!(presentation_work_source(&project).is_none());
+}
+
+/// A cleared command that was the only part of Issues Workflow for its project turns Issues
+/// Workflow off there, so the card shows no work fields at all, its tickets included. With a
+/// Linear key or `gh` on, they stay as unavailable (`a_cleared_command_keeps_its_tickets_on_the_card`).
+#[test]
+fn a_cleared_command_that_was_issues_workflows_only_part_leaves_the_cards() {
+    let _gh = crate::session_git_status::assume_gh_cli_signed_out_for_test();
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "card-only-part", "good");
+    let project = project_in(&store, &workspace_id, json!({}));
+    set_branch(project["path"].as_str().unwrap(), "acm-12-spec");
+    let session = session(project_id(&project), "S1", json!({}));
+    run_exact_read(&exact_read(
+        &store,
+        &workspace_id,
+        "card-only-part",
+        &["ACM-12"],
+    ));
+    assert_eq!(
+        card_link(&project, &session, "card-only-part:ACM-12")["title"],
+        "Spec the contract"
+    );
+
+    clear_work_source(&store.db, &workspace_id, &no_references).expect("cleared");
+    assert!(!project_work_mode(&project));
+    assert_eq!(presentation_session_work(&project, &session), None);
+}
+
+/// A project moved into a team workspace by any repository write (a re-added path repaired into a
+/// worktree, for one) never shows the workspace it left's command on its row, not even before the
+/// next card pass: the projection forgets it at once, and a team workspace shows none.
+#[test]
+fn a_project_moved_into_a_team_workspace_shows_no_work_source() {
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "card-to-team", "good");
+    let project = project_in(&store, &workspace_id, json!({}));
+    let team = store.ws("ws-team");
+    join_team(&store, &team);
+    assert!(presentation_work_source(&project).is_some());
+
+    DomainRepository::new(&store.db, "test")
+        .update_project(
+            json!({ "projectId": project_id(&project), "launchSettings": { "workspaceId": team } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("moved");
+    assert!(presentation_work_source(&project).is_none());
+    assert!(!issues_workflow_parts(&project).command);
+
+    place(&store);
+    assert!(presentation_work_source(&project).is_none());
+}

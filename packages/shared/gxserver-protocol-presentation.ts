@@ -125,7 +125,7 @@ export interface GxserverPresentationProject {
   botGatewayRunning?: boolean;
   /** How many runs that bot's cron jobs delivered since local midnight; absent for every other project. */
   botRunsToday?: number;
-  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies or `gh` is signed in (server/src/work_mode/project.rs); present only when true. */
+  /** Issues Workflow (formerly Work mode) is on for this project: a Linear key applies, `gh` is signed in, or its workspace has a ticket command (server/src/work_mode/project.rs); present only when true. */
   workMode?: true;
   /** Issues Workflow is on and a Linear key applies to this project; present only when true. */
   workLinear?: true;
@@ -137,6 +137,16 @@ export interface GxserverPresentationProject {
   workspaceId?: string;
   /** The project shows in every workspace (the Ghostex config folder's project, home of the Help chats); present only when true. */
   everyWorkspace?: true;
+  /** The ticket command of the project's workspace (server/src/work_mode/command/); absent without one, in a team workspace, and from an older daemon. */
+  workSource?: {
+    /** The id its `info` pinned, which its tickets' keys and link kinds start with. */
+    id: string;
+    name: string;
+    /** A `data:image/svg+xml;base64,…` URL; absent when it has none. */
+    icon?: string;
+    /** Whether it is the workspace's primary tracker; false until a command can be picked as one. */
+    isTracker: boolean;
+  };
   /*
   CDXC:Icons 2026-07-29 (discovered icons):
   The icon the PROJECT ITSELF ships, discovered server-side inside the checkout

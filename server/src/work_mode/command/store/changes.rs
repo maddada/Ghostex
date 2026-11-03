@@ -742,7 +742,7 @@ pub(crate) struct StoredValues {
 
 impl StoredValues {
     /// Whether `text`, which the record would keep as it is, holds a stored value.
-    pub(super) fn found_in(&self, text: &str) -> bool {
+    pub(crate) fn found_in(&self, text: &str) -> bool {
         self.values.iter().any(|value| appears_in(text, value))
     }
 }

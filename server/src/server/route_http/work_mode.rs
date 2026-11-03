@@ -62,12 +62,33 @@ pub(super) async fn route_work_mode_http(
                     // `add…` keys (the Work page's Link to current session) join the session's
                     // effective links and answer with the request that takes them back.
                     let project = repository.get_project(&project_id)?.unwrap_or(Value::Null);
-                    let added = expand_added_work_links(&project, &session, existing, params)?;
-                    let links = merge_work_links(
-                        existing,
-                        added.as_ref().map_or(params, |added| &added.request),
+                    // A ticket command's links name only the command of the session's workspace,
+                    // checked and written under the ticket command store's writer lock and the
+                    // placement lock. Read again under them: a move rewrites the project's workspace.
+                    let session_workspace = || {
+                        let project = repository.get_project(&project_id)?.unwrap_or(Value::Null);
+                        Ok(crate::workspaces::project_workspace_id(
+                            &crate::workspaces::read_sidebar_workspaces(db)?,
+                            &project,
+                            &repository.list_projects_without_session_history()?,
+                        ))
+                    };
+                    let (links, added) = crate::work_mode::with_checked_ticket_links(
+                        params,
+                        session_workspace,
+                        db,
+                        &state.paths,
+                        |params| {
+                            let added =
+                                expand_added_work_links(&project, &session, existing, params)?;
+                            let links = merge_work_links(
+                                existing,
+                                added.as_ref().map_or(params, |added| &added.request),
+                            )?;
+                            write_work_links(db, &project_id, &session_id, &links)?;
+                            Ok((links, added))
+                        },
                     )?;
-                    write_work_links(db, &project_id, &session_id, &links)?;
                     schedule_presentation_session_delta(
                         &state,
                         db,
@@ -171,6 +192,7 @@ pub(super) async fn route_work_mode_http(
 /// One line for the CLI on what Issues Workflow shows with this setup.
 fn issues_workflow_note(parts: IssuesWorkflowParts) -> &'static str {
     match (parts.linear, parts.github) {
+        (false, false) if parts.command => "Issues Workflow is on with the workspace's ticket command; add a Linear key (`ghostex issues linear-key`) or sign in with `gh auth login` for Linear tickets or pull requests.",
         (true, true) => "Issues Workflow is on: Linear and GitHub parts both show.",
         (true, false) => "Issues Workflow is on with Linear only; sign in with `gh auth login` for pull requests and GitHub issues.",
         (false, true) => "Issues Workflow is on with GitHub only; add a Linear key (`ghostex issues linear-key`) for Linear tickets.",

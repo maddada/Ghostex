@@ -112,11 +112,29 @@ pub(crate) fn work_targets_in(
         })
         .collect();
     // A ticket command the workspace no longer reads (cleared, switched from, or stopped in a
-    // team) keeps the tickets it answered for on the card, as unavailable with their last title.
+    // team) keeps the tickets it was linked to on the card, as unavailable with their last title:
+    // its hand-set ones, else the branch's it answered for. That is while Issues Workflow stays on
+    // for the project; when the command was its only part, the card has no work fields at all.
+    let unread_hand_set: Vec<LinkedTicket> = manual
+        .tickets
+        .iter()
+        .filter_map(|(id, ids)| {
+            let source = WorkSourceId::Command(CommandSourceId::known(id)?);
+            (!sources.contains(&source)).then(|| {
+                ids.iter().map(move |id| LinkedTicket {
+                    ticket: TicketRef::new(source, id.clone()),
+                    by_hand: true,
+                })
+            })
+        })
+        .flatten()
+        .collect();
+    tickets.extend(unread_hand_set);
     if let (Some(workspace_id), Some(branch)) = (workspace_id, branch.as_deref()) {
         tickets.extend(
             unread_command_tickets_in_branch(workspace_id, &sources, branch)
                 .into_iter()
+                .filter(|ticket| !manual.tickets.contains_key(ticket.source.as_wire()))
                 .map(|ticket| LinkedTicket {
                     ticket,
                     by_hand: false,

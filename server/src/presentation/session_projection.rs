@@ -109,6 +109,9 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
             crate::work_mode::issues_workflow_parts(project),
             crate::work_mode::cached_project_work_tracker(project_id),
         );
+        if let Some(work_source) = crate::work_mode::presentation_work_source(project) {
+            output.insert("workSource".to_string(), work_source);
+        }
     }
     if crate::workspaces::workspaces_feature_enabled() {
         if let Some(workspace_id) = crate::workspaces::stored_project_workspace_id(project) {
@@ -123,8 +126,8 @@ pub(crate) fn project_presentation_project(project: &Value) -> Value {
 
 /// `workMode`, `workLinear`, `workGithubOff` and `workTracker` on a project row
 /// (`PresentationProject` in packages/gx-protocol/src/presentation.rs): Issues Workflow is on once
-/// a Linear key applies or `gh` is signed in (CDXC:WorkMode 2026-10-24 in
-/// server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
+/// a Linear key applies, `gh` is signed in or the workspace has a ticket command (CDXC:WorkMode
+/// 2026-10-24 in server/src/work_mode/project.rs). `workGithubOff` is sent only when false would mislead: a
 /// daemon too old to send it had no such rule, so its absence means GitHub's parts are on.
 pub(crate) fn insert_issues_workflow_fields(
     output: &mut Map<String, Value>,

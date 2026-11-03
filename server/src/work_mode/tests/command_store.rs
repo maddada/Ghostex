@@ -17,6 +17,7 @@ use super::*;
 
 mod another_program;
 mod cards;
+mod links;
 mod published;
 mod stored_values;
 
