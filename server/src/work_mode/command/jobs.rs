@@ -169,23 +169,48 @@ impl Drop for RunningKey<'_> {
     }
 }
 
-fn queue() -> &'static JobQueue {
+/// The queue, its workers started on first use. A worker that can't start is logged once, in
+/// `paths`' log: with none, the queue fills and its jobs never run.
+fn queue(paths: &GxserverPaths) -> &'static JobQueue {
     static QUEUE: OnceLock<JobQueue> = OnceLock::new();
     static WORKERS: OnceLock<()> = OnceLock::new();
     let queue = QUEUE.get_or_init(|| JobQueue::new(QUEUE_CAPACITY));
     WORKERS.get_or_init(|| {
-        for _ in 0..BACKGROUND_WORKERS {
-            let _ = std::thread::Builder::new()
-                .name("work-source".to_string())
-                .spawn(move || drain(queue, run_exact_read));
+        let unstarted = (0..BACKGROUND_WORKERS)
+            .filter(|_| {
+                std::thread::Builder::new()
+                    .name("work-source".to_string())
+                    .spawn(move || drain(queue, run_exact_read))
+                    .is_err()
+            })
+            .count();
+        if unstarted > 0 {
+            log_workers_unstarted(paths, unstarted);
         }
     });
     queue
 }
 
+/// One error line in fixed words when background workers couldn't start.
+fn log_workers_unstarted(paths: &GxserverPaths, unstarted: usize) {
+    let _ = GxserverLogger::new(paths.clone()).log(crate::logging::GxserverLogInput {
+        level: crate::logging::LogLevel::Error,
+        event: "work_source_workers_unstarted".to_string(),
+        server_id: None,
+        request_id: None,
+        client: None,
+        duration_ms: None,
+        error: Some(
+            "Ghostex couldn't start a ticket command worker thread; cards may not show new ticket reads until gxserver restarts."
+                .to_string(),
+        ),
+        details: Some(serde_json::json!({ "unstarted": unstarted, "workers": BACKGROUND_WORKERS })),
+    });
+}
+
 /// Queues an exact read for a worker; returns at once.
 pub(crate) fn queue_exact_read(job: ExactRead) -> QueueOutcome {
-    queue().push(job)
+    queue(&job.paths).push(job)
 }
 
 /// A worker: runs each job `queue` hands it, for good. A panic ends only that job: its slot, its

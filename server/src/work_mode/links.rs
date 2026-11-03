@@ -183,6 +183,10 @@ pub(crate) fn with_checked_ticket_links<T>(
         }
         let rules = work_source(WorkSourceId::Command(source));
         let mut canonical: Vec<String> = Vec::new();
+        // The refusal says whether a typed id contains a stored value. That is fine while only
+        // remote-allowed clients reach this route, which are fully trusted; if
+        // `/api/setSessionWorkLinks` ever joined `PEER_ALLOWED_ENDPOINTS`, it would let another
+        // computer guess short secrets one try at a time.
         for item in list_of(ids) {
             let text = item
                 .as_str()

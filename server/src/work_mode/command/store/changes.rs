@@ -393,7 +393,7 @@ pub(crate) fn set_work_source(
 /// `stored` was read under.
 ///
 /// CDXC:WorkMode 2026-11-02 WHY:
-/// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the decision on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
+/// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the rule on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
 #[allow(clippy::too_many_arguments)]
 fn run_and_pin(
     db: &Connection,
