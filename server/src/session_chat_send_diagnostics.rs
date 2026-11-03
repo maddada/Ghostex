@@ -16,6 +16,7 @@ static WRITER: Mutex<()> = Mutex::new(());
 /// User: always log the reason a send failed and the terminal's last page so a reported local time can identify the failure.
 /// Keep this content-bearing diagnostic separate from the redacted support log; draft-save failures also prevent Send from reaching the terminal.
 /// CDXC:SessionChat 2026-10-29 WHY: GitHub #350: a refused question answer was logged nowhere, so the Windows screen whose highlight could not be read was lost; answers are logged with the screen like sends.
+/// CDXC:SessionChat 2026-11-03 WHY: GitHub #400: a Claude session sat in `vi` (its external editor, opened by a draft move between the terminal and Chat whose editor handshake was never answered) and every later send was held, but the failed move was logged nowhere, so the report could not say what opened the editor. Draft moves are logged with the screen like sends.
 pub(crate) async fn record_response(
     state: &AppState,
     request_id: &str,
@@ -30,6 +31,8 @@ pub(crate) async fn record_response(
                 | "/api/queueSessionChatPrompt"
                 | "/api/sendSessionChatQueuedPrompt"
                 | "/api/answerSessionChatPrompt"
+                | "/api/handoffSessionChatDraft"
+                | "/api/replaceSessionChatDraft"
         )
     ) {
         return;

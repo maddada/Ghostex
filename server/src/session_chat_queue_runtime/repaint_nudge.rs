@@ -279,4 +279,27 @@ mod tests {
             Some(std::path::PathBuf::from("/dev/pts/3"))
         );
     }
+
+    /// GitHub #400: Linux procps writes `?` where macOS writes `??`, and the daemon was never found.
+    #[cfg(unix)]
+    #[test]
+    fn the_session_daemon_is_found_on_linux_and_macos() {
+        let macos = "  100     1 ??       /Applications/Ghostex.app/Contents/Resources/bin/zmx run S1x-P1abc-G1abc -d\n  101   100 ttys006  /bin/zsh\n";
+        let linux = "    100       1 ?        /opt/ghostex/gxserver/bin/zmx run S1x-P1abc-G1abc -d\n    101     100 pts/3    bash\n    102     101 pts/3    claude\n";
+        for table in [macos, linux] {
+            assert_eq!(
+                crate::zmx::find_zmx_daemon_process_id(table, "S1x-P1abc-G1abc"),
+                Some(100),
+                "{table}"
+            );
+            assert_eq!(
+                crate::zmx::find_zmx_daemon_process_id(table, "S1x-P1abc-G2abc"),
+                None
+            );
+        }
+        assert_eq!(
+            child_tty(linux, 100),
+            Some(std::path::PathBuf::from("/dev/pts/3"))
+        );
+    }
 }

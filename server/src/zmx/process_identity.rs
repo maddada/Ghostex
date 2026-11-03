@@ -95,8 +95,10 @@ pub(crate) fn find_zmx_daemon_process_id(ps_output: &str, session_name: &str) ->
     })
 }
 
+/// CDXC:Zmx 2026-11-03 WHY: macOS `ps` writes `??` for a process without a terminal and Linux procps writes `?`. Only `??` was known, so on Linux every daemon row kept its `?` as the first word of its command, no `zmx run <name>` daemon was ever found, and the chat's repaint step reported "the session's zmx daemon is not running" for live sessions (GitHub #400).
 fn looks_like_process_terminal_name(value: &str) -> bool {
     value == "??"
+        || value == "?"
         || value == "-"
         || value.starts_with("tty")
         || value.starts_with("pts/")
@@ -105,7 +107,7 @@ fn looks_like_process_terminal_name(value: &str) -> bool {
 
 fn normalize_process_terminal_name(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    if trimmed.is_empty() || matches!(trimmed, "??" | "-") {
+    if trimmed.is_empty() || matches!(trimmed, "??" | "?" | "-") {
         return None;
     }
     let name = Path::new(trimmed).file_name()?.to_str()?;

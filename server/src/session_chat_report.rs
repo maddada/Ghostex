@@ -327,7 +327,13 @@ fn recent_send_problems(
         })
         .map(|entry| {
             let text = |key: &str| entry.get(key).and_then(Value::as_str).unwrap_or_default();
-            let message = [text("message"), text("reason")]
+            // A failed model change keeps its reason under `selection` (GitHub #400's report
+            // listed `sessionChatModelSelectionFailed` with no reason).
+            let selection_message = entry
+                .pointer("/selection/message")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let message = [text("message"), text("reason"), selection_message]
                 .into_iter()
                 .find(|message| !message.is_empty())
                 .unwrap_or_default();
@@ -459,6 +465,33 @@ mod tests {
         ] {
             assert!(report.contains(kept), "{kept} missing:\n{report}");
         }
+    }
+
+    #[test]
+    fn a_failed_model_change_is_listed_with_its_reason() {
+        let dir = std::env::temp_dir().join(format!(
+            "ghostex-report-model-failure-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let line = json!({
+            "ts": "2026-11-03T05:51:23Z",
+            "event": "sessionChatModelSelectionFailed",
+            "projectId": "P1abc",
+            "sessionId": "G1abc",
+            "selection": {"code": "internalError", "message": "The claude input box is not on screen yet."},
+        });
+        std::fs::write(
+            dir.join("session-chat-send-failures.jsonl"),
+            format!("{line}\n"),
+        )
+        .unwrap();
+        let problems = super::recent_send_problems(&dir, "P1abc", "G1abc");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            problems,
+            vec!["2026-11-03T05:51:23Z sessionChatModelSelectionFailed: The claude input box is not on screen yet."]
+        );
     }
 
     /// Session G14iv's screen when its report was copied on 2026-10-27 (200 columns, trimmed).
