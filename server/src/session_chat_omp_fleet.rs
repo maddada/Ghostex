@@ -217,7 +217,7 @@ fn read_incremental<T: Clone + Default>(
         if read > MAX_SESSION_CHAT_TRANSCRIPT_RECORD_BYTES {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "OMP session record is too large",
+                "The saved OMP messages are too large to open.",
             ));
         }
         // A partial final write is read again once it is complete.
@@ -356,7 +356,7 @@ fn hub_members(root: &Path) -> anyhow::Result<(PathBuf, Vec<Member>)> {
         .to_str()
         .and_then(|root| root.strip_suffix(".jsonl"))
         .map(PathBuf::from)
-        .ok_or_else(|| anyhow::anyhow!("The main transcript is not an OMP session file."))?;
+        .ok_or_else(|| anyhow::anyhow!("The saved OMP messages could not be opened."))?;
     let vibe = vibe_child_ids(root)?;
     let mut members = Vec::new();
     collect_members(&dir, &vibe, &mut HashSet::new(), &mut members)?;
@@ -525,10 +525,10 @@ pub(crate) fn omp_child_transcript(
                 (parts.next(), parts.next()),
                 (Some(Component::Normal(_)), None)
             ),
-        "Not an OMP subagent id."
+        "This subagent could not be opened. Choose it again from the subagent list."
     );
     let unavailable =
-        || anyhow::anyhow!("This subagent's transcript is not available in this conversation.");
+        || anyhow::anyhow!("This subagent's messages are not available in this chat.");
     let (dir, members) = hub_members(root)?;
     let member = members
         .into_iter()
