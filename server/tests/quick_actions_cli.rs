@@ -431,14 +431,86 @@ fn run_action_global_uses_selected_project() {
     assert_eq!(result["session"]["projectId"], json!(PROJECT_ID));
     let created = daemon.requests_to("/api/createSession");
     assert_eq!(created.len(), 1);
-    // No cwd: gxserver starts a project's terminal in the project's own folder.
+    // No cwd: gxserver starts a project's terminal in the project's own folder. The command is
+    // not stored in the row, so a later wake does not run it again.
     assert_eq!(
         created[0],
         json!({
             "kind": "terminal",
-            "launchSettings": { "startupCommand": "echo global-marker" },
             "projectId": PROJECT_ID,
             "title": "Global Term",
+        })
+    );
+    // The provider start is what runs the command, once, as the desktop's own Action run does.
+    assert_eq!(
+        daemon.requests_to("/api/startSessionProvider"),
+        vec![json!({
+            "projectId": PROJECT_ID,
+            "sessionId": CREATED_SESSION_ID,
+            "startupText": "echo global-marker",
+        })]
+    );
+}
+
+#[test]
+fn run_action_project_action_runs_its_command() {
+    let home = computer(true);
+    let daemon = start(Daemon {
+        projects: projects_with_actions(),
+        ..Daemon::default()
+    });
+    let output = ghostex(
+        home.path(),
+        &daemon,
+        &["run-action", "deploy", "--project-id", PROJECT_ID],
+    );
+    assert_eq!(output.code, 0, "stderr: {}", output.stderr);
+    let result = output.json();
+    assert_eq!(result["ok"], json!(true));
+    assert_eq!(result["session"]["sessionId"], json!(CREATED_SESSION_ID));
+    assert_eq!(
+        daemon.requests_to("/api/createSession"),
+        vec![json!({ "kind": "terminal", "projectId": PROJECT_ID, "title": "Deploy" })]
+    );
+    assert_eq!(
+        daemon.requests_to("/api/startSessionProvider"),
+        vec![json!({
+            "projectId": PROJECT_ID,
+            "sessionId": CREATED_SESSION_ID,
+            "startupText": "make deploy",
+        })]
+    );
+}
+
+/// `create-session --input --start` shares the start with `run-action`: its text stays queued in
+/// the row, where the start runs it and marks it consumed, so the start carries no `startupText`.
+#[test]
+fn create_session_input_start_keeps_the_queued_text() {
+    let home = computer(true);
+    let daemon = start(Daemon {
+        projects: projects_with_actions(),
+        ..Daemon::default()
+    });
+    let output = ghostex(
+        home.path(),
+        &daemon,
+        &[
+            "create-session",
+            "--project-id",
+            PROJECT_ID,
+            "--input",
+            "echo queued",
+            "--start",
+        ],
+    );
+    assert_eq!(output.code, 0, "stderr: {}", output.stderr);
+    let created = daemon.requests_to("/api/createSession");
+    assert_eq!(created.len(), 1);
+    assert_eq!(
+        created[0]["launchSettings"],
+        json!({
+            "runtimeRelevant": { "queueProviderStartupText": true },
+            "startupText": "echo queued",
         })
     );
     assert_eq!(
@@ -470,9 +542,9 @@ fn run_action_scope_disambiguates_equal_ids() {
         assert_eq!(output.code, 0, "{scope:?} stderr: {}", output.stderr);
     }
     let started: Vec<Value> = daemon
-        .requests_to("/api/createSession")
+        .requests_to("/api/startSessionProvider")
         .iter()
-        .map(|params| params["launchSettings"]["startupCommand"].clone())
+        .map(|params| params["startupText"].clone())
         .collect();
     assert_eq!(
         started,
