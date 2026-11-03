@@ -330,6 +330,15 @@ fn expected_of(case: &Value) -> Value {
                     worktree_parent_path: project["worktreeParentPath"]
                         .as_str()
                         .map(str::to_string),
+                    has_sessions: machine["sessions"]
+                        .as_array()
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                        .iter()
+                        .any(|session| {
+                            session["projectId"] == project["projectId"]
+                                && session["isBrowser"].as_bool() != Some(true)
+                        }),
                 })
                 .collect(),
         })
@@ -343,7 +352,19 @@ fn expected_of(case: &Value) -> Value {
         })
         .unwrap_or_default();
     let current_machine = case["currentMachine"].as_str().unwrap_or("local");
-    let all_choices = unified_project_choices(&choice_inputs, &last_machines, current_machine);
+    let recent_repos: Vec<String> = case["recentRepos"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|repo| repo.as_str().map(str::to_string))
+        .collect();
+    let all_choices = unified_project_choices(
+        &choice_inputs,
+        &last_machines,
+        &recent_repos,
+        current_machine,
+    );
     let choices: Vec<Value> = filter_project_choices(&all_choices, text(case, "choiceQuery"))
         .iter()
         .map(|choice| {
@@ -351,6 +372,8 @@ fn expected_of(case: &Value) -> Value {
                 "repoKey": choice.repo_key,
                 "label": choice.label,
                 "selected": choice.selected,
+                "hasSessions": choice.has_sessions,
+                "recent": choice.recent,
                 "machines": choice.machines.iter().map(|chip| json!({
                     "machineId": chip.machine_id,
                     "label": chip.label,
@@ -360,14 +383,59 @@ fn expected_of(case: &Value) -> Value {
             })
         })
         .collect();
-    let target =
-        unified_new_session_target(&filter, &all_choices, case["activeProjectId"].as_str())
-            .map(|target| json!({"machineId": target.machine_id, "projectId": target.project_id}));
+    let active_machine = case["activeMachine"].as_str().unwrap_or("local");
+    let active_repo = case["activeProjectId"].as_str().and_then(|project_id| {
+        let machine = machines_in
+            .iter()
+            .find(|machine| text(machine, "machine") == active_machine)?;
+        let project = machine["projects"]
+            .as_array()?
+            .iter()
+            .find(|project| text(project, "projectId") == project_id)?;
+        Some(
+            repo_identity(
+                project["gitRemoteOriginUrl"].as_str(),
+                text(project, "path"),
+                project["worktreeParentPath"].as_str(),
+                text(project, "title"),
+            )
+            .key,
+        )
+    });
+    let active = case["activeProjectId"]
+        .as_str()
+        .zip(active_repo.as_deref())
+        .map(|(project_id, repo_key)| ActiveProject {
+            repo_key,
+            machine_id: active_machine,
+            project_id,
+        });
+    let target = unified_new_session_target(&filter, &all_choices, active).map(|target| {
+        json!({
+            "repoKey": target.repo_key,
+            "machineId": target.machine_id,
+            "projectId": target.project_id,
+        })
+    });
+    let widened = case.get("createdIn").map(|created| {
+        let widened = widen_filter_for_new_session(
+            &filter,
+            text(created, "repoKey"),
+            text(created, "machineId"),
+            created["spaceKey"].as_str(),
+        );
+        json!({
+            "repos": widened.repos,
+            "machines": widened.machines,
+            "spaces": widened.spaces,
+        })
+    });
     json!({
         "groups": groups,
         "moves": moves,
         "choices": choices,
         "newSessionTarget": target,
+        "widenedFilter": widened,
         "drafts": ids(&view.drafts),
         "pinned": ids(&view.pinned),
         "active": ids(&view.active),
@@ -473,6 +541,24 @@ fn cases() -> Vec<Value> {
         scale("the project search matches names and machines", json!({
             "choiceQuery": "stu",
             "filter": {"repos": ["github.com/o/tools"]},
+        })),
+        scale("the project list puts recent projects first and keeps projects with no session", json!({
+            "recentRepos": ["github.com/o/quiet", "github.com/o/billing", "gone/repo"],
+        })),
+        scale("a machine that is not connected is never where a project starts while another has it", json!({
+            "lastMachines": {"github.com/o/acme": "studio"},
+            "activeProjectId": "bil",
+        })),
+        scale("the picker starts on the open project, on its own machine", json!({
+            "activeProjectId": "ac-wt",
+        })),
+        scale("a new session outside the filter joins its repository and machine picks", json!({
+            "filter": {"repos": ["github.com/o/zebra"], "machines": ["local"]},
+            "createdIn": {"repoKey": "github.com/o/billing", "machineId": "studio"},
+        })),
+        scale("a new session leaves a kind with no pick empty", json!({
+            "filter": {"machines": ["studio"]},
+            "createdIn": {"repoKey": "github.com/o/billing", "machineId": "local"},
         })),
         json!({
             "name": "one repository on two machines is one project, named as this computer spells it",

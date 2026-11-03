@@ -9,6 +9,7 @@ mod find_prompts;
 mod git_menu;
 mod host_messages;
 mod modals;
+mod new_thread_picker;
 mod project_path_actions;
 mod session_links;
 mod side_chat;
@@ -30,4 +31,6 @@ pub(crate) struct WebHostState {
     pub(crate) git_active_project: Option<String>,
     /// Whether the header's Git dropdown is open (`git_menu.rs`).
     pub(crate) git_menu_open: bool,
+    /// The New Thread picker open over the page (`new_thread_picker.rs`).
+    pub(crate) new_thread_picker: Option<new_thread_picker::WebNewThreadPicker>,
 }

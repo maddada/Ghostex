@@ -28,11 +28,14 @@ use std::rc::Rc;
 #[path = "new_thread_picker_run_on.rs"]
 mod run_on;
 pub(crate) use run_on::*;
+#[path = "new_thread_picker_place.rs"]
+mod place;
+pub(crate) use place::*;
 
 /*
 CDXC:AgentLauncher 2026-09-09 DECISION:
 User: the native New Thread picker is sized to its rows: the search field, the key-hint row, one row per agent up to twelve, the divider, and the Browser and Terminal rows; more agents scroll. The chrome height is the 6px top inset, 36px search field, 32px hint row, 2px list inset, 9px divider, three 36px rows (Coordinator, Browser, Terminal), the 6px bottom inset, and the 2px frame border.
-SEE-ALSO: the 30px Run on row is added only when agentbox is installed and the project is on this computer (CDXC:AgentBox in new_thread_picker_run_on.rs); otherwise the picker is exactly this. Its width is the user's 2026-10-29 decision below (420px became 460px so the key hints keep one line).
+SEE-ALSO: the 40px project row (new_thread_picker_place.rs) and the 30px Run on row (new_thread_picker_run_on.rs) are added whenever the picker knows its projects, which the app always passes; the preview binary without them is exactly this. Its width is the user's 2026-10-29 decision below (420px became 460px so the key hints keep one line).
 */
 /*
 CDXC:Coordinators 2026-11-01 DECISION:
@@ -90,9 +93,18 @@ const ICON_CLEAR: &str = "modals/new-thread-picker/x.svg";
 
 /// Search field, key hints, list insets, the divider, and the Coordinator,
 /// Browser and Terminal rows, plus one row per agent up to the visible maximum; longer
-/// agent lists scroll inside that frame. `run_on` adds the Run on row.
-pub(crate) fn new_thread_picker_window_height(agent_count: usize, run_on: bool) -> f32 {
+/// agent lists scroll inside that frame. `place` adds the project row, `run_on` the Run on row.
+pub(crate) fn new_thread_picker_window_height(
+    agent_count: usize,
+    place: bool,
+    run_on: bool,
+) -> f32 {
     NEW_THREAD_PICKER_CHROME_HEIGHT
+        + if place {
+            NEW_THREAD_PICKER_PLACE_HEIGHT
+        } else {
+            0.0
+        }
         + if run_on {
             NEW_THREAD_PICKER_RUN_ON_HEIGHT
         } else {
@@ -295,6 +307,9 @@ pub(crate) struct NewThreadPickerConfig {
     /// The account of the active project's last Claude cloud session: the Claude (cloud) account
     /// list highlights it first (gx-core `project_last_cloud_account`).
     pub(crate) cloud_default_account: Option<String>,
+    /// The projects a thread can start in and where the picker starts; `None` (the preview) draws
+    /// no project row and starts in the active project.
+    pub(crate) place: Option<NewThreadPickerPlace>,
 }
 
 /// What the picker asks its host to do. The picker removes its own window
@@ -304,15 +319,23 @@ pub(crate) enum NewThreadPickerCommand {
     LaunchAgent {
         agent_id: String,
         account_id: Option<String>,
-        /// A box's `runLocation`; `None` runs on this computer.
+        /// A box's `runLocation`; `None` runs on the picked machine.
         run_location: Option<String>,
+        /// The picked project and machine; `None` is the active project.
+        target: Option<NewThreadPickerTarget>,
     },
     /// The New Coordinator dialog (`projectAction` `coordinator`).
-    NewCoordinator,
+    NewCoordinator {
+        target: Option<NewThreadPickerTarget>,
+    },
     /// `openBrowserPaneInGroup`.
-    OpenBrowser,
+    OpenBrowser {
+        target: Option<NewThreadPickerTarget>,
+    },
     /// `createSession`.
-    CreateTerminal,
+    CreateTerminal {
+        target: Option<NewThreadPickerTarget>,
+    },
     /// Settings on its Accounts page.
     AddAccount,
     /// Settings on its Cloud Boxes page (the Run on row's set-up link).
@@ -335,6 +358,8 @@ enum PickerRow {
     CliLogin,
     AddAccount,
     Retry,
+    /// A project of the project list.
+    Project(usize),
 }
 
 fn matches_query(text: &str, normalized_query: &str) -> bool {
@@ -376,6 +401,10 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     close_when_inactive: bool,
     /// See `NewThreadPickerConfig::cloud_default_account`.
     cloud_default_account: Option<String>,
+    /// See `NewThreadPickerConfig::place`.
+    place: Option<NewThreadPickerPlace>,
+    /// The list shows the projects (new_thread_picker_place.rs).
+    choosing_project: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -429,7 +458,8 @@ impl GpuiNewThreadPickerWindow {
             },
         );
         input.update(cx, |input, cx| input.focus(window, cx));
-        let picker = Self {
+        let start_machine = config.place.as_ref().map(|place| place.machine);
+        let mut picker = Self {
             glass: false,
             frosted_fill: None,
             host,
@@ -449,12 +479,17 @@ impl GpuiNewThreadPickerWindow {
             scroll: ScrollHandle::new(),
             was_active: window.is_window_active(),
             close_when_inactive: config.close_when_inactive,
+            place: config.place,
+            choosing_project: false,
             _subscriptions: vec![
                 change_subscription,
                 activation_subscription,
                 press_subscription,
             ],
         };
+        if let Some(machine) = start_machine {
+            picker.apply_place_machines(machine);
+        }
         picker.reveal_selected_run_location();
         picker
     }
@@ -478,6 +513,13 @@ impl GpuiNewThreadPickerWindow {
         self.run_on = RunOnState::new(config.boxes, config.default_run_location)
             .with_cloud_box(config.cloud_box);
         self.cloud_default_account = config.cloud_default_account;
+        let start_machine = config.place.as_ref().map(|place| place.machine);
+        self.place = config.place;
+        self.choosing_project = false;
+        self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
+        if let Some(machine) = start_machine {
+            self.apply_place_machines(machine);
+        }
         self.fit_window_height(window);
         self.reveal_selected_run_location();
         self.scope = None;
@@ -524,15 +566,19 @@ impl GpuiNewThreadPickerWindow {
         cx.notify();
     }
 
-    /// The frame follows the agent count and whether the Run on row is drawn.
+    /// The frame follows the agent count and whether the project and Run on rows are drawn, or
+    /// the project list while it is open.
     pub(super) fn fit_window_height(&self, window: &mut Window) {
-        window.resize(size(
-            px(NEW_THREAD_PICKER_WIDTH),
-            px(new_thread_picker_window_height(
+        let height = if self.choosing_project {
+            self.project_list_height()
+        } else {
+            new_thread_picker_window_height(
                 self.agents.len(),
+                self.place.is_some(),
                 self.run_on.shown(),
-            )),
-        ));
+            )
+        };
+        window.resize(size(px(NEW_THREAD_PICKER_WIDTH), px(height)));
     }
 
     pub(crate) fn set_accounts(
@@ -607,6 +653,9 @@ impl GpuiNewThreadPickerWindow {
     }
 
     fn rows(&self) -> Vec<PickerRow> {
+        if self.choosing_project {
+            return self.project_rows();
+        }
         let query = self.normalized_query();
         match self.scope_agent() {
             None => {
@@ -665,6 +714,9 @@ impl GpuiNewThreadPickerWindow {
     /// Child index inside the scroll container, which also holds the divider
     /// between the agents and the Coordinator, Browser and Terminal rows.
     fn scroll_child_index(&self, rows: &[PickerRow], selected: usize) -> usize {
+        if self.choosing_project {
+            return self.project_scroll_child_index(rows, selected);
+        }
         let agent_rows = rows
             .iter()
             .filter(|row| matches!(row, PickerRow::Agent(_)))
@@ -778,11 +830,13 @@ impl GpuiNewThreadPickerWindow {
                 if let Some(agent) = self.agents.get(index) {
                     let agent_id = agent.agent_id.clone();
                     let run_location = self.run_on.run_location().map(str::to_string);
+                    let target = self.launch_target();
                     self.finish(
                         NewThreadPickerCommand::LaunchAgent {
                             agent_id,
                             account_id: None,
                             run_location,
+                            target,
                         },
                         window,
                         cx,
@@ -800,11 +854,13 @@ impl GpuiNewThreadPickerWindow {
                     return;
                 }
                 let account_id = Some(account.id.clone());
+                let target = self.launch_target();
                 self.finish(
                     NewThreadPickerCommand::LaunchAgent {
                         agent_id,
                         account_id,
                         run_location: None,
+                        target,
                     },
                     window,
                     cx,
@@ -812,11 +868,13 @@ impl GpuiNewThreadPickerWindow {
             }
             PickerRow::CliLogin => {
                 if let Some(agent_id) = self.scope_agent().map(|agent| agent.agent_id.clone()) {
+                    let target = self.launch_target();
                     self.finish(
                         NewThreadPickerCommand::LaunchAgent {
                             agent_id,
                             account_id: None,
                             run_location: None,
+                            target,
                         },
                         window,
                         cx,
@@ -832,14 +890,26 @@ impl GpuiNewThreadPickerWindow {
                 cx.notify();
             }
             PickerRow::Coordinator => {
-                self.finish(NewThreadPickerCommand::NewCoordinator, window, cx);
+                let target = self.launch_target();
+                self.finish(
+                    NewThreadPickerCommand::NewCoordinator { target },
+                    window,
+                    cx,
+                );
             }
             PickerRow::Browser => {
-                self.finish(NewThreadPickerCommand::OpenBrowser, window, cx);
+                let target = self.launch_target();
+                self.finish(NewThreadPickerCommand::OpenBrowser { target }, window, cx);
             }
             PickerRow::Terminal => {
-                self.finish(NewThreadPickerCommand::CreateTerminal, window, cx);
+                let target = self.launch_target();
+                self.finish(
+                    NewThreadPickerCommand::CreateTerminal { target },
+                    window,
+                    cx,
+                );
             }
+            PickerRow::Project(index) => self.pick_project(index, window, cx),
         }
     }
 
@@ -876,7 +946,9 @@ impl GpuiNewThreadPickerWindow {
 
     fn on_escape(&mut self, _: &Escape, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.scope.is_some() {
+        if self.choosing_project {
+            self.leave_project_list(window, cx);
+        } else if self.scope.is_some() {
             self.leave_scope(window, cx);
         } else {
             self.close(window, cx);
@@ -886,7 +958,8 @@ impl GpuiNewThreadPickerWindow {
     /// Tab: open the highlighted Claude or Codex agent's account list.
     fn on_tab(&mut self, _: &IndentInline, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
-        if self.scope.is_none()
+        if !self.choosing_project
+            && self.scope.is_none()
             && let Some(PickerRow::Agent(index)) = self.selected_row()
         {
             self.enter_scope(index, window, cx);
@@ -1461,7 +1534,13 @@ impl GpuiNewThreadPickerWindow {
 impl Render for GpuiNewThreadPickerWindow {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = self.colors;
-        let list_children = self.render_list(cx);
+        let choosing = self.choosing_project;
+        let list_children = if choosing {
+            self.render_project_list(cx)
+        } else {
+            self.render_list(cx)
+        };
+        let place = self.render_place(cx);
         v_flex()
             .id("ghostex-gpui-new-thread-picker")
             .size_full()
@@ -1488,11 +1567,18 @@ impl Render for GpuiNewThreadPickerWindow {
             .capture_action(cx.listener(Self::on_move_home))
             .capture_action(cx.listener(Self::on_move_end))
             .capture_key_down(cx.listener(Self::on_run_on_key_down))
+            .children(place)
             .child(self.render_search(cx))
-            .when(self.run_on.shown(), |root| {
+            .when(!choosing && self.run_on.shown(), |root| {
                 root.child(self.render_run_on(cx))
             })
-            .child(self.render_hints())
+            .map(|root| {
+                if choosing {
+                    root.child(self.render_project_hints().into_any_element())
+                } else {
+                    root.child(self.render_hints().into_any_element())
+                }
+            })
             .child(
                 div()
                     .relative()

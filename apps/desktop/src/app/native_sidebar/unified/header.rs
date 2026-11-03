@@ -64,6 +64,15 @@ pub(super) fn filter_menu_items(unified: &UnifiedSidebarSnapshot) -> Value {
             if let Some(detail) = &option.detail {
                 item["detail"] = Value::String(detail.clone());
             }
+            // CDXC:Sidebar 2026-11-03 DECISION:
+            // User (Q1163 "we need A and also need C", Q1184 "projects"): a project row of the filter has a "+" on hover that opens the New thread picker on that project, on the machine it starts on, without changing the filter. Machine and Space rows have none, because the machine is picked on the picker.
+            if kind == "repo" {
+                item["rowAction"] = json!({
+                    "icon": "plus",
+                    "ariaLabel": format!("New session in {}", option.label),
+                    "command": {"type": "unifiedNewSessionInRepo", "key": option.key},
+                });
+            }
             if row_has_menu(unified, kind, &option.key) {
                 item["rowMenu"] = json!({"kind": kind, "key": option.key, "label": option.label});
             }
@@ -427,6 +436,17 @@ mod tests {
         assert_eq!(row(&items, "w")["rowMenu"]["kind"], "machine");
         assert_eq!(row(&items, "local|s1")["rowMenu"]["kind"], "space");
         assert!(row(&items, "w|s2").get("rowMenu").is_none());
+    }
+
+    #[test]
+    fn only_project_rows_start_a_session() {
+        let items = filter_menu_items(&snapshot(vec![option("ghostex", &["project:a"])]));
+        let action = &row(&items, "ghostex")["rowAction"];
+        assert_eq!(action["command"]["type"], "unifiedNewSessionInRepo");
+        assert_eq!(action["command"]["key"], "ghostex");
+        for no_button in ["space-a", "windows", "local"] {
+            assert!(row(&items, no_button).get("rowAction").is_none());
+        }
     }
 
     #[test]

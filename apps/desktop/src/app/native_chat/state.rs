@@ -229,6 +229,7 @@ pub(crate) struct NativeChatView {
     /// The worktree tray's project search, while it is open.
     pub(super) draft_project_picker: Option<super::draft_project_picker::DraftProjectPicker>,
     pub(super) draft_project_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) draft_machine_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(crate) draft_revision: u64,
     pub(crate) draft_id: String,
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
@@ -404,6 +405,7 @@ impl NativeChatView {
             option_menu: None,
             draft_project_picker: None,
             draft_project_chip_bounds: Default::default(),
+            draft_machine_chip_bounds: Default::default(),
             menu_toggle: Default::default(),
             pill_bounds: Default::default(),
             working_card: Default::default(),

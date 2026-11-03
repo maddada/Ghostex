@@ -14,35 +14,31 @@ use crate::app::helpers::*;
 use crate::*;
 
 impl GhostexGpuiApp {
-    /// Whether the picker offers the Cloud Box chip for the active project.
+    /// Whether the picker offers the Cloud Box chip; the Run on row shows it only while the picked
+    /// project is on this computer.
     pub(crate) fn new_thread_picker_offers_cloud_box(&self) -> bool {
         shared_settings::shared_sidebar_settings_snapshot().cloud_boxes_enabled()
-            && self
-                .gx_store
-                .core
-                .focus()
-                .active_project
-                .as_ref()
-                .is_some_and(|project| project.machine.is_local())
     }
 
-    /// Remembers Cloud Box (or not) for the active project, then launches the agent there.
+    /// Remembers Cloud Box (or not) for the picked project on this computer (`project_id`, else
+    /// the active one), then launches the agent there.
     pub(crate) fn launch_agent_with_cloud_box_choice(
         &mut self,
         agent_id: String,
         account_id: Option<String>,
         cloud: bool,
+        project_id: Option<String>,
         cx: &mut gpui::Context<Self>,
     ) {
-        let Some(project_id) = self
-            .gx_store
-            .core
-            .focus()
-            .active_project
-            .as_ref()
-            .filter(|project| project.machine.is_local())
-            .map(|project| project.project_id.clone())
-        else {
+        let Some(project_id) = project_id.or_else(|| {
+            self.gx_store
+                .core
+                .focus()
+                .active_project
+                .as_ref()
+                .filter(|project| project.machine.is_local())
+                .map(|project| project.project_id.clone())
+        }) else {
             self.launch_agent_in_active_project(agent_id, account_id, None, cx);
             return;
         };

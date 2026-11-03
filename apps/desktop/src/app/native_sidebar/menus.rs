@@ -1041,6 +1041,44 @@ impl GhostexGpuiApp {
                                     .text_color(foreground.opacity(0.5)),
                             )
                         })
+                        // A row's start button (the Unified filter's project rows): shown on the
+                        // hovered or keyboard row, it closes the menu and runs its command.
+                        .when_some(item.get("rowAction").cloned(), |row, action| {
+                            let revealed = selected || row_menu_open;
+                            let icon_path =
+                                gpui_sidebar_command_icon_asset_path(action["icon"].as_str());
+                            row.group(MENU_ROW_GROUP).child(
+                                div()
+                                    .id(format!("native-menu-action-{panel_index}-{item_index}"))
+                                    .role(gpui::Role::Button)
+                                    .aria_label(
+                                        action["ariaLabel"].as_str().unwrap_or_default().to_owned(),
+                                    )
+                                    .flex_shrink_0()
+                                    .size(px(SESSION_HOVER_BUTTON * scale))
+                                    .mr(px(-6.0 * scale))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(4.0 * scale))
+                                    .hover(|button| button.bg(hover))
+                                    .when(!revealed, |button| button.opacity(0.0))
+                                    .group_hover(MENU_ROW_GROUP, |button| button.opacity(1.0))
+                                    .child(
+                                        gpui::svg()
+                                            .path(icon_path)
+                                            .size(px(SESSION_HOVER_ICON * scale))
+                                            .text_color(foreground.opacity(0.55)),
+                                    )
+                                    .on_click(cx.listener(move |app, _, _, cx| {
+                                        cx.stop_propagation();
+                                        if let Some(command) = action.get("command").cloned() {
+                                            app.dismiss_native_sidebar_menu(cx);
+                                            app.dispatch_native_sidebar_ui(command, cx);
+                                        }
+                                    })),
+                            )
+                        })
                         .when(row_menu, |row| {
                             let revealed = selected || row_menu_open;
                             row.child(

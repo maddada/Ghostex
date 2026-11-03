@@ -1,9 +1,11 @@
-//! Where a new session starts and how a draft changes project: the choices the new chat's tray
-//! offers on any sidebar, the Unified header's New session, and the move itself.
+//! Where a new session starts and how a draft changes project: the projects the New thread picker
+//! and the new chat's tray offer on any sidebar, where the picker starts, what a start remembers,
+//! and the draft move itself.
 
 use ghostex_gx_core::unified_sidebar::{
-    ProjectChoiceInput, UnifiedChoiceMachineInput, UnifiedProjectChoice,
-    unified_new_session_target, unified_project_choices,
+    ActiveProject, ProjectChoiceInput, UnifiedChoiceMachineInput, UnifiedFilter,
+    UnifiedNewSessionTarget, UnifiedProjectChoice, repo_identity, unified_new_session_target,
+    unified_project_choices, widen_filter_for_new_session,
 };
 use ghostex_gx_core::{LOCAL_MACHINE_ID, MachineId, ProjectKey};
 use serde_json::{Value, json};
@@ -21,7 +23,7 @@ pub(crate) struct PendingDraftMove {
     pub(crate) text: String,
 }
 
-fn group_id_of(machine_id: &str, project_id: &str) -> String {
+pub(crate) fn group_id_of(machine_id: &str, project_id: &str) -> String {
     let machine = if machine_id == LOCAL_MACHINE_ID {
         MachineId::Local
     } else {
@@ -69,8 +71,16 @@ impl GhostexGpuiApp {
         let machine_inputs: Vec<UnifiedChoiceMachineInput> = machines
             .into_iter()
             .filter_map(|(machine, label, connected)| {
-                let projects = store
-                    .loaded(&machine)?
+                let loaded = store.loaded(&machine)?;
+                // Projects with a workspace session (a command pane's terminal isn't one).
+                let with_sessions: std::collections::BTreeSet<&str> = loaded
+                    .server_sessions()
+                    .filter(|session| {
+                        session.surface != ghostex_gx_protocol::SessionSurface::Commands
+                    })
+                    .map(|session| session.project_id.as_str())
+                    .collect();
+                let projects = loaded
                     .projects()
                     .iter()
                     .filter(|project| {
@@ -95,6 +105,7 @@ impl GhostexGpuiApp {
                                 .and_then(|worktree| worktree.get("parentProjectPath"))
                                 .and_then(Value::as_str)
                                 .map(str::to_string),
+                            has_sessions: with_sessions.contains(project.project_id.as_str()),
                         })
                     })
                     .collect();
@@ -106,52 +117,243 @@ impl GhostexGpuiApp {
                 })
             })
             .collect();
+        let saved = &self.gx_store.unified_sidebar.saved;
         unified_project_choices(
             &machine_inputs,
-            &self.gx_store.unified_sidebar.saved.last_machines,
+            &saved.last_machines,
+            &saved.recent_repos,
             &inputs.ui.selected_machine_id,
         )
     }
 
-    /// The header's New session button: the picker, aimed at the filtered repository or the active
-    /// project. Nothing is activated, so it cannot start a default agent (CDXC:Sidebar 2026-10-31
-    /// in gx-core unified_sidebar/choices.rs).
-    pub(crate) fn open_unified_new_session(&mut self, cx: &mut gpui::Context<Self>) {
-        let choices = self.gx_store_project_choices();
-        let active = self.gpui_app_modal_active_project_id();
-        let target = unified_new_session_target(
-            &self.gx_store.unified_sidebar.filter,
-            &choices,
-            active.as_deref(),
-        );
-        self.gx_store.unified_sidebar.picker_target =
-            target.map(|target| group_id_of(&target.machine_id, &target.project_id));
-        self.open_unified_new_session_picker(cx);
+    /// The repository key of a project on one machine, as the project list keys its rows.
+    pub(crate) fn gx_store_repo_key_of(
+        &self,
+        machine: &MachineId,
+        project_id: &str,
+    ) -> Option<String> {
+        let project = self
+            .gx_store
+            .core
+            .presentation()
+            .loaded(machine)?
+            .project(project_id)?
+            .clone();
+        let parent = project
+            .worktree
+            .as_ref()
+            .and_then(|worktree| worktree.get("parentProjectPath"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        Some(
+            repo_identity(
+                project.git_remote_origin_url.value().map(String::as_str),
+                project.path.as_deref().unwrap_or_default(),
+                parent.as_deref(),
+                &project.title,
+            )
+            .key,
+        )
     }
 
-    /// A group's "+": the picker in that project.
+    /// Where the New thread picker starts (CDXC:Sidebar 2026-11-03 in gx-core
+    /// unified_sidebar/choices.rs): the Unified filter's one repository while the Unified sidebar
+    /// is on, else the open project on its machine, else the list's first project.
+    pub(crate) fn gx_store_new_session_start(
+        &mut self,
+        choices: &[UnifiedProjectChoice],
+    ) -> Option<UnifiedNewSessionTarget> {
+        self.gx_store.unified_sidebar.ensure_saved_read();
+        let unified = self
+            .gx_store
+            .sidebar_list
+            .last_inputs
+            .settings
+            .unified_sidebar;
+        let filter = if unified {
+            self.gx_store.unified_sidebar.filter.clone()
+        } else {
+            UnifiedFilter::default()
+        };
+        let active = self.gx_store.core.focus().active_project.clone();
+        let active_repo = active
+            .as_ref()
+            .and_then(|project| self.gx_store_repo_key_of(&project.machine, &project.project_id));
+        let machine_id = active.as_ref().map(|project| {
+            project
+                .machine
+                .remote_id()
+                .unwrap_or(LOCAL_MACHINE_ID)
+                .to_string()
+        });
+        let active = active
+            .as_ref()
+            .zip(active_repo.as_deref())
+            .zip(machine_id.as_deref())
+            .map(|((project, repo_key), machine_id)| ActiveProject {
+                repo_key,
+                machine_id,
+                project_id: &project.project_id,
+            });
+        unified_new_session_target(&filter, choices, active)
+    }
+
+    /// A session started from the New thread picker (or the tray's move): its machine is where the
+    /// project starts next time, the project moves to the top of Recent, and while the Unified
+    /// sidebar is on a filter that would hide the session gains its project (CDXC:Sidebar
+    /// 2026-11-03 `widen_filter_for_new_session`).
+    pub(crate) fn gx_store_new_session_started(
+        &mut self,
+        target: &UnifiedNewSessionTarget,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let unified = self
+            .gx_store
+            .sidebar_list
+            .last_inputs
+            .settings
+            .unified_sidebar;
+        let host = &mut self.gx_store.unified_sidebar;
+        host.ensure_saved_read();
+        host.saved
+            .remember_new_session(&target.repo_key, &target.machine_id);
+        if unified {
+            host.pending_project_clear();
+            host.filter = widen_filter_for_new_session(
+                &host.filter,
+                &target.repo_key,
+                &target.machine_id,
+                None,
+            );
+        }
+        host.persist();
+        if unified {
+            self.gx_store_unified_sidebar_changed(&ghostex_gx_core::ChangeSummary::default(), cx);
+        }
+    }
+
+    /// The New thread picker's projects and where it starts: `picker_start` when a "+" set one,
+    /// else `gx_store_new_session_start`. `None` when no machine lists a project.
+    pub(crate) fn gx_store_new_thread_picker_place(
+        &mut self,
+    ) -> Option<crate::app::window::NewThreadPickerPlace> {
+        use crate::app::window::{
+            NewThreadPickerMachine, NewThreadPickerPlace, NewThreadPickerProject,
+        };
+        let choices = self.gx_store_project_choices();
+        let start = match self.gx_store.unified_sidebar.picker_start.take() {
+            Some(start) => Some(start),
+            None => self.gx_store_new_session_start(&choices),
+        }?;
+        let mut projects: Vec<NewThreadPickerProject> = choices
+            .iter()
+            .map(|choice| NewThreadPickerProject {
+                repo_key: choice.repo_key.clone(),
+                label: choice.label.clone(),
+                has_sessions: choice.has_sessions,
+                recent: choice.recent,
+                machines: choice
+                    .machines
+                    .iter()
+                    .map(|machine| NewThreadPickerMachine {
+                        machine_id: machine.machine_id.clone(),
+                        label: machine.label.clone(),
+                        connected: machine.connected,
+                        project_id: machine.project_id.clone(),
+                    })
+                    .collect(),
+                start_machine: choice.selected,
+            })
+            .collect();
+        let project = projects
+            .iter()
+            .position(|project| project.repo_key == start.repo_key)?;
+        let machine = projects[project]
+            .machines
+            .iter()
+            .position(|machine| machine.machine_id == start.machine_id)?;
+        // The start can be a worktree the row doesn't point at; on that machine it is "here".
+        projects[project].machines[machine].project_id = start.project_id.clone();
+        Some(NewThreadPickerPlace {
+            projects,
+            project,
+            machine,
+            hotkey: crate::gpui_configured_hotkey_label("openNewThreadPalette"),
+        })
+    }
+
+    /// A picker command's pick: the group its launch goes to (the launch reads `picker_target`),
+    /// and what a start remembers (`gx_store_new_session_started`).
+    pub(crate) fn gx_store_take_new_thread_picker_target(
+        &mut self,
+        target: Option<crate::app::window::NewThreadPickerTarget>,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let Some(target) = target else {
+            return;
+        };
+        self.gx_store.unified_sidebar.picker_target =
+            Some(group_id_of(&target.machine_id, &target.project_id));
+        self.gx_store_new_session_started(
+            &UnifiedNewSessionTarget {
+                repo_key: target.repo_key,
+                machine_id: target.machine_id,
+                project_id: target.project_id,
+            },
+            cx,
+        );
+    }
+
+    /// The header's New session button and ⌘N: the New thread picker, starting where
+    /// `gx_store_new_session_start` says. Nothing is activated, so it cannot start a default agent
+    /// (CDXC:Sidebar 2026-10-31 WHY in gx-core unified_sidebar/choices.rs).
+    pub(crate) fn open_unified_new_session(&mut self, cx: &mut gpui::Context<Self>) {
+        self.gx_store.unified_sidebar.picker_start = None;
+        self.open_gpui_new_thread_picker(cx);
+    }
+
+    /// A group's "+" and a filter row's "+": the picker on that project, on that machine.
     pub(crate) fn open_new_session_in(
         &mut self,
         machine_id: &str,
         project_id: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        self.gx_store.unified_sidebar.picker_target = Some(group_id_of(machine_id, project_id));
-        self.open_unified_new_session_picker(cx);
+        let machine = if machine_id == LOCAL_MACHINE_ID {
+            MachineId::Local
+        } else {
+            MachineId::Remote(machine_id.to_string())
+        };
+        let Some(repo_key) = self.gx_store_repo_key_of(&machine, project_id) else {
+            return;
+        };
+        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
+            repo_key,
+            machine_id: machine_id.to_string(),
+            project_id: project_id.to_string(),
+        });
+        self.open_gpui_new_thread_picker(cx);
     }
 
-    fn open_unified_new_session_picker(&mut self, cx: &mut gpui::Context<Self>) {
-        #[cfg(not(target_arch = "wasm32"))]
+    /// A filter row's "+": the picker on that repository, on the machine it starts on.
+    pub(crate) fn open_new_session_in_repo(
+        &mut self,
+        repo_key: &str,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        let choices = self.gx_store_project_choices();
+        let Some(choice) = choices.iter().find(|choice| choice.repo_key == repo_key) else {
+            return;
+        };
+        let Some(machine) = choice.selected_machine() else {
+            return;
+        };
+        self.gx_store.unified_sidebar.picker_start = Some(UnifiedNewSessionTarget {
+            repo_key: repo_key.to_string(),
+            machine_id: machine.machine_id.clone(),
+            project_id: machine.project_id.clone(),
+        });
         self.open_gpui_new_thread_picker(cx);
-        // The page has no picker window: a terminal session, as its New session always made.
-        #[cfg(target_arch = "wasm32")]
-        {
-            let command = match self.gx_store.unified_sidebar.picker_target.take() {
-                Some(group_id) => json!({"type": "createSessionInGroup", "groupId": group_id}),
-                None => json!({"type": "createSession"}),
-            };
-            self.dispatch_native_sidebar_command(command, cx);
-        }
     }
 
     /// A pick in the tray's project chip: start the same agent as a draft there, with the composer's
@@ -168,12 +370,15 @@ impl GhostexGpuiApp {
         project_id: &str,
         cx: &mut gpui::Context<Self>,
     ) {
-        let host = &mut self.gx_store.unified_sidebar;
-        host.saved
-            .last_machines
-            .insert(repo_key.to_string(), machine_id.to_string());
-        host.persist();
-        host.pending_draft_move = Some(draft);
+        self.gx_store_new_session_started(
+            &UnifiedNewSessionTarget {
+                repo_key: repo_key.to_string(),
+                machine_id: machine_id.to_string(),
+                project_id: project_id.to_string(),
+            },
+            cx,
+        );
+        self.gx_store.unified_sidebar.pending_draft_move = Some(draft);
         let message = json!({
             "type": "runSidebarAgent",
             "agentId": agent_id,

@@ -174,6 +174,7 @@ impl NativeChatView {
             .text_size(px(12.5 * s))
             .when_some(tray["projectName"].as_str(), |row, name| {
                 row.child(self.render_draft_project_chip(name, p, busy, cx))
+                    .children(self.render_draft_machine_chip(p, busy, cx))
             })
             .when(has_choices, |row| row.child(control));
         let status = &tray["status"];

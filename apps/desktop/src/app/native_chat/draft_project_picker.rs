@@ -1,17 +1,16 @@
-//! The tray's project chip and what it opens: a search over every project on every machine, one
-//! row per repository with a chip per machine. The rows are gx-core's
-//! (`unified_sidebar/choices.rs`); picking moves the draft (`gx_store/unified_new_session.rs`). The
-//! phone draws the same choice in `apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx`.
+//! The tray's project chip and machine chip and what they open: a search over every project on
+//! every machine, one row per repository, and the list of the machines that have the draft's
+//! project. The rows are gx-core's (`unified_sidebar/choices.rs`); picking moves the draft
+//! (`gx_store/unified_new_session.rs`). The phone draws the same choice in
+//! `apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx` and `MachinePickerSheet.tsx`.
 //!
-//! CDXC:Worktrees 2026-10-31 DECISION:
-//! User (Q847): "we need to add picking the project and machine in the bar that we added today where we added the ability to pick either the project folder or the worktree". The chip is the tray's first control; it reads the project, and the machine's name when the chat is on another machine. User (Q848): one row per repository with machine chips, stays at 100 rows; left and right arrows change the machine. The search opens on the draft's own project, so Escape leaves things as they were.
+//! CDXC:Worktrees 2026-11-03 DECISION:
+//! User (Q1186 "split", after Q1167 "i want to go towards not separating projects by machines"): the tray picks the project and the machine with two chips. The project chip reads the project's name and opens a search of projects only (Recent first, then A to Z, "No sessions" on a project without one), with no machine chips on its rows; a pick moves the draft to that project on the machine it starts on (the last one used for it). The machine chip beside it reads the draft's machine and lists the machines that have the project, a machine that isn't connected dimmed; it shows while the project is on more than one machine or the draft is on another computer. Both open on the draft's own place, so Escape leaves things as they were. This supersedes Q848's machine chips on every row of the search (CDXC:Worktrees 2026-10-31, Q847 "we need to add picking the project and machine in the bar").
 
 use super::{appearance::ChatAppearance, option_menu, reply_popover, state::NativeChatView};
 use crate::app::gx_store::unified_new_session::PendingDraftMove;
 use crate::app::native_chat::cursor::ChatCursor as _;
-use ghostex_gx_core::unified_sidebar::{
-    UnifiedProjectChoice, filter_project_choices, move_project_choice_machine,
-};
+use ghostex_gx_core::unified_sidebar::{UnifiedProjectChoice, filter_project_choices};
 use gpui::Focusable as _;
 use gpui::prelude::FluentBuilder as _;
 use gpui::{
@@ -62,6 +61,8 @@ pub(crate) struct DraftProjectPicker {
 struct ProjectPickerCard {
     chat: WeakEntity<NativeChatView>,
     choices: Vec<UnifiedProjectChoice>,
+    /// The machine chip's list: the draft's project, whose machines are the rows.
+    machines_of: Option<UnifiedProjectChoice>,
     input: Entity<InputState>,
     query: String,
     highlighted: usize,
@@ -80,12 +81,21 @@ impl ProjectPickerCard {
     fn rows(&self) -> Vec<UnifiedProjectChoice> {
         filter_project_choices(&self.choices, &self.query)
     }
+
+    /// The rows Up and Down walk: the projects, or the machine list's machines.
+    fn row_count(&self) -> usize {
+        match &self.machines_of {
+            Some(choice) => choice.machines.len(),
+            None => self.rows().len(),
+        }
+    }
 }
 
-/// The card's height for `rows` rows, the list capped at its tallest.
-fn card_height(rows: usize, scale: f32) -> f32 {
+/// The card's height for `rows` rows, the list capped at its tallest; the machine list has no
+/// search row.
+fn card_height(rows: usize, search: bool, scale: f32) -> f32 {
     let list = (rows.max(1) as f32 * ROW_HEIGHT + LIST_PADDING * 2.0).min(LIST_MAX_HEIGHT);
-    (SEARCH_HEIGHT + list + 2.0) * scale
+    (if search { SEARCH_HEIGHT } else { 0.0 } + list + 2.0) * scale
 }
 
 /// Where the card opens: its left edge on the chip's and its bottom just above it, kept inside the
@@ -108,24 +118,93 @@ fn card_bounds(
 }
 
 impl NativeChatView {
-    /// What the chip reads.
-    pub(super) fn draft_project_chip_label(&self, name: &str, cx: &Context<Self>) -> String {
-        let machine = (self.config.machine_id != ghostex_gx_core::LOCAL_MACHINE_ID)
-            .then(|| {
-                let app = self.config.app.as_ref()?.upgrade()?;
-                let inputs = &app.read(cx).gx_store.sidebar_list.last_inputs;
-                inputs
-                    .host
-                    .machines
-                    .iter()
-                    .find(|tab| tab.machine_id == self.config.machine_id)
-                    .map(|tab| tab.label.clone())
+    /// The draft's project as a row of the project list, with the machines that have it.
+    fn draft_choice(&self, cx: &Context<Self>) -> Option<UnifiedProjectChoice> {
+        let app = self.config.app.as_ref()?.upgrade()?;
+        let choices = app.read(cx).gx_store_project_choices();
+        let (machine_id, project_id) = (&self.config.machine_id, &self.config.project_id);
+        let mut choice = choices.into_iter().find(|choice| {
+            choice.machines.iter().any(|machine| {
+                &machine.machine_id == machine_id && &machine.project_id == project_id
             })
-            .flatten();
-        match machine {
-            Some(machine) => format!("{name} · {machine}"),
-            None => name.to_string(),
+        })?;
+        choice.selected = choice
+            .machines
+            .iter()
+            .position(|machine| &machine.machine_id == machine_id)
+            .unwrap_or(choice.selected);
+        Some(choice)
+    }
+
+    /// The tray's machine chip: the draft's machine, while there is a machine to change to or the
+    /// draft is on another computer.
+    pub(super) fn render_draft_machine_chip(
+        &self,
+        p: &ChatAppearance,
+        busy: bool,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        let choice = self.draft_choice(cx)?;
+        let machine = choice.selected_machine()?.clone();
+        let local = machine.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID;
+        if choice.machines.len() < 2 && local {
+            return None;
         }
+        let s = p.scale;
+        let bounds = self.draft_machine_chip_bounds.clone();
+        Some(
+            div()
+                .on_prepaint(move |painted, _, _| bounds.set(painted))
+                .id("chat-draft-machine")
+                .role(gpui::Role::Button)
+                .aria_label(format!("Machine: {}", machine.label))
+                .flex_shrink_0()
+                .h(px(26.0 * s))
+                .px(px(8.0 * s))
+                .flex()
+                .items_center()
+                .gap(px(5.0 * s))
+                .rounded(px(7.0 * s))
+                .border_1()
+                .border_color(p.composer_border)
+                .text_color(p.primary)
+                .when(!busy && choice.machines.len() > 1, |chip| {
+                    chip.chat_cursor_pointer()
+                        .hover(|style| style.bg(p.border))
+                        .on_click(cx.listener(|chat, _, window, cx| {
+                            chat.toggle_draft_place_picker(true, window, cx);
+                        }))
+                })
+                .child(
+                    svg()
+                        .path(if local {
+                            "titlebar/device-desktop.svg"
+                        } else {
+                            "titlebar/server.svg"
+                        })
+                        .size(px(13.0 * s))
+                        .flex_shrink_0()
+                        .text_color(p.muted),
+                )
+                .child(
+                    div()
+                        .max_w(px(140.0 * s))
+                        .overflow_hidden()
+                        .text_ellipsis()
+                        .whitespace_nowrap()
+                        .child(machine.label),
+                )
+                .when(choice.machines.len() > 1, |chip| {
+                    chip.child(
+                        svg()
+                            .path("titlebar/chevron-down.svg")
+                            .size(px(12.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
+                    )
+                })
+                .into_any_element(),
+        )
     }
 
     pub(super) fn render_draft_project_chip(
@@ -136,7 +215,7 @@ impl NativeChatView {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let s = p.scale;
-        let label = self.draft_project_chip_label(name, cx);
+        let label = name.to_string();
         let bounds = self.draft_project_chip_bounds.clone();
         div()
             .on_prepaint(move |painted, _, _| bounds.set(painted))
@@ -158,7 +237,7 @@ impl NativeChatView {
                 chip.chat_cursor_pointer()
                     .hover(|style| style.bg(p.border))
                     .on_click(cx.listener(|chat, _, window, cx| {
-                        chat.toggle_draft_project_picker(window, cx);
+                        chat.toggle_draft_place_picker(false, window, cx);
                     }))
             })
             .child(
@@ -186,9 +265,15 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// The chip's click: opens the search, or closes the one open (also when the press that started
-    /// this click already closed it by taking key status, `CHIP_PRESS`).
-    fn toggle_draft_project_picker(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// A chip's click: opens the project search (`machines` false) or the machine list, or closes
+    /// the one open (also when the press that started this click already closed it by taking key
+    /// status, `CHIP_PRESS`).
+    fn toggle_draft_place_picker(
+        &mut self,
+        machines: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         match self.draft_project_picker.take() {
             Some(DraftProjectPicker {
                 handle: Some(handle),
@@ -209,20 +294,40 @@ impl NativeChatView {
             return;
         };
         let choices = app.read(cx).gx_store_project_choices();
-        let project_id = self.config.project_id.clone();
-        let highlighted = choices
-            .iter()
-            .position(|choice| {
-                choice
-                    .machines
-                    .iter()
-                    .any(|machine| machine.project_id == project_id)
-            })
-            .unwrap_or(0);
+        let machines_of = if machines {
+            let Some(choice) = self.draft_choice(cx) else {
+                return;
+            };
+            Some(choice)
+        } else {
+            None
+        };
+        let (machine_id, project_id) = (
+            self.config.machine_id.clone(),
+            self.config.project_id.clone(),
+        );
+        let highlighted = match &machines_of {
+            Some(choice) => choice.selected,
+            None => choices
+                .iter()
+                .position(|choice| {
+                    choice.machines.iter().any(|machine| {
+                        machine.machine_id == machine_id && machine.project_id == project_id
+                    })
+                })
+                .unwrap_or(0),
+        };
+        let rows = machines_of
+            .as_ref()
+            .map_or(choices.len(), |choice| choice.machines.len());
         let appearance = ChatAppearance::current(&self.snapshot);
         let scale = appearance.scale;
         let content = super::child_window::content_bounds(window);
-        let chip = self.draft_project_chip_bounds.get();
+        let chip = if machines {
+            self.draft_machine_chip_bounds.get()
+        } else {
+            self.draft_project_chip_bounds.get()
+        };
         let view = self.bounds.get();
         let within = if view.size.width > px(0.0) && view.size.height > px(0.0) {
             Bounds::new(content.origin + view.origin, view.size)
@@ -232,7 +337,7 @@ impl NativeChatView {
         let bounds = card_bounds(
             Bounds::new(content.origin + chip.origin, chip.size),
             within,
-            card_height(choices.len(), scale),
+            card_height(rows, !machines, scale),
             scale,
         );
         let parent = super::child_window::window_native_view(window)
@@ -283,6 +388,7 @@ impl NativeChatView {
                             ProjectPickerCard::new(
                                 chat,
                                 choices,
+                                machines_of,
                                 highlighted,
                                 appearance,
                                 window,
@@ -334,10 +440,13 @@ impl NativeChatView {
         }
     }
 
+    /// A pick: a project row (on the machine it starts on) or, with `picked_machine`, a machine of
+    /// the draft's project.
     fn pick_draft_project(
         &mut self,
         row: &UnifiedProjectChoice,
         chip: usize,
+        picked_machine: bool,
         cx: &mut Context<Self>,
     ) {
         let Some(machine) = row.machines.get(chip) else {
@@ -349,6 +458,13 @@ impl NativeChatView {
         }
         let same = machine.project_id == self.config.project_id
             && machine.machine_id == self.config.machine_id;
+        // The draft's own project, picked again from the project list: nothing moves.
+        let same = same
+            || (!picked_machine
+                && row.machines.iter().any(|machine| {
+                    machine.project_id == self.config.project_id
+                        && machine.machine_id == self.config.machine_id
+                }));
         let agent_id = self.snapshot["sessionAgentId"].as_str().map(str::to_string);
         let (false, Some(agent_id), Some(app)) = (
             same,
@@ -387,6 +503,7 @@ impl ProjectPickerCard {
     fn new(
         chat: WeakEntity<NativeChatView>,
         choices: Vec<UnifiedProjectChoice>,
+        machines_of: Option<UnifiedProjectChoice>,
         highlighted: usize,
         appearance: ChatAppearance,
         window: &mut Window,
@@ -403,16 +520,16 @@ impl ProjectPickerCard {
                     card.scroll.scroll_to_item(0);
                     cx.notify();
                 }
-                InputEvent::PressEnter { .. } => {
-                    let rows = card.rows();
-                    if let Some(row) = rows.get(card.highlighted) {
-                        card.close(Some((row.clone(), row.selected)), cx);
-                    }
-                }
+                InputEvent::PressEnter { .. } => card.pick_highlighted(cx),
                 _ => {}
             },
         );
-        input.read(cx).focus_handle(cx).focus(window, cx);
+        let focus = cx.focus_handle();
+        if machines_of.is_some() {
+            focus.focus(window, cx);
+        } else {
+            input.read(cx).focus_handle(cx).focus(window, cx);
+        }
         let activation = cx.observe_window_activation(window, |card: &mut Self, window, cx| {
             if window.is_window_active() {
                 card.was_active = true;
@@ -447,11 +564,12 @@ impl ProjectPickerCard {
         Self {
             chat,
             choices,
+            machines_of,
             input,
             query: String::new(),
             highlighted,
             scroll,
-            focus: cx.focus_handle(),
+            focus,
             appearance,
             closed: false,
             was_active: window.is_window_active(),
@@ -483,8 +601,24 @@ impl ProjectPickerCard {
         window.activate_window();
     }
 
+    /// Enter: the highlighted project, or the highlighted machine.
+    fn pick_highlighted(&mut self, cx: &mut Context<Self>) {
+        if let Some(choice) = self.machines_of.clone() {
+            if choice.machines.get(self.highlighted).is_some() {
+                let chip = self.highlighted;
+                self.close(Some((choice, chip)), cx);
+            }
+            return;
+        }
+        let rows = self.rows();
+        if let Some(row) = rows.get(self.highlighted) {
+            self.close(Some((row.clone(), row.selected)), cx);
+        }
+    }
+
     /// Closes the card, gives the chat its keyboard back and moves the draft for a pick.
     fn close(&mut self, pick: Option<(UnifiedProjectChoice, usize)>, cx: &mut Context<Self>) {
+        let picked_machine = self.machines_of.is_some();
         if self.closed {
             return;
         }
@@ -515,7 +649,7 @@ impl ProjectPickerCard {
                 let _ = chat.update(cx, |chat, cx| {
                     chat.focus_composer_from_hotkey(window, cx);
                     if let Some((row, chip)) = pick {
-                        chat.pick_draft_project(&row, chip, cx);
+                        chat.pick_draft_project(&row, chip, picked_machine, cx);
                     }
                     cx.notify();
                 });
@@ -523,8 +657,8 @@ impl ProjectPickerCard {
         });
     }
 
-    /// Up and down walk the rows; left and right change the highlighted row's machine; Escape
-    /// closes.
+    /// Up and down walk the rows, Enter in the machine list picks (the search's field takes its own
+    /// Enter), Escape closes.
     fn key(&mut self, event: &gpui::KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
         if key == "escape" {
@@ -533,30 +667,100 @@ impl ProjectPickerCard {
             self.close(None, cx);
             return;
         }
-        let rows = self.rows();
-        let Some(row) = rows.get(self.highlighted) else {
+        let count = self.row_count();
+        if count == 0 {
             return;
-        };
+        }
         match key {
             "up" => self.highlighted = self.highlighted.saturating_sub(1),
-            "down" => self.highlighted = (self.highlighted + 1).min(rows.len() - 1),
-            "left" | "right" if row.machines.len() > 1 => {
-                let selected = move_project_choice_machine(row, key == "right");
-                let repo_key = row.repo_key.clone();
-                if let Some(choice) = self
-                    .choices
-                    .iter_mut()
-                    .find(|choice| choice.repo_key == repo_key)
-                {
-                    choice.selected = selected;
-                }
-            }
+            "down" => self.highlighted = (self.highlighted + 1).min(count - 1),
+            "enter" if self.machines_of.is_some() => self.pick_highlighted(cx),
             _ => return,
         }
         cx.stop_propagation();
         window.prevent_default();
         self.scroll.scroll_to_item(self.highlighted);
         cx.notify();
+    }
+
+    /// The machine list's rows: each machine that has the draft's project, the draft's ticked.
+    fn render_machine_rows(
+        &self,
+        choice: &UnifiedProjectChoice,
+        p: &ChatAppearance,
+        wash: gpui::Hsla,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let s = p.scale;
+        choice
+            .machines
+            .iter()
+            .enumerate()
+            .map(|(index, machine)| {
+                let on = index == self.highlighted;
+                let pick = choice.clone();
+                div()
+                    .id(("chat-draft-machine-row", index))
+                    .role(gpui::Role::Button)
+                    .aria_label(machine.label.clone())
+                    .min_h(px(ROW_HEIGHT * s))
+                    .px(px(8.0 * s))
+                    .flex()
+                    .items_center()
+                    .gap(px(8.0 * s))
+                    .rounded(px(6.0 * s))
+                    .text_size(px(13.0 * s))
+                    .text_color(p.foreground)
+                    .when(!machine.connected, |row| row.opacity(0.45))
+                    .when(machine.connected, |row| {
+                        row.chat_cursor_pointer().hover(move |style| style.bg(wash))
+                    })
+                    .when(on, |row| row.bg(wash))
+                    .child(
+                        svg()
+                            .path(if machine.machine_id == ghostex_gx_core::LOCAL_MACHINE_ID {
+                                "titlebar/device-desktop.svg"
+                            } else {
+                                "titlebar/server.svg"
+                            })
+                            .size(px(13.0 * s))
+                            .flex_shrink_0()
+                            .text_color(p.muted),
+                    )
+                    .child(
+                        div()
+                            .flex_1()
+                            .min_w_0()
+                            .overflow_hidden()
+                            .text_ellipsis()
+                            .whitespace_nowrap()
+                            .child(machine.label.clone()),
+                    )
+                    .when(!machine.connected, |row| {
+                        row.child(
+                            div()
+                                .flex_shrink_0()
+                                .text_size(px(11.5 * s))
+                                .text_color(p.muted)
+                                .child("Not connected"),
+                        )
+                    })
+                    .when(index == choice.selected, |row| {
+                        row.child(
+                            svg()
+                                .path("titlebar/check.svg")
+                                .size(px(13.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.muted),
+                        )
+                    })
+                    .on_click(cx.listener(move |card, _, _, cx| {
+                        cx.stop_propagation();
+                        card.close(Some((pick.clone(), index)), cx);
+                    }))
+                    .into_any_element()
+            })
+            .collect()
     }
 }
 
@@ -573,42 +777,12 @@ impl Render for ProjectPickerCard {
             .map(|(index, row)| {
                 let on = index == highlighted;
                 let pick_row = row.clone();
-                let chips = (row.machines.len() > 1
-                    || row
-                        .machines
-                        .first()
-                        .map(|machine| machine.machine_id.as_str())
-                        != Some(ghostex_gx_core::LOCAL_MACHINE_ID))
-                .then(|| {
+                let note = (!row.has_sessions).then(|| {
                     div()
-                        .flex()
                         .flex_shrink_0()
-                        .items_center()
-                        .gap(px(3.0 * s))
-                        .children(row.machines.iter().enumerate().map(|(chip, machine)| {
-                            let selected = chip == row.selected;
-                            let chip_row = row.clone();
-                            div()
-                                .id(format!("chat-draft-project-{index}-chip-{chip}"))
-                                .role(gpui::Role::Button)
-                                .aria_label(machine.label.clone())
-                                .h(px(20.0 * s))
-                                .px(px(6.0 * s))
-                                .flex()
-                                .items_center()
-                                .rounded(px(5.0 * s))
-                                .text_size(px(11.5 * s))
-                                .border_1()
-                                .border_color(if selected { p.muted } else { edge })
-                                .text_color(if selected { p.primary } else { p.muted })
-                                .when(!machine.connected, |chip| chip.opacity(0.45))
-                                .when(machine.connected, |chip| chip.chat_cursor_pointer())
-                                .child(machine.label.clone())
-                                .on_click(cx.listener(move |card, _, _, cx| {
-                                    cx.stop_propagation();
-                                    card.close(Some((chip_row.clone(), chip)), cx);
-                                }))
-                        }))
+                        .text_size(px(11.5 * s))
+                        .text_color(p.muted)
+                        .child("No sessions")
                 });
                 div()
                     .id(("chat-draft-project-row", index))
@@ -634,7 +808,7 @@ impl Render for ProjectPickerCard {
                             .whitespace_nowrap()
                             .child(row.label.clone()),
                     )
-                    .children(chips)
+                    .children(note)
                     .on_click(cx.listener(move |card, _, _, cx| {
                         cx.stop_propagation();
                         let chip = pick_row.selected;
@@ -643,7 +817,12 @@ impl Render for ProjectPickerCard {
                     .into_any_element()
             })
             .collect();
-        let empty = rows.is_empty();
+        let machines_of = self.machines_of.clone();
+        let rows_view = match &machines_of {
+            Some(choice) => self.render_machine_rows(choice, &p, wash, cx),
+            None => rows_view,
+        };
+        let empty = rows_view.is_empty();
         div()
             .id("chat-draft-project-picker")
             .role(gpui::Role::Dialog)
@@ -659,37 +838,39 @@ impl Render for ProjectPickerCard {
             .font_family(p.font.clone())
             .text_color(p.foreground)
             .capture_key_down(cx.listener(Self::key))
-            .child(
-                div()
-                    .h(px(SEARCH_HEIGHT * s))
-                    .flex_shrink_0()
-                    .px(px(10.0 * s))
-                    .flex()
-                    .items_center()
-                    .gap(px(6.0 * s))
-                    .border_b_1()
-                    .border_color(edge)
-                    .child(
-                        svg()
-                            .path("titlebar/search.svg")
-                            .size(px(13.0 * s))
-                            .flex_shrink_0()
-                            .text_color(p.muted),
-                    )
-                    .child(
-                        div().flex_1().min_w_0().child(
-                            Input::new(&self.input)
-                                .appearance(false)
-                                .bordered(false)
-                                .focus_bordered(false)
-                                .w_full()
-                                .p_0()
-                                .text_size(px(13.0 * s))
-                                .text_color(p.foreground)
-                                .placeholder_color(p.muted.opacity(0.6)),
+            .when(machines_of.is_none(), |card| {
+                card.child(
+                    div()
+                        .h(px(SEARCH_HEIGHT * s))
+                        .flex_shrink_0()
+                        .px(px(10.0 * s))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .border_b_1()
+                        .border_color(edge)
+                        .child(
+                            svg()
+                                .path("titlebar/search.svg")
+                                .size(px(13.0 * s))
+                                .flex_shrink_0()
+                                .text_color(p.muted),
+                        )
+                        .child(
+                            div().flex_1().min_w_0().child(
+                                Input::new(&self.input)
+                                    .appearance(false)
+                                    .bordered(false)
+                                    .focus_bordered(false)
+                                    .w_full()
+                                    .p_0()
+                                    .text_size(px(13.0 * s))
+                                    .text_color(p.foreground)
+                                    .placeholder_color(p.muted.opacity(0.6)),
+                            ),
                         ),
-                    ),
-            )
+                )
+            })
             .child(
                 div()
                     .id("chat-draft-project-rows")

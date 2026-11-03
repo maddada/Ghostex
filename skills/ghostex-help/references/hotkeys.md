@@ -27,7 +27,7 @@ While a terminal has the keyboard, the Terminal focused binding applies instead 
 | Open Quick Access: Recent Sessions | `cmd+p` |  | `cmd+p` | `cmd+alt+shift+p` | Open Ghostex Quick Access on Recent Sessions. | `openSessionSearchPalette` |
 | Open Quick Access: Recent Projects | `cmd+alt+shift+o` |  | `cmd+alt+shift+o` |  | Open Ghostex Quick Access on Recent Projects. | `openProjectSearchPalette` |
 | Open Quick Access: Files | `cmd+o` |  | `cmd+o` | `cmd+shift+y` | Open Ghostex Quick Access on Files to find a file in your projects and open it. | `openQuickAccessFiles` |
-| New Thread in Active Project | `cmd+n` |  | `cmd+n` | `cmd+alt+shift+n` | Pick an agent, Browser, or Terminal to start in the active project. | `openNewThreadPalette` |
+| New Thread in Active Project | `cmd+n` |  | `cmd+n` | `cmd+alt+shift+n` | Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project. | `openNewThreadPalette` |
 | Open Commands Panel | `cmd+j` | `f12` | `cmd+j` | `f12` | Open the project command terminal panel (F12 always works too). When the pane is already focused, hide it; press again to show it. | `openCommandsPanel` |
 | Open Commands Panel (Second Key) | `shift+escape` |  | `shift+escape` |  | A second key that opens or hides the Commands panel, like Open Commands Panel. | `openCommandsPanelSecondKey` |
 | Open Settings | `cmd+,` |  | `cmd+,` |  | Open app settings. | `openSettings` |

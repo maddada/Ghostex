@@ -51,8 +51,11 @@ pub(crate) struct UnifiedSidebarHost {
     all_repos: Vec<UnifiedFilterOption>,
     /// Each repository's icon as last seen, for a chip whose sessions the filter has all hidden.
     repo_icons: HashMap<String, Arc<gpui::Image>>,
-    /// Where the next New session starts, while its picker is open.
+    /// The group the picker's launch goes to, set from the picker's pick as it launches.
     pub(crate) picker_target: Option<String>,
+    /// Where the next New thread picker starts: a "+" sets it; `None` starts where
+    /// `gx_store_new_session_start` says.
+    pub(crate) picker_start: Option<ghostex_gx_core::unified_sidebar::UnifiedNewSessionTarget>,
     /// A draft moving to another project, taken by the launch it asked for.
     pub(crate) pending_draft_move: Option<super::unified_new_session::PendingDraftMove>,
     /// A project picked in Quick Access whose repository the filter is set to once the list
@@ -72,6 +75,11 @@ impl UnifiedSidebarHost {
             .flat_map(|group| group.core.sessions.iter())
             .find(|session| session.row.sidebar_session_id == sidebar_session_id)
             .and_then(|session| session.row.key.clone())
+    }
+
+    /// A Quick Access pick waiting to filter the list gives way to a filter set since.
+    pub(crate) fn pending_project_clear(&mut self) {
+        self.pending_project = None;
     }
 
     /// Reads the saved state once, the first time the list is built.
@@ -543,6 +551,13 @@ impl GhostexGpuiApp {
                 host.saved.strip_expanded = !host.saved.strip_expanded;
                 host.persist();
                 cx.notify();
+                true
+            }
+            Some("unifiedNewSessionInRepo") => {
+                if let Some(key) = command["key"].as_str() {
+                    let key = key.to_string();
+                    self.open_new_session_in_repo(&key, cx);
+                }
                 true
             }
             Some("unifiedNewSession") => {

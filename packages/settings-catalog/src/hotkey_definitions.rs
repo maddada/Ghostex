@@ -246,7 +246,7 @@ pub const HOTKEY_DEFINITIONS: &[HotkeyDefinition] = &[
     HotkeyDefinition {
         id: "openNewThreadPalette",
         title: "New Thread in Active Project",
-        description: "Pick an agent, Browser, or Terminal to start in the active project.",
+        description: "Pick an agent, Browser, or Terminal to start in the active project. Press it again in the picker to choose another project.",
         default_key: "cmd+n",
         windows_linux_default_key: None,
         alternate_default_keys: &[],

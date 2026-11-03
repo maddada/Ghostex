@@ -147,23 +147,26 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             agent_id,
             account_id,
             run_location,
+            target,
         } => {
-            eprintln!("launch {agent_id} with account {account_id:?} in {run_location:?}");
+            eprintln!(
+                "launch {agent_id} with account {account_id:?} in {run_location:?} at {target:?}"
+            );
             cx.quit();
         }
         NewThreadPickerCommand::OpenCloudBoxesSettings => {
             eprintln!("open Settings > Cloud Boxes");
             cx.quit();
         }
-        NewThreadPickerCommand::NewCoordinator => {
+        NewThreadPickerCommand::NewCoordinator { .. } => {
             eprintln!("new coordinator");
             cx.quit();
         }
-        NewThreadPickerCommand::OpenBrowser => {
+        NewThreadPickerCommand::OpenBrowser { .. } => {
             eprintln!("open browser");
             cx.quit();
         }
-        NewThreadPickerCommand::CreateTerminal => {
+        NewThreadPickerCommand::CreateTerminal { .. } => {
             eprintln!("create terminal");
             cx.quit();
         }
@@ -214,8 +217,11 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
     let cloud_box = state.starts_with("boxes");
-    let run_on_shown = boxes.shows_run_on() || cloud_box;
+    // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
+    let place = state.starts_with("places") || state == "projects";
+    let run_on_shown = place || boxes.shows_run_on() || cloud_box;
     let config = NewThreadPickerConfig {
+        place: place.then(demo_place),
         palette: demo.palette,
         agents: agents.clone(),
         agents_loaded: state != "loading",
@@ -232,11 +238,18 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     };
     let (window, view) = super::open_modal_window(
         NEW_THREAD_PICKER_WIDTH,
-        new_thread_picker_window_height(agents.len(), run_on_shown),
+        new_thread_picker_window_height(agents.len(), place, run_on_shown),
         move |window, cx| cx.new(|cx| GpuiNewThreadPickerWindow::new(config, host, window, cx)),
         cx,
     );
     *slot.borrow_mut() = Some((window, view.clone()));
+    if state == "projects" {
+        let _ = window.update(cx, |_root, window, cx| {
+            view.update(cx, |picker, cx| {
+                picker.toggle_project_list(window, cx);
+            })
+        });
+    }
     if state == "boxes-ssh" {
         // A background preview draws one frame; a second one shows the chips scrolled to the pick.
         let view = view.clone();
@@ -273,5 +286,59 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
             });
         })
         .detach();
+    }
+}
+
+/// Three projects on three machines, one machine not connected, for the `places` states.
+fn demo_place() -> NewThreadPickerPlace {
+    let machine = |id: &str, label: &str, connected: bool, project: &str| NewThreadPickerMachine {
+        machine_id: id.to_string(),
+        label: label.to_string(),
+        connected,
+        project_id: project.to_string(),
+    };
+    let project =
+        |label: &str, recent: bool, has_sessions: bool, machines| NewThreadPickerProject {
+            repo_key: format!("github.com/o/{label}"),
+            label: label.to_string(),
+            has_sessions,
+            recent,
+            machines,
+            start_machine: 0,
+        };
+    NewThreadPickerPlace {
+        projects: vec![
+            project(
+                "project-b",
+                true,
+                true,
+                vec![machine("serverb", "Server B", true, "b")],
+            ),
+            project(
+                "project-a",
+                true,
+                false,
+                vec![
+                    machine("local", "MacBook", true, "a1"),
+                    machine("servera", "Server A", true, "a2"),
+                    machine("serverc", "Server C", false, "a3"),
+                ],
+            ),
+            project(
+                "dotfiles",
+                false,
+                true,
+                vec![machine("local", "MacBook", true, "d")],
+            ),
+            project(
+                "site",
+                false,
+                false,
+                vec![machine("local", "MacBook", true, "s")],
+            ),
+        ],
+        project: 1,
+        machine: 1,
+        hotkey: Some("⌘N".to_string()),
     }
 }

@@ -7,7 +7,7 @@ use gpui::{
     ParentElement, Render, StatefulInteractiveElement, Styled, div, px,
 };
 use gpui_component::{h_flex, v_flex};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use ghostex_gx_core::unified_sidebar::UnifiedStatus;
 
@@ -244,54 +244,18 @@ impl GhostexGpuiApp {
             .into_any_element()
     }
 
-    /// The "+" on a header: the New session picker in that project when one machine has it, or a
-    /// menu of its machines when several do.
+    /// The "+" on a header: the New thread picker on that project, on the machine it starts on.
+    ///
+    /// CDXC:Sidebar 2026-11-03 DECISION:
+    /// User (Q1167, the page's "+" opens the picker with the machine already chosen, unobjected): the machine is picked on the New thread picker, so the "+" no longer opens a menu of machines first. It starts on the last machine used for the project, a connected one when there is one.
     fn unified_group_new_session(
         &mut self,
         repo_key: &str,
-        event: &gpui::ClickEvent,
-        scale: f32,
-        window: &mut gpui::Window,
+        _event: &gpui::ClickEvent,
+        _scale: f32,
+        _window: &mut gpui::Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let choices = self.gx_store_project_choices();
-        let Some(choice) = choices.iter().find(|choice| choice.repo_key == repo_key) else {
-            return;
-        };
-        let reachable: Vec<_> = choice
-            .machines
-            .iter()
-            .filter(|machine| machine.connected)
-            .collect();
-        match reachable.as_slice() {
-            [] => {}
-            [machine] => {
-                let (machine_id, project_id) =
-                    (machine.machine_id.clone(), machine.project_id.clone());
-                self.open_new_session_in(&machine_id, &project_id, cx);
-            }
-            machines => {
-                let selected = choice
-                    .selected_machine()
-                    .map(|chip| chip.machine_id.as_str());
-                let menu = Value::Array(
-                    machines
-                        .iter()
-                        .map(|machine| {
-                            json!({
-                                "label": machine.label,
-                                "checked": selected == Some(machine.machine_id.as_str()),
-                                "command": {
-                                    "type": "unifiedNewSession",
-                                    "machineId": machine.machine_id,
-                                    "projectId": machine.project_id,
-                                },
-                            })
-                        })
-                        .collect(),
-                );
-                Self::show_native_sidebar_menu(&menu, event.position(), scale, window, cx);
-            }
-        }
+        self.open_new_session_in_repo(repo_key, cx);
     }
 }
