@@ -485,15 +485,9 @@ impl GhostexGpuiApp {
         cx: &mut gpui::Context<Self>,
     ) {
         let sidebar_id = key.to_sidebar_session_id();
-        if !self.dispatch_gpui_status_activation(&sidebar_id, cx) {
-            return;
-        }
-        let request_id = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |elapsed| elapsed.as_micros() as u64);
-        self.gx_store_note_local_sidebar_reveal(&sidebar_id, request_id);
-        self.gx_store_note_sidebar_reveal(&sidebar_id, request_id, cx);
-        self.gx_store_sidebar_state_changed(cx);
+        // Switches the sidebar to the session's computer and reveals its row, the way a
+        // notification click does (gx_store/activation_focus.rs).
+        let _ = self.dispatch_gpui_status_activation(&sidebar_id, cx);
     }
 
     /// A finished tool of a call on another computer that names a session to show (`show`, sent
