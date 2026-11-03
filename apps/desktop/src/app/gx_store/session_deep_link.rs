@@ -166,32 +166,14 @@ impl GhostexGpuiApp {
         window: &mut Window,
         cx: &mut gpui::Context<Self>,
     ) {
-        let row_id = session.to_sidebar_session_id();
-        let target_row = row_id.clone();
+        let target_row = session.to_sidebar_session_id();
         self.activate_session_in_its_window(&target_row, window, cx, move |app, cx| {
-            app.select_session_link_machine(&session, cx);
-            app.gx_store_flush_local_selection(cx);
             let options = RowFocusOptions {
                 keep_sleeping,
                 ..RowFocusOptions::default()
             };
-            app.gx_store_focus_session_row(&row_id, options, cx);
-            let request_id = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |elapsed| elapsed.as_micros() as u64);
-            app.gx_store_note_local_sidebar_reveal(&row_id, request_id);
-            app.gx_store_note_sidebar_reveal(&row_id, request_id, cx);
-            app.gx_store_sidebar_state_changed(cx);
+            app.gx_store_show_session_on_its_machine(&session, options, cx);
         });
-    }
-
-    fn select_session_link_machine(&mut self, session: &SessionKey, cx: &mut gpui::Context<Self>) {
-        let machine_id = session
-            .machine
-            .remote_id()
-            .unwrap_or(ghostex_gx_core::LOCAL_MACHINE_ID)
-            .to_string();
-        self.gx_store_apply_sidebar_ui_intent(SidebarUiIntent::SelectMachine { machine_id }, cx);
     }
 }
 
@@ -299,7 +281,8 @@ async fn offer_restore(
         None => format!("gxserver:{}:{}", session.project_id, session.session_id),
     };
     let _ = this.update(cx, |this, cx| {
-        this.select_session_link_machine(&session, cx);
+        let machine_id = super::activation_focus::session_machine_tab(&session);
+        this.gx_store_apply_sidebar_ui_intent(SidebarUiIntent::SelectMachine { machine_id }, cx);
         this.restore_previous_session_from_history(history_id, cx);
     });
 }

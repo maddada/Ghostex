@@ -161,13 +161,16 @@ pub(crate) use sidebar_ui_storage::{
     read_preference_value, with_read_connection, with_write_connection, write_client_document_value,
 };
 
-pub(crate) use activation_focus::{menu_bar_session_focus_id, palette_session_focus_id};
+pub(crate) use activation_focus::{
+    menu_bar_session_focus_id, palette_session_focus_id, system_notification_session,
+};
 pub(crate) use agentbox::{
     AGENTBOX_STATUS_ON_OPEN, cached_agentbox_locations, invalidate_agentbox_status,
 };
 pub(crate) use capture_targets::CaptureTargetProject;
 pub(crate) use client_storage_init::initialize_client_storage_at_start;
 pub(crate) use cloud_boxes::{cloud_box_request_target, cloud_box_send_target};
+pub(crate) use focus_perform::RowFocusOptions;
 pub(crate) use host::GxStoreHost;
 pub(crate) use primary_launcher::{
     read_agent_choices, read_primary_agent_launcher_id, try_read_agent_choices, write_agent_choices,
