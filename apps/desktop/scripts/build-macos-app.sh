@@ -14,6 +14,12 @@ GPUI_LID_SLEEP_HELPER_LABEL="$GPUI_BUNDLE_ID.LidSleepHelper"
 # not make it known to Launch Services before it is installed or put in a DMG.
 APP_BUILD_DIR="$GPUI_DIR/build/macos.noindex"
 APP_PATH="$APP_BUILD_DIR/$APP_NAME.app"
+
+# CDXC:Build 2026-11-03 WHY:
+# Isolated builds stage into their own Ghostex-N.app but share one build-cache folder. A stamp for something staged inside the bundle must be per bundle, otherwise a build of Ghostex-3.app marks the new CEF framework as staged and the next build of Ghostex.app skips the copy and ships the old one.
+bundle_stamp_key() {
+	printf '%s-%s\n' "$1" "$(md5 -q -s "$APP_PATH")"
+}
 RUN_APP=0
 SOUND_SRC_DIR="$REPO_ROOT/media/sounds"
 SOUND_DEST_DIR="$APP_PATH/Contents/Resources/sidebar/sounds"
@@ -589,7 +595,7 @@ stage_gpui_ghostex_editor_app() {
 		--path "$REPO_ROOT/packages/shared" \
 		--path "$REPO_ROOT/bun.lock" \
 		--path "$REPO_ROOT/tsconfig.json")"
-	if cache_matches "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest" \
+	if cache_matches "$(bundle_stamp_key gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH)" "$editor_digest" \
 		"$GHOSTEX_EDITOR_APP_SOURCE/Contents/MacOS/GhostexEditor" \
 		"$editor_executable" \
 		"$GHOSTEX_EDITOR_APP_DEST/Contents/Resources/Web/index.html"; then
@@ -621,7 +627,7 @@ stage_gpui_ghostex_editor_app() {
 		echo "Packaged GhostexEditor helper does not contain $GHOSTEX_MACOS_ARCH: $editor_executable" >&2
 		exit 1
 	fi
-	write_cache_stamp "gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH" "$editor_digest"
+	write_cache_stamp "$(bundle_stamp_key gpui-ghostex-editor-app-$GHOSTEX_MACOS_ARCH)" "$editor_digest"
 }
 
 stage_gpui_lid_sleep_helper() {
@@ -963,7 +969,7 @@ stage_gpui_app_icon() {
 
 	local icon_digest
 	icon_digest="$(fingerprint_inputs --value "gpui-app-icon-v1" --path "$writer" --path "$APP_ICON_SOURCE_SET")"
-	if cache_matches "gpui-app-icon" "$icon_digest" "$APP_ICON_DEST"; then
+	if cache_matches "$(bundle_stamp_key gpui-app-icon)" "$icon_digest" "$APP_ICON_DEST"; then
 		return 0
 	fi
 	mkdir -p "$(dirname "$APP_ICON_DEST")"
@@ -972,7 +978,7 @@ stage_gpui_app_icon() {
 		echo "App icon encoder did not write $APP_ICON_DEST" >&2
 		exit 1
 	fi
-	write_cache_stamp "gpui-app-icon" "$icon_digest"
+	write_cache_stamp "$(bundle_stamp_key gpui-app-icon)" "$icon_digest"
 }
 
 sign_gpui_app_bundle() {
@@ -1074,14 +1080,14 @@ stage_cef_framework_if_changed() {
 		--value "libcef=$(path_identity "$CEF_FRAMEWORK/Chromium Embedded Framework")" \
 		--path "$CEF_DISTRIBUTION_DIR/archive.json" \
 		--path "$CEF_FRAMEWORK/Resources/Info.plist")"
-	if cache_matches "cef-framework-staged" "$framework_digest" \
+	if cache_matches "$(bundle_stamp_key cef-framework-staged)" "$framework_digest" \
 		"$target_dir/Chromium Embedded Framework" \
 		"$target_dir/Resources/Info.plist"; then
 		echo "CEF framework is current in the staged bundle; skipping copy."
 		return 0
 	fi
 	stage_framework_directory "$CEF_FRAMEWORK" "$target_dir"
-	write_cache_stamp "cef-framework-staged" "$framework_digest"
+	write_cache_stamp "$(bundle_stamp_key cef-framework-staged)" "$framework_digest"
 }
 
 stage_code_server_payload_if_changed() {
@@ -1100,7 +1106,7 @@ stage_code_server_payload_if_changed() {
 		--value "node=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/node")" \
 		--value "vscode=$(path_identity "$WEB_SOURCE_DIR/code-server/lib/vscode/out/server-main.js")" \
 		--path "$(cache_stamp_path "code-server-package-$GHOSTEX_MACOS_ARCH")")"
-	if cache_matches "code-server-staged" "$payload_digest" \
+	if cache_matches "$(bundle_stamp_key code-server-staged)" "$payload_digest" \
 		"$target_dir/out/node/entry.js" \
 		"$target_dir/lib/node" \
 		"$target_dir/lib/vscode/out/server-main.js"; then
@@ -1109,7 +1115,7 @@ stage_code_server_payload_if_changed() {
 	fi
 	rsync -a --delete "$WEB_SOURCE_DIR/code-server/" "$target_dir/"
 	chmod 755 "$target_dir/lib/node"
-	write_cache_stamp "code-server-staged" "$payload_digest"
+	write_cache_stamp "$(bundle_stamp_key code-server-staged)" "$payload_digest"
 }
 
 # CDXC:Build 2026-09-23 WHY:
