@@ -241,3 +241,169 @@ fn an_unconfirmed_card_is_neither_working_nor_a_failed_send() {
     assert!(!is_working(&state));
     assert_eq!(card_prompt_id(&state), None);
 }
+
+#[test]
+fn retained_question_and_approval_cards_wait_for_live_confirmation() {
+    use ghostex_gx_chat_core::{ChatCore, ChatFrame, Event, RpcOutcome, StartConfig};
+
+    fn drive(core: &mut ChatCore, event: Event) {
+        let mut pending = core.handle(event, context());
+        while let Some(effect) = pending.pop() {
+            let keys = match effect {
+                Effect::ReadStorage { key } => vec![key],
+                Effect::ReadStorageBatch { keys } => keys,
+                _ => continue,
+            };
+            for key in keys {
+                pending.extend(core.handle(Event::StorageLoaded { key, value: None }, context()));
+            }
+        }
+    }
+
+    fn seed(core: &mut ChatCore, result: Value) {
+        let request_id = core.state().messages.reads[0].request_id;
+        drive(
+            core,
+            Event::RpcSettled {
+                request_id,
+                outcome: Box::new(RpcOutcome::Ok { result }),
+            },
+        );
+    }
+
+    for prompt in [
+        json!({"kind":"question","toolUseId":"ask-1","questions":[{"question":"Continue?","options":[{"label":"Yes"}]}]}),
+        json!({"kind":"approval","toolUseId":"ask-1","tool":"edit","summary":"Change a file"}),
+    ] {
+        let retained = json!({
+            "projectId":"project-1", "sessionId":"session-1", "serverId":"server-1",
+            "protocolVersion":1, "epoch":1, "seq":1, "status":"ready", "prompt":prompt,
+            "messages":[{"id":"m1","role":"user","source":"transcript","blocks":[{"type":"text","text":"Hello"}]}],
+            "hasMore":false, "beforeOffset":0,
+        });
+        let record = json!({
+            "key":"retained-1", "savedAt":context().now_ms as i64,
+            "requestedWindow":300, "snapshot":retained,
+        })
+        .to_string();
+        for source in ["stored-before-boot", "stored-after-boot", "initial"] {
+            for confirmation in ["snapshot", "replaced", "state", "seed"] {
+                for still_open in [false, true] {
+                    let mut core = ChatCore::new();
+                    drive(
+                        &mut core,
+                        Event::Start(Box::new(StartConfig {
+                            project_id: "project-1".into(),
+                            session_id: "session-1".into(),
+                            initial_snapshot: (source == "initial").then(|| retained.clone()),
+                            ..Default::default()
+                        })),
+                    );
+                    if source == "stored-before-boot" {
+                        drive(
+                            &mut core,
+                            Event::RetainedSnapshotLoaded {
+                                value: Some(record.clone()),
+                            },
+                        );
+                    }
+                    drive(&mut core, Event::ComposerBootRead(Box::default()));
+                    if source == "stored-after-boot" {
+                        drive(
+                            &mut core,
+                            Event::RetainedSnapshotLoaded {
+                                value: Some(record.clone()),
+                            },
+                        );
+                    }
+                    assert_eq!(core.state().messages.list.len(), 1, "{source}");
+                    assert!(!core.document().question_card.visible, "{source}: {prompt}");
+                    assert_eq!(
+                        core.state()
+                            .messages
+                            .snapshot
+                            .as_ref()
+                            .unwrap()
+                            .result
+                            .state
+                            .prompt
+                            .as_ref(),
+                        Some(&prompt),
+                        "retention keeps the original fold"
+                    );
+
+                    // Appends confirm transcript rows, not whether a blocking prompt is still open.
+                    drive(
+                        &mut core,
+                        Event::Frame(Box::new(ChatFrame::Appended(Box::new(
+                            serde_json::from_value(json!({
+                                "projectId":"project-1", "sessionId":"session-1",
+                                "serverId":"server-1", "protocolVersion":1, "epoch":1, "seq":2, "messages":[],
+                            })).unwrap(),
+                        )))),
+                    );
+                    assert!(!core.document().question_card.visible);
+
+                    let mut live = retained.clone();
+                    live["seq"] = json!(3);
+                    live["prompt"] = if still_open {
+                        prompt.clone()
+                    } else {
+                        Value::Null
+                    };
+                    match confirmation {
+                        "seed" => seed(&mut core, live),
+                        "state" => drive(
+                            &mut core,
+                            Event::Frame(Box::new(ChatFrame::State(Box::new(
+                                serde_json::from_value(live).unwrap(),
+                            )))),
+                        ),
+                        _ => {
+                            let frame = Box::new(serde_json::from_value(live).unwrap());
+                            let frame = if confirmation == "snapshot" {
+                                ChatFrame::Snapshot(frame)
+                            } else {
+                                ChatFrame::Replaced(frame)
+                            };
+                            drive(&mut core, Event::Frame(Box::new(frame)));
+                        }
+                    }
+                    let card = &core.document().question_card;
+                    assert_eq!(
+                        card.visible, still_open,
+                        "{source}/{confirmation}: {prompt}"
+                    );
+                    assert!(!card.loading, "{source}/{confirmation}: {prompt}");
+                }
+            }
+        }
+
+        // A late storage answer must not replace a prompt a seed read already confirmed.
+        for still_open in [false, true] {
+            let mut core = ChatCore::new();
+            drive(&mut core, Event::Start(Box::default()));
+            drive(&mut core, Event::ComposerBootRead(Box::default()));
+            let mut live = retained.clone();
+            live["prompt"] = if still_open {
+                let mut current = prompt.clone();
+                current["toolUseId"] = json!("ask-2");
+                current
+            } else {
+                Value::Null
+            };
+            seed(&mut core, live.clone());
+            drive(
+                &mut core,
+                Event::RetainedSnapshotLoaded {
+                    value: Some(record.clone()),
+                },
+            );
+            assert_eq!(core.document().question_card.visible, still_open);
+            assert_eq!(
+                core.state().session.prompt.as_ref(),
+                live["prompt"].as_object().map(|_| &live["prompt"])
+            );
+        }
+    }
+}

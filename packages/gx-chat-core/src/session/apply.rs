@@ -310,10 +310,16 @@ pub fn apply_draft_agent_carriage(state: &mut ChatState, result: &ReadSessionCha
 ///
 /// `restore_presentation` is false only when the identity the host had cached disagrees with the
 /// one the snapshot carries, which is the case a stale presentation cache must not win.
+///
+/// CDXC:SessionChat 2026-11-03 WHY:
+/// A retained transcript can still carry a question or approval answered elsewhere.
+/// `restore_prompt` is false for retained folds: keep the current prompt until a live frame or
+/// tail read confirms what is still open, without rolling back a live prompt that arrived first.
 pub fn apply_authoritative(
     state: &mut ChatState,
     result: &ReadSessionChatResult,
     restore_presentation: bool,
+    restore_prompt: bool,
     context: &crate::state::ChatContext,
 ) {
     // A detail-mode history prefix survives a re-read of the same epoch when the window still
@@ -406,7 +412,9 @@ pub fn apply_authoritative(
     if let Some(working) = result.working {
         state.session.session_activity_working = working;
     }
-    state.session.prompt = result.state.prompt.clone();
+    if restore_prompt {
+        state.session.prompt = result.state.prompt.clone();
+    }
     if restore_presentation {
         apply_agent_identity(
             state,
