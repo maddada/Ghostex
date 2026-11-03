@@ -2488,7 +2488,7 @@ dependencies = [
  "log",
  "markup5ever_rcdom",
  "mermaid-rs-renderer",
- "oo7 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "oo7",
  "percent-encoding",
  "portable-pty",
  "qrcode",
@@ -3055,7 +3055,7 @@ dependencies = [
  "libc",
  "log",
  "notify-rust",
- "oo7 0.6.0 (git+https://github.com/zed-industries/oo7?rev=731c1215edb6905876c6137ab300428c7b8d7c13)",
+ "oo7",
  "open",
  "parking_lot",
  "raw-window-handle",
@@ -5291,41 +5291,6 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
-name = "oo7"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "78f2bfed90f1618b4b48dcad9307f25e14ae894e2949642c87c351601d62cebd"
-dependencies = [
- "aes",
- "ashpd",
- "async-fs",
- "async-io",
- "async-lock",
- "blocking",
- "cbc",
- "cipher",
- "digest 0.10.7",
- "endi",
- "futures-lite",
- "futures-util",
- "getrandom 0.4.3",
- "hkdf",
- "hmac",
- "md-5",
- "num",
- "num-bigint-dig",
- "pbkdf2",
- "serde",
- "serde_bytes",
- "sha2 0.10.9",
- "subtle",
- "zbus",
- "zbus_macros",
- "zeroize",
- "zvariant",
-]
 
 [[package]]
 name = "oo7"
