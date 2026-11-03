@@ -1,7 +1,7 @@
 //! The error card a failed API call becomes, and the automatic retry it shows.
 //!
 //! CDXC:SessionChat 2026-10-15 DECISION:
-//! User: "make errors like this one have a nice design please" (the plain "API Error: Can't reach the API server … (ENOTFOUND)" line a Claude turn ended with) and "i noticed you didn't retry when i got this error please fix! should've retried!". A connection or server failure the agent recorded is drawn as a compact card: an icon, a short human title, the agent's own words muted under it, and the retry gxserver runs for it (waiting for the network, the countdown, the hourly tries after the quick ones, stopped). Retry now and Stop retrying sit on the card. Once anything follows the failed row (the continuation, or the user's own message) the card collapses to one quiet line.
+//! User: "make errors like this one have a nice design please" (the plain "API Error: Can't reach the API server … (ENOTFOUND)" line a Claude turn ended with) and "i noticed you didn't retry when i got this error please fix! should've retried!". A connection or server failure the agent recorded is drawn as a compact card: an icon, a short human title, a plain sentence under it with the agent's own words behind Details (`kind_body`, 2026-11-03), and the retry gxserver runs for it (waiting for the network, the countdown, the hourly tries after the quick ones, stopped). Retry now and Stop retrying sit on the card. Once anything follows the failed row (the continuation, or the user's own message) the card collapses to one quiet line.
 //! SEE-ALSO: server/src/accounts/api_errors.rs (detection, the quick tries and `apiRetry`), apps/desktop/src/app/native_chat/api_error_card.rs and apps/mobile/app/src/chat/native/cards/ApiErrorCard.tsx (the two renderers).
 
 use ghostex_gx_protocol::{ChatBlock, ChatMessage, ChatRole};
@@ -55,6 +55,23 @@ pub fn classify_api_error(text: &str) -> (&'static str, &'static str) {
         ("overloaded", "The API is overloaded")
     } else {
         ("server", "The API had a server error")
+    }
+}
+
+/// What the card says about a failure kind, in plain words; the agent's own line goes behind the
+/// card's Details toggle.
+/// CDXC:SessionChat 2026-11-03 DECISION: User (Q1118): one plain sentence per kind replaces the agent's raw line, which moves behind Details, and "pls show the buttons on separate row from retrying in 12s... line", so the retry line sits in the card's body and Retry now / Stop retrying get the footer to themselves.
+/// SEE-ALSO: apps/desktop/src/app/native_chat/api_error_card.rs, apps/mobile/app/src/chat/native/cards/ApiErrorCard.tsx.
+fn kind_body(kind: &str) -> &'static str {
+    match kind {
+        "offline" => "Check your internet connection.",
+        "refused" => {
+            "Something on this computer, like a firewall or proxy, blocked the connection."
+        }
+        "lost" => "The connection dropped before the reply finished.",
+        "stalled" => "The reply stopped arriving.",
+        "overloaded" => "The service is busy right now.",
+        _ => "The service had a problem on its side.",
     }
 }
 
@@ -268,12 +285,19 @@ pub fn api_error_card(state: &ChatState, context: &ChatContext) -> Value {
         Some("waiting" | "busy" | "done") => "warning",
         _ => "error",
     };
+    // Only while a try is still coming: a stale "Retried at" (`done`) is amber too, but nothing is retrying.
+    let body = if matches!(status["tone"].as_str(), Some("waiting" | "busy")) {
+        format!("{} Ghostex keeps retrying.", kind_body(kind))
+    } else {
+        kind_body(kind).to_string()
+    };
     json!({
         "messageId": message_id,
         "kind": kind,
         "icon": kind_icon(kind),
         "tone": tone,
         "title": title,
+        "body": body,
         "detail": detail,
         "status": status,
         "actions": actions,

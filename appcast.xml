@@ -8,6 +8,74 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>10.44.0</title>
+            <pubDate>Tue, 03 Nov 2026 00:20:07 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.44.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>104400</sparkle:version>
+            <sparkle:shortVersionString>10.44.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.44.0
+
+## 10.44.0 - 2026-11-03
+
+**Ghostex 10.44.0 is out.** Agents on two connected computers can run sessions on each other, closing a coordinator or a busy agent asks first, Cloud Boxes is on for everyone with Instabox and Boat, agents can ask you privately for a password or key, Ghostex cleans up its old files by itself, and chat cards say what happened in plain words.
+
+### 🌐 Remote computers
+
+- **Agents control sessions on a connected computer, both ways.** A coordinator can start threads on another computer and get their reports, and that computer's agents can start, message, read, sleep, wake and close sessions on this one while the connection is up. Turn Agent access off in the machine's Edit dialog to stop it. Both computers need Ghostex 10.44 or later.
+- **The floating button's panel lists each remote machine,** with its agents when it's connected and a Connect row when it isn't, and the floating button and menu bar count only this computer and computers connected right now.
+- **The pairing QR stays hidden until you click it,** and Copy as text sits right under it.
+- **Easy Connect keeps working on the computer that hosts it,** so paired phones keep its address.
+- **Linux: every package includes tailcat,** so Easy Connect and Cloud Boxes work without installing it yourself.
+
+### 🧭 Coordinators
+
+- **Closing a coordinator or a busy agent asks first,** naming what closes, from every way to close a session. A coordinator closes its open threads with it, and restoring it from Previous Sessions brings them back under it.
+- **OpenCode coordinators start on the model and effort you choose,** with a search field for long model lists.
+- **The New Coordinator dialog's agent list closes when you pick one,** and Model and Effort appear for every agent that takes them, thanks to @OliverJEvans (#395).
+
+### ☁️ Cloud Boxes
+
+- **Cloud Boxes is on by default on every computer,** Windows included. Run a new chat on an Instabox or Boat machine: pick Cloud Box beside This folder in the new chat, choose a snapshot, provider and size with its price, and the chat opens on the box once it boots.
+- **Each box session gets its own branch,** Pull branch brings it home as a worktree project, and pictures in the first message go with it.
+- **Box sessions show in their project in the sidebar** with a cloud badge, a stopped box's chat still opens, and sending a message wakes it.
+- **The box chip in the header** shows the box's state, time and cost, with its terminal, snapshots, Open PR and Stop. Settings > Cloud Boxes sets providers, spending, timers and agent logins.
+
+### 🤖 Agents
+
+- **Agents learn what Ghostex can do from a short note** (pages, question forms, charts, its own browser, other agents), read the details from `ghostex agent-guide` and can ask Ghostex Help with `ghostex help ask`. Turn it off in Settings > Chat > Tell agents about Ghostex.
+- **Agents ask which browser you prefer for previews** once, Ghostex's own browser or your usual one, and remember the answer.
+- **Agents can ask you for a password, key or token privately.** A private card on the computer and the phone takes it, and it never goes into the chat. Settings > Secrets adds 1Password accounts to read keys from.
+- **New accounts show in the sidebar,** and the accounts area starts pinned until you unpin it.
+
+### 💬 Chat
+
+- **Chat cards say what happened in plain words,** with the agent's raw lines behind Details, retry buttons on their own row, and accounts named by email unless you hide it.
+- **The API error card says Ghostex keeps retrying** only while another try is coming.
+- **Question cards and pages use a quiet Recommended mark,** and chat pages follow the window's wallpaper tint live with a darker dark mode.
+- **A mentioned session shows its full title** in the chat box.
+- **Search by Prompt's toolbar fits its window,** switching to icons or a … menu so the search field is never cut off.
+
+### 📱 On the phone
+
+- **Reply quotes the words you selected** when you select part of a message and pick Reply.
+- **Android: Scan code reads the computer's pairing QR again,** with a coarser QR phones read easily from a screen, thanks to @knigaperevodchik (#394).
+- **Android: the terminal no longer crashes** when its history shrinks while you're scrolled up (#398).
+- **The Saved prompts sheet loads once** instead of flashing while the agent works, and the paste sheet points at Copy as text under the QR.
+
+### 🩹 Fixes and polish
+
+- **Ghostex deletes its own old files once a day:** old screenshots, logs, crash reports, backups, published pages, unread Codex copies and long-closed sessions, keeping pinned and favorite sessions and anything you pasted. Diagnostic log areas stop after 3 days at most.
+- **The Environment card in Session details shows the session's RAM.**
+- **Dialogs inside Settings use your theme's raised surface** instead of black.
+- **macOS: Caps Lock types capitals in terminals.**
+- **Windows: Antigravity's background checks no longer pop up a terminal window,** thanks to @DaveW001 (#397).
+- **A forked session stays in Previous Sessions** when it kept working after the fork.
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.44.0/ghostex-10.44.0-arm64.dmg" length="52193370" type="application/octet-stream" sparkle:edSignature="6GkMq1bUap2sZL6q4A7JBKIYb+x9Hqq4xefqskonnT5LUrpnhIjiSfBAdxGVUpzHeHu+sr3RB8x9dHcBykG6Dg=="/>
+        </item>
+        <item>
             <title>10.43.0</title>
             <pubDate>Mon, 02 Nov 2026 03:41:47 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.43.0</sparkle:fullReleaseNotesLink>
@@ -305,68 +373,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.40.0/ghostex-10.40.0-arm64.dmg" length="49300010" type="application/octet-stream" sparkle:edSignature="UwaES4ng1a6vwe2dhmFUImTcxW7USGO3Dm9NesulWWEKuiYwZF8oFSY9tkERox1jrDU8r8WE7QtqPd/FJ8QBCQ=="/>
         </item>
         <item>
-            <title>10.39.0</title>
-            <pubDate>Wed, 28 Oct 2026 07:17:36 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.39.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>103900</sparkle:version>
-            <sparkle:shortVersionString>10.39.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.39.0
-
-## 10.39.0 - 2026-10-28
-
-**Ghostex 10.39.0 is out.** Linux works like Windows from the first run on Omarchy and other Hyprland desktops, and the AppImage updates itself. Agents show as pills you can click and mention with +, DeepSeek Harness joins the agents, Orchestrators are Coordinators again, the bar above the composer gets two rows, a Resources pill and a Links pill, and GPT 6.1 Terra joins Codex.
-
-### 🐧 Linux
-
-- **The AppImage updates itself like Windows:** Download update fetches the new version, checks its signature against the Ghostex key built into the app, and Restart and update swaps it in and relaunches, going back to the old version if anything fails. deb, rpm, tarball and AUR installs keep the update notice.
-- **Omarchy and Hyprland treat Ghostex's small windows as floating:** the setup window, popups, menus, tooltips, the Running Agents panel and Docs note windows no longer tile, and a dialog's close button, toast buttons and chat suggestions can be clicked.
-- **Omarchy's Super+C and Super+V copy and paste in Ghostex** without stopping a running command; Ctrl+Insert and Shift+Insert also copy and paste in text fields on Windows and Linux.
-- **No light flash at launch on a dark desktop,** and the setup's System appearance follows the desktop.
-- **Links open in Wayland-only browsers:** the intro video, Settings links, Open In, Reveal, the update dialog and sign-ins inside agent sessions no longer do nothing on Omarchy.
-- **Dropping a file onto a chat or the terminal works on Hyprland,** from X11 and Wayland file managers.
-- **Clicking a notification opens its session or browser tab,** and browser page notifications show once.
-- **Middle-click pastes the selection in the terminal,** as in other Linux terminals.
-- **Computer Use can see the screen on Hyprland and Sway.**
-- **When the background service can't start, the sidebar says why within seconds** (a taken port names the program holding it) with Try again, on Linux and macOS.
-- **First run on Linux:** a folder chooser when the system has none, the AppImage adds Ghostex to the app launcher, and the ghostex command goes to ~/.local/bin; Settings > Integrations says why the command isn't usable and gives the PATH line to copy.
-- **Looking for agents never installs them:** Omarchy's install-on-first-run commands count as not installed until you start that agent.
-
-### 🤖 Agents
-
-- **Agents show as pills:** a mention of another session, and every message between agents, shows a +Session pill with the agent's logo, and a click switches to that session.
-- **Type + in the chat box to mention another agent in the project;** Copy ID copies a session's mention to paste into another chat, and Copy Details tells the agent to run `ghostex agents`.
-- **DeepSeek Harness is a supported agent** (under More agents): Chat View, install and update from Settings > Agents through mise, and its models and reasoning levels in the model menu and the chat's model pill.
-- **Orchestrators are called Coordinators again,** and `ghostex coordinator` is the command (`ghostex orchestrator` keeps working). The chat's Threads pill is now Workers.
-- **GPT 6.1 Terra joins the Codex models,** and Cursor adds DeepSeek V4.1 Flash 1017 with its current ids and effort levels. A small ⓘ beside Codex's Fast notes that Codex keeps Fast for new sessions too.
-
-### 💬 Chat
-
-- **The bar above the composer takes two rows when the working text doesn't fit:** the current action on top, the pills below, with a short animation, and it doesn't jump back and forth during a turn. Pills that don't fit scroll with a soft fade at the edge.
-- **A Links pill in that bar replaces the links in the chat's top bar,** with one link's ID and +N (`SPX-123 +2`); the sidebar's links badge shows the same, and a pinned link becomes the badge's ID.
-- **Suggested links open unfolded when a session has 2 or fewer links.**
-- **A Resources pill opens Chat Resources,** and the ? pill jumps from question to question. Rows show how long ago they were asked, without question numbers, and a button puts a question off For later or brings it back.
-- **The Accounts & limits panel is about half as tall:** each account's 5h, 7d and model limits sit in one row, with reset times in their tooltips.
-- **@ shows a file pill only for a file or folder that exists in the project,** so npm packages and handles stay plain text.
-- **Pages agents show in the chat fit a phone:** columns stack, small pills stay on one line, and wide mockups scroll inside their own box.
-- **The Running Agents panel opens with its top 3 projects expanded,** and with every session-card hover button turned off, hovering a sidebar row no longer changes it.
-
-### 🔌 Remote computers
-
-- **A machine that points back at this computer says so** and never installs or updates a background service there.
-- **Editing a machine reconnects at once,** the Settings tile shows why a machine can't connect, ~/ paths work when adding a remote project, and removing a machine closes its connection.
-
-### 🩹 Fixes and polish
-
-- **Answering Claude's question and approval cards works with Claude Code 2.1.311's files panel open,** No clears the approval, and a refused tool call ends the turn instead of leaving the session working.
-- **Picking GPT 6.1 Terra works,** new Codex sessions show their model before the first message, and a stale red Copy Report clears once an approval closes.
-- **On the phone, Send stays above the keyboard** however long the message is.
-- **Files no longer gets stuck on a file that was deleted.**
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.39.0/ghostex-10.39.0-arm64.dmg" length="49157838" type="application/octet-stream" sparkle:edSignature="jiiqxf+G2xB9w601tjWZUw1Dah1+4hfhUroF7Yujo1Mg3t1boCo59pL4YBnxthNfQeYIUM4Uxp7nxlj4q6uPAQ=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -378,6 +384,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: MH/QXpQoS9ysgt9Im3MjopdfWtWNa+GB+zyye9fTCkCX9wmvDRsrck0M9QXRykhM9CMYK/jIrWOis7Tjx+1qDg==
-length: 36816
+edSignature: wmnxymCYuHkQ52IXdJaJ08Njz0FdL5VsfHarJO82C6/P7CG+Cgf+HxNxaA78UDR0RdRbvrX34IoSaKORdXNQBw==
+length: 36400
 -->

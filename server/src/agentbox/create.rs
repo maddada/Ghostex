@@ -44,8 +44,9 @@ pub(crate) struct BoxLaunch {
 
 /// Fills `runtimeSettings.agentbox` and returns the launch plan that runs the agent in a new box.
 ///
-/// CDXC:AgentBox 2026-10-01 DECISION:
-/// User: "let's try just use agentbox cli for now". Ghostex integrates by running the `agentbox` CLI in the session's terminal, not through agentbox's hub REST API and not by reimplementing boxes. Account wrapping is skipped (the box has its own sign-in), and agentbox, not Ghostex, carries the agent's settings, skills and Codex sign-in into the box.
+/// CDXC:AgentBox 2026-11-02 DECISION:
+/// User (D3 "into cloud box menu", Q996 "gxserver on box", Q997 "advanced"): Instabox and Boat boxes are Cloud Boxes that Ghostex drives itself (server/src/cloud_boxes/, gxserver on the box); the `agentbox` CLI stays only for the older places (Docker, your SSH server, Hetzner, Vercel, Daytona, E2B, DigitalOcean), set up under Settings > Cloud Boxes > Advanced and picked under More providers in a new chat's Cloud Box picker (and on New Thread's Run on row). This supersedes the 2026-10-01 "let's try just use agentbox cli for now", which still describes how those places run: Ghostex runs the `agentbox` CLI in the session's terminal, not agentbox's hub REST API, account wrapping is skipped (the box has its own sign-in), and agentbox, not Ghostex, carries the agent's settings, skills and Codex sign-in into the box.
+/// SEE-ALSO: packages/gx-chat-core/src/menus/cloud_box.rs (More providers), packages/gx-chat-core/src/menus/run_location.rs.
 pub(crate) fn prepare_box_launch(
     provider: &str,
     family: &str,

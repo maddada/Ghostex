@@ -947,6 +947,19 @@ fn build_session(
             }),
         );
     }
+    // A Cloud Box session's badge, drawn by native_sidebar/cloud_box.rs.
+    if let Some(cloud_box) = &row.cloud_box {
+        details.insert(
+            "cloudBox".to_string(),
+            json!({
+                "boxId": cloud_box.box_id,
+                "boxName": cloud_box.box_name,
+                "provider": cloud_box.provider,
+                "state": cloud_box.state,
+                "tooltip": cloud_box.tooltip(),
+            }),
+        );
+    }
     // A Claude cloud session, drawn by native_sidebar/claude_cloud.rs.
     if let Some(cloud) = &row.claude_cloud {
         details.insert(

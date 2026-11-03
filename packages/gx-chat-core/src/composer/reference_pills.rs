@@ -312,16 +312,9 @@ pub fn reference_display_label(label: &str, path: &str, kind: ReferenceKind) -> 
     if kind == ReferenceKind::Skill || kind == ReferenceKind::Comment {
         return label.to_string();
     }
+    // CDXC:SessionChat 2026-11-02 DECISION: User: a session mentioned in the chat box shows its full name, as the sent message's pill does ("Restoring lost Main Coordinator thread", not "Restoring lost Ma…"). Only the chat box's own width may wrap it, never the 18-character cap other pills keep.
     if kind == ReferenceKind::Session {
-        let shown = crate::transcript::session_mentions::pill_label(label);
-        let characters: Vec<char> = shown.chars().collect();
-        if characters.len() <= REFERENCE_PILL_MAX_LABEL_CHARACTERS {
-            return shown;
-        }
-        let out: String = characters[..REFERENCE_PILL_MAX_LABEL_CHARACTERS - 1]
-            .iter()
-            .collect();
-        return format!("{}\u{2026}", out.trim_end());
+        return crate::transcript::session_mentions::pill_label(label);
     }
     let path_label = reference_path_label(label, path, kind);
     let shown = path_label.as_deref().unwrap_or(label);
@@ -744,11 +737,11 @@ mod session_chip_tests {
         );
         assert_eq!(
             reference_display_label(
-                "Model and effort inventory",
+                "Restoring lost Main Coordinator thread",
                 "S90:P3lv0:G1",
                 ReferenceKind::Session
             ),
-            "Model and effort\u{2026}"
+            "Restoring lost Main Coordinator thread"
         );
     }
 }

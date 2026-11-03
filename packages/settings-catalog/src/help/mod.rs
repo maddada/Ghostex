@@ -145,6 +145,11 @@ fn number_range(key: &str) -> Option<NumberRange> {
         step: Some(step),
     };
     Some(match key {
+        // Dollars a month; 0 is no cap. Idle and delete take any whole number in range, the
+        // Settings menus list the common ones.
+        "cloudBoxesMonthlyCapUsd" => stepped(0.0, 10_000.0, 1.0),
+        "cloudBoxesIdleStopMinutes" => stepped(1.0, 24.0 * 60.0, 1.0),
+        "cloudBoxesDeleteStoppedAfterDays" => stepped(1.0, 365.0, 1.0),
         "agentManagerZoomPercent" => range(
             MIN_AGENT_MANAGER_ZOOM_PERCENT,
             MAX_AGENT_MANAGER_ZOOM_PERCENT,

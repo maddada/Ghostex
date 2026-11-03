@@ -3,8 +3,8 @@
 use super::dialog::{AutomationDialog, DialogField, DialogSelect};
 use super::drafts::{ExecutionKind, ScheduleMode, SchedulePreset};
 use crate::app::window::{
-    ModalButtonTone, ModalSegmentedItem, capture_child_bounds, hsla, modal_action_button,
-    modal_error, modal_footer, modal_header, modal_hint, modal_section_title,
+    ModalButtonTone, ModalSegmentedItem, capture_child_bounds, hide_hosted_modal_popover, hsla,
+    modal_action_button, modal_error, modal_footer, modal_header, modal_hint, modal_section_title,
     modal_segmented_control, modal_select_menu, modal_select_trigger, modal_shell_scrolling,
     modal_spinner, modal_switch, modal_text_area, modal_text_input,
 };
@@ -307,7 +307,15 @@ impl AutomationDialog {
         modal_footer(vec![cancel, save])
     }
 
+    /// The open select's list. Under window glass a list draws in a frosted window of its own that
+    /// only a closed select's render hides, so every closed select is hidden here (issue #395: a
+    /// picked row left its list on screen).
     fn open_menu(&self, window: &Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+        for kind in DialogSelect::ALL {
+            if !self.select(kind).open {
+                hide_hosted_modal_popover(kind.menu_id(), window, cx);
+            }
+        }
         let kind = DialogSelect::ALL
             .into_iter()
             .find(|kind| self.select(*kind).open)?;

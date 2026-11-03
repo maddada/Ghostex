@@ -286,6 +286,13 @@ view from the strip.
   Terminal), so the other hotkeys apply, and pressed again puts it back in the
   terminal that had it last (Focus Last Terminal). While the VS Code view itself has keyboard focus, Cmd+N and
   Cmd+Shift+O go to VS Code instead (New File, Go to Symbol).
+  Closing a session that is busy (an agent in the middle of a turn, waiting on
+  your answer to a question or approval, or still running background work) or
+  a coordinator asks first, naming what closes; an idle session closes at once.
+  Every way to close asks the same way: the sidebar's Close button and menu, a
+  tab's x, Cmd+W, the tab menu's Close Others, Left and Right, Running Sessions,
+  and the phone's Close. A closed session's conversation stays in Previous
+  Sessions, where you can restore it.
   Starting a new session always creates a new one; empty sessions stay in the
   sidebar until you close them. An Advanced setting, Close empty sessions when
   starting a new one (`closeEmptySessionsOnNew`, off by default), changes that:
@@ -407,6 +414,12 @@ view from the strip.
   permissions > Forget all answers lets every site ask again (if that workspace's Browser
   hasn't opened a page yet, it applies when it does). If the sign-in gave up
   while the question was open, try it again.
+  Agents open pages in (Settings > Files & Links > Browser, default Ask) is
+  where an agent opens a page it built for you, such as a website preview: the
+  Ghostex Browser or your default browser. While it is Ask, the agent asks you
+  the first time and offers to save your answer here; once set, agents use it
+  without asking. Setting: `agentPreviewBrowser` (`ask`, `internal-browser`,
+  `system-default-browser`).
 - **Linear and Jira**: open either view from the **+** menu. Paste the workspace,
   project, team, or board URL you want as its home. Ghostex identifies the workspace
   from the address and preserves the full URL, including filters. Previously used
@@ -1448,8 +1461,8 @@ sends it, as Send would. Shift+Enter starts a new line and Escape closes it.
 On the phone there is no hover. Hold a message's words to select them (drag
 the handles to change the selection); the menu that appears offers Copy, Add to
 Chat, which quotes the selected words into the chat box, and More, which opens
-the message's menu with Copy, Add to Chat and Reply for the whole message and the same
-actions. A selection stays inside one paragraph, list item, table cell or code
+the message's menu with Copy and Add to Chat for the whole message, Reply for
+the words you selected, and the same actions. A selection stays inside one paragraph, list item, table cell or code
 block, so use More > Copy for a whole message. Holding a message beside its
 words opens that menu straight away, and holding a link opens the link's own
 menu. Nothing shows under a message until you do.
@@ -2100,6 +2113,20 @@ Coordinators answer without markers (Settings > Chat, an advanced setting, off b
 Settings: `markedHandovers`, `markedHandoversStyle` (`labels`, `rule`,
 `badge`), `markedHandoversEmoji`, `markedHandoversHeadingStrength`, `orchestratorPlainReplies`.
 
+Tell agents about Ghostex (Settings > Chat, on by default) gives every agent
+session Ghostex starts a short note that it runs in Ghostex: Ghostex can show
+pages, question forms, charts and graphs in the chat, open pages the agent
+builds in its own browser, run other agents and install Ghostex skills. The
+agent uses it only when you ask for one of those things, and then reads the
+details from `ghostex agent-guide`. It reaches Claude Code, Codex, ZCode, Pi
+and Factory Droid at launch; other agents (OpenCode, Gemini CLI, Cursor and
+the rest) get the same note from the Ghostex Agent Guide skill (`ghostex
+agent-guide install-skill`). A change applies to sessions started or resumed
+afterwards. Agents can also ask Ghostex Help themselves with `ghostex help ask
+"<question>"`, which starts (or reuses) a Ghostex Help chat in the Ghostex
+project and prints its answer. Setting: `agentGhostexNote`; CLI: `ghostex
+agent-guide`, `ghostex help ask "<question>" [--new]`.
+
 Catch me up: turn on Catch me up button (Settings > Chat, off by default) and
 the chat box shows a Catch me up button at its top right while it is empty, on
 the computer and on the phone; it fades out as you start typing and back in
@@ -2122,7 +2149,8 @@ the whole app, remembered across restarts). When the chat is wide enough the
 panel sits beside it as its own column and the conversation moves over to make
 room; when it is too narrow the panel opens as a floating card under the ring,
 and a click on the chat closes it. Its cards: Environment (this computer or the
-box the session runs in, its folder, branch and account); Context (how full the
+box the session runs in, its folder, branch and account, and how much memory
+the session's processes use while it runs on this computer); Context (how full the
 context window is, with Claude's own breakdown into messages, memory files,
 skills, tools and free space; Ghostex asks a silent read-only copy of the
 session, so nothing is typed into it and no tokens are spent, and it counts
@@ -2365,6 +2393,10 @@ view, with **Sign in to claude.ai** or **Sign out** (see Claude cloud
 sessions). Changes save as you
 make them; Sign in again and Remove sit at the
 bottom, and Remove asks first and says how many sessions use the account.
+A newly added account starts with Show usage in the sidebar on. The accounts'
+usage sits pinned at the bottom of the sidebar by default; click the usage button
+on the sidebar's bottom row to unpin it (it then shows only while you hover the
+button), and click it again to pin it back. Ghostex remembers your choice.
 Turn Enabled off to keep an account you no longer use (for example one whose
 subscription ended) saved but out of use: it shows dimmed with a Disabled tag,
 Ghostex never starts new sessions on it, switches to it at a limit or offers it
@@ -2970,7 +3002,11 @@ version of the Projects features in Cursor and Claude Code.
   Antigravity, Pi, OMP or OpenCode, whichever you have set up), its model where the agent
   lets Ghostex choose one (Opus 5.5 on Claude; otherwise each agent starts on its
   own default) and its effort: Low, Medium, High or XHigh, High by default (an agent without
-  XHigh offers its levels from Low up to its highest). Use a very good model: the coordinator
+  XHigh offers its levels from Low up to its highest). Cursor and ZCode coordinators take no
+  effort choice (Cursor's effort is part of its model). An OpenCode coordinator lists every model
+  your OpenCode has (search the list), starting on OpenCode's default, and its effort is that
+  model's variant; Ghostex switches OpenCode to them before its first message. Use a very good
+  model: the coordinator
   is the agent you talk to all day, and the main way Ghostex itself is built.
   Its first message is always "Read and adhere to this skill:
   /ghostex-orchestrator" (`$ghostex-orchestrator` on agents other than Claude
@@ -3031,6 +3067,12 @@ version of the Projects features in Cursor and Claude Code.
   shell stay awake, and so does the coordinator (the item is greyed out when no
   thread can be slept). On the phone, long-press the coordinator for the same
   item; `ghostex coordinator sleep-inactive-threads` does it from a terminal.
+- **Closing a coordinator** closes its threads that are open in the sidebar
+  too (working, waiting, finished or asleep; done threads are left alone), and
+  Ghostex asks first: "Close Main Coordinator and its 3 open threads?". Every
+  thread keeps its conversation. Restoring the coordinator from Previous
+  Sessions brings those threads back under it, each on its own conversation.
+  `ghostex kill` on a coordinator closes its open threads the same way.
   The phone's session list shows the same
   tree: crown, crew count, threads indented under their coordinator, and the
   chevron to fold them.
@@ -3065,6 +3107,15 @@ version of the Projects features in Cursor and Claude Code.
   what needs you. Nobody has to poll. A thread reports only this way: Ghostex
   refuses a thread's messages to its own coordinator in the middle of a turn
   and tells it to end its turn with its report.
+- **Threads on another computer**: a coordinator can start a thread on a
+  computer this one is connected to (Settings > Remote > Remote machines): ask
+  it to, for example "run this on Omarchy". The thread uses that computer's
+  project with the same name (or the one you name), its agents and its
+  folders, sits under the coordinator in the sidebar with the computer's name
+  after its title in reports, and reports back like any thread. While the
+  computer is not connected, its reports wait; you can still mark it done. From a terminal: `ghostex
+  coordinator start-thread --computer <name> --title "<title>" --task "<task>"
+  [--project-id <id>]`.
 - **Work that never arrives is caught**: when the coordinator starts a thread,
   it waits until the thread has actually taken its brief before saying it is
   under way, and says "pending" with the reason when it has not yet. Ghostex
@@ -3457,8 +3508,8 @@ sessions, so any client can control agents on any machine.
   as Running or how many machines are connected, and the page reopens on the
   last tab). Easy Connect installs the Tailcat helper, turns on SSH access with
   one admin prompt, and gives a pairing QR code: under Connect a phone, click
-  Show QR to open it in a popup (Settings never shows the code until you ask)
-  and scan it with the Ghostex mobile app (Android ships today). If the phone can't scan it, click Copy as text under Show QR and paste the code in the phone's Scan code screen (Paste a pairing code). A Tailscale path is offered for tailnets; its code sits behind the same Show QR button and Copy as text.
+  the hidden QR to open it in a popup (Settings never shows the code until you ask)
+  and scan it with the Ghostex mobile app (Android ships today). If the phone can't scan it, click Copy as text under the QR and paste the code in the phone's Scan code screen (Paste a pairing code). A Tailscale path is offered for tailnets; its code sits behind the same click-to-show QR and Copy as text.
   The phone's own camera can scan the code too: the QR is a ghostex.dev link,
   so with an up-to-date Ghostex app installed the camera opens the app and it
   pairs straight away, on Android and iPhone.
@@ -3532,6 +3583,16 @@ sessions, so any client can control agents on any machine.
   press Cancel. The machine appears as a sidebar section with its own
   projects and sessions; its terminals stream into the desktop app. Windows,
   Linux, and macOS clients use the connected computer's folders and shell.
+  Agents can use a connected machine too: any agent on this computer can
+  start, message and read sessions there, and the machine's agents can do the
+  same on this computer, while the connection is up (`ghostex computers` lists
+  them; agents add `--computer <name>` to `ghostex sessions`, `ghostex agents
+  create` and `ghostex coordinator start-thread`). They can start, message,
+  read, sleep, wake and close sessions there, nothing else, and both computers
+  need Ghostex 10.44 or later. Connecting is the permission: an agent that can
+  type into a session on the other computer can run commands there, as you
+  could. Turn **Agent access** off in the machine's Edit dialog to stop agents
+  on either computer from using the other.
   Files and folders you drop onto a remote terminal or add with its attach
   (paperclip) button are uploaded to that computer first, so the terminal gets
   references the agent there can open.
@@ -3709,56 +3770,136 @@ CLI: `ghostex create-agent claude-cloud --project-id <id> --prompt "<task>"`,
 `ghostex claude-cloud status <session>`, `ghostex claude-cloud send <session>
 <message>`, `ghostex claude-cloud bring-back <session>`.
 
-## Cloud Boxes (agents in a box, here or in the cloud)
+## Cloud Boxes (sessions on a machine in the cloud)
 
-A box is an isolated copy of your project where an agent works without touching
-this computer. Boxes run on this computer with Docker (free), in the cloud on
-Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server over SSH.
-Ghostex drives agentbox, a free open-source command line tool
-(https://github.com/madarco/agentbox); Claude, Codex, OpenCode and Pi can run
-in a box. Your agent's settings, skills and Codex sign-in go with it. Claude
-needs its own one-time sign-in for boxes, so Claude on this computer stays
-signed in.
+A Cloud Box is a Linux machine on your own Instabox (instabox.sh) or Boat
+(boat.dev) account that runs a Ghostex session: the agent works there, not on
+this computer, and keeps working when this computer sleeps. Ghostex never
+bills; your provider account does. Cloud Boxes is a built-in extension, on by
+default on every computer (Settings > Extensions, `cloudBoxesEnabled`); turning
+it off hides it everywhere and keeps your boxes and settings.
 
-Cloud Boxes is a built-in extension, off by default and only on macOS and
-Linux: turn it on with its switch in Settings > Extensions (Features). While it
-is off the Cloud Boxes page in Settings, the Run on choice in New Thread and in
-a new chat thread, Run in a Box in the Select Agent menu and the
-`ghostex agentbox` commands are gone (they say Cloud Boxes is turned off), and
-new threads run on this computer. Your boxes, provider logins and default
-location are kept and come back when you turn it on (`cloudBoxesHidden`).
+- **Connect a provider**: Settings > Cloud Boxes > Providers. Instabox's
+  Connect signs in in your browser. Boat's Connect asks for your Boat email,
+  opens Boat's page and shows a 6-digit code to type there. Paste Key takes an
+  API key instead. Free plans and trials work; Settings shows their limits
+  (Instabox free: one box at a time; Boat trial: boxes stop after 2 hours).
+- **Start one**: in a new chat pick Cloud Box beside This folder and New
+  worktree (or the Cloud Box chip under Run on in New Thread); the choice is
+  remembered per project. The chip beside it picks what the box starts from:
+  a snapshot (★ is the project's Default), a Blank box, or a running box to
+  reuse (the chat gets its own worktree there), plus the provider and size
+  with their price per hour. Nothing starts or bills until you send the first
+  message; it waits with a progress card while the box starts, fetches the
+  code and starts the agent, then the chat opens on the box. The box chip in
+  the session's header shows its state, running time and about-$ cost; its
+  menu has Open terminal, Save as snapshot, Update snapshot, Pull branch, Open
+  PR, Stop and Delete. Cloud sessions sit in their project in the sidebar with
+  a cloud badge whose dot shows the box's state (blue starting, green running,
+  amber idle, grey paused or stopped, red failed); the sidebar menu's Sort &
+  Filter > Cloud Box Sessions shows only them. Each box session works on its own new branch, cut from the
+  latest base branch and named from the first message; pictures attached to
+  that message go to the box with it. The agent pushes the branch (a GitHub
+  login saved in the project's snapshot lets it), and Pull branch brings it to
+  this computer as a worktree of the project (an existing worktree of that
+  branch is brought up to date).
+- **Set up cloud box**: Settings > Projects > Cloud box opens a new chat on a
+  blank box with a setup prompt (install the project, run its tests, write
+  `.ghostex/cloud-setup.sh`, sign in to GitHub with you). Check it, press
+  Enter, and when it's done use Save as snapshot on the box chip so new boxes
+  start ready.
+- **Snapshots**: a project's snapshot holds its tools and caches, so a box
+  starts ready; the code is always fetched fresh. Settings > Projects > Cloud
+  box lists them: the Default (★) is what new boxes start from, Update saves a
+  running box of the project as the new Default (the old one stays as Previous
+  for 7 days), Make Default and Delete. The same section picks the provider
+  and size, and **Send to the box**: tick the project's `.env` files and name
+  variables; their values are read from this computer whenever a box starts
+  and never saved in a snapshot.
+- **Agent logins for boxes**: Settings > Cloud Boxes. Allow on Cloud Boxes for
+  a Claude account approves a one-year box token once in your browser, so
+  Claude on this computer stays signed in (claude.ai connectors and Remote
+  Control don't work on a box). A Codex account is allowed as it is: each box
+  gets a fresh copy of its login and sends refreshed sign-ins back.
+- **Cost and stopping**: Settings > Cloud Boxes shows this month's spend per
+  provider and in total. The Monthly cap warns at 80% and starts no new box at
+  100%; running boxes keep running. A box with no agent working and no
+  terminal open pauses (Instabox) or stops (Boat) after 15 minutes; opening its
+  session shows the last transcript without waking it, and sending a message
+  wakes it. When every session on a box is archived it stops, and is deleted
+  after 7 days unless it has unpushed work. Your boxes lists every box with
+  Stop and Delete (a box with unpushed work asks before Delete Anyway).
+- **From your phone**: cloud sessions sit in their project on the phone too,
+  with the same cloud badge, and open in chat without waking the box; sending
+  a message wakes it. The box pill under a cloud chat's header shows its
+  running time and about-$ cost; long-press it (or the session's row) for
+  Stop, Pull branch, Open PR and Delete. A project's agent menu starts with
+  Where: This computer or Cloud Box, remembered per project like the new-chat
+  bar. Start boxes from your phone keeps what a phone needs on your paired
+  phones, so while this computer is off the agent menu offers Start Claude (or
+  Codex) on a Cloud Box…, which starts a box from the project's Default
+  snapshot (not once this month's spend the computer last saw reached the
+  monthly cap), and the phone can chat with, wake, stop and delete boxes.
+  Connecting providers, the first snapshot and picking secrets stay on the
+  computer.
+- **More providers (agentbox)**: under Advanced on Settings > Cloud Boxes,
+  boxes run through agentbox, a free open-source command line tool
+  (https://github.com/madarco/agentbox), on this computer with Docker, on
+  Hetzner, Vercel, Daytona, E2B or DigitalOcean, or on your own server over
+  SSH (macOS and Linux; on Windows, use Ghostex inside WSL). "Set It Up for Me"
+  starts an agent that installs agentbox and sets up the providers you want,
+  asking before anything that costs money; or Install agentbox, then Set Up for
+  Docker, or Log In and Prepare for a cloud; Add Server registers your own
+  server. Pick a box under More providers in a new chat's Cloud Box chip,
+  under Run on in New Thread, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
+  Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
+  they exist.
 
-- **Set up**: Settings > Cloud Boxes. "Set It Up for Me" starts an agent that
-  installs agentbox, asks which clouds you want before anything that costs
-  money, creates the provider API token in your browser, and signs Claude and
-  Codex in for boxes. To do it by hand: Install agentbox, then Set Up for
-  Docker, or Log In (paste an API token from the provider's console) and
-  Prepare (once, builds the base image) for a cloud. Add Server registers your
-  own server by a name and its SSH address; Check tests it. Claude in boxes >
-  Sign In opens the sign-in page. Each step runs in a terminal tab; the page
-  updates while it runs. Run Check shows agentbox's own health check.
-- **Use**: pick a box under Run on in New Thread (Cmd+Left and Cmd+Right switch
-  location), or choose Run in a Box in a project's Select Agent menu. A new
-  chat thread also shows a Run on row above its message box until you send the
-  first message: pick This computer or a box there, and the box starts with
-  that first message. Box sessions open in the terminal view and show a badge with where they run. The
-  first Claude box asks you to sign in right in its terminal: approve in the
-  browser page that opens and paste the code. Right-click a box session for Open
-  Box Web App (the app it serves, opened on this computer), Open Box Screen (the
-  box's own browser), Stop Box and Destroy Box. Add an `agentbox.yaml` with
-  `services.web.expose.port` to your project to start your dev server in the box
-  automatically. Sleeping or waking a session, or restarting Ghostex, reconnects
-  to the same box and conversation.
-- **Cost**: cloud boxes bill while they exist. Closing or deleting a session
-  stops its box and keeps its work; Settings > Cloud Boxes > Your boxes lists
-  every box with Open Web App, Stop and Destroy (deletes the box for good).
-- Boxes run on macOS and Linux; on Windows, use Ghostex inside WSL.
-
-Related settings: `cloudBoxesHidden` (turns the feature off; default on, so
-Cloud Boxes starts off), `agentboxDefaultLocation` (where new threads run unless you
-pick another location; default `local`, this computer). CLI:
+Related settings: `cloudBoxesEnabled` (on by default),
+`cloudBoxesMonthlyCapUsd` (0 = no cap), `cloudBoxesIdleStopMinutes` (default
+15), `cloudBoxesDeleteStoppedAfterDays` (default 7),
+`cloudBoxesPhoneStartEnabled` (default off), `agentboxDefaultLocation` (where
+agentbox New Thread runs unless you pick another place; default `local`). CLI:
+`ghostex cloud providers`, `ghostex cloud list`, `ghostex cloud spend`,
+`ghostex cloud attach <box-id> <project-id> <session-id>` (a box session's
+terminal in any terminal; the ids are the box's own, from `ghostex cloud show`),
 `ghostex agentbox status`, `ghostex agentbox list`,
 `ghostex create-agent <agent> --project-id <id> --run-on docker`.
+
+## Secrets (passwords, API keys and 1Password)
+
+When an agent needs a password, an API key or a token from you, it asks in a
+private card above the chat box instead of in the chat: the card says what it
+needs and why, and has a hidden field with Save privately and Decline. What you
+type never shows in the chat, the transcript or the agent's context: Ghostex
+writes it to a private file that only that agent's commands can read, and
+deletes the file after 24 hours. This works for every agent Ghostex runs
+(Claude, Codex, OpenCode and the rest), in the chat on the computer and on the
+phone, and covers a sudo password too. The card closes on its own when the
+agent stops waiting (10 minutes unless it asked for longer). Agents ask with
+`ghostex secret request`; the bundled `$ghostex-secrets` skill teaches them
+when and how, so tell an agent "ask me for the token privately" if it asks in
+the chat instead.
+
+Settings > Secrets lists the 1Password accounts Ghostex reads keys from, adds
+one (a name and the 1Password account, such as my.1password.com) and removes
+one. It needs the 1Password CLI (`op`, from 1Password or `brew install
+1password-cli`) with "Integrate with 1Password CLI" turned on in 1Password's
+Developer settings; each account shows whether `op` is signed in to it.
+Ghostex keeps only the account name, never a key. With an account added you
+can paste a 1Password reference (`op://vault/item/field`, from an item field's
+Copy Secret Reference) instead of a key: in a secret request card, and in the
+voice agent's xAI and OpenAI key fields, where the key is then read from
+1Password each time it is used. 1Password may ask you to unlock when a key is
+read. "Check a reference" on the same page tries a reference and says only
+whether it worked.
+
+Settings page: Secrets (`ghostex settings open --tab secrets`). CLI:
+`ghostex secret request --label text --reason text`,
+`ghostex secret providers list`,
+`ghostex secret providers add --name Personal --account my.1password.com`,
+`ghostex secret providers remove <id>`,
+`ghostex secret providers check --provider <id> --reference op://vault/item/field`.
 
 ## Notifications and status
 
@@ -3891,9 +4032,12 @@ Click the button, or press Cmd+Ctrl+Shift+S (Alt+Ctrl+Shift+S on Windows and
 Linux), to open its panel: Capture Area (A), Capture App (Space), Capture Screen (F)
 and Write Prompt (T), over the same
 Running Agents list as the menu bar dropdown, with Open Ghostex, Hide button,
-Restart and Quit. Projects in the list start collapsed: click one to see its
-sessions (click a session to open it in Ghostex), or type in the filter above
-the list to find a project or session by name. Drag the empty part of the
+Restart and Quit. The first three projects in the list start open: click a
+project to open or close it (click a session to open it in Ghostex), or type in
+the filter above the list to find a project, session or remote machine by name.
+Below this computer's projects, each remote machine has its own section with its
+projects and running agents; a machine that is not connected shows one row saying
+so, with a Connect button. Drag the empty part of the
 Running Agents heading to move the panel; it opens there from then on. Use the same
 modifiers with A, Space, F or T instead of S to run an action straight away,
 from any app. "Hide button" keeps it hidden until you turn the setting on
@@ -4298,14 +4442,13 @@ backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
   project.
   Features are whole parts of Ghostex you can switch off to keep the app
   simple: Actions (off by default), Open In (on by default), Spaces (off by
-  default), Cloud Boxes (off by default; macOS and Linux only, not listed on
-  Windows), Workspaces (off by default; it brings workspaces and the team's
+  default), Cloud Boxes (on by default), Workspaces (off by default; it brings workspaces and the team's
   Slack flow), Read aloud (off by default, and
   listed only while Enable Experimental Features is on) and the Session details
   panel (beta, on by default). Turning one off removes it everywhere at once (its header button,
   Settings pages and rows, hotkeys, Quick Access rows and menus) and turning it
   back on restores everything you had set up. Settings: `actionsHidden`,
-  `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesHidden`,
+  `openInTitlebarButtonHidden`, `sidebarSpacesEnabled`, `cloudBoxesEnabled`,
   `workspacesHidden`, `readAloudHidden`, `sessionDetailsPanelHidden`.
   The Edit (pencil) button on a card chooses where that view, header button, or
   extension appears. Pick **Everywhere** or **Only in selected places**, then
@@ -4794,8 +4937,8 @@ switch it off in Settings > Extensions, or `debuggingHidden`, to drop the page).
 Enable that switch to see Diagnostic logs. Diagnostic logs has one switch per area (terminals,
 sidebar, chat, modals, board, remote machines, agent activity, prompt editor,
 app lifecycle, server requests) and one Turn logs off after choice (15 min,
-1 hour, or Never) shared by all of them; warnings, errors, and crashes are
-always captured. Open the page with `ghostex settings open --tab debugging`.
+1 hour, or 3 days) shared by all of them, so no area stays on longer than 3 days;
+warnings, errors, and crashes are always captured. Open the page with `ghostex settings open --tab debugging`.
 Settings that depend on a setting above them have an indented ↳ before their
 name. They appear when the parent setting enables them.
 In the Settings table of contents, click a page or section title to go there.
@@ -4807,6 +4950,18 @@ Related settings: `sidebarTheme`, `darkThemePreset`, `lightThemePreset`,
 `windowGlass`, `windowGlassSidebarOpacityDark`, `windowGlassWorkAreaTintDark`,
 `windowGlassSidebarOpacityLight`, `windowGlassWorkAreaTintLight`, `themeSidebarContrast`, `themeWorkAreaContrast`, `showActivePaneOutline`, the `keepAwake*` rows,
 `showBetaFeatures`, `debuggingMode`.
+
+## Disk space and automatic cleanup
+
+Ghostex deletes old files it made by itself, once a day, so its data folders do not keep
+growing. It removes screenshots agents saved more than 60 days ago (folders named
+`release-*` or `youtube-*` are kept, and images you pasted into chats or board cards are
+never removed), published chat pages after 90 days, log files nothing has written for
+14 days, crash reports after 30 days, backups taken before a data migration after 30 days,
+Ghostex's copies of compressed Codex chats nobody opened for 30 days (opening the chat
+again rebuilds its copy), and closed sessions idle for 90 days from the closed sessions
+list (pinned and favorite sessions stay, and the agent's own conversation files are not
+touched). There is no setting for it.
 
 ## Sending feedback
 

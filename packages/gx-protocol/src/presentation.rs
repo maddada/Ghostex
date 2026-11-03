@@ -919,6 +919,10 @@ pub struct PresentationSession {
     /// Present only for a Claude cloud session: the agent runs on claude.ai's computers.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_cloud: Option<PresentationClaudeCloud>,
+    /// Present only for a Cloud Box session (on the box's gxserver) or a draft whose tray picked
+    /// Cloud Box (on home gxserver): the ☁ badge and its state dot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_box: Option<crate::cloud_box::PresentationCloudBox>,
     /// Accounts or agents this session can be resumed under; element shape kept loose.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub switchable_agents: Option<Value>,
@@ -945,6 +949,10 @@ pub struct PresentationSession {
     /// `finished`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coordinator_thread_state: Option<String>,
+    /// A coordinator's threads that run on other computers this one is connected to; the client
+    /// nests those computers' rows under the coordinator (server/src/coordinators/remote_threads.rs).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinator_remote_threads: Option<Vec<PresentationRemoteThread>>,
     /// The main session this session is a side chat of (server/src/side_chats/); a side chat is
     /// left out of every session list and shown from its main chat's Side chats pill.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1063,4 +1071,19 @@ impl PresentationSession {
 
 fn is_false(value: &bool) -> bool {
     !*value
+}
+
+/// One of a coordinator's threads on another computer: that computer's server id, the thread's ids
+/// there, and its state as the coordinator's computer sees it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PresentationRemoteThread {
+    #[serde(default)]
+    pub server_id: String,
+    #[serde(default)]
+    pub project_id: String,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_state: Option<String>,
 }

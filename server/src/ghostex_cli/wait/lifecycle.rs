@@ -1,11 +1,37 @@
 use serde_json::{json, Map, Value};
 
-use crate::ghostex_cli::args::parse_args;
+use crate::ghostex_cli::args::{parse_args, Flags};
 use crate::ghostex_cli::output::{is_failed_cli_result, print_json};
 use crate::ghostex_cli::rpc::{CliError, CliResult};
 use crate::ghostex_cli::{actions, sessions};
 
 use super::*;
+
+/// Where a CLI close came from, for gxserver's one line per close (session_close_log.rs):
+/// `--close-source` when a client names its door (the phone sends `phone.<door>`), else
+/// `default`, and the session that ran the command (`GHOSTEX_GLOBAL_SESSION_REF`) when an agent
+/// or a terminal in Ghostex ran it.
+pub(crate) fn insert_close_source(payload: &mut Map<String, Value>, flags: &Flags, default: &str) {
+    let source = flags
+        .text("closeSource")
+        .map(|source| source.trim().to_string())
+        .filter(|source| !source.is_empty())
+        .unwrap_or_else(|| default.to_string());
+    payload.insert(
+        crate::session_close_log::CLOSE_SOURCE_PARAM.to_string(),
+        Value::String(source),
+    );
+    if let Some(caller) = std::env::var("GHOSTEX_GLOBAL_SESSION_REF")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        payload.insert(
+            crate::session_close_log::CLOSED_BY_PARAM.to_string(),
+            Value::String(caller),
+        );
+    }
+}
 
 pub fn session_action_command(
     action: &str,
@@ -35,6 +61,9 @@ pub fn session_action_command(
         let mut payload = extra_payload.as_object().cloned().unwrap_or_default();
         insert_session_field(&mut payload, "projectId", session);
         insert_session_field(&mut payload, "sessionId", session);
+        if action == "closeSession" {
+            insert_close_source(&mut payload, &flags, "cli.kill");
+        }
         let action_result =
             actions::send_gxserver_cli_action(action, &Value::Object(payload), &flags)?;
         if is_failed_cli_result(&action_result) {

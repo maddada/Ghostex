@@ -101,6 +101,12 @@ pub fn handle_with_ids(
             )]
         }
 
+        ActionKind::AnswerSecretRequest => {
+            crate::extras::secret_requests::answer(state, action, next_request_id())
+                .into_iter()
+                .collect()
+        }
+
         ActionKind::SearchOpen => {
             search::open(&mut state.extras.search);
             Vec::new()

@@ -376,6 +376,10 @@ pub(crate) fn session_row(
             _ => None,
         },
         thread_state: session.coordinator_thread_state.clone(),
+        coordinator_remote_threads: session
+            .coordinator_remote_threads
+            .clone()
+            .unwrap_or_default(),
         agentbox: session
             .agentbox
             .as_ref()
@@ -385,6 +389,10 @@ pub(crate) fn session_row(
                 provider_label: agentbox.provider_label.clone(),
             }),
         claude_cloud: session.claude_cloud.clone(),
+        cloud_box: session
+            .cloud_box
+            .as_ref()
+            .map(crate::cloud_boxes::SessionCloudBoxBadge::from_presentation),
         work,
         links: session
             .links

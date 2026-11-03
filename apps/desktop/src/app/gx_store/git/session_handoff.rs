@@ -240,14 +240,20 @@ impl GhostexGpuiApp {
                                 cx.background_executor().timer(POLL).await;
                             }
                         }
+                        // The user chose to hand this session off, which closes it: no second
+                        // question (gx_store/sidebar_close_confirm.rs).
                         let _ = this.update(cx, |this, cx| {
+                            let confirmed =
+                                std::mem::replace(&mut this.gx_store.session_close_confirmed, true);
                             this.dispatch_native_sidebar_command(
                                 json!({
                                     "type": "closeSession",
                                     "sessionId": session.to_sidebar_session_id(),
+                                    "closeSource": "handoff",
                                 }),
                                 cx,
                             );
+                            this.gx_store.session_close_confirmed = confirmed;
                         });
                         return;
                     }

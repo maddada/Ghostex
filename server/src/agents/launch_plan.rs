@@ -520,11 +520,12 @@ fn apply_requested_agent_model(
                     | "zcode"
                     | "empryo"
                     | "antigravity"
+                    | "opencode"
             )
         })
         .ok_or_else(|| {
             DomainStateError::bad_request(
-                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, and ZCode only a coordinator's model.",
+                "A launch model or effort can only be set for Claude, Codex, Pi, OMP, Copilot, Grok Build, Hermes Agent, Empryo and Antigravity CLI agents; Cursor CLI and Gemini take a model only, ZCode only a coordinator's model, and OpenCode only a coordinator's model and variant.",
             )
         })?;
     if effort.is_some() {
@@ -561,6 +562,37 @@ fn apply_requested_agent_model(
         if crate::coordinators::coordinator_create_request(params)?.is_none() {
             return Err(DomainStateError::bad_request(
                 "A ZCode thread keeps its configured model; only a coordinator's own model can be set.",
+            ));
+        }
+        return Ok((command, None));
+    }
+    if family == "opencode" {
+        // CDXC:Coordinators 2026-11-02 WHY:
+        // OpenCode 2's terminal app has no launch model flag, so a coordinator create's model and
+        // variant reach the session as a `/model provider/model [variant]` line the create flow
+        // queues before the first message (`start_orchestrator_role`), which the OpenCode send
+        // path applies through OpenCode's server like the chat's model pill. A thread has no such
+        // delivery yet, so its model request stays refused rather than silently dropped.
+        if crate::coordinators::coordinator_create_request(params)?.is_none() {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode thread keeps its configured model; only a coordinator's own model and variant can be set.",
+            ));
+        }
+        let Some(model) = model.as_deref() else {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode effort is a variant of the chosen model, so pick the model too.",
+            ));
+        };
+        if !model
+            .split_once('/')
+            .is_some_and(|(provider, name)| !provider.is_empty() && !name.is_empty())
+            || model.split_whitespace().nth(1).is_some()
+            || effort
+                .as_deref()
+                .is_some_and(|effort| effort.split_whitespace().nth(1).is_some())
+        {
+            return Err(DomainStateError::bad_request(
+                "An OpenCode model is provider/model, such as openai/gpt-6.1-terra, and its effort one of that model's variants.",
             ));
         }
         return Ok((command, None));
@@ -952,7 +984,7 @@ pub(crate) fn resolve_agent_launch_command(
         accept_all_mode == Some("disabled"),
     );
     let command = with_codex_no_daemon(agent_id, icon, &command);
-    let command = with_marked_handovers(agent_id, icon, &command);
+    let command = with_launch_notes(agent_id, icon, &command);
     let command = crate::connectors::with_connector_tools(agent_id, icon, &command);
     // Last, so the steps above still read the program's own name (agent_cli/launch_path.rs).
     let command = crate::agent_cli::launch_path::with_reachable_program(&command);
@@ -1099,7 +1131,7 @@ mod launch_choice_tests {
         }
         assert!(launch("opencode", Some("opencode/big-pickle"), None)
             .unwrap_err()
-            .contains("can only be set for"));
+            .contains("An OpenCode thread keeps its configured model"));
         assert!(launch("dsh", Some("deepseek-v4"), None)
             .unwrap_err()
             .contains("Cursor CLI and Gemini take a model only"));

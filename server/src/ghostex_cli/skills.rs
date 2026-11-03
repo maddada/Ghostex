@@ -26,6 +26,8 @@ const GHOSTEX_AUTO_RENAME_SESSION_SKILL_NAME: &str = "ghostex-auto-rename-sessio
 const GHOSTEX_MOVE_CODEX_SESSION_SKILL_NAME: &str = "ghostex-move-codex-session";
 const GHOSTEX_HELP_SKILL_NAME: &str = "ghostex-help";
 const GHOSTEX_VISUALS_SKILL_NAME: &str = "ghostex-visuals";
+const GHOSTEX_SECRETS_SKILL_NAME: &str = "ghostex-secrets";
+const GHOSTEX_AGENT_GUIDE_SKILL_NAME: &str = "ghostex-agent-guide";
 
 /// JS stringFlag: trimmed non-empty string or nothing.
 fn string_flag(value: Option<String>) -> Option<String> {
@@ -494,6 +496,28 @@ pub fn install_visuals_skill_command(args: &[String]) -> CliResult<()> {
         "ghostex visual --help",
         &["GHOSTEX_VISUALS_SKILL_SOURCE"],
         GHOSTEX_VISUALS_SKILL_NAME,
+    )
+}
+
+/// `$ghostex-secrets` teaches agents to ask for a password or token with `ghostex secret request`
+/// instead of in the chat.
+pub fn install_secrets_skill_command(args: &[String]) -> CliResult<()> {
+    install_ghostex_agent_skill(
+        args,
+        "ghostex secret --help",
+        &["GHOSTEX_SECRETS_SKILL_SOURCE"],
+        GHOSTEX_SECRETS_SKILL_NAME,
+    )
+}
+
+/// `$ghostex-agent-guide` gives agents without a launch note the Ghostex note as a skill they may
+/// load on their own, which sends them to `ghostex agent-guide`.
+pub fn install_agent_guide_skill_command(args: &[String]) -> CliResult<()> {
+    install_ghostex_agent_skill(
+        args,
+        "ghostex agent-guide",
+        &["GHOSTEX_AGENT_GUIDE_SKILL_SOURCE"],
+        GHOSTEX_AGENT_GUIDE_SKILL_NAME,
     )
 }
 

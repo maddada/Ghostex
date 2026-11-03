@@ -143,6 +143,7 @@ pub fn begin(
         drawn: false,
         send_request_id,
         interrupt,
+        draft_unsaved: false,
     };
     draw_at_enter(state, context, &mut submission);
     start_or_wait(state, context, submission)
@@ -412,7 +413,7 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
                 ),
                 _ => (
                     text,
-                    version,
+                    version.filter(|_| !submission.draft_unsaved),
                     submission.image_paths.clone(),
                     submission.send_request_id.clone(),
                 ),
@@ -457,6 +458,7 @@ fn run_head(state: &mut ChatState, context: &ChatContext) -> Vec<Effect> {
         }
         SendPhase::QueueText => {
             let send_request_id = submission.send_request_id.clone();
+            let version = version.filter(|_| !submission.draft_unsaved);
             if hold_for_gate(state, context) {
                 return Vec::new();
             }
@@ -763,6 +765,28 @@ pub fn settle_request(
             }
             effects.extend(run_head(state, context));
         }
+        // A sleeping Cloud Box refuses the draft push ahead of a send; the send itself is what
+        // wakes it (`session/cloud_box.rs`), so the submission goes on to it, without the draft
+        // revision the box never saved (the woken box refused it: "The submitted draft revision is
+        // no longer available").
+        crate::wire::RpcOutcome::Err { code, .. }
+            if crate::session::cloud_box::is_asleep(code.as_deref())
+                && state
+                    .composer
+                    .submitting
+                    .as_ref()
+                    .is_some_and(|submission| {
+                        submission.phases.first() == Some(&SendPhase::PushDraft)
+                    }) =>
+        {
+            state.core.refusal_claimed = true;
+            if let Some(submission) = state.composer.submitting.as_mut() {
+                submission.request = None;
+                submission.draft_unsaved = true;
+                submission.phases.remove(0);
+            }
+            effects.extend(run_head(state, context));
+        }
         crate::wire::RpcOutcome::Err { message, code, .. } => {
             remember_failed_send(state, code.as_deref());
             undo_optimistic(state);
@@ -970,6 +994,7 @@ pub fn handoff(
         drawn: true,
         send_request_id: None,
         interrupt: false,
+        draft_unsaved: false,
     };
     // The head phase writes the unsubmitted record a handoff parks from.
     start_or_wait(state, context, submission)

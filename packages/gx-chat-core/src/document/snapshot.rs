@@ -62,6 +62,10 @@ pub struct Document {
     pub agent_tasks: Tri<Value>,
     /// Latched once gxserver has read this session's screen.
     pub screen_probed: bool,
+    /// The session's Cloud Box is paused or stopped; sending a message wakes it
+    /// (`session/cloud_box.rs`). The composer's placeholder already says so.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cloud_box_asleep: bool,
     pub agent: Tri<String>,
     pub agent_session_id: Tri<String>,
     /// A draft session's agent choices. Family e.
@@ -224,6 +228,9 @@ pub struct Document {
     pub side_chats_panel: Tri<Value>,
     /// A side chat's own bar (`{ parentSessionId, parentTitle }`), or `null`. Family f.
     pub side_chat_of: Tri<Value>,
+    /// The private secret request cards above the composer (`extras::secret_requests::project`),
+    /// an array, empty when none. Family f.
+    pub secret_requests: Tri<Value>,
     /// The background tasks the agent left running (`extras::background_tasks`), which the
     /// Background pill's menu lists, or `null`. Family f.
     pub background_tasks_panel: Tri<Value>,

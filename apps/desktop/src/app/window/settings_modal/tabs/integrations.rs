@@ -71,6 +71,7 @@ fn skill_icon(skill_id: &str) -> &'static str {
         "manageBeads" => "modals/settings/layout-kanban.svg",
         "moveCodexSession" => "modals/settings/git-pull-request.svg",
         "visuals" => "modals/settings/chart-bar.svg",
+        "secrets" => "modals/settings/key.svg",
         _ => ICON_TERMINAL,
     }
 }
@@ -89,6 +90,7 @@ fn skill_install_message(skill_id: &str) -> Option<&'static str> {
         "moveCodexSession" => "installMoveCodexSessionSkill",
         "help" => "installHelpSkill",
         "visuals" => "installVisualsSkill",
+        "secrets" => "installSecretsSkill",
         _ => return None,
     })
 }
@@ -107,6 +109,7 @@ fn skill_installed(skill_id: &str, status: Option<&Value>) -> bool {
         "moveCodexSession" => "moveCodexSessionSkillInstalled",
         "help" => "helpSkillInstalled",
         "visuals" => "visualsSkillInstalled",
+        "secrets" => "secretsSkillInstalled",
         _ => return false,
     };
     flag(status, key) == Some(true)

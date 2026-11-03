@@ -35,7 +35,7 @@ use super::inputs::{
 use super::machine_spaces::section_spaces_enabled;
 use super::model::SidebarViewModel;
 use super::spaces::{resolve_selected_space, space_for_group, SpacesState};
-use super::tags::matches_tag_filters;
+use super::tags::matches_session_filters;
 use super::view::{GroupView, SidebarView};
 
 /// The changes that put a row on screen. Every field is already compared against what the sidebar
@@ -232,8 +232,9 @@ pub fn reveal_plan(
         // `applyNativeSidebarReveal` asks the row itself, not why it was missing: a ticked filter
         // the row does not match is lifted whether or not something else also kept it out.
         clear_tag_filters: !inputs.ui.selected_tag_filters.is_empty()
-            && !matches_tag_filters(
+            && !matches_session_filters(
                 found.effective_tag.as_deref(),
+                found.on_cloud_box,
                 &inputs.ui.selected_tag_filters,
             ),
         select_space: space_for_reveal(core, inputs, group),
@@ -387,6 +388,8 @@ struct Located {
     section: SectionId,
     /// The tag the row is filtered by.
     effective_tag: Option<String>,
+    /// The row runs on a Cloud Box, which the Cloud Box filter lets through.
+    on_cloud_box: bool,
     /// The folded coordinators above the row, nearest first.
     folded_by: Vec<String>,
 }
@@ -450,6 +453,7 @@ fn locate(
         storage_id: group.core.storage_id.clone(),
         section,
         effective_tag: row.and_then(|row| row.effective_tag.clone()),
+        on_cloud_box: row.is_some_and(|row| row.cloud_box.is_some()),
         folded_by,
     })
 }

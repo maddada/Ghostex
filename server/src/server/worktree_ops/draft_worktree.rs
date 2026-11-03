@@ -363,7 +363,19 @@ pub(crate) async fn draft_worktree(
         // no move on this gxserver knows about.
         let moved = params.get("moved").and_then(Value::as_bool) == Some(true);
         let closed = finish_draft_move(state, &project_id, &session_id, moved);
+        if closed {
+            super::draft_cloud_box::forget_cloud_move(&project_id, &session_id);
+        }
         return Ok(json!({ "closed": closed }));
+    }
+    let starts_cloud_box = params
+        .get("start")
+        .and_then(|start| start.get("mode"))
+        .and_then(Value::as_str)
+        == Some(super::draft_cloud_box::MODE_CLOUD_BOX);
+    if starts_cloud_box {
+        super::draft_cloud_box::start_cloud_box_move(state, params).await?;
+        return Ok(json!({ "move": move_value(&project_id, &session_id) }));
     }
     if params.get("start").is_some_and(Value::is_object) {
         let request = DraftMoveRequest::read(params)?;
@@ -375,7 +387,14 @@ pub(crate) async fn draft_worktree(
     }
     let (project, session) = read_draft(state, &project_id, &session_id)?;
     if let Some(remember) = params.get("remember").and_then(Value::as_object) {
-        remember_choice(state, &project, remember)?;
+        let cloud =
+            super::draft_cloud_box::remember_cloud_choice(state, &project, &session, remember)
+                .await?;
+        if !cloud {
+            // Read again: the Cloud Box memory was just written into the same runtime settings.
+            let (project, _) = read_draft(state, &project_id, &session_id)?;
+            remember_choice(state, &project, remember)?;
+        }
     }
     let (project, session) = match params.get("remember") {
         Some(_) => read_draft(state, &project_id, &session_id)?,
@@ -386,8 +405,58 @@ pub(crate) async fn draft_worktree(
 
 fn move_value(project_id: &str, session_id: &str) -> Value {
     read_move(project_id, session_id)
-        .map(|status| status.to_value())
+        .map(|status| {
+            super::draft_cloud_box::decorate_move(project_id, session_id, status.to_value())
+        })
         .unwrap_or(Value::Null)
+}
+
+/// The draft and its project for a Cloud Box start, refused when the tray no longer applies.
+pub(crate) fn read_draft_for_cloud_box(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) -> std::result::Result<(Value, Value), DomainStateError> {
+    let (project, session) = read_draft(state, project_id, session_id)?;
+    if !tray_applies(&project, &session) {
+        return Err(DomainStateError {
+            code: "invalidState",
+            message: "This chat has already started, so it can no longer start a cloud box."
+                .to_string(),
+        });
+    }
+    Ok((project, session))
+}
+
+/// Claims the draft for a Cloud Box start (`false` while another move runs).
+pub(crate) fn begin_cloud_box_move(project_id: &str, session_id: &str, label: String) -> bool {
+    begin_move(project_id, session_id, label)
+}
+
+/// Records how a Cloud Box start ended.
+pub(crate) fn end_cloud_box_move(project_id: &str, session_id: &str, status: DraftMoveStatus) {
+    write_move(project_id, session_id, status);
+}
+
+/// Closes a Cloud Box draft whose session started on its box once the grace period passes, in
+/// case no client finishes it.
+pub(crate) async fn close_cloud_box_draft_later(
+    state: &AppState,
+    project_id: &str,
+    session_id: &str,
+) {
+    tokio::time::sleep(DRAFT_CLOSE_GRACE).await;
+    let (state, project_id, session_id) = (
+        state.clone(),
+        project_id.to_string(),
+        session_id.to_string(),
+    );
+    let _ = tokio::task::spawn_blocking(move || {
+        if finish_draft_move(&state, &project_id, &session_id, false) {
+            super::draft_cloud_box::forget_cloud_move(&project_id, &session_id);
+        }
+    })
+    .await;
 }
 
 fn remember_choice(
@@ -451,6 +520,7 @@ async fn read_tray(
     if !tray_applies(project, session) {
         return Ok(unavailable(false));
     }
+    let cloud_box = super::draft_cloud_box::cloud_box_facts(state, project, session).await;
     let mut context_params = Map::new();
     context_params.insert("projectId".to_string(), json!(project_id));
     // A folder that is not a git checkout lists no worktrees and no branches: no tray.
@@ -484,6 +554,7 @@ async fn read_tray(
         "worktrees": worktrees,
         "remembered": memory.to_value(),
         "move": move_value(&project_id, &session_id),
+        "cloudBox": cloud_box,
     }))
 }
 
@@ -910,6 +981,7 @@ fn finish_draft_move(state: &AppState, project_id: &str, session_id: &str, moved
     let mut params = lifecycle_params(project_id, session_id);
     params.insert("action".into(), json!("close"));
     params.insert("reason".into(), json!(DRAFT_MOVED_CLOSE_REASON));
+    params.insert("closeSource".into(), json!("server.draftMovedToWorktree"));
     let response = dispatch_zmx_lifecycle_http_blocking(
         state,
         "/api/transitionSession".to_string(),

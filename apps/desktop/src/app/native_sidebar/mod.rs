@@ -5,6 +5,7 @@ pub(crate) mod appearance;
 pub(crate) mod automations_row;
 mod bots;
 mod claude_cloud;
+mod cloud_box;
 mod collections;
 mod decorations;
 mod disclosure;

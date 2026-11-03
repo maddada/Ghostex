@@ -457,6 +457,7 @@ fn machine_draft_to_form(draft: &MachineDraft) -> Value {
         "sshUser": draft.ssh_user,
         "wslDistribution": draft.wsl_distribution,
         "disabled": draft.disabled,
+        "agentAccessOff": draft.agent_access_off,
     })
 }
 
@@ -489,6 +490,7 @@ fn machine_draft_from_form(form: &Value, base: MachineDraft) -> MachineDraft {
         ssh_user: text("sshUser", base.ssh_user.clone()),
         wsl_distribution: text("wslDistribution", base.wsl_distribution.clone()),
         disabled: flag("disabled", base.disabled),
+        agent_access_off: flag("agentAccessOff", base.agent_access_off),
     }
 }
 
@@ -819,7 +821,7 @@ pub(super) fn machine_dialog(
 ) -> Option<AnyElement> {
     let dialog = tab.machine_dialog.as_ref()?;
     let colors = dialog_colors(t);
-    let p = t.p;
+    let p = t.p.nested_dialog();
     let is_new = dialog.machine_id.is_none();
     let draft = dialog.draft.clone();
     let advanced_open = dialog.advanced_open;
@@ -940,6 +942,49 @@ pub(super) fn machine_dialog(
                 .into_any_element(),
         );
     }
+    {
+        // CDXC:RemoteMachines 2026-11-03 DECISION: the user chose that connecting a computer is permission enough for agents on both computers to start, message and read each other's sessions, with one switch per machine to stop it (on by default). SEE-ALSO: server/src/connected_computers/registry.rs.
+        let agent_access = !draft.agent_access_off;
+        fields.push(
+            h_flex()
+                .w_full()
+                .items_center()
+                .gap(px(12.0))
+                .child(
+                    v_flex()
+                        .flex_1()
+                        .min_w_0()
+                        .child(
+                            div()
+                                .text_size(px(14.0))
+                                .line_height(px(19.25))
+                                .text_color(hsla(t.muted))
+                                .child("Agent access"),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(13.0))
+                                .line_height(px(18.85))
+                                .text_color(hsla(colors.muted))
+                                .child("Agents on this computer can start, message and read sessions on this machine, and its agents can do the same here."),
+                        ),
+                )
+                .child(
+                    div()
+                        .id("remote-machine-dialog-agent-access")
+                        .flex_shrink_0()
+                        .cursor_pointer()
+                        .on_click(cx.listener(move |tab, _: &ClickEvent, _window, cx| {
+                            if let Some(dialog) = tab.machine_dialog.as_mut() {
+                                dialog.draft.agent_access_off = agent_access;
+                            }
+                            cx.notify();
+                        }))
+                        .child(settings_switch(&p, agent_access, false)),
+                )
+                .into_any_element(),
+        );
+    }
     if let Some(reading) = &code_reading {
         let (text, color) = match reading {
             CodeReading::Accepted { summary, .. } => (
@@ -1048,9 +1093,7 @@ pub(super) fn machine_dialog(
         .w_full()
         .pt(px(8.0))
         .border_t_1()
-        // The dialog is portaled out of the themed Settings root, so `--app-border` is the dark
-        // app's white hairline in both appearances (invisible on the light surface).
-        .border_color(hsla(modal_rgba(0xffffff, 0.11)))
+        .border_color(hsla(p.hairline))
         .child(div().flex().child(compact_button(
             &p,
             "remote-machine-advanced-toggle",

@@ -113,6 +113,10 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
         card_visible,
         option_switching(state),
     )
+    .or(state
+        .session
+        .cloud_box_asleep
+        .then_some(crate::session::cloud_box::ASLEEP_PLACEHOLDER))
     .unwrap_or(
         if state
             .session

@@ -16,6 +16,8 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 ghostex-gx-chat-json = { path = "../gx-chat-json" }
+# CDXC:CloudBoxes 2026-11-02 WHY: the phone starts, wakes, stops and deletes Cloud Boxes with the computer off on the same provider rules gxserver runs (`gx_cloud_call`).
+ghostex-gx-cloud = { path = "../gx-cloud" }
 
 [profile.release]
 # wasm32 cannot unwind: a panic traps the instance, and the page treats that as every core gone.

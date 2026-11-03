@@ -132,7 +132,61 @@ pub fn restore_previous_session(
     if let Some(zmx_name) = non_empty(session, "zmxName") {
         answer["zmxName"] = Value::String(zmx_name);
     }
+    let (restored_threads, threads_not_restored) = restore_threads_closed_with_coordinator(
+        &(restored_project, restored_id),
+        repository,
+        db,
+        call,
+    );
+    if !restored_threads.is_empty() {
+        answer["restoredThreads"] = json!(restored_threads);
+    }
+    if threads_not_restored > 0 {
+        answer["threadsNotRestored"] = json!(threads_not_restored);
+    }
     Ok(answer)
+}
+
+/// Restores the threads that closing this coordinator closed with it (see the CDXC:Coordinators
+/// 2026-11-02 DECISION on `close_threads_with_coordinator` in
+/// server/src/server/coordinator_close.rs). Each comes back through this same restore, which moves
+/// its thread link onto its new session, so it sits under the coordinator again on its own
+/// conversation. A thread that was brought back by hand meanwhile is left as it is. Answers the new
+/// sessions' ids and how many could not come back.
+fn restore_threads_closed_with_coordinator(
+    coordinator: &crate::coordinators::SessionKey,
+    repository: &DomainRepository<'_>,
+    db: &Connection,
+    call: &dyn Fn(&str, Value) -> Result<Value, DomainStateError>,
+) -> (Vec<String>, usize) {
+    let Ok(threads) = crate::coordinators::threads_closed_with_coordinator(db, coordinator) else {
+        return (Vec::new(), 0);
+    };
+    let mut restored = Vec::new();
+    let mut not_restored = 0;
+    for thread in threads {
+        let still_closed = repository
+            .get_session(&thread.project_id, &thread.session_id)
+            .ok()
+            .flatten()
+            .is_some_and(|session| {
+                crate::presentation::effective_lifecycle_state(&session) == "stopped"
+            });
+        if !still_closed {
+            continue;
+        }
+        let request = RestorePreviousSessionRequest {
+            project_id: thread.project_id,
+            session_id: thread.session_id,
+            reason: "coordinatorRestored".to_string(),
+        };
+        match restore_previous_session(&request, repository, db, call) {
+            Ok(answer) => restored.extend(non_empty(Some(&answer), "sessionId")),
+            Err(_) => not_restored += 1,
+        }
+    }
+    let _ = crate::coordinators::clear_threads_closed_with_coordinator(db, coordinator);
+    (restored, not_restored)
 }
 
 /// The closed row for the session; a row still marked running is taken only when no stopped one
@@ -349,5 +403,144 @@ mod tests {
         // A link the person removed stays removed.
         assert!(stored.is_removed("pr:maddada/ghostex#279"));
         assert!(stored.read.contains_key("pr:maddada/ghostex#286"));
+    }
+
+    #[test]
+    fn restoring_a_coordinator_brings_back_the_threads_its_close_took() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        initialize_gxserver_storage(&paths).expect("storage init");
+        let db = open_gxserver_database(&paths).expect("open db");
+        let repository = DomainRepository::new(&db, "S1");
+        let project = repository
+            .create_project(&params(
+                json!({ "name": "Coordinated", "path": std::env::temp_dir() }),
+            ))
+            .expect("create project");
+        let project_id = project["projectId"]
+            .as_str()
+            .expect("projectId")
+            .to_string();
+        let create = |title: &str, lifecycle: &str| -> String {
+            repository
+                .create_session(
+                    &params(json!({
+                        "projectId": project_id,
+                        "kind": "agent",
+                        "agentId": "claude",
+                        "title": title,
+                        "lifecycleState": lifecycle,
+                    })),
+                    false,
+                )
+                .expect("create session")["sessionId"]
+                .as_str()
+                .expect("sessionId")
+                .to_string()
+        };
+        let close = |session_id: &str| {
+            repository
+                .update_session_for_lifecycle(&params(json!({
+                    "projectId": project_id,
+                    "sessionId": session_id,
+                    "lifecycleState": "stopped",
+                })))
+                .expect("close session");
+        };
+        let coordinator = create("Main Coordinator", "running");
+        let working = create("Working thread", "running");
+        let asleep = create("Sleeping thread", "sleeping");
+        let done = create("Done thread", "running");
+        crate::coordinators::insert_coordinator(&db, &project_id, &coordinator, "", "")
+            .expect("coordinator");
+        for thread in [&working, &asleep, &done] {
+            crate::coordinators::link_thread(
+                &db,
+                &project_id,
+                thread,
+                &project_id,
+                &coordinator,
+                "task",
+            )
+            .expect("link thread");
+        }
+        crate::coordinators::set_thread_resolved(&db, &project_id, &done, true).expect("resolve");
+        let coordinator_key = (project_id.clone(), coordinator.clone());
+
+        // Closing the coordinator takes its two open threads, not the done one.
+        let open = crate::coordinators::threads_open_under(&db, &repository, &coordinator_key)
+            .expect("open threads");
+        let mut open_ids: Vec<String> = open
+            .iter()
+            .map(|thread| thread.session_id.clone())
+            .collect();
+        open_ids.sort();
+        let mut expected = vec![working.clone(), asleep.clone()];
+        expected.sort();
+        assert_eq!(open_ids, expected);
+        close(&coordinator);
+        for thread in &open {
+            close(&thread.session_id);
+            crate::coordinators::mark_thread_closed_with_coordinator(&db, &thread.key())
+                .expect("mark");
+        }
+
+        let call = |path: &str, body: Value| -> Result<Value, DomainStateError> {
+            match path {
+                "/api/listPreviousSessions" => {
+                    let wanted = body["query"].as_str().unwrap_or_default().to_string();
+                    let row = repository
+                        .get_session(&project_id, &wanted)?
+                        .expect("closed row");
+                    Ok(json!({ "results": [{
+                        "projectId": project_id,
+                        "sessionId": wanted,
+                        "title": row["title"],
+                        "agentId": "claude",
+                        "lifecycleState": "stopped",
+                    }] }))
+                }
+                "/api/createSession" => Ok(json!({
+                    "session": repository.create_session(&params(body), false)?,
+                })),
+                "/api/removeSession" => Ok(json!({})),
+                other => panic!("unexpected call {other}"),
+            }
+        };
+        let request = RestorePreviousSessionRequest {
+            project_id: project_id.clone(),
+            session_id: coordinator.clone(),
+            reason: "test".to_string(),
+        };
+        let answer = restore_previous_session(&request, &repository, &db, &call).expect("restore");
+        let restored = (
+            project_id.clone(),
+            answer["sessionId"]
+                .as_str()
+                .expect("restored id")
+                .to_string(),
+        );
+        let restored_threads = answer["restoredThreads"]
+            .as_array()
+            .expect("restored threads");
+        assert_eq!(restored_threads.len(), 2);
+
+        // Both come back under the restored coordinator, unmarked and not done; the done one stays done.
+        let threads =
+            crate::coordinators::list_threads_for(&db, &restored.0, &restored.1).expect("threads");
+        let open_now: Vec<_> = threads
+            .iter()
+            .filter(|thread| !thread.is_resolved())
+            .collect();
+        assert_eq!(open_now.len(), 2);
+        for thread in open_now {
+            assert!(thread.closed_with_coordinator_at.is_none());
+            assert!(restored_threads
+                .iter()
+                .any(|id| id.as_str() == Some(thread.session_id.as_str())));
+        }
+        assert!(threads
+            .iter()
+            .any(|thread| thread.session_id == done && thread.is_resolved()));
     }
 }

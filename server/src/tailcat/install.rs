@@ -13,7 +13,7 @@ use serde::Deserialize;
 use crate::paths::GxserverPaths;
 
 use super::{
-    binary::managed_tailcat_binary, read_tailcat_binary_version, resolve_tailcat_binary,
+    binary::managed_tailcat_binary, read_tailcat_binary_version, resolve_client_tailcat_binary,
     start_tailcat_from_persisted_state, TailcatRuntime,
 };
 
@@ -85,7 +85,8 @@ impl Drop for InstallDirectory {
 }
 
 fn install(paths: &GxserverPaths) -> Result<()> {
-    if resolve_tailcat_binary().is_some() {
+    // An older helper elsewhere (`~/go/bin`) does not count: it can't dial a current server.
+    if resolve_client_tailcat_binary().is_some() {
         return Ok(());
     }
     let directory = InstallDirectory(

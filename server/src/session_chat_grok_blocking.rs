@@ -267,13 +267,13 @@ pub fn detect_grok_trust_prompt(
             SESSION_CHAT_NOTICE_TRUST_PROMPT,
             SessionChatTerminalNoticeSeverity::Warning,
             SessionChatTerminalNoticeSource::Screen,
-            "Grok Build is waiting for folder trust",
+            "Trust this folder?",
         )
         .with_detail(lines[heading + 1..choices - 1].join("\n"))
         .with_screen_tail(crate::session_chat_notice::session_chat_terminal_screen_tail(text))
         .with_actions(vec![
             SessionChatTerminalNoticeAction::send_keys("trustDirectory", "Trust this folder", "y"),
-            SessionChatTerminalNoticeAction::switch_to_terminal("Open terminal"),
+            SessionChatTerminalNoticeAction::switch_to_terminal("Terminal view"),
         ]),
     )
 }
@@ -352,8 +352,8 @@ pub fn detect_grok_blocking_screen(text: &str) -> Option<GrokBlockingScreen> {
         (
             &["do you trust the contents of this directory?"],
             &["yes, proceed", "no, quit"],
-            "Grok Build is waiting for folder trust",
-            "Accept or decline the workspace trust question in the terminal before sending a message.",
+            "Trust this folder?",
+            "Grok Build won't do anything here until you trust this folder. Answer it in the terminal.",
         ),
         (
             &["login with ", "switch account"],

@@ -43,6 +43,7 @@ impl GhostexGpuiApp {
                     .timer(support_logs::RETENTION_STARTUP_DELAY)
                     .await;
                 support_logs::prune_gpui_support_logs();
+                support_logs::bound_open_ended_diagnostic_areas();
             })
             .detach();
     }

@@ -124,7 +124,7 @@ pub fn switch(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     else {
         return Vec::new();
     };
-    let Some(row) = row(state) else {
+    let Some(row) = row_value(state) else {
         return Vec::new();
     };
     let offered = row
@@ -161,12 +161,43 @@ fn option(run_location: &str, label: &str, icon: &str, tooltip: Option<String>) 
     })
 }
 
-/// The row as the renderers draw it, or `None` when it is hidden.
+/// Moves the draft to `target` (the Cloud Box picker's More providers rows and the tray's other
+/// segments use it while the Run on row itself is hidden).
+pub fn switch_to(state: &mut ChatState, target: &str) -> Vec<Effect> {
+    let mut action = UserAction::new(crate::action::ActionKind::SwitchDraftRunLocation);
+    action
+        .params
+        .insert("runLocation".to_string(), json!(target));
+    switch(state, &action)
+}
+
+/// The row as the renderers draw it, or `None` when it is hidden: wherever the new chat's tray
+/// offers Cloud Box, whose picker lists these places under More providers.
+///
+/// CDXC:CloudBoxes 2026-11-02 DECISION:
+/// User (D3 "into cloud box menu"): the Run on row goes away where the tray's Cloud Box segment is
+/// offered; its agentbox places are rows of that segment's picker. A folder that is not a git
+/// checkout has no Cloud Box segment, so it keeps the row. This narrows the AgentBox 2026-10-01
+/// decision above.
+pub fn row(state: &ChatState) -> Option<Value> {
+    let tray_offers_cloud = state
+        .menus
+        .draft_worktree
+        .answer
+        .as_ref()
+        .is_some_and(crate::menus::cloud_box::offered);
+    if tray_offers_cloud {
+        return None;
+    }
+    row_value(state)
+}
+
+/// The row's content whether or not it is shown.
 ///
 /// `{label, selected, busy, options: [{runLocation, label, icon, tooltip}]}`: This computer first,
 /// then every ready box location in gxserver's order, then the draft's current box when agentbox
 /// no longer reports it ready (so the selected chip is always on the row).
-pub fn row(state: &ChatState) -> Option<Value> {
+fn row_value(state: &ChatState) -> Option<Value> {
     if !is_draft(state) {
         return None;
     }

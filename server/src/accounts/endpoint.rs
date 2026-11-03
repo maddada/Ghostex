@@ -27,6 +27,31 @@ pub(crate) fn account_id(account: &DiscoveredAccount) -> String {
         hex::encode(Sha256::digest(account.identity.as_bytes()))
     )
 }
+/// A login added to the saved accounts for the first time, with the settings a new account starts with.
+///
+/// CDXC:AgentProviders 2026-10-07 DECISION:
+/// User: "please also make 'available for automatic switching' enabled by default for accounts when added in settings in ghostex". A newly registered account starts with `eligible: true`; Settings, `setup.rs` and the phone all add accounts through `register`, and accounts already saved keep their own value.
+///
+/// CDXC:AgentProviders 2026-11-03 DECISION:
+/// User: "when i add an acconut in ghostex make it appear in sidebar enabled by default". A new account starts with `show_in_titlebar: true`, so its usage shows in the sidebar's account strip at once; accounts already saved keep the choice they have, including one the user hid.
+pub(crate) fn new_saved_account(found: &DiscoveredAccount) -> SavedAccount {
+    SavedAccount {
+        id: account_id(found),
+        provider: found.provider,
+        selector: found.selector.clone(),
+        identity: found.identity.clone(),
+        name: found.name.clone(),
+        color: "neutral".into(),
+        indicator: String::new(),
+        show_in_titlebar: true,
+        eligible: true,
+        shared_history: true,
+        disabled: None,
+        user_disabled: false,
+        login_expired_at: None,
+        login_confirmed_at: None,
+    }
+}
 pub(crate) fn dispatch(
     state: &AppState,
     params: &Map<String, Value>,
@@ -266,29 +291,12 @@ pub(crate) fn dispatch(
                 }
             }
             if !reconnecting {
-                // CDXC:AgentProviders 2026-10-07 DECISION:
-                // User: "please also make 'available for automatic switching' enabled by default for accounts when added in settings in ghostex". A newly registered account starts with `eligible: true`; this is the only place an account is created (Settings, `setup.rs` and the phone all call `register`), and accounts already saved keep their own value.
                 if registry.accounts.len() >= 50 {
                     return Err(DomainStateError::bad_request(
                         "At most 50 accounts can be registered.",
                     ));
                 }
-                registry.accounts.push(SavedAccount {
-                    id: id.clone(),
-                    provider,
-                    selector: found.selector.clone(),
-                    identity: found.identity.clone(),
-                    name: found.name.clone(),
-                    color: "neutral".into(),
-                    indicator: String::new(),
-                    show_in_titlebar: false,
-                    eligible: true,
-                    shared_history: true,
-                    disabled: None,
-                    user_disabled: false,
-                    login_expired_at: None,
-                    login_confirmed_at: None,
-                });
+                registry.accounts.push(new_saved_account(found));
             }
             store::write(&db, &registry)?;
             if reconnecting {
@@ -957,4 +965,50 @@ fn state_value(
         }
     }
     Ok(value)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A new account shows its usage in the sidebar and may be switched to automatically.
+    #[test]
+    fn a_new_account_starts_shown_in_the_sidebar_and_eligible() {
+        let found = DiscoveredAccount {
+            provider: Provider::Claude,
+            selector: "3".into(),
+            identity: "someone@example.com".into(),
+            name: "Work".into(),
+            email: "someone@example.com".into(),
+            status: "ready".into(),
+            shared_history: true,
+            usage: vec![],
+            reset_credits: None,
+            reset_credit_details: None,
+            reset_credits_error: None,
+            usage_updated_at: None,
+            usage_error: None,
+            usage_stale: false,
+        };
+        let saved = new_saved_account(&found);
+        assert_eq!(saved.id, account_id(&found));
+        assert_eq!(
+            (saved.selector.as_str(), saved.name.as_str()),
+            ("3", "Work")
+        );
+        assert!(saved.show_in_titlebar && saved.eligible && saved.shared_history);
+        assert!(!saved.user_disabled && saved.disabled.is_none());
+    }
+
+    /// An account saved before this default existed keeps the sidebar choice it has.
+    #[test]
+    fn a_saved_account_keeps_its_sidebar_choice() {
+        let hidden: SavedAccount = serde_json::from_value(json!({
+            "id": "claude-1", "provider": "claude", "selector": "1", "identity": "a",
+            "name": "A", "color": "neutral", "showInTitlebar": false,
+            "eligible": true, "sharedHistory": true
+        }))
+        .unwrap();
+        assert!(!hidden.show_in_titlebar);
+    }
 }

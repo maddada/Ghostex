@@ -18,6 +18,10 @@ use crate::GhostexGpuiApp;
 #[derive(Default)]
 pub(crate) struct GxStoreHost {
     pub(crate) core: Core,
+    /// The close a close confirmation holds while it is open (`sidebar_close_confirm.rs`).
+    pub(crate) pending_session_close: Option<super::sidebar_close_confirm::PendingSessionClose>,
+    /// Set while a confirmed close runs, so the same close does not ask again.
+    pub(crate) session_close_confirmed: bool,
     pub(crate) endpoint: Option<GxserverEndpoint>,
     /// What the page shows while there is no list: the connection's last failure.
     pub(crate) status: Option<String>,
@@ -324,11 +328,35 @@ impl GhostexGpuiApp {
         self.gx_store_prune_workspace_groups(cx);
     }
 
+    /// Applies a store output the way a frame's is applied (`cloud_boxes.rs` feeds its box machines
+    /// through it).
+    pub(crate) fn gx_store_apply_output(
+        &mut self,
+        output: ghostex_gx_core::Output,
+        cx: &mut gpui::Context<Self>,
+    ) {
+        self.gx_store_after(output, cx);
+    }
+
     fn gx_store_after(&mut self, output: ghostex_gx_core::Output, cx: &mut gpui::Context<Self>) {
+        let cloud_boxes_changed = output.changes.cloud_boxes_changed;
         for effect in output.effects {
+            // Home gxserver's box registry is read when this computer's stream goes live and when
+            // a `cloudBoxesChanged` frame asks for it (`cloud_boxes.rs`).
+            if matches!(
+                &effect,
+                ghostex_gx_core::Effect::MachineLive { machine } if machine.is_local()
+            ) || matches!(effect, ghostex_gx_core::Effect::RefetchCloudBoxes)
+            {
+                self.gx_store_refresh_cloud_boxes(cx);
+            }
             match effect {
-                ghostex_gx_core::Effect::ResubscribePresentation { .. } => {
-                    self.gx_store_subscribe(true)
+                // A box machine's snapshot is asked of its own socket (`cloud_boxes.rs`).
+                ghostex_gx_core::Effect::ResubscribePresentation { machine, .. } => {
+                    match machine.remote_id() {
+                        Some(machine_id) => super::cloud_boxes::cloud_box_resubscribe(machine_id),
+                        None => self.gx_store_subscribe(true),
+                    }
                 }
                 effect @ (ghostex_gx_core::Effect::MachineLive { .. }
                 | ghostex_gx_core::Effect::RefetchSidebarHud { .. }
@@ -341,6 +369,9 @@ impl GhostexGpuiApp {
         self.gx_store_hud_store_changed(&output.changes, cx);
         self.gx_store.sidebar_list.note_changes(&output.changes);
         self.gx_store_update_sidebar_list(cx);
+        if cloud_boxes_changed {
+            self.gx_store_sync_cloud_boxes(cx);
+        }
         // A draft whose first message started its agentbox box leaves Chat View (gx-core's
         // `session_chat_view_unavailable`), so its terminal is attached as the rule flips.
         if let Some(session) = self.open_session.clone()

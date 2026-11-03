@@ -1,6 +1,6 @@
 mod arguments;
 mod command;
-mod delivery;
+pub(super) mod delivery;
 pub(super) mod identity;
 mod lifecycle;
 pub(super) mod outbound;

@@ -129,7 +129,7 @@ pub fn bulk_menu(input: &BulkMenuInput<'_>) -> Option<Vec<MenuItem>> {
             "Close Selected",
             "x",
             input.selected,
-            message::close_session,
+            message::close_selected_session,
         )
         .into_iter()
         .map(MenuItem::with_danger),

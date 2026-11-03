@@ -291,6 +291,31 @@ pub(super) fn progress_dots(index: usize, count: usize, p: &ChatAppearance) -> A
 /// the usual 500ms.
 pub(super) const QUICK_TOOLTIP_DELAY: std::time::Duration = std::time::Duration::from_millis(150);
 
+/// The quiet mark beside the option the agent recommends, at the chat's scale `s`.
+///
+/// CDXC:SessionChat 2026-11-02 DECISION:
+/// User: "make the 'recommended' tag more subtle, not like a pill, and not all caps", first on the HTML pages, then the chat's own question card to match them. A recommended option shows a small muted "Recommended" in sentence case after a faint amber star, with no pill, fill or border, the same mark as the pages (server/src/visual_pages/kit.rs `.gx-rec`) and the phone (apps/mobile/app/src/chat/native/cards/askCard.tsx `RecommendedMark`). Supersedes the light-grey Recommended pill the 2026-10-11 decision kept.
+fn recommended_mark(s: f32, p: &ChatAppearance) -> AnyElement {
+    div()
+        .flex_shrink_0()
+        .flex()
+        .items_center()
+        .gap(px(4.0 * s))
+        .text_size(px(12.0 * s))
+        .line_height(px(18.0 * s))
+        .font_weight(FontWeight::MEDIUM)
+        .text_color(p.muted)
+        .child(
+            svg()
+                .path("titlebar/star-filled.svg")
+                .size(px(10.0 * s))
+                .flex_shrink_0()
+                .text_color(ask_color(p).opacity(0.75)),
+        )
+        .child("Recommended")
+        .into_any_element()
+}
+
 /// A muted keycap: an option's shortcut or letter, or the key a button answers to.
 pub(super) fn keycap(label: String, lit: bool, on_primary: bool, p: &ChatAppearance) -> AnyElement {
     let s = p.scale;
@@ -621,21 +646,7 @@ impl NativeChatView {
                                     })
                                     .child(label.clone()),
                             )
-                            .when(recommended, |line| {
-                                line.child(
-                                    div()
-                                        .flex_shrink_0()
-                                        .px(px(6.0 * s))
-                                        .rounded_full()
-                                        .border_1()
-                                        .border_color(p.control_primary.opacity(0.6))
-                                        .text_size(px(10.5 * s))
-                                        .line_height(px(16.0 * s))
-                                        .font_weight(FontWeight::SEMIBOLD)
-                                        .text_color(p.control_primary)
-                                        .child("Recommended"),
-                                )
-                            }),
+                            .when(recommended, |line| line.child(recommended_mark(s, p))),
                     )
                     .when(!detail.is_empty() && detail != label, |column| {
                         column.child(

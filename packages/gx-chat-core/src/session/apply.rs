@@ -111,6 +111,9 @@ pub fn apply_state_frame(
     if let Some(parent) = frame.state.side_chat_of.clone() {
         state.session.side_chat_of = Some(parent);
     }
+    if let Some(requests) = frame.state.secret_requests.clone() {
+        crate::extras::secret_requests::receive(state, requests);
+    }
     if let Some(deliveries) = frame.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);
     }
@@ -463,6 +466,9 @@ pub fn apply_authoritative(
     }
     if let Some(parent) = result.state.side_chat_of.clone() {
         state.session.side_chat_of = Some(parent);
+    }
+    if let Some(requests) = result.state.secret_requests.clone() {
+        crate::extras::secret_requests::receive(state, requests);
     }
     if let Some(deliveries) = result.state.agent_message_deliveries.clone() {
         state.session.agent_message_deliveries = Some(deliveries);

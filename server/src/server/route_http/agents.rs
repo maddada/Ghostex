@@ -34,6 +34,9 @@ pub(super) async fn route_agents_http(
         "/api/agentbox" => {
             agentbox_http::handle(&state, endpoint.path, request_id, &body_json).await
         }
+        "/api/cloudBoxes" => {
+            agentbox_http::handle_cloud_boxes(state, endpoint.path, request_id, &body_json).await
+        }
         "/api/agentAccounts" => {
             accounts_http::handle_accounts_http(&state, endpoint.path, request_id, &body_json).await
         }

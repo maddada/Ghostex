@@ -40,7 +40,10 @@ pub(crate) fn section_menu(group: &GroupView, section: &SectionView) -> Option<V
         MenuItem::row(
             "Close All",
             "x",
-            MenuCommand::command(message::close_sessions(&section.member_ids)),
+            MenuCommand::command(message::close_sessions(
+                &section.member_ids,
+                "sectionCloseAll",
+            )),
         )
         .with_danger(),
     ])

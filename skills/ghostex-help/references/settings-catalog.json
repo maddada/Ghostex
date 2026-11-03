@@ -194,6 +194,18 @@
       "agentWritable": true
     },
     {
+      "key": "agentGhostexNote",
+      "title": "Tell agents about Ghostex",
+      "subtitle": "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.",
+      "tab": "chat",
+      "tabTitle": "Chat",
+      "section": "chat",
+      "sectionTitle": "Chat",
+      "type": "boolean",
+      "default": true,
+      "agentWritable": true
+    },
+    {
       "key": "orchestratorAllEfforts",
       "title": "Every effort level in coordinator pickers",
       "subtitle": "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.",
@@ -2626,6 +2638,32 @@
         },
         {
           "label": "System Default Browser",
+          "value": "system-default-browser"
+        }
+      ],
+      "agentWritable": true
+    },
+    {
+      "key": "agentPreviewBrowser",
+      "title": "Agents open pages in",
+      "subtitle": "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+      "tab": "tools",
+      "tabTitle": "Files & Links",
+      "section": "browser",
+      "sectionTitle": "Browser",
+      "type": "enum",
+      "default": "ask",
+      "options": [
+        {
+          "label": "Ask",
+          "value": "ask"
+        },
+        {
+          "label": "Ghostex Browser",
+          "value": "internal-browser"
+        },
+        {
+          "label": "My default browser",
           "value": "system-default-browser"
         }
       ],
@@ -9283,8 +9321,16 @@
           "value": "ghostex-help"
         },
         {
+          "label": "Ghostex Agent Guide",
+          "value": "ghostex-agent-guide"
+        },
+        {
           "label": "Ghostex Visuals",
           "value": "ghostex-visuals"
+        },
+        {
+          "label": "Ghostex Secrets",
+          "value": "ghostex-secrets"
         },
         {
           "label": "Ghostex Computer Use",
@@ -9433,16 +9479,186 @@
       "agentWritable": true
     },
     {
+      "key": "cloudBoxesInstabox",
+      "title": "Instabox",
+      "subtitle": "Connect your Instabox.sh account in the browser, or paste an API key. Boxes run on your account and bill to it.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudProviders",
+      "sectionTitle": "Providers",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "cloudBoxesBoat",
+      "title": "Boat",
+      "subtitle": "Connect your Boat.dev account: Ghostex asks for your email, opens Boat's page and shows a 6-digit code to type there. Or paste an API key.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudProviders",
+      "sectionTitle": "Providers",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "cloudBoxesSpend",
+      "title": "This month",
+      "subtitle": "What your Cloud Boxes cost this month, per provider and in total. Instabox counts everything on that account; Boat counts the boxes Ghostex made.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudSpending",
+      "sectionTitle": "Spending",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "cloudBoxesMonthlyCapUsd",
+      "title": "Monthly cap",
+      "subtitle": "Ghostex warns at 80% of this many dollars a month and starts no new box at 100%. Running boxes keep running. 0 turns the cap off.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudSpending",
+      "sectionTitle": "Spending",
+      "type": "number",
+      "default": 0,
+      "min": 0,
+      "max": 10000,
+      "step": 1,
+      "agentWritable": true
+    },
+    {
+      "key": "cloudBoxesIdleStopMinutes",
+      "title": "Stop idle boxes after",
+      "subtitle": "A box with no agent working and no terminal open pauses (Instabox) or stops (Boat) after this long. Sending a message wakes it.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudLifetime",
+      "sectionTitle": "Stopping and deleting",
+      "type": "number",
+      "default": 15,
+      "options": [
+        {
+          "label": "5 minutes",
+          "value": "5"
+        },
+        {
+          "label": "10 minutes",
+          "value": "10"
+        },
+        {
+          "label": "15 minutes",
+          "value": "15"
+        },
+        {
+          "label": "30 minutes",
+          "value": "30"
+        },
+        {
+          "label": "1 hour",
+          "value": "60"
+        },
+        {
+          "label": "2 hours",
+          "value": "120"
+        }
+      ],
+      "min": 1,
+      "max": 1440,
+      "step": 1,
+      "agentWritable": true
+    },
+    {
+      "key": "cloudBoxesDeleteStoppedAfterDays",
+      "title": "Delete archived boxes after",
+      "subtitle": "When every session on a box is archived, the box stops and is deleted after this many days. A box with unpushed work is kept until you push or delete it.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudLifetime",
+      "sectionTitle": "Stopping and deleting",
+      "type": "number",
+      "default": 7,
+      "options": [
+        {
+          "label": "1 day",
+          "value": "1"
+        },
+        {
+          "label": "3 days",
+          "value": "3"
+        },
+        {
+          "label": "7 days",
+          "value": "7"
+        },
+        {
+          "label": "14 days",
+          "value": "14"
+        },
+        {
+          "label": "30 days",
+          "value": "30"
+        }
+      ],
+      "min": 1,
+      "max": 365,
+      "step": 1,
+      "agentWritable": true
+    },
+    {
+      "key": "cloudBoxesPhoneStartEnabled",
+      "title": "Start boxes from your phone",
+      "subtitle": "Keep your provider key, agent logins, Default snapshots and picked secrets on your paired phones, so they can start a box while this computer is off.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudLifetime",
+      "sectionTitle": "Stopping and deleting",
+      "type": "boolean",
+      "default": false,
+      "agentWritable": true
+    },
+    {
+      "key": "cloudBoxesBoxes",
+      "title": "Your boxes",
+      "subtitle": "Every box with its state, project, age and cost. Stop a box, or delete it; a box with unpushed work asks first.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudBoxList",
+      "sectionTitle": "Your boxes",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "cloudBoxesClaudeLogins",
+      "title": "Claude on cloud boxes",
+      "subtitle": "Allow a Claude account on boxes: it makes a one-year box token after one approval in your browser, so Claude on this computer stays signed in.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudAgentLogins",
+      "sectionTitle": "Agent logins for boxes",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "cloudBoxesCodexLogins",
+      "title": "Codex on cloud boxes",
+      "subtitle": "Allow a Codex account on boxes: each box gets a fresh copy of its login and sends refreshed sign-ins back to this computer.",
+      "tab": "cloudBoxes",
+      "tabTitle": "Cloud Boxes",
+      "section": "cloudAgentLogins",
+      "sectionTitle": "Agent logins for boxes",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "agentboxStatus",
       "title": "agentbox",
       "subtitle": "Install agentbox, the free open-source command line tool Ghostex uses to run agent sessions in boxes, see its version and whether Docker is running, and run its check.",
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "overview",
-      "sectionTitle": "Cloud Boxes",
+      "sectionTitle": "More providers (agentbox)",
       "type": "ui",
-      "agentWritable": false,
-      "availability": "Only on macOS and Linux."
+      "agentWritable": false
     },
     {
       "key": "agentboxSetUpForMe",
@@ -9451,7 +9667,7 @@
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "overview",
-      "sectionTitle": "Cloud Boxes",
+      "sectionTitle": "More providers (agentbox)",
       "type": "ui",
       "agentWritable": false,
       "availability": "Only on macOS and Linux."
@@ -9463,7 +9679,7 @@
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
       "section": "overview",
-      "sectionTitle": "Cloud Boxes",
+      "sectionTitle": "More providers (agentbox)",
       "type": "ui",
       "agentWritable": false,
       "availability": "Only on macOS and Linux."
@@ -9599,7 +9815,7 @@
     },
     {
       "key": "agentboxStartThread",
-      "title": "Start a thread in a box",
+      "title": "Start a thread in an agentbox box",
       "subtitle": "Open New Thread and pick where it runs under Run on. Boxes open in the terminal view.",
       "tab": "cloudBoxes",
       "tabTitle": "Cloud Boxes",
@@ -10256,7 +10472,7 @@
     {
       "key": "cloudBoxes",
       "title": "Cloud Boxes",
-      "subtitle": "Run agent sessions in isolated boxes, in Docker on this computer or in the cloud, from New Thread's Run on choice or Run in a Box in the Select Agent menu.",
+      "subtitle": "Run agent sessions on a Cloud Box: a Linux machine on your Instabox or Boat account, started from a new chat, with more providers through agentbox.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
@@ -10380,17 +10596,16 @@
       "agentWritable": true
     },
     {
-      "key": "cloudBoxesHidden",
-      "title": "Turn off Cloud Boxes",
-      "subtitle": "Turn off Cloud Boxes everywhere: the Cloud Boxes page in Settings, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the agentbox commands. Off by default; your boxes and box settings are kept.",
+      "key": "cloudBoxesEnabled",
+      "title": "Cloud Boxes",
+      "subtitle": "Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.",
       "tab": "extensions",
       "tabTitle": "Extensions",
       "section": "official",
       "sectionTitle": "Built-in",
       "type": "boolean",
       "default": true,
-      "agentWritable": true,
-      "availability": "Only on macOS and Linux."
+      "agentWritable": true
     },
     {
       "key": "workspacesHidden",
@@ -11031,6 +11246,39 @@
       "agentWritable": false
     },
     {
+      "key": "projectCloudBoxDefaults",
+      "title": "Cloud box provider and size",
+      "subtitle": "Which provider and machine size a new Cloud Box for this project starts on.",
+      "tab": "projects",
+      "tabTitle": "Projects",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "projectCloudBoxSnapshots",
+      "title": "Cloud box snapshots",
+      "subtitle": "This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.",
+      "tab": "projects",
+      "tabTitle": "Projects",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "projectCloudBoxSecrets",
+      "title": "Send to the box",
+      "subtitle": "Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.",
+      "tab": "projects",
+      "tabTitle": "Projects",
+      "section": "projectSettings",
+      "sectionTitle": "Project settings",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
       "key": "easyConnectEnabled",
       "title": "Easy Connect",
       "subtitle": "Connect a phone or a remote machine. Install the Tailcat CLI helper with one click.",
@@ -11270,6 +11518,39 @@
       "tabTitle": "Remote",
       "section": "remoteAdvanced",
       "sectionTitle": "Advanced",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "secretProviders",
+      "title": "1Password accounts",
+      "subtitle": "The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with \"Integrate with 1Password CLI\" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "providers",
+      "sectionTitle": "Secret providers",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "secretReferenceCheck",
+      "title": "Check a 1Password reference",
+      "subtitle": "Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "check",
+      "sectionTitle": "Check a reference",
+      "type": "ui",
+      "agentWritable": false
+    },
+    {
+      "key": "secretRequests",
+      "title": "Private secret requests",
+      "subtitle": "When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.",
+      "tab": "secrets",
+      "tabTitle": "Secrets",
+      "section": "requests",
+      "sectionTitle": "Secrets agents ask for",
       "type": "ui",
       "agentWritable": false
     },
@@ -11890,7 +12171,7 @@
     {
       "key": "voiceAgentXaiKey",
       "title": "xAI API key",
-      "subtitle": "Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it.",
+      "subtitle": "Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.",
       "tab": "voiceAgent",
       "tabTitle": "Voice agent",
       "section": "keys",
@@ -11901,7 +12182,7 @@
     {
       "key": "voiceAgentOpenaiKey",
       "title": "OpenAI API key",
-      "subtitle": "Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it.",
+      "subtitle": "Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.",
       "tab": "voiceAgent",
       "tabTitle": "Voice agent",
       "section": "keys",

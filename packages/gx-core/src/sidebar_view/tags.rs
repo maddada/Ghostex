@@ -263,6 +263,9 @@ pub(crate) fn tag_label(tag: Option<&str>, catalog: &TagCatalog) -> Option<Strin
     if tag == UNTAGGED_TAG_FILTER {
         return Some("No tag".to_string());
     }
+    if tag == crate::cloud_boxes::CLOUD_BOX_FILTER {
+        return Some("Cloud Box".to_string());
+    }
     if is_custom_tag_id(tag) {
         return Some(
             catalog
@@ -300,6 +303,20 @@ pub(crate) fn matches_tag_filters(effective_tag: Option<&str>, filters: &[String
         None => filters.iter().any(|filter| filter == UNTAGGED_TAG_FILTER),
         Some(tag) => filters.iter().any(|filter| filter == tag),
     }
+}
+
+/// The tag filters, with the Cloud Box filter (`cloud_boxes::CLOUD_BOX_FILTER`) as one more
+/// choice: ticked, it lets every row that runs on a box through.
+pub(crate) fn matches_session_filters(
+    effective_tag: Option<&str>,
+    on_cloud_box: bool,
+    filters: &[String],
+) -> bool {
+    (on_cloud_box
+        && filters
+            .iter()
+            .any(|filter| filter == crate::cloud_boxes::CLOUD_BOX_FILTER))
+        || matches_tag_filters(effective_tag, filters)
 }
 
 /// One row of the tag filter list in settings.

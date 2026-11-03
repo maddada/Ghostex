@@ -1,6 +1,10 @@
 use ghostex_gx_chat_core::menus::orchestrator_effort::{
     default_orchestrator_effort, orchestrator_efforts,
 };
+use ghostex_gx_chat_core::protocol::{
+    coordinator_default_model_label, coordinator_launch_takes_effort,
+    coordinator_launch_takes_model, coordinator_model_label,
+};
 use serde_json::{json, Value};
 
 use super::{acknowledge_threads, playbook, sleep_threads, threads};
@@ -316,16 +320,23 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
         .iter()
         .filter_map(|row| {
             let family = agent_family(row)?;
-            // Only these agents' launches take a model (launch_plan.rs `apply_agent_model_options`);
-            // the others start on their own configured model, so their form shows no model choice.
-            let lineup = matches!(family, "claude" | "codex" | "pi" | "zcode" | "antigravity")
+            // An agent whose launch takes no model starts on its configured one, so its form shows
+            // no model choice; one whose launch takes no effort shows no effort choice.
+            let lineup = coordinator_launch_takes_model(family)
                 .then(|| catalog.pointer(&format!("/agents/{family}")))
                 .flatten();
+            let takes_effort = coordinator_launch_takes_effort(family);
             let agent_efforts = lineup
                 .and_then(|agent| agent.get("efforts"))
                 .cloned()
                 .unwrap_or_else(|| json!([]));
-            let models: Vec<Value> = lineup
+            // OpenCode's lineup marks no default, so its first row keeps OpenCode's own model.
+            let keep_default = lineup.and(coordinator_default_model_label(family)).map(|label| {
+                json!({ "value": "", "label": label, "default": true, "efforts": [], "defaultEffort": null })
+            });
+            let models: Vec<Value> = keep_default
+                .into_iter()
+                .chain(lineup
                 .and_then(|agent| agent.get("models"))
                 .and_then(Value::as_array)
                 .map(Vec::as_slice)
@@ -340,6 +351,7 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .unwrap_or_default()
                         .iter()
                         .filter_map(Value::as_str)
+                        .filter(|_| takes_effort)
                         .collect();
                     let offered = orchestrator_efforts(&levels, all_efforts, None);
                     let efforts: Vec<Value> = offered
@@ -348,12 +360,16 @@ fn options(parsed: &ParsedArgs) -> CliResult<()> {
                         .collect();
                     json!({
                         "value": model["value"],
-                        "label": model["label"],
+                        "label": coordinator_model_label(
+                            family,
+                            model["value"].as_str().unwrap_or_default(),
+                            model["label"].as_str().unwrap_or_default(),
+                        ),
                         "default": model.get("default").and_then(Value::as_bool) == Some(true),
                         "efforts": efforts,
                         "defaultEffort": default_orchestrator_effort(&levels),
                     })
-                })
+                }))
                 .collect();
             let default_model = models
                 .iter()
@@ -512,6 +528,7 @@ pub(super) fn print_status(view: &Value, all: bool) {
         ("finished", "Finished"),
         ("working", "Working"),
         ("sleeping", "Sleeping"),
+        ("unreachable", "On a computer that isn't connected"),
         ("closed", "Closed"),
         ("done", "Done"),
     ] {

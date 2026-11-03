@@ -13,7 +13,7 @@ use crate::keys::SessionKey;
 use super::inputs::{SectionId, SidebarSettings, SidebarUiState};
 use super::ordering::{held_out_of_working, order_rows_for_display, row_deadline_ms};
 use super::sections::{project_session_sections, SectionLayout};
-use super::tags::matches_tag_filters;
+use super::tags::matches_session_filters;
 use super::threads::nest_threads;
 use super::view::{
     GroupCore, GroupSummary, NeedsYou, ProjectContextView, RemoteMachineView, SessionRow,
@@ -280,8 +280,9 @@ pub(crate) fn lay_out_group_rows(
         .into_iter()
         .map(|index| store_rows[index].clone())
         .filter(|session| {
-            matches_tag_filters(
+            matches_session_filters(
                 session.row.effective_tag.as_deref(),
+                session.row.cloud_box.is_some(),
                 &ui.selected_tag_filters,
             )
         })

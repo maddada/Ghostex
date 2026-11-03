@@ -18,8 +18,8 @@ This derivation is registry-only and O(n) over the rows SQLite already handed us
 no rollout file is opened while a list is being built. Two rules come out of it:
 
 - A row is SUPERSEDED, and therefore hidden from Previous Sessions, only when it
-  is closed AND some other row descends from it. A deliberate fork leaves two
-  living leaves, and both stay visible because neither has a descendant.
+  is closed AND some other row continues it (see `supersedes_parent` for forks).
+  A deliberate fork leaves two living leaves, and both stay visible.
 - Every row that survives publishes how many VISIBLE siblings share its history,
   so a card can say "this conversation has branches" without a second round trip.
 */
@@ -48,16 +48,40 @@ pub(crate) struct SessionForkFacts {
     agent_session_id: Option<String>,
     claims: ParentClaims,
     active: bool,
+    forked_from: Vec<String>,
+    created_at: Option<String>,
+    last_active_at: Option<String>,
 }
 
 impl SessionForkFacts {
     pub(crate) fn from_session(session: &Value) -> Self {
+        let forked_from = [
+            read_runtime_text(session, "forkedFromSessionId"),
+            read_launch_text(session, "forkedFromSessionId"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
         Self {
             session_id: string_field(session, "sessionId"),
             agent_session_id: read_runtime_text(session, "agentSessionId"),
             claims: parent_claims(session),
             active: is_active(session),
+            forked_from,
+            created_at: string_field(session, "createdAt"),
+            last_active_at: string_field(session, "lastActiveAt"),
         }
+    }
+}
+
+/// CDXC:SessionFork 2026-11-02 WHY: A Ghostex fork used to hide its parent from Previous Sessions as soon as the parent closed, so a coordinator that was forked once and then kept working for a day vanished from history and could not be restored. A fork owns the parent's history only up to the fork, so it supersedes the parent only when the parent was not used after the fork was made; restores and resumed conversations still supersede the row they continue.
+fn supersedes_parent(child: &SessionForkFacts, parent_id: &str, parent: &SessionForkFacts) -> bool {
+    if !child.forked_from.iter().any(|id| id == parent_id) {
+        return true;
+    }
+    match (&parent.last_active_at, &child.created_at) {
+        (Some(parent_last_active), Some(forked_at)) => parent_last_active <= forked_at,
+        _ => true,
     }
 }
 
@@ -142,15 +166,14 @@ impl SessionForkFamilies {
             }
         }
 
-        let has_descendant: HashSet<String> = parents.values().cloned().collect();
-        let hidden: HashSet<String> = has_descendant
+        let hidden: HashSet<String> = parents
             .iter()
-            .filter(|session_id| {
-                by_id
-                    .get(*session_id)
-                    .is_some_and(|session| !session.active)
+            .filter_map(|(child_id, parent_id)| {
+                let parent = by_id.get(parent_id)?;
+                let child = by_id.get(child_id)?;
+                (!parent.active && supersedes_parent(child, parent_id, parent))
+                    .then(|| parent_id.clone())
             })
-            .cloned()
             .collect();
 
         let (family_of, families) = group_families(&order, &parents);

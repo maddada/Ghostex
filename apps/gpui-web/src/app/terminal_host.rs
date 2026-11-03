@@ -15,7 +15,11 @@ impl GhostexGpuiApp {
         if let Some(view) = self.terminals.get(session) {
             return Some(view.clone());
         }
-        let endpoint = self.gx_store.endpoint.clone()?;
+        // A Cloud Box session's terminal is on the box's own gxserver (`gx_store/cloud_boxes.rs`).
+        let endpoint = match session.machine.remote_id() {
+            Some(machine_id) => crate::app::gx_store::cloud_box_endpoint(machine_id)?,
+            None => self.gx_store.endpoint.clone()?,
+        };
         crate::terminal_gpui_engine::register_gpui_terminal_engine_fonts(cx);
         let (sink, events) = TerminalView::event_channel();
         let model = TerminalModel::attach(

@@ -2,6 +2,7 @@ mod account_login;
 mod accounts;
 pub mod actions;
 mod agent_cli;
+mod agent_guide;
 pub mod agent_sync;
 mod agentbox_cli;
 mod agents;
@@ -10,9 +11,13 @@ pub mod args;
 pub mod attach;
 pub mod automations;
 pub mod board;
+mod box_cli;
 pub mod browser_mcp;
 mod built_in_extensions;
 mod claude_cloud_cli;
+mod cloud_attach;
+mod cloud_cli;
+mod computers;
 mod connectors;
 mod connectors_executor;
 mod connectors_mcp;
@@ -22,6 +27,7 @@ pub mod editors;
 pub mod extensions;
 mod feedback;
 pub mod guide;
+mod help_ask;
 mod hookless_activity;
 pub mod launchers;
 mod mcp_stdio;
@@ -36,6 +42,7 @@ pub mod resources;
 pub mod rpc;
 mod run_in_terminal;
 pub mod saved_prompts;
+mod secret;
 pub mod selector;
 mod session_chat_model;
 mod session_chat_rpc;
@@ -100,12 +107,17 @@ pub fn run() -> i32 {
 /// global help gate.
 const HELP_GATE_EXCLUDED: &[&str] = &[
     "account-login",
+    "agent-guide",
+    "computers",
+    "help",
     "accounts",
     "agent-cli",
     "agentbox",
     "agents",
     "app-update",
+    "box",
     "claude-cloud",
+    "cloud",
     "coordinator",
     "orchestrator",
     "automations",
@@ -127,6 +139,8 @@ const HELP_GATE_EXCLUDED: &[&str] = &[
     "guide",
     "manage-beads",
     "notify",
+    "secret",
+    "secrets",
     "visual",
     "h",
     "history",
@@ -220,7 +234,9 @@ fn is_known_command(name: &str) -> bool {
         "agent-cli",
         "agentbox",
         "agents",
+        "box",
         "claude-cloud",
+        "cloud",
         "coordinator",
         "orchestrator",
         "sessions",
@@ -375,6 +391,7 @@ fn is_known_command(name: &str) -> bool {
         "web",
         "ports",
         "resources",
+        "computers",
         "install-browser-skill",
         "install-browser-mcp-skill",
         "install-browser-use-skill",
@@ -394,9 +411,12 @@ fn is_known_command(name: &str) -> bool {
         "move-codex-session",
         "install-move-codex-session-skill",
         "guide",
+        "agent-guide",
         "agent-sync",
         "feedback",
         "notify",
+        "secret",
+        "secrets",
         "show",
         "visual",
         "install-help-skill",
@@ -415,6 +435,8 @@ fn is_known_command(name: &str) -> bool {
 }
 
 fn run_command(name: &str, args: &[String]) -> CliResult<()> {
+    let routed = computers::args_for_session_on_another_computer(name, args);
+    let args: &[String] = routed.as_deref().unwrap_or(args);
     use actions::{
         run_bridge_action, run_message_bridge_action, run_resolved_session_bridge_action,
         BridgeOptions, Parser,
@@ -440,7 +462,10 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             agentbox_cli::run(args)
         }
         "agents" => agents::run(args),
+        "computers" => computers::run(args),
+        "box" => box_cli::run(args),
         "claude-cloud" => claude_cloud_cli::run(args),
+        "cloud" => cloud_cli::run(args),
         // CDXC:Coordinators 2026-10-28 DECISION: user renamed Orchestrator back to Coordinator and made `coordinator` the real command group; `orchestrator` stays as an alias (see ghostex_cli/coordinator/command.rs).
         "coordinator" | "orchestrator" => coordinator::run(args),
         "sessions" | "s" | "list-sessions" | "ls" => sessions::sessions_command(args),
@@ -928,6 +953,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "bd" | "beads" => launchers::beads_command(args),
         "board" => board::board_command(args),
         "notify" => notify::notify_command(args),
+        "secret" | "secrets" => secret::secret_command(args),
         "feedback" => feedback::feedback_command(args),
         "show" => show::show_command(args),
         "visual" => visual::visual_command(args),
@@ -961,6 +987,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
             skills::install_move_codex_session_skill_command(args)
         }
         "guide" => guide::guide_command(args),
+        "agent-guide" => agent_guide::agent_guide_command(args),
         "voice" => voice::voice_command(args),
         "agent-sync" => agent_sync::agent_sync_command(args),
         "install-help-skill" => skills::install_help_skill_command(args),
@@ -974,10 +1001,7 @@ fn run_command(name: &str, args: &[String]) -> CliResult<()> {
         "logs" => diagnostics::logs_command(args),
         "hookless-activity" => hookless_activity::hookless_activity_command(args),
         "bundle" => diagnostics::bundle_command(args),
-        "help" => {
-            println!("{}", usage::usage());
-            Ok(())
-        }
+        "help" => help_ask::help_command(args),
         other if automations::is_automation_command(other) => {
             automations::run_automation_command(other, args)
         }

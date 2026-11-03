@@ -1,5 +1,5 @@
 //! A dialog opened from inside Settings (`DialogContent className='ghostex-settings-shadcn ...'
-//! nested`): the 12px-rounded panel on the Settings surface (`#0e0e0e` dark, `#f5f5f5` light) with a
+//! nested`): the 12px-rounded panel on the theme's dialog surface (`SettingsPalette::dialog_surface`) with a
 //! hairline edge and a 1px foreground/10 ring, 16px padding and 12px between its parts, a 16/16
 //! medium title, a 14/20 muted description, the page's body and a right-aligned footer. A
 //! `nested` dialog also lays its own black/65 backdrop over the whole Settings window (rail, search
@@ -77,15 +77,9 @@ impl SettingsDialogSpec {
     }
 }
 
-/// The dialog's surface colour.
+/// The dialog's surface colour (`SettingsPalette::dialog_surface`).
 pub(crate) fn dialog_background(p: &SettingsPalette) -> gpui::Rgba {
-    if p.light {
-        p.surface
-    } else if p.glass {
-        p.modal.solid_surface
-    } else {
-        gpui::rgb(0x0e0e0e)
-    }
+    p.dialog_surface()
 }
 
 /// `DialogFooter`: the buttons right-aligned with 8px between them.

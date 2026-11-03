@@ -217,6 +217,10 @@ pub fn usage() -> String {
             "Update this or a connected computer's Ghostex app",
         ),
         format_help_command(
+            "computers [--json]",
+            "List the computers this one is connected to; any agent can then start, message and read sessions there with --computer <name> (sessions, agents create/send/list, coordinator start-thread, read-session-chat, read-text and the other session verbs), or with a session ref from that computer",
+        ),
+        format_help_command(
             "create-session [title] [--input text] [--start] [--project-id id] [--group-id id] [--cwd path]",
             "Create a terminal session; --start materializes the live terminal immediately; --group-id (with --start) puts it in one of the project's session groups (ghostex session-groups lists them); --cwd starts it in another folder while it stays in the project",
         ),
@@ -235,6 +239,14 @@ pub fn usage() -> String {
         format_help_command(
             "notify --title text [--body text] [--session-id id]",
             "Post a notification to the Ghostex bell for a session; defaults to the calling session",
+        ),
+        format_help_command(
+            "secret request --label text --reason text [--placeholder text] [--timeout-minutes N]",
+            "Ask the user for a password, API key or token through a private card in this session's chat, and wait for the answer. The value never enters the chat or your context: when saved, the result names an owner-only file (deleted after 24 hours) to read inside the command that needs it. Use it instead of asking for a secret in chat, and for a sudo password",
+        ),
+        format_help_command(
+            "secret providers [list|add --name text --account text|remove <id>|check --provider id --reference op://…]",
+            "List, add, remove or test the 1Password accounts Ghostex reads saved keys from (Settings > Secrets); check says only whether a reference can be read, never its value",
         ),
         format_help_command(
             "feedback send --title text --body-file file --github-user name [--image file]... [--dry-run]",
@@ -390,6 +402,14 @@ pub fn usage() -> String {
             "Print the built-in Ghostex guide, or one chapter of it",
         ),
         format_help_command("guide --help", "Show Ghostex Help skill setup"),
+        format_help_command(
+            "agent-guide",
+            "Print what an agent running in Ghostex can do: pages, questions and charts in the chat, the browser, other agents, secrets, Ghostex skills",
+        ),
+        format_help_command(
+            "help ask \"<question>\" [--new] [--timeout-seconds N] [--json]",
+            "Ask a Ghostex Help session (the default prompt agent with the ghostex-help skill) and print its answer once it finishes",
+        ),
     ]
     .join("\n");
 
@@ -613,6 +633,10 @@ pub fn usage() -> String {
         format_help_command(
             "agentbox status | list | url <session> [--screen] [--json]",
             "Check agentbox readiness, list boxes, and print a box session's web app or screen URL",
+        ),
+        format_help_command(
+            "cloud providers | connect | list | create | resume | stop | delete | spend | cap [--json]",
+            "Run agent sessions on Cloud Boxes: connect Instabox or Boat, start, wake, stop and delete boxes, and see this month's spend (ghostex cloud --help)",
         ),
         format_help_command(
             "agent-cli status | install <agent> | update <agent> [--json]",
@@ -1638,6 +1662,34 @@ the same way Send Bug / Feedback does. The issue starts with "Reported by @<name
 notifies that user, and Ghostex adds a line with its version and the operating system. Attach
 up to five PNG, JPEG or WebP screenshots of 5 MB each with --image. The issue is public.
 --dry-run prints the exact request (images shown by size) without posting it."#
+        .to_string()
+}
+
+pub fn secret_usage() -> String {
+    r#"Usage:
+  ghostex secret request --label <text> --reason <text> [--placeholder <text>] [--timeout-minutes N]
+  ghostex secret providers [list]
+  ghostex secret providers add --name <text> --account <1Password account>
+  ghostex secret providers remove <id>
+  ghostex secret providers check --provider <id> --reference op://vault/item/field
+  ghostex secret install-skill
+
+request: shows a private card in the calling session's chat asking the user for a secret
+(a password, API key or token) and waits for the answer (10 minutes unless --timeout-minutes,
+at most 60). The value never enters the chat, the transcript or your context. Prints JSON:
+  {"status":"saved","file":"<owner-only file>","next":"…"}   read it inside the command
+  {"status":"declined"|"timedOut"|"cancelled","next":"…"}    exit code 1
+The file is deleted after 24 hours. Use it only inside the command that needs it, e.g.
+  CLOUDFLARE_API_TOKEN="$(cat '<file>')" wrangler whoami
+For a sudo password: once `sudo -n <command>` fails for lack of a password, run
+  sudo -k -S -p '' <command> < '<file>'
+(the file replaces the command's stdin, so give the command its input as a file argument).
+Never print, echo, copy or commit the value. The user may answer with a 1Password reference
+(op://vault/item/field) when a 1Password provider is set up; Ghostex reads it for them.
+
+providers: the 1Password accounts Ghostex reads saved keys and tokens from (Settings >
+Secrets). They need the 1Password CLI (op) signed in on this computer. check reads one
+reference (1Password may ask to unlock) and says only whether it worked."#
         .to_string()
 }
 

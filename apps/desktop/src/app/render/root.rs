@@ -1053,6 +1053,9 @@ impl Render for GhostexGpuiApp {
                     this.run_claude_cloud_menu_pick(action, cx);
                 }),
             )
+            .on_action(cx.listener(|this, action: &CloudBoxMenuPicked, _window, cx| {
+                this.run_cloud_box_menu_pick(action, cx);
+            }))
             .on_action(cx.listener(|this, _: &VoiceCallAllSessions, _window, cx| {
                 this.voice_call_all_sessions(cx);
             }))

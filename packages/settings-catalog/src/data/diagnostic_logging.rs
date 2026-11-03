@@ -1,9 +1,11 @@
 use crate::json::{opt, Opt, J};
 
+/// CDXC:Diagnostics 2026-11-03 DECISION:
+/// User chose: diagnostic log areas turn themselves off after 3 days at most ("Yes, after 3 days"), so the "Never" choice is replaced by "3 days". Areas left on for good had filled the logs folder with 25 MB per area.
 pub const DIAGNOSTIC_LOGGING_DURATION_OPTIONS: &[Opt] = &[
     opt("15 min", "15m"),
     opt("1 hour", "1h"),
-    opt("Never", "always"),
+    opt("3 days", "3d"),
 ];
 
 /// CDXC:Diagnostics 2026-09-26 DECISION:

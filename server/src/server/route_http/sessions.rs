@@ -380,35 +380,7 @@ pub(super) async fn route_sessions_http(
             request_id,
             &body_json,
             |repository, db, params, _| {
-                let session = repository.remove_session(params)?;
-                crate::agentbox::stop_session_box_in_background(repository, &session);
-                /*
-                CDXC:Drafts 2026-08-28:
-                Removing a DRAFT also kills its background agent CLI. The row
-                being deleted is the last thing that pointed at that zmx daemon,
-                so deleting a draft would otherwise leave an orphaned CLI running
-                with nothing in any sidebar able to stop it. Scoped strictly to
-                drafts: removing any other session behaves exactly as it did
-                before — those are sessions the user is expected to have closed
-                deliberately, and changing that is not this feature's call to
-                make.
-                */
-                crate::agents::kill_draft_session_provider(&session);
-                let project_id = value_text(&session, "projectId")?;
-                let session_id = value_text(&session, "sessionId")?;
-                crate::session_chat_queue::forget_session_chat_queue(
-                    db,
-                    &project_id,
-                    Some(&session_id),
-                )?;
-                crate::session_chat_queue_attachments::sweep(&state.paths, db);
-                schedule_presentation_session_delta(
-                    &state,
-                    db,
-                    repository,
-                    &project_id,
-                    &session_id,
-                )?;
+                let session = remove_session_row(&state, db, repository, params)?;
                 Ok(json!({ "session": session }))
             },
         ),
@@ -491,6 +463,29 @@ pub(super) async fn route_sessions_http(
                     coordinator_runtime::handle_coordinator_http(
                         &state, &path, db, repository, params,
                     )
+                },
+            )
+        }
+        path if crate::coordinators::REMOTE_THREAD_ENDPOINTS.contains(&path) => {
+            let path = endpoint.path.clone();
+            handle_domain_http(
+                &state,
+                endpoint.path,
+                request_id,
+                &body_json,
+                |repository, db, params, _| {
+                    let output = crate::coordinators::handle_remote_thread_endpoint(
+                        &path,
+                        db,
+                        state.metadata.server_id.as_str(),
+                        params,
+                    )?;
+                    if let Some((project_id, session_id)) = &output.changed_coordinator {
+                        schedule_presentation_session_delta(
+                            &state, db, repository, project_id, session_id,
+                        )?;
+                    }
+                    Ok(output.result)
                 },
             )
         }

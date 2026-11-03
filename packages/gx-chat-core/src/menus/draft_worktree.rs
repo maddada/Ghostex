@@ -27,6 +27,7 @@ use crate::wire::{ChatRpcMethod, RpcOutcome};
 pub const MODE_FOLDER: &str = "folder";
 pub const MODE_NEW: &str = "newWorktree";
 pub const MODE_EXISTING: &str = "existingWorktree";
+pub use crate::menus::cloud_box::MODE_CLOUD_BOX;
 /// How often the tray reads a running move's progress.
 pub const POLL_MS: f64 = 1_000.0;
 const POLL_TIMER: &str = "menus.draftWorktreePoll";
@@ -65,6 +66,11 @@ pub struct DraftWorktreeState {
     /// This chat sent its first message (any way: Enter, Tab to queue, Compact, a form or question
     /// answer, Send now), so the tray is gone for good ([`note_first_message`]).
     pub sent: bool,
+    /// The Cloud Box picker's picks of this chat (`menus/cloud_box.rs`).
+    pub cloud: crate::menus::cloud_box::CloudPicks,
+    /// The running move starts a cloud box, and the box row it last reported (its boot card).
+    pub cloud_start: bool,
+    pub cloud_box: Option<Value>,
 }
 
 fn text(value: &Value, key: &str) -> Option<String> {
@@ -80,11 +86,16 @@ fn is_draft(state: &ChatState) -> bool {
     state.session.available_agents.is_some()
 }
 
-/// A box picked on the Run on row runs nowhere near this folder: no tray then.
+/// A box picked on the Run on row runs nowhere near this folder: no tray then, unless the tray
+/// offers Cloud Box, whose picker lists that box place under More providers (D3).
 fn box_picked(state: &ChatState) -> bool {
-    crate::menus::run_location::row(state)
-        .and_then(|row| text(&row, "selected"))
-        .is_some_and(|selected| selected != crate::menus::run_location::LOCAL_RUN_LOCATION)
+    let offered = state
+        .menus
+        .draft_worktree
+        .answer
+        .as_ref()
+        .is_some_and(crate::menus::cloud_box::offered);
+    !offered && crate::menus::cloud_box::agentbox_picked(state).is_some()
 }
 
 /*
@@ -195,7 +206,11 @@ fn give_back(state: &mut ChatState, message: String) -> Vec<Effect> {
 /// Folds what a running move reported: keep reading, give the message back, or open the new chat.
 fn follow(state: &mut ChatState, context: &ChatContext, answer: &Value) -> Vec<Effect> {
     match move_status(answer) {
-        Some((status, _)) if status == "creating" => {
+        Some((status, value)) if status == "creating" => {
+            if let Some(row) = value.get("cloudBox").filter(|row| row.is_object()) {
+                state.menus.draft_worktree.cloud_box = Some(row.clone());
+                state.core.request_render();
+            }
             state.core.timers.arm(POLL_TIMER, context.now_ms, POLL_MS);
             Vec::new()
         }
@@ -212,7 +227,15 @@ fn follow(state: &mut ChatState, context: &ChatContext, answer: &Value) -> Vec<E
             let tray = &mut state.menus.draft_worktree;
             tray.poll_request = None;
             tray.status = Some(MoveStatus::Opened);
+            if let Some(row) = value.get("cloudBox").filter(|row| row.is_object()) {
+                tray.cloud_box = Some(row.clone());
+            }
             let sent = tray.message.take().unwrap_or_default();
+            // A cloud box session opens on the box's own machine (`cloudbox:<boxId>`).
+            let mut open = json!({ "projectId": project_id, "sessionId": session_id });
+            if let Some(machine_id) = text(&value, "machineId") {
+                open["machineId"] = json!(machine_id);
+            }
             state.core.request_render();
             let request_id = state.core.allocate_request_id();
             vec![
@@ -222,10 +245,7 @@ fn follow(state: &mut ChatState, context: &ChatContext, answer: &Value) -> Vec<E
                 },
                 Effect::HostAction {
                     action: "openAgentSession".to_string(),
-                    params: Box::new(json!({
-                        "projectId": project_id,
-                        "sessionId": session_id,
-                    })),
+                    params: Box::new(open),
                 },
                 // The draft this chat was is empty now: gxserver closes it.
                 Effect::SendRpc {
@@ -318,14 +338,22 @@ fn worktrees(answer: &Value) -> Vec<Value> {
 
 /// The choice on: this chat's own pick, else the project's remembered one, else This folder.
 fn selected_mode(state: &ChatState, answer: &Value) -> String {
+    let cloud_offered = crate::menus::cloud_box::offered(answer);
     let mode = state
         .menus
         .draft_worktree
         .mode
         .clone()
+        .or_else(|| {
+            (cloud_offered
+                && (crate::menus::cloud_box::remembered(answer)
+                    || crate::menus::cloud_box::agentbox_picked(state).is_some()))
+            .then(|| MODE_CLOUD_BOX.to_string())
+        })
         .or_else(|| remembered(answer, "mode"))
         .unwrap_or_else(|| MODE_FOLDER.to_string());
     match mode.as_str() {
+        MODE_CLOUD_BOX if cloud_offered => mode,
         MODE_NEW => mode,
         MODE_EXISTING if !worktrees(answer).is_empty() => mode,
         _ => MODE_FOLDER.to_string(),
@@ -384,6 +412,13 @@ pub fn tray(state: &ChatState) -> Option<Value> {
     if !worktree_list.is_empty() {
         segments.push(json!({ "mode": MODE_EXISTING, "label": "Existing" }));
     }
+    if crate::menus::cloud_box::offered(answer) {
+        segments.push(json!({
+            "mode": MODE_CLOUD_BOX,
+            "label": crate::menus::cloud_box::SEGMENT_LABEL,
+            "icon": crate::menus::cloud_box::ICON,
+        }));
+    }
     let worktree_key = tray.worktree_key.clone().filter(|key| {
         worktree_list
             .iter()
@@ -395,12 +430,23 @@ pub fn tray(state: &ChatState) -> Option<Value> {
             .find(|worktree| worktree.get("worktreeKey").and_then(Value::as_str) == Some(key))
             .and_then(|worktree| text(worktree, "name"))
     });
+    let card = |label: &str, opening: bool| {
+        tray.cloud_box
+            .as_ref()
+            .filter(|_| tray.cloud_start)
+            .map(|row| crate::menus::cloud_box::card(label, tray.message.as_deref(), row, opening))
+            .unwrap_or(Value::Null)
+    };
     let status = match &tray.status {
-        Some(MoveStatus::Creating { label }) => json!({ "state": "creating", "label": label }),
-        Some(MoveStatus::Failed { message }) => json!({ "state": "failed", "message": message }),
-        Some(MoveStatus::Opened) => {
-            json!({ "state": "opened", "label": "Opening the new chat…" })
+        Some(MoveStatus::Creating { label }) => {
+            json!({ "state": "creating", "label": label, "card": card(label, false) })
         }
+        Some(MoveStatus::Failed { message }) => json!({ "state": "failed", "message": message }),
+        Some(MoveStatus::Opened) => json!({
+            "state": "opened",
+            "label": if tray.cloud_start { "Opening the chat on the box…" } else { "Opening the new chat…" },
+            "card": card("Opening the chat on the box…", true),
+        }),
         None => Value::Null,
     };
     let mut value = Map::new();
@@ -424,6 +470,18 @@ pub fn tray(state: &ChatState) -> Option<Value> {
     value.insert("worktreeLabel".to_string(), json!(worktree_label));
     value.insert("busy".to_string(), json!(moving));
     value.insert("status".to_string(), status);
+    if mode == MODE_CLOUD_BOX {
+        if let Some(facts) = crate::menus::cloud_box::facts(answer) {
+            let picked = crate::menus::cloud_box::resolved(state, facts);
+            value.insert(
+                "cloudBox".to_string(),
+                json!({
+                    "chip": crate::menus::cloud_box::chip(state, &picked),
+                    "menu": crate::menus::cloud_box::menu(state, facts, &picked),
+                }),
+            );
+        }
+    }
     Some(Value::Object(value))
 }
 
@@ -472,19 +530,95 @@ pub fn pick(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
     // A new pick clears the last failure's reason.
     tray_state.status = None;
     state.core.request_render();
+    let mut effects = Vec::new();
+    // Leaving Cloud Box while an agentbox place is picked moves the draft back to this computer.
+    if mode != MODE_CLOUD_BOX && crate::menus::cloud_box::agentbox_picked(state).is_some() {
+        effects.extend(crate::menus::run_location::switch_to(
+            state,
+            crate::menus::run_location::LOCAL_RUN_LOCATION,
+        ));
+    }
+    effects.push(remember_effect(state, &mode));
+    effects
+}
+
+/// The call that remembers the tray's choice: the mode for the project, a new worktree's base
+/// branch, and the Cloud Box picks for the draft.
+fn remember_effect(state: &mut ChatState, mode: &str) -> Effect {
     let mut remember = json!({ "mode": mode });
     if mode == MODE_NEW {
         if let Some(base) = tray(state).and_then(|tray| text(&tray, "baseBranch")) {
             remember["baseBranch"] = json!(base);
         }
     }
+    if mode == MODE_CLOUD_BOX {
+        if let Some(facts) = state
+            .menus
+            .draft_worktree
+            .answer
+            .as_ref()
+            .and_then(crate::menus::cloud_box::facts)
+        {
+            let picked = crate::menus::cloud_box::resolved(state, facts);
+            remember["cloudBox"] = crate::menus::cloud_box::start_picks(&picked);
+        }
+    }
     // Remembering is fire and forget: the answer re-reads the tray, which the pick already drew.
     let request_id = state.core.allocate_request_id();
-    vec![Effect::SendRpc {
+    Effect::SendRpc {
         request_id,
         method: ChatRpcMethod::DraftWorktree,
         params: Box::new(json!({ "remember": remember })),
-    }]
+    }
+}
+
+/// `{"type": "setDraftCloudBox", "provider"?, "snapshotId"?, "size"?, "reuseBoxId"?, "blank"?}`: a
+/// pick in the Cloud Box picker. A `null` clears that pick (a new box instead of a reused one).
+pub fn pick_cloud(state: &mut ChatState, action: &UserAction) -> Vec<Effect> {
+    let Some(current) = tray(state) else {
+        return Vec::new();
+    };
+    if current.get("busy").and_then(Value::as_bool) == Some(true) {
+        return Vec::new();
+    }
+    let has = |key: &str| action.params.contains_key(key);
+    let value = |key: &str| {
+        action
+            .param(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+    };
+    let picks = &mut state.menus.draft_worktree.cloud;
+    if has("provider") {
+        picks.provider = value("provider");
+    }
+    if has("snapshotId") {
+        picks.snapshot_id = value("snapshotId");
+    }
+    if has("size") {
+        picks.size = value("size");
+    }
+    if has("reuseBoxId") {
+        picks.reuse_box_id = Some(value("reuseBoxId"));
+    }
+    if let Some(blank) = action.param("blank").and_then(Value::as_bool) {
+        picks.blank = Some(blank);
+    }
+    let tray_state = &mut state.menus.draft_worktree;
+    tray_state.mode = Some(MODE_CLOUD_BOX.to_string());
+    tray_state.status = None;
+    state.core.request_render();
+    let mut effects = Vec::new();
+    if crate::menus::cloud_box::agentbox_picked(state).is_some() {
+        effects.extend(crate::menus::run_location::switch_to(
+            state,
+            crate::menus::run_location::LOCAL_RUN_LOCATION,
+        ));
+    }
+    effects.push(remember_effect(state, MODE_CLOUD_BOX));
+    effects
 }
 
 /// The first message of a chat whose tray says a worktree: the move instead of an ordinary send.
@@ -499,6 +633,9 @@ pub fn intercept_send(
     if mode == MODE_FOLDER {
         return None;
     }
+    if mode == MODE_CLOUD_BOX {
+        return intercept_cloud_send(state, &current, text_to_send, image_paths);
+    }
     if current.get("busy").and_then(Value::as_bool) == Some(true) {
         // One move at a time: the message goes straight back.
         return Some(vec![Effect::HostAction {
@@ -507,6 +644,7 @@ pub fn intercept_send(
         }]);
     }
     state.menus.draft_worktree.message = Some(text_to_send.to_string());
+    state.menus.draft_worktree.cloud_start = false;
     let worktree_key = text(&current, "worktreeKey");
     if mode == MODE_EXISTING && worktree_key.is_none() {
         return Some(give_back(
@@ -542,6 +680,56 @@ pub fn intercept_send(
         request_id,
         method: ChatRpcMethod::DraftWorktree,
         params: Box::new(json!({ "start": start })),
+    }])
+}
+
+/// The first message of a Cloud Box draft: gxserver keeps it, starts the box and the tray follows
+/// its boot card. An agentbox place picked under More providers sends as always (its first send
+/// starts that box, `server/src/session_chat_queue_runtime/box_first_send.rs`).
+fn intercept_cloud_send(
+    state: &mut ChatState,
+    current: &Value,
+    text_to_send: &str,
+    image_paths: &[String],
+) -> Option<Vec<Effect>> {
+    if crate::menus::cloud_box::agentbox_picked(state).is_some() {
+        return None;
+    }
+    if current.get("busy").and_then(Value::as_bool) == Some(true) {
+        return Some(vec![Effect::HostAction {
+            action: "submissionFailed".to_string(),
+            params: Box::new(json!({ "method": "send", "text": text_to_send })),
+        }]);
+    }
+    let facts = state
+        .menus
+        .draft_worktree
+        .answer
+        .as_ref()
+        .and_then(crate::menus::cloud_box::facts)?
+        .clone();
+    let picked = crate::menus::cloud_box::resolved(state, &facts);
+    state.menus.draft_worktree.message = Some(text_to_send.to_string());
+    if let Some(reason) = crate::menus::cloud_box::refusal(&facts, &picked) {
+        return Some(give_back(state, reason));
+    }
+    let label = crate::menus::cloud_box::start_label(&picked);
+    let tray_state = &mut state.menus.draft_worktree;
+    tray_state.status = Some(MoveStatus::Creating { label });
+    tray_state.cloud_start = true;
+    tray_state.cloud_box = None;
+    let request_id = state.core.allocate_request_id();
+    tray_state.start_request = Some(request_id);
+    state.core.request_render();
+    Some(vec![Effect::SendRpc {
+        request_id,
+        method: ChatRpcMethod::DraftWorktree,
+        params: Box::new(json!({ "start": {
+            "mode": MODE_CLOUD_BOX,
+            "text": text_to_send,
+            "imagePaths": image_paths,
+            "cloudBox": crate::menus::cloud_box::start_picks(&picked),
+        }})),
     }])
 }
 

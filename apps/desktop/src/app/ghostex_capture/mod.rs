@@ -13,6 +13,7 @@ mod grab;
 mod hotkeys;
 mod icon_window;
 mod lifecycle;
+mod machine_sections;
 mod model;
 mod note;
 mod overlay;

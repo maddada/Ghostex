@@ -20,6 +20,7 @@ mod attention;
 pub mod bot_feed;
 mod change;
 mod claude_cloud;
+pub mod cloud_boxes;
 mod connection;
 mod core;
 mod doc_sync;
@@ -172,6 +173,9 @@ pub use crate::sidebar_actions::{
     OPEN_COMMAND_TYPES, READ_ONLY_MESSAGE_TYPES, RELOAD_MESSAGE_TYPES, RELOAD_SET_MESSAGE_TYPES,
     REMOTE_AWAITED_TIMEOUT_MS, REMOTE_FIRE_AND_FORGET_TIMEOUT_MS, REMOTE_FOCUS_MESSAGE_TYPE,
     REMOTE_SESSION_MESSAGE_TYPES, SESSION_SNOOZE_PRESETS, SNOOZE_MESSAGE_TYPES, SORT_ACTIONS,
+};
+pub use crate::sidebar_actions::{
+    close_confirmation, close_source, sidebar_close_targets, CloseConfirmation,
 };
 pub use crate::sidebar_actions::{
     delayed_send_seed, normalize_remote_machine_settings, owns_agent_run_command,

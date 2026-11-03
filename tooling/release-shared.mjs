@@ -20,7 +20,13 @@ export class ReleaseError extends Error {
  manifest or dist/protocol exports; nothing on the
  remote host consumes them and version identity lives in build-identity.json.
  */
-const remoteGxserverLinuxRequiredPackageResources = ['bin/gxserver', 'bin/zmx', 'bin/ghostex', 'build-identity.json'];
+const remoteGxserverLinuxRequiredPackageResources = [
+  'bin/gxserver',
+  'bin/zmx',
+  'bin/ghostex',
+  'bin/tailcat',
+  'build-identity.json',
+];
 
 /*
  CDXC:Release 2026-07-02-14:10:

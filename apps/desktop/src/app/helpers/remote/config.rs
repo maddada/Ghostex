@@ -148,6 +148,8 @@ pub(crate) fn gpui_remote_machines_with_changed_connection(
         let mut fields = machine.as_object().cloned().unwrap_or_default();
         fields.remove("name");
         fields.remove("disabled");
+        // Agent access is renewed in place (remote_conn/connected_computers.rs), never a reconnect.
+        fields.remove("agentAccess");
         fields
     };
     let machines = |settings: &serde_json::Map<String, serde_json::Value>| {

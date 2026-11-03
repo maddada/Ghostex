@@ -6,6 +6,8 @@
 //!
 //! The project chip and its search are `draft_project_picker.rs`.
 //!
+//! The Cloud Box segment's chip and its boot progress card are `box_picker.rs`.
+//!
 //! CDXC:Worktrees 2026-10-31 DECISION:
 //! User (Q828): the tray sits on top of the message box, attached to it like a tab, while the chat is
 //! new. The pick uses the shared bordered segmented control (AGENTS.md "Shared UI controls"); the
@@ -162,8 +164,10 @@ impl NativeChatView {
         .text_size(px(13.0 * s))
         .when(busy, |control| control.opacity(0.6));
 
+        // A narrow chat wraps the chips after the segments onto a second line instead of clipping.
         let mut row = div()
             .flex()
+            .flex_wrap()
             .items_center()
             .gap(px(8.0 * s))
             .min_w_0()
@@ -201,57 +205,60 @@ impl NativeChatView {
             }
             Some("failed") => {
                 let message = status["message"].as_str().unwrap_or_default().to_owned();
-                row = row
-                    .child(
-                        div()
-                            .id("chat-worktree-failure")
-                            .flex()
-                            .flex_1()
-                            .items_center()
-                            .gap(px(6.0 * s))
-                            .min_w_0()
-                            .text_color(rgb(FAILED_COLOR))
-                            .child(
-                                svg()
-                                    .path("titlebar/alert-triangle.svg")
-                                    .size(px(13.0 * s))
-                                    .flex_shrink_0()
-                                    .text_color(rgb(FAILED_COLOR)),
-                            )
-                            .child(
-                                div()
-                                    .min_w_0()
-                                    .overflow_hidden()
-                                    .text_ellipsis()
-                                    .whitespace_nowrap()
-                                    .child(message.clone()),
-                            )
-                            .tooltip(move |window, cx| {
-                                gpui_component::tooltip::Tooltip::new(message.clone())
-                                    .build(window, cx)
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("chat-worktree-retry")
-                            .role(gpui::Role::Button)
-                            .aria_label("Try again")
-                            .flex_shrink_0()
-                            .h(px(26.0 * s))
-                            .px(px(10.0 * s))
-                            .flex()
-                            .items_center()
-                            .rounded(px(7.0 * s))
-                            .border_1()
-                            .border_color(p.composer_border)
-                            .text_color(p.primary)
-                            .chat_cursor_pointer()
-                            .hover(|style| style.bg(p.border))
-                            .child("Try again")
-                            .on_click(cx.listener(|chat, _, window, cx| {
-                                chat.submit("send", window, cx);
-                            })),
-                    );
+                // A line of its own, like the boot card: as a flexible item beside the segments
+                // the message was cut to its first word ("ghostex b…") even in a wide window.
+                row = row.child(
+                    div()
+                        .id("chat-worktree-failure")
+                        .flex()
+                        .w_full()
+                        .items_center()
+                        .gap(px(6.0 * s))
+                        .min_w_0()
+                        .text_color(rgb(FAILED_COLOR))
+                        .child(
+                            svg()
+                                .path("titlebar/alert-triangle.svg")
+                                .size(px(13.0 * s))
+                                .flex_shrink_0()
+                                .text_color(rgb(FAILED_COLOR)),
+                        )
+                        .child(
+                            div()
+                                .id("chat-worktree-failure-message")
+                                .flex_1()
+                                .min_w_0()
+                                .overflow_hidden()
+                                .text_ellipsis()
+                                .whitespace_nowrap()
+                                .child(message.clone())
+                                .tooltip(move |window, cx| {
+                                    gpui_component::tooltip::Tooltip::new(message.clone())
+                                        .build(window, cx)
+                                }),
+                        )
+                        .child(
+                            div()
+                                .id("chat-worktree-retry")
+                                .role(gpui::Role::Button)
+                                .aria_label("Try again")
+                                .flex_shrink_0()
+                                .h(px(26.0 * s))
+                                .px(px(10.0 * s))
+                                .flex()
+                                .items_center()
+                                .rounded(px(7.0 * s))
+                                .border_1()
+                                .border_color(p.composer_border)
+                                .text_color(p.primary)
+                                .chat_cursor_pointer()
+                                .hover(|style| style.bg(p.border))
+                                .child("Try again")
+                                .on_click(cx.listener(|chat, _, window, cx| {
+                                    chat.submit("send", window, cx);
+                                })),
+                        ),
+                );
             }
             _ => {}
         }
@@ -313,9 +320,15 @@ impl NativeChatView {
                         cx,
                     ));
                 }
+                "cloudBox" => {
+                    if tray["cloudBox"].is_object() {
+                        row = row.child(self.render_cloud_box_chip(&tray["cloudBox"], p, busy, cx));
+                    }
+                }
                 _ => {
+                    // CDXC:CloudBoxes 2026-11-02 DECISION: User (Q1006 note): "move the branch name to align to the end of the left aligned elements in that bar". The current branch sits right after the segments, not at the bar's right end.
                     if let Some(current) = tray["currentBranch"].as_str() {
-                        row = row.child(div().flex_1()).child(
+                        row = row.child(
                             div()
                                 .flex()
                                 .items_center()
@@ -361,7 +374,10 @@ impl NativeChatView {
                         .border_b_0()
                         .border_color(p.composer_border)
                         .bg(p.composer_background)
-                        .child(row),
+                        .child(row)
+                        .when(status["card"].is_object(), |tray| {
+                            tray.child(self.render_cloud_box_card(&status["card"], p))
+                        }),
                 )
                 .into_any_element(),
         )

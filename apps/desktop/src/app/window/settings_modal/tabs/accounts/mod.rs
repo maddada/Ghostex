@@ -415,9 +415,19 @@ impl AccountsTab {
                 }
             });
         });
+        let (client, store) = (self.client.clone(), self.store.clone());
+        let added = account_id.clone();
         self.connected = Some((account_id, clear));
-        self.client.update(cx, |client, cx| {
-            client.request(json!({ "operation": "list", "refresh": true }), None, cx)
+        self.client.update(cx, |client_state, cx| {
+            client_state.request(
+                json!({ "operation": "list", "refresh": true }),
+                Some(Box::new(move |ok, cx| {
+                    if ok {
+                        show_added_account_in_sidebar(&client, &store, |a| a.id() == added, cx);
+                    }
+                })),
+                cx,
+            )
         });
         cx.notify();
     }
@@ -627,4 +637,32 @@ impl Render for AccountsTab {
         }
         settings_page(&self.store, SettingsTabId::Accounts, &p, blocks, cx)
     }
+}
+
+/// Hands an account just added to the sidebar's usage strip, which otherwise picks it up on its
+/// next 30-second read. gxserver saves a new account as shown there (CDXC:AgentProviders 2026-11-03
+/// on `new_saved_account` in server/src/accounts/endpoint.rs); one the list reports as hidden is
+/// left alone.
+pub(crate) fn show_added_account_in_sidebar(
+    client: &Entity<AccountsClient>,
+    store: &Entity<SettingsStore>,
+    is_added: impl Fn(&data::Account) -> bool,
+    cx: &mut App,
+) {
+    let Some(account) = client
+        .read(cx)
+        .data
+        .as_ref()
+        .and_then(|data| data.accounts().into_iter().find(|a| is_added(a)))
+    else {
+        return;
+    };
+    if !account.show_in_titlebar() {
+        return;
+    }
+    super::super::store::store_host_message(
+        store,
+        json!({ "type": "accountTitlebarChanged", "machineId": "local", "account": account.raw }),
+        cx,
+    );
 }

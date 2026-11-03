@@ -304,6 +304,7 @@ impl GhostexGpuiApp {
             boxes: self.new_thread_picker_boxes(),
             default_run_location: shared_settings::shared_sidebar_settings_snapshot()
                 .agentbox_default_location(),
+            cloud_box: self.new_thread_picker_offers_cloud_box(),
             close_when_inactive: true,
             cloud_default_account: self
                 .gx_store
@@ -354,7 +355,7 @@ impl GhostexGpuiApp {
             px(NEW_THREAD_PICKER_WIDTH),
             px(new_thread_picker_window_height(
                 agent_count,
-                config.boxes.shows_run_on(),
+                config.boxes.shows_run_on() || config.cloud_box,
             )),
         );
         let window_bounds =
@@ -505,7 +506,15 @@ impl GhostexGpuiApp {
                 run_location,
             } => {
                 self.release_gpui_new_thread_picker_window(cx);
-                self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
+                let cloud_box = run_location.as_deref()
+                    == Some(crate::app::window::new_thread_picker::CLOUD_BOX_RUN_LOCATION);
+                if cloud_box
+                    || (run_location.is_none() && self.new_thread_picker_offers_cloud_box())
+                {
+                    self.launch_agent_with_cloud_box_choice(agent_id, account_id, cloud_box, cx);
+                } else {
+                    self.launch_agent_in_active_project(agent_id, account_id, run_location, cx);
+                }
             }
             // The launcher's "New Coordinator…" action, so the dialog opens the way it does there.
             NewThreadPickerCommand::NewCoordinator => {

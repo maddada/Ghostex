@@ -413,6 +413,14 @@ impl GhostexGpuiApp {
         {
             return None;
         }
+        // A connected Cloud Box needs no overlay; its pane is re-armed as it connects.
+        if gpui_is_cloud_box_machine(&key.remote_machine_id)
+            && self
+                .gpui_remote_gxserver_request_target(&key.remote_machine_id)
+                .is_some()
+        {
+            return None;
+        }
         Some(gpui_remote_connect_overlay_labels(
             self.remote_machine_connect_states
                 .get(&key.remote_machine_id)
@@ -455,8 +463,10 @@ impl GhostexGpuiApp {
             return;
         };
         let settings_snapshot = shared_settings::shared_sidebar_settings_snapshot();
+        // A Cloud Box's restored pane re-arms through its gxserver too (helpers/remote/
+        // cloud_box_attach.rs), once gx_store/cloud_boxes.rs has connected it.
         let Some(config) =
-            gpui_remote_machine_config_from_settings(settings_snapshot.object(), remote_machine_id)
+            gpui_remote_attach_machine_config(settings_snapshot.object(), remote_machine_id)
         else {
             return;
         };

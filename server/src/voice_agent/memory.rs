@@ -390,7 +390,7 @@ async fn summarize(state: Arc<AppState>, path: PathBuf) {
             json!({"provider": provider.id()}),
         );
     };
-    let key = match keys::read_key(&state.paths, provider) {
+    let key = match keys::read_key_async(&state.paths, provider).await {
         Ok(Some(key)) => key,
         Ok(None) => {
             fail("No API key is saved for the provider any more.".to_string());

@@ -345,6 +345,7 @@ jobs:
           sudo rpm --root "$RPM_TEST_ROOT" --install --nodeps "$RPM_PATH"
           sudo rpm --root "$RPM_TEST_ROOT" --upgrade --replacepkgs --nodeps "$RPM_PATH"
           sudo test -x "$RPM_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$RPM_TEST_ROOT/opt/ghostex/gxserver/bin/tailcat"
           sudo test -x "$RPM_TEST_ROOT/usr/bin/ghostex"
           sudo test -L "$RPM_TEST_ROOT/usr/bin/gx"
       - name: Build the portable tarball
@@ -361,6 +362,7 @@ jobs:
           trap 'sudo rm -rf "$TAR_TEST_ROOT"' EXIT
           zstd -dc "$TAR_PATH" | sudo tar -xpf - -C "$TAR_TEST_ROOT"
           sudo test -x "$TAR_TEST_ROOT/opt/ghostex/Ghostex"
+          sudo test -x "$TAR_TEST_ROOT/opt/ghostex/gxserver/bin/tailcat"
           sudo test -x "$TAR_TEST_ROOT/usr/bin/ghostex"
           sudo test -L "$TAR_TEST_ROOT/usr/bin/gx"
           sudo test ! -e "$TAR_TEST_ROOT/DEBIAN"
@@ -392,6 +394,7 @@ jobs:
           test -s "$ROOT/ghostex.png"
           test -x "$ROOT/opt/ghostex/Ghostex"
           test -x "$ROOT/opt/ghostex/gxserver/bin/ghostex"
+          test -x "$ROOT/opt/ghostex/gxserver/bin/tailcat"
           test ! -e "$ROOT/opt/ghostex/libcef.so"
           test ! -e "$ROOT/DEBIAN"
           grep -qx 'X-AppImage-Homepage=https://ghostex.dev' "$ROOT/ghostex.desktop"
@@ -418,6 +421,14 @@ jobs:
           sudo dpkg --install "$DEB_PATH"
           test -x /opt/ghostex/Ghostex
           test -x /usr/bin/ghostex
+          # The bundled tailcat must run on this host and be the pinned one
+          # (TOOLCHAIN.tailcat in product-inputs.mjs), or Cloud Boxes cannot dial.
+          TAILCAT_EXPECTED="$(bun -e 'import { TOOLCHAIN } from "./tooling/release-gpui/product-inputs.mjs"; console.log(TOOLCHAIN.tailcat)')"
+          TAILCAT_VERSION="$(/opt/ghostex/gxserver/bin/tailcat version | head -n 1)"
+          if [[ -z "$TAILCAT_EXPECTED" || "$TAILCAT_VERSION" != "$TAILCAT_EXPECTED" ]]; then
+            echo "Bundled tailcat reports '$TAILCAT_VERSION'; the release pins '$TAILCAT_EXPECTED'" >&2
+            exit 1
+          fi
           test -L /usr/bin/gx
           test "$(dpkg-query --showformat='${Version}' --show ghostex)" = "${{ inputs.version }}"
       - name: Attest the RPM package

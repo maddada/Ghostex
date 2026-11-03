@@ -21,6 +21,8 @@ pub(crate) fn build_gxserver_zmx_child_environment() -> HashMap<String, String> 
     ) {
         environment.insert(key.to_string(), value.to_string());
     }
+    // On a Cloud Box: the session's injected login and the ticked secret variables.
+    environment.extend(crate::cloud_boxes::box_mode::logins::session_environment());
     remove_gxserver_zmx_color_disabling_environment_values(&mut environment);
     environment.insert("COLORTERM".to_string(), "truecolor".to_string());
     environment.insert("TERM_PROGRAM".to_string(), "ghostty".to_string());

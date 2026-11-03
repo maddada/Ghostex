@@ -232,7 +232,8 @@ MEMBERS="$(unsquashfs -o "$OFFSET" -lc "$APPIMAGE" | sed 's|^squashfs-root||')"
 for required in /AppRun /.ghostex-appimage /ghostex.desktop /ghostex.png /.DirIcon \
 	"/usr/share/metainfo/$APPSTREAM_ID.metainfo.xml" \
 	/opt/ghostex/Ghostex /opt/ghostex/ghostex-gpui-runtime /opt/ghostex/gxserver/bin/gxserver \
-	/opt/ghostex/gxserver/bin/ghostex /opt/ghostex/resources/on-demand-resources.json \
+	/opt/ghostex/gxserver/bin/ghostex /opt/ghostex/gxserver/bin/tailcat \
+	/opt/ghostex/resources/on-demand-resources.json \
 	/opt/ghostex/gxserver/skills/ghostex-cli/SKILL.md /opt/ghostex/libxkbcommon-x11.so.0; do
 	grep -qxF "$required" <<<"$MEMBERS" || {
 		echo "AppImage is missing $required" >&2

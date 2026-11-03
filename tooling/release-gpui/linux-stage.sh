@@ -56,6 +56,15 @@ APP_DIR="$REPO_ROOT/apps/desktop/build/linux/Ghostex"
 	echo "Linux build is missing bundled ghostex CLI" >&2
 	exit 1
 }
+# CDXC:CloudBoxes 2026-11-02 WHY:
+# Every Linux package ships the gxserver package's prebuilt tailcat (pinned in
+# server/package-remote-linux.mjs) so a Linux desktop dials Cloud Boxes and
+# Easy Connect machines without installing one (the user approved the ~20 MB).
+# The desktop app finds it beside this gxserver (easy_connect_forward.rs).
+[[ -x "$APP_DIR/gxserver/bin/tailcat" ]] || {
+	echo "Linux build is missing the bundled tailcat in its gxserver package (rebuild it with server/package-remote-linux.mjs)" >&2
+	exit 1
+}
 [[ -f "$APP_DIR/gxserver/skills/ghostex-cli/SKILL.md" ]] || {
 	echo "Linux build is missing the bundled agent skills in its gxserver package (rebuild it with server/package-remote-linux.mjs)" >&2
 	exit 1

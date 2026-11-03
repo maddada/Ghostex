@@ -14,6 +14,7 @@ pub(crate) enum GpuiGhostexCliSettingsAction {
     InstallMoveCodexSessionSkill,
     InstallHelpSkill,
     InstallVisualsSkill,
+    InstallSecretsSkill,
     InstallCuaDriverSkill,
     FinishDesktopControlSetup {
         driver_installed: bool,
@@ -48,6 +49,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "installMoveCodexSessionSkill",
             Self::InstallHelpSkill => "installHelpSkill",
             Self::InstallVisualsSkill => "installVisualsSkill",
+            Self::InstallSecretsSkill => "installSecretsSkill",
             Self::InstallCuaDriverSkill => "installCuaDriverSkill",
             Self::FinishDesktopControlSetup { .. } => "installCuaDriver",
             Self::FinishTrycuaUninstall { .. } => "uninstallCuaDriver",
@@ -72,6 +74,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session installed",
             Self::InstallHelpSkill => "Ghostex Help installed",
             Self::InstallVisualsSkill => "Ghostex Visuals installed",
+            Self::InstallSecretsSkill => "Ghostex Secrets installed",
             Self::InstallCuaDriverSkill => "Cua Driver skill installed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -102,6 +105,7 @@ impl GpuiGhostexCliSettingsAction {
             Self::InstallMoveCodexSessionSkill => "Ghostex Move Codex Session install failed",
             Self::InstallHelpSkill => "Ghostex Help install failed",
             Self::InstallVisualsSkill => "Ghostex Visuals install failed",
+            Self::InstallSecretsSkill => "Ghostex Secrets install failed",
             Self::InstallCuaDriverSkill => "Cua Driver skill install failed",
             Self::FinishDesktopControlSetup {
                 was_update: true, ..
@@ -235,6 +239,13 @@ pub(crate) fn gpui_run_ghostex_cli_settings_action(
                 action,
                 &["visual", "install-skill"],
                 "Ghostex Visuals",
+            )
+        }
+        GpuiGhostexCliSettingsAction::InstallSecretsSkill => {
+            gpui_install_bundled_ghostex_skill_action(
+                action,
+                &["secret", "install-skill"],
+                "Ghostex Secrets",
             )
         }
         GpuiGhostexCliSettingsAction::InstallCuaDriverSkill => {

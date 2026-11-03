@@ -47,12 +47,9 @@ base64url(JSON) whose `address` is itself base64url made a version 19 code
 dialog draws it. The compact code carries the same fields as bytes in base32,
 behind an upper-case prefix, so after the link everything is in the QR's
 alphanumeric mode (5.5 bits a character instead of 8): about version 11 at
-error correction L. A phone app older than 2026-10-27 cannot read it, which is
-why the Show QR dialog keeps the `ghostex-ec1:` link until phones have the
-reader; Copy as text always gives `ghostex-ec1:`, which every phone and
-computer reads. Layout, every length a big-endian u16: address (the `tc` blob's
-base64url bytes), secret (its base64url bytes), port, SSH port, user (UTF-8),
-name (UTF-8).
+error correction L. Layout, every length a big-endian u16: address (the `tc`
+blob's base64url bytes), secret (its base64url bytes), port, SSH port, user
+(UTF-8), name (UTF-8).
 SEE-ALSO: packages/shared/ghostex-remote-pairing.ts and
 apps/mobile/app/src/machines/pairingCodes.ts (`readEasyConnectCompactCode`),
 apps/desktop/src/app/window/settings_modal/tabs/remote/model.rs.
@@ -152,6 +149,24 @@ fn encode_base32(bytes: &[u8]) -> String {
 /// opens the phone app.
 pub fn pairing_link(code: &str) -> String {
     format!("{PAIRING_LINK_PREFIX}{code}")
+}
+
+/// The Easy Connect QR payload: the compact code in its ghostex.dev link, or the
+/// `ghostex-ec1:` code when the compact form cannot carry this code.
+///
+/// CDXC:RemotePairing 2026-11-02 DECISION:
+/// The user chose (Q618) to switch the pairing QR to this code "in the release after" the phones
+/// got its reader (10.37); it went out with the fix for issue #394, whose cause was the Android
+/// release build (see the phone's plugins/withAndroidReleaseSize.js), not the QR's density.
+/// `/api/remotePairingCode` puts it in the QR's link and keeps
+/// `ghostex-ec1:` for Copy as text, which every phone and computer reads; a code this cannot
+/// encode falls back to the `ghostex-ec1:` link. Phone apps older than 10.37 (not updated over the
+/// air) cannot read the new QR and pair with Copy as text.
+pub fn easy_connect_pairing_link(code: &EasyConnectCode) -> String {
+    match encode_easy_connect_compact_code(code) {
+        Some(compact) => pairing_link(&compact),
+        None => pairing_link(&encode_easy_connect_code(code)),
+    }
 }
 
 fn encode_base64url_json<T: Serialize>(value: &T) -> String {
@@ -310,6 +325,45 @@ mod tests {
             || byte.is_ascii_digit()
             || byte == b'-'
             || byte == b':'));
+    }
+
+    /// A code shaped like a real one (a 172-character `tc` address, a minted 16-byte secret, a
+    /// name with a curly apostrophe); the phone's `pairingCodes.test.ts` reads the same vector.
+    const REAL_SIZE_COMPACT_VECTOR: &str = "GHOSTEX-EC2:ACWKIYLQLAQKLUCIJT3JNPW66TINDCM6S4MCEQPGBD46JDXIZPMAE3MRB5BVYLDBNNMCAWEHCYJZHSN7VQMY2JJLNVYKPTEUUHDNXVMBW4FJG2AEKMULINKHMFYVQIAP6E4KDHT62XKPPYQIIOHARJT35TNTXIBMRMRJILTSZ7VFBYA2KZQXFANBMFHIDI3BNBXHIYZTGAZWCLTJOBXC4ZDFOZQTI3ZRHA2S4MJXHAXDEMBSFYYTSN3BGZYTEYJQGA5GIZBYGA5DEMB2HIZDANYACAROR4FHD5VGFD4HJP3I7BIW7LROK6AACYAAK3LBMRSGCAAWKN2HKZDJN7RIBGLTEBGWCY2CN5XWWICQOJXQ";
+
+    #[test]
+    fn easy_connect_qr_carries_the_compact_code() {
+        assert_eq!(
+            easy_connect_pairing_link(&compact_vector_code()),
+            format!("https://ghostex.dev/pair#{COMPACT_VECTOR}")
+        );
+        let code = EasyConnectCode {
+            v: 1,
+            address: "tcpGFwWCCl0EhM9pa-3vTQ0YmelxgiQeYI-eSO6MvYAm2RD0NcLGFrWCBYhxYTk8m_rBmNJSttcKfMlKHG29WBtwqTaARTKLQ1R2FxWCAP8Tihnn7V1PfiCEOOCKZ77Ns7oCyLIpQucs_qUOAaVmFygaFhToGjYWhudGMzMDNhLmlwbi5kZXZhNG8xODUuMTc4LjIwMi4xOTdhNnEyYTAwOmRkODA6MjA6OjIwNw".to_string(),
+            name: "Studio\u{2019}s MacBook Pro".to_string(),
+            user: "madda".to_string(),
+            port: 58744,
+            ssh_port: 22,
+            secret: Some("Iujwpx9qYo-HS_aPhRb64g".to_string()),
+            expires_at: None,
+        };
+        let link = easy_connect_pairing_link(&code);
+        assert_eq!(
+            link,
+            format!("https://ghostex.dev/pair#{REAL_SIZE_COMPACT_VECTOR}")
+        );
+        // About a fifth shorter than the `ghostex-ec1:` link.
+        assert!(link.len() * 5 < pairing_link(&encode_easy_connect_code(&code)).len() * 4);
+    }
+
+    #[test]
+    fn easy_connect_qr_keeps_the_json_code_when_compact_cannot_carry_it() {
+        let mut code = compact_vector_code();
+        code.address = "not-a-tailcat-address".to_string();
+        assert_eq!(
+            easy_connect_pairing_link(&code),
+            pairing_link(&encode_easy_connect_code(&code))
+        );
     }
 
     #[test]

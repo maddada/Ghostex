@@ -418,6 +418,11 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Remote-allowed like managedTools beside it: the boxes and the agentbox CLI belong to the machine that owns the project, so a client looking at a remote machine asks that machine. Setup commands come back as text gxserver chose, never text the caller supplied.
         */
         | "/api/agentbox"
+        /*
+        CDXC:CloudBoxes 2026-11-02 WHY:
+        Remote-allowed like agentbox above: the registry, the provider keys and the projects live on the computer that owns them, so the phone (over the paired link) and the GPUI web build ask that computer. Keys are only ever sent in (connect); no action hands one back, and connectInfo returns only a box's own gxserver token.
+        */
+        | "/api/cloudBoxes"
         | "/api/agentAccounts"
         | "/api/readAgentResumePlan"
         | "/api/requestSessionRename"
@@ -831,6 +836,18 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         }
         "/api/setVoiceAgentKey" => full_local(path),
         /*
+        CDXC:Secrets 2026-11-02 WHY:
+        A secret request is created and waited for by the `ghostex secret request` an agent runs on this computer, and answered from any chat that shows the session, the phone included (the value only travels to this computer). Secret providers are a setting of this computer's: only its own clients list, change or test them.
+        */
+        "/api/answerSecretRequest" => remote_allowed(path),
+        "/api/createSecretRequest"
+        | "/api/waitSecretRequest"
+        | "/api/cancelSecretRequest"
+        | "/api/readSecretProviders"
+        | "/api/saveSecretProvider"
+        | "/api/removeSecretProvider"
+        | "/api/checkSecretReference" => full_local(path),
+        /*
         CDXC:VoiceMode 2026-10-20 WHY:
         Dictate's recordings are kept on this computer and the phone dictates through it, so the phone uploads, transcribes, lists and dismisses recordings here too; the key never leaves this computer.
         */
@@ -1031,6 +1048,16 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         Refresh reads the HTML file a page was published from on this computer and replaces the page, so like publishing it is for this computer's own clients only: the desktop app asks here, or through its tunnel for a remote machine's page (visual_pages/source.rs).
         */
         "/api/readVisualPageSource" | "/api/refreshVisualPage" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: the desktop app registers the computers it is connected to (and, through its tunnel, how a connected computer reaches this one back); it carries a loopback address and that computer's token, so only this computer's own clients and the tunnel may call these.
+        "/api/registerConnectedComputer"
+        | "/api/unregisterConnectedComputer"
+        | "/api/listConnectedComputers"
+        | "/api/issueComputerGrant"
+        | "/api/revokeComputerGrant" => full_local(path),
+        // CDXC:RemoteMachines 2026-11-03 WHY: a coordinator's threads on another computer are linked on the coordinator's own computer, by its own CLI, so only this computer's clients may change them.
+        "/api/linkRemoteCoordinatorThread"
+        | "/api/updateRemoteCoordinatorThread"
+        | "/api/listRemoteCoordinatorThreads" => full_local(path),
         /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key

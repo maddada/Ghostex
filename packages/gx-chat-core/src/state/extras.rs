@@ -87,6 +87,10 @@ pub struct PanelsState {
     /// The side chat call in flight (`extras::side_chats`): Bring back or Delete, and the side
     /// chat it names.
     pub side_chat_request: Option<(u64, crate::extras::side_chats::SideChatCall)>,
+    /// The secret request answers in flight (`extras::secret_requests`), by RPC id, and the
+    /// last refusal of each card by its id. Never the typed value.
+    pub secret_request_calls: std::collections::BTreeMap<u64, String>,
+    pub secret_request_errors: std::collections::BTreeMap<String, String>,
     /// The grouped background-task row is unfolded to its tasks; folded by default, per chat.
     pub background_tasks_open: bool,
 }
@@ -103,6 +107,8 @@ impl Default for PanelsState {
             threads_all_request: None,
             threads_open_request: None,
             side_chat_request: None,
+            secret_request_calls: Default::default(),
+            secret_request_errors: Default::default(),
             background_tasks_open: false,
         }
     }

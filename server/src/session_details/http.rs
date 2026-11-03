@@ -114,13 +114,19 @@ fn read_details(
     let claude = agent.as_deref() == Some("claude");
     let folder = crate::session_git_status::effective_session_git_cwd(&session, project.as_ref());
     let home = state.paths.home_dir.clone();
-    let environment = super::environment::read_environment(
+    let mut environment = super::environment::read_environment(
         &session,
         project.as_ref(),
         folder.as_deref(),
         &home,
         agent.as_deref(),
     );
+    // A Cloud Box session's processes run on the box, out of this computer's reach.
+    if crate::agentbox::session_agentbox(&session).is_none() {
+        environment["memoryBytes"] = json!(crate::zmx::provider_zmx_session_name(&session)
+            .ok()
+            .and_then(|name| super::memory::read_session_memory_bytes(&name)));
+    }
     let changes = folder.as_deref().and_then(super::changes::read_changes);
     let mut result = json!({
         "agent": agent,

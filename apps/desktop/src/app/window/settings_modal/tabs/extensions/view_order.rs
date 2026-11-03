@@ -56,6 +56,7 @@ impl ExtensionsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let p = &p.nested_dialog();
         if !self.arrange_open {
             return None;
         }

@@ -38,7 +38,7 @@ pub(crate) use source::{
     handle_refresh_http as handle_refresh_visual_page_http, READ_VISUAL_PAGE_SOURCE_ENDPOINT,
     REFRESH_VISUAL_PAGE_ENDPOINT,
 };
-pub(crate) use store::VISUAL_PAGE_MAX_BYTES;
+pub(crate) use store::{prune_old_pages, VISUAL_PAGE_MAX_BYTES};
 pub(crate) use thumbnail::{
     handle_read_http as handle_read_visual_page_thumbnail_http,
     handle_store_http as handle_store_visual_page_thumbnail_http,

@@ -9,6 +9,7 @@
 //!   memory files, skills) and which background commands it ran, read incrementally.
 //! - `probe.rs`: Claude's own context breakdown, from a silent read-only copy of the session.
 //! - `skills.rs`: where each listed skill's SKILL.md is (home, project or plugin), or that it is built in.
+//! - `memory.rs`: the Environment section's RAM row, the session's process tree.
 //! - `environment.rs`, `changes.rs`, `connectors.rs`, `background.rs`: the panel's other sections.
 //! - `agents.rs`: the read for every other agent; `picker_skills.rs` (their Skills), `codex.rs` and
 //!   `opencode.rs` (those agents' own sections).
@@ -25,6 +26,7 @@ mod connectors;
 mod environment;
 mod gate;
 mod http;
+mod memory;
 mod opencode;
 mod picker_skills;
 mod probe;

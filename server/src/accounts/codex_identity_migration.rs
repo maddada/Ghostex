@@ -1,6 +1,6 @@
 use super::{
     codex_identity::codex_account_part,
-    endpoint::account_id,
+    endpoint::{account_id, new_saved_account},
     model::{DiscoveredAccount, NewSessionAccount, Provider, Registry, SavedAccount},
 };
 use rusqlite::{params, Connection, OptionalExtension};
@@ -89,22 +89,7 @@ pub(super) fn plan(
             {
                 continue;
             }
-            accounts.push(SavedAccount {
-                id,
-                provider: Provider::Codex,
-                selector: other.selector.clone(),
-                identity: other.identity.clone(),
-                name: other.name.clone(),
-                color: "neutral".into(),
-                indicator: String::new(),
-                show_in_titlebar: false,
-                eligible: true,
-                shared_history: true,
-                disabled: None,
-                user_disabled: false,
-                login_expired_at: None,
-                login_confirmed_at: None,
-            });
+            accounts.push(new_saved_account(other));
         }
     }
     registry.accounts = accounts;
@@ -468,7 +453,7 @@ mod tests {
         );
         let ids: HashSet<_> = registry.accounts.iter().map(|a| a.id.clone()).collect();
         assert_eq!(ids.len(), 3);
-        assert!(registry.accounts[1].eligible && !registry.accounts[1].show_in_titlebar);
+        assert!(registry.accounts[1].eligible && registry.accounts[1].show_in_titlebar);
         assert_eq!(
             registry.last_used_accounts[&Provider::Codex],
             account_id(&team_first)

@@ -119,6 +119,21 @@ impl CloseFollowUp {
     }
 }
 
+/// Where a close came from, as gxserver's one line per close names it (server/src/session_close_log.rs,
+/// CDXC:Sessions 2026-11-02 DECISION there): `desktop.<door>` or `web.<door>`, the door being the
+/// payload's own `closeSource` (`sidebarRowButton`, `tabShortcut`, …) or `default`.
+pub fn close_source(message: &Value, default: &str) -> String {
+    let client = if cfg!(target_arch = "wasm32") {
+        "web"
+    } else {
+        "desktop"
+    };
+    format!(
+        "{client}.{}",
+        text_field(message, "closeSource").unwrap_or(default)
+    )
+}
+
 /// The `closeSession` payload, or `None` when this file does not own it.
 ///
 /// Refused, each one a subsystem rather than a branch: a browser row closes an app tab through the
@@ -144,6 +159,7 @@ pub fn plan_close_request(core: &Core, message: &Value) -> Option<CloseRequest> 
         rpc_path: "/api/transitionSession",
         rpc_params: json!({
             "action": "close",
+            "closeSource": close_source(message, "sidebar"),
             "projectId": session.project_id,
             "reason": "gpui-sidebar",
             "sessionId": session.session_id,

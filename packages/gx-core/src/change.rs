@@ -75,6 +75,9 @@ pub struct ChangeSummary {
     pub focus_changed: bool,
     /// The host-reported displayed set changed.
     pub displayed_changed: bool,
+    /// Home gxserver's Cloud Boxes registry moved (`cloud_boxes.rs`): a box's state, name or
+    /// cached sessions, which the merged box rows and their badges read.
+    pub cloud_boxes_changed: bool,
 }
 
 impl ChangeSummary {
@@ -98,6 +101,7 @@ impl ChangeSummary {
             && !self.side_state.any()
             && !self.focus_changed
             && !self.displayed_changed
+            && !self.cloud_boxes_changed
     }
 
     pub(crate) fn note_project_changed(&mut self, key: ProjectKey) {
@@ -181,6 +185,7 @@ impl ChangeSummary {
         self.side_state.custom_session_tags |= other.side_state.custom_session_tags;
         self.focus_changed |= other.focus_changed;
         self.displayed_changed |= other.displayed_changed;
+        self.cloud_boxes_changed |= other.cloud_boxes_changed;
         // A reason survives only while the combined result is still "nothing changed".
         self.ignored = if self.is_empty() { ignored } else { None };
     }

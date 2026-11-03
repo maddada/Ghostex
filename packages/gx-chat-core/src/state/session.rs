@@ -88,11 +88,16 @@ pub struct SessionState {
     pub side_chats: Option<Value>,
     /// For a side chat, its main session (`{ sessionId, title }`); unchanged on omission.
     pub side_chat_of: Option<Value>,
+    /// The session's secret requests (`extras::secret_requests`); unchanged on omission.
+    pub secret_requests: Option<Value>,
     /// How the messages this session sent other agents and left waiting ended, by send id.
     /// Unchanged on omission.
     pub agent_message_deliveries: Option<Value>,
     /// Latched once gxserver has read this session's screen; an omission never unsets it.
     pub screen_probed: bool,
+    /// The session's Cloud Box is paused or stopped: its host refused a read with
+    /// `cloudBoxAsleep` (`session/cloud_box.rs`). A sent message wakes it.
+    pub cloud_box_asleep: bool,
     /// Live work as the chat channel itself reports it.
     pub server_working: bool,
     /// The session activity gxserver presents, which is what the sidebar spinner reads.
@@ -165,8 +170,10 @@ impl Default for SessionState {
             coordinator_threads: None,
             side_chats: None,
             side_chat_of: None,
+            secret_requests: None,
             agent_message_deliveries: None,
             screen_probed: false,
+            cloud_box_asleep: false,
             server_working: false,
             session_activity_working: false,
             external_working: false,

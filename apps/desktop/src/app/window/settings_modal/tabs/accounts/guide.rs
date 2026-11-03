@@ -34,6 +34,7 @@ impl AccountsTab {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let p = &p.nested_dialog();
         let provider = self.guide.clone()?;
         let data = self.client.read(cx).data.clone()?;
         let border = modal_rgba(

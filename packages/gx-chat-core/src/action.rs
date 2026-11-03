@@ -85,6 +85,7 @@ action_kinds! {
     OpenSideChat => "openSideChat",
     BringBackSideChat => "bringBackSideChat",
     DeleteSideChat => "deleteSideChat",
+    AnswerSecretRequest => "answerSecretRequest",
     SearchOpen => "searchOpen",
     SearchClose => "searchClose",
     SearchQuery => "searchQuery",
@@ -200,6 +201,8 @@ action_kinds! {
     SwitchDraftAgent => "switchDraftAgent",
     SwitchDraftRunLocation => "switchDraftRunLocation",
     SetDraftWorktree => "setDraftWorktree",
+    SetDraftCloudBox => "setDraftCloudBox",
+    OpenCloudBoxSettings => "openCloudBoxSettings",
     SwitchToTerminal => "switchToTerminal",
     SelectForkBranch => "selectForkBranch",
 

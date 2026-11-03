@@ -64,8 +64,10 @@ fn bool_setting(paths: &GxserverPaths, key: &str) -> bool {
 
 /// CDXC:MarkedHandovers 2026-10-11 WHY:
 /// For a session the setting covers, the note is added when the launch or resume command is resolved instead of being saved in the session's base command: the command is resolved again on every start, resume, fork and account switch, so turning the setting on or off reaches each session the next time it starts or resumes, while a running agent keeps the instructions it started with. Orchestrators made before 2026-10-17 carry it in their role (role.rs) unless they answer without markers; newer ones read it from `ghostex orchestrator guide`, which their `ghostex-orchestrator` skill sends them to (role.rs `coordinator_guide`), and threads have it saved in their base command at creation (`with_thread_marked_handovers`), so both keep it whatever the setting says. Claude keeps only the last `--append-system-prompt-file` (tested 2026-10-11 on Claude Code 2.1.296) and Codex reads one `developer_instructions`, so a command that already names its own is left alone rather than lose it, except a Codex orchestrator's guide pointer, which the note joins. ZCode has no such flag and gets the note as SessionStart hook context (activity.rs); Empryo ignores hook context and other agents have no channel Ghostex can use, so they do not get the note outside an Empryo orchestrator's profile.
-/// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with).
-pub(crate) fn with_marked_handovers(agent_id: &str, icon: Option<&str>, command: &str) -> String {
+/// CDXC:AgentGuide 2026-11-02 WHY:
+/// The Ghostex note (agents/ghostex_note.rs) rides the same flag, joined with this note into one file or value, so neither replaces the other. Pi (`--append-system-prompt`, which takes a file) and Droid (`--append-system-prompt-file`) get the joined text through their own flags; OpenCode, Gemini, Cursor, Copilot, Amp and the rest have no flag Ghostex can use and get the note as the `ghostex-agent-guide` skill instead.
+/// SEE-ALSO: server/src/agents/launch_plan.rs (`resolve_agent_launch_command` calls this), server/src/coordinators/role.rs (`coordinator_role_file` and `GUIDE_POINTER_COORDINATOR_INSTRUCTIONS`, the older orchestrators' role flags this combines with), server/src/agents/ghostex_note.rs.
+pub(crate) fn with_launch_notes(agent_id: &str, icon: Option<&str>, command: &str) -> String {
     if command.trim().is_empty() {
         return command.to_string();
     }
@@ -101,39 +103,57 @@ pub(crate) fn with_marked_handovers(agent_id: &str, icon: Option<&str>, command:
             return command.replace(&pointer_arg, &codex_note_arg(&combined));
         }
     }
-    if !marked_handovers_enabled(&paths) {
+    let Some(text) = super::current_launch_note_text(&paths) else {
         return command.to_string();
-    }
-    with_marked_handovers_note(&paths, &family, command)
+    };
+    with_note_text(&paths, &family, command, &text)
 }
 
 /// A thread's base command at creation, with the note saved in it, so the thread marks its
 /// handovers on every start and resume whatever the setting says.
 pub(crate) fn with_thread_marked_handovers(family: &str, command: &str) -> String {
-    with_marked_handovers_note(&get_gxserver_paths(None), family, command)
+    with_note_text(
+        &get_gxserver_paths(None),
+        family,
+        command,
+        MARKED_HANDOVERS_NOTE,
+    )
 }
 
-/// `command` with the note flag of its family, unless it already names a system prompt file or
-/// developer instructions (the note's own included).
-fn with_marked_handovers_note(paths: &GxserverPaths, family: &str, command: &str) -> String {
-    match family {
+/// `command` with `text` behind the system prompt flag of its family, unless it already names a
+/// system prompt file or developer instructions (a note's own included).
+fn with_note_text(paths: &GxserverPaths, family: &str, command: &str, text: &str) -> String {
+    let file_flag = match family {
         "claude" if !command.contains("--append-system-prompt-file") => {
-            let path = paths.root_dir.join("marked-handovers").join("note.md");
-            match write_note_file(&path, MARKED_HANDOVERS_NOTE) {
-                Ok(()) => format!(
-                    "{} --append-system-prompt-file {}",
-                    command.trim_end(),
-                    quote_shell_arg(&path.to_string_lossy())
-                ),
-                Err(_) => command.to_string(),
-            }
+            "--append-system-prompt-file"
         }
-        "codex" if !command.contains("developer_instructions=") => format!(
-            "{} {}",
+        "droid" if !command.contains("--append-system-prompt") => "--append-system-prompt-file",
+        // Pi reads a file named by `--append-system-prompt` (it takes text or a file).
+        "pi" if !command.contains("--append-system-prompt") => "--append-system-prompt",
+        "codex" if !command.contains("developer_instructions=") => {
+            return format!("{} {}", command.trim_end(), codex_note_arg(text));
+        }
+        _ => return command.to_string(),
+    };
+    let path = note_file_path(paths, text);
+    match write_note_file(&path, text) {
+        Ok(()) => format!(
+            "{} {file_flag} {}",
             command.trim_end(),
-            codex_note_arg(MARKED_HANDOVERS_NOTE)
+            quote_shell_arg(&path.to_string_lossy())
         ),
-        _ => command.to_string(),
+        Err(_) => command.to_string(),
+    }
+}
+
+/// The Marked handovers note alone keeps its own file, which threads name in their saved commands;
+/// any other text (the Ghostex note, alone or with it) has one file that every launch rewrites with
+/// the current settings, which every session reads the next time it starts or resumes.
+fn note_file_path(paths: &GxserverPaths, text: &str) -> std::path::PathBuf {
+    if text == MARKED_HANDOVERS_NOTE {
+        paths.root_dir.join("marked-handovers").join("note.md")
+    } else {
+        paths.root_dir.join("agent-note").join("note.md")
     }
 }
 
@@ -169,4 +189,63 @@ fn write_note_file(path: &Path, content: &str) -> std::io::Result<()> {
         std::fs::write(path, content)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_family_gets_the_note_through_its_own_flag() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let text =
+            crate::agents::launch_note_text(Some(crate::agents::GHOSTEX_NOTE), true).unwrap();
+        let file = paths.root_dir.join("agent-note").join("note.md");
+        let quoted = quote_shell_arg(&file.to_string_lossy());
+
+        assert_eq!(
+            with_note_text(&paths, "claude", "claude", &text),
+            format!("claude --append-system-prompt-file {quoted}")
+        );
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), text);
+        assert_eq!(
+            with_note_text(&paths, "droid", "droid --resume x", &text),
+            format!("droid --resume x --append-system-prompt-file {quoted}")
+        );
+        assert_eq!(
+            with_note_text(&paths, "pi", "pi", &text),
+            format!("pi --append-system-prompt {quoted}")
+        );
+        assert!(with_note_text(&paths, "codex", "codex", &text)
+            .starts_with("codex -c 'developer_instructions=\"You are running inside Ghostex."));
+        assert_eq!(
+            with_note_text(&paths, "opencode", "opencode", &text),
+            "opencode"
+        );
+    }
+
+    #[test]
+    fn a_command_with_its_own_system_prompt_keeps_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        for (family, command) in [
+            ("claude", "claude --append-system-prompt-file /x.md"),
+            ("droid", "droid --append-system-prompt hi"),
+            ("pi", "pi --append-system-prompt hi"),
+            ("codex", "codex -c 'developer_instructions=\"hi\"'"),
+        ] {
+            assert_eq!(with_note_text(&paths, family, command, "note"), command);
+        }
+    }
+
+    #[test]
+    fn marked_handovers_alone_keeps_the_file_threads_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        assert_eq!(
+            note_file_path(&paths, MARKED_HANDOVERS_NOTE),
+            paths.root_dir.join("marked-handovers").join("note.md")
+        );
+    }
 }

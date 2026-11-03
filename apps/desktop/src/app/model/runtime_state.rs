@@ -78,6 +78,9 @@ pub(crate) struct GpuiRemoteGxserverConnection {
     /// The machine's gxserver is this computer's own (`gpui_remote_is_this_computer`), so it is
     /// never installed or updated from here.
     pub(crate) this_computer: bool,
+    /// The way back for the machine's agents to reach this computer (helpers/remote/reverse_tunnel.rs),
+    /// opened after connecting (remote_conn/connected_computers.rs).
+    pub(crate) reverse_tunnel: Option<crate::app::helpers::GpuiRemoteReverseTunnel>,
 }
 
 impl GpuiRemoteGxserverConnection {
@@ -97,6 +100,9 @@ impl GpuiRemoteGxserverConnection {
         }
         gpui_forget_remote_tunnel(self.child.id());
         let _ = self.child.kill();
+        if let Some(mut reverse) = self.reverse_tunnel.take() {
+            reverse.terminate();
+        }
     }
 }
 

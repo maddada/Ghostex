@@ -122,8 +122,13 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("gitActionsTitlebarButtonHidden", J::Bool(false)),
     // CDXC:Extensions 2026-10-01 DECISION: Actions is off by default (built_in_extensions.rs).
     ("actionsHidden", J::Bool(true)),
-    // CDXC:AgentBox 2026-10-06 DECISION: Cloud Boxes is off by default (official_extensions.rs).
-    ("cloudBoxesHidden", J::Bool(true)),
+    // CDXC:CloudBoxes 2026-11-02 DECISION: Cloud Boxes is on by default everywhere (D11, official_extensions.rs); `cloudBoxesEnabled` replaces `cloudBoxesHidden`, whose saved `true` default would have kept it off.
+    ("cloudBoxesEnabled", J::Bool(true)),
+    // Cloud Boxes (packages/gx-protocol/src/cloud_box/settings.rs `setting_keys`): 0 = no monthly cap.
+    ("cloudBoxesMonthlyCapUsd", J::Num(0.0)),
+    ("cloudBoxesIdleStopMinutes", J::Num(15.0)),
+    ("cloudBoxesDeleteStoppedAfterDays", J::Num(7.0)),
+    ("cloudBoxesPhoneStartEnabled", J::Bool(false)),
     // CDXC:Workspaces 2026-10-09 DECISION: Workspaces is off by default (official_extensions.rs).
     ("workspacesHidden", J::Bool(true)),
     // CDXC:VoiceMode 2026-10-21 DECISION: Read aloud is off by default (official_extensions.rs).
@@ -568,6 +573,10 @@ pub const DEFAULT_GHOSTEX_SETTINGS: &[(&str, J)] = &[
     ("chatSendOnPick", J::Bool(false)),
     ("chatAnswersWaitForIdle", J::Bool(false)),
     ("chatPageOpenTarget", J::Str("popup")),
+    // CDXC:AgentGuide 2026-11-02 DECISION: User (Q1066): the short Ghostex note goes to every agent session Ghostex starts, "on by default (with a setting to turn it off)".
+    ("agentGhostexNote", J::Bool(true)),
+    // CDXC:AgentGuide 2026-11-02 DECISION: User (#263): "if user asks for browser we ask which the user prefers (internal ghostex browser, or external browser)", and (Q1069) the answer is kept in this setting, which the note and `ghostex agent-guide` then state so agents stop asking. Ask until the user picks.
+    ("agentPreviewBrowser", J::Str("ask")),
     // CDXC:MarkedHandovers 2026-10-11 DECISION: User: "force the marked handovers for coordinators/orchestrator threads and their children by default and make it disabled by default for non-orchestrator/child threads". This switch covers every other session and stays off by default; threads mark regardless, orchestrators unless `orchestratorPlainReplies` is on.
     ("markedHandovers", J::Bool(false)),
     // CDXC:MarkedHandovers 2026-10-17 DECISION: User: "please allow launching an orchestrator without the reply style so the orchestrator answers normally. but put "Not recommended" and make it an advanced setting". Off by default, so orchestrators keep marking their handovers; their threads mark their reports either way.

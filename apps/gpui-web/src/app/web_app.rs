@@ -115,7 +115,8 @@ impl GhostexGpuiApp {
             session_details_choices: Default::default(),
             session_details_button_bounds: Rc::default(),
             session_details_dismissed_at: None,
-            sidebar_usage_visible: false,
+            // Pinned by default, as on the desktop (CDXC:Sidebar 2026-11-03 in shell_layout.rs).
+            sidebar_usage_visible: true,
             gpui_reduce_motion_enabled: false,
             app_modal_window: None,
             snapshot_browser_focus: false,

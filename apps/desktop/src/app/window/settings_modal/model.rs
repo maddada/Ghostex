@@ -32,6 +32,7 @@ pub(crate) enum SettingsTabId {
     Projects,
     Agents,
     Accounts,
+    Secrets,
     Actions,
     OpenTargets,
     Hotkeys,
@@ -68,7 +69,7 @@ impl SettingsTabId {
     /// (the catalog) at the rail's bottom with the pages that fold under it
     /// ([`Self::EXTENSIONS_GROUP`]). Pages the shell filters (OS Integration, Connectors, Debugging,
     /// the built-in extensions' pages) leave the rail while they are off.
-    pub(crate) const RAIL_ORDER: [SettingsTabId; 23] = [
+    pub(crate) const RAIL_ORDER: [SettingsTabId; 24] = [
         SettingsTabId::Chat,
         SettingsTabId::Sidebar,
         SettingsTabId::Terminal,
@@ -79,6 +80,7 @@ impl SettingsTabId {
         SettingsTabId::Hotkeys,
         SettingsTabId::Agents,
         SettingsTabId::Accounts,
+        SettingsTabId::Secrets,
         SettingsTabId::Integrations,
         SettingsTabId::Remote,
         SettingsTabId::Projects,
@@ -128,6 +130,7 @@ impl SettingsTabId {
             | SettingsTabId::Hotkeys => RailTier::App,
             SettingsTabId::Agents
             | SettingsTabId::Accounts
+            | SettingsTabId::Secrets
             | SettingsTabId::Integrations
             | SettingsTabId::Remote
             | SettingsTabId::Projects
@@ -179,6 +182,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "projects",
             SettingsTabId::Agents => "agents",
             SettingsTabId::Accounts => "accounts",
+            SettingsTabId::Secrets => "secrets",
             SettingsTabId::Actions => "actions",
             SettingsTabId::OpenTargets => "openTargets",
             SettingsTabId::Hotkeys => "hotkeys",
@@ -220,6 +224,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "Projects",
             SettingsTabId::Agents => "Agents",
             SettingsTabId::Accounts => "Accounts",
+            SettingsTabId::Secrets => "Secrets",
             SettingsTabId::Actions => "Actions",
             SettingsTabId::OpenTargets => "Open In",
             SettingsTabId::Hotkeys => "Hotkeys",
@@ -249,6 +254,7 @@ impl SettingsTabId {
             SettingsTabId::Projects => "modals/settings/folder-open.svg",
             SettingsTabId::Agents => "modals/settings/code-dots.svg",
             SettingsTabId::Accounts => "modals/settings/users.svg",
+            SettingsTabId::Secrets => "modals/settings/key.svg",
             SettingsTabId::Actions => "modals/settings/player-play.svg",
             SettingsTabId::OpenTargets => "modals/settings/external-link.svg",
             SettingsTabId::Hotkeys => "modals/settings/keyboard.svg",

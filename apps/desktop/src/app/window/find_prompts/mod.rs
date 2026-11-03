@@ -7,6 +7,7 @@ mod menus;
 pub(crate) mod model;
 pub(crate) mod palette;
 mod render;
+mod toolbar_steps;
 mod window;
 
 pub(crate) use window::{FindPromptsModalCommand, GpuiFindPromptsModalWindow};

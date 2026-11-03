@@ -26,6 +26,7 @@ How to use this file:
 - **Send when you pick an answer** `chatSendOnPick` (boolean, default false) [advanced]: When a question card asks one question, picking an answer sends it right away, without Send answers. Cards with several questions, multiple-choice questions, Other and text answers still wait for Send.
 - **Wait for turn end before sending form answers** `chatAnswersWaitForIdle` (boolean, default false) [advanced]: Send answers from question forms and chat pages only after the agent finishes its turn. Off sends them like a normal chat message, which the agent can read after its current tool call finishes.
 - **Open chat pages in** `chatPageOpenTarget` (one of popup | files | system-browser; default popup): Where a page an agent shows in chat (a mockup, a question form, a comparison) opens when you click its card: a popup over the chat, the Files view, or your default web browser. Answers you send from the page reach the agent the same way in all three. The phone always opens pages in its own viewer. Option labels: popup = Popup, files = Files, system-browser = System browser.
+- **Tell agents about Ghostex** `agentGhostexNote` (boolean, default true): Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.
 - **Every effort level in coordinator pickers** `orchestratorAllEfforts` (boolean, default false) [advanced]: Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.
 - **Coordinator playbook** `orchestratorPlaybook` (Settings UI row without a settings key; use `ghostex settings open`) [advanced]: How every coordinator works: the playbook it follows. Edit it for all projects here, or for one project and its worktrees in Settings > Projects. Coordinators, existing ones too, follow the edited playbook from their next guide read, and a switch turns an edited playbook off without losing it.
 - **Read aloud voice** `readAloudVoice` (text: the id of a voice installed on this computer (on a Mac, for example `com.apple.voice.compact.en-US.Samantha`), easiest picked on its Settings row; default (empty), the system voice): The voice Read aloud speaks the agent's replies with: System voice, or one of the voices installed on this computer. Add voices in your computer's speech or accessibility settings. The phone has its own Voice in its Settings > Chat. Only on macOS.
@@ -163,6 +164,7 @@ How to use this file:
 ### Browser
 
 - **Open links in** `webLinkOpenTarget` (one of internal-browser | system-default-browser; default internal-browser): Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser. Option labels: internal-browser = Internal Browser, system-default-browser = System Default Browser.
+- **Agents open pages in** `agentPreviewBrowser` (one of ask | internal-browser | system-default-browser; default ask): Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here. Option labels: ask = Ask, internal-browser = Ghostex Browser, system-default-browser = My default browser.
 - **Open session links in** `sessionLinkOpenTarget` (one of embedded | external; default embedded): Open a session's pull requests, issues and Linear tickets (the chips after its title and its links list) in the project Browser view or the system default browser. The phone follows this setting too. Option labels: embedded = Internal Browser, external = System Default Browser.
 - **Show pages in their own row** `browserPagesInViewRow` (boolean, default false): Show the Browser as one tab in the side panel's tab bar, with its pages as a row of tabs under it, instead of each page as a tab beside the views. Pages open, close, sleep and drag as before.
 ### Editor
@@ -351,9 +353,29 @@ How to use this file:
 - **Switch to the session after sending** `ghostexCaptureSwitchToSession` (boolean, default true): After a prompt is sent from Floating Capture, the Ghostex window shows the session it went to, without coming in front of the app you are in.
 ## Cloud Boxes (tab `cloudBoxes`)
 
-### Cloud Boxes
+### Providers
 
-- **agentbox** `agentboxStatus` (Settings UI row without a settings key; use `ghostex settings open`): Install agentbox, the free open-source command line tool Ghostex uses to run agent sessions in boxes, see its version and whether Docker is running, and run its check. Only on macOS and Linux.
+- **Instabox** `cloudBoxesInstabox` (Settings UI row without a settings key; use `ghostex settings open`): Connect your Instabox.sh account in the browser, or paste an API key. Boxes run on your account and bill to it.
+- **Boat** `cloudBoxesBoat` (Settings UI row without a settings key; use `ghostex settings open`): Connect your Boat.dev account: Ghostex asks for your email, opens Boat's page and shows a 6-digit code to type there. Or paste an API key.
+### Spending
+
+- **This month** `cloudBoxesSpend` (Settings UI row without a settings key; use `ghostex settings open`): What your Cloud Boxes cost this month, per provider and in total. Instabox counts everything on that account; Boat counts the boxes Ghostex made.
+- **Monthly cap** `cloudBoxesMonthlyCapUsd` (number 0 to 10000 step 1 default 0): Ghostex warns at 80% of this many dollars a month and starts no new box at 100%. Running boxes keep running. 0 turns the cap off.
+### Stopping and deleting
+
+- **Stop idle boxes after** `cloudBoxesIdleStopMinutes` (number 1 to 1440 step 1 one of 5 | 10 | 15 | 30 | 60 | 120; default 15): A box with no agent working and no terminal open pauses (Instabox) or stops (Boat) after this long. Sending a message wakes it. Option labels: 5 = 5 minutes, 10 = 10 minutes, 15 = 15 minutes, 30 = 30 minutes, 60 = 1 hour, 120 = 2 hours.
+- **Delete archived boxes after** `cloudBoxesDeleteStoppedAfterDays` (number 1 to 365 step 1 one of 1 | 3 | 7 | 14 | 30; default 7): When every session on a box is archived, the box stops and is deleted after this many days. A box with unpushed work is kept until you push or delete it. Option labels: 1 = 1 day, 3 = 3 days, 7 = 7 days, 14 = 14 days, 30 = 30 days.
+- **Start boxes from your phone** `cloudBoxesPhoneStartEnabled` (boolean, default false): Keep your provider key, agent logins, Default snapshots and picked secrets on your paired phones, so they can start a box while this computer is off.
+### Your boxes
+
+- **Your boxes** `cloudBoxesBoxes` (Settings UI row without a settings key; use `ghostex settings open`): Every box with its state, project, age and cost. Stop a box, or delete it; a box with unpushed work asks first.
+### Agent logins for boxes
+
+- **Claude on cloud boxes** `cloudBoxesClaudeLogins` (Settings UI row without a settings key; use `ghostex settings open`): Allow a Claude account on boxes: it makes a one-year box token after one approval in your browser, so Claude on this computer stays signed in.
+- **Codex on cloud boxes** `cloudBoxesCodexLogins` (Settings UI row without a settings key; use `ghostex settings open`): Allow a Codex account on boxes: each box gets a fresh copy of its login and sends refreshed sign-ins back to this computer.
+### More providers (agentbox)
+
+- **agentbox** `agentboxStatus` (Settings UI row without a settings key; use `ghostex settings open`): Install agentbox, the free open-source command line tool Ghostex uses to run agent sessions in boxes, see its version and whether Docker is running, and run its check.
 - **Set it up for me** `agentboxSetUpForMe` (Settings UI row without a settings key; use `ghostex settings open`): Start an agent that installs agentbox, asks which clouds you want, creates the API tokens in your browser, and signs Claude and Codex in for boxes. Only on macOS and Linux.
 - **What is a box?** `agentboxWhatIsABox` (Settings UI row without a settings key; use `ghostex settings open`): A box is an isolated copy of your project where an agent works without touching this computer. Your agent's settings, skills and Codex sign-in go with it, and its web app opens on this computer. Only on macOS and Linux.
 ### Where boxes run
@@ -372,7 +394,7 @@ How to use this file:
 - **Your boxes** `agentboxBoxes` (Settings UI row without a settings key; use `ghostex settings open`): See every box, open a box's web app, stop a box, or destroy it to delete it for good. Only on macOS and Linux.
 ### How it works
 
-- **Start a thread in a box** `agentboxStartThread` (Settings UI row without a settings key; use `ghostex settings open`): Open New Thread and pick where it runs under Run on. Boxes open in the terminal view. Only on macOS and Linux.
+- **Start a thread in an agentbox box** `agentboxStartThread` (Settings UI row without a settings key; use `ghostex settings open`): Open New Thread and pick where it runs under Run on. Boxes open in the terminal view. Only on macOS and Linux.
 - **Open a box's web app** `agentboxWebApp` (Settings UI row without a settings key; use `ghostex settings open`): Right-click the session and choose Open Box Web App to open it on this computer. Add an agentbox.yaml with services.web.expose.port to start your dev server in the box automatically. Only on macOS and Linux.
 - **Cloud boxes bill until stopped** `agentboxBilling` (Settings UI row without a settings key; use `ghostex settings open`): Cloud providers charge while a box exists. Deleting a session stops its box and keeps its work; Destroy removes the box. Only on macOS and Linux.
 ## Extensions (tab `extensions`)
@@ -435,7 +457,7 @@ How to use this file:
 - **Actions** `quickActions` (Settings UI row without a settings key; use `ghostex settings open`): Saved terminal commands and web pages you start in one click from the Start button, a hotkey, Quick Access or a project row.
 - **Open In** `openIn` (Settings UI row without a settings key; use `ghostex settings open`): Open the active project or a session's folder in your editor, terminal or file manager from the Open button and the Open In menus.
 - **Spaces** `spaces` (Settings UI row without a settings key; use `ghostex settings open`): Group projects into Spaces and switch between them from a row of icons at the top of the sidebar, or by swiping.
-- **Cloud Boxes** `cloudBoxes` (Settings UI row without a settings key; use `ghostex settings open`): Run agent sessions in isolated boxes, in Docker on this computer or in the cloud, from New Thread's Run on choice or Run in a Box in the Select Agent menu.
+- **Cloud Boxes** `cloudBoxes` (Settings UI row without a settings key; use `ghostex settings open`): Run agent sessions on a Cloud Box: a Linux machine on your Instabox or Boat account, started from a new chat, with more providers through agentbox.
 - **Workspaces** `workspaces` (Settings UI row without a settings key; use `ghostex settings open`): Keep each company's projects, Spaces, browser sign-ins, Linear key and Claude account in its own workspace, pick each one's primary tracker, and share a team backend for your team's Slack flow.
 - **Connectors** `connectors` (Settings UI row without a settings key; use `ghostex settings open`): Connect Gmail, Slack, Linear and more apps to a workspace so its agents can use them, from the Connectors page and the ghostex connectors commands.
 - **OS Integration** `osIntegration` (Settings UI row without a settings key; use `ghostex settings open`): Make Ghostex your default editor, terminal-link handler and script runner, and check how this computer opens its files and links.
@@ -446,7 +468,7 @@ How to use this file:
 - **Turn off Actions** `actionsHidden` (boolean, default true): Turn off Actions everywhere: the Start button, the Actions page in Settings, Actions pinned to project rows, the Start Action hotkeys and the Quick Access rows. Off by default; your saved actions are kept.
 - **Turn off Open In** `openInTitlebarButtonHidden` (boolean, default false): Turn off Open In everywhere: the Open button, the Open In page in Settings and the Open In menus. Your apps and custom commands are kept.
 - **Spaces** `sidebarSpacesEnabled` (boolean, default false): Turn on Spaces: a row of Space icons at the top of the sidebar, Space menus, and the Space settings. Off by default; your saved Spaces are kept while it is off.
-- **Turn off Cloud Boxes** `cloudBoxesHidden` (boolean, default true): Turn off Cloud Boxes everywhere: the Cloud Boxes page in Settings, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the agentbox commands. Off by default; your boxes and box settings are kept. Only on macOS and Linux.
+- **Cloud Boxes** `cloudBoxesEnabled` (boolean, default true): Turn Cloud Boxes on or off everywhere: the Cloud Boxes page in Settings, the Cloud Box choice of a new chat, the Run on choice of a new thread, Run in a Box in the Select Agent menu and the cloud and agentbox commands. On by default; your boxes and box settings are kept while it is off.
 - **Turn off Workspaces** `workspacesHidden` (boolean, default true): Turn off Workspaces everywhere: the workspace button, Move to workspace, the Workspaces page in Settings, the team backend and Slack, and the workspace, team and slack commands. Issues Workflow stays on without it. Off by default; your workspaces, keys and team connections are kept.
 - **Turn off Read aloud** `readAloudHidden` (boolean, default true): Turn off Read aloud everywhere: Read aloud on replies, Auto-read in the chat's ⋯ menu, the Read aloud rows on Settings > Chat and the Read aloud hotkeys, on this computer and in the phone app and browser connected to it. Off by default, and shown only while Enable Experimental Features is on; your Voice and Speed are kept.
 - **Turn off the Session details panel** `sessionDetailsPanelHidden` (boolean, default false): Turn off the Session details panel (beta): the context ring at the top right of the window, the panel beside Claude chats, and the Claude task list row on Settings > Chat. On by default.
@@ -528,6 +550,9 @@ How to use this file:
 - **Beads directory** `beadsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Absolute path the Project board reads its Beads workspace (.beads) from.
 - **Docs directory** `docsDirectory` (Settings UI row without a settings key; use `ghostex settings open`): Extra folder this project's Files view shows, in addition to its own docs.
 - **Project Linear API key** `projectLinearApiKey` (Settings UI row without a settings key; use `ghostex settings open`): A Linear key for this project only, used instead of its workspace's or the shared key. Issues Workflow shows Linear tickets once a key applies to the project.
+- **Cloud box provider and size** `projectCloudBoxDefaults` (Settings UI row without a settings key; use `ghostex settings open`): Which provider and machine size a new Cloud Box for this project starts on.
+- **Cloud box snapshots** `projectCloudBoxSnapshots` (Settings UI row without a settings key; use `ghostex settings open`): This project's saved snapshots: what a new Cloud Box starts from. Make one the Default (★), update the Default from a running box, or delete one.
+- **Send to the box** `projectCloudBoxSecrets` (Settings UI row without a settings key; use `ghostex settings open`): Tick the project's .env files and name the variables a Cloud Box gets at start. Their values are read from this computer each time and never saved in a snapshot.
 ## Remote (tab `remote`)
 
 ### Easy Connect
@@ -560,6 +585,17 @@ How to use this file:
 - **Easy Connect binary** `binary` (Settings UI row without a settings key; use `ghostex settings open`): Path and version of the Easy Connect binary.
 - **gxserver** `gxserver` (Settings UI row without a settings key; use `ghostex settings open`): Local API the app and phones talk to.
 - **Raw Easy Connect status** `rawStatus` (Settings UI row without a settings key; use `ghostex settings open`): Raw Easy Connect status JSON for bug reports.
+## Secrets (tab `secrets`)
+
+### Secret providers
+
+- **1Password accounts** `secretProviders` (Settings UI row without a settings key; use `ghostex settings open`): The 1Password accounts Ghostex reads keys and tokens from, so you can paste an op://vault/item/field reference instead of the key itself. Needs the 1Password CLI (op) with "Integrate with 1Password CLI" turned on in 1Password. Ghostex keeps only the account name; 1Password may ask you to unlock when a key is read.
+### Check a reference
+
+- **Check a 1Password reference** `secretReferenceCheck` (Settings UI row without a settings key; use `ghostex settings open`): Reads an op://vault/item/field reference once to see that it works. Ghostex says only whether it could read it and never shows the value.
+### Secrets agents ask for
+
+- **Private secret requests** `secretRequests` (Settings UI row without a settings key; use `ghostex settings open`): When an agent needs a password, API key or token, it asks in a private card above the chat box instead of in the chat. What you type goes to a private file only that agent's commands can read, deleted after 24 hours; it never appears in the chat or reaches the model. With a 1Password account added, you can answer with an op:// reference instead.
 ## Workspaces (tab `workspaces`)
 
 ### Workspaces
@@ -623,8 +659,8 @@ How to use this file:
 - **Last conversation** `voiceAgentMemory` (Settings UI row without a settings key; use `ghostex settings open`): A short summary of your last voice conversation, kept on this computer until the next conversation replaces it. Press Continue in the voice panel, or say "pick up where we left off", to carry on from it. Forget deletes it.
 ### API keys
 
-- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it.
-- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it.
+- **xAI API key** `voiceAgentXaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your xAI API key for Grok Voice and for the chat box's dictation microphone. Kept encrypted on this computer; your phone uses it through this computer and never stores it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead and the key is read from 1Password each time.
+- **OpenAI API key** `voiceAgentOpenaiKey` (Settings UI row without a settings key; use `ghostex settings open`): Your OpenAI API key for GPT Realtime, and for the chat box's dictation microphone when no xAI key is saved. Kept encrypted on this computer and never shown again after you save it. With a 1Password account added in Settings > Secrets, paste an op://vault/item/field reference instead.
 ### Dictation history
 
 - **Dictation history** `voiceAgentDictationHistory` (Settings UI row without a settings key; use `ghostex settings open`): Every recording you made with the Dictate microphone, newest first, with its text. Play, download or delete a recording, copy its text, recover one you cancelled, or transcribe one that failed (the text is copied to your clipboard too). Recordings stay on this computer until you delete them.

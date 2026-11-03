@@ -121,6 +121,12 @@ impl GhostexGpuiApp {
                     cx,
                 );
             }
+            "installSecretsSkill" => {
+                self.run_gpui_ghostex_cli_settings_action(
+                    GpuiGhostexCliSettingsAction::InstallSecretsSkill,
+                    cx,
+                );
+            }
             "installCuaDriverSkill" => {
                 self.run_gpui_ghostex_cli_settings_action(
                     GpuiGhostexCliSettingsAction::InstallCuaDriverSkill,
@@ -186,6 +192,13 @@ impl GhostexGpuiApp {
             }
             "setUpAgentboxWithAgent" => {
                 self.run_agentbox_setup_chat(cx);
+            }
+            "setUpCloudBox" => {
+                if let Some(project_id) =
+                    command.get("projectId").and_then(serde_json::Value::as_str)
+                {
+                    self.gx_store_create_cloud_box_setup_chat(project_id.to_string(), cx);
+                }
             }
             "uninstallBundledAgentSkills" => {
                 self.run_gpui_ghostex_cli_settings_action(

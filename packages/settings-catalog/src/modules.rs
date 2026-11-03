@@ -501,6 +501,10 @@ pub fn exports(module: &str, platform: Platform) -> Vec<(&'static str, Json)> {
                 WEB_LINK_OPEN_TARGET_OPTIONS.to_json(),
             ),
             (
+                "AGENT_PREVIEW_BROWSER_OPTIONS",
+                AGENT_PREVIEW_BROWSER_OPTIONS.to_json(),
+            ),
+            (
                 "SESSION_LINK_OPEN_TARGET_OPTIONS",
                 SESSION_LINK_OPEN_TARGET_OPTIONS.to_json(),
             ),

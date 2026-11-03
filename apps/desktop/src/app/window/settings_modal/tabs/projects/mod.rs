@@ -5,6 +5,8 @@
 //! view settings (views.rs).
 //!
 //! CDXC:Projects 2026-06-19-12:11 SEE-ALSO: the page edits selected-project metadata only and never offers project deletion.
+mod cloud_box;
+mod cloud_box_setup;
 mod picker;
 mod views;
 mod work_mode;
@@ -247,6 +249,8 @@ pub(crate) struct ProjectsTab {
     work: work_mode::ProjectWorkModeState,
     /// The projects' own orchestrator playbooks and their editor.
     orchestrator_playbook: super::orchestrator_playbook::OrchestratorPlaybookState,
+    /// The selected project's Cloud box section (cloud_box.rs).
+    cloud_box: cloud_box::ProjectCloudBoxState,
 }
 
 impl ProjectsTab {
@@ -289,6 +293,7 @@ impl ProjectsTab {
             preview_applied: false,
             work: work_mode::ProjectWorkModeState::default(),
             orchestrator_playbook: Default::default(),
+            cloud_box: Default::default(),
         };
         if open_instructions {
             let project_id = Some(page.selected_project_id.clone()).filter(|id| !id.is_empty());
@@ -1171,6 +1176,7 @@ impl ProjectsTab {
         if let Some(section) = settings_section(p, "Project", None, None, rows) {
             blocks.push(PageBlock::section("projectSettings", section));
         }
+        blocks.extend(self.cloud_box_blocks(p, project, window, cx));
 
         // `ProjectViewSettings`, keyed by `${projectId}:${view.id}`: a new project starts fresh drafts.
         let views = source_views(custom_views);

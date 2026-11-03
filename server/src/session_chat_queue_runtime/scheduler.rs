@@ -767,7 +767,7 @@ impl SessionChatQueueRuntime {
                 }
                 return Assessment::Fail {
                     prompt_id: head.id.clone(),
-                    reason: notice.title.clone(),
+                    reason: notice_failure_reason(&notice),
                 };
             }
         }
@@ -1283,6 +1283,23 @@ pub(super) fn escape_closes_claude_panel(
 ) -> bool {
     composer.should_dismiss()
         && notice.kind == crate::session_chat_notice::SESSION_CHAT_NOTICE_CLAUDE_INPUT_BLOCKED
+}
+
+/// A row a blocking notice failed says why in the card's own words: its title ("Trust this folder?",
+/// "Claude Code stopped") and the sentence under it, since 2026-11-03 short titles read as a reason
+/// only with that sentence.
+fn notice_failure_reason(notice: &crate::session_chat_notice::SessionChatTerminalNotice) -> String {
+    let title = notice.title.trim();
+    match notice
+        .detail
+        .as_deref()
+        .map(str::trim)
+        .filter(|detail| !detail.is_empty())
+    {
+        Some(detail) if title.ends_with(['.', '?', '!']) => format!("{title} {detail}"),
+        Some(detail) => format!("{title}. {detail}"),
+        None => title.to_string(),
+    }
 }
 
 #[cfg(test)]

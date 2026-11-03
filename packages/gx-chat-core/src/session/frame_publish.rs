@@ -97,6 +97,10 @@ pub fn side_state_moves(
             .as_ref()
             .is_some_and(|parent| session.side_chat_of.as_ref() != Some(parent))
         || side
+            .secret_requests
+            .as_ref()
+            .is_some_and(|rows| session.secret_requests.as_ref() != Some(rows))
+        || side
             .agent_message_deliveries
             .as_ref()
             .is_some_and(|deliveries| session.agent_message_deliveries.as_ref() != Some(deliveries))

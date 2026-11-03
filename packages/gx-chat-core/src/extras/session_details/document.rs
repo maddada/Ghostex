@@ -168,6 +168,18 @@ fn account_row(environment: &Value, hide_emails: bool) -> Option<Value> {
     }))
 }
 
+/// "640 MB RAM", "1.2 GB RAM": the Resources panel's units, with one decimal from a gigabyte on.
+fn ram_label(bytes: f64) -> String {
+    let mb = bytes / (1024.0 * 1024.0);
+    if mb >= 1024.0 {
+        format!("{:.1} GB RAM", mb / 1024.0)
+    } else {
+        format!("{:.0} MB RAM", mb.max(1.0))
+    }
+}
+
+/// CDXC:SessionDetails 2026-11-02 DECISION:
+/// User: show the session's RAM usage in the Environment card ("1.2 GB RAM"), the Resources panel's number for the session's whole process tree, kept current with the panel's poll. The row is left out when no number is known (the session isn't running, or it runs on a Cloud Box or another computer that can't report it), never shown as 0 or a dash.
 fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
     let environment = data.get("environment")?;
     let mut rows = Vec::new();
@@ -191,6 +203,9 @@ fn environment(data: &Value, hide_emails: bool) -> Option<Value> {
     }
     if let Some(row) = account_row(environment, hide_emails) {
         rows.push(row);
+    }
+    if let Some(bytes) = number(environment.get("memoryBytes")).filter(|bytes| *bytes > 0.0) {
+        rows.push(json!({"icon": "memory", "text": ram_label(bytes)}));
     }
     Some(json!({ "rows": rows }))
 }
@@ -786,4 +801,40 @@ pub fn document(state: &ChatState, context: &ChatContext) -> Value {
         "error": details.error,
         "sections": sections,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows(environment: Value) -> Vec<Value> {
+        let body = super::environment(&json!({ "environment": environment }), false).unwrap();
+        body["rows"].as_array().unwrap().clone()
+    }
+
+    #[test]
+    fn a_running_session_shows_its_ram_last() {
+        let rows = rows(json!({"memoryBytes": 1.25 * 1024.0 * 1024.0 * 1024.0}));
+        assert_eq!(
+            rows.last().unwrap(),
+            &json!({"icon": "memory", "text": "1.2 GB RAM"})
+        );
+        let rows = super::environment(
+            &json!({"environment": {"memoryBytes": 640.0 * 1024.0 * 1024.0}}),
+            false,
+        )
+        .unwrap();
+        assert_eq!(rows["rows"][1]["text"], "640 MB RAM");
+    }
+
+    #[test]
+    fn no_known_ram_hides_the_row() {
+        for environment in [
+            json!({}),
+            json!({"memoryBytes": null}),
+            json!({"memoryBytes": 0}),
+        ] {
+            assert!(rows(environment).iter().all(|row| row["icon"] != "memory"));
+        }
+    }
 }

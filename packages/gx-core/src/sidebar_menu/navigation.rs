@@ -38,6 +38,8 @@ pub struct MoreMenuInput<'a> {
     pub host: &'a MenuHost,
     /// The project group ids the list draws.
     pub drawn_project_group_ids: &'a [String],
+    /// The list draws a Cloud Box session, so the Cloud Box filter is offered.
+    pub cloud_box_rows: bool,
 }
 
 /// `createNativeNavigation(...).moreMenu`.
@@ -104,6 +106,23 @@ pub fn more_menu(input: &MoreMenuInput<'_>) -> Vec<MenuItem> {
             .with_checked(input.settings.hide_projects_without_sessions),
         );
         sort.push(MenuItem::separator());
+        // The Cloud filter of Q1015 (CDXC:CloudBoxes in cloud_boxes.rs): offered on this
+        // computer's tab while a box session is listed, or while it is ticked.
+        let cloud_ticked = ui
+            .selected_tag_filters
+            .iter()
+            .any(|tag| tag == crate::cloud_boxes::CLOUD_BOX_FILTER);
+        if is_local && (input.cloud_box_rows || cloud_ticked) {
+            sort.push(
+                MenuItem::row(
+                    "Cloud Box Sessions",
+                    "cloud",
+                    MenuCommand::toggle_tag_filter(crate::cloud_boxes::CLOUD_BOX_FILTER),
+                )
+                .with_checked(cloud_ticked),
+            );
+            sort.push(MenuItem::separator());
+        }
         // CDXC:Sidebar 2026-10-31 DECISION: User (Q853): a heading says what the tag rows do. The reporter ticked one expecting it to tag something.
         let tag_rows_start = sort.len();
         for item in
@@ -295,6 +314,7 @@ mod tests {
             filter_catalog: &catalog,
             host,
             drawn_project_group_ids: &drawn,
+            cloud_box_rows: false,
         });
         let top = more.iter().filter_map(|item| item.label.clone()).collect();
         let sort = more
@@ -354,6 +374,7 @@ mod tests {
             filter_catalog: &catalog,
             host: &MenuHost::default(),
             drawn_project_group_ids: &[],
+            cloud_box_rows: false,
         });
         let rows = more
             .iter()

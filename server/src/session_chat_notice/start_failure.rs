@@ -23,27 +23,23 @@ pub(super) fn detect_claude_missing_login(
         return None;
     }
     let slot = cswap_missing_login_slot(&flatten_tail(&screen.folded, NOTICE_EXIT_SCAN_LINES))?;
-    let email = claude_slot_email(&slot);
-    let account = match email {
-        Some(email) => format!("account {slot} ({email})"),
-        None => format!("account {slot}"),
-    };
+    let account = card_account_name(&slot, claude_slot_email(&slot).as_deref());
     Some(
         SessionChatTerminalNotice::new(
             SESSION_CHAT_NOTICE_LOGIN_EXPIRED,
             SessionChatTerminalNoticeSeverity::Error,
             SessionChatTerminalNoticeSource::Screen,
-            format!("Claude couldn't start: {account} has no saved login on this computer"),
+            format!("{account} isn't signed in here"),
         )
         .with_input_blocking(true)
         .with_detail(format!(
-            "Switch this session to an account that works, or sign in to account {slot} on this computer. A message you send meanwhile waits in the chat and goes out as soon as Claude is up."
+            "Sign in to {account} on this computer, or switch this chat to another account. Messages you send wait until Claude starts."
         ))
         .with_screen_tail(screen.screen_tail())
         .with_actions(vec![
             SessionChatTerminalNoticeAction {
                 id: SESSION_CHAT_NOTICE_ACTION_SIGN_IN.to_string(),
-                label: format!("Sign in to account {slot}"),
+                label: "Sign in".to_string(),
                 kind: SessionChatTerminalNoticeActionKind::RestartAgent,
                 send: None,
             },
@@ -68,11 +64,6 @@ pub fn agent_start_failure_notice(screen_text: &str) -> Option<SessionChatTermin
     }
     let screen_tail = screen.screen_tail();
     let error_lines = screen_tail.as_deref().and_then(start_failure_error_lines);
-    let detail = if error_lines.is_some() {
-        "Its start command ended with the error below and the terminal is back at a shell prompt."
-    } else {
-        "Its start command ended and the terminal is back at a shell prompt."
-    };
     Some(
         SessionChatTerminalNotice::new(
             SESSION_CHAT_NOTICE_AGENT_EXITED,
@@ -81,7 +72,7 @@ pub fn agent_start_failure_notice(screen_text: &str) -> Option<SessionChatTermin
             "The agent couldn't start",
         )
         .with_input_blocking(true)
-        .with_detail(format!("{detail} Fix that, then try again. A message you send meanwhile waits in the chat and goes out once the agent is up."))
+        .with_detail(START_FAILURE_DETAIL)
         .with_error_lines(error_lines)
         .with_screen_tail(screen_tail)
         .with_actions(vec![
@@ -94,6 +85,29 @@ pub fn agent_start_failure_notice(screen_text: &str) -> Option<SessionChatTermin
             SessionChatTerminalNoticeAction::switch_to_terminal(OPEN_TERMINAL.label),
         ]),
     )
+}
+
+/// What a failed start's card says; its error lines sit behind the card's Details toggle.
+pub const START_FAILURE_DETAIL: &str =
+    "It stopped with an error. Fix it and try again; messages you send wait until it starts.";
+
+/// How a card names a saved account: its email, or "Account N" while Settings hides account emails
+/// (`hideAccountEmails`) or no email is known.
+/// CDXC:AgentProviders 2026-11-03 DECISION: User (Q1135): a card names the account by its email ("maddada123spam@gmail.com is signed out"); "watch out we need to hide email if it's hidden in settings", so with Hide account emails on it says "Account 2", never the email. gxserver picks the name, so the desktop, the web build and the phone all get the same words.
+/// SEE-ALSO: server/src/session_chat_account_sign_in.rs, packages/settings-catalog/src/data/defaults.rs (`hideAccountEmails`).
+pub(crate) fn card_account_name(selector: &str, email: Option<&str>) -> String {
+    let email = email.map(str::trim).filter(|email| !email.is_empty());
+    match email {
+        Some(email) if !account_emails_hidden() => email.to_string(),
+        _ => format!("Account {selector}"),
+    }
+}
+
+/// Settings > Accounts > Hide account emails, read fresh from the shared settings file.
+fn account_emails_hidden() -> bool {
+    crate::shared_settings_file::read_shared_settings(&crate::paths::get_gxserver_paths(None))
+        .and_then(|settings| settings.get("hideAccountEmails").and_then(Value::as_bool))
+        .unwrap_or(false)
 }
 
 /// The id of Install on the card of an agent whose command is not on this computer. It rides the
@@ -145,14 +159,13 @@ pub fn agent_command_missing_notice(
     command: &str,
     installed_at: Option<&str>,
 ) -> SessionChatTerminalNotice {
-    let send_note =
-        "A message you send meanwhile waits in the chat and goes out once the agent is up.";
     match installed_at {
         None => {
-            notice.title = format!("{agent_name} isn't installed on this computer");
-            notice.detail = Some(format!(
-                "Its command, {command}, wasn't found. Install installs it the way Settings > Agents does and then starts {agent_name}. {send_note}"
-            ));
+            notice.title = format!("{agent_name} isn't installed");
+            notice.detail = Some(
+                "Install it to start chatting. Messages you send wait until it's running."
+                    .to_string(),
+            );
             notice.actions = vec![
                 SessionChatTerminalNoticeAction {
                     id: SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT.to_string(),
@@ -166,7 +179,7 @@ pub fn agent_command_missing_notice(
         Some(path) => {
             notice.title = format!("This terminal can't find {command}");
             notice.detail = Some(format!(
-                "{agent_name} is installed at {path}, but the terminal's PATH doesn't include that folder. Add it with Add to PATH in Settings > Agents, then try again. {send_note}"
+                "{agent_name} is installed at {path}, but the terminal doesn't look there. Use Add to PATH in Settings > Agents, then try again."
             ));
         }
     }
@@ -177,7 +190,7 @@ pub fn agent_command_missing_notice(
 const START_FAILURE_ERROR_LINES: usize = 4;
 
 /// CDXC:SessionChat 2026-10-16 WHY:
-/// The failed-start card has to say why without the user opening the terminal: a customer's card would have read "--share-history is not supported on Windows yet" had it shown cswap's own words. These are the last block of output above the shell prompt the failed start left (the prompt line dropped, at most four lines, stopping at a blank line so older output stays out).
+/// The failed-start card has to say why without the user opening the terminal: a customer's card would have read "--share-history is not supported on Windows yet" had it shown cswap's own words. These are the last block of output above the shell prompt the failed start left (the prompt line dropped, at most four lines, stopping at a blank line so older output stays out), shown behind the card's Details toggle since 2026-11-03 (Q1136).
 /// SEE-ALSO: apps/desktop/src/app/native_chat/notice.rs and apps/mobile/app/src/chat/native/cards/NoticeCard.tsx draw `errorLines`.
 fn start_failure_error_lines(screen_tail: &str) -> Option<String> {
     let mut lines: Vec<&str> = screen_tail.lines().map(str::trim_end).collect();
@@ -358,10 +371,7 @@ mod missing_command_tests {
         .expect("a failed start");
         let missing =
             agent_command_missing_notice(base.clone(), "DeepSeek Harness", "dsh-tui", None);
-        assert_eq!(
-            missing.title,
-            "DeepSeek Harness isn't installed on this computer"
-        );
+        assert_eq!(missing.title, "DeepSeek Harness isn't installed");
         assert_eq!(
             missing.actions[0].id,
             SESSION_CHAT_NOTICE_ACTION_INSTALL_AGENT

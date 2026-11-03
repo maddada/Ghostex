@@ -77,7 +77,7 @@ pub fn is_expected_gxserver_auth_token(provided_token: &str, expected_token: &st
             .into()
 }
 
-fn bearer_token(headers: &HeaderMap) -> Option<&str> {
+pub fn bearer_token(headers: &HeaderMap) -> Option<&str> {
     let value = headers.get(header::AUTHORIZATION)?.to_str().ok()?;
     let mut parts = value.split(' ');
     let scheme = parts.next()?;

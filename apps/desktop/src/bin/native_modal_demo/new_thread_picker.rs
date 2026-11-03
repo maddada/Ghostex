@@ -212,7 +212,9 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         "noboxes" => NewThreadPickerBoxes::NotSetUp,
         _ => NewThreadPickerBoxes::Unknown,
     };
-    let run_on_shown = boxes.shows_run_on();
+    // The Cloud Box chip shows with the boxes states (Cloud Boxes on).
+    let cloud_box = state.starts_with("boxes");
+    let run_on_shown = boxes.shows_run_on() || cloud_box;
     let config = NewThreadPickerConfig {
         palette: demo.palette,
         agents: agents.clone(),
@@ -226,6 +228,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
         },
         close_when_inactive: false,
         cloud_default_account: None,
+        cloud_box,
     };
     let (window, view) = super::open_modal_window(
         NEW_THREAD_PICKER_WIDTH,

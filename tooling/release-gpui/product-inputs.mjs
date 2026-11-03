@@ -38,6 +38,16 @@ export const TOOLCHAIN = Object.freeze({
    */
   tailcatBridgeGo: '1.27.1',
   tailcatBridgeGomobile: 'v0.0.0-20260821190718-4776eadac327',
+  /*
+   * CDXC:CloudBoxes 2026-11-02 SEE-ALSO: the tailcat every gxserver Linux package
+   * carries in bin/ (and so every Linux desktop package, at
+   * /opt/ghostex/gxserver/bin/tailcat), built by server/package-remote-linux.mjs
+   * with `go install` of this module version (Go's checksum database verifies the
+   * module) using the Go that release-gpui-gxserver.yml installs. Asserted against
+   * that script, server/src/tailcat/install.rs and the workflows.
+   */
+  tailcat: 'v0.6.0',
+  tailcatGo: '1.27.1',
   vpk: '1.2.0',
   /*
    * One Zig toolchain for the whole repo. Ghostty and the zmx fork moved from
@@ -218,6 +228,8 @@ function gxserverProduct(arch) {
     signing: { mode: 'unsigned' },
     values: {
       arch,
+      tailcat: TOOLCHAIN.tailcat,
+      tailcatGo: TOOLCHAIN.tailcatGo,
       zig: TOOLCHAIN.zig,
     },
     versionStamped: false,
@@ -296,6 +308,8 @@ function linuxDesktopProduct(format, arch = 'x64') {
     values: {
       ...(arch === 'arm64' ? { arch } : {}),
       packageFormat: format,
+      /* The package ships the gxserver package's tailcat, and the release job checks its version. */
+      tailcat: TOOLCHAIN.tailcat,
       zig: TOOLCHAIN.zig,
     },
     versionStamped: true,

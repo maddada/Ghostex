@@ -140,6 +140,13 @@ impl GxserverLogger {
         self.persist(entry)
     }
 
+    /// Persists a record the user asked to keep for every occurrence, whatever the diagnostics
+    /// switches say. Only for rare, metadata-only events: today one line per session close
+    /// (`session_close_log.rs`).
+    pub fn log_record(&self, entry: GxserverLogInput) -> Result<()> {
+        self.persist(entry)
+    }
+
     pub fn log_routine(
         &self,
         scenario: DiagnosticLogScenario,

@@ -55,6 +55,7 @@ pub(crate) struct WindowsWslGhostexCliStatus {
     pub(crate) move_codex_session_skill_path: Option<String>,
     pub(crate) help_skill_path: Option<String>,
     pub(crate) visuals_skill_path: Option<String>,
+    pub(crate) secrets_skill_path: Option<String>,
 }
 
 #[allow(dead_code)] // used by the windows path

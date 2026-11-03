@@ -156,6 +156,7 @@ fn chat_section(
             cx,
         ));
     }
+    rows.extend(page.toggle(g, s, "agentGhostexNote", "Tell agents about Ghostex", "Agent sessions Ghostex starts get a short note that they run in Ghostex: it can show pages, questions and charts in the chat, install Ghostex skills, and `ghostex agent-guide` explains the rest. Agents use it only when you ask for one of those things. Applies to sessions started or resumed after you change it.", false, cx));
     rows.extend(page.toggle(g, s, "orchestratorAllEfforts", "Every effort level in coordinator pickers", "Also lists the levels above XHigh (Max, Ultra and the like) in the coordinator effort pickers, where the agent has them. Coordinators work best on High or XHigh.", false, cx));
     rows.extend(orchestrator_playbook_row(page, g, s, cx));
     rows.extend(read_aloud_rows(page, g, s, window, cx));
@@ -285,6 +286,18 @@ fn browser_section(
         "Open links in",
         "Open web links from terminal output (Command-click), session chat, and detected dev servers in the project Browser view or the system default browser.",
         g.options("WEB_LINK_OPEN_TARGET_OPTIONS"),
+        None,
+        false,
+        window,
+        cx,
+    ));
+    rows.extend(page.select(
+        g,
+        "browser",
+        "agentPreviewBrowser",
+        "Agents open pages in",
+        "Where an agent opens a page it built for you, such as a website preview: the project Browser view or your default browser. Ask has the agent ask you the first time and save your answer here.",
+        g.options("AGENT_PREVIEW_BROWSER_OPTIONS"),
         None,
         false,
         window,

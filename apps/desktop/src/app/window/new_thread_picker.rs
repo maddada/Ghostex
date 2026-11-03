@@ -288,6 +288,8 @@ pub(crate) struct NewThreadPickerConfig {
     pub(crate) boxes: NewThreadPickerBoxes,
     /// Settings' default location: `local` or a box's `runLocation`.
     pub(crate) default_run_location: String,
+    /// Offer the Run on row's Cloud Box chip (Cloud Boxes on, project on this computer).
+    pub(crate) cloud_box: bool,
     /// The app closes the picker when its window stops being key; the preview keeps it open.
     pub(crate) close_when_inactive: bool,
     /// The account of the active project's last Claude cloud session: the Claude (cloud) account
@@ -438,7 +440,8 @@ impl GpuiNewThreadPickerWindow {
             accounts: config.accounts,
             accounts_error: None,
             cloud_default_account: config.cloud_default_account.clone(),
-            run_on: RunOnState::new(config.boxes, config.default_run_location),
+            run_on: RunOnState::new(config.boxes, config.default_run_location)
+                .with_cloud_box(config.cloud_box),
             run_on_scroll: ScrollHandle::new(),
             query: String::new(),
             selected: 0,
@@ -472,7 +475,8 @@ impl GpuiNewThreadPickerWindow {
             self.accounts = config.accounts;
             self.accounts_error = None;
         }
-        self.run_on = RunOnState::new(config.boxes, config.default_run_location);
+        self.run_on = RunOnState::new(config.boxes, config.default_run_location)
+            .with_cloud_box(config.cloud_box);
         self.cloud_default_account = config.cloud_default_account;
         self.fit_window_height(window);
         self.reveal_selected_run_location();

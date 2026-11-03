@@ -120,7 +120,76 @@ pub(crate) fn readable_rollout(path: &Path) -> Option<PathBuf> {
     if !compressed.is_file() {
         return None;
     }
-    mirror_compressed_rollout(&plain, &compressed)
+    let mirror = mirror_compressed_rollout(&plain, &compressed)?;
+    note_mirror_read(&mirror);
+    Some(mirror)
+}
+
+/// Stamps the mirror's last-read time, which [`prune_unread_mirrors`] measures from. The
+/// modification time is left alone: it is the freshness mark that matches the compressed source.
+/// Skipped when the stamp is less than a day old, so a chat tailing its rollout does not write
+/// metadata on every read.
+fn note_mirror_read(mirror: &Path) {
+    let now = std::time::SystemTime::now();
+    let recent = fs::metadata(mirror)
+        .and_then(|meta| meta.accessed())
+        .ok()
+        .and_then(|accessed| now.duration_since(accessed).ok())
+        .is_some_and(|age| age < crate::storage_cleanup::DAY);
+    if recent {
+        return;
+    }
+    if let Ok(file) = File::options().write(true).open(mirror) {
+        let _ = file.set_times(fs::FileTimes::new().set_accessed(now));
+    }
+}
+
+/// CDXC:ServerDaemon 2026-11-03 DECISION:
+/// User chose: a mirror copy nothing has read for 30 days is deleted. It is only a decoded copy of Codex's compressed file, so the next read of that chat decodes it again (a few seconds for the largest rollouts).
+const MIRROR_MAX_UNREAD: std::time::Duration =
+    std::time::Duration::from_secs(30 * crate::storage_cleanup::DAY.as_secs());
+
+/// Deletes the mirror copies unread for [`MIRROR_MAX_UNREAD`], and decode leftovers a crash or a
+/// killed daemon left behind.
+pub(crate) fn prune_unread_mirrors(now: std::time::SystemTime) -> crate::storage_cleanup::Tally {
+    use crate::storage_cleanup::{prune_tree, Since};
+    let _guard = MIRROR_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut tally = prune_tree(mirror_root(), Since::Accessed, MIRROR_MAX_UNREAD, now);
+    // `<mirror>.jsonl.tmp-<pid>-<n>` files are written and renamed under the lock held here, so
+    // any still present is abandoned; one modified over a day ago surely is.
+    tally.add(prune_tree_matching(mirror_root(), now, |name| {
+        name.contains(".jsonl.tmp-")
+    }));
+    tally
+}
+
+fn prune_tree_matching(
+    dir: &Path,
+    now: std::time::SystemTime,
+    matches: fn(&str) -> bool,
+) -> crate::storage_cleanup::Tally {
+    use crate::storage_cleanup::{is_older, remove_file, Since, Tally, DAY};
+    let mut tally = Tally::default();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return tally;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else {
+            continue;
+        };
+        if metadata.is_dir() {
+            tally.add(prune_tree_matching(&path, now, matches));
+        } else if metadata.is_file()
+            && matches(&entry.file_name().to_string_lossy())
+            && is_older(&metadata, Since::Modified, DAY, now)
+        {
+            remove_file(&path, &metadata, &mut tally);
+        }
+    }
+    tally
 }
 
 fn mirror_compressed_rollout(plain: &Path, compressed: &Path) -> Option<PathBuf> {

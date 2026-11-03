@@ -227,12 +227,22 @@ fn delete(state: &AppState, params: &Map<String, Value>) -> Result<Value, Domain
         ),
     };
     // A side chat that already stopped has no daemon to kill; removing it is what matters.
-    let _ = dispatch_zmx_lifecycle_endpoint(
+    lifecycle.insert("closeSource".to_string(), json!("server.sideChatDeleted"));
+    let killed = dispatch_zmx_lifecycle_endpoint(
         &repository,
         "/api/killSession",
         &lifecycle,
         &context,
         &settings,
+    );
+    crate::session_close_log::log_session_close(
+        &state.logger,
+        &state.metadata.server_id,
+        &project_id,
+        &session_id,
+        &lifecycle,
+        "/api/killSession",
+        if killed.is_ok() { "stopped" } else { "failed" },
     );
     crate::session_chat_send_wake::retire_held_messages_of_closed_session(
         state,

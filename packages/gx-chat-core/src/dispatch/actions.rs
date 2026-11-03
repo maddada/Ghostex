@@ -155,6 +155,8 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::SwitchDraftAgent
         | ActionKind::SwitchDraftRunLocation
         | ActionKind::SetDraftWorktree
+        | ActionKind::SetDraftCloudBox
+        | ActionKind::OpenCloudBoxSettings
         | ActionKind::SwitchToTerminal
         | ActionKind::SelectForkBranch
         | ActionKind::ContextEdit
@@ -176,6 +178,7 @@ pub fn owner(kind: &ActionKind) -> Option<Family> {
         | ActionKind::OpenSideChat
         | ActionKind::BringBackSideChat
         | ActionKind::DeleteSideChat
+        | ActionKind::AnswerSecretRequest
         | ActionKind::SearchOpen
         | ActionKind::SearchClose
         | ActionKind::SearchQuery
@@ -314,6 +317,7 @@ fn clears_error(kind: &ActionKind) -> bool {
             | ActionKind::OpenSideChat
             | ActionKind::BringBackSideChat
             | ActionKind::DeleteSideChat
+            | ActionKind::AnswerSecretRequest
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery
@@ -370,6 +374,7 @@ fn publishes_at_once(kind: &ActionKind) -> bool {
             | ActionKind::OpenSideChat
             | ActionKind::BringBackSideChat
             | ActionKind::DeleteSideChat
+            | ActionKind::AnswerSecretRequest
             | ActionKind::SearchOpen
             | ActionKind::SearchClose
             | ActionKind::SearchQuery

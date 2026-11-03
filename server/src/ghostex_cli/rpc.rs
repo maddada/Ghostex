@@ -183,6 +183,10 @@ pub fn is_local_gxserver_target(target: &Target) -> bool {
     if target.kind == "local" {
         return true;
     }
+    // A relay target is this computer's address, but the session runs on the other computer.
+    if target.kind == "computer" {
+        return false;
+    }
     let Ok(url) = url::Url::parse(&target.base_url) else {
         return false;
     };
@@ -484,7 +488,7 @@ fn js_value_to_string(value: &Value) -> String {
 
 /// CDXC:Cli 2026-10-04 WHY:
 /// A global ref is this machine's when its server id is the one in the local gxserver's `identity.json`, beside the auth token the local target already reads. Deciding it only by a 1-second `/api/health/server` probe failed whenever gxserver answered slowly (just after a restart): `ghostex agents send` then resolved its own sender ref `S8g:…` as a remote server with no connection profile and refused the send. The probe stays for a state folder without the file.
-fn local_gxserver_server_id() -> Option<String> {
+pub(crate) fn local_gxserver_server_id() -> Option<String> {
     let text = std::fs::read_to_string(gxserver_root().join("identity.json")).ok()?;
     let identity = parse_json_value(&text)?;
     identity
@@ -516,6 +520,34 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
     An explicit server now wins; the ref only has to belong to it, which its health check confirms
     when it reports a server id.
     */
+    /*
+    CDXC:RemoteMachines 2026-11-03 WHY:
+    `--computer <name>` and a session ref of a connected computer go to this computer's own gxserver, which relays them over the connection the desktop app already has (connected_computers/relay.rs). The CLI never holds the other computer's token, and every verb that reaches gxserver through here works on the other computer unchanged.
+    */
+    if let Some(wanted) = flags
+        .text("computer")
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty() && value != "true")
+    {
+        if server != "local" {
+            return Err(CliError::Other(
+                "Use --computer or --server, not both.".to_string(),
+            ));
+        }
+        let local = resolve_local_gxserver_target()?;
+        let Some(target) = super::computers::computer_flag_target(&local, &wanted)? else {
+            return Ok(local);
+        };
+        if let Some(global_ref) = find_global_ref_candidate(params) {
+            let ref_server = global_ref.split(':').next().unwrap_or_default();
+            if Some(ref_server) != target.server_id.as_deref() {
+                return Err(CliError::Other(format!(
+                    "{global_ref} is a session on another computer than --computer {wanted}; leave out --computer, the ref says where it runs."
+                )));
+            }
+        }
+        return Ok(target);
+    }
     if let Some(global_ref) = find_global_ref_candidate(params) {
         let server_id = global_ref.split(':').next().unwrap_or_default().to_string();
         if server != "local" {
@@ -540,9 +572,12 @@ pub fn resolve_gxserver_server_target(flags: &Flags, params: &Value) -> CliResul
                 return Ok(local);
             }
         }
+        if let Some(target) = super::computers::ref_target(&local, &server_id)? {
+            return Ok(target);
+        }
         let Some(profile) = find_gxserver_connection_profile_by_server_id(&server_id) else {
             return Err(CliError::Other(format!(
-                "Global session ref {global_ref} targets {server_id}, but no gxserver connection profile exists for that server."
+                "{global_ref} is a session on a computer this one isn't connected to. Connect that computer in Settings > Remote > Remote machines, or list its sessions with ghostex sessions --computer <name>."
             )));
         };
         return resolve_gxserver_profile_target(&profile, flags);
@@ -1261,7 +1296,7 @@ fn start_gxserver_tailcat_tunnel(
     plan: &TailcatForwardPlan,
     flags: &Flags,
 ) -> CliResult<TailcatTunnel> {
-    let Some(binary_path) = crate::tailcat::resolve_tailcat_binary() else {
+    let Some(binary_path) = crate::tailcat::resolve_client_tailcat_binary() else {
         return Err(tailcat_missing_error(target));
     };
     let tunnel = start_tailcat_tunnel(&binary_path, plan)?;
@@ -1301,8 +1336,9 @@ fn start_gxserver_tailcat_tunnel(
 
 fn tailcat_missing_error(target: &Target) -> CliError {
     CliError::Connection(format!(
-        "Could not set up tailcat gxserver profile{} because the \"tailcat\" executable was not found. Install it with \"go install github.com/tailscale/tailcat/cmd/tailcat@latest\", or point GHOSTEX_TAILCAT_BIN at it.",
-        target.profile_suffix()
+        "Could not set up tailcat gxserver profile{} because no \"tailcat\" {} or newer was found. Install it in Settings › Remote › Easy Connect, or point GHOSTEX_TAILCAT_BIN at one.",
+        target.profile_suffix(),
+        ghostex_paths::tailcat::TAILCAT_MIN_VERSION
     ))
 }
 

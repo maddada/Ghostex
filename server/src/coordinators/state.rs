@@ -205,7 +205,7 @@ pub fn thread_prompt(session: &Value) -> Option<ThreadPrompt> {
 }
 
 /// One line per question (with its options), or the approval and what it is for.
-fn prompt_summary(prompt: &SessionChatInteractivePrompt) -> String {
+pub(crate) fn prompt_summary(prompt: &SessionChatInteractivePrompt) -> String {
     match prompt {
         SessionChatInteractivePrompt::Question { questions, .. } => questions
             .iter()

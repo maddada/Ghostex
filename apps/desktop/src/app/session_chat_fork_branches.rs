@@ -39,8 +39,15 @@ impl GhostexGpuiApp {
         };
         // The family is derived by the daemon that owns this chat, so a remote session's branches
         // live on that same machine and take its tunnel.
-        let remote_machine_id = match self.workspace_terminal_key_for_shell_session(session_id) {
-            Some(GpuiWorkspaceTerminalSessionKey::Remote(key)) => Some(key.remote_machine_id),
+        // A Cloud Box start names the box's machine (`cloudbox:<boxId>`) the new session is on.
+        let remote_machine_id = match (
+            field("machineId"),
+            self.workspace_terminal_key_for_shell_session(session_id),
+        ) {
+            (Some(machine_id), _) => Some(machine_id),
+            (None, Some(GpuiWorkspaceTerminalSessionKey::Remote(key))) => {
+                Some(key.remote_machine_id)
+            }
             _ => None,
         };
         let sidebar_session_id = match &remote_machine_id {

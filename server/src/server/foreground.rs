@@ -339,14 +339,18 @@ pub async fn run_gxserver_foreground(
     crate::accounts::reset_watch::start(state.clone());
     crate::accounts::claude_swap_switch::start(state.clone());
     session_auto_sleep_sweep::start_session_auto_sleep_sweep(state.clone());
+    storage_cleanup_sweep::start_storage_cleanup_sweep(state.clone());
     sidebar_spaces_switch::start_sidebar_spaces_switch_watch(state.clone());
     workspaces_switch::start_workspaces_switch_watch(state.clone());
     crate::connectors::start_connectors(state.clone());
     bot_sync::start_bot_project_sync(state.clone());
     close_after_done_runtime::start_close_after_done_runtime(state.clone());
     coordinator_runtime::start_coordinator_runtime(state.clone());
+    coordinator_remote_runtime::start_coordinator_remote_runtime(state.clone());
+    tokio::spawn(peer_http::start_peer_listener(state.clone()));
     agent_message_delivery_runtime::start_agent_message_delivery_runtime(state.clone());
     crate::agentbox::start_agentbox_activity_poller(state.clone());
+    crate::cloud_boxes::start_cloud_boxes_scheduler(state.clone());
     crate::claude_cloud::start_claude_cloud_poller(state.clone());
     /*
     CDXC:SessionChat 2026-08-21:
@@ -403,6 +407,8 @@ pub async fn run_gxserver_foreground(
     sync_zmx_title_observers_for_all_sessions(&state, "server-start");
     sync_session_chat_followers_for_all_sessions(&state, "server-start");
     crate::voice_agent::recover_voice_agent_memory(&state);
+    // Secret request files are deleted a day after they were saved, even when no agent asks again.
+    crate::secret_requests::sweep_saved_files(&state.paths);
     let agent_metadata_title_sync_task = spawn_agent_metadata_title_sync_task(&state);
     let session_lifecycle_sweep_task = spawn_session_lifecycle_sweep_task(&state);
     let session_git_status_refresh_task = spawn_session_git_status_refresh_task(&state);

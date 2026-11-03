@@ -727,11 +727,7 @@ fn pick_color_dialog<V: SettingsPage>(
         move |page: &mut V, window, cx| close_picker(page, key, kind, fallback, window, cx),
         cx,
     );
-    let dialog_bg = if p.light {
-        rgb(0xffffff)
-    } else {
-        rgb(0x0e0e0e)
-    };
+    let dialog_bg = p.dialog_surface();
     let dialog = v_flex()
         .id(SharedString::from(format!("{key}-picker-dialog")))
         .track_focus(&focus)
