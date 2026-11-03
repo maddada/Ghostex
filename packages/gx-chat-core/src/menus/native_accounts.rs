@@ -120,6 +120,26 @@ pub fn panel_usage_bars(account: &Account, now_ms: i64) -> Vec<PanelUsageBar> {
         .collect()
 }
 
+/// Every account's compact usage columns from an `agentAccounts` answer, without a chat.
+///
+/// Rows keep the answer's order and carry only its account id and the panel's existing bars.
+/// No selected account, provider filter, switch eligibility or session policy is applied.
+pub fn account_usage_columns(answer: &Value, now_ms: i64) -> Value {
+    Value::Array(
+        answer
+            .get("accounts")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|entry| {
+                let account = Account::from_value(entry);
+                let usage = panel_usage_bars(&account, now_ms);
+                serde_json::json!({ "id": account.id, "usage": usage })
+            })
+            .collect(),
+    )
+}
+
 /// What is wrong with the account the session is on, on its row in the panel.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -620,6 +640,62 @@ mod tests {
         assert_eq!(bars[0].reset, "Resets 2h 36m");
         assert_eq!(bars[2].reset, "Reset time unavailable");
         assert_eq!(bars[3].label, "Sonnet 7d: 3%");
+    }
+
+    #[test]
+    fn account_usage_columns_match_the_panel_without_a_chat() {
+        let fixture = json!({
+            "accounts": [
+                {
+                    "id": "claude-1", "provider": "claude", "registered": true,
+                    "usage": [
+                        { "id": "fiveHour", "usedPercent": 16.5,
+                          "resetsAt": crate::menus::time::iso_from_millis(NOW + 9_360_000) },
+                        { "id": "sevenDay", "usedPercent": 140.0 },
+                        { "model": "Fable", "usedPercent": -2.5,
+                          "resetsAt": crate::menus::time::iso_from_millis(NOW - 1) },
+                        { "model": "Sonnet", "limitWindowSeconds": 604_800, "usedPercent": 3,
+                          "resetsAt": "not a date" }
+                    ]
+                },
+                {
+                    "id": "codex-1", "provider": "codex", "registered": true,
+                    "userDisabled": true,
+                    "usage": [
+                        { "model": "Spark", "limitWindowSeconds": 18_000, "usedPercent": 12 },
+                        { "label": "Extra usage" }
+                    ]
+                },
+                { "id": "no-usage", "registered": false }
+            ]
+        });
+        let columns = account_usage_columns(&fixture, NOW);
+        let accounts = AccountsState::from_value(&fixture);
+        for (index, account) in accounts.accounts.iter().enumerate() {
+            assert_eq!(columns[index]["id"], json!(account.id));
+            assert_eq!(
+                columns[index]["usage"],
+                serde_json::to_value(panel_usage_bars(account, NOW)).unwrap()
+            );
+        }
+        assert_eq!(columns.as_array().unwrap().len(), 3);
+        assert_eq!(columns[0]["usage"][0]["value"], "17%");
+        assert_eq!(columns[0]["usage"][0]["resetIn"], "2h 36m");
+        assert_eq!(columns[0]["usage"][1]["percent"], 100);
+        assert_eq!(columns[0]["usage"][2]["name"], "Fable");
+        assert_eq!(columns[0]["usage"][2]["percent"], 0);
+        assert_eq!(columns[0]["usage"][2]["resetIn"], "due");
+        assert_eq!(columns[0]["usage"][3]["name"], "Sonnet");
+        assert_eq!(columns[0]["usage"][3]["resetIn"], Value::Null);
+        assert_eq!(columns[1]["usage"][0]["name"], "Spark 5h");
+        assert_eq!(columns[1]["usage"][1]["value"], "NaN%");
+        assert_eq!(columns[1]["usage"][1]["percent"], Value::Null);
+        assert_eq!(columns[2]["usage"], json!([]));
+
+        let mut with_session = fixture;
+        with_session["session"] = json!({ "provider": "claude", "accountId": "claude-1" });
+        assert_eq!(account_usage_columns(&with_session, NOW), columns);
+        assert_eq!(account_usage_columns(&json!({}), NOW), json!([]));
     }
 
     #[test]
