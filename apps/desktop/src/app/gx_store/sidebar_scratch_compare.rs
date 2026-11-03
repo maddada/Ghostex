@@ -231,6 +231,10 @@ fn compare_rows(kept: &[SessionView], built: &[SessionView], difference: &mut Sc
             row.pending_question_count == other.pending_question_count,
         );
         note(
+            "awaitingAnswer",
+            row.awaiting_answer == other.awaiting_answer,
+        );
+        note(
             "lastInteractionAt",
             row.last_interaction_at == other.last_interaction_at,
         );

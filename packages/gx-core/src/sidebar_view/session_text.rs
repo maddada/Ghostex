@@ -30,6 +30,7 @@ pub(crate) struct TitleInput<'a> {
     pub(crate) detail: Option<&'a str>,
     pub(crate) session_note: Option<&'a str>,
     pub(crate) pending_question_count: u64,
+    pub(crate) awaiting_answer: bool,
     pub(crate) awaiting_approval: bool,
     pub(crate) activity: &'a str,
     pub(crate) delayed_send_remaining_label: Option<&'a str>,
@@ -145,16 +146,23 @@ pub(crate) fn session_tooltip(
     if input.awaiting_approval {
         lines.push("Waiting for your approval".to_string());
     }
-    if input.pending_question_count > 0 {
+    if ghostex_gx_protocol::session_has_question(
+        input.pending_question_count,
+        input.awaiting_answer,
+    ) {
         let prefix = if input.activity == "working" {
             "Working · "
         } else {
             ""
         };
-        lines.push(format!(
-            "{prefix}Answer requested ({})",
-            input.pending_question_count
-        ));
+        lines.push(if input.pending_question_count > 0 {
+            format!(
+                "{prefix}Answer requested ({})",
+                input.pending_question_count
+            )
+        } else {
+            format!("{prefix}Answer requested")
+        });
     }
     if let Some(label) = input
         .delayed_send_remaining_label

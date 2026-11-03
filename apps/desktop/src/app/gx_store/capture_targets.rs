@@ -101,7 +101,7 @@ impl GhostexGpuiApp {
                                 row.display_title.clone()
                             },
                             activity: row.activity.clone(),
-                            question: row.pending_question_count > 0,
+                            question: row.has_question(),
                             sleeping: row.lifecycle_state == "sleeping",
                             last_interaction_at: row.last_interaction_at.clone(),
                             focused,

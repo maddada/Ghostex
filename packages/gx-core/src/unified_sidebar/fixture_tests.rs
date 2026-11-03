@@ -83,6 +83,7 @@ fn session_row(machine: &MachineId, session: &Value) -> SessionRow {
         },
         activity: session["activity"].as_str().unwrap_or("idle").to_string(),
         awaiting_approval: flag(session, "awaitingApproval"),
+        awaiting_answer: flag(session, "awaitingAnswer"),
         pending_question_count: session["pendingQuestionCount"].as_u64().unwrap_or(0),
         model_selection_failed: flag(session, "modelSelectionFailed"),
         program_status_failed: flag(session, "programStatusFailed"),

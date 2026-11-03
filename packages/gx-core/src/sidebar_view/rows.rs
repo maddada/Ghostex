@@ -39,6 +39,7 @@ pub(crate) struct RowContext<'a> {
 #[derive(Clone, Copy, Default)]
 pub(crate) struct SideChatNeeds {
     pub(crate) questions: u64,
+    pub(crate) awaiting_answer: bool,
     pub(crate) approval: bool,
 }
 
@@ -56,13 +57,14 @@ pub(crate) fn side_chat_needs(
         let Some(parent) = session.side_chat_parent_session_id.as_ref() else {
             continue;
         };
-        if session.pending_question_count == 0 && !session.awaiting_approval {
+        if !session.has_question() && !session.awaiting_approval {
             continue;
         }
         let entry = needs
             .entry((session.project_id.clone(), parent.clone()))
             .or_default();
         entry.questions += session.pending_question_count;
+        entry.awaiting_answer |= session.awaiting_answer;
         entry.approval |= session.awaiting_approval;
     }
     needs
@@ -211,6 +213,7 @@ pub(crate) fn session_row(
         detail: session.subtitle.as_deref(),
         session_note: session_note.as_deref(),
         pending_question_count: session.pending_question_count + side_chats.questions,
+        awaiting_answer: session.awaiting_answer || side_chats.awaiting_answer,
         awaiting_approval: session.awaiting_approval || side_chats.approval,
         activity: session.activity.as_str(),
         delayed_send_remaining_label: delayed
@@ -322,6 +325,7 @@ pub(crate) fn session_row(
         model_selection_failed: failure.is_some(),
         program_status_failed,
         pending_question_count: session.pending_question_count + side_chats.questions,
+        awaiting_answer: session.awaiting_answer || side_chats.awaiting_answer,
         awaiting_approval: session.awaiting_approval || side_chats.approval,
         stuck,
         agent_icon: agent_icon.map(str::to_string),

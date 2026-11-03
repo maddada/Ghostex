@@ -105,7 +105,7 @@ fn row_is_inactive(row: &super::view::SessionRow) -> bool {
     row.lifecycle_state == "running"
         && row.activity != "working"
         && row.activity != "attention"
-        && row.pending_question_count == 0
+        && !row.has_question()
         && !row.awaiting_approval
         && !row.has_background_work
 }

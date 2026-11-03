@@ -83,7 +83,7 @@ pub(crate) fn machine_tab_summary(
             // `SessionRow::needs_you`'s order, read off the presentation session.
             if session.awaiting_approval {
                 summary.approval_count += 1;
-            } else if session.pending_question_count > 0 {
+            } else if session.has_question() {
                 summary.question_count += 1;
             } else if session.activity.as_str() == "attention" {
                 summary.attention_count += 1;

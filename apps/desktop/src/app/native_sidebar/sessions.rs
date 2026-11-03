@@ -168,13 +168,16 @@ impl GhostexGpuiApp {
         // CDXC:Tooltips 2026-10-29 DECISION: User: "please let me disable the tooltip for sessions in the sidebar with a toggle (advanced setting)". `showSidebarSessionTooltips` (on unless saved off) gates only this title tooltip; this one row renderer draws every sidebar session row (project lists, a coordinator's thread rows, the peek), and the Running Agents panel has no session tooltip. Chip, badge, hover-button and project-row tooltips stay.
         let session_tooltips =
             hud["settings"]["showSidebarSessionTooltips"].as_bool() != Some(false);
-        let question = session
-            .details
-            .get("pendingQuestionCount")
-            .and_then(Value::as_u64)
-            .unwrap_or(0)
-            > 0;
-        let question_fill = super::status::pending_question_fill(&hud["settings"], question);
+        let question = session.details.get("hasQuestion").and_then(Value::as_bool) == Some(true);
+        let question_fill = super::status::pending_question_fill(
+            &hud["settings"],
+            session
+                .details
+                .get("pendingQuestionCount")
+                .and_then(Value::as_u64)
+                .unwrap_or(0)
+                > 0,
+        );
         let failed =
             session.model_selection_failed || session.program_status_failed || session.stuck;
         // The red approval dot wins over every other status (CDXC:SessionStatus 2026-10-27 in status.rs).

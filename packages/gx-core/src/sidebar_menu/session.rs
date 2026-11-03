@@ -812,7 +812,7 @@ fn full_menu(
             .filter(|row| {
                 can_sleep(row)
                     && !row.has_background_work
-                    && row.pending_question_count == 0
+                    && !row.has_question()
                     && !row.awaiting_approval
             })
             .map(|row| row.sidebar_session_id.clone())

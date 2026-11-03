@@ -22,7 +22,10 @@ pub fn is_sleep_inactive_session(session: &Value) -> bool {
         .unwrap_or(0);
     text("lifecycleState") == Some("running")
         && !matches!(text("activity"), Some("working" | "attention"))
-        && pending_questions == 0
+        && !ghostex_gx_protocol::session_has_question(
+            pending_questions,
+            session.get("awaitingAnswer").and_then(Value::as_bool) == Some(true),
+        )
         && session
             .get("backgroundWorkDetectedAt")
             .is_none_or(Value::is_null)

@@ -430,9 +430,8 @@ impl FoldedStatus {
         // pink needs-you dot; only a finished turn is the stack's blue, so the blue is exactly what
         // opening the orchestrator clears (server/src/coordinators/seen_threads.rs).
         let waiting = row.activity == "attention" && row.thread_state.as_deref() == Some("waiting");
-        self.question |= row.pending_question_count > 0 || waiting;
-        self.attention |=
-            row.pending_question_count == 0 && row.activity == "attention" && !waiting;
+        self.question |= row.has_question() || waiting;
+        self.attention |= !row.has_question() && row.activity == "attention" && !waiting;
         self.background_work |= row.shows_background_work();
     }
 
@@ -530,6 +529,10 @@ pub fn rename_shake_key(rename_failed_at: Option<&str>, now_ms: i64) -> Option<&
 }
 
 impl SessionRow {
+    pub fn has_question(&self) -> bool {
+        ghostex_gx_protocol::session_has_question(self.pending_question_count, self.awaiting_answer)
+    }
+
     /// CDXC:SessionStatus 2026-09-24 DECISION:
     /// User: a section, project, collection, Space or machine header shows the grey dot when it has no working session but has a grey-dot session, so the headers count exactly the rows that draw the grey dot: idle rows with a background shell or monitor still running.
     pub fn shows_background_work(&self) -> bool {
@@ -547,7 +550,7 @@ impl SessionRow {
     pub fn needs_you(&self) -> Option<NeedsYou> {
         if self.awaiting_approval {
             Some(NeedsYou::Approval)
-        } else if self.pending_question_count > 0 {
+        } else if self.has_question() {
             Some(NeedsYou::Question)
         } else if self.activity == "attention" {
             Some(NeedsYou::Attention)
@@ -603,6 +606,8 @@ pub struct SessionRow {
     /// from those reports; drawn as the same red dot until the user has seen it.
     pub program_status_failed: bool,
     pub pending_question_count: u64,
+    /// A hook-stored question card is waiting for an answer, independently of the question count.
+    pub awaiting_answer: bool,
     /// gxserver's `awaitingApproval`: the session is stuck on a permission prompt or approval card
     /// only the user can grant; drawn as the red approval dot ahead of every other status
     /// (CDXC:SessionStatus 2026-10-27 in server/src/session_approval.rs).
@@ -948,5 +953,20 @@ mod tests {
                 ..FoldedStatus::default()
             }
         );
+    }
+
+    #[test]
+    fn open_question_card_uses_question_dot_without_async_questions() {
+        let row = SessionRow {
+            activity: "attention".to_string(),
+            awaiting_answer: true,
+            pending_question_count: 0,
+            ..SessionRow::default()
+        };
+        assert_eq!(row.needs_you(), Some(NeedsYou::Question));
+        let mut status = FoldedStatus::default();
+        status.add(&row);
+        assert!(status.question);
+        assert!(!status.attention);
     }
 }

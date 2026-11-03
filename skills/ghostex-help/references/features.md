@@ -790,6 +790,10 @@ manager and Add to Group.
 A project's Sleep, Wake, Sleep Inactive and Close Inactive act on that
 project's sessions only; its browser tabs are slept and closed from the tab
 strip above the view, where they live.
+Sleep Inactive and Close Inactive leave sessions with unanswered question cards
+awake, for every agent, as well as sessions that are working, waiting for
+approval or running a background shell. A session's Advanced > Sleep Below
+also skips unanswered question cards, approvals and background shells.
 Click a project header (or the chevron beside it) or a group header to expand
 or collapse it; rename a group from its right-click menu.
 Sessions groups gather some of a project's sessions under a header of their
@@ -972,8 +976,9 @@ project folder when the work needs its own folder, and Add to Group > New Group
 to group projects together.
 Right-click a Space icon for its menu: Manage (Edit Space, New Space) and
 Sleep. Sleep Inactive sleeps only the Space's sessions that are awake but
-neither working nor waiting on you. Sessions stay where they are, asleep, and
-wake when you open them; the row is greyed out when it has nothing to sleep.
+neither working nor waiting on you; unanswered question cards, approvals and
+background shells keep a session awake. Sessions stay where they are, asleep,
+and wake when you open them; the row is greyed out when it has nothing to sleep.
 The Other button offers the same rows for projects that are in no Space.
 Space icons keep their normal glyph and show amber working-session and blue
 attention-session counts in extra-bold text near the bottom of each icon, including
@@ -1111,9 +1116,10 @@ where they are while you open, change and close views.
   a session is done, a pink dot when an agent is waiting for an answer, and a
   red dot when an agent is stuck waiting for your approval, including rows
   hidden by a collapsed heading. A collapsed project, a collapsed collection, a
-  Space button and a computer tab show the same red for those sessions. Pending questions use
-  pink instead of blue; multiple dots appear when multiple states are present,
-  including orange and pink when an agent keeps working after asking. Collapsed
+  Space button and a computer tab show the same red for those sessions. Unanswered question
+  cards count as questions for every agent, alongside Ghostex forms and pages with questions.
+  They use pink instead of blue; multiple dots appear when multiple states are
+  present, including orange and pink when an agent keeps working after asking. Collapsed
   headings show their session count at the right edge and a muted gray hollow
   circle after the status dots when they contain the active session. The circle
   disappears when expanded without moving the other dots. Hovering gives the
@@ -1304,7 +1310,8 @@ when you open it.
 - Sleeping frees RAM; Auto Sleep does it after idle minutes. Auto Sleep runs
   on the computer that hosts the sessions, so it keeps working while the app
   window is closed, and it never sleeps a session a Ghostex window or the phone
-  app is showing. Web pages sleep the same way: a browser tab in
+  app is showing, or one with an unanswered question card, form or page.
+  Web pages sleep the same way: a browser tab in
   any project, or a Files, website or extension view, that has been off screen
   for its Browser sleeps after or Project sleeps after time closes to free its memory and
   reloads when you select it again. Tabs playing sound, tabs where you typed

@@ -1146,7 +1146,19 @@ pub struct PresentationSession {
     pub close_after_done_deadline_at: Option<String>,
 }
 
+/// Whether the session waits on an unanswered question, without changing the async question count.
+///
+/// CDXC:SessionStatus 2026-11-03 DECISION:
+/// An open question card counts as a question on the desktop for every agent, just as on the phone: the question dot, status, ordering and inactivity sleep guards use it too. This supersedes leaving the desktop dot and automatic sleep unchanged when `awaitingAnswer` was added.
+pub fn session_has_question(pending_question_count: u64, awaiting_answer: bool) -> bool {
+    pending_question_count > 0 || awaiting_answer
+}
+
 impl PresentationSession {
+    pub fn has_question(&self) -> bool {
+        session_has_question(self.pending_question_count, self.awaiting_answer)
+    }
+
     /// Whether the session is a row of the session lists: a workspace session the daemon shows by
     /// default, and not a side chat (those are reached from their main chat's Side chats pill).
     pub fn listed_in_sidebar(&self) -> bool {
