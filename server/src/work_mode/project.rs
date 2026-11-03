@@ -49,6 +49,24 @@ pub(crate) fn issues_workflow_parts(project: &Value) -> IssuesWorkflowParts {
     }
 }
 
+/// What a project row last published of Issues Workflow, which the card pass compares to tell
+/// whether to send the row again: its parts, its tracker, and its ticket command as the row shows
+/// it (`presentation_work_source`), so a name the command now answers with reaches clients too.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct PublishedProjectWork {
+    pub(crate) parts: IssuesWorkflowParts,
+    tracker: super::WorkSourceId,
+    work_source: Option<Value>,
+}
+
+pub(crate) fn published_project_work(project_id: &str, project: &Value) -> PublishedProjectWork {
+    PublishedProjectWork {
+        parts: issues_workflow_parts(project),
+        tracker: super::cached_project_work_tracker(project_id),
+        work_source: presentation_work_source(project),
+    }
+}
+
 /// `PresentationProject.work_source`: the ticket command of the project's workspace, not its
 /// tracker (`isTracker: false`): a command can't be picked as the tracker yet.
 ///

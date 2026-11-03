@@ -1814,3 +1814,38 @@ fn a_failed_check_carries_what_the_log_line_needs_masked() {
         other => panic!("not a failed check: {other:?}"),
     }
 }
+
+/// A Switch to an id with another name changes what the project row publishes, with the same
+/// Issues Workflow parts, so the card pass sends the row again instead of leaving the old name on
+/// it.
+#[test]
+fn a_switch_to_another_name_republishes_the_project_row() {
+    let store = Store::new();
+    store.answer("good");
+    store.set("ws-a", false).expect("pinned");
+    let workspace_id = store.ws("ws-a");
+    let repository = crate::domain::DomainRepository::new(&store.db, "test");
+    let project = repository
+        .create_project(
+            json!({ "name": "App", "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    replace_project_workspaces(&store.paths, &repository, &store.db).expect("placed");
+    let project_id = project["projectId"].as_str().unwrap();
+    let before = published_project_work(project_id, &project);
+    assert_eq!(
+        presentation_work_source(&project).expect("shown")["name"],
+        json!("Fixture")
+    );
+    store.answer("info-renamed");
+    store.set("ws-a", true).expect("switched");
+    let after = published_project_work(project_id, &project);
+    assert_eq!(
+        presentation_work_source(&project).expect("shown")["name"],
+        json!("Renamed")
+    );
+    assert_eq!(before.parts, after.parts);
+    assert_ne!(before, after);
+}

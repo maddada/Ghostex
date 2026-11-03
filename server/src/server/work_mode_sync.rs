@@ -12,18 +12,16 @@ use crate::domain::{DomainRepository, DomainStateError};
 use crate::logging::{GxserverLogInput, LogLevel};
 use crate::storage::open_gxserver_database;
 use crate::work_mode::{
-    cached_project_work_tracker, issues_workflow_parts, issues_workflow_settings,
-    presentation_session_work, project_work_mode, refresh_issues_workflow_setup,
-    refresh_work_caches, work_display_title, IssuesWorkflowParts, WorkSourceId,
+    issues_workflow_settings, presentation_session_work, project_work_mode, published_project_work,
+    refresh_issues_workflow_setup, refresh_work_caches, work_display_title, PublishedProjectWork,
 };
 
-/// What each project last published of Issues Workflow (which parts it has, and its tracker), so a
-/// pass republishes a project whose Linear key was set or removed, whose tracker changed, or every
-/// project once `gh` is signed in or out.
-fn published_linear_projects(
-) -> &'static Mutex<HashMap<String, (IssuesWorkflowParts, WorkSourceId)>> {
-    static PUBLISHED: OnceLock<Mutex<HashMap<String, (IssuesWorkflowParts, WorkSourceId)>>> =
-        OnceLock::new();
+/// What each project last published of Issues Workflow (which parts it has, its tracker and its
+/// ticket command), so a pass republishes a project whose Linear key was set or removed, whose
+/// tracker changed, whose ticket command now has another name, or every project once `gh`
+/// is signed in or out.
+fn published_linear_projects() -> &'static Mutex<HashMap<String, PublishedProjectWork>> {
+    static PUBLISHED: OnceLock<Mutex<HashMap<String, PublishedProjectWork>>> = OnceLock::new();
     PUBLISHED.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -75,14 +73,11 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
                 continue;
             };
             seen.insert(project_id);
-            let parts = (
-                issues_workflow_parts(project),
-                cached_project_work_tracker(project_id),
-            );
-            let previous = published.insert(project_id.to_string(), parts);
+            let parts = published_project_work(project_id, project);
+            let previous = published.insert(project_id.to_string(), parts.clone());
             // A project not published by a pass yet went out in the snapshot with nothing set up
             // (the caches start empty), so it only needs a delta once something is.
-            if previous.map_or(parts.0.any(), |previous| previous != parts) {
+            if previous.map_or(parts.parts.any(), |previous| previous != parts) {
                 linear_changed.push(project_id.to_string());
             }
         }
