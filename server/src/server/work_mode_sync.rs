@@ -65,7 +65,9 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     // Before the cards are read: which workspace, and so which ticket command, each project uses.
     crate::work_mode::replace_project_workspaces(&state.paths, &repository, &db)?;
 
-    let mut linear_changed = Vec::new();
+    // What changed is kept only once its delta has gone out (below), so a failed one is sent
+    // again on the next pass.
+    let mut linear_changed: Vec<(String, PublishedProjectWork)> = Vec::new();
     if let Ok(mut published) = published_linear_projects().lock() {
         let mut seen = std::collections::HashSet::new();
         for project in &all_projects {
@@ -74,11 +76,14 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
             };
             seen.insert(project_id);
             let parts = published_project_work(project_id, project);
-            let previous = published.insert(project_id.to_string(), parts.clone());
-            // A project not published by a pass yet went out in the snapshot with nothing set up
-            // (the caches start empty), so it only needs a delta once something is.
-            if previous.map_or(parts.parts.any(), |previous| previous != parts) {
-                linear_changed.push(project_id.to_string());
+            match published.get(project_id) {
+                Some(previous) if *previous == parts => {}
+                // A project not published by a pass yet went out in the snapshot with nothing set
+                // up (the caches start empty), so it only needs a delta once something is.
+                None if !parts.parts.any() => {
+                    published.insert(project_id.to_string(), parts);
+                }
+                _ => linear_changed.push((project_id.to_string(), parts)),
             }
         }
         published.retain(|project_id, _| seen.contains(project_id.as_str()));
@@ -102,7 +107,7 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
                 || project
                     .get("projectId")
                     .and_then(Value::as_str)
-                    .is_some_and(|id| linear_changed.iter().any(|changed| changed == id))
+                    .is_some_and(|id| linear_changed.iter().any(|(changed, _)| changed == id))
         })
         .cloned()
         .collect();
@@ -115,14 +120,20 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
     // Only projects with Issues Workflow on are refreshed (it filters them itself).
     refresh_work_caches(&state.paths, &projects, &sessions);
 
-    for project_id in linear_changed {
-        schedule_presentation_project_delta(
-            state,
-            &db,
-            &repository,
-            &project_id,
-            "projectUpdated",
-        )?;
+    // One delta that fails doesn't hold back the others; the first failure is returned once they
+    // all went out, for the pass's log line.
+    let mut first_error = None;
+    for (project_id, parts) in linear_changed {
+        match send_project_delta(state, &db, &repository, &project_id) {
+            Ok(()) => {
+                if let Ok(mut published) = published_linear_projects().lock() {
+                    published.insert(project_id, parts);
+                }
+            }
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
     }
 
     let projects_by_id: HashMap<&str, &Value> = projects
@@ -156,15 +167,80 @@ pub(crate) fn run_work_mode_refresh_once(state: &Arc<AppState>) -> Result<(), Do
             let fingerprint = work_fingerprint(project, session);
             let key = (project_id.to_string(), session_id.to_string());
             if published.get(&key) != Some(&fingerprint) {
-                published.insert(key.clone(), fingerprint);
-                changed.push(key);
+                changed.push((key, fingerprint));
             }
         }
     }
-    for (project_id, session_id) in changed {
-        schedule_presentation_session_delta(state, &db, &repository, &project_id, &session_id)?;
+    for ((project_id, session_id), fingerprint) in changed {
+        match send_session_delta(state, &db, &repository, &project_id, &session_id) {
+            Ok(()) => {
+                if let Ok(mut published) = published_work().lock() {
+                    published.insert((project_id, session_id), fingerprint);
+                }
+            }
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    first_error.map_or(Ok(()), Err)
+}
+
+/// A project's delta, with its Issues Workflow parts, its tracker and its ticket command as the
+/// row shows them.
+fn send_project_delta(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+) -> Result<(), DomainStateError> {
+    #[cfg(test)]
+    delta_hook(project_id)?;
+    schedule_presentation_project_delta(state, db, repository, project_id, "projectUpdated")
+}
+
+/// A session's delta, with its card's links, statuses and branch title.
+fn send_session_delta(
+    state: &AppState,
+    db: &rusqlite::Connection,
+    repository: &DomainRepository<'_>,
+    project_id: &str,
+    session_id: &str,
+) -> Result<(), DomainStateError> {
+    #[cfg(test)]
+    delta_hook(session_id)?;
+    schedule_presentation_session_delta(state, db, repository, project_id, session_id)
+}
+
+/// Records a delta a pass tries, by project or session id, and fails it once if a test asked.
+#[cfg(test)]
+fn delta_hook(id: &str) -> Result<(), DomainStateError> {
+    let mut hooks = delta_hooks();
+    hooks.attempted.push(id.to_string());
+    if hooks.failing.remove(id) {
+        return Err(DomainStateError {
+            code: "internalError",
+            message: "A test's delta failed.".to_string(),
+        });
     }
     Ok(())
+}
+
+/// The project and session deltas a test made fail once, and every one a pass tried, in order.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct DeltaHooks {
+    pub(crate) failing: std::collections::HashSet<String>,
+    pub(crate) attempted: Vec<String>,
+}
+
+#[cfg(test)]
+pub(crate) fn delta_hooks() -> std::sync::MutexGuard<'static, DeltaHooks> {
+    static HOOKS: OnceLock<Mutex<DeltaHooks>> = OnceLock::new();
+    HOOKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Publishes a project whose Issues Workflow parts may have changed (it moved to another workspace,
