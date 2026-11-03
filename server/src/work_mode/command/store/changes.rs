@@ -389,6 +389,9 @@ pub(crate) fn set_work_source(
 
 /// `set_work_source` without its mask's exit: what it words is raw. `held` is the writer lock
 /// `stored` was read under.
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the decision on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
 #[allow(clippy::too_many_arguments)]
 fn run_and_pin(
     db: &Connection,
@@ -419,17 +422,48 @@ fn run_and_pin(
         refuse_path_spelling(stored, &typed_path, Some(&resolved))?;
         (plan, typed_path, resolved)
     };
-    let accepted = plan
+    // Another program than the pinned one's is asked without the pinned command's credentials,
+    // and in no source's folder, until its answer is pinned.
+    let pinned_program = plan
         .existing
         .as_ref()
-        .map_or(&[][..], |command| &command.info.credentials[..]);
-    let checked = check_info(paths, &resolved, &plan.env, accepted, &stored.mask);
+        .filter(|command| command.resolved_path == resolved);
+    let checked = match pinned_program {
+        Some(command) => check_info(
+            paths,
+            &resolved,
+            &plan.env,
+            &command.info.credentials,
+            &stored.mask,
+        ),
+        None => check_info(
+            paths,
+            &resolved,
+            &command_env_of(paths, workspace_id, None),
+            &[],
+            &stored.mask,
+        ),
+    };
 
     let _writer = writer();
     still_current(db, paths, workspace_id, plan.generation)?;
     let mut sources = read_work_sources(db)?;
+    // Another program's answer changes what is secret, in the record and among the stored
+    // values, only when it answers with the pinned id. The pinned program's own answers always do,
+    // and with nothing pinned every answer does.
+    let secrecy_applies = match (&plan.existing, &checked) {
+        (None, _) => true,
+        (Some(_), _) if pinned_program.is_some() => true,
+        (Some(pinned), Ok(info)) => pinned.source_id == info.id,
+        (Some(_), Err(_)) => false,
+    };
+    let declares_secret = if secrecy_applies {
+        answer_declares_secret(&checked)
+    } else {
+        Vec::new()
+    };
     // Before anything is written, so a value it can't remove refuses the change whole.
-    let removed = remove_short_secrets(paths, workspace_id, &answer_declares_secret(&checked))
+    let removed = remove_short_secrets(paths, workspace_id, &declares_secret)
         .map_err(|_| WorkSourceError::Refused(SHORT_SECRET_UNREMOVABLE.to_string()))?;
     if removed {
         bump_generation(workspace_id);
@@ -438,7 +472,12 @@ fn run_and_pin(
         Ok(info) => info,
         Err(mut failure) => {
             failure.message = noted(failure.message, removed);
-            if let Some(command) = sources.workspaces.get_mut(workspace_id) {
+            // Another program's failure says nothing about the pinned command.
+            if let Some(command) = sources
+                .workspaces
+                .get_mut(workspace_id)
+                .filter(|_| pinned_program.is_some())
+            {
                 record_failure(command, &failure, paths, workspace_id);
                 save_work_sources(db, &sources)?;
                 bump_generation(workspace_id);
@@ -448,19 +487,20 @@ fn run_and_pin(
     };
     // Whatever is refused below, the fields this answer declares secret are secret in the record
     // from now on, and none of their values stays in it raw.
-    let tightened = sources
-        .workspaces
-        .get_mut(workspace_id)
-        .is_some_and(|command| {
-            let before = command.clone();
-            tighten_and_sanitize(
-                command,
-                paths,
-                workspace_id,
-                &declared_secret(&info.credentials),
-            );
-            *command != before
-        });
+    let tightened = secrecy_applies
+        && sources
+            .workspaces
+            .get_mut(workspace_id)
+            .is_some_and(|command| {
+                let before = command.clone();
+                tighten_and_sanitize(
+                    command,
+                    paths,
+                    workspace_id,
+                    &declared_secret(&info.credentials),
+                );
+                *command != before
+            });
     let refuse =
         |sources: &mut WorkSources, text: String| -> Result<WorkspaceCommand, WorkSourceError> {
             let noted_in_record = removed
@@ -496,19 +536,30 @@ fn run_and_pin(
         if !switch {
             let refused = noted(
                 format!(
-                    "This command now calls itself \"{}\"; this workspace's links use \"{}\". {SWITCH_OFFER}",
+                    "{} \"{}\"; this workspace's links use \"{}\". {SWITCH_OFFER}",
+                    if pinned_program.is_some() {
+                        "This command now calls itself"
+                    } else {
+                        "That command calls itself"
+                    },
                     stored.mask.shown(&info.id),
                     stored.mask.shown(&pinned.source_id)
                 ),
                 removed,
             );
-            if let Some(command) = sources.workspaces.get_mut(workspace_id) {
+            // Only the pinned program's own answer is offered in the record; another program's is
+            // switched to by setting its path again with `switch`.
+            if let Some(command) = sources
+                .workspaces
+                .get_mut(workspace_id)
+                .filter(|_| pinned_program.is_some())
+            {
                 command.offered_id = Some(info.id.clone());
                 command.last_error = Some(refused.clone());
                 command.last_error_detail = None;
+                save_work_sources(db, &sources)?;
+                bump_generation(workspace_id);
             }
-            save_work_sources(db, &sources)?;
-            bump_generation(workspace_id);
             return Err(WorkSourceError::Refused(refused));
         }
     }
