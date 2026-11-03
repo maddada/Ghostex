@@ -258,9 +258,19 @@ view from the strip.
   (the one its agent button shows, see Sidebar),
   in your default view (Chat or Terminal), like ChatGPT's New Chat. Cmd+N opens
   the New Thread picker instead: type to filter the configured agents (that
-  project's agent first), Coordinator, Browser, or Terminal, press Enter to start it in the active project,
+  project's agent first), Coordinator, Browser, or Terminal, press Enter to start it,
   and press Tab on Claude or Codex to pick an account. Coordinator opens the
-  same New Coordinator dialog as the project's agent launcher. Cmd+Shift+T opens a new
+  same New Coordinator dialog as the project's agent launcher. The picker's top
+  row names the project it starts in (the one you have open, or the Unified
+  filter's one project) and, when there is a choice, its computer: click it, or
+  press Cmd+N again, to pick any project on any computer from a list with your
+  recent projects first (the ones whose sessions you used last) and the rest A to
+  Z, including projects with no session yet ("No sessions"). A project on more
+  than one computer shows them as small chips on its row, the one you last used
+  for it filled; Enter or a click takes that one, Left and Right or a click on a
+  chip pick another, and a computer that isn't connected is dimmed. Cloud Box and
+  your boxes are chips there too for a project on this computer. The first Down
+  highlights the top project; Escape goes back. Cmd+Shift+T opens a new
   terminal, Cmd+T always opens a new browser tab, Cmd+Ctrl+Shift+F forks the
   focused session, and Cmd+D splits. Cmd+R renames the focused session,
   Cmd+Shift+A (or Option+Shift+S) sleeps it, and Cmd+Shift+Backspace (or Cmd+W)
@@ -652,7 +662,10 @@ On the phone, Unified hides the computer tabs: Computers in the menu at the top
 of the Sessions list picks a computer, adds one or opens Manage computers. A
 computer that can't connect shows its name and the problem over the list, with
 Reconnect and Remote Settings. Add project asks which computer when you have
-several, and a project's New session asks when that project is on several.
+several. On the phone the agent menu that starts a session shows its project on
+top (tap it to pick any project, recent ones first) and a row of computer chips
+starting on the last one used for that project; New session, a project's "+"
+and the "+" on a project in the filter all open it.
 
 The Unified sidebar has its own hover strip (`unifiedSessionCardHoverButtons`):
 by default Snooze, Park and Close always show on a hovered card and the chevron
@@ -663,7 +676,8 @@ Filter) puts every machine's sessions of one repository under one header, with
 that project's Working, Snoozed and Parked inside it; Drafts stay above the groups.
 Drag a header to arrange the groups; the order is saved per repository across
 machines, and a new project lands after the arranged ones, A to Z. The "+" on a
-header starts a session there, after a menu of its machines when several have it.
+header opens the New Thread picker on that project, on the computer you last
+used for it.
 A project you hid in the Project sidebar leaves this
 list and its filter too, until you turn on Show Hidden. In the More menu, Sort &
 Filter offers Show Hidden, Group by Project and Working Section here, and Collapse
@@ -678,13 +692,17 @@ what you typed a chip that narrows the list by title, project, branch or machine
 The filter, open shelves and folded groups come back after a restart; search text
 does not. A project row shows an X on its right while you hover it: click once
 and it turns red, then click again to remove that project from the list on every
-machine that has it. The project goes to Recent Projects, where Quick Access >
+machine that has it; the "+" beside it opens the New Thread picker on that
+project without changing the filter. The project goes to Recent Projects, where Quick Access >
 Projects reopens it; its sessions keep running out of sight until then. Picking
 a project in Quick Access > Projects also filters to it. Next to the filter are
-Add project and New session, which opens the new-session picker (agents,
-Browser, Terminal) in the filtered project when the filter is one project,
-without making it your open project; the session starts as a draft, and the bar
-above its message box changes the project or machine.
+Add project and New session, which opens the New Thread picker in the filtered
+project when the filter is one project (else in the one you have open), without
+making it your open project; its top row changes the project and
+computer first. When the new session's project is one the filter hides, that
+project joins the filter as a chip, so you see the session and can drop the chip.
+The session starts as a draft, and the bar above its message box has a project
+chip and a computer chip to move it.
 Cards show the project's own icon when it has one, and right-clicking
 any card opens that session's menu, as in the Project sidebar.
 
@@ -3368,7 +3386,14 @@ mid-sentence. Say "show me the sidebar one" to switch to a session yourself,
 even while typing. It sees a coordinator's threads as part of that
 coordinator: asked what is going on, it reads the coordinator (like Main
 Coordinator) and reads a thread only when you ask for it ("what's the Windows
-popup thread doing"). While the
+popup thread doing"). It also sees the sessions on the other computers you are
+connected to (Settings > Remote > Remote machines), named with their computer
+("Sidebar fix on Omarchy"): it can read them, send them prompts, answer their
+question cards and approvals, stop them, show them and start agents and
+coordinators in that computer's projects. Drafting into a chat on another
+computer and answering question forms there are not available; it says so. A
+computer whose Agent access is off (in Settings > Remote > Remote machines, on
+either computer) stays out of reach, and the agent tells you why. While the
 conversation is open it tells you when a session finishes its turn or starts
 waiting on a question or an approval. The conversation keeps going while you
 switch projects and chats. A small panel under the header shows what it is
@@ -3794,7 +3819,8 @@ it off hides it everywhere and keeps your boxes and settings.
   API key instead. Free plans and trials work; Settings shows their limits
   (Instabox free: one box at a time; Boat trial: boxes stop after 2 hours).
 - **Start one**: in a new chat pick Cloud Box beside This folder and New
-  worktree (or the Cloud Box chip under Run on in New Thread); the choice is
+  worktree (or the Cloud Box chip on a project's row in New Thread's project
+  list); the choice is
   remembered per project. The chip beside it picks what the box starts from:
   a snapshot (★ is the project's Default), a Blank box, or a running box to
   reuse (the chat gets its own worktree there), plus the provider and size
@@ -3860,7 +3886,7 @@ it off hides it everywhere and keeps your boxes and settings.
   asking before anything that costs money; or Install agentbox, then Set Up for
   Docker, or Log In and Prepare for a cloud; Add Server registers your own
   server. Pick a box under More providers in a new chat's Cloud Box chip,
-  under Run on in New Thread, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
+  on a project's row in New Thread's project list, or Run in a Box in a project's Select Agent menu; right-click a box session for Open Box Web App,
   Open Box Screen, Stop Box and Destroy Box. Cloud agentbox boxes bill while
   they exist.
 
@@ -4133,13 +4159,14 @@ using the title when Ghostex already knows it), else its first words. If the
 worktree cannot be made, nothing is sent and the message stays in the box with
 the reason and Try again. Each project remembers the last choice.
 
-The bar also starts with the project chip, in any folder: it names the project,
-and the machine for a chat on another computer. It opens a search over every
-project on every machine, one row per repository with a chip per machine; arrows
-move through the rows, left and right change the machine, and a row starts on the
-machine you last used for it. A machine that isn't connected keeps its chip, dimmed.
-Picking moves the draft: the same agent starts there with what you typed, and the
-empty draft closes.
+The bar also starts with the project chip, in any folder: it names the project
+and opens a search over every project on every computer, one row per project,
+recent ones first and "No sessions" on a project without one. Picking one moves
+the draft there, on the computer you last used for that project. Beside it, the
+computer chip names the chat's computer while the project is on more than one
+(or on another computer) and lists the computers that have it; one that isn't
+connected is dimmed. Either pick moves the draft: the same agent starts there
+with what you typed, and the empty draft closes.
 
 Issues Workflow (called Work mode before) ties your sessions to the tickets they
 work on. There is no switch: it is on for every project once it is set up. Its
@@ -4190,6 +4217,18 @@ its own uses; `--project-id <id>` sets one for a single project, `--clear`
 removes it). GitHub status comes from `gh`, so sign in
 with `gh auth login`. `ghostex issues status` says what is set up.
 `ghostex work-mode …`, the old name, still works for every one of these commands.
+
+A workspace can also point at a **ticket command**: a program you or your team
+wrote for another tracker, which tells Ghostex its name, how its ticket IDs look
+and which credentials it needs. Set it from a terminal on the computer that runs
+the workspace with `ghostex issues source set <path> --workspace Work`, then
+store each credential it asks for with `ghostex issues source credential <name>
+--workspace Work`, which reads the value from stdin (`--clear` removes it). Secret
+credentials need at least 3 characters and are never shown back. A session whose
+branch names one of its tickets shows that ticket on its card and in its links,
+with its title and state, or Unavailable when the program can't be asked.
+`ghostex issues source` shows what is set, `check` runs it again and `clear`
+removes it; a workspace connected to a team can't use one.
 
 Every session, in any project, keeps a list of the pull requests, GitHub issues
 and Linear tickets it is linked to, and gathers them by itself: the PR of the
@@ -4388,7 +4427,7 @@ docs directory), Settings > Projects > Linear API key, `hideProjectHeaderDiffSta
 `showProjectEditorDiffFileCount`,
 `showUntrackedProjectDiffWhenNoTrackedChanges`. Issues Workflow:
 `titleSessionsByBranch`, `offerCleanupWhenPrMerges`, `ghostex issues
-status|linear-key|tracker|create-ticket|start|cleanup` (old name `ghostex
+status|linear-key|source|tracker|create-ticket|start|cleanup` (old name `ghostex
 work-mode`), `ghostex link-session`. Team
 backend: `ghostex team deploy|join|invite|identity|status|ping|leave`. Slack:
 `ghostex team flow|slack-manifest|slack-connect|linear-connect|own-linear-key`,
