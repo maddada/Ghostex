@@ -33,6 +33,27 @@ pub(crate) fn is_codex_subagent_transcript(transcript_path: Option<&str>) -> boo
         .is_some_and(|meta| meta.is_subagent)
 }
 
+/// CDXC:SessionIdentity 2026-11-03 WHY:
+/// OMP runs each subagent (task tool, eval `agent()`, `/tan` clones) inside the session's own process and rebinds every extension to it, so Ghostex's OMP extension reported the child's session id and transcript as the session's: the chat showed the child's prompt, thinking and edits until the parent's next hook named the parent again, and the child's end marked the parent's running turn finished (live test 2026-11-03). The notify hook drops every event of a child, like a Codex subagent's: OMP starts task subagents and `/tan` clones without a UI (`hasUI: false` in OMP 18.13.3 `task/executor.ts` and `modes/controllers/tan-command-controller.ts`), so none of their events is a prompt waiting in this terminal. A child writes `<parent>/<agentId>.jsonl` beside the parent's `<parent>.jsonl`, and its own children one folder further down; OMP itself tells a child from a top-level session by that sibling file (`resolveBreadcrumbToInteractiveRoot` in `session/session-manager.ts`). A top-level session's file sits in its project folder, which has no such sibling.
+/// SEE-ALSO: build_omp_extension_source in server/src/agent_hooks/plugin_sources.rs (the hooks), server/src/session_chat_omp_fleet.rs (the Subagents list reads the same folders).
+pub(crate) fn is_omp_subagent_transcript(transcript_path: Option<&str>) -> bool {
+    let Some(path) = transcript_path.map(super::probing::expand_home_path) else {
+        return false;
+    };
+    if path.extension().and_then(|extension| extension.to_str()) != Some("jsonl") {
+        return false;
+    }
+    let Some(folder) = path
+        .parent()
+        .filter(|folder| !folder.as_os_str().is_empty())
+    else {
+        return false;
+    };
+    let mut parent_transcript = folder.as_os_str().to_owned();
+    parent_transcript.push(".jsonl");
+    PathBuf::from(parent_transcript).is_file()
+}
+
 pub(crate) fn read_codex_hook_session_identities(
     paths: &GxserverPaths,
 ) -> HashMap<String, CodexHookSessionIdentity> {

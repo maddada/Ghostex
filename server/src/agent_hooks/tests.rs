@@ -467,6 +467,232 @@ fn notify_hook_helper_records_working_status_and_first_prompt() {
     );
 }
 
+/// One record per line, appended the way OMP writes its session files.
+fn append_omp_records(path: &Path, records: &[Value]) {
+    use std::io::Write;
+    fs::create_dir_all(path.parent().expect("transcript folder")).expect("session folder");
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .expect("open transcript");
+    for record in records {
+        writeln!(file, "{record}").expect("append record");
+    }
+}
+
+fn omp_message(id: &str, role: &str, content: Value) -> Value {
+    json!({
+        "type": "message",
+        "id": id,
+        "parentId": null,
+        "timestamp": "2026-11-03T08:37:42.000Z",
+        "message": { "role": role, "content": content, "timestamp": 1_793_695_062_000_i64 }
+    })
+}
+
+/// What Ghostex's OMP extension sends for one event of one session (build_omp_extension_source).
+fn omp_hook(event: &str, session_id: &str, transcript: &Path, extra: Value) -> String {
+    let mut payload = json!({
+        "agent": "omp",
+        "session_id": session_id,
+        "cwd": "/work/infra",
+        "hook_event_name": event,
+        "event": event,
+        "transcript_path": path_string(transcript),
+    });
+    if let (Some(payload), Some(extra)) = (payload.as_object_mut(), extra.as_object()) {
+        payload.extend(extra.clone());
+    }
+    payload.to_string()
+}
+
+/// OMP runs a subagent inside the session's own process and rebinds Ghostex's OMP extension to
+/// it, so the child's hooks arrive in this session's hook helper under the child's own session id
+/// and transcript, `<parent>/<agentId>.jsonl` beside the parent's `<parent>.jsonl` (OMP 18.13.3
+/// `task/executor.ts`, `session/session-manager.ts`). The session's chat reads the transcript its
+/// hooks name, so it must stay on the parent's while the child's file grows.
+#[test]
+fn an_omp_subagents_hooks_never_move_the_sessions_chat_to_the_childs_transcript() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let state_path = temp.path().join("session.state");
+    let hook_store = temp.path().join("hook-store");
+    let project_folder = temp.path().join(".omp/agent/sessions/--work-infra--");
+    let parent_id = "0b9c4e2a-7d1f-4c3e-9a8b-5e6f7a8b9c0d";
+    let child_id = "3f2e1d0c-b9a8-4776-8554-433221100fed";
+    let parent = project_folder.join(format!("2026-11-03T08-36-16-815Z_{parent_id}.jsonl"));
+    let child = project_folder
+        .join(format!("2026-11-03T08-36-16-815Z_{parent_id}"))
+        .join("QuietOtter.jsonl");
+    let parent_prompt = "Start one background subagent, then run the sleep job.";
+    let child_prompt = "Send the parent one message, then finish with a one-line result.";
+    let hook = |payload: String| {
+        run_notify_hook(vec![
+            path_string(&state_path),
+            payload,
+            path_string(&hook_store),
+        ])
+        .expect("notify helper");
+    };
+    // Every moment is checked and all differences are reported together.
+    let problems = std::cell::RefCell::new(Vec::<String>::new());
+    let check_parent_chat = |moment: &str| {
+        let state = read_hook_state(&state_path);
+        let source = crate::session_chat::resolve_session_chat_transcript_path(
+            crate::session_chat::SessionChatTranscriptAgent::Pi,
+            read_state_string(&state, "agentSessionId").as_deref(),
+            read_state_string(&state, "agentSessionPath").as_deref(),
+        );
+        let rendered = source.as_deref().map_or_else(String::new, |source| {
+            let chat = crate::session_chat_tail::read_session_chat_transcript_tail_file(
+                source,
+                300,
+                crate::session_chat::session_chat_line_decoder(
+                    crate::session_chat::SessionChatTranscriptAgent::Pi,
+                ),
+                true,
+                None,
+                None,
+                None,
+            )
+            .expect("read chat");
+            serde_json::to_string(&chat.messages).expect("chat rows")
+        });
+        let mut found = Vec::new();
+        if rendered.contains(child_prompt) || rendered.contains("child-") {
+            found.push(format!("the chat shows the subagent's records: {rendered}"));
+        }
+        if source.as_deref() != Some(parent.as_path()) {
+            found.push(format!("the chat reads {source:?}"));
+        } else if !rendered.contains(parent_prompt) {
+            found.push(format!("the chat lacks the parent's prompt: {rendered}"));
+        }
+        let conversation = read_state_string(&state, "agentSessionId");
+        if conversation.as_deref() != Some(parent_id) {
+            found.push(format!("the session's conversation is {conversation:?}"));
+        }
+        let status = read_state_string(&state, "status");
+        if status.as_deref() != Some("working") {
+            found.push(format!("the parent's running turn reads {status:?}"));
+        }
+        problems.borrow_mut().extend(
+            found
+                .into_iter()
+                .map(|problem| format!("{moment}: {problem}")),
+        );
+    };
+
+    // The parent's turn: its prompt, then the `task` call that spawns the child.
+    append_omp_records(
+        &parent,
+        &[
+            json!({"type":"title","v":1,"title":"","updatedAt":"2026-11-03T08:36:16.815Z","pad":"    "}),
+            json!({"type":"session","version":3,"id":parent_id,"timestamp":"2026-11-03T08:36:16.815Z","cwd":"/work/infra"}),
+            omp_message(
+                "parent-user",
+                "user",
+                json!([{ "type": "text", "text": parent_prompt }]),
+            ),
+            omp_message(
+                "parent-task",
+                "assistant",
+                json!([{ "type": "toolCall", "id": "call-task", "name": "task", "arguments": {} }]),
+            ),
+        ],
+    );
+    hook(omp_hook("SessionStart", parent_id, &parent, json!({})));
+    hook(omp_hook(
+        "UserPromptSubmit",
+        parent_id,
+        &parent,
+        json!({ "prompt": parent_prompt }),
+    ));
+    hook(omp_hook(
+        "PreToolUse",
+        parent_id,
+        &parent,
+        json!({ "tool_name": "task" }),
+    ));
+    check_parent_chat("parent spawns the subagent");
+
+    // The child's whole run, its transcript growing between its hooks.
+    hook(omp_hook("SessionStart", child_id, &child, json!({})));
+    hook(omp_hook(
+        "UserPromptSubmit",
+        child_id,
+        &child,
+        json!({ "prompt": child_prompt }),
+    ));
+    check_parent_chat("subagent prompt submitted, its file not written yet");
+    append_omp_records(
+        &child,
+        &[
+            json!({"type":"title","v":1,"title":"","updatedAt":"2026-11-03T08:37:43.000Z","pad":"    "}),
+            json!({"type":"session","version":3,"id":child_id,"timestamp":"2026-11-03T08:37:43.000Z","cwd":"/work/infra","parentSession":path_string(&parent)}),
+            omp_message(
+                "child-user",
+                "user",
+                json!([{ "type": "text", "text": child_prompt }]),
+            ),
+            omp_message(
+                "child-thinking",
+                "assistant",
+                json!([
+                    { "type": "thinking", "thinking": "child-thinking: message the parent first." },
+                    { "type": "toolCall", "id": "call-write", "name": "write", "arguments": { "path": "agent://Main" } }
+                ]),
+            ),
+        ],
+    );
+    hook(omp_hook(
+        "PreToolUse",
+        child_id,
+        &child,
+        json!({ "tool_name": "write" }),
+    ));
+    check_parent_chat("subagent calls a tool");
+    append_omp_records(
+        &child,
+        &[
+            json!({"type":"message","id":"child-result","parentId":null,"timestamp":"2026-11-03T08:37:47.000Z",
+            "message":{"role":"toolResult","toolCallId":"call-write","toolName":"write",
+                "content":[{"type":"text","text":"child-result: delivered"}],"isError":false,"timestamp":1_793_695_067_000_i64}}),
+        ],
+    );
+    hook(omp_hook(
+        "PostToolUse",
+        child_id,
+        &child,
+        json!({ "tool_name": "write" }),
+    ));
+    append_omp_records(
+        &child,
+        &[omp_message(
+            "child-final",
+            "assistant",
+            json!([{ "type": "text", "text": "child-final: sent." }]),
+        )],
+    );
+    hook(omp_hook(
+        "Stop",
+        child_id,
+        &child,
+        json!({ "last_assistant_message": "child-final: sent." }),
+    ));
+    check_parent_chat("subagent finished");
+
+    // The parent goes on with its own next tool.
+    hook(omp_hook(
+        "PreToolUse",
+        parent_id,
+        &parent,
+        json!({ "tool_name": "bash" }),
+    ));
+    check_parent_chat("parent's next tool");
+    let problems = problems.into_inner();
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
+}
+
 #[test]
 fn uninstall_agent_hooks_removes_notify_and_flat_json_without_autoupgrade() {
     let temp = tempfile::tempdir().expect("tempdir");

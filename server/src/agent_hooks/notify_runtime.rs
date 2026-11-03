@@ -141,6 +141,11 @@ pub fn run_notify_hook(args: Vec<String>) -> Result<Option<String>, DomainStateE
     {
         return Ok(None);
     }
+    if agent_key == "omp"
+        && super::resolution::is_omp_subagent_transcript(transcript_path.as_deref())
+    {
+        return Ok(None);
+    }
     // A terminal parked on a daemon conversation reports under its own old id (claude_daemon.rs).
     let (session_id, transcript_path) =
         if !daemon_hosted && super::claude_daemon::terminal_is_parked(&agent_key) {
