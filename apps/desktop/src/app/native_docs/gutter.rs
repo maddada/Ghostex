@@ -1,4 +1,4 @@
-//! The Docs gutter: 28px line numbers, a 3px git stripe and a 16px fold lane, aligned to the
+//! The Docs gutter: line numbers (at least 28px, wider for long documents), a 3px git stripe and a 16px fold lane, aligned to the
 //! editor's own row layout. Git state compares the document with its HEAD version, which the file
 //! bridge's `gitBaseline` supplies (local or remote project alike).
 //!
@@ -15,6 +15,45 @@ use super::palette::DocsPalette;
 pub(crate) const FOLD_W: f32 = 16.;
 pub(crate) const NUMBERS_W: f32 = 28.;
 pub(crate) const STRIPE_W: f32 = 3.;
+/// Space right of a line number, before the git stripe.
+const NUMBER_PAD_RIGHT: f32 = 4.;
+/// Space left of the widest line number, so its first digit does not touch the view's edge.
+const NUMBER_PAD_LEFT: f32 = 2.;
+
+thread_local! {
+    /// The widest digit of the line numbers' font at their size, measured by
+    /// [`measure_number_digits`] each time a document body renders.
+    static DIGIT_WIDTH: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+
+/// Measures the widest digit the line numbers draw with: the UI font, which the App font
+/// setting can swap for a wider face, at the Files line-number size.
+pub(crate) fn measure_number_digits(window: &gpui::Window) {
+    let text_system = window.text_system();
+    let font_id = text_system.resolve_font(&gpui::font(super::fonts::DOCS_FONT));
+    let size = px(crate::ui_fonts::files_line_number_size());
+    let widest = ('0'..='9')
+        .filter_map(|digit| text_system.advance(font_id, size, digit).ok())
+        .map(|advance| f32::from(advance.width))
+        .fold(0.0, f32::max);
+    DIGIT_WIDTH.with(|cell| cell.set((widest > 0.0).then_some(widest)));
+}
+
+/// The number of lines in `text`, as the gutter numbers them.
+pub(crate) fn line_count(text: &str) -> usize {
+    text.bytes().filter(|byte| *byte == b'\n').count() + 1
+}
+
+/// CDXC:Docs 2026-11-03 WHY: the numbers column was a fixed 28px (times the Files zoom) with
+/// right-aligned numbers, so a four-digit number at 12px (about 29px of digits) spilled past the
+/// column's left edge and the view clipped its first digit ("4820" read ".820"). The column is
+/// now as wide as the document's longest number in the measured font, and never narrower than
+/// 28px, so short documents keep their layout.
+fn numbers_column_width(digit_width: f32, line_count: usize, zoom: f32) -> f32 {
+    let digits = line_count.max(1).ilog10() + 1;
+    let needed = digits as f32 * digit_width + NUMBER_PAD_LEFT + NUMBER_PAD_RIGHT;
+    (NUMBERS_W * zoom).max(needed.ceil())
+}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LineChange {
@@ -64,19 +103,23 @@ pub(crate) struct GutterModel<'a> {
     pub(crate) live: Option<&'a Entity<zorite_editor::EditorState>>,
 }
 
-/// The gutter's width: line numbers (2px when hidden, like the Docs page), the git stripe and the
-/// fold lane.
-pub(crate) fn gutter_width(numbers: bool) -> f32 {
-    numbers_width(numbers) + STRIPE_W + FOLD_W
+/// The gutter's width for a document of `line_count` lines: line numbers (2px when hidden, like
+/// the Docs page), the git stripe and the fold lane.
+pub(crate) fn gutter_width(numbers: bool, line_count: usize) -> f32 {
+    numbers_width(numbers, line_count) + STRIPE_W + FOLD_W
 }
 
-/// The line numbers' column widens with the Files zoom, so a four-digit number still fits.
-fn numbers_width(numbers: bool) -> f32 {
-    if numbers {
-        NUMBERS_W * crate::ui_fonts::files_zoom_scale()
-    } else {
-        2.
+/// The line numbers' column: it widens with the Files zoom and with the document's longest line
+/// number.
+fn numbers_width(numbers: bool, line_count: usize) -> f32 {
+    if !numbers {
+        return 2.;
     }
+    // Before the first measurement, a digit is assumed as wide as the widest common UI faces'.
+    let digit_width = DIGIT_WIDTH
+        .with(std::cell::Cell::get)
+        .unwrap_or(crate::ui_fonts::files_line_number_size() * 0.65);
+    numbers_column_width(digit_width, line_count, crate::ui_fonts::files_zoom_scale())
 }
 
 /// The Docs page's line-number row: the base text line (1.7 line height), so a tall heading row
@@ -93,7 +136,8 @@ pub(crate) fn render(
     palette: &DocsPalette,
     body: gpui::Hsla,
 ) -> AnyElement {
-    let width = gutter_width(model.numbers);
+    let line_count = model.rows.len();
+    let width = gutter_width(model.numbers, line_count);
     let height = model
         .rows
         .last()
@@ -146,12 +190,14 @@ pub(crate) fn render(
                     .absolute()
                     .top(*top)
                     .left(px(0.))
-                    .w(px(numbers_width(true)))
+                    .w(px(numbers_width(true, line_count)))
                     .h((*row_height).min(px(number_row_height())))
-                    .pr(px(4.))
+                    .pr(px(NUMBER_PAD_RIGHT))
                     .flex()
                     .items_center()
                     .justify_end()
+                    .whitespace_nowrap()
+                    .font_family(super::fonts::DOCS_FONT)
                     .text_size(px(crate::ui_fonts::files_line_number_size()))
                     .text_color(if current { body } else { muted })
                     .child((index + 1).to_string())
@@ -159,7 +205,7 @@ pub(crate) fn render(
     });
     // A changed line's stripe covers its whole height (to the next row's top), like the Docs
     // page's; hovering widens it to 5px.
-    let stripe_x = px(numbers_width(model.numbers));
+    let stripe_x = px(numbers_width(model.numbers, line_count));
     let rows = model.rows;
     let full_height = move |line: usize| -> Option<(Pixels, Pixels)> {
         let (top, height) = *rows.get(line)?;
@@ -363,4 +409,44 @@ pub(crate) fn render_overview_ruler(
             .children(end_line)
             .into_any_element(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// About the widest digit of the bundled Inter at 12px.
+    const DIGIT: f32 = 7.3;
+
+    #[test]
+    fn short_documents_keep_the_28px_column() {
+        assert_eq!(numbers_column_width(DIGIT, 1, 1.0), NUMBERS_W);
+        assert_eq!(numbers_column_width(DIGIT, 99, 1.0), NUMBERS_W);
+        assert_eq!(numbers_column_width(DIGIT, 99, 1.5), NUMBERS_W * 1.5);
+    }
+
+    #[test]
+    fn four_and_five_digit_numbers_fit_their_column() {
+        for (lines, digits) in [
+            (1_000, 4.0),
+            (4_830, 4.0),
+            (9_999, 4.0),
+            (10_000, 5.0),
+            (54_321, 5.0),
+        ] {
+            let width = numbers_column_width(DIGIT, lines, 1.0);
+            assert!(
+                width - NUMBER_PAD_RIGHT - NUMBER_PAD_LEFT >= digits * DIGIT,
+                "{lines} lines: {width}px leaves no room for {digits} digits"
+            );
+        }
+        assert!(numbers_column_width(DIGIT, 10_000, 1.0) > numbers_column_width(DIGIT, 9_999, 1.0));
+    }
+
+    #[test]
+    fn line_count_counts_the_last_line_without_a_newline() {
+        assert_eq!(line_count(""), 1);
+        assert_eq!(line_count("a"), 1);
+        assert_eq!(line_count("a\nb\n"), 3);
+    }
 }

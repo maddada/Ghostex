@@ -93,6 +93,7 @@ pub(crate) fn render_markdown_body(
         let top = -body.scroll.offset().y - px(BODY_TOP_PAD);
         (viewport > px(0.0)).then(|| (top - viewport, top + viewport * 2.0))
     };
+    super::gutter::measure_number_digits(window);
     let gutter = super::gutter::render(
         super::gutter::GutterModel {
             rows: &rows,
@@ -149,7 +150,7 @@ pub(crate) fn render_markdown_body(
         .size_full()
     };
     let focus_target = body.live.clone();
-    let gutter_width = super::gutter::gutter_width(body.line_numbers);
+    let gutter_width = super::gutter::gutter_width(body.line_numbers, rows.len());
     let available = f32::from(body.scroll.bounds().size.width);
     // The reading column grows with the Files zoom, so a zoomed document keeps its line length.
     let content_max_width = CONTENT_MAX_WIDTH * crate::ui_fonts::files_zoom_scale();

@@ -632,6 +632,7 @@ impl GhostexGpuiApp {
         let scroll = document.scroll.clone();
         let editor = document.live.as_ref()?.read(cx);
         let len = editor.text().len();
+        let line_count = super::gutter::line_count(&editor.text());
         let first = editor.bounds_for_offset(range.start.min(len))?;
         let last = editor
             .bounds_for_offset(range.end.min(len))
@@ -655,7 +656,7 @@ impl GhostexGpuiApp {
             let column = if self.native_docs.constrain_width {
                 full.min(
                     super::markdown_body::CONTENT_MAX_WIDTH * crate::ui_fonts::files_zoom_scale()
-                        + super::gutter::gutter_width(self.native_docs.line_numbers),
+                        + super::gutter::gutter_width(self.native_docs.line_numbers, line_count),
                 )
             } else {
                 full
