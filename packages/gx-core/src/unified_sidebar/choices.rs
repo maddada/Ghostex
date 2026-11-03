@@ -7,6 +7,7 @@ use crate::keys::MachineId;
 
 use super::build::{machine_key, UnifiedFilter};
 use super::repo::repo_identity;
+use super::saved::RECENT_REPOS_MAX;
 
 /// One project of one machine.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -19,6 +20,20 @@ pub struct ProjectChoiceInput {
     pub worktree_parent_path: Option<String>,
     /// The project has an open session on this machine.
     pub has_sessions: bool,
+    /// When a session of the project on this machine last came back to the user
+    /// ([`session_activity_ms`]), the newest of them.
+    pub last_activity_ms: Option<i64>,
+}
+
+/// When a session last did something that matters: its meaningful activity, else its last
+/// activity, else its last update, as a sidebar row reads it.
+pub fn session_activity_ms(session: &ghostex_gx_protocol::PresentationSession) -> Option<i64> {
+    session
+        .meaningful_activity_at
+        .as_deref()
+        .or(session.last_active_at.as_deref())
+        .or(Some(session.updated_at.as_str()))
+        .and_then(crate::sidebar_view::text::parse_iso_ms)
 }
 
 /// One machine and what it holds.
@@ -61,11 +76,13 @@ impl UnifiedProjectChoice {
     }
 }
 
-/// The project list's rows: recent projects first, in the order they were last used, then the
-/// rest A to Z.
+/// The project list's rows: recent projects first, newest first, then the rest A to Z.
 ///
 /// CDXC:Sidebar 2026-11-03 DECISION:
 /// User (Q1163 "we need A and also need C", Q1164, Q1165 "recent", Q1166 "listed", Q1167): "i want to go towards not separating projects by machines. i want to pick the project then pick which machine on the "New thread" page itself (default to the machine used last). right now we make the user pick the machine too much". So a repository on several machines is one row with no machine chips on it: the machine is picked afterwards, on the New thread picker's Run on row or the tray's machine chip. Recent projects (the last ones a session was started in) come first, then every other project A to Z, including projects with no open session, which say "No sessions" and are listed without touching the sidebar's filter. On each machine the row points at its main checkout: a worktree stands in only when that machine has nothing else of the repository. This supersedes Q848's machine chips on every row.
+///
+/// CDXC:Sidebar 2026-11-03 DECISION:
+/// User, of the project list opening A to Z: "make the recent projects show up here at the top". Recent are the projects whose sessions came back to you most recently (`last_activity_ms`, newest first), so the list is useful before anything was started from the picker; the projects sessions were last started in from the picker (`recent_repos`) fill what is left, which keeps a project whose sessions were closed. At most [`RECENT_REPOS_MAX`].
 pub fn unified_project_choices(
     machines: &[UnifiedChoiceMachineInput],
     last_machines: &BTreeMap<String, String>,
@@ -73,12 +90,15 @@ pub fn unified_project_choices(
     current_machine: &str,
 ) -> Vec<UnifiedProjectChoice> {
     let mut by_repo: BTreeMap<String, UnifiedProjectChoice> = BTreeMap::new();
+    // Each repository's newest session activity across its machines.
+    let mut latest: BTreeMap<String, i64> = BTreeMap::new();
     for machine in machines {
         let machine_id = machine_key(&machine.machine);
         // Per repository: the first main checkout, else the first worktree, and whether any of
         // its projects on this machine has a session.
         let mut picks: BTreeMap<String, (&ProjectChoiceInput, String)> = BTreeMap::new();
         let mut with_sessions: BTreeSet<String> = BTreeSet::new();
+        let mut activity: BTreeMap<String, i64> = BTreeMap::new();
         for project in &machine.projects {
             let repo = repo_identity(
                 project.git_remote_origin_url.as_deref(),
@@ -89,6 +109,10 @@ pub fn unified_project_choices(
             if project.has_sessions {
                 with_sessions.insert(repo.key.clone());
             }
+            if let Some(at) = project.last_activity_ms {
+                let newest = activity.entry(repo.key.clone()).or_insert(at);
+                *newest = (*newest).max(at);
+            }
             let replaces = picks.get(&repo.key).is_some_and(|(pick, _)| {
                 pick.worktree_parent_path.is_some() && project.worktree_parent_path.is_none()
             });
@@ -98,6 +122,10 @@ pub fn unified_project_choices(
         }
         for (repo_key, (project, label)) in picks {
             let has_sessions = with_sessions.contains(&repo_key);
+            if let Some(at) = activity.get(&repo_key).copied() {
+                let newest = latest.entry(repo_key.clone()).or_insert(at);
+                *newest = (*newest).max(at);
+            }
             let choice = by_repo
                 .entry(repo_key.clone())
                 .or_insert_with(|| UnifiedProjectChoice {
@@ -114,13 +142,14 @@ pub fn unified_project_choices(
             });
         }
     }
+    let recent = recent_order(&by_repo, &latest, recent_repos);
     let mut choices: Vec<UnifiedProjectChoice> = by_repo.into_values().collect();
     for choice in &mut choices {
         choice.selected = default_machine(choice, last_machines, current_machine);
-        choice.recent = recent_repos.contains(&choice.repo_key);
+        choice.recent = recent.contains(&choice.repo_key);
     }
     let recent_rank = |choice: &UnifiedProjectChoice| {
-        recent_repos
+        recent
             .iter()
             .position(|repo| *repo == choice.repo_key)
             .unwrap_or(usize::MAX)
@@ -132,6 +161,32 @@ pub fn unified_project_choices(
             .then_with(|| left.repo_key.cmp(&right.repo_key))
     });
     choices
+}
+
+/// Recent, in order: repositories by their newest session activity, then the picker's own starts
+/// that are still listed, up to [`RECENT_REPOS_MAX`].
+fn recent_order(
+    listed: &BTreeMap<String, UnifiedProjectChoice>,
+    latest: &BTreeMap<String, i64>,
+    recent_repos: &[String],
+) -> Vec<String> {
+    let mut by_activity: Vec<(&String, i64)> =
+        latest.iter().map(|(repo, at)| (repo, *at)).collect();
+    by_activity.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(right.0)));
+    let mut order: Vec<String> = Vec::new();
+    for repo in by_activity
+        .into_iter()
+        .map(|(repo, _)| repo)
+        .chain(recent_repos.iter())
+    {
+        if order.len() == RECENT_REPOS_MAX {
+            break;
+        }
+        if listed.contains_key(repo) && !order.contains(repo) {
+            order.push(repo.clone());
+        }
+    }
+    order
 }
 
 /// The machine a project starts on: the last one used for it, else the one you are on, else this

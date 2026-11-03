@@ -219,7 +219,7 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
     let cloud_box = state.starts_with("boxes");
     // `places` and `projects` draw the project row and machine chips (`projects` opens the list).
     let place = state.starts_with("places") || state == "projects";
-    let run_on_shown = place || boxes.shows_run_on() || cloud_box;
+    let run_on_shown = !place && (boxes.shows_run_on() || cloud_box);
     let config = NewThreadPickerConfig {
         place: place.then(demo_place),
         palette: demo.palette,

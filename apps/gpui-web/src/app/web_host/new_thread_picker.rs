@@ -67,11 +67,8 @@ impl GhostexGpuiApp {
                 )
             })
             .unwrap_or((1280.0, 800.0));
-        let height = new_thread_picker_window_height(
-            config.agents.len(),
-            config.place.is_some(),
-            config.place.is_some(),
-        );
+        let height =
+            new_thread_picker_window_height(config.agents.len(), config.place.is_some(), false);
         let bounds = Bounds::centered_at(
             gpui::point(px(page.0 / 2.0), px(page.1 / 2.0)),
             size(px(NEW_THREAD_PICKER_WIDTH), px(height)),

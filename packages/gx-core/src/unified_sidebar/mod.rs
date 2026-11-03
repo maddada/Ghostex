@@ -26,7 +26,7 @@ pub use build::{
     UnifiedStatus,
 };
 pub use choices::{
-    default_machine, filter_project_choices, move_project_choice_machine,
+    default_machine, filter_project_choices, move_project_choice_machine, session_activity_ms,
     unified_new_session_target, unified_project_choices, widen_filter_for_new_session,
     ActiveProject, ProjectChoiceInput, UnifiedChoiceMachine, UnifiedChoiceMachineInput,
     UnifiedNewSessionTarget, UnifiedProjectChoice,

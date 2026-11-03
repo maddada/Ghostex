@@ -1,11 +1,14 @@
-//! The New Thread picker's top row and its project list: which project the thread starts in, and
-//! the list the row (or the New Thread hotkey pressed again) opens. The machine is picked on the
-//! Run on row (new_thread_picker_run_on.rs). A child of `new_thread_picker.rs` (included with
+//! The New Thread picker's top row and its project list: which project and place the thread
+//! starts in, and the list the row (or the New Thread hotkey pressed again) opens, where each
+//! project's machines (and Cloud Box and boxes on this computer) are chips on its row. A child of `new_thread_picker.rs` (included with
 //! `#[path]`, so the preview binary builds it too), which is why it reads the picker's private
 //! state directly.
 //!
 //! CDXC:AgentLauncher 2026-11-03 DECISION:
 //! User (Q1163 "we need A and also need C", Q1167, Q1183 "cmd-n-again"): the picker names the project it starts in on a row above the search field, and the project is picked there: clicking the row, or pressing the New Thread hotkey again while the picker is open, turns the list into the projects (Recent first, then the rest A to Z, a project with no open session saying "No sessions"), the search field searching them; Enter or a click picks one and goes back to the agents, and the hotkey again or Escape goes back without changing it. A second press of the hotkey no longer closes the picker. The project's machine is chosen on the Run on row, starting on the last machine used for it. The rows come from gx-core (`unified_project_choices`), so the tray and the phone list the same projects.
+//!
+//! CDXC:AgentLauncher 2026-11-03 DECISION:
+//! User: "show the machines inside the project picking area please instead" and "fix pressing down arrow here when i open this not going to the top project in this list". A project row shows its places as small chips at its right (`RunOnState::chips`), the one it starts on (the last used for it) filled, a machine that isn't connected dimmed; Enter or a click on the row takes the project there, Left and Right move the highlighted row's pick, and a click on a chip takes that place. The list opens with no row highlighted, so the first Down highlights its top row (Up its last), and Enter before that keeps the project the picker started on; typing highlights the best match. A row lists its chips only when there is a choice or the place isn't this computer, so a project only here stays a plain row. The top row names the picked place beside the project the same way.
 //! SEE-ALSO: packages/gx-core/src/unified_sidebar/choices.rs (the rows, the start, the machine), apps/desktop/src/app/gx_store/unified_new_session.rs (what the host passes in and does after a launch), apps/mobile/app/src/chat/native/composer/ProjectPickerSheet.tsx (the phone's list).
 use super::*;
 
@@ -24,6 +27,7 @@ const SECTION_ALL: &str = "All projects";
 const NO_SESSIONS: &str = "No sessions";
 const EMPTY_PROJECTS: &str = "No projects match.";
 const HINT_CHOOSE: &str = "Choose";
+const HINT_PLACE: &str = "Machine";
 const ICON_CHEVRON_DOWN: &str = "titlebar/chevron-down.svg";
 const ICON_CHEVRON_UP: &str = "titlebar/chevron-up.svg";
 
@@ -213,13 +217,10 @@ impl GpuiNewThreadPickerWindow {
         self.choosing_project = true;
         self.clear_query(window, cx);
         self.set_placeholder(PLACEHOLDER_PROJECTS, window, cx);
-        let current = self.place.as_ref().map(|place| place.project);
-        self.selected = self
-            .rows()
-            .iter()
-            .position(|row| Some(*row) == current.map(PickerRow::Project))
-            .unwrap_or(0);
-        self.scroll.scroll_to_item(self.selected);
+        self.project_cursor = false;
+        self.row_places.clear();
+        self.selected = 0;
+        self.scroll.scroll_to_item(0);
         self.fit_window_height(window);
         self.input.update(cx, |input, cx| input.focus(window, cx));
         cx.notify();
@@ -227,6 +228,7 @@ impl GpuiNewThreadPickerWindow {
 
     pub(super) fn leave_project_list(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.choosing_project = false;
+        self.project_cursor = false;
         self.clear_query(window, cx);
         self.set_placeholder(PLACEHOLDER_AGENTS, window, cx);
         self.selected = 0;
@@ -236,10 +238,80 @@ impl GpuiNewThreadPickerWindow {
         cx.notify();
     }
 
-    /// A project picked from the list: the thread starts there, on its starting machine.
+    /// The first Down (or Up) after the list opens: its top (or last) row, nothing moved past.
+    pub(super) fn first_project_step(&mut self, delta: isize, cx: &mut Context<Self>) -> bool {
+        if !self.choosing_project || self.project_cursor {
+            return false;
+        }
+        let rows = self.rows();
+        if rows.is_empty() {
+            return true;
+        }
+        self.project_cursor = true;
+        self.selected = if delta > 0 { 0 } else { rows.len() - 1 };
+        self.scroll
+            .scroll_to_item(self.project_scroll_child_index(&rows, self.selected));
+        cx.notify();
+        true
+    }
+
+    /// A project's places as its row offers them: the picked one for the project the picker is on,
+    /// else where it starts.
+    fn project_places(&self, index: usize) -> Option<RunOnState> {
+        let place = self.place.as_ref()?;
+        let project = place.projects.get(index)?;
+        if index == place.project {
+            return Some(self.run_on.clone());
+        }
+        Some(
+            self.run_on
+                .for_machines(project.run_on_machines(), project.start_machine),
+        )
+    }
+
+    /// The place a pick of the row takes: the one Left or Right chose on it, else its start.
+    pub(super) fn row_place(&self, index: usize) -> usize {
+        self.row_places.get(&index).copied().unwrap_or_else(|| {
+            self.project_places(index)
+                .map_or(0, |places| places.selected_index())
+        })
+    }
+
+    /// Whether a row draws its chips: there is a place to choose, or it isn't this computer.
+    fn row_shows_places(chips: &[RunOnChip], project: &NewThreadPickerProject) -> bool {
+        chips.len() > 1
+            || project
+                .machines
+                .iter()
+                .any(|machine| machine.machine_id != "local")
+    }
+
+    /// Left or Right on the highlighted project row: its next place that can be picked.
+    pub(super) fn step_row_place(&mut self, forward: bool, cx: &mut Context<Self>) -> bool {
+        if !self.choosing_project || !self.project_cursor {
+            return false;
+        }
+        let Some(PickerRow::Project(index)) = self.selected_row() else {
+            return false;
+        };
+        let Some(places) = self.project_places(index) else {
+            return false;
+        };
+        if places.chip_count() < 2 {
+            return false;
+        }
+        let next = places.step(self.row_place(index), forward);
+        self.row_places.insert(index, next);
+        cx.notify();
+        true
+    }
+
+    /// A project picked from the list: the thread starts there, in the place `chip` (its row's
+    /// chip order).
     pub(super) fn pick_project(
         &mut self,
         index: usize,
+        chip: usize,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
@@ -250,10 +322,14 @@ impl GpuiNewThreadPickerWindow {
             return;
         };
         let machine = project.start_machine;
+        let same_project = place.project == index;
         place.project = index;
         place.machine = machine;
         let was_in_box = self.run_on.in_box();
-        self.apply_place_machines(machine);
+        if !same_project {
+            self.apply_place_machines(machine);
+        }
+        self.run_on.select_index(chip);
         self.leave_project_list(window, cx);
         if was_in_box != self.run_on.in_box() {
             self.run_location_changed(window, cx);
@@ -271,6 +347,11 @@ impl GpuiNewThreadPickerWindow {
             .and_then(|place| place.hotkey.clone())
             .filter(|hotkey| !hotkey.is_empty());
         let open = self.choosing_project;
+        // The place beside the project, while there is one to choose or it isn't this computer.
+        let chips = self.run_on.chips();
+        let place_chip = Self::row_shows_places(&chips, project)
+            .then(|| chips.get(self.run_on.selected_index()).cloned())
+            .flatten();
         Some(
             div()
                 .flex_shrink_0()
@@ -318,6 +399,9 @@ impl GpuiNewThreadPickerWindow {
                                 .text_color(hsla(c.foreground))
                                 .child(project.label.clone()),
                         )
+                        .when_some(place_chip, |row, chip| {
+                            row.child(self.render_place_chip(&chip, true, None))
+                        })
                         .when_some(hotkey, |row, hotkey| {
                             row.child(
                                 div()
@@ -380,6 +464,73 @@ impl GpuiNewThreadPickerWindow {
             .child(label)
     }
 
+    /// A place chip: a machine, Cloud Box or a box, filled when it is the row's pick. `click`
+    /// takes the project there.
+    fn render_place_chip(
+        &self,
+        chip: &RunOnChip,
+        picked: bool,
+        click: Option<(usize, usize, &mut Context<Self>)>,
+    ) -> AnyElement {
+        let c = self.colors;
+        let base = h_flex()
+            .flex_shrink_0()
+            .h(px(20.0))
+            .items_center()
+            .gap(px(4.0))
+            .px(px(6.0))
+            .rounded(px(4.0))
+            .border_1()
+            .text_size(px(11.5))
+            .line_height(px(14.0))
+            .when(picked, |chip| {
+                chip.bg(hsla(rgba_of(c.foreground, 0.10)))
+                    .border_color(hsla(rgba_of(c.foreground, 0.22)))
+                    .text_color(hsla(c.foreground))
+            })
+            .when(!picked, |chip| {
+                chip.border_color(hsla(rgba_of(c.foreground, 0.08)))
+                    .text_color(hsla(c.muted))
+            })
+            .when(!chip.selectable, |chip| chip.opacity(0.45))
+            .child(modal_icon(
+                chip.icon,
+                11.0,
+                if picked { c.foreground } else { c.glyph },
+            ))
+            .child(
+                div()
+                    .max_w(px(110.0))
+                    .overflow_hidden()
+                    .text_ellipsis()
+                    .whitespace_nowrap()
+                    .child(chip.label.clone()),
+            );
+        let Some((project, place, cx)) = click else {
+            return base.into_any_element();
+        };
+        let selectable = chip.selectable;
+        let tooltip = chip.tooltip.clone();
+        base.id(ElementId::Name(
+            format!("new-thread-place-{project}-{place}").into(),
+        ))
+        .when(selectable && !picked, |chip| {
+            chip.hover(|chip| chip.bg(hsla(rgba_of(c.foreground, 0.06))))
+        })
+        .when_some(tooltip, |chip, tooltip| {
+            chip.tooltip(move |window, cx| {
+                gpui_component::tooltip::Tooltip::new(tooltip.clone()).build(window, cx)
+            })
+        })
+        .on_click(cx.listener(move |this, _, window, cx| {
+            cx.stop_propagation();
+            if selectable {
+                this.pick_project(project, place, window, cx);
+            }
+        }))
+        .into_any_element()
+    }
+
     /// The key hints while the project list is open.
     pub(super) fn render_project_hints(&self) -> impl IntoElement {
         h_flex()
@@ -395,8 +546,20 @@ impl GpuiNewThreadPickerWindow {
             .line_height(px(16.0))
             .text_color(hsla(rgba_of(self.colors.muted, 0.8)))
             .child(self.render_hint(&["↑", "↓"], HINT_MOVE))
+            .when(self.any_row_has_places(), |hints| {
+                hints.child(self.render_hint(&["←", "→"], HINT_PLACE))
+            })
             .child(self.render_hint(&["↵"], HINT_CHOOSE))
             .child(self.render_hint(&["esc"], HINT_BACK))
+    }
+
+    fn any_row_has_places(&self) -> bool {
+        self.place.as_ref().is_some_and(|place| {
+            (0..place.projects.len()).any(|index| {
+                self.project_places(index)
+                    .is_some_and(|places| places.chip_count() > 1)
+            })
+        })
     }
 
     fn render_section(&self, label: &'static str) -> AnyElement {
@@ -438,7 +601,25 @@ impl GpuiNewThreadPickerWindow {
                     SECTION_ALL
                 }));
             }
-            let selected = position == self.selected;
+            let selected = self.project_cursor && position == self.selected;
+            let places = self.project_places(index);
+            let chips = places.as_ref().map(RunOnState::chips).unwrap_or_default();
+            let picked = self.row_place(index);
+            let chip_elements: Vec<AnyElement> = if Self::row_shows_places(&chips, project) {
+                chips
+                    .iter()
+                    .enumerate()
+                    .map(|(chip_index, chip)| {
+                        self.render_place_chip(
+                            chip,
+                            chip_index == picked,
+                            Some((index, chip_index, &mut *cx)),
+                        )
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
             children.push(
                 self.row_shell(
                     ElementId::Name(format!("new-thread-project-{index}").into()),
@@ -465,6 +646,15 @@ impl GpuiNewThreadPickerWindow {
                             .child(NO_SESSIONS),
                     )
                 })
+                .when(!chip_elements.is_empty(), |row| {
+                    row.child(
+                        h_flex()
+                            .flex_shrink_0()
+                            .gap(px(4.0))
+                            .items_center()
+                            .children(chip_elements),
+                    )
+                })
                 .into_any_element(),
             );
         }
@@ -484,6 +674,42 @@ mod tests {
         assert_eq!(initial("ghostex"), "G");
         assert_eq!(initial("_tools"), "T");
         assert_eq!(initial(""), "·");
+    }
+
+    #[test]
+    fn a_row_lists_its_places_only_when_there_is_a_choice_or_it_is_elsewhere() {
+        let chip = |label: &str| RunOnChip {
+            label: label.to_string(),
+            icon: "",
+            selectable: true,
+            tooltip: None,
+        };
+        let project = |machine_id: &str| NewThreadPickerProject {
+            repo_key: "r".to_string(),
+            label: "r".to_string(),
+            has_sessions: true,
+            recent: false,
+            machines: vec![NewThreadPickerMachine {
+                machine_id: machine_id.to_string(),
+                label: machine_id.to_string(),
+                connected: true,
+                project_id: "p".to_string(),
+            }],
+            start_machine: 0,
+        };
+        let here = project("local");
+        assert!(!GpuiNewThreadPickerWindow::row_shows_places(
+            &[chip("Local")],
+            &here
+        ));
+        assert!(GpuiNewThreadPickerWindow::row_shows_places(
+            &[chip("Local"), chip("Cloud Box")],
+            &here
+        ));
+        assert!(GpuiNewThreadPickerWindow::row_shows_places(
+            &[chip("Windows")],
+            &project("windows")
+        ));
     }
 
     #[test]

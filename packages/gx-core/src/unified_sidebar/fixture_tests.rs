@@ -339,6 +339,17 @@ fn expected_of(case: &Value) -> Value {
                             session["projectId"] == project["projectId"]
                                 && session["isBrowser"].as_bool() != Some(true)
                         }),
+                    last_activity_ms: machine["sessions"]
+                        .as_array()
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                        .iter()
+                        .filter(|session| {
+                            session["projectId"] == project["projectId"]
+                                && session["isBrowser"].as_bool() != Some(true)
+                        })
+                        .filter_map(|session| session["lastInteractionMs"].as_i64())
+                        .max(),
                 })
                 .collect(),
         })

@@ -72,14 +72,19 @@ impl GhostexGpuiApp {
             .into_iter()
             .filter_map(|(machine, label, connected)| {
                 let loaded = store.loaded(&machine)?;
-                // Projects with a workspace session (a command pane's terminal isn't one).
-                let with_sessions: std::collections::BTreeSet<&str> = loaded
-                    .server_sessions()
-                    .filter(|session| {
-                        session.surface != ghostex_gx_protocol::SessionSurface::Commands
-                    })
-                    .map(|session| session.project_id.as_str())
-                    .collect();
+                // Projects with a workspace session (a command pane's terminal isn't one), and when
+                // each one's sessions last came back to the user.
+                let mut with_sessions: std::collections::BTreeMap<&str, Option<i64>> =
+                    std::collections::BTreeMap::new();
+                for session in loaded.server_sessions().filter(|session| {
+                    session.surface != ghostex_gx_protocol::SessionSurface::Commands
+                }) {
+                    let at = ghostex_gx_core::unified_sidebar::session_activity_ms(session);
+                    let newest = with_sessions
+                        .entry(session.project_id.as_str())
+                        .or_insert(at);
+                    *newest = (*newest).max(at);
+                }
                 let projects = loaded
                     .projects()
                     .iter()
@@ -105,7 +110,11 @@ impl GhostexGpuiApp {
                                 .and_then(|worktree| worktree.get("parentProjectPath"))
                                 .and_then(Value::as_str)
                                 .map(str::to_string),
-                            has_sessions: with_sessions.contains(project.project_id.as_str()),
+                            has_sessions: with_sessions.contains_key(project.project_id.as_str()),
+                            last_activity_ms: with_sessions
+                                .get(project.project_id.as_str())
+                                .copied()
+                                .flatten(),
                         })
                     })
                     .collect();
@@ -240,6 +249,8 @@ impl GhostexGpuiApp {
         use crate::app::window::{
             NewThreadPickerMachine, NewThreadPickerPlace, NewThreadPickerProject,
         };
+        // Recent reads the saved starts, which the Project sidebar never reads on its own.
+        self.gx_store.unified_sidebar.ensure_saved_read();
         let choices = self.gx_store_project_choices();
         let start = match self.gx_store.unified_sidebar.picker_start.take() {
             Some(start) => Some(start),

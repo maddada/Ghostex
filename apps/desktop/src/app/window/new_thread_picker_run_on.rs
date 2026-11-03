@@ -12,6 +12,9 @@
 //! CDXC:AgentLauncher 2026-11-03 DECISION:
 //! User (Q1180, "btw I don't like this "Run on" row :\ it's left aligned while the rest are filling the row"; the page's Q1181 "per-project" and its offline-chip note, unobjected): the machine a thread starts on is picked on this row. It starts with a chip per machine that has the picked project (this computer's chip first when it has it), starting on the last machine used for that project, then Cloud Box and the boxes, which only run here, so they show only while the project is on this computer. A machine that isn't connected keeps its chip, dimmed, and can't be picked; Cmd+Left and Cmd+Right step over it. The chips share the row's whole width, as the rows above and below fill theirs, and scroll only when there are too many to fit. The row shows whenever the picker knows the project's machines, so it is there on every machine; without them (the preview binary) it keeps the This computer chip and its agentbox-only rule below. This supersedes the WHY below, under which the row showed only with agentbox installed and the project on this computer.
 //!
+//! CDXC:AgentLauncher 2026-11-03 DECISION:
+//! User, of the row above the key hints in the real app: "how can we make this area look better. it's not good. let's not show the machines here, show the machines inside the project picking area please instead". With its projects known the picker draws no Run on row: the places (`RunOnState::chips`: the machines, then Cloud Box and the boxes for a project on this computer) are chips on each row of the project list, and the top row names the picked place beside the project. Cloud Box isn't a machine but it is a place a thread starts in, so it is a chip on that list too, after this computer's machines. Cmd+Left and Cmd+Right still step through the places with the list closed. The row below stays only for a picker without projects (the preview binary). This supersedes the fill-the-row look above for the app.
+//!
 //! CDXC:ClaudeCloud 2026-10-29 DECISION:
 //! User: "also no need for this machine/cloud since I can just pick cloud claude there in agents list". Claude cloud is no longer a place in this row (supersedes the 2026-10-23 decision in packages/gx-core/src/claude_cloud.rs that put it here): the user starts a cloud session by picking "Claude (cloud)" in the agent list. Without agentbox the row and its Location key hint are gone, as before 2026-10-23; with agentbox it holds This computer and the boxes.
 use super::*;
@@ -104,6 +107,15 @@ pub(crate) struct RunOnMachine {
     pub(crate) local: bool,
 }
 
+/// One place a thread can start: a machine, Cloud Box or a box.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RunOnChip {
+    pub(crate) label: String,
+    pub(crate) icon: &'static str,
+    pub(crate) selectable: bool,
+    pub(crate) tooltip: Option<String>,
+}
+
 /// The row's state: the project's machines, the offered boxes, the default location, and which
 /// chip is picked.
 #[derive(Clone, Debug, Default)]
@@ -171,6 +183,74 @@ impl RunOnState {
         } else if !self.touched {
             self.apply_preferred();
         }
+    }
+
+    /// The places in chip order: the machines (This computer alone without them), Cloud Box, then
+    /// the boxes; the project list draws them on each project's row.
+    pub(crate) fn chips(&self) -> Vec<RunOnChip> {
+        let mut chips: Vec<RunOnChip> = if self.machines.is_empty() {
+            vec![RunOnChip {
+                label: THIS_COMPUTER.to_string(),
+                icon: ICON_THIS_COMPUTER,
+                selectable: true,
+                tooltip: Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string()),
+            }]
+        } else {
+            self.machines
+                .iter()
+                .map(|machine| RunOnChip {
+                    label: machine.label.clone(),
+                    icon: if machine.local {
+                        ICON_THIS_COMPUTER
+                    } else {
+                        ICON_REMOTE_MACHINE
+                    },
+                    selectable: machine.connected,
+                    tooltip: if !machine.connected {
+                        Some(format!("{} isn't connected", machine.label))
+                    } else if machine.local {
+                        Some(ghostex_gx_core::THIS_COMPUTER_DESCRIPTION.to_string())
+                    } else {
+                        None
+                    },
+                })
+                .collect()
+        };
+        if self.cloud_box_offered() {
+            chips.push(RunOnChip {
+                label: CLOUD_BOX_LABEL.to_string(),
+                icon: ICON_CLOUD_BOX,
+                selectable: true,
+                tooltip: Some(CLOUD_BOX_TOOLTIP.to_string()),
+            });
+        }
+        for location in &self.boxes.locations()[..self.box_count()] {
+            chips.push(RunOnChip {
+                label: location.label.clone(),
+                icon: location.icon(),
+                selectable: true,
+                tooltip: location.tooltip.clone(),
+            });
+        }
+        chips
+    }
+
+    /// The same row for another project: its machines, starting on `machine`.
+    pub(crate) fn for_machines(&self, machines: Vec<RunOnMachine>, machine: usize) -> Self {
+        let mut state = self.clone();
+        state.touched = false;
+        state.set_machines(machines, machine);
+        state
+    }
+
+    /// The next place that can be picked from `from`, stopping at the ends.
+    pub(crate) fn step(&self, from: usize, forward: bool) -> usize {
+        let next = if forward {
+            (from + 1..self.chip_count()).find(|index| self.selectable(*index))
+        } else {
+            (0..from).rev().find(|index| self.selectable(*index))
+        };
+        next.unwrap_or(from)
     }
 
     fn machine_count(&self) -> usize {
@@ -267,7 +347,7 @@ impl RunOnState {
 
     /// Chip index: the machines (This computer alone without them), then Cloud Box when offered,
     /// then the boxes in order.
-    fn selected_index(&self) -> usize {
+    pub(crate) fn selected_index(&self) -> usize {
         match self.selected.as_deref() {
             Some(CLOUD_BOX_RUN_LOCATION) if self.cloud_box_offered() => self.machine_count(),
             selected => selected
@@ -282,11 +362,11 @@ impl RunOnState {
     }
 
     /// Whether the chip at `index` can be picked: a machine that isn't connected can't.
-    fn selectable(&self, index: usize) -> bool {
+    pub(crate) fn selectable(&self, index: usize) -> bool {
         index >= self.machine_count() || self.machine_selectable(index)
     }
 
-    fn select_index(&mut self, index: usize) {
+    pub(crate) fn select_index(&mut self, index: usize) {
         if !self.selectable(index) {
             return;
         }
@@ -306,7 +386,7 @@ impl RunOnState {
             .map(|location| location.run_location.clone());
     }
 
-    fn chip_count(&self) -> usize {
+    pub(crate) fn chip_count(&self) -> usize {
         self.box_offset() + self.box_count()
     }
 }
@@ -370,8 +450,9 @@ impl GpuiNewThreadPickerWindow {
         (self.run_on.shown()
             && self.run_on.chip_count() > 1
             && self.scope.is_none()
-            && !self.choosing_project)
-            .then(|| self.render_hint(&[KEYS], HINT_LOCATION))
+            && !self.choosing_project
+            && self.place.is_none())
+        .then(|| self.render_hint(&[KEYS], HINT_LOCATION))
     }
 
     /// Cmd+Left and Cmd+Right (Alt off macOS): the previous or next location, wrapping.
@@ -710,6 +791,40 @@ mod tests {
         state.set_machines(vec![machine("Server A", true, false)], 0);
         assert_eq!(state.chip_count(), 1);
         assert_eq!(state.run_location(), None);
+    }
+
+    #[test]
+    fn the_places_are_the_machines_then_cloud_box_then_the_boxes() {
+        let state = RunOnState::new(
+            NewThreadPickerBoxes::Ready(vec![docker()]),
+            "local".to_string(),
+        )
+        .with_cloud_box(true)
+        .for_machines(
+            vec![machine("Mac", true, true), machine("Studio", false, false)],
+            0,
+        );
+        let labels: Vec<(String, bool)> = state
+            .chips()
+            .into_iter()
+            .map(|chip| (chip.label, chip.selectable))
+            .collect();
+        assert_eq!(
+            labels,
+            [
+                ("Mac".to_string(), true),
+                ("Studio".to_string(), false),
+                ("Cloud Box".to_string(), true),
+                ("Docker".to_string(), true),
+            ]
+        );
+        // Steps skip the machine that can't be reached and stop at the ends.
+        assert_eq!(state.step(0, true), 2);
+        assert_eq!(state.step(3, true), 3);
+        assert_eq!(state.step(2, false), 0);
+        // A project only elsewhere has no Cloud Box or box.
+        let remote = state.for_machines(vec![machine("Studio", true, false)], 0);
+        assert_eq!(remote.chips().len(), 1);
     }
 
     #[test]

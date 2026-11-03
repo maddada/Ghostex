@@ -367,7 +367,7 @@ impl GhostexGpuiApp {
             px(new_thread_picker_window_height(
                 agent_count,
                 config.place.is_some(),
-                config.place.is_some() || config.boxes.shows_run_on() || config.cloud_box,
+                config.place.is_none() && (config.boxes.shows_run_on() || config.cloud_box),
             )),
         );
         let window_bounds =

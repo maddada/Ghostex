@@ -400,6 +400,7 @@ fn choice_machines() -> Vec<UnifiedChoiceMachineInput> {
         git_remote_origin_url: Some(origin.to_string()),
         worktree_parent_path: parent.map(str::to_string),
         has_sessions: id == "acme",
+        last_activity_ms: (id == "acme").then_some(500),
     };
     vec![
         UnifiedChoiceMachineInput {
@@ -497,6 +498,8 @@ fn arrows_move_along_the_chips_and_stop_at_the_ends() {
 
 #[test]
 fn recent_projects_come_first_then_the_rest_a_to_z() {
+    // Session activity first (acme), then the picker's own starts (zebra); a start that is no
+    // longer listed is skipped.
     let recent = ["github.com/o/zebra".to_string(), "gone/repo".to_string()];
     let choices = unified_project_choices(&choice_machines(), &BTreeMap::new(), &recent, "local");
     let rows: Vec<(&str, bool, bool)> = choices
@@ -506,9 +509,54 @@ fn recent_projects_come_first_then_the_rest_a_to_z() {
     assert_eq!(
         rows,
         [
+            ("acme", true, true),
             ("zebra", true, false),
-            ("acme", false, true),
             ("bill", false, false)
+        ]
+    );
+}
+
+#[test]
+fn recent_holds_the_newest_active_projects_up_to_its_cap() {
+    let machine = |projects: Vec<ProjectChoiceInput>| UnifiedChoiceMachineInput {
+        machine: MachineId::Local,
+        label: "Local".to_string(),
+        connected: true,
+        projects,
+    };
+    let project = |id: &str, at: Option<i64>| ProjectChoiceInput {
+        project_id: id.to_string(),
+        title: id.to_string(),
+        path: format!("/{id}"),
+        git_remote_origin_url: Some(format!("https://github.com/o/{id}")),
+        worktree_parent_path: None,
+        has_sessions: at.is_some(),
+        last_activity_ms: at,
+    };
+    let projects = vec![
+        project("a", Some(1)),
+        project("b", Some(7)),
+        project("c", Some(3)),
+        project("d", Some(9)),
+        project("e", Some(5)),
+        project("f", Some(2)),
+        project("g", None),
+    ];
+    let choices = unified_project_choices(&[machine(projects)], &BTreeMap::new(), &[], "local");
+    let labels: Vec<(&str, bool)> = choices
+        .iter()
+        .map(|choice| (choice.label.as_str(), choice.recent))
+        .collect();
+    assert_eq!(
+        labels,
+        [
+            ("d", true),
+            ("b", true),
+            ("e", true),
+            ("c", true),
+            ("f", true),
+            ("a", false),
+            ("g", false)
         ]
     );
 }

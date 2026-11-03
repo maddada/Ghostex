@@ -405,6 +405,10 @@ pub(crate) struct GpuiNewThreadPickerWindow {
     place: Option<NewThreadPickerPlace>,
     /// The list shows the projects (new_thread_picker_place.rs).
     choosing_project: bool,
+    /// A project row is highlighted; the list opens with none, so the first Down is its top row.
+    project_cursor: bool,
+    /// A place picked with Left or Right on a project row, by project.
+    row_places: std::collections::BTreeMap<usize, usize>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -428,6 +432,8 @@ impl GpuiNewThreadPickerWindow {
                 if matches!(event, InputEvent::Change) {
                     this.query = input.read(cx).value().to_string();
                     this.selected = 0;
+                    // Typing highlights the best match, as the agent list does.
+                    this.project_cursor = !this.query.trim().is_empty();
                     this.scroll.scroll_to_item(0);
                     cx.notify();
                 }
@@ -481,6 +487,8 @@ impl GpuiNewThreadPickerWindow {
             close_when_inactive: config.close_when_inactive,
             place: config.place,
             choosing_project: false,
+            project_cursor: false,
+            row_places: Default::default(),
             _subscriptions: vec![
                 change_subscription,
                 activation_subscription,
@@ -575,7 +583,7 @@ impl GpuiNewThreadPickerWindow {
             new_thread_picker_window_height(
                 self.agents.len(),
                 self.place.is_some(),
-                self.run_on.shown(),
+                self.place.is_none() && self.run_on.shown(),
             )
         };
         window.resize(size(px(NEW_THREAD_PICKER_WIDTH), px(height)));
@@ -729,6 +737,9 @@ impl GpuiNewThreadPickerWindow {
     }
 
     fn move_selection(&mut self, delta: isize, cx: &mut Context<Self>) {
+        if self.first_project_step(delta, cx) {
+            return;
+        }
         let rows = self.rows();
         if rows.is_empty() {
             return;
@@ -909,7 +920,10 @@ impl GpuiNewThreadPickerWindow {
                     cx,
                 );
             }
-            PickerRow::Project(index) => self.pick_project(index, window, cx),
+            PickerRow::Project(index) => {
+                let place = self.row_place(index);
+                self.pick_project(index, place, window, cx);
+            }
         }
     }
 
@@ -939,6 +953,11 @@ impl GpuiNewThreadPickerWindow {
 
     fn on_enter(&mut self, _: &Enter, window: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
+        // Nothing highlighted yet: Enter keeps the project the picker started on.
+        if self.choosing_project && !self.project_cursor {
+            self.leave_project_list(window, cx);
+            return;
+        }
         if let Some(row) = self.selected_row() {
             self.activate(row, window, cx);
         }
@@ -967,6 +986,10 @@ impl GpuiNewThreadPickerWindow {
     }
 
     fn on_move_right(&mut self, _: &MoveRight, window: &mut Window, cx: &mut Context<Self>) {
+        if self.step_row_place(true, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.scope.is_none()
             && let Some(PickerRow::Agent(index)) = self.selected_row()
             && self.agents[index].provider().is_some()
@@ -979,6 +1002,10 @@ impl GpuiNewThreadPickerWindow {
     }
 
     fn on_move_left(&mut self, _: &MoveLeft, window: &mut Window, cx: &mut Context<Self>) {
+        if self.step_row_place(false, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if self.scope.is_some() {
             cx.stop_propagation();
             self.leave_scope(window, cx);
@@ -1569,9 +1596,10 @@ impl Render for GpuiNewThreadPickerWindow {
             .capture_key_down(cx.listener(Self::on_run_on_key_down))
             .children(place)
             .child(self.render_search(cx))
-            .when(!choosing && self.run_on.shown(), |root| {
-                root.child(self.render_run_on(cx))
-            })
+            .when(
+                !choosing && self.place.is_none() && self.run_on.shown(),
+                |root| root.child(self.render_run_on(cx)),
+            )
             .map(|root| {
                 if choosing {
                     root.child(self.render_project_hints().into_any_element())
