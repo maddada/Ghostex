@@ -55,8 +55,11 @@ pub(crate) const INHERITED_VARS: [&str; 16] = [
     "no_proxy",
 ];
 /// Also passed through on Windows. Compiled everywhere so its tests run on every platform.
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// Without `PSModuleAnalysisCachePath`, Windows PowerShell 5.1 re-analyzes every installed module the first time a `.ps1` source uses a cmdlet: on GitHub's Windows runner the fixture's `info` took 11–34 s that way against 0.35 s with it, past `info`'s 10 s limit. `PSModulePath` stays out on purpose: a PowerShell 7 parent puts its own module folder there, which breaks 5.1 children (see `agent_without_powershell7_modules` in zmx/scripts_windows.rs), and PowerShell rebuilds the default when it is missing.
 #[cfg_attr(not(windows), allow(dead_code))]
-pub(crate) const INHERITED_WINDOWS_VARS: [&str; 14] = [
+pub(crate) const INHERITED_WINDOWS_VARS: [&str; 15] = [
     "SystemRoot",
     "windir",
     "ComSpec",
@@ -71,6 +74,7 @@ pub(crate) const INHERITED_WINDOWS_VARS: [&str; 14] = [
     "TMP",
     "ProgramData",
     "ProgramFiles",
+    "PSModuleAnalysisCachePath",
 ];
 
 /// One process the source can be asked to run.

@@ -183,7 +183,17 @@ mod tests {
             assert!(Path::new(&sent).is_absolute(), "{sent}");
             assert!(sent.starts_with(r"C:\") && sent.ends_with(end), "{sent}");
         }
-        for typed in [r"C:\tools\x.ps1", r"\\server\share\x.ps1"] {
+        // Root-relative: absolute on the current folder's own drive.
+        let Some(Component::Prefix(drive)) = folder.components().next() else {
+            panic!("{} has no drive", folder.display());
+        };
+        let drive = drive.as_os_str().to_string_lossy();
+        assert_eq!(path_to_send(r"\x.ps1", true), format!(r"{drive}\x.ps1"));
+        for typed in [
+            r"C:\tools\x.ps1",
+            r"\\server\share\x.ps1",
+            r"\\?\C:\tools\x.ps1",
+        ] {
             assert_eq!(path_to_send(typed, true), typed);
         }
     }

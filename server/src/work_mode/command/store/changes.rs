@@ -65,8 +65,9 @@ fn writer() -> MutexGuard<'static, ()> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Whether some change holds the store's writer lock right now.
-#[cfg(test)]
+/// Whether some change holds the store's writer lock right now. Only the store's tests ask, and
+/// they run on Unix.
+#[cfg(all(test, unix))]
 pub(crate) fn work_source_writer_held() -> bool {
     matches!(WRITER.try_lock(), Err(std::sync::TryLockError::WouldBlock))
 }
