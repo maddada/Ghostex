@@ -1738,7 +1738,7 @@ chat switches to that conversation. Other agents' pickers and menus that take ov
 their terminal (and Codex screens the chat can't read) show that part of the terminal
 in a card instead. While that card is up it has the chat's keyboard: letters, numbers,
 the arrow keys, Enter and Escape go straight to the agent, even if you were typing a
-message. Click Hide and type in chat on the card to type in the chat box again: the
+message. Click Return keyboard to chat on the card to type in the chat box again: the
 card hides until the agent closes that screen, and nothing is sent to the agent. On
 the phone, the card's key buttons send the keys.
 A new Claude Code install's first-run setup is answered in the chat too: the

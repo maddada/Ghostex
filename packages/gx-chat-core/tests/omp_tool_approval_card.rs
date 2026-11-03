@@ -123,15 +123,16 @@ impl Chat {
 }
 
 #[test]
-fn the_release_button_says_it_hides_the_card_and_answers_nothing() {
+fn the_passthrough_card_uses_the_shared_keyboard_hint_and_release_label() {
     let mut chat = Chat::open();
     chat.screen(Some(approval("echo ghostex-approval-test")));
     assert!(chat.card_shown());
     let passthrough = chat.document()["terminalNotice"]["passthrough"].clone();
-    assert_eq!(passthrough["releaseLabel"], "Hide and type in chat");
-    let hint = passthrough["hint"].as_str().expect("the card's hint");
-    assert!(hint.contains("Hiding it sends nothing"), "{hint}");
-    assert!(hint.contains("the agent keeps waiting"), "{hint}");
+    assert_eq!(passthrough["releaseLabel"], "Return keyboard to chat");
+    assert_eq!(
+        passthrough["hint"],
+        "This card has the keyboard: letters, numbers, arrows, Enter and Esc go to the agent's terminal."
+    );
 }
 
 #[test]
