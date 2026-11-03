@@ -42,12 +42,11 @@ fn the_open_approval_is_a_permission_card_with_omps_rows() {
     for screen in [PI, BOX] {
         let notice = classify_session_chat_terminal_notice(Some("omp"), screen).expect("notice");
         assert_eq!(notice.kind, SESSION_CHAT_NOTICE_PERMISSION_PROMPT);
-        assert_eq!(notice.title, "OMP is asking for permission to proceed");
-        assert!(notice
-            .detail
-            .as_deref()
-            .is_some_and(|detail| detail
-                .starts_with("Allow tool: bash Command: echo ghostex-approval-test ")));
+        assert_eq!(notice.title, "Allow this?");
+        assert_eq!(
+            notice.detail.as_deref(),
+            Some("Allow tool: bash Command: echo ghostex-approval-test")
+        );
         let rows: Vec<(&str, bool)> = notice
             .choices
             .iter()
