@@ -7,6 +7,18 @@
 //!
 //! A ticket's `team`: a key-number ticket's team is the key of its id (`ACM` of `ACM-12`), and the
 //! JSON `team` is read only for number sources.
+//!
+//! For a program's author:
+//! - A credential `info` declares is secret unless it says `"secret": false`. A secret value
+//!   needs at least 3 characters (`MIN_MASKED_IN_PLACE_CHARS`): a shorter one can't be masked
+//!   where it appears, so a short value such as a team number is declared `"secret": false`. If
+//!   an answer later marks secret a field whose saved value is shorter, Ghostex removes that value
+//!   and says so.
+//! - While a secret is set, Ghostex hides the program's error output and masks the value wherever
+//!   an answer echoes it.
+//! - A PowerShell program (`.ps1`) starts with
+//!   `[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)`, so its answers reach Ghostex
+//!   as UTF-8. `.bat` and `.cmd` files are never run (`runner.rs`).
 
 use serde_json::{json, Map, Value};
 

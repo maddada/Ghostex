@@ -52,6 +52,7 @@ pub(super) async fn route_workspaces_http(
             |_, db, params, _| {
                 let _event_sequence = lock_presentation_event_sequence(&state)?;
                 let current = read_sidebar_workspaces(db)?;
+                refuse_other_trackers(params)?;
                 let (workspace_id, next) = create_workspace_in(&current, params)?;
                 let workspaces = write_sidebar_workspaces(db, &next)?;
                 broadcast_workspaces(&state, db, &workspaces)?;
@@ -68,6 +69,7 @@ pub(super) async fn route_workspaces_http(
                     let _event_sequence = lock_presentation_event_sequence(&state)?;
                     let current = read_sidebar_workspaces(db)?;
                     let workspace_id = required_workspace(&current, params)?;
+                    refuse_other_trackers(params)?;
                     let next = update_workspace_in(&current, &workspace_id, params)?;
                     let workspaces = write_sidebar_workspaces(db, &next)?;
                     if workspaces != current {
@@ -223,6 +225,23 @@ pub(super) async fn route_workspaces_http(
             })
         }
     })
+}
+
+/// The generic workspace writes, which remote clients may call, set only a built-in tracker. A
+/// workspace's ticket command is set and chosen on its own computer (the decision on the
+/// work-source endpoints in `protocol.rs`), so a command id here is refused instead of dropped.
+/// The check is these routes' own, not `update_workspace_in`'s, which the local-only
+/// `/api/setWorkTracker` also writes through.
+fn refuse_other_trackers(params: &Map<String, Value>) -> Result<(), DomainStateError> {
+    match params.get("tracker") {
+        None | Some(Value::Null) => Ok(()),
+        Some(tracker) if matches!(tracker.as_str().map(str::trim), Some("linear" | "github")) => {
+            Ok(())
+        }
+        Some(_) => Err(DomainStateError::bad_request(
+            "tracker must be \"linear\" or \"github\"; a ticket command is set and picked on its own computer.",
+        )),
+    }
 }
 
 /// A moved project leaves its project group and the Spaces that list it, which belong to the

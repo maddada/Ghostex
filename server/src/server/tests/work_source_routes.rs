@@ -290,6 +290,17 @@ async fn generic_workspace_writes_refuse_a_command_tracker() {
         )
         .await;
     assert_eq!(status, StatusCode::OK);
+    // The refusal is those routes' own: the workspace write the local-only `setWorkTracker` goes
+    // through refuses no tracker text.
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let current = crate::workspaces::read_sidebar_workspaces(&db).expect("workspaces");
+    let patch = json!({ "tracker": "fixture" });
+    assert!(crate::workspaces::update_workspace_in(
+        &current,
+        &workspace_id,
+        patch.as_object().unwrap()
+    )
+    .is_ok());
 }
 
 #[tokio::test]

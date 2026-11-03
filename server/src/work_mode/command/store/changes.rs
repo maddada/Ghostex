@@ -1,6 +1,6 @@
 //! Every change to the ticket command record, under one writer lock: setting or re-checking a
 //! workspace's command, switching to the id its command now answers with, clearing it, deleting
-//! its workspace, and storing its credentials.
+//! its workspace, and storing its credentials (`credential_save.rs`).
 //!
 //! A change that runs the command plans under the writer lock (the record, the generation,
 //! whether the workspace exists and whether it is in a team, read together), runs `info` without
@@ -15,15 +15,12 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use rusqlite::Connection;
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::domain::{DomainRepository, DomainStateError};
 use crate::paths::GxserverPaths;
 
 use super::*;
-
-/// A credential value: a single line of at most this many bytes.
-const MAX_CREDENTIAL_BYTES: usize = 4 * 1024;
 
 pub(crate) const TEAM_REFUSAL: &str = "A workspace connected to a team uses its team's tracker; ticket commands are for this computer's workspaces.";
 
@@ -49,11 +46,6 @@ pub(crate) const SHORT_SECRET_REMOVED: &str = "A credential this command now mar
 /// Ghostex couldn't remove that value.
 pub(crate) const SHORT_SECRET_UNREMOVABLE: &str = "The command marks secret a credential whose saved value is too short to keep secret, and Ghostex couldn't remove that value, so it changed nothing; try again.";
 
-/// A credential save whose check marked a field secret whose saved value is too short to keep
-/// secret, when Ghostex couldn't remove that value. The save's values were written before its
-/// check ran, so they stay; only the check's answer is dropped.
-pub(crate) const SAVED_BUT_SHORT_SECRET_UNREMOVABLE: &str = "Ghostex saved the values, but the command now marks secret a credential whose saved value is too short to keep secret, and Ghostex couldn't remove it, so it didn't use the check's answer. Save one of at least 3 characters.";
-
 const CHANGED_MEANWHILE: &str =
     "The ticket command's setup changed while it was being checked; try again.";
 
@@ -61,7 +53,7 @@ static WRITER: Mutex<()> = Mutex::new(());
 
 /// The store's writer lock, which comes before the placement lock (`hold_project_placement`):
 /// taking it while holding that one panics rather than waiting forever.
-fn writer() -> MutexGuard<'static, ()> {
+pub(super) fn writer() -> MutexGuard<'static, ()> {
     assert!(
         !crate::domain::repository::project::placement_held_here(),
         "the ticket command store's writer lock is taken while holding the placement lock"
@@ -99,7 +91,7 @@ pub(crate) fn work_source_generation(workspace_id: &str) -> u64 {
         .unwrap_or(0)
 }
 
-fn bump_generation(workspace_id: &str) {
+pub(super) fn bump_generation(workspace_id: &str) {
     if let Ok(mut generations) = generations().lock() {
         *generations.entry(workspace_id.to_string()).or_default() += 1;
     }
@@ -212,15 +204,15 @@ pub(crate) fn command_env_of(
 }
 
 /// What a change that runs the command planned against, read together under the writer lock.
-struct Plan {
-    existing: Option<WorkspaceCommand>,
-    generation: u64,
-    env: CommandEnv,
+pub(super) struct Plan {
+    pub(super) existing: Option<WorkspaceCommand>,
+    pub(super) generation: u64,
+    pub(super) env: CommandEnv,
 }
 
 /// Reads the plan. Refuses a workspace that is gone or connected to a team. The caller holds the
 /// writer lock.
-fn plan(
+pub(super) fn plan(
     db: &Connection,
     paths: &GxserverPaths,
     workspace_id: &str,
@@ -254,7 +246,7 @@ fn ensure_workspace_may_set(
 
 /// Whether what a plan read is still true: the same generation (no pin, path, credential or team
 /// change since), and the workspace still there and not in a team. The caller holds the writer.
-fn still_current(
+pub(super) fn still_current(
     db: &Connection,
     paths: &GxserverPaths,
     workspace_id: &str,
@@ -271,7 +263,7 @@ fn still_current(
 /// fields it declares secret. `mask` is the change's one mask: its secrets mask the run's texts
 /// as they are built and cut, and are never passed to the command (`CommandEnv::masking_too`), so
 /// a value the command isn't given, such as one kept after a clear, can't come back raw either.
-fn check_info(
+pub(super) fn check_info(
     paths: &GxserverPaths,
     program: &std::path::Path,
     env: &CommandEnv,
@@ -735,54 +727,6 @@ pub(crate) fn delete_workspace_work_source(
     })
 }
 
-/// Stores credential values (`null` or blank removes one) for the workspace's command, then
-/// checks `info` again with them, since its keys may depend on what they can see. The values are
-/// kept even when that check fails; the failure comes back for the person to see.
-///
-/// Its own errors leave through one mask, read once under the writer lock before anything is
-/// planned (`stored_values`) and applied once here, so what it words inside is raw. A failed
-/// check is not masked again: the runner masked and cut its texts with every field that has a value
-/// and is secret for it, and the record makes secret what it declares (`CheckFailure`).
-pub(crate) fn set_work_source_credentials(
-    db: &Connection,
-    paths: &GxserverPaths,
-    workspace_id: &str,
-    values: &Map<String, Value>,
-) -> Result<CredentialsSaved, WorkSourceError> {
-    let held = writer();
-    let mut stored = stored_values(db, paths, workspace_id)?;
-    let mask = proposed_values_mask(values).masking_too(&stored.mask);
-    // Its check runs with the values it stores, as they are declared; what it masks besides is
-    // only what the workspace kept as secret, never a proposed value declared not secret. Its
-    // answer is held to the values it stores too; WHY: one it removes is still compared for this
-    // one check, which only refuses more.
-    stored.values.extend(
-        values
-            .values()
-            .filter_map(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(str::to_string),
-    );
-    match store_credentials(db, paths, workspace_id, values, &stored, &mask, held) {
-        Ok((command, failure)) => Ok(CredentialsSaved {
-            command,
-            failure,
-            mask,
-        }),
-        Err(error) => Err(error.masked(&mask)),
-    }
-}
-
-/// A credential save that stored its values: the record after it, its check's failure, and the
-/// mask its errors leave through, for the route to word its own errors with.
-#[derive(Debug)]
-pub(crate) struct CredentialsSaved {
-    pub(crate) command: WorkspaceCommand,
-    pub(crate) failure: Option<CheckFailure>,
-    pub(crate) mask: CommandEnv,
-}
-
 /// What a workspace has stored, read once under the writer lock before a change plans anything.
 #[derive(Debug)]
 pub(crate) struct StoredValues {
@@ -798,7 +742,7 @@ pub(crate) struct StoredValues {
 
 impl StoredValues {
     /// Whether `text`, which the record would keep as it is, holds a stored value.
-    fn found_in(&self, text: &str) -> bool {
+    pub(super) fn found_in(&self, text: &str) -> bool {
         self.values.iter().any(|value| appears_in(text, value))
     }
 }
@@ -809,7 +753,7 @@ impl StoredValues {
 /// `MIN_MASKED_IN_PLACE_CHARS` is exempt: a secret that short is refused when saved
 /// (`credential_changes`), and one that isn't secret would refuse almost any text, a workspace
 /// id's 32 hex digits included.
-fn appears_in(text: &str, value: &str) -> bool {
+pub(super) fn appears_in(text: &str, value: &str) -> bool {
     value.chars().count() >= MIN_MASKED_IN_PLACE_CHARS && text.contains(value)
 }
 
@@ -867,28 +811,6 @@ pub(crate) fn stored_values(
     Ok(StoredValues { mask, values })
 }
 
-/// Every string value of at least `MIN_MASKED_IN_PLACE_CHARS` a credential save proposes, each a
-/// secret from the moment it arrives whatever field it is for: an early refusal can come before
-/// its field is known. The route masks an error it words before naming a workspace with it.
-pub(crate) fn proposed_values_mask(values: &Map<String, Value>) -> CommandEnv {
-    CommandEnv {
-        credentials: values
-            .iter()
-            .filter_map(|(name, value)| {
-                let value = value.as_str()?.trim();
-                // WHY: a shorter secret is refused (`credential_changes`); as a mask it would
-                // withhold almost any text.
-                (value.chars().count() >= MIN_MASKED_IN_PLACE_CHARS).then(|| CommandCredential {
-                    name: name.clone(),
-                    value: value.to_string(),
-                    secret: true,
-                })
-            })
-            .collect(),
-        ..CommandEnv::default()
-    }
-}
-
 impl WorkSourceError {
     /// This error with its text through `mask`. A failed check's texts are the runner's, already
     /// masked and cut with the fields secret for them, and pass as they are.
@@ -904,245 +826,9 @@ impl WorkSourceError {
     }
 }
 
-/// `set_work_source_credentials` without its mask's exit: what it words is raw. Its check is also
-/// masked with `stored`'s mask, the values the workspace stored as secret before it, and its
-/// answer is refused when it holds one of `stored`'s values. `held` is the writer lock `stored`
-/// was read under. `mask` is the save's, which what it words after its check is worded through.
-fn store_credentials(
-    db: &Connection,
-    paths: &GxserverPaths,
-    workspace_id: &str,
-    values: &Map<String, Value>,
-    stored: &StoredValues,
-    mask: &CommandEnv,
-    held: MutexGuard<'static, ()>,
-) -> Result<(WorkspaceCommand, Option<CheckFailure>), WorkSourceError> {
-    // Planned, checked and stored in the writer section the mask was read in, so nothing can
-    // change in between.
-    let (current, generation) = {
-        let _writer = held;
-        let plan = plan(db, paths, workspace_id)?;
-        let mut current = plan
-            .existing
-            .ok_or_else(|| WorkSourceError::Refused("Set the ticket command first.".to_string()))?;
-        let changes = credential_changes(&current.info, values)?;
-        for (name, value) in &changes {
-            if let Some(value) = value {
-                refuse_unmaskable(&current, workspace_id, name, value)?;
-            }
-        }
-        mutate_credentials(paths, |credentials| {
-            store_source_credentials(credentials, workspace_id, &current.source_id, &changes)
-        })
-        .map_err(|error| {
-            WorkSourceError::Refused(format!("Could not save the credentials: {error}"))
-        })?;
-        // What the record already holds is masked with the new values, so none of them is kept
-        // in it, or shown from it, as it was before they were secret.
-        let mut sources = read_work_sources(db)?;
-        if let Some(command) = sources.workspaces.get_mut(workspace_id) {
-            sanitize(
-                command,
-                &command_env_of(paths, workspace_id, Some(&current)),
-            );
-            current = command.clone();
-            save_work_sources(db, &sources)?;
-        }
-        bump_generation(workspace_id);
-        (current, work_source_generation(workspace_id))
-    };
-
-    let env = command_env_of(paths, workspace_id, Some(&current));
-    let checked = check_info(
-        paths,
-        &current.resolved_path,
-        &env,
-        &current.info.credentials,
-        &stored.mask,
-    );
-    let _writer = writer();
-    if still_current(db, paths, workspace_id, generation).is_err() {
-        // Something changed while `info` ran: its answer is dropped, the values stay stored.
-        return Ok((current, None));
-    }
-    let mut sources = read_work_sources(db)?;
-    let Some(command) = sources.workspaces.get_mut(workspace_id) else {
-        return Ok((current, None));
-    };
-    // As for a set (`run_and_pin`), before anything else is written. The values were written
-    // before the check ran, so a value it can't remove leaves them saved and drops only the
-    // check's answer: none of its declarations or its info is applied.
-    let Ok(removed) = remove_short_secrets(paths, workspace_id, &answer_declares_secret(&checked))
-    else {
-        command.last_error = Some(SAVED_BUT_SHORT_SECRET_UNREMOVABLE.to_string());
-        command.last_error_detail = None;
-        let command = command.clone();
-        save_work_sources(db, &sources)?;
-        bump_generation(workspace_id);
-        return Ok((command, None));
-    };
-    let failure = match checked {
-        // The values stay stored; the answer is dropped before any of it is kept, an id offered
-        // for a Switch included.
-        Ok(info)
-            if answer_kept_as_is(&info)
-                .iter()
-                .any(|(_, text)| stored.found_in(text)) =>
-        {
-            command.offered_id = None;
-            command.last_error = Some(noted(ANSWER_SPELLS_CREDENTIAL.to_string(), removed));
-            command.last_error_detail = None;
-            tighten_and_sanitize(
-                command,
-                paths,
-                workspace_id,
-                &declared_secret(&info.credentials),
-            );
-            None
-        }
-        Ok(info) if info.id != command.source_id => {
-            command.offered_id = Some(info.id.clone());
-            command.last_error = Some(noted(
-                format!(
-                    "This command now calls itself \"{}\"; this workspace's links use \"{}\".",
-                    mask.shown(&info.id),
-                    mask.shown(&command.source_id)
-                ),
-                removed,
-            ));
-            command.last_error_detail = None;
-            tighten_and_sanitize(
-                command,
-                paths,
-                workspace_id,
-                &declared_secret(&info.credentials),
-            );
-            None
-        }
-        Ok(info) if info.id_format != command.info.id_format => {
-            command.offered_id = None;
-            command.last_error = Some(noted(
-                format!(
-                    "It sends {} ids now; this workspace's links use {} ids.",
-                    format_word(info.id_format),
-                    format_word(command.info.id_format)
-                ),
-                removed,
-            ));
-            command.last_error_detail = None;
-            tighten_and_sanitize(
-                command,
-                paths,
-                workspace_id,
-                &declared_secret(&info.credentials),
-            );
-            None
-        }
-        Ok(info) => {
-            command.info = info;
-            command.checked_at = now_iso();
-            command.last_error = removed.then(|| SHORT_SECRET_REMOVED.to_string());
-            command.last_error_detail = None;
-            command.offered_id = None;
-            None
-        }
-        Err(mut failure) => {
-            failure.message = noted(failure.message, removed);
-            record_failure(command, &failure, paths, workspace_id);
-            Some(failure)
-        }
-    };
-    let command = command.clone();
-    save_work_sources(db, &sources)?;
-    bump_generation(workspace_id);
-    Ok((command, failure))
-}
-
-/// The changes a request asks for: only fields the accepted info declares, each a single line of
-/// at most `MAX_CREDENTIAL_BYTES`, or `null` to remove it. A secret field's value must be at
-/// least `MIN_MASKED_IN_PLACE_CHARS` long: a shorter one can't be masked where it appears (a
-/// message holding it is withheld whole), and as a team number it would refuse every ticket id
-/// containing it.
-fn credential_changes(
-    info: &CommandInfo,
-    values: &Map<String, Value>,
-) -> Result<Vec<(String, Option<String>)>, WorkSourceError> {
-    let refused = |text: String| WorkSourceError::Refused(text);
-    values
-        .iter()
-        .map(|(name, value)| {
-            let Some(field) = info.credentials.iter().find(|field| &field.name == name) else {
-                return Err(refused(format!(
-                    "\"{name}\" isn't a credential this command asks for."
-                )));
-            };
-            let value = match value {
-                Value::Null => None,
-                Value::String(text) => Some(text.trim().to_string()),
-                _ => {
-                    return Err(refused(format!(
-                        "{} must be text or null.",
-                        field.label
-                    )))
-                }
-            };
-            if let Some(text) = &value {
-                if text.len() > MAX_CREDENTIAL_BYTES {
-                    return Err(refused(format!(
-                        "{} is longer than 4 KB.",
-                        field.label
-                    )));
-                }
-                if text.contains(['\n', '\r']) {
-                    return Err(refused(format!(
-                        "{} must be a single line.",
-                        field.label
-                    )));
-                }
-                if field.secret
-                    && !text.is_empty()
-                    && text.chars().count() < MIN_MASKED_IN_PLACE_CHARS
-                {
-                    return Err(refused(format!(
-                        "{}: a value this short can't be kept secret; a secret needs at least {MIN_MASKED_IN_PLACE_CHARS} characters. If it isn't secret, the command's info should mark it \"secret\": false.",
-                        field.label
-                    )));
-                }
-            }
-            Ok((name.clone(), value))
-        })
-        .collect()
-}
-
-/// Refuses a value that appears in something the record keeps as it is and Ghostex can't mask
-/// without changing what it names: the workspace id, the command's path, an id offered for a
-/// Switch, or what its answer put there (`answer_kept_as_is`). Secret or not, a value shorter than
-/// `MIN_MASKED_IN_PLACE_CHARS` is never refused here (`appears_in`).
-fn refuse_unmaskable(
-    command: &WorkspaceCommand,
-    workspace_id: &str,
-    name: &str,
-    value: &str,
-) -> Result<(), WorkSourceError> {
-    let resolved = command.resolved_path.display().to_string();
-    let mut fixed = answer_kept_as_is(&command.info);
-    fixed.extend([
-        ("workspace id", workspace_id),
-        ("path", command.path.as_str()),
-        ("path", resolved.as_str()),
-    ]);
-    fixed.extend(command.offered_id.as_deref().map(|id| ("offered id", id)));
-    match fixed.iter().find(|(_, text)| appears_in(text, value)) {
-        Some((what, _)) => Err(WorkSourceError::Refused(format!(
-            "{name} can't be saved: its value also appears in the command's {what}, which Ghostex can't hide."
-        ))),
-        None => Ok(()),
-    }
-}
-
 /// What an accepted answer puts in the record that the record keeps as it is, each with what it
 /// is: its id, its ID keys and its credential names.
-fn answer_kept_as_is(info: &CommandInfo) -> Vec<(&'static str, &str)> {
+pub(super) fn answer_kept_as_is(info: &CommandInfo) -> Vec<(&'static str, &str)> {
     let mut kept = vec![("source id", info.id.as_str())];
     kept.extend(info.id_keys.iter().map(|key| ("ID keys", key.as_str())));
     kept.extend(
@@ -1175,7 +861,7 @@ pub(crate) fn refuse_path_spelling(
 
 /// Masks what the record keeps for display (the accepted info's name, labels and placeholders,
 /// the last error and its detail) with `env`'s secrets, and drops an icon that spells one.
-fn sanitize(command: &mut WorkspaceCommand, env: &CommandEnv) {
+pub(super) fn sanitize(command: &mut WorkspaceCommand, env: &CommandEnv) {
     let info = &mut command.info;
     info.name = fit_name(&env.redact(&info.name));
     for field in &mut info.credentials {
@@ -1198,7 +884,7 @@ fn sanitize(command: &mut WorkspaceCommand, env: &CommandEnv) {
 /// secret from now on, with a value or without, so a value saved later is held to the secret
 /// rules; the runner masked the failure's texts with those that have a value. None of their values
 /// stays in the record raw. Stdout that isn't JSON declares nothing, so it makes no field secret.
-fn record_failure(
+pub(super) fn record_failure(
     command: &mut WorkspaceCommand,
     failure: &CheckFailure,
     paths: &GxserverPaths,
@@ -1215,7 +901,7 @@ fn record_failure(
 
 /// The fields an answer declares secret, accepted or not: a failing one's are what its JSON
 /// declares (`CheckFailure::answer_secret`).
-fn answer_declares_secret(checked: &Result<CommandInfo, CheckFailure>) -> Vec<String> {
+pub(super) fn answer_declares_secret(checked: &Result<CommandInfo, CheckFailure>) -> Vec<String> {
     match checked {
         Ok(info) => declared_secret(&info.credentials),
         Err(failure) => failure.answer_secret.clone(),
@@ -1231,7 +917,7 @@ fn answer_declares_secret(checked: &Result<CommandInfo, CheckFailure>) -> Vec<St
 ///
 /// CDXC:WorkMode 2026-11-02 WHY:
 /// A value of 1 or 2 characters is never secret and never hidden, not even in the request that removes it: it was shown openly while it wasn't secret, so hiding it then protects nothing. When any answer marks its field secret, Ghostex removes that saved value, the same rule as saving one, says why and asks for one of at least 3 characters. The record's shape stays as it is.
-fn remove_short_secrets(
+pub(super) fn remove_short_secrets(
     paths: &GxserverPaths,
     workspace_id: &str,
     secret: &[String],
@@ -1251,7 +937,7 @@ fn remove_short_secrets(
 
 /// `text`, after `SHORT_SECRET_REMOVED` when the change removed a value: first, so that a cut to
 /// `MAX_MESSAGE_CHARS` never drops it and a refusal still ends with `SWITCH_OFFER`.
-fn noted(text: String, removed: bool) -> String {
+pub(super) fn noted(text: String, removed: bool) -> String {
     if removed {
         format!("{SHORT_SECRET_REMOVED} {text}")
     } else {
@@ -1260,7 +946,7 @@ fn noted(text: String, removed: bool) -> String {
 }
 
 /// The fields an answer declares secret.
-fn declared_secret(fields: &[CredentialField]) -> Vec<String> {
+pub(super) fn declared_secret(fields: &[CredentialField]) -> Vec<String> {
     fields
         .iter()
         .filter(|field| field.secret)
@@ -1270,7 +956,7 @@ fn declared_secret(fields: &[CredentialField]) -> Vec<String> {
 
 /// Makes secret every field named in `secret`, never the reverse; then masks what the record
 /// keeps with the values that are secret now, so it holds none of them raw.
-fn tighten_and_sanitize(
+pub(super) fn tighten_and_sanitize(
     command: &mut WorkspaceCommand,
     paths: &GxserverPaths,
     workspace_id: &str,

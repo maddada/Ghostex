@@ -4,12 +4,14 @@
 //! (`summary.rs`).
 
 mod changes;
+mod credential_save;
 mod document;
 mod ids;
 mod snapshot;
 mod summary;
 
 pub(crate) use changes::*;
+pub(crate) use credential_save::*;
 pub(crate) use document::*;
 pub(crate) use ids::*;
 pub(crate) use snapshot::*;
