@@ -157,7 +157,7 @@ fn record_attention_row(
         })?;
     let repository = DomainRepository::new(&db, state.metadata.server_id.as_str());
     let (title, subtitle) = session_row_heading(&repository, project_id, session)?;
-    insert_notification_feed_row(
+    let row = insert_notification_feed_row(
         &db,
         NewNotificationFeedRow {
             project_id: project_id.to_string(),
@@ -173,6 +173,7 @@ fn record_attention_row(
                 .map(str::to_string),
         },
     )?;
+    crate::push::announce_feed_row(state, session, &row);
     Ok(true)
 }
 

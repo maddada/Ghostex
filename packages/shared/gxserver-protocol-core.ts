@@ -184,6 +184,7 @@ export type GxserverEndpointPath =
   | '/api/readNotificationFeed'
   | '/api/updateNotificationFeed'
   | '/api/createNotification'
+  | '/api/registerPushToken'
   | '/api/readSidebarProjectCollections'
   | '/api/updateSidebarProjectCollections'
   | '/api/assignProjectToSidebarCollection'

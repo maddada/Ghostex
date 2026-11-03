@@ -203,6 +203,10 @@ pub async fn run_gxserver_foreground(
         migration,
         paths: paths.clone(),
         presentation_event_sequence,
+        push: Arc::new(crate::push::PushRuntime::start(
+            paths.clone(),
+            logger.clone(),
+        )),
         remote_pairing_runtime: RemotePairingRuntime::new(),
         repository_clone_jobs: RepositoryCloneJobManager::default(),
         session_chat_followers: Arc::new(Mutex::new(HashMap::new())),

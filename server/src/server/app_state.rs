@@ -63,6 +63,8 @@ pub(crate) struct AppState {
     pub(crate) migration: MigrationStatus,
     pub(crate) paths: GxserverPaths,
     pub(crate) presentation_event_sequence: Arc<Mutex<()>>,
+    /// Sends push notifications to the registered phones (server/src/push/).
+    pub(crate) push: Arc<crate::push::PushRuntime>,
     pub(crate) remote_pairing_runtime: RemotePairingRuntime,
     pub(crate) repository_clone_jobs: RepositoryCloneJobManager,
     pub(crate) session_chat_followers: Arc<Mutex<HashMap<String, SessionChatFollowerEntry>>>,

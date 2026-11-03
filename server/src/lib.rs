@@ -74,6 +74,7 @@ pub mod project_git_state;
 pub mod project_icon;
 pub(crate) mod project_views;
 pub mod protocol;
+pub(crate) mod push;
 pub mod remote_access;
 pub mod repository_clone;
 pub mod resume_lookup;

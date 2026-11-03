@@ -72,3 +72,6 @@ pub const GXSERVER_EVENTS_STREAM_SESSION_CHAT: &str = "sessionChat";
 pub const GXSERVER_EVENTS_STREAM_NOTIFICATIONS: &str = "notifications";
 /// The `ghostex server endpoint` capability that promises [`GXSERVER_EVENTS_STREAM_NOTIFICATIONS`].
 pub const GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM: &str = "notificationStream";
+/// The `ghostex server endpoint` capability that promises `/api/registerPushToken` and push
+/// notifications to the phones registered there (finished, needs input, failed, agent starts).
+pub const GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS: &str = "pushNotifications";

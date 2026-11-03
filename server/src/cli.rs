@@ -180,10 +180,12 @@ pub async fn run(args: Vec<String>) -> Result<()> {
 /// CDXC:Mobile 2026-10-09 WHY: the phone retries a chat send whose HTTP request was lost on its SSH port forward only when gxserver dedupes `sendRequestId` (`session_chat_send_requests.rs`, `send_once`); an older daemon would type the message twice, and no other field tells the phone which it is talking to. SEE-ALSO: apps/mobile/app/src/chat/rust/machine-link.ts
 /// CDXC:VoiceMode 2026-10-20 SEE-ALSO: `voiceAgent` means `/api/voice` (conversation and dictation) and `/api/readVoiceAgent` exist (docs/2026-10-20/voice-mode/voice-agent-client-contract.md).
 /// CDXC:Notifications 2026-10-31 SEE-ALSO: `notificationStream` means `/api/events?stream=notifications` carries only notification feed changes and the daemon's start and stop (`notification_event_matches` in server/src/server/ws.rs); an older daemon would send that socket its whole hub, so the phone opens it only behind this flag and otherwise polls the feed.
-const ENDPOINT_CAPABILITIES: [&str; 3] = [
+/// CDXC:Notifications 2026-11-01 SEE-ALSO: `pushNotifications` means `/api/registerPushToken` exists and this daemon pushes finished, needs-input and failed notices and agent starts to the registered phones (server/src/push/); the phone shows its push switches only behind this flag, since an older daemon has no such route.
+const ENDPOINT_CAPABILITIES: [&str; 4] = [
     "sendRequestLedger",
     "voiceAgent",
     ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_NOTIFICATION_STREAM,
+    ghostex_gx_protocol::GXSERVER_ENDPOINT_CAPABILITY_PUSH_NOTIFICATIONS,
 ];
 
 /// `gxserver endpoint` (`ghostex server endpoint`): the running daemon's local port and bearer token
@@ -1028,6 +1030,7 @@ mod tests {
                 Value::from("sendRequestLedger"),
                 Value::from("voiceAgent"),
                 Value::from("notificationStream"),
+                Value::from("pushNotifications"),
             ]
         );
         // The token names the stream the event socket filters on.

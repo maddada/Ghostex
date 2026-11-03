@@ -1110,6 +1110,12 @@ pub fn endpoint_for(path: &str) -> Option<EndpointDescriptor> {
         | "/api/updateRemoteCoordinatorThread"
         | "/api/listRemoteCoordinatorThreads" => full_local(path),
         /*
+        CDXC:Notifications 2026-10-31 WHY:
+        A phone registers its push token over the link it already uses, the SSH or Easy Connect forward to the loopback listener with the bearer token; no other listener serves it. The token is a send credential, so the route never answers on the remote listener.
+        SEE-ALSO: server/src/push/registration.rs, packages/shared/gxserver-protocol-core.ts.
+        */
+        "/api/registerPushToken" => full_local(path),
+        /*
         CDXC:RemotePairing 2026-09-03:
         The only unauthenticated write endpoint. A phone registers its SSH key
         through the Easy Connect tunnel before it holds any gxserver credential,

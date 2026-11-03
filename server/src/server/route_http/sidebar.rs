@@ -1,4 +1,4 @@
-//! Sidebar-state routes: the launcher/action HUD and its Settings mutations, navigation history, the notification feed, session groups, project collections, Spaces, custom session tags and app user data.
+//! Sidebar-state routes: the launcher/action HUD and its Settings mutations, navigation history, the notification feed and phone push registration, session groups, project collections, Spaces, custom session tags and app user data.
 
 use serde_json::{json, Map, Value};
 
@@ -16,6 +16,7 @@ use crate::{
         NOTIFICATION_FEED_READ_ENDPOINT, NOTIFICATION_FEED_UPDATE_ENDPOINT,
     },
     presentation::increment_presentation_revision,
+    push::{handle_register_push_token_http, REGISTER_PUSH_TOKEN_ENDPOINT},
     sidebar_hud::{
         create_sidebar_hud_settings_mutation, read_sidebar_agent_roster, read_sidebar_hud,
         read_sidebar_hud_global_commands, GlobalSidebarCommandUpdate,
@@ -275,6 +276,9 @@ pub(super) async fn route_sidebar_http(
                 create_notification_endpoint(&state, repository, db, params)
             },
         ),
+        REGISTER_PUSH_TOKEN_ENDPOINT => {
+            handle_register_push_token_http(&state, endpoint.path, request_id, &body_json).await
+        }
         "/api/updateWorkspaceSessionGroups" => handle_domain_http(
             &state,
             endpoint.path,
