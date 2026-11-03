@@ -48,6 +48,7 @@ impl WorkProjectInput {
         TicketScope {
             project_id: &self.project_id,
             workspace_id: crate::workspaces::stored_project_workspace_id(&self.project),
+            effective_workspace_id: Some(&self.workspace_id),
             cwd: self.path.as_deref(),
             credentials: Some(&self.credentials),
         }

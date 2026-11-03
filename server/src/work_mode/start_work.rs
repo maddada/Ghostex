@@ -46,6 +46,12 @@ impl WorkTicket {
                 WorkSourceId::Github => Self::Github(ticket.id.parse().map_err(|_| {
                     DomainStateError::bad_request("ticketId must be a GitHub issue number.")
                 })?),
+                WorkSourceId::Command(id) => {
+                    return Err(DomainStateError::bad_request(format!(
+                        "Ghostex can't start work on {} tickets yet.",
+                        id.as_str()
+                    )))
+                }
             },
             WorkItemRef::PullRequest(selector) => Self::PullRequest(selector),
         })
@@ -252,6 +258,8 @@ fn plan_ticket_work(
             let scope = TicketScope {
                 project_id,
                 workspace_id: crate::workspaces::stored_project_workspace_id(&project),
+                // Start work on a ticket command's ticket is refused before this (`WorkTicket::of`).
+                effective_workspace_id: None,
                 cwd: project.get("path").and_then(Value::as_str),
                 credentials: Some(&credentials),
             };

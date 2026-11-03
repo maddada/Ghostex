@@ -36,11 +36,21 @@ pub(crate) fn expand_added_work_links(
     let ticket = TicketRef::from_params(params)
         .transpose()
         .map_err(DomainStateError::bad_request)?;
+    if let Some(TicketRef {
+        source: WorkSourceId::Command(id),
+        ..
+    }) = &ticket
+    {
+        return Err(DomainStateError::bad_request(format!(
+            "Ghostex can't link {} tickets by hand yet.",
+            id.as_str()
+        )));
+    }
     let mut added: HashMap<WorkSourceId, Vec<Value>> = WorkSourceId::BUILT_IN
         .into_iter()
         .filter_map(|source| {
-            params
-                .get(added_work_link_field(source))
+            added_work_link_field(source)
+                .and_then(|field| params.get(field))
                 .map(|value| (source, list_values(value)))
         })
         .collect();

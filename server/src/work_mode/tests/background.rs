@@ -548,7 +548,7 @@ fn the_card_pass_reads_a_project_with_its_workspaces_key() {
 struct OneProjectSource;
 
 impl WorkSource for OneProjectSource {
-    fn name(&self) -> std::borrow::Cow<'static, str> {
+    fn name(&self, _scope: &TicketScope) -> std::borrow::Cow<'static, str> {
         "One project".into()
     }
     fn link_kind(&self) -> std::borrow::Cow<'static, str> {

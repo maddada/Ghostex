@@ -22,6 +22,9 @@ pub(crate) enum WorkSourceId {
     Linear,
     /// GitHub issues and GitHub Projects.
     Github,
+    /// A workspace's ticket command, by the id its `info` pinned (`CommandSourceId`, interned so
+    /// this stays `Copy`).
+    Command(CommandSourceId),
 }
 
 impl WorkSourceId {
@@ -37,6 +40,7 @@ impl WorkSourceId {
         match self {
             Self::Linear => "linear",
             Self::Github => "github",
+            Self::Command(id) => id.as_str(),
         }
     }
 
@@ -44,12 +48,24 @@ impl WorkSourceId {
         Self::parse(value?.as_str()?)
     }
 
+    /// Linear, GitHub, or a command id the store already interned; never interns one.
     pub(crate) fn parse(text: &str) -> Option<Self> {
+        let text = text.trim();
+        Self::parse_built_in(text).or_else(|| CommandSourceId::known(text).map(Self::Command))
+    }
+
+    /// Linear or GitHub only: a team's tracker (its Convex flow) and this computer's stored
+    /// tracker can never name a ticket command.
+    pub(crate) fn parse_built_in(text: &str) -> Option<Self> {
         match text.trim() {
             "linear" => Some(Self::Linear),
             "github" => Some(Self::Github),
             _ => None,
         }
+    }
+
+    pub(crate) fn from_wire_built_in(value: Option<&Value>) -> Option<Self> {
+        Self::parse_built_in(value?.as_str()?)
     }
 }
 
@@ -163,6 +179,12 @@ pub(crate) enum TicketRead {
     /// The source says there is no such ticket.
     NotFound,
     Found(Ticket),
+    /// The source can't be asked: its command is no longer pinned in the workspace, the
+    /// workspace joined a team, the command is missing or a required credential is unset, or its
+    /// first read failed. Shows the last title it had.
+    Unavailable {
+        title: Option<String>,
+    },
 }
 
 /// The tickets one source brings to the Work list, and what went wrong reading them.
@@ -187,8 +209,12 @@ pub(crate) struct ListedTicket {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TicketScope<'a> {
     pub(crate) project_id: &'a str,
-    /// The workspace whose credentials the project uses (`stored_project_workspace_id`).
+    /// The workspace whose credentials the project uses (`stored_project_workspace_id`), which
+    /// Linear's key lookup keeps using.
     pub(crate) workspace_id: Option<&'a str>,
+    /// The workspace the project is in (`project_workspace_id`: a worktree follows its parent
+    /// checkout), where a ticket command's setting and credentials are read.
+    pub(crate) effective_workspace_id: Option<&'a str>,
     /// The project's checkout, where `gh` runs.
     pub(crate) cwd: Option<&'a str>,
     /// Where the source looks up its own credentials. `None` on the presentation projection,
@@ -223,8 +249,8 @@ pub(crate) struct CreatedTicket {
 }
 
 pub(crate) trait WorkSource: Sync {
-    /// How errors and buttons name it.
-    fn name(&self) -> Cow<'static, str>;
+    /// How errors and buttons name it. A ticket command's name is its workspace's `info.name`.
+    fn name(&self, scope: &TicketScope) -> Cow<'static, str>;
     /// The `kind` its tickets publish as session links: `linear`, `issue`.
     fn link_kind(&self) -> Cow<'static, str>;
     /// `TicketRef::key`.
@@ -320,6 +346,7 @@ pub(crate) fn work_source(id: WorkSourceId) -> &'static dyn WorkSource {
     match id {
         WorkSourceId::Linear => &LinearSource,
         WorkSourceId::Github => &GithubSource,
+        WorkSourceId::Command(id) => id.source(),
     }
 }
 
@@ -350,6 +377,11 @@ pub(crate) fn ticket_link_value(ticket: &TicketRef, repo: &str, read: &TicketRea
         }
         TicketRead::Unread => {
             link.insert("loading".to_string(), json!(true));
+        }
+        TicketRead::Unavailable { title } => {
+            insert_text(&mut link, "title", title.as_deref());
+            link.insert("state".to_string(), json!("unavailable"));
+            link.insert("stateName".to_string(), json!("Unavailable"));
         }
     }
     Value::Object(link)

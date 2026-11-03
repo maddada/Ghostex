@@ -16,7 +16,7 @@ fn number_of(id: &str) -> Result<u64, String> {
 }
 
 impl WorkSource for GithubSource {
-    fn name(&self) -> Cow<'static, str> {
+    fn name(&self, _scope: &TicketScope) -> Cow<'static, str> {
         Cow::Borrowed("GitHub")
     }
 

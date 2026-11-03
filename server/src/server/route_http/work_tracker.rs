@@ -137,7 +137,7 @@ fn read_work_tracker(
             Ok(flow) => {
                 remember_team_work_tracker(
                     &workspace_id,
-                    WorkSourceId::from_wire(flow.get("tracker")),
+                    WorkSourceId::from_wire_built_in(flow.get("tracker")),
                 );
                 can_edit = flow.get("canEdit").and_then(Value::as_bool) != Some(false);
             }
@@ -177,7 +177,7 @@ fn set_work_tracker(
         .ok_or_else(|| DomainStateError::bad_request("Pass workspaceId."))?;
     let workspace_id = find_workspace_id(&current, &reference)
         .ok_or_else(|| DomainStateError::bad_request(crate::workspaces::NO_SUCH_WORKSPACE))?;
-    let tracker = WorkSourceId::from_wire(params.get("tracker")).ok_or_else(|| {
+    let tracker = WorkSourceId::from_wire_built_in(params.get("tracker")).ok_or_else(|| {
         DomainStateError::bad_request("tracker must be \"linear\" or \"github\".")
     })?;
     if crate::team_sync::workspace_has_team(&state.paths, &workspace_id) {
@@ -220,6 +220,7 @@ fn create_issue(
                     .and_then(Value::as_str)
                     .unwrap_or_default(),
                 workspace_id: None,
+                effective_workspace_id: None,
                 cwd: Some(cwd),
                 credentials: None,
             },

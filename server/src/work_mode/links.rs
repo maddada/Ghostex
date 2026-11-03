@@ -31,15 +31,19 @@ impl ManualWorkLinks {
                 .github_issues
                 .as_ref()
                 .map(|numbers| numbers.iter().map(u64::to_string).collect()),
+            // Ticket commands have no hand-set links yet.
+            WorkSourceId::Command(_) => None,
         }
     }
 }
 
-/// The request key that adds tickets of a source to the ones a session already links.
-pub(crate) fn added_work_link_field(source: WorkSourceId) -> &'static str {
+/// The request key that adds tickets of a source to the ones a session already links; none for a
+/// ticket command, whose tickets can't be linked by hand yet.
+pub(crate) fn added_work_link_field(source: WorkSourceId) -> Option<&'static str> {
     match source {
-        WorkSourceId::Linear => "addLinearIssues",
-        WorkSourceId::Github => "addGithubIssues",
+        WorkSourceId::Linear => Some("addLinearIssues"),
+        WorkSourceId::Github => Some("addGithubIssues"),
+        WorkSourceId::Command(_) => None,
     }
 }
 

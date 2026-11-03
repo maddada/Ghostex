@@ -428,7 +428,7 @@ fn run_and_pin(
             failure.message = noted(failure.message, removed);
             if let Some(command) = sources.workspaces.get_mut(workspace_id) {
                 record_failure(command, &failure, paths, workspace_id);
-                write_work_sources(db, &sources)?;
+                save_work_sources(db, &sources)?;
                 bump_generation(workspace_id);
             }
             return Err(WorkSourceError::Failed(failure));
@@ -461,7 +461,7 @@ fn run_and_pin(
                         true
                     });
             if tightened || noted_in_record {
-                write_work_sources(db, sources)?;
+                save_work_sources(db, sources)?;
                 bump_generation(workspace_id);
             }
             Err(WorkSourceError::Refused(noted(text, removed)))
@@ -495,7 +495,7 @@ fn run_and_pin(
                 command.last_error = Some(refused.clone());
                 command.last_error_detail = None;
             }
-            write_work_sources(db, &sources)?;
+            save_work_sources(db, &sources)?;
             bump_generation(workspace_id);
             return Err(WorkSourceError::Refused(refused));
         }
@@ -552,7 +552,7 @@ fn run_and_pin(
         .workspaces
         .insert(workspace_id.to_string(), command.clone());
     prune_retired(&mut sources, &references()?);
-    write_work_sources(db, &sources)?;
+    save_work_sources(db, &sources)?;
     bump_generation(workspace_id);
     Ok(command)
 }
@@ -576,7 +576,7 @@ pub(crate) fn clear_work_source(
         if let Some(command) = sources.workspaces.remove(workspace_id) {
             retire(&mut sources, &command);
             prune_retired(&mut sources, &references()?);
-            write_work_sources(db, &sources)?;
+            save_work_sources(db, &sources)?;
         }
         bump_generation(workspace_id);
         Ok(())
@@ -592,12 +592,19 @@ pub(crate) fn clear_work_source(
 pub(crate) struct WorkSourceDeletion {
     workspace_id: String,
     removed_credentials: Option<Value>,
+    /// The record it read and the one it wrote, published to the copy in memory on `commit`.
+    published: Option<(WorkSources, WorkSources)>,
     _writer: MutexGuard<'static, ()>,
 }
 
 impl WorkSourceDeletion {
-    /// The transaction it was made in committed: the writer lock is released.
-    pub(crate) fn commit(self) {}
+    /// The transaction it was made in committed: the copy in memory follows the record, then the
+    /// writer lock is released.
+    pub(crate) fn commit(self) {
+        if let Some((read, written)) = &self.published {
+            publish(read, written);
+        }
+    }
 
     /// Puts the removed credentials back, merged into the file as it is now, then releases the
     /// writer lock. The record's change is undone by rolling back the transaction it was made in.
@@ -630,11 +637,15 @@ pub(crate) fn delete_workspace_work_source(
     references: References,
 ) -> Result<WorkSourceDeletion, WorkSourceError> {
     let writer = writer();
-    let mut sources = read_work_sources(db)?;
+    let read = read_work_sources(db)?;
+    let mut sources = read.clone();
+    let mut published = None;
     if let Some(command) = sources.workspaces.remove(workspace_id) {
         retire(&mut sources, &command);
         prune_retired(&mut sources, &references()?);
+        // Inside the caller's transaction: the copy in memory follows only once it commits.
         write_work_sources(db, &sources)?;
+        published = Some((read, sources));
     }
     // Written only when it held some, so a workspace without command credentials never needs the
     // file to be writable.
@@ -651,6 +662,7 @@ pub(crate) fn delete_workspace_work_source(
     Ok(WorkSourceDeletion {
         workspace_id: workspace_id.to_string(),
         removed_credentials,
+        published,
         _writer: writer,
     })
 }
@@ -865,7 +877,7 @@ fn store_credentials(
                 &command_env_of(paths, workspace_id, Some(&current)),
             );
             current = command.clone();
-            write_work_sources(db, &sources)?;
+            save_work_sources(db, &sources)?;
         }
         bump_generation(workspace_id);
         (current, work_source_generation(workspace_id))
@@ -896,7 +908,7 @@ fn store_credentials(
         command.last_error = Some(SAVED_BUT_SHORT_SECRET_UNREMOVABLE.to_string());
         command.last_error_detail = None;
         let command = command.clone();
-        write_work_sources(db, &sources)?;
+        save_work_sources(db, &sources)?;
         bump_generation(workspace_id);
         return Ok((command, None));
     };
@@ -972,7 +984,7 @@ fn store_credentials(
         }
     };
     let command = command.clone();
-    write_work_sources(db, &sources)?;
+    save_work_sources(db, &sources)?;
     bump_generation(workspace_id);
     Ok((command, failure))
 }

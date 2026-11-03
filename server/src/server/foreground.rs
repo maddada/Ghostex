@@ -321,6 +321,9 @@ pub async fn run_gxserver_foreground(
         "serverId": metadata.server_id.clone(),
         "type": "serverStarted",
     }));
+    // Before the first request: a link saved under a ticket command's id parses from the start.
+    startup_gate.step("loading ticket sources");
+    crate::work_mode::load_work_source_store_at_startup(&paths, &logger);
     startup_gate.step("starting its background runtimes");
     state.automation_runtime.start(shutdown_tx.subscribe());
     state.delayed_send_runtime.start(

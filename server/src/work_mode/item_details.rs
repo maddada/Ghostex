@@ -217,6 +217,8 @@ pub(crate) fn read_work_item(
             WorkItemRef::Ticket(ticket) => match ticket.source {
                 WorkSourceId::Linear => Some(ticket.id.clone()),
                 WorkSourceId::Github => repo.map(|repo| format!("{repo}#{}", ticket.id)),
+                // A team workspace never uses a ticket command.
+                WorkSourceId::Command(_) => None,
             },
             WorkItemRef::PullRequest(selector) => pull_request_url_parts(selector)
                 .map(|(repo, number)| format!("{}#{number}", repo.to_ascii_lowercase()))
@@ -261,7 +263,7 @@ pub(crate) fn read_work_item(
                 })
             });
         if let (Some(task), WorkItemRef::Ticket(wanted)) = (ticket_task, ticket_ref) {
-            let name = work_source(wanted.source).name();
+            let name = work_source(wanted.source).name(&scope_for(wanted.source));
             match task
                 .join()
                 .unwrap_or_else(|_| Err(format!("{name} read failed.")))
@@ -345,7 +347,7 @@ pub(crate) fn read_work_item(
                 if source.can_read(&scope) {
                     match source.read_detail(&scope, &first.id, force) {
                         Ok(value) => ticket = Some(value),
-                        Err(error) => errors.push(format!("{}: {error}", source.name())),
+                        Err(error) => errors.push(format!("{}: {error}", source.name(&scope))),
                     }
                 }
             }

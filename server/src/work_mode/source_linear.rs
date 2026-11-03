@@ -78,7 +78,7 @@ pub(crate) fn ticket_of_linear_issue(info: LinearIssueInfo) -> Ticket {
 const NO_LINEAR_KEY: &str = "Set a Linear API key first (Settings, or ghostex issues linear-key).";
 
 impl WorkSource for LinearSource {
-    fn name(&self) -> Cow<'static, str> {
+    fn name(&self, _scope: &TicketScope) -> Cow<'static, str> {
         Cow::Borrowed("Linear")
     }
 

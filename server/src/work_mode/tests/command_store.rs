@@ -15,6 +15,7 @@ use crate::storage::{initialize_gxserver_storage, open_gxserver_database, Gxserv
 
 use super::*;
 
+mod published;
 mod stored_values;
 
 /// The store's set of a typed path, as these tests read it: its result, whose errors already left

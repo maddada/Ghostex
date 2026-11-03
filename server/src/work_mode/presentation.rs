@@ -71,6 +71,7 @@ pub(crate) fn work_targets(project: &Value, session: &Value) -> WorkTargets {
     let scope = TicketScope {
         project_id,
         workspace_id: None,
+        effective_workspace_id: None,
         cwd: cwd.as_deref(),
         credentials: None,
     };
@@ -112,7 +113,9 @@ pub(crate) fn work_targets(project: &Value, session: &Value) -> WorkTargets {
                         TicketRead::Found(ticket) => {
                             ticket_pull_request_in_repo(&ticket.pull_request_urls, repo.as_deref())
                         }
-                        TicketRead::NotFound | TicketRead::Unread => None,
+                        TicketRead::NotFound
+                        | TicketRead::Unread
+                        | TicketRead::Unavailable { .. } => None,
                     }
                 })
             }),
@@ -240,6 +243,7 @@ pub(crate) fn presentation_session_work(project: &Value, session: &Value) -> Opt
             .and_then(Value::as_str)
             .unwrap_or_default(),
         workspace_id: None,
+        effective_workspace_id: None,
         cwd: targets.cwd.as_deref(),
         credentials: None,
     };

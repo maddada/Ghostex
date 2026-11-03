@@ -1296,6 +1296,38 @@ async fn the_tracker_and_workspace_routes_name_no_typed_workspace() {
     }
 }
 
+/// A ticket id that isn't one of the command's is refused without quoting it: the id typed here is
+/// the workspace's stored credential, and every request error's message is logged.
+#[tokio::test]
+async fn a_typed_command_ticket_id_is_never_repeated_back() {
+    let routes = Routes::new();
+    routes.answer("good");
+    with_token(&routes, "Work", "tok-typed-77").await;
+    let (status, body) = routes
+        .logged_call(
+            "/api/readWorkItem",
+            json!({ "source": "fixture", "ticketId": "tok-typed-77" }),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        error_text(&body),
+        "That isn't a fixture ticket ID: a key and a number, like ABC-12."
+    );
+    assert!(!body.to_string().contains("tok-typed-77"), "{body}");
+    let logged = logged_errors(&routes);
+    assert!(
+        logged.iter().any(|error| error.contains("ticket ID")),
+        "the refusal is in the request log: {logged:?}"
+    );
+    assert!(
+        !fs::read_to_string(&routes.paths.log_file)
+            .unwrap_or_default()
+            .contains("tok-typed-77"),
+        "{logged:?}"
+    );
+}
+
 #[tokio::test]
 async fn a_check_runs_on_the_server_with_the_path_it_has() {
     let routes = Routes::new();
