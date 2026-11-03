@@ -1140,11 +1140,11 @@ pub(crate) fn normalize_agent_hook_event_activity(params: &Map<String, Value>) -
             event,
             &Value::Object(params.clone()),
         )
-    } else if agent.as_deref() == Some("antigravity") {
-        // agy's stop keeps the turn working while background work will wake it again, and its
-        // question tool waits for the user (CDXC:AgentHooks 2026-10-23 in event_mapping.rs).
+    } else if let Some(agent @ ("antigravity" | "omp")) = agent.as_deref() {
+        // agy's stop keeps the turn working while background work will wake it again; agy's and
+        // OMP's question tools wait for the user (CDXC:AgentHooks 2026-10-23 in event_mapping.rs).
         crate::agent_hooks::event_mapping::activity_for_hook_event(
-            "antigravity",
+            agent,
             event.and_then(Value::as_str).unwrap_or_default(),
             &Value::Object(params.clone()),
         )

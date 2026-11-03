@@ -9,6 +9,7 @@ mod event_streams;
 mod failure_episodes;
 pub(crate) mod helpers;
 mod notification_failures;
+mod omp_waits;
 mod project_directories;
 mod protocol_and_routes;
 mod renderer_and_titles;

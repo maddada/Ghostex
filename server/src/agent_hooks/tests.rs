@@ -11,7 +11,7 @@ use super::api::{
 };
 use super::config::{
     all_hook_events, HookDefinition, HookPaths, AMP_PLUGIN_MARKER, NOTIFY_HOOK_MARKER,
-    NOTIFY_HOOK_VERSION, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
+    NOTIFY_HOOK_VERSION, OMP_EXTENSION_MARKER, OPENCODE_PLUGIN_MARKER, PI_EXTENSION_MARKER,
 };
 use super::event_mapping::activity_for_hook_event;
 use super::install::{
@@ -22,7 +22,7 @@ use super::install::{
     uninstall_plugin_file_hook,
 };
 use super::notify_runtime::{read_hook_state, read_state_string, run_notify_hook};
-use super::plugin_sources::{command_for_agent, shell_quote};
+use super::plugin_sources::{build_plugin_file_source, command_for_agent, shell_quote};
 use super::probing::{command_exists, decode_base64_text, path_string, read_file_text};
 use super::resolution::provider_hook_paths;
 use super::statusline::{install_statusline_hook, statusline_command};
@@ -266,6 +266,58 @@ fn hook_status_reports_legacy_pi_agent_extension_as_update_required() {
     assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
 }
 
+/// An OMP extension installed before it forwarded the `ask` tool's questions (marker v4) or before
+/// it sent a PermissionRequest for the approval dialog OMP shows (v5 to v8) is rewritten by the
+/// status read the desktop makes before every agent launch.
+#[test]
+fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwarding() {
+    for previous in ["v4", "v5", "v6", "v7", "v8"] {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
+        let hook_paths = HookPaths::from_paths(&paths);
+        seed_real_cli(&hook_paths.home_dir, "omp");
+        write_test_executable(&temp.path().join(".local").join("bin").join("omp"));
+        install_notify_hook(&hook_paths).expect("notify hook");
+        let extension_path = provider_hook_paths("omp", &hook_paths)
+            .into_iter()
+            .next()
+            .expect("omp extension path");
+        write_test_file(
+            &extension_path,
+            &format!(
+                "// {OMP_EXTENSION_MARKER} {previous}\nconst hook = \"{}\";\n",
+                path_string(&hook_paths.notify_hook_path)
+            ),
+        );
+
+        let status = read_agent_hook_status(
+            &paths,
+            json!({ "agentIds": ["omp"] }).as_object().expect("params"),
+        )
+        .expect("status");
+        assert!(
+            status["autoUpgradedPaths"]
+                .as_array()
+                .is_some_and(|upgraded| upgraded.contains(&json!(path_string(&extension_path)))),
+            "{previous}: {status}"
+        );
+        assert_eq!(
+            status["agents"][0]["status"],
+            json!("installed"),
+            "{previous}"
+        );
+        assert_eq!(
+            read_file_text(&extension_path),
+            build_plugin_file_source("omp", &hook_paths.notify_hook_path),
+            "{previous}"
+        );
+        assert!(
+            read_file_text(&extension_path).contains("sendApprovalHook(\"PermissionRequest\""),
+            "{previous}"
+        );
+    }
+}
+
 #[test]
 fn notify_hook_current_requires_marker_and_resolved_state_directory() {
     let temp = tempfile::tempdir().expect("tempdir");
@@ -304,6 +356,35 @@ fn codex_stop_persists_attention_in_the_hook_sidecar() {
     assert_eq!(
         activity_for_hook_event("codex", "SessionEnd", &json!({})),
         Some("idle".to_string())
+    );
+}
+
+/// OMP's `ask` waits for the user as Claude's AskUserQuestion does; its other tools, the same event
+/// of other agents' ask tools (which raise their wait through a PermissionRequest or a stop) and
+/// OMP's approval pair keep their mapping.
+#[test]
+fn an_omp_ask_needs_the_user_and_other_pre_tool_events_keep_working() {
+    let pre = |agent: &str, tool: &str| {
+        activity_for_hook_event(agent, "PreToolUse", &json!({ "tool_name": tool }))
+    };
+    assert_eq!(pre("omp", "ask"), Some("attention".to_string()));
+    assert_eq!(pre("omp", "bash"), Some("working".to_string()));
+    assert_eq!(
+        pre("claude", "AskUserQuestion"),
+        Some("working".to_string())
+    );
+    assert_eq!(
+        pre("codex", "request_user_input"),
+        Some("working".to_string())
+    );
+    assert_eq!(pre("pi", "ask"), Some("working".to_string()));
+    assert_eq!(
+        activity_for_hook_event("omp", "PermissionRequest", &json!({ "tool_name": "bash" })),
+        Some("attention".to_string())
+    );
+    assert_eq!(
+        activity_for_hook_event("omp", "post_approval_response", &json!({})),
+        Some("working".to_string())
     );
 }
 

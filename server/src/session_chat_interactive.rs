@@ -602,6 +602,15 @@ pub fn session_chat_prompt_clear_decision(
             event.tool_input,
         );
     }
+    // An agent that reports the answer to its approval prompt (OMP's `tool_approval_resolved`, sent
+    // as `post_approval_response` with the call's id) retires that call's card at the answer, so no
+    // live Allow/Deny card stands while the allowed tool runs. Claude reports no answer; its card
+    // waits for the tool's own end.
+    if normalize_hook_event_name(event.event_name.unwrap_or_default()) == "post_approval_response" {
+        return matches!(stored, SessionChatInteractivePrompt::Approval { .. })
+            && event.tool_use_id.is_some()
+            && event.tool_use_id == stored.tool_use_id();
+    }
     if event.idle_input_notification {
         return false;
     }

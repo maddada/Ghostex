@@ -356,3 +356,33 @@ fn question_parsing_follows_canonical_shape_rules() {
     assert!(parse_session_chat_questions(Some("request_user_input"), &json!("{broken")).is_none());
     assert!(parse_session_chat_questions(Some("request_user_input"), &json!("null")).is_none());
 }
+
+/// An approval answer that names its call (OMP's `tool_approval_resolved`, forwarded as
+/// `post_approval_response`) retires that call's approval card and nothing else; Hermes' answer,
+/// which names no call, keeps the old rule (no retirement).
+#[test]
+fn an_approval_answer_retires_only_its_own_calls_card() {
+    let approval = |id: Option<&str>| SessionChatInteractivePrompt::Approval {
+        tool: "bash".to_string(),
+        summary: Some("echo second-approval".to_string()),
+        tool_use_id: id.map(str::to_string),
+    };
+    let answer = |id: Option<&'static str>| SessionChatPromptClearEvent {
+        event_name: Some("post_approval_response"),
+        next_activity: Some("working"),
+        tool_use_id: id,
+        ..Default::default()
+    };
+    let retires = |stored: &SessionChatInteractivePrompt, id| {
+        session_chat_prompt_clear_decision(Some(stored), answer(id))
+    };
+    assert!(retires(&approval(Some("call-b")), Some("call-b")));
+    assert!(!retires(&approval(Some("call-b")), Some("call-a")));
+    assert!(!retires(&approval(Some("call-b")), None));
+    assert!(!retires(&approval(None), None));
+    let question = SessionChatInteractivePrompt::Question {
+        questions: Vec::new(),
+        tool_use_id: Some("call-b".to_string()),
+    };
+    assert!(!retires(&question, Some("call-b")));
+}
