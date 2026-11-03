@@ -397,3 +397,69 @@ fn js_string_coercions() {
     assert_eq!(js_string_or_empty(Some(&Value::Null)), "");
     assert_eq!(js_string_or_empty(Some(&json!(true))), "true");
 }
+
+#[test]
+fn the_handshake_folder_is_the_one_the_session_names() {
+    let own = || PathBuf::from("/home/u/.other-state/ghostex");
+    let named = env_map(&[(
+        "GHOSTEX_PROMPT_HANDSHAKE_DIR",
+        "/home/u/.local/state/ghostex",
+    )]);
+    assert_eq!(
+        prompt_handshake_dir_with(&|key| named.get(key).cloned(), own),
+        PathBuf::from("/home/u/.local/state/ghostex")
+    );
+    // A session started before gxserver named the folder keeps resolving its own, as before.
+    let older = env_map(&[]);
+    assert_eq!(
+        prompt_handshake_dir_with(&|key| older.get(key).cloned(), own),
+        own()
+    );
+    for unusable in ["", "relative/state"] {
+        let env = env_map(&[("GHOSTEX_PROMPT_HANDSHAKE_DIR", unusable)]);
+        assert_eq!(
+            prompt_handshake_dir_with(&|key| env.get(key).cloned(), own),
+            own()
+        );
+    }
+}
+
+/// GitHub #400: a session shell whose profile sets another XDG_STATE_HOME still finds the marker
+/// gxserver wrote, because the session's setup names gxserver's folder after the profile ran.
+#[cfg(unix)]
+#[test]
+fn a_session_with_another_xdg_state_home_finds_gxservers_marker() {
+    let home = tempfile::tempdir().unwrap();
+    let shell_state = home.path().join("elsewhere-state");
+    let setup = crate::zmx::zmx_provider_prompt_editor_setup_shell_command(None);
+    let output = Command::new("/bin/sh")
+        .env_clear()
+        .env("HOME", home.path())
+        .env("PATH", "/usr/bin:/bin")
+        .env("XDG_STATE_HOME", &shell_state)
+        .arg("-c")
+        .arg(format!("{setup}\nenv"))
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{output:?}");
+    let session_env: HashMap<String, String> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.split_once('='))
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
+    // What the session's own environment would resolve, which is not where gxserver writes.
+    let shell_own = shell_state.join("ghostex");
+    let gxserver_dir = crate::zmx::prompt_handshake_dir();
+    assert_ne!(shell_own, gxserver_dir);
+    let resolved =
+        prompt_handshake_dir_with(&|key| session_env.get(key).cloned(), || shell_own.clone());
+    assert_eq!(resolved, gxserver_dir);
+    assert_eq!(
+        resolved.join("prompt-stash-requests").join("P1abc-G1abc"),
+        gxserver_dir
+            .join("prompt-stash-requests")
+            .join("P1abc-G1abc")
+    );
+    // The wrapper itself still lands where the shell's own environment puts it.
+    assert!(shell_own.join("prompt-editor").is_file());
+}
