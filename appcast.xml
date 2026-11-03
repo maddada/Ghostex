@@ -8,6 +8,49 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
         <link>https://github.com/maddada/Ghostex/releases</link>
         <description>Sparkle appcast for Ghostex macOS releases.</description>
         <item>
+            <title>10.45.0</title>
+            <pubDate>Tue, 03 Nov 2026 19:06:26 +0000</pubDate>
+            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.45.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>104500</sparkle:version>
+            <sparkle:shortVersionString>10.45.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.45.0
+
+## 10.45.0 - 2026-11-03
+
+**Ghostex 10.45.0 is out.** Start a new session in any project on any computer from one picker, connect your own ticket tracker to Work mode, use Voice mode with sessions on your other computers, and hand over only the last few turns of a conversation.
+
+### ✨ New sessions
+
+- **Start a new session anywhere.** The New Thread picker (Cmd+N) names the project it starts in on its top row: click it or press Cmd+N again to pick any project on any computer, with your recent projects first. A project on several computers shows them as chips on its row, starting on the one you used last for it, thanks to @sebastianarena (#359).
+- **The "+" on a project in the Unified filter and on a project group header opens the New Thread picker on that project,** and a project the filter hides joins the filter when you start a session there.
+- **On the phone, the agent menu that starts a session shows its project on top** (tap it to pick any project) and a row of computer chips.
+
+### 🎫 Work mode
+
+- **Connect your own ticket tracker with a ticket command.** Set it with `ghostex issues source set <path>`, store its credentials with `ghostex issues source credential <name>` from stdin (secrets need at least 3 characters), and a session whose branch names one of its tickets shows it on its card and in its links with its title and state. Workspaces connected to a team can't use one, thanks to @lardissone (#396, #402).
+
+### 🎙️ Voice mode
+
+- **Voice mode works with sessions on your connected computers.** It can read them, send them prompts, answer their questions and approvals, stop them, show them and start agents in that computer's projects. A computer whose Agent access is off stays out of reach, and Voice mode tells you why.
+
+### 🤝 Handoff
+
+- **Hand over only the last turns of a conversation.** The History slider in Handoff picks how many recent turns go over (20 by default, remembered), with your earlier prompts listed, or turn on Whole conversation to send everything. On the computer, the web and the phone.
+
+### 🩹 Fixes and polish
+
+- **Clicking a notification switches the sidebar to the session's computer,** and so do the menu bar, Quick Access, the status item, `ghostex focus` and Voice mode when they open a session on another computer, thanks to @lardissone (#401).
+- **Install another agent shows Installing, then Installed,** or the error with Retry.
+- **Line numbers in Files are no longer cut off** on documents with 1,000 lines or more.
+- **The built-in browser updates to Chromium 156.**
+- **Linux: Ctrl+G opens Ghostex's prompt editor instead of vi, so the chat no longer gets stuck behind an editor,** and the false "zmx daemon is not running" alarm is gone, thanks to @isfix (#400).
+- **Linux: Ghostex ships one copy of its keyring library,** thanks to @bet4it (#399).
+]]></description>
+            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.45.0/ghostex-10.45.0-arm64.dmg" length="52379422" type="application/octet-stream" sparkle:edSignature="Rw8yY4KxualtcMcbv+tm+LqR2oV0kd25Ziak+35ZiUAGLjBmvIouvwhBlLFLB8adawPd54UqCEtIlH1bNXY0Dg=="/>
+        </item>
+        <item>
             <title>10.44.0</title>
             <pubDate>Tue, 03 Nov 2026 00:20:07 +0000</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.44.0</sparkle:fullReleaseNotesLink>
@@ -307,72 +350,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
             <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.41.0/ghostex-10.41.0-arm64.dmg" length="49556271" type="application/octet-stream" sparkle:edSignature="7fLUMl7BUo600ahdK5ySax3XpuEcWTmABdgKJllgRjL1+zLwgG8Hb9wHhOzKaQAIQ67j60zZGUyORxsgO37UDw=="/>
         </item>
         <item>
-            <title>10.40.0</title>
-            <pubDate>Thu, 29 Oct 2026 02:07:14 +0000</pubDate>
-            <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v10.40.0</sparkle:fullReleaseNotesLink>
-            <sparkle:version>104000</sparkle:version>
-            <sparkle:shortVersionString>10.40.0</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <description sparkle:format="markdown"><![CDATA[# Ghostex 10.40.0
-
-## 10.40.0 - 2026-10-29
-
-**Ghostex 10.40.0 is out.** Settings split General into six pages under App, Setup and More, the chat's pills move into a strip along the chat box, full-window Claude takes over the whole window, dialogs and menus turn to frosted glass on macOS, and tool call cards arrive as a preview. Update Ghostex on your remote computers too: the Work page's tickets changed in the background service.
-
-### ⚙️ Settings
-- **General is split into six pages:** Chat, Sidebar & Sessions, Terminal, Notifications, Files & Links, and Power & Sleep, and the Settings sidebar lists every page under App, Setup and More. Sleeping Sessions moved to Sidebar & Sessions, and Experimental and Reset to defaults moved to About.
-- **Show Advanced never hides a page:** Workspaces, Cloud Boxes, Open In, OS Integration and Debugging always stay in the Settings sidebar, and Show Advanced only shows or hides rows inside pages.
-- **Settings > Integrations has a Web runtime row** for the Chromium runtime with its status, Install, Reinstall and Uninstall; the Extensions store no longer lists it.
-- **Session status is always Combined:** the Session status from setting is gone, and every session uses Ghostex's own detection plus what the program reports about itself.
-- **A Session tooltips switch** (Sidebar & Sessions > Session Cards, on by default) turns off the hover tooltip on sidebar session rows.
-
-### 💬 Chat
-- **The pills move into a soft strip along the top of the chat box,** the bar above it keeps only the working line, and each pill's menu opens right above the pill you clicked.
-- **Tool call cards (preview, Settings > Chat, off by default):** one card per burst of tool calls with stacked icons, results and times, failures that say why and app logos for MCP tools; they fold once done and show on the phone too. A Codex command that failed inside a script shows its exit code.
-- **Chat Resources has two groups,** Unanswered (For later included) and Earlier (answered questions, pages, charts and withdrawn ones, told apart by icon and colour), and long chats load it a page at a time.
-- **The ? pill steps only through questions still waiting** that aren't For later; with none waiting, a click opens Chat Resources.
-- **The Tasks pill and the Session details Tasks card show every open task,** the 4 newest done ones, and Show more for the rest.
-- **Links read #270+** in the chat's Links pill and the sidebar badge (no repo name, no count), in the header's muted colours, and the Links pill comes last.
-- **Session details' folds ease open and shut,** and its account row shows the email alone.
-- **Message from and to cards** read the session name as part of the title and show the agent's icon once.
-- **The chat's More menu has Session note,** and the terminal view's buttons follow the chat's order, with Session note, Stash prompt and Saved prompts in More.
-- **A folded approval card shows the row Cmd+Enter answers and the No that Escape answers.**
-- **The working bar drops the elapsed time,** and Claude Code's own update notices no longer reach the chat.
-
-### 🧭 Coordinators
-- **Thread reports arrive on their own:** a report held for an idle Claude coordinator whose input box can't be read gets its screen redrawn, so it no longer waits until someone opens the coordinator. Copy Report masks session refs, names, paths, emails and ids.
-- **The sidebar row reads at a glance:** the links badge is a plain #348 before the workers count, and the crew icon shows only while a thread works, waits on you or waits for approval.
-- **The Workers menu header reads "2 active · 429 total".**
-
-### 🖥️ Full-window Claude
-- **Turning Claude on fills the window:** it hides the sidebar, side panel and Commands pane, the header keeps the sidebar's top-row buttons, and turning it off restores the layout.
-- **Opening any session turns Claude off,** and showing the sidebar returns to the Space, project, session and layout you came from.
-- **The Claude button moves to the sidebar's top row** in its grey; the Issues briefcase leaves that row (Issues stays in Open a view, its hotkey and the session chips).
-
-### 🪟 Frosted glass and tooltips
-- **macOS, with transparency on:** Settings, Search by Prompt, Agents Hub, Quick Access, Browser History and the New Thread picker get a darker frosted fill, and Send Bug / Feedback and 20 other dialogs, the Notifications, Tips & Tricks, Resources and Dev servers dropdowns, and the terminal bar's ⋯ menu and flyouts are frosted too, with a quarter more blur and a 45% dark tint.
-- **Every plain tooltip uses the same roomy look,** centred with a gap, with shortcuts as key caps.
-- **The sidebar's icons and machine tab names take the header's colours,** and a machine tab shows a tooltip only when it has an error or a waiting update.
-- **The Files sidebar drops the Project Docs label** above the tree.
-
-### 📱 On the phone
-- **Chat improvements reach phones over the air** without a new app install, starting with this release.
-- **Tool call cards, the plain links badge and the quieter crew icon** match the computer.
-
-### 🩹 Fixes and polish
-- **Antigravity:** messages no longer fail with "The terminal draft could not be cleared" while its Accept edits, Auto, Plan or Best-of-N hint shows in the input box (#349).
-- **Adding a second Claude account no longer says "Login did not complete"** after it was saved, and a real failure shows its reason (#347).
-- **Windows: Ghostex no longer closes when a monitor is plugged in or unplugged** (#346), thanks to @Dev-Mriganka.
-- **Agents installed through mise start without any shell setup;** Install fetches mise itself and Node.js when npm is missing, and a missing agent command offers Install on its card.
-- **Work:** Linear and GitHub tickets share one ticket shape, the groundwork for more ticket sources, and GitHub issue details keep their assignee and labels, thanks to @lardissone.
-- **Remote:** clicking into a remote session clears its blue dot on its own machine too.
-- **Linux and Windows:** a click into an embedded web page closes an open sidebar menu or titlebar dropdown.
-- **Page text boxes wrap long lines** instead of widening the page.
-]]></description>
-            <enclosure url="https://github.com/maddada/Ghostex/releases/download/v10.40.0/ghostex-10.40.0-arm64.dmg" length="49300010" type="application/octet-stream" sparkle:edSignature="UwaES4ng1a6vwe2dhmFUImTcxW7USGO3Dm9NesulWWEKuiYwZF8oFSY9tkERox1jrDU8r8WE7QtqPd/FJ8QBCQ=="/>
-        </item>
-        <item>
             <title>3.26.1</title>
             <pubDate>Mon, 01 Jun 2026 18:43:20 +0400</pubDate>
             <sparkle:fullReleaseNotesLink>https://github.com/maddada/Ghostex/releases/tag/v3.26.1</sparkle:fullReleaseNotesLink>
@@ -384,6 +361,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: wmnxymCYuHkQ52IXdJaJ08Njz0FdL5VsfHarJO82C6/P7CG+Cgf+HxNxaA78UDR0RdRbvrX34IoSaKORdXNQBw==
-length: 36400
+edSignature: Xj9E+/iNQhGM3mezYhathcmsrGl9pcuipMnzcYtVxGOlwDxCo/I/vm1z0h+xdcFjz+6hXfY07s6HsnLDrDbxDw==
+length: 33042
 -->
