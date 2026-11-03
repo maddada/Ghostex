@@ -170,7 +170,7 @@ fn alert_event(
         session_id: session_id.to_string(),
         notification_id: notification_id.to_string(),
         agent_name: "omp".to_string(),
-        project_name: "Ghostexfeatures".to_string(),
+        project_name: "demo-app".to_string(),
         occurred_at_ms,
     }
 }
@@ -221,7 +221,7 @@ async fn push_send_finished_alert_carries_only_event_and_names() {
         sends[0].body,
         json!([{
             "to": TOKEN_P,
-            "title": "omp in Ghostexfeatures",
+            "title": "omp in demo-app",
             "body": "Finished",
             "data": {
                 "kind": "finished",
