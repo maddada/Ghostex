@@ -241,11 +241,9 @@ pub struct PresentationProject {
 pub struct PresentationWorkSource {
     /// The id its `info` pinned, which its tickets' keys and link kinds start with (`fixture`).
     pub id: String,
-    /// Its name for the workspace (`info.name`).
+    /// Its name for the workspace (`info.name`). Its icon is not on the row (CDXC:WorkMode
+    /// 2026-11-03 in server/src/work_mode/project.rs).
     pub name: String,
-    /// Its icon as a `data:image/svg+xml;base64,…` URL; absent when it has none or it was refused.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub icon: Option<String>,
     /// Whether it is the workspace's primary tracker; false until a command can be picked as one.
     #[serde(default, deserialize_with = "crate::de::null_as_default")]
     pub is_tracker: bool,

@@ -51,21 +51,14 @@ pub(crate) fn issues_workflow_parts(project: &Value) -> IssuesWorkflowParts {
 
 /// `PresentationProject.work_source`: the ticket command of the project's workspace, not its
 /// tracker (`isTracker: false`): a command can't be picked as the tracker yet.
+///
+/// CDXC:WorkMode 2026-11-03 WHY:
+/// The row carries no icon: an icon can be 16 KB (about 22 KB as a `data:` URL), and on every project of the workspace that was about 650 KB per full snapshot for 30 projects, sent to every client for a field none drew. When a client draws it, carry it once per workspace, not on each row; Settings reads it from `/api/readWorkSource`.
 pub(crate) fn presentation_work_source(project: &Value) -> Option<Value> {
-    use base64::Engine;
     let command = project_ticket_command(project)?;
     let mut source = Map::new();
     source.insert("id".to_string(), Value::from(command.source_id.clone()));
     source.insert("name".to_string(), Value::from(command.info.name.clone()));
-    if let Some(Ok(svg)) = &command.info.icon {
-        source.insert(
-            "icon".to_string(),
-            Value::from(format!(
-                "data:image/svg+xml;base64,{}",
-                base64::engine::general_purpose::STANDARD.encode(svg)
-            )),
-        );
-    }
     source.insert("isTracker".to_string(), Value::Bool(false));
     Some(Value::Object(source))
 }

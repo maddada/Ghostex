@@ -141,9 +141,8 @@ export interface GxserverPresentationProject {
   workSource?: {
     /** The id its `info` pinned, which its tickets' keys and link kinds start with. */
     id: string;
+    /** Its name for the workspace; its icon is not on the row (server/src/work_mode/project.rs). */
     name: string;
-    /** A `data:image/svg+xml;base64,…` URL; absent when it has none. */
-    icon?: string;
     /** Whether it is the workspace's primary tracker; false until a command can be picked as one. */
     isTracker: boolean;
   };

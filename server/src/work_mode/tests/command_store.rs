@@ -19,6 +19,7 @@ mod another_program;
 mod cards;
 mod links;
 mod published;
+mod session_links;
 mod stored_values;
 
 /// The store's set of a typed path, as these tests read it: its result, whose errors already left

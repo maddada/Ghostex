@@ -328,12 +328,14 @@ impl SessionLink {
                     },
                 )
             }
+            // A ticket command's ticket it can't ask about right now (`unavailable`, its last
+            // title kept) is grey like one not read yet, not green like open work.
             SessionLinkKind::Other => (
                 SessionLinkGlyph::Ticket,
                 match state {
                     _ if self.finished => SessionLinkTone::Done,
+                    Some("unavailable") | None => SessionLinkTone::Draft,
                     Some(_) => SessionLinkTone::Open,
-                    None => SessionLinkTone::Draft,
                 },
             ),
         }
@@ -1025,6 +1027,12 @@ mod tests {
         assert_eq!(
             ticket.glyph(),
             (SessionLinkGlyph::Ticket, SessionLinkTone::Done)
+        );
+        ticket.finished = false;
+        ticket.state = Some("unavailable".to_string());
+        assert_eq!(
+            ticket.glyph(),
+            (SessionLinkGlyph::Ticket, SessionLinkTone::Draft)
         );
         assert_eq!(kind_of("linear"), SessionLinkKind::Linear);
     }

@@ -25,7 +25,7 @@ fn token_of(id: &str) -> String {
 
 /// Pins the fixture in `workspace` as `id`, a key-number source, with its `token` and the `mode`
 /// it answers in stored. Returns the workspace's id.
-fn pin(store: &Store, workspace: &str, id: &str, mode: &str) -> String {
+pub(super) fn pin(store: &Store, workspace: &str, id: &str, mode: &str) -> String {
     let sources = record_pinning(store, workspace, id, IdFormat::KeyNumber);
     save_work_sources(&store.db, &sources).expect("pinned");
     let workspace_id = store.ws(workspace);
@@ -44,7 +44,7 @@ fn store_values(paths: &GxserverPaths, workspace_id: &str, id: &str, token: &str
 }
 
 /// A project in `workspace_id`, then every project placed in its workspace.
-fn project_in(store: &Store, workspace_id: &str, extra: Value) -> Value {
+pub(super) fn project_in(store: &Store, workspace_id: &str, extra: Value) -> Value {
     let path = store
         .paths
         .app_data_dir
@@ -88,7 +88,7 @@ fn project_id(project: &Value) -> &str {
 
 /// A session of `project` whose branch names `ACM-12`, in a project Issues Workflow is on for (a
 /// Linear key applies to it).
-fn session_on_acm_12(project: &Value) -> Value {
+pub(super) fn session_on_acm_12(project: &Value) -> Value {
     set_branch(project["path"].as_str().unwrap(), "acm-12-spec");
     remember_project_linear_key(project_id(project), Some(1));
     session(project_id(project), "S1", json!({}))
@@ -105,7 +105,7 @@ fn plan_of(workspace_id: &str, id: &str) -> JobPlan {
     }
 }
 
-fn exact_read(store: &Store, workspace_id: &str, id: &str, ids: &[&str]) -> ExactRead {
+pub(super) fn exact_read(store: &Store, workspace_id: &str, id: &str, ids: &[&str]) -> ExactRead {
     ExactRead {
         plan: plan_of(workspace_id, id),
         ids: ids.iter().map(|id| id.to_string()).collect(),
@@ -1252,9 +1252,11 @@ fn a_ticket_command_turns_issues_workflow_on_and_shows_on_the_project_row() {
     assert_eq!(source["id"], "card-row");
     assert_eq!(source["name"], "Fixture");
     assert_eq!(source["isTracker"], false);
-    assert!(source["icon"]
-        .as_str()
-        .is_some_and(|icon| icon.starts_with("data:image/svg+xml;base64,")));
+    // The row carries no icon (CDXC:WorkMode 2026-11-03 in work_mode/project.rs).
+    assert_eq!(
+        source.as_object().unwrap().keys().collect::<Vec<_>>(),
+        ["id", "name", "isTracker"]
+    );
 
     // A project in a workspace without one has neither.
     let bare = project_in(&store, &store.ws("ws-bare"), json!({}));

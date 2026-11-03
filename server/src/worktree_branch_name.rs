@@ -126,12 +126,14 @@ fn reference_key(link: &SessionLinkRef) -> String {
     match link {
         SessionLinkRef::Github { number, .. } => number.to_string(),
         SessionLinkRef::Linear { identifier } => identifier.to_ascii_lowercase(),
+        SessionLinkRef::Command { id, .. } => id.to_ascii_lowercase(),
     }
 }
 
 /// The title Work mode's caches already hold for `link`, without asking anyone.
 fn cached_title(link: &SessionLinkRef, scope: &ReferenceScope) -> Option<String> {
     let title = match link {
+        SessionLinkRef::Command { .. } => None,
         SessionLinkRef::Linear { identifier } => {
             let fingerprint = crate::work_mode::project_linear_key(scope.project_id)?;
             crate::work_mode::cached_linear_issue(fingerprint, identifier)?.title

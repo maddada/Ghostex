@@ -1,13 +1,17 @@
-//! What a session link points at: a GitHub PR, a GitHub issue or a Linear issue, named by a key
-//! that stays the same whichever way the link was written (`#318` from the session's repo, a full
-//! URL, `ghx-142`).
+//! What a session link points at: a GitHub PR, a GitHub issue, a Linear issue or a ticket of the
+//! workspace's ticket command, named by a key that stays the same whichever way the link was
+//! written (`#318` from the session's repo, a full URL, `ghx-142`).
 
-/// The three kinds a session can be linked to.
+use crate::work_mode::{work_source, CommandSourceId, WorkSourceId};
+
+/// The kinds a session can be linked to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum SessionLinkKind {
     PullRequest,
     Issue,
     Linear,
+    /// A ticket command's ticket; its wire kind and key prefix are the command's id.
+    Command(CommandSourceId),
 }
 
 impl SessionLinkKind {
@@ -16,6 +20,7 @@ impl SessionLinkKind {
             Self::PullRequest => "pullRequest",
             Self::Issue => "issue",
             Self::Linear => "linear",
+            Self::Command(source) => source.as_str(),
         }
     }
 
@@ -24,6 +29,7 @@ impl SessionLinkKind {
             Self::PullRequest => "pr",
             Self::Issue => "issue",
             Self::Linear => "linear",
+            Self::Command(source) => source.as_str(),
         }
     }
 }
@@ -39,6 +45,11 @@ pub(crate) enum SessionLinkRef {
     },
     /// `GHX-142`, uppercase.
     Linear { identifier: String },
+    /// `ACM-12` of the ticket command that pinned `source`, as the command reads it.
+    ///
+    /// CDXC:SessionLinks 2026-11-03 WHY:
+    /// A command ticket joins a session's links only through its branch or `/api/setSessionWorkLinks` (`workLinks.tickets`), which refuses an id holding a value the workspace stores; it is never stored among `sessionLinks.items` (`/api/restoreSessionLink` adds no command ticket back by hand) and its last title is kept in the command's own titles table, which goes with its workspace, never in `sessionLinks.read`.
+    Command { source: CommandSourceId, id: String },
 }
 
 impl SessionLinkRef {
@@ -52,7 +63,7 @@ impl SessionLinkRef {
     pub(crate) fn in_repos(&self, repos: &[String]) -> bool {
         match self {
             Self::Github { repo, .. } => repos.iter().any(|own| own == repo),
-            Self::Linear { .. } => true,
+            Self::Linear { .. } | Self::Command { .. } => true,
         }
     }
 
@@ -60,17 +71,19 @@ impl SessionLinkRef {
         match self {
             Self::Github { kind, .. } => *kind,
             Self::Linear { .. } => SessionLinkKind::Linear,
+            Self::Command { source, .. } => SessionLinkKind::Command(*source),
         }
     }
 
-    /// `pr:owner/repo#318`, `issue:owner/repo#305` or `linear:GHX-142`: what storage, the removed
-    /// list and clients name a link by.
+    /// `pr:owner/repo#318`, `issue:owner/repo#305`, `linear:GHX-142` or `fixture:ACM-12` (a
+    /// ticket command's id first): what storage, the removed list and clients name a link by.
     pub(crate) fn key(&self) -> String {
         match self {
             Self::Github { kind, repo, number } => {
                 format!("{}:{repo}#{number}", kind.key_prefix())
             }
             Self::Linear { identifier } => format!("linear:{identifier}"),
+            Self::Command { source, id } => format!("{}:{id}", source.as_str()),
         }
     }
 
@@ -93,7 +106,11 @@ impl SessionLinkRef {
                     number,
                 })
             }
-            _ => None,
+            prefix => {
+                let source = CommandSourceId::known(prefix)?;
+                let id = work_source(WorkSourceId::Command(source)).parse_ref(rest)?;
+                Some(Self::Command { source, id })
+            }
         }
     }
 
@@ -108,7 +125,7 @@ impl SessionLinkRef {
                     "issues"
                 }
             )),
-            Self::Linear { .. } => None,
+            Self::Linear { .. } | Self::Command { .. } => None,
         }
     }
 
@@ -124,6 +141,7 @@ impl SessionLinkRef {
                 }
             }
             Self::Linear { identifier } => identifier.clone(),
+            Self::Command { id, .. } => id.clone(),
         }
     }
 }
