@@ -7,7 +7,7 @@
 
 /// CDXC:RemoteMachines 2026-11-03 WHY:
 /// A token another computer holds once opened every `RemoteAllowed` endpoint (about 200: extensions, git pushes, project deletion, automations, secrets, settings), and the relay forwarded any path, so A could reach B's local-only controls and relay on to C. Both now go through this one list, taken from the CLI verbs' own calls (grep `call_gxserver_rpc` in ghostex_cli/agents, sessions, wait, session_chat_rpc, actions/dispatch.rs and coordinator/threads.rs, plus server/coordinator_remote_runtime.rs). A new verb that should work across computers adds its endpoints here; `scope_tests` keeps every entry a `RemoteAllowed` endpoint.
-/// SEE-ALSO: server/src/server/route_http/dispatch.rs (the gate), relay.rs (the forward), peer_listener.rs (the way back).
+/// SEE-ALSO: server/src/server/route_http/dispatch.rs (the gate), relay.rs (the forward), peer_listener.rs (the way back), server/src/voice_agent/computers.rs (Voice mode on another computer uses these same endpoints).
 pub(crate) const PEER_ALLOWED_ENDPOINTS: &[&str] = &[
     // Reads: the session list, projects, agent types, the presentation the report checker reads.
     "/api/health/server",

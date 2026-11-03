@@ -164,6 +164,11 @@ impl FocusScope {
 
     /// Whether an announcement about another session's change reaches this call.
     pub(super) fn wants(&self, announcement: &Announcement) -> bool {
+        // A call about one session is about one of this computer's (`from_sessions` takes a
+        // `projectId:sessionId` ref), never another computer's.
+        if announcement.server_id.is_some() {
+            return false;
+        }
         let reference = format!("{}:{}", announcement.project_id, announcement.session_id);
         if reference == self.reference() {
             return true;
@@ -305,6 +310,7 @@ mod tests {
             has_chat: true,
             thread_of: None,
             threads: None,
+            computer: None,
         }
     }
 
@@ -327,6 +333,7 @@ mod tests {
             kind,
             project_id: project_id.to_string(),
             session_id: session_id.to_string(),
+            server_id: None,
             model_text: None,
         }
     }

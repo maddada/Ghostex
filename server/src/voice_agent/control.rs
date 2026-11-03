@@ -12,8 +12,8 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
+use super::computers;
 use super::focus::Purpose;
-use super::loopback;
 use super::sessions::{self, Match, SessionInfo, VoiceState};
 use super::tools::{self, ToolMemory, ToolOutcome};
 use crate::server::AppState;
@@ -57,7 +57,8 @@ pub(super) fn stop_target(
         }
         Match::Ambiguous(candidates) => Ok(StopTarget::Unsure(candidates)),
         Match::None => Err(format!(
-            "No open session matches \"{query}\". Call list_sessions to see their titles."
+            "{} \"{query}\". Call list_sessions to see their titles.",
+            tools::NO_MATCH
         )),
     }
 }
@@ -75,8 +76,9 @@ pub(super) async fn stop_session(
         if query.is_empty() {
             return Err("Say which session.".to_string());
         }
-        let all = sessions::list_sessions_async(state).await?;
-        stop_target(memory, &all, &query)?
+        let (all, unavailable) = sessions::list_everywhere_async(state).await?;
+        stop_target(memory, &all, &query)
+            .map_err(|error| computers::with_unreachable(error, &unavailable))?
     };
     let session = match target {
         StopTarget::Sure(session) => session,
@@ -90,8 +92,9 @@ pub(super) async fn stop_session(
             "note": "It is asleep, so it isn't running anything to stop.",
         }));
     }
-    loopback::call(
+    computers::call(
         state,
+        session.computer.as_ref(),
         "/api/interruptSessionChat",
         json!({"projectId": session.project_id, "sessionId": session.session_id}),
         Duration::from_secs(20),
@@ -297,8 +300,10 @@ pub(super) async fn start_coordinator(state: &Arc<AppState>, args: &Value) -> To
         Ok(project) => project,
         Err(error) => return tools::failure(error),
     };
-    let hud = match loopback::call(
+    let computer = project.computer.as_ref();
+    let hud = match computers::call(
         state,
+        computer,
         "/api/readSidebarHud",
         json!({}),
         Duration::from_secs(10),
@@ -332,8 +337,9 @@ pub(super) async fn start_coordinator(state: &Arc<AppState>, args: &Value) -> To
             model: None,
             effort: None,
         });
-    let created = match loopback::call(
+    let created = match computers::call(
         state,
+        computer,
         "/api/createAgentSession",
         params,
         Duration::from_secs(30),
@@ -348,8 +354,12 @@ pub(super) async fn start_coordinator(state: &Arc<AppState>, args: &Value) -> To
     let (Some(project_id), Some(session_id)) = (field("projectId"), field("sessionId")) else {
         return tools::failure("gxserver created no session.");
     };
-    if let Err(error) = loopback::call(
+    if let Some(computer) = computer {
+        computers::forget(state, &computer.server_id);
+    }
+    if let Err(error) = computers::call(
         state,
+        computer,
         "/api/startSessionProvider",
         json!({"projectId": project_id, "sessionId": session_id}),
         Duration::from_secs(60),
@@ -372,10 +382,13 @@ pub(super) async fn start_coordinator(state: &Arc<AppState>, args: &Value) -> To
         "coordinator": true,
         "project": project.name,
         "agent": agent,
-        "ref": format!("{project_id}:{session_id}"),
+        "ref": tools::new_session_ref(computer, &project_id, &session_id),
         // gxserver queued the first message (the skill line, then this) before it answered.
         "firstMessageQueued": !message.is_empty(),
     });
+    if let Some(computer) = computer {
+        output["computer"] = json!(computer.name);
+    }
     if let Some(error) = created
         .get("coordinatorRoleError")
         .and_then(Value::as_str)

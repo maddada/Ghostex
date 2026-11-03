@@ -100,6 +100,13 @@ pub(crate) fn parse_focus(value: &Value, machine: &MachineId) -> Option<VoiceFoc
     })
 }
 
+/// The connected machine a tool frame's `computerSession` is on, from its gxserver server id.
+fn computer_session_machine(session: &Value) -> Option<MachineId> {
+    let server_id = session["serverId"].as_str()?;
+    crate::app::remote_conn::connected_computers::gpui_remote_machine_for_server_id(server_id)
+        .map(MachineId::Remote)
+}
+
 /// The scope a `ready` frame names.
 pub(crate) fn ready_focus(event: &Value, machine: &MachineId) -> ReadyFocus {
     match event.get("focus") {
@@ -493,18 +500,27 @@ impl GhostexGpuiApp {
     /// with `clientRemote=1`): shown here, as this computer's gxserver shows it for a call that runs
     /// here. `now` (the user asked to see it) always shows; `follow` (an all-sessions call touched it)
     /// shows unless the user is typing.
+    ///
+    /// A session of another connected computer comes as `computerSession`, with that computer's
+    /// server id, from a call on any computer: the call's gxserver can only switch its own screen.
     pub(super) fn follow_remote_voice_call_tool(
         &mut self,
         event: &Value,
         cx: &mut gpui::Context<Self>,
     ) {
-        if self.voice_agent.machine.is_local() {
+        let elsewhere = &event["computerSession"];
+        if elsewhere.is_null() && self.voice_agent.machine.is_local() {
             return;
         }
         if !remote_show_wanted(event["show"].as_str(), super::typing::user_is_typing()) {
             return;
         }
-        if let Some(shown) = parse_focus(&event["session"], &self.voice_agent.machine) {
+        let shown = if elsewhere.is_null() {
+            parse_focus(&event["session"], &self.voice_agent.machine)
+        } else {
+            computer_session_machine(elsewhere).and_then(|machine| parse_focus(elsewhere, &machine))
+        };
+        if let Some(shown) = shown {
             self.show_voice_call_session(&shown.key, cx);
         }
     }

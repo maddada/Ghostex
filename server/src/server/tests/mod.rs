@@ -6,6 +6,7 @@ mod helpers;
 mod project_directories;
 mod protocol_and_routes;
 mod renderer_and_titles;
+mod voice_remote_sessions;
 #[cfg(unix)]
 mod work_source_routes;
 #[cfg(unix)]

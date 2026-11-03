@@ -67,6 +67,8 @@ pub(super) struct Announcement {
     pub(super) kind: &'static str,
     pub(super) project_id: String,
     pub(super) session_id: String,
+    /// The connected computer the session runs on, when it is not this one.
+    pub(super) server_id: Option<String>,
     /// What the model is told instead of `text`, when it needs more (a focused call's finished
     /// turn carries the reply).
     pub(super) model_text: Option<String>,
@@ -607,17 +609,22 @@ impl Conversation {
                         }
                     }
                     let finished_focus = announcement.kind == "turnFinished"
+                        && announcement.server_id.is_none()
                         && self.focus.as_ref().is_some_and(|scope| {
                             scope.project_id == announcement.project_id
                                 && scope.session_id == announcement.session_id
                         });
-                    self.to_client(json!({
+                    let mut frame = json!({
                         "type": "announcement",
                         "text": announcement.text,
                         "kind": announcement.kind,
                         "projectId": announcement.project_id,
                         "sessionId": announcement.session_id,
-                    }));
+                    });
+                    if let Some(server_id) = &announcement.server_id {
+                        frame["serverId"] = json!(server_id);
+                    }
+                    self.to_client(frame);
                     if finished_focus {
                         self.read_finished_reply(announcement);
                     } else {
@@ -667,13 +674,25 @@ impl Conversation {
                 });
                 if outcome.ok {
                     if let Some(session) = super::show::shown_session(&name, &outcome.output) {
-                        finished["session"] = session;
-                        // A client on another computer shows the session itself.
-                        if self.memory.client_remote() {
+                        // A session on another computer goes in a field of its own, so a client
+                        // that would open it by its ids on this computer (the phone's chip, an
+                        // older desktop) leaves it alone; the desktop shows it on that computer.
+                        if session.get("serverId").is_some() {
+                            finished["computerSession"] = session;
                             if name == "show_session" {
                                 finished["show"] = json!("now");
                             } else if self.focus.is_none() {
                                 finished["show"] = json!("follow");
+                            }
+                        } else {
+                            finished["session"] = session;
+                            // A client on another computer shows the session itself.
+                            if self.memory.client_remote() {
+                                if name == "show_session" {
+                                    finished["show"] = json!("now");
+                                } else if self.focus.is_none() {
+                                    finished["show"] = json!("follow");
+                                }
                             }
                         }
                     }
@@ -1249,6 +1268,7 @@ impl Conversation {
                 kind: "sessionClosed",
                 project_id: scope.project_id.clone(),
                 session_id: scope.session_id.clone(),
+                server_id: None,
                 model_text: Some(focus::closed_message(&scope.title)),
             });
         }

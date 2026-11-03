@@ -141,7 +141,12 @@ fn collect(state: &AppState, project_id: &str, session_id: &str) -> Vec<Asked> {
     asked
 }
 
+/// The open forms and pages of `session`. Those of a session on another computer are in that
+/// computer's database and transcripts, which no endpoint another computer may use reads.
 async fn collect_async(state: &Arc<AppState>, session: &SessionInfo) -> Vec<Asked> {
+    if session.computer.is_some() {
+        return Vec::new();
+    }
     let state = state.clone();
     let (project_id, session_id) = (session.project_id.clone(), session.session_id.clone());
     tokio::task::spawn_blocking(move || collect(&state, &project_id, &session_id))
@@ -543,6 +548,9 @@ pub(super) async fn answer(
     session: &SessionInfo,
     args: &Value,
 ) -> Result<Value, String> {
+    if let Some(computer) = &session.computer {
+        return Err(format!("Question forms and pages in a chat on {} can't be answered from here, so nothing was sent. The user can answer them in Ghostex.", computer.name));
+    }
     let asked = collect_async(state, session).await;
     if asked.is_empty() {
         return Err("Nothing is waiting for an answer in that session any more.".to_string());

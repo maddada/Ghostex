@@ -14,7 +14,9 @@ pub(crate) use peer_listener::{peer_listener_port, set_peer_listener_port};
 pub(crate) use registry::{
     authorize_peer_token, find, is_server_id, list, ConnectedComputer, PeerAuthorization,
 };
-pub(crate) use relay::{parse_relay_path, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX};
+pub(crate) use relay::{
+    access_off_message, parse_relay_path, peer_refusal, relay, relay_base_url, RELAY_ROUTE_PREFIX,
+};
 pub(crate) use scope::{is_peer_allowed, PEER_ALLOWED_ENDPOINTS};
 
 #[cfg(test)]

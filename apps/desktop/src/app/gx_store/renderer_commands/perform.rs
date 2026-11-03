@@ -116,18 +116,33 @@ impl GhostexGpuiApp {
                 Ok(self.gpui_native_resources_snapshot_export(cx))
             }
             RendererVerb::ReadFocusedSession => {
-                // This computer's sessions only: a remote machine's row means nothing to the
-                // gxserver that asks.
+                // This computer's sessions in `focused`/`onScreen`; a connected machine's go in
+                // `focusedElsewhere`/`onScreenElsewhere` with its gxserver's server id, which the
+                // voice agent names it by (server/src/voice_agent/screen.rs). A machine whose id
+                // is not known yet is left out.
                 let focus = self.gx_store.core.focus();
                 let local = |key: &ghostex_gx_core::SessionKey| {
                     key.machine.is_local().then(
                         || json!({ "projectId": key.project_id, "sessionId": key.session_id }),
                     )
                 };
+                let elsewhere = |key: &ghostex_gx_core::SessionKey| {
+                    let server_id =
+                        crate::app::remote_conn::connected_computers::gpui_remote_machine_server_id(
+                            key.machine.remote_id()?,
+                        )?;
+                    Some(json!({
+                        "serverId": server_id,
+                        "projectId": key.project_id,
+                        "sessionId": key.session_id,
+                    }))
+                };
                 Ok(json!({
                     "focused": focus.focused_session.as_ref().and_then(local),
+                    "focusedElsewhere": focus.focused_session.as_ref().and_then(elsewhere),
                     "ok": true,
                     "onScreen": focus.displayed_sessions.iter().filter_map(local).collect::<Vec<_>>(),
+                    "onScreenElsewhere": focus.displayed_sessions.iter().filter_map(elsewhere).collect::<Vec<_>>(),
                 }))
             }
             RendererVerb::UpdateSettingsPatch { patch, keys } => {

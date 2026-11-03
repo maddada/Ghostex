@@ -118,6 +118,7 @@ fn session(project: &str, id: &str, title: &str) -> SessionInfo {
         has_chat: true,
         thread_of: None,
         threads: None,
+        computer: None,
     }
 }
 
@@ -316,6 +317,7 @@ fn announcement(reference: &str, kind: &'static str, text: &str) -> Announcement
         kind,
         project_id: project_id.to_string(),
         session_id: session_id.to_string(),
+        server_id: None,
         model_text: None,
     }
 }

@@ -78,17 +78,12 @@ pub(crate) async fn relay(
         );
     };
     if !computer.agent_access {
-        let message = match computer.off_by {
-            Some(super::registry::OffBy::ThisComputer) | None => format!(
-                "Agent access to {name} is off. Turn on Agent access for {name} in Settings > Remote > Remote machines.",
-                name = computer.name
-            ),
-            Some(super::registry::OffBy::OtherComputer) => format!(
-                "{name} has Agent access for this computer turned off. It is turned back on in {name}'s Settings > Remote > Remote machines.",
-                name = computer.name
-            ),
-        };
-        return refusal(StatusCode::FORBIDDEN, "agentAccessOff", message, request_id);
+        return refusal(
+            StatusCode::FORBIDDEN,
+            "agentAccessOff",
+            access_off_message(&computer),
+            request_id,
+        );
     }
     if method != Method::POST && !(method == Method::GET && forwarded == "/api/health/server") {
         return refusal(
@@ -149,6 +144,20 @@ pub(crate) async fn relay(
                 "{name} didn't answer. Ghostex reconnects it on its own, so try again in a moment."
             ),
             request_id,
+        ),
+    }
+}
+
+/// Why nothing reaches `computer` while its Agent access is off, naming whose switch it is.
+pub(crate) fn access_off_message(computer: &super::ConnectedComputer) -> String {
+    match computer.off_by {
+        Some(super::registry::OffBy::ThisComputer) | None => format!(
+            "Agent access to {name} is off. Turn on Agent access for {name} in Settings > Remote > Remote machines.",
+            name = computer.name
+        ),
+        Some(super::registry::OffBy::OtherComputer) => format!(
+            "{name} has Agent access for this computer turned off. It is turned back on in {name}'s Settings > Remote > Remote machines.",
+            name = computer.name
         ),
     }
 }

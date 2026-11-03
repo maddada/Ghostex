@@ -1,5 +1,5 @@
-//! Spoken announcements: while any voice conversation is open, every session's state is read every
-//! two seconds and a session that finishes its turn or starts waiting on a question or an approval
+//! Spoken announcements: while any voice conversation is open, every session's state (this
+//! computer's and the connected computers', `computers.rs`) is read every two seconds and a session that finishes its turn or starts waiting on a question or an approval
 //! is announced to every open conversation; a call about one session keeps only that session's
 //! (`focus.rs`). Each pass also ends every open call once the voice agent is turned off
 //! (`feature.rs`).
@@ -30,9 +30,10 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
     }
     let state = state.clone();
     tokio::spawn(async move {
-        let mut stable: HashMap<(String, String), VoiceState> = HashMap::new();
-        let mut seen: HashMap<(String, String), VoiceState> = HashMap::new();
-        let mut turn_events: HashMap<(String, String), Option<String>> = HashMap::new();
+        // By session ref, which names the computer too (ids are only unique per computer).
+        let mut stable: HashMap<String, VoiceState> = HashMap::new();
+        let mut seen: HashMap<String, VoiceState> = HashMap::new();
+        let mut turn_events: HashMap<String, Option<String>> = HashMap::new();
         let mut seeded = false;
         loop {
             if registry::count() == 0 {
@@ -57,9 +58,9 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
             }
             if let Ok(rows) = sessions::list_sessions_async(&state).await {
                 let mut lines: Vec<Announcement> = Vec::new();
-                let mut present: HashSet<(String, String)> = HashSet::new();
+                let mut present: HashSet<String> = HashSet::new();
                 for row in &rows {
-                    let key = (row.project_id.clone(), row.session_id.clone());
+                    let key = row.reference();
                     present.insert(key.clone());
                     let known = turn_events.contains_key(&key);
                     let previous_event = turn_events
@@ -74,10 +75,11 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                         stable.insert(key.clone(), row.state);
                         seen.insert(key.clone(), row.state);
                         lines.push(Announcement {
-                            text: format!("\"{}\" finished its turn.", row.title),
+                            text: format!("{} finished its turn.", row.spoken_title()),
                             kind: "turnFinished",
                             project_id: row.project_id.clone(),
                             session_id: row.session_id.clone(),
+                            server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
                             model_text: None,
                         });
                         continue;
@@ -96,15 +98,15 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                     let was_awake = !matches!(before, None | Some(VoiceState::Sleeping));
                     let (text, kind) = match row.state {
                         VoiceState::Finished if was_busy && row.turn_event.is_none() => (
-                            format!("\"{}\" finished its turn.", row.title),
+                            format!("{} finished its turn.", row.spoken_title()),
                             "turnFinished",
                         ),
                         VoiceState::WaitingOnQuestion if was_awake => (
-                            format!("\"{}\" is waiting on a question.", row.title),
+                            format!("{} is waiting on a question.", row.spoken_title()),
                             "waitingOnQuestion",
                         ),
                         VoiceState::WaitingOnApproval if was_awake => (
-                            format!("\"{}\" is waiting for your approval.", row.title),
+                            format!("{} is waiting for your approval.", row.spoken_title()),
                             "waitingOnApproval",
                         ),
                         _ => continue,
@@ -114,6 +116,7 @@ pub(super) fn ensure_running(state: &Arc<AppState>) {
                         kind,
                         project_id: row.project_id.clone(),
                         session_id: row.session_id.clone(),
+                        server_id: row.computer.as_ref().map(|c| c.server_id.clone()),
                         model_text: None,
                     });
                 }

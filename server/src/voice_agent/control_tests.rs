@@ -27,6 +27,7 @@ fn session(project: &str, id: &str, title: &str) -> SessionInfo {
         has_chat: true,
         thread_of: None,
         threads: None,
+        computer: None,
     }
 }
 

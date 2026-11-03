@@ -13,6 +13,9 @@ use serde_json::{json, Value};
 use crate::constants::GXSERVER_PROTOCOL_VERSION;
 use crate::server::AppState;
 
+/// How an error starts when the request got no answer at all.
+pub(super) const NO_ANSWER: &str = "gxserver did not answer";
+
 /// POSTs `params` to `path` and answers the response's `result`, or the server's error message.
 pub(super) async fn call(
     state: &Arc<AppState>,
@@ -42,7 +45,7 @@ pub(super) async fn call(
             .send(body.to_string());
         let response = match outcome {
             Ok(response) => response,
-            Err(error) => return Err(format!("gxserver did not answer: {error}")),
+            Err(error) => return Err(format!("{NO_ANSWER}: {error}")),
         };
         let body: Value = crate::http_agent::read_json(response)
             .map_err(|error| format!("gxserver sent an unreadable answer: {error}"))?;

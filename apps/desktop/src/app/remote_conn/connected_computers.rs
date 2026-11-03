@@ -63,6 +63,22 @@ struct RegistrationOutcome {
     close_reverse: bool,
 }
 
+/// The gxserver server id of a connected remote machine, once its registration learned it.
+pub(crate) fn gpui_remote_machine_server_id(remote_machine_id: &str) -> Option<String> {
+    state()
+        .get(remote_machine_id)
+        .and_then(|machine| machine.server_id.clone())
+}
+
+/// The connected remote machine whose gxserver has `server_id`, the way gxserver names another
+/// computer's session (`serverId:projectId:sessionId`).
+pub(crate) fn gpui_remote_machine_for_server_id(server_id: &str) -> Option<String> {
+    state()
+        .iter()
+        .find(|(_, machine)| machine.server_id.as_deref() == Some(server_id))
+        .map(|(machine_id, _)| machine_id.clone())
+}
+
 /// The Agent access switch of a machine in Settings > Remote > Remote machines (on unless the
 /// user turned it off).
 pub(crate) fn gpui_remote_machine_agent_access(remote_machine_id: &str) -> bool {
@@ -564,6 +580,24 @@ mod tests {
             release_connection(&mut registration, "omarchy", 50002),
             None
         );
+    }
+
+    #[test]
+    fn a_machine_and_its_gxserver_server_id_name_each_other() {
+        state()
+            .entry("remote-voice-test".to_string())
+            .or_default()
+            .server_id = Some("S9voice".into());
+        assert_eq!(
+            gpui_remote_machine_server_id("remote-voice-test").as_deref(),
+            Some("S9voice")
+        );
+        assert_eq!(
+            gpui_remote_machine_for_server_id("S9voice").as_deref(),
+            Some("remote-voice-test")
+        );
+        assert_eq!(gpui_remote_machine_for_server_id("S9unknown"), None);
+        state().remove("remote-voice-test");
     }
 
     #[test]
