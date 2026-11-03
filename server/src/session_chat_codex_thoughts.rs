@@ -125,6 +125,7 @@ mod tests {
             async_questions: None,
             queued: false,
             api_error: None,
+            custom_message: None,
         }
     }
 
