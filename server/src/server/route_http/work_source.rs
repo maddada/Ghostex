@@ -12,7 +12,9 @@ use crate::work_mode::{
     CheckFailure, CommandEnv, CommandFailure, SourcePath, WorkSourceChange, WorkSourceError,
     WorkspaceCommand,
 };
-use crate::workspaces::{find_workspace_id, read_sidebar_workspaces, DEFAULT_WORKSPACE_ID};
+use crate::workspaces::{
+    find_workspace_id, read_sidebar_workspaces, DEFAULT_WORKSPACE_ID, NO_SUCH_WORKSPACE,
+};
 
 use super::*;
 
@@ -62,10 +64,6 @@ pub(super) async fn route_work_source_http(
         ),
     })
 }
-
-/// No workspace has the id or name a request gave. It repeats nothing the request sent: a stale
-/// name can spell a credential the workspace stored, and names are never checked against them.
-const NO_SUCH_WORKSPACE: &str = "No workspace matched that id or name.";
 
 /// The workspace a request names (`workspaceId`, an id or a name), else the default workspace. Its
 /// errors hold nothing the request sent.

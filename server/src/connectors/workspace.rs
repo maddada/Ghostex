@@ -108,7 +108,32 @@ pub(crate) fn resolve_workspace(
     let Some(reference) = reference else {
         return Ok(DEFAULT_WORKSPACE_ID.to_string());
     };
-    find_workspace_id(&read_workspaces(paths)?, reference).ok_or_else(|| {
-        DomainStateError::bad_request(format!("There is no workspace called \"{reference}\"."))
-    })
+    named_workspace(&read_workspaces(paths)?, reference)
+}
+
+/// The workspace `reference` names among `workspaces`. Its error repeats nothing typed: it goes to
+/// the request log, and a stale name can spell a credential a workspace stored.
+fn named_workspace(workspaces: &Value, reference: &str) -> Result<String, DomainStateError> {
+    find_workspace_id(workspaces, reference)
+        .ok_or_else(|| DomainStateError::bad_request(crate::workspaces::NO_SUCH_WORKSPACE))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn an_unknown_workspace_is_named_in_fixed_words() {
+        let workspaces = json!({ "workspaces": { "ws-known": { "name": "Work" } } });
+        let error = named_workspace(&workspaces, "ws-typed-ref-66").expect_err("unknown");
+        assert_eq!(error.code, "badRequest");
+        assert_eq!(error.message, crate::workspaces::NO_SUCH_WORKSPACE);
+        assert!(!error.message.contains("ws-typed-ref-66"));
+        assert_eq!(
+            named_workspace(&workspaces, " work ").expect("by name"),
+            "ws-known"
+        );
+    }
 }

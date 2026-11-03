@@ -321,9 +321,8 @@ fn required_workspace(
     params: &Map<String, Value>,
 ) -> Result<String, DomainStateError> {
     let reference = required_text(params, "workspaceId")?;
-    find_workspace_id(workspaces, &reference).ok_or_else(|| {
-        DomainStateError::bad_request(format!("No workspace matched \"{reference}\"."))
-    })
+    find_workspace_id(workspaces, &reference)
+        .ok_or_else(|| DomainStateError::bad_request(crate::workspaces::NO_SUCH_WORKSPACE))
 }
 
 fn required_text(params: &Map<String, Value>, key: &str) -> Result<String, DomainStateError> {

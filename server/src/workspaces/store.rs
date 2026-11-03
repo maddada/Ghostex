@@ -114,6 +114,11 @@ pub fn workspace_claude_account_id(state: &Value, workspace_id: &str) -> Option<
         .map(str::to_string)
 }
 
+/// What a request is told when no workspace has the id or name it gave. It repeats nothing the
+/// request sent: every domain error's message goes to the request log, and a stale name can
+/// spell a credential the workspace stored.
+pub const NO_SUCH_WORKSPACE: &str = "No workspace matched that id or name.";
+
 /// The workspace `reference` names: a workspace id, else a workspace name (any case), so the
 /// `ghostex workspace` verbs can take either.
 pub fn find_workspace_id(state: &Value, reference: &str) -> Option<String> {

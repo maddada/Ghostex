@@ -62,6 +62,18 @@ impl Routes {
         (status, response_json(response.response).await)
     }
 
+    /// `call` through the whole request path, request log included.
+    async fn logged_call(&self, path: &str, params: Value) -> (StatusCode, Value) {
+        let response = handle_http_request(
+            self.state.clone(),
+            rpc_request(path, &self.token, json!({ "params": params })),
+        )
+        .await
+        .expect("answered");
+        let status = response.status();
+        (status, response_json(response).await)
+    }
+
     async fn workspace(&self, name: &str) -> String {
         let (status, body) = self
             .call("/api/createWorkspace", json!({ "name": name }))
@@ -1242,6 +1254,45 @@ async fn an_unknown_workspace_is_never_repeated_back() {
     assert_eq!(logged.len(), 4, "{logged:?}");
     for error in &logged {
         assert!(!error.contains("abc123"), "{error}");
+    }
+}
+
+/// The tracker and workspace routes answer a workspace they can't find in the same fixed words,
+/// never repeating the typed reference in the answer or the request log.
+#[tokio::test]
+async fn the_tracker_and_workspace_routes_name_no_typed_workspace() {
+    let routes = Routes::new();
+    let typed = "ws-typed-ref-55";
+    let calls = [
+        ("/api/readWorkTracker", json!({ "workspaceId": typed })),
+        (
+            "/api/setWorkTracker",
+            json!({ "workspaceId": typed, "tracker": "github" }),
+        ),
+        (
+            "/api/updateWorkspace",
+            json!({ "workspaceId": typed, "name": "Work" }),
+        ),
+        ("/api/deleteWorkspace", json!({ "workspaceId": typed })),
+        (
+            "/api/moveMachineToWorkspace",
+            json!({ "workspaceId": typed, "machineId": "machine-1" }),
+        ),
+    ];
+    for (path, params) in &calls {
+        let (status, body) = routes.logged_call(path, params.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{path}: {body}");
+        assert_eq!(
+            error_text(&body),
+            "No workspace matched that id or name.",
+            "{path}"
+        );
+        assert!(!body.to_string().contains(typed), "{path}: {body}");
+    }
+    let logged = logged_errors(&routes);
+    assert_eq!(logged.len(), calls.len(), "{logged:?}");
+    for error in &logged {
+        assert!(!error.contains(typed), "{error}");
     }
 }
 
