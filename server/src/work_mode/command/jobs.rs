@@ -359,8 +359,8 @@ fn project_placed_in(db: &rusqlite::Connection, project_id: &str, workspace_id: 
 pub(crate) fn prepare(job: &ExactRead) -> Option<PreparedRun> {
     let (plan, paths) = (&job.plan, &job.paths);
     let db = crate::storage::open_gxserver_database(paths).ok()?;
-    let writer = hold_work_source_writer();
-    let placement = crate::domain::repository::project::hold_project_placement();
+    let writer = hold_work_source_writer().ok()?;
+    let placement = crate::domain::repository::project::hold_project_placement().ok()?;
     if !plan_holds(job, &db) {
         return None;
     }
@@ -383,11 +383,13 @@ pub(crate) fn commit_if_current(job: &ExactRead, effects: impl FnOnce()) -> bool
     let Ok(db) = crate::storage::open_gxserver_database(&job.paths) else {
         return false;
     };
-    let _writer = hold_work_source_writer();
+    let Ok(_writer) = hold_work_source_writer() else {
+        return false;
+    };
     // Released before `effects`, which need only the store's writer lock.
-    let holds = {
-        let _placement = crate::domain::repository::project::hold_project_placement();
-        plan_holds(job, &db)
+    let holds = match crate::domain::repository::project::hold_project_placement() {
+        Ok(_placement) => plan_holds(job, &db),
+        Err(_) => false,
     };
     if !holds {
         return false;

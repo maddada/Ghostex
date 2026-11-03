@@ -105,6 +105,7 @@ pub(crate) fn store_team_connection(
             credentials.insert(CREDENTIALS_KEY.to_string(), Value::Object(connections));
         })
     })
+    .map_err(|error| std::io::Error::other(error.message))?
 }
 
 /// Forgets one workspace's connection. Returns whether there was one.
@@ -128,6 +129,7 @@ pub(crate) fn remove_team_connection(
             removed
         })
     })
+    .map_err(|error| std::io::Error::other(error.message))?
 }
 
 #[cfg(test)]

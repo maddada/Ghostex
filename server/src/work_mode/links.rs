@@ -157,11 +157,11 @@ pub(crate) fn with_checked_ticket_links<T>(
     let requested = requested.as_object().ok_or_else(|| {
         DomainStateError::bad_request("tickets must map a ticket command's id to its ticket IDs.")
     })?;
-    let _writer = hold_work_source_writer();
+    let _writer = hold_work_source_writer()?;
     // Then the placement lock, which every change to a project's workspace takes
     // (`DomainRepository::update_project`), held from this read through the write: so the link is
     // written while the session's project is still in the workspace it was checked for.
-    let _placement = crate::domain::repository::project::hold_project_placement();
+    let _placement = crate::domain::repository::project::hold_project_placement()?;
     let workspace_id = &session_workspace()?;
     let stored = stored_values(db, paths, workspace_id).map_err(|error| match error {
         WorkSourceError::Storage(error) => error,

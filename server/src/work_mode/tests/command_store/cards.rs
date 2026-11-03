@@ -905,7 +905,7 @@ fn a_job_planned_before_a_change_never_runs() {
     let workspace_id = pin(&store, "ws-a", "card-stale", "good");
     let project = project_in(&store, &workspace_id, json!({}));
     let job = exact_read(&store, &workspace_id, "card-stale", &["ACM-12"]);
-    change_work_source_config(&workspace_id, || {});
+    change_work_source_config(&workspace_id, || {}).expect("changed");
     run_exact_read(&job);
     assert!(calls(&store, "card-stale").is_empty());
     assert!(matches!(
@@ -943,6 +943,7 @@ fn a_change_waits_for_the_command_to_start_and_the_job_drops_its_answer() {
             change_work_source_config(&workspace_id, || {
                 store_values(&paths, &workspace_id, "card-locked", "tok-new", "good");
             })
+            .expect("changed")
         })
     };
     assert!(calls(&store, "card-locked").is_empty());
@@ -1054,7 +1055,7 @@ fn a_job_that_panics_holding_a_slot_and_the_lock_frees_both() {
         Some(CachedTicket::Found(_))
     ));
     assert!(calls(&store, "card-held") == ["list"]);
-    in_background(|| change_work_source_config("card-held-unrelated", || {}))
+    in_background(|| change_work_source_config("card-held-unrelated", || {}).expect("changed"))
         .recv_timeout(HANDSHAKE)
         .expect("the lock is free");
 }

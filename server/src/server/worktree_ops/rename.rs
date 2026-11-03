@@ -607,7 +607,7 @@ pub(crate) fn apply_renamed_worktree_project_state(
     */
     // Before the transaction, in the lock order (placement, then SQLite), and through its commit:
     // the re-detected worktree metadata can name a different parent, which moves the project.
-    let placement = crate::domain::repository::project::hold_project_placement();
+    let placement = crate::domain::repository::project::hold_project_placement()?;
     let transaction =
         rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate)
             .map_err(|error| DomainStateError {
