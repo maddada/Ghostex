@@ -323,7 +323,7 @@ impl NativeChatView {
             .into_any_element()
     }
 
-    /// OMP's advisor notes: one 44px row (the info tile, "Advisor notes", the time and one pill
+    /// OMP's advisor notes: one 44px row (the info tile, "Advisor shared notes", the time and one pill
     /// per severity) that opens to the notes, each with its severity word and icon. The core
     /// decides the notes, their order, their words and tones; this lays them out in the one-line
     /// card every transcript card shares (`SINGLE_LINE_CARD`, cards.rs), body like an opened

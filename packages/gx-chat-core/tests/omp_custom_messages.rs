@@ -1,5 +1,5 @@
 //! OMP's own messages in the chat: a finished background job is a tool-call row, another OMP
-//! agent's IRC message is the "Message from" card, advisor notes are one "Advisor notes" card, and
+//! agent's IRC message is the "Message from" card, advisor notes are one "Advisor shared notes" card, and
 //! one of these that reaches the agent after its reply opens a turn of its own, while the working
 //! card's Worked line stays with the prompt's run. Rows from an older gxserver (no
 //! `customMessage`) and OMP types the chat does not draw stay the marker line, and other agents'
@@ -406,7 +406,7 @@ fn advisor_notes_are_one_card_with_a_pill_per_severity_and_the_notes_worst_first
     let model = projected(&advisor("v1", T0 + 11 * MINUTE));
     let card = &model["systemCard"];
     assert_eq!(card["kind"], "advisor");
-    assert_eq!(card["name"], "Advisor notes");
+    assert_eq!(card["name"], "Advisor shared notes");
     assert_eq!(card["time"], "12:41 PM");
     let counts: Vec<(&str, &str)> = card["counts"]
         .as_array()

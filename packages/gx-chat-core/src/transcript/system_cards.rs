@@ -151,8 +151,8 @@ fn advisor_card(details: &Value, markdown: &str) -> Option<Value> {
         .collect();
     Some(json!({
         "kind": "advisor",
-        "name": "Advisor notes",
-        "title": format!("Advisor notes: {}", tally.join(", ")),
+        "name": "Advisor shared notes",
+        "title": format!("Advisor shared notes: {}", tally.join(", ")),
         "counts": counts,
         "notes": drawn,
         "text": markdown,

@@ -2123,7 +2123,7 @@ and hold on the phone) to see the command itself. When one finishes, a row in
 the chat says so, with its exit code only when it did not succeed.
 In an OMP chat, a finished background job is such a row too (click it to read the result),
 a message from another OMP agent is a "Message from" card, and the advisor's notes are one
-"Advisor notes" card whose severity pills (such as "1 concern") show what it holds; click it
+"Advisor shared notes" card whose severity pills (such as "1 concern") show what it holds; click it
 to read the notes. On the phone the card shows the most serious note's severity and how many
 other notes there are.
 Chat follows the app theme by default. In Settings > Interface > Advanced, set Chat theme to Light, Dark, or System for a separate appearance, or choose Follow app to use the main Appearance (`sessionChatTheme`, `sidebarTheme`).
