@@ -210,17 +210,17 @@ pub fn advance(state: &mut ChatState, context: &ChatContext) -> bool {
 }
 
 /// The finished turn whose "Worked for 2m 13s" the working card shows drops it from its own fold, which
-/// reads "Previous turn" beside its counts instead, so the time is on screen once.
+/// reads "Previous turn" beside its counts instead, so the time is on screen once. The OMP wake-ups'
+/// turns after it (`presentation::latest_worked_turn`) keep their own times.
 ///
 /// CDXC:SessionChat 2026-10-18 DECISION:
 /// User (Q257, the card when the turn ends: "worked line"): "then you need to not show the same text up top in the collapsed section that mentions how many tool calls were done in this case if you get me (because otherwise we'd have "worked 2m 13s" twice on screen". While the working card shows a turn's Worked line, that turn's fold drops its time. Then (2026-10-18), seeing the fold left with only its chevron and counts: "Make this say 'Previous turn' on the left side after the chevron". Supersedes the 2026-10-17 fold that showed only its counts.
 fn without_worked_time(items: &mut [TranscriptItem], turn_id: &str) {
-    for item in items.iter_mut().rev() {
-        if let TranscriptItem::CompletedWork { id, label, .. } = item {
-            if id == turn_id {
-                *label = "Previous turn".to_string();
-            }
-            return;
-        }
+    let fold = items.iter_mut().rev().find_map(|item| match item {
+        TranscriptItem::CompletedWork { id, label, .. } if id == turn_id => Some(label),
+        _ => None,
+    });
+    if let Some(label) = fold {
+        *label = "Previous turn".to_string();
     }
 }

@@ -272,7 +272,7 @@ const OMP_WAKE_TYPES: [&str; 5] = [
 /// `OMP_WAKE_TYPES`.
 ///
 /// CDXC:SessionChat 2026-10-30 WHY: in oh-my-pi 18.13.3 these visible deliveries start an agent turn when the agent is idle: `async-result`, `launch-completion` and `lsp-late-diagnostic` through the yield queue's idle flush (`session/yield-queue.ts`, `injectIdle` in `session/agent-session.ts`), an `irc:incoming` through `wakeForIrc` (`session/irc-bridge.ts`), advisor notes and `live-delegation` sent with `triggerTurn` (`session/session-advisors.ts`, `live/controller.ts`), and `collab-prompt` and `skill-prompt` through `promptCustomMessage` (`collab/host.ts`, `modes/skill-command.ts`). They are system rows, not the user rows a Claude wake-up arrives as, so without this the reply after one became the previous turn's final reply and the reply before it folded away. Where OMP adds one without a turn (plan mode, after the user stopped the agent, a preserved advisor card), the row stands between the turns with nothing folded under it. OMP types that never start a turn (`background-tan-dispatch`, `session-transfer`, the display-only IRC relay cards) keep the old placement.
-fn is_omp_wake_kind(message: &ChatMessage) -> bool {
+pub(crate) fn is_omp_wake_kind(message: &ChatMessage) -> bool {
     message.role == ChatRole::System
         && message.custom_message.as_ref().is_some_and(|custom| {
             matches!(

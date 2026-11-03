@@ -1,8 +1,9 @@
 //! OMP's own messages in the chat: a finished background job is a tool-call row, another OMP
 //! agent's IRC message is the "Message from" card, advisor notes are one "Advisor notes" card, and
-//! one of these that reaches the agent after its reply opens a turn of its own. Rows from an older
-//! gxserver (no `customMessage`) and OMP types the chat does not draw stay the marker line, and
-//! other agents' rows are unchanged.
+//! one of these that reaches the agent after its reply opens a turn of its own, while the working
+//! card's Worked line stays with the prompt's run. Rows from an older gxserver (no
+//! `customMessage`) and OMP types the chat does not draw stay the marker line, and other agents'
+//! rows are unchanged.
 //!
 //! The rows are synthetic, written the way oh-my-pi 18.13.3 writes them: `async-result` from
 //! `session/async-job-delivery.ts` and `prompts/tools/async-result.md`, `irc:incoming` from
@@ -16,7 +17,7 @@ use ghostex_gx_chat_core::transcript::presentation::{build, project_message};
 use ghostex_gx_chat_core::transcript::transcript::project_chat_transcript;
 use ghostex_gx_chat_core::transcript::turns::RenderItem;
 use ghostex_gx_chat_core::transcript::work_summary::tool_duration_label;
-use ghostex_gx_chat_core::{ChatContext, ChatState, TranscriptItem};
+use ghostex_gx_chat_core::{ChatContext, ChatState, TranscriptItem, WorkingStrip};
 use serde_json::{json, Value};
 use std::cell::OnceCell;
 use std::collections::HashMap;
@@ -896,4 +897,237 @@ fn job_results_in_another_order_show_the_whole_text() {
     for output in outputs {
         assert!(output.contains("ALPHA RESULT") && output.contains("BETA RESULT"));
     }
+}
+
+/// The chat as the reader sees it once the rows refresh ran: each fold's id and label, and the
+/// working card's line above the composer.
+fn worked_view(state: &mut ChatState) -> (Vec<(String, String)>, Option<String>) {
+    ghostex_gx_chat_core::transcript::refresh(state, &context());
+    let folds = state
+        .transcript_view
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            TranscriptItem::CompletedWork { id, label, .. } => Some((id.clone(), label.clone())),
+            _ => None,
+        })
+        .collect();
+    let card = ghostex_gx_chat_core::extras::working_card::working_card(
+        state,
+        &WorkingStrip::default(),
+        &[],
+    );
+    (folds, card.label)
+}
+
+/// A settled chat of `agent` holding `rows`, each with its transcript line's byte offset.
+fn chat_state(agent: &str, rows: &[ChatMessage]) -> ChatState {
+    let mut state = ChatState::default();
+    state.session.agent = Some(agent.into());
+    show_rows(&mut state, rows);
+    state
+}
+
+/// The chat's list becomes `rows`, as a new composition.
+fn show_rows(state: &mut ChatState, rows: &[ChatMessage]) {
+    let mut rows = rows.to_vec();
+    for (index, row) in rows.iter_mut().enumerate() {
+        row.byte_offset = Some(100 * (index as u64 + 1));
+    }
+    state.messages.list = rows.clone();
+    state.messages.composed = rows;
+    state.messages.compose_generation += 1;
+}
+
+fn folds(labels: &[(&str, &str)]) -> Vec<(String, String)> {
+    labels
+        .iter()
+        .map(|(id, label)| (id.to_string(), label.to_string()))
+        .collect()
+}
+
+/// 2026-11-03 08:37:36.518 UTC, when the prompt of a recorded OMP 18.13.3 run was sent.
+const RUN: i64 = 1_793_695_056_518;
+
+/// One prompt of that recorded run, at its recorded times: the agent starts a background subagent
+/// and a background shell job; the subagent's message and its end arrive while the agent still
+/// works, and it replies; the shell job's result wakes it and it replies again. Then advisor notes
+/// wake it once more and it replies (the advisor's times are made up; that run's advisor spoke
+/// later).
+fn omp_run() -> Vec<ChatMessage> {
+    let result = |id: &str, call: &str, output: &str, at: i64| {
+        message(json!({
+            "id": id,
+            "role": "tool",
+            "source": "transcript",
+            "timestamp": at,
+            "blocks": [{ "type": "tool-result", "output": output, "callId": call }],
+        }))
+    };
+    vec![
+        row(
+            "u1",
+            "user",
+            "Start a background subagent and a background shell job, then report both.",
+            RUN,
+        ),
+        message(json!({
+            "id": "a0",
+            "role": "assistant",
+            "source": "transcript",
+            "timestamp": RUN + 5_885,
+            "blocks": [
+                { "type": "tool-call", "name": "task", "input": { "agent": "sonic" }, "callId": "c-task" },
+                { "type": "tool-call", "name": "bash", "input": { "command": "sleep 20; echo job-done", "async": true }, "callId": "c-bash" },
+            ],
+        })),
+        result(
+            "t1",
+            "c-task",
+            "Spawned agent `SympatheticNarwhal` (job `SympatheticNarwhal`).",
+            RUN + 5_923,
+        ),
+        omp(
+            "i1",
+            "irc:incoming",
+            json!({ "from": "SympatheticNarwhal", "message": "Hello from the subagent" }),
+            "<irc>\nIncoming IRC message from agent `SympatheticNarwhal`:\n\nHello from the subagent\n</irc>",
+            RUN + 11_699,
+        ),
+        result("t2", "c-bash", "Backgrounded as job bg_1.", RUN + 41_235),
+        omp(
+            "j1",
+            "async-result",
+            json!({ "jobs": [{ "jobId": "SympatheticNarwhal", "status": "completed", "label": "SympatheticNarwhal", "durationMs": 8_239 }] }),
+            "<system-notice>\nBackground job SympatheticNarwhal has completed. Resume your work using the result below.\nSent the parent one message.\n</system-notice>",
+            RUN + 47_811,
+        ),
+        row(
+            "a1",
+            "assistant",
+            "The subagent finished and sent its message.",
+            RUN + 50_839,
+        ),
+        omp(
+            "j2",
+            "async-result",
+            json!({ "jobs": [{ "jobId": "bg_1", "status": "completed", "label": "sleep 20; echo job-done", "durationMs": 20_051 }] }),
+            "<system-notice>\nBackground job bg_1 has completed. Resume your work using the result below.\njob-done\nWall time: 20.05 seconds\n</system-notice>",
+            RUN + 61_279,
+        ),
+        row(
+            "a2",
+            "assistant",
+            "The shell job finished too: job-done.",
+            RUN + 63_310,
+        ),
+        omp(
+            "v1",
+            "advisor",
+            json!({ "notes": [{ "note": "The job's output was not checked for errors.", "severity": "concern" }] }),
+            "<advisory severity=\"concern\" guidance=\"Weigh this note.\">\nThe job's output was not checked for errors.\n</advisory>",
+            RUN + 74_268,
+        ),
+        row(
+            "a3",
+            "assistant",
+            "Checked: the job printed no errors.",
+            RUN + 77_268,
+        ),
+    ]
+}
+
+/// The same rows from a gxserver that sends no `customMessage`: every OMP row is a marker line
+/// that opens no turn, so the prompt's turn runs to the newest reply.
+fn without_custom_messages(rows: &[ChatMessage]) -> Vec<ChatMessage> {
+    let mut rows = rows.to_vec();
+    for row in &mut rows {
+        row.custom_message = None;
+    }
+    rows
+}
+
+/// The working card's "Worked for" line and the "Previous turn" fold stay with the prompt's turn
+/// through the wake-ups after it, timed from the prompt to the agent's newest reply, while each
+/// wake-up keeps its own fold and time.
+#[test]
+fn omp_wake_ups_keep_the_worked_line_and_previous_turn_on_the_prompts_run() {
+    let run = omp_run();
+    let mut next = run.clone();
+    next.push(row(
+        "u2",
+        "user",
+        "Run sleep 45 twice in the foreground.",
+        RUN + 308_471,
+    ));
+    next.extend(tool_work("a4", RUN + 310_000));
+    next.push(row("a5", "assistant", "Done.", RUN + 413_482));
+    // The run after its first wake-up, after its second, and once the next prompt's turn ended.
+    let phases: [(&[ChatMessage], &[(&str, &str)], &str); 3] = [
+        (
+            &run[..9],
+            &[("u1", "Previous turn"), ("j2", "Worked for 2s")],
+            "Worked for 1m 3s",
+        ),
+        (
+            &run,
+            &[
+                ("u1", "Previous turn"),
+                ("j2", "Worked for 2s"),
+                ("v1", "Worked for 3s"),
+            ],
+            "Worked for 1m 17s",
+        ),
+        (
+            &next,
+            &[
+                ("u1", "Worked for 1m 17s"),
+                ("j2", "Worked for 2s"),
+                ("v1", "Worked for 3s"),
+                ("u2", "Previous turn"),
+            ],
+            "Worked for 1m 45s",
+        ),
+    ];
+    // One chat that refreshes as the rows arrive, which reuses its settled turns.
+    let mut live = chat_state("omp", &[]);
+    for (phase, (rows, expected, card)) in phases.into_iter().enumerate() {
+        show_rows(&mut live, rows);
+        let seen = worked_view(&mut live);
+        assert_eq!(
+            seen,
+            (folds(expected), Some(card.to_string())),
+            "phase {phase}"
+        );
+        assert_eq!(
+            worked_view(&mut chat_state("omp", rows)),
+            seen,
+            "phase {phase}, a fresh build"
+        );
+        // The prompt's fold and the card read as when no OMP row opened a turn.
+        let (older_folds, older_card) =
+            worked_view(&mut chat_state("omp", &without_custom_messages(rows)));
+        assert_eq!(older_card, seen.1, "phase {phase}");
+        assert_eq!(older_folds[0], seen.0[0], "phase {phase}");
+    }
+}
+
+/// A Claude background task that ends after the reply opens a turn that keeps its own Worked line
+/// and "Previous turn" fold, as before OMP wake-ups opened turns.
+#[test]
+fn another_agents_wake_up_keeps_the_worked_line_on_its_own_turn() {
+    let notification = "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command \"cargo test\" completed (exit code 0)</summary>\n</task-notification>";
+    let rows = vec![
+        row("u1", "user", "Run the tests in the background", T0),
+        row("a1", "assistant", "Started them.", T0 + MINUTE),
+        row("n1", "user", notification, T0 + 5 * MINUTE),
+        row("a2", "assistant", "They pass.", T0 + 5 * MINUTE + 20_000),
+    ];
+    assert_eq!(
+        worked_view(&mut chat_state("claude", &rows)),
+        (
+            folds(&[("u1", "Worked for 1m"), ("n1", "Previous turn")]),
+            Some("Worked for 20s".to_string())
+        )
+    );
 }

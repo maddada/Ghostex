@@ -928,13 +928,12 @@ fn a_row_without_an_offset_after_a_wake_up_turn_draws_the_same_from_a_retained_p
         .iter()
         .map(|item| serde_json::to_value(item).unwrap())
         .collect();
-    // The rows refresh moves the newest turn's Worked time to the working card (`rows.rs`).
+    // The rows refresh moves the newest run's Worked time to the working card (`rows.rs`).
     if let Some((id, _)) = projection.worked_turn {
         if let Some(item) = fresh
             .iter_mut()
             .rev()
-            .find(|item| item["kind"] == "completed-work")
-            .filter(|item| item["id"] == id.as_str())
+            .find(|item| item["kind"] == "completed-work" && item["id"] == id.as_str())
         {
             item["label"] = json!("Previous turn");
         }

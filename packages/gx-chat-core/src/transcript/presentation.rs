@@ -55,7 +55,9 @@ use crate::transcript::transcript::{
     completed_chat_work, project_chat_transcript, TranscriptProjection,
 };
 use crate::transcript::transcript_rows::{file_rows, open_tool_detail, tool_fold, tool_rows};
-use crate::transcript::turns::{partition_completed_work, worked_duration_label, RenderItem};
+use crate::transcript::turns::{
+    is_omp_wake_kind, partition_completed_work, worked_duration_label, RenderItem,
+};
 use crate::transcript::work_summary::{tool_spans, work_stats};
 
 /// A message's file changes and tool calls, in the order their rows are numbered.
@@ -522,50 +524,79 @@ pub struct Projection {
     /// pointing at the row index of the list it just built. Family f owns the rail's rules; this
     /// pass is where the TypeScript calls them, so it is where the core calls them too.
     pub minimap: Vec<crate::extras::minimap_rail::MinimapMarkerRow>,
-    /// The newest turn's id and its "Worked for 2m 13s" once it has finished and nothing was sent
-    /// after it: the working card's line above the composer (`extras::working_card`).
+    /// The newest turn a user row opened, its id and its "Worked for 2m 13s", once it has finished
+    /// and nothing was sent after it: the working card's line above the composer
+    /// (`extras::working_card`, `latest_worked_turn`).
     pub worked_turn: Option<(String, String)>,
 }
 
-/// "Worked for 2m 5s" for a finished turn, the label on its fold. `loaded` is the turn's part of
+/// When a finished turn ended, as its "Worked for" label times it. `loaded` is the turn's part of
 /// the rows a deferred read brought back (`section_part`), if they are here.
+fn turn_end(
+    turn: &crate::transcript::turns::CompletedWorkTurn,
+    loaded: Option<&[ChatMessage]>,
+) -> Option<i64> {
+    turn.final_message
+        .as_ref()
+        .and_then(|message| message.timestamp)
+        .or_else(|| {
+            turn.user
+                .deferred_work
+                .as_ref()
+                .and_then(|deferred| deferred.completed_at)
+        })
+        // An interrupted turn, or a wake-up the agent answered only with work, has no final
+        // reply; it ran until its last row, the loaded ones included.
+        .or_else(|| {
+            let kept = turn.work.iter().rev().find_map(|row| row.timestamp);
+            let loaded = loaded.and_then(|rows| rows.iter().filter_map(|row| row.timestamp).max());
+            kept.max(loaded)
+        })
+}
+
+/// "Worked for 2m 5s" for a finished turn, the label on its fold; `later` are the render items
+/// after it. A turn a user row opened runs on through the turns of the OMP wake-ups after it
+/// (`turns::opens_omp_turn`) to the newest of their replies; a wake-up's own turn is timed alone.
+///
+/// CDXC:SessionChat 2026-11-03 WHY: an OMP background job's result, IRC message or advisor note that wakes the agent after its reply opens a turn of its own, so the reply before it stays in view. Timed alone, the newest such turn took the working card's "Worked for" line and the "Previous turn" fold from the prompt, and the card read the wake-up's few seconds instead of the run. The prompt's turn keeps both and is timed from the prompt to the agent's newest reply, which is the time the chat showed when OMP rows opened no turn; a wake-up answered without a reply adds nothing, as it did not then either. A Claude background task's end arrives as a user row and keeps its own turn's line, as before.
 fn turn_worked_label(
     turn: &crate::transcript::turns::CompletedWorkTurn,
     loaded: Option<&[ChatMessage]>,
+    later: &[RenderItem],
 ) -> String {
-    worked_duration_label(
-        turn.user.timestamp,
-        turn.final_message
-            .as_ref()
-            .and_then(|message| message.timestamp)
-            .or_else(|| {
-                turn.user
-                    .deferred_work
-                    .as_ref()
-                    .and_then(|deferred| deferred.completed_at)
-            })
-            // An interrupted turn, or a wake-up the agent answered only with work, has no final
-            // reply; it ran until its last row, the loaded ones included.
-            .or_else(|| {
-                let kept = turn.work.iter().rev().find_map(|row| row.timestamp);
-                let loaded =
-                    loaded.and_then(|rows| rows.iter().filter_map(|row| row.timestamp).max());
-                kept.max(loaded)
-            }),
-    )
+    let mut end = turn_end(turn, loaded);
+    if !is_omp_wake_kind(&turn.user) {
+        for item in later {
+            match item {
+                RenderItem::Message(message) if message.role == ChatRole::User => break,
+                RenderItem::Message(_) => {}
+                RenderItem::CompletedWork(wake) if is_omp_wake_kind(&wake.user) => {
+                    end = end.max(
+                        wake.final_message
+                            .as_ref()
+                            .and_then(|reply| reply.timestamp),
+                    );
+                }
+                RenderItem::CompletedWork(_) => break,
+            }
+        }
+    }
+    worked_duration_label(turn.user.timestamp, end)
 }
 
-/// The newest turn's Worked line, when that turn has finished, timed, with no prompt after it.
+/// The Worked line of the newest turn a user row opened, when it has finished, timed, with no
+/// prompt after it. The turns of the OMP wake-ups after it continue its run (`turn_worked_label`).
 pub(crate) fn latest_worked_turn(items: &[RenderItem], working: bool) -> Option<(String, String)> {
     if working {
         return None;
     }
-    for item in items.iter().rev() {
+    for (at, item) in items.iter().enumerate().rev() {
         match item {
             RenderItem::Message(message) if message.role == ChatRole::User => return None,
             RenderItem::Message(_) => continue,
+            RenderItem::CompletedWork(turn) if is_omp_wake_kind(&turn.user) => continue,
             RenderItem::CompletedWork(turn) => {
-                let label = turn_worked_label(turn, None);
+                let label = turn_worked_label(turn, None, &items[at + 1..]);
                 // A turn with no length to show says only "Worked", which would be no news.
                 return (label != "Worked").then(|| (turn.user.id.clone(), label));
             }
@@ -1245,6 +1276,7 @@ fn turn_items(
                     label: turn_worked_label(
                         turn,
                         section.map(|rows| crate::transcript::transcript::section_part(turn, rows)),
+                        &projection.items[index + 1..],
                     ),
                     stats,
                     files_card: crate::transcript::file_change_rows::file_change_card(&files),
