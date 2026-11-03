@@ -7,7 +7,12 @@ use super::*;
 
 /// The record of `store` with `workspace` pinning `id` in `format`, taken from a real pin so its
 /// `info` is one the contract accepted.
-fn record_pinning(store: &Store, workspace: &str, id: &str, format: IdFormat) -> WorkSources {
+pub(super) fn record_pinning(
+    store: &Store,
+    workspace: &str,
+    id: &str,
+    format: IdFormat,
+) -> WorkSources {
     store.answer("good");
     let mut command = store.set(workspace, false).expect("pinned");
     command.source_id = id.to_string();
@@ -29,7 +34,7 @@ fn scope_in(workspace_id: &str) -> TicketScope<'_> {
     }
 }
 
-fn command_source(id: &str) -> WorkSourceId {
+pub(super) fn command_source(id: &str) -> WorkSourceId {
     WorkSourceId::parse(id).unwrap_or_else(|| panic!("{id} isn't known"))
 }
 
@@ -66,10 +71,10 @@ fn a_saved_record_is_published_with_its_ids_interned() {
         .tickets_in_branch(&scope_in(&elsewhere), "acm-12-spec")
         .is_empty());
     assert_eq!(rules.name(&scope_in(&elsewhere)), "pub-keys");
-    // Not readable yet, and refused where it can't be used.
+    // Not read yet, and refused where it can't be used.
     assert!(matches!(
         rules.cached_ticket(&scope_in(&workspace_id), "ACM-12"),
-        TicketRead::Unavailable { title: None }
+        TicketRead::Unread
     ));
     assert_eq!(
         rules

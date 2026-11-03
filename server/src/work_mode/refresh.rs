@@ -84,11 +84,12 @@ pub(crate) fn refresh_work_caches(paths: &GxserverPaths, projects: &[Value], ses
     // PR along.
     let credentials = WorkCredentials::new(paths);
     let pass = TicketPass {
+        paths,
         credentials: &credentials,
         projects: &projects_by_id,
         sessions,
     };
-    for source in WorkSourceId::BUILT_IN {
+    for source in work_sources_for(team_workspaces.iter().map(String::as_str)) {
         work_source(source).refresh_tickets(&pass);
     }
 

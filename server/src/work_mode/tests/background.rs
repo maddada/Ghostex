@@ -533,6 +533,7 @@ fn the_card_pass_reads_a_project_with_its_workspaces_key() {
     let projects: HashMap<&str, &Value> = HashMap::from([("PBgScopePass", &project)]);
 
     work_source(WorkSourceId::Linear).refresh_tickets(&TicketPass {
+        paths: &paths,
         credentials: &credentials,
         projects: &projects,
         sessions: &[],

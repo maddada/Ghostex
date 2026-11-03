@@ -59,10 +59,22 @@ const CHANGED_MEANWHILE: &str =
 
 static WRITER: Mutex<()> = Mutex::new(());
 
+/// The store's writer lock, which comes before the placement lock (`hold_project_placement`):
+/// taking it while holding that one panics rather than waiting forever.
 fn writer() -> MutexGuard<'static, ()> {
+    assert!(
+        !crate::domain::repository::project::placement_held_here(),
+        "the ticket command store's writer lock is taken while holding the placement lock"
+    );
     WRITER
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// The store's writer lock, for a background job (`jobs.rs`): held from its plan check until its
+/// command has started, and again while it keeps the result, so no change lands in between.
+pub(crate) fn hold_work_source_writer() -> MutexGuard<'static, ()> {
+    writer()
 }
 
 /// Whether some change holds the store's writer lock right now. Only the store's tests ask, and
@@ -604,6 +616,7 @@ impl WorkSourceDeletion {
         if let Some((read, written)) = &self.published {
             publish(read, written);
         }
+        forget_workspace_ticket_titles(&self.workspace_id);
     }
 
     /// Puts the removed credentials back, merged into the file as it is now, then releases the
@@ -620,8 +633,9 @@ impl WorkSourceDeletion {
     }
 }
 
-/// A workspace is being deleted: its command is cleared and its credentials removed. Never fails
-/// on a bound, since retiring an id the record already holds adds none.
+/// A workspace is being deleted: its command is cleared, its credentials removed and its tickets'
+/// last titles deleted. Never fails on a bound, since retiring an id the record already holds
+/// adds none.
 ///
 /// CDXC:WorkMode 2026-10-31 WHY:
 /// `/api/deleteWorkspace` stays allowed from any client for a workspace with a ticket command, and removes the command and its credentials, like the Linear key it already removes: deleting never sets a command, runs one or reveals a credential.
@@ -647,6 +661,9 @@ pub(crate) fn delete_workspace_work_source(
         write_work_sources(db, &sources)?;
         published = Some((read, sources));
     }
+    // Whether or not it has a command now: a cleared command's titles stay until the workspace
+    // goes.
+    delete_workspace_ticket_titles(db, workspace_id)?;
     // Written only when it held some, so a workspace without command credentials never needs the
     // file to be writable.
     let removed_credentials = mutate_credentials_when(paths, |credentials| {
@@ -745,9 +762,10 @@ fn appears_in(text: &str, value: &str) -> bool {
     value.chars().count() >= MIN_MASKED_IN_PLACE_CHARS && text.contains(value)
 }
 
-/// Reads what the workspace has stored (`StoredValues`). A failed read refuses the change: an
-/// empty mask would show what it should hide, and an empty list would let a value in.
-fn stored_values(
+/// Reads what the workspace has stored (`StoredValues`). A failed read refuses the change, and
+/// runs no background call: an empty mask would show what it should hide, and an empty list
+/// would let a value in.
+pub(crate) fn stored_values(
     db: &Connection,
     paths: &GxserverPaths,
     workspace_id: &str,

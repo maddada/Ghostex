@@ -1,13 +1,17 @@
 //! A workspace's ticket command as a ticket source: one `CommandSource` per id the store interned
 //! (`CommandSourceId`). Its name, ID keys and credential fields are its workspace's own accepted
-//! `info` (the scope's `effective_workspace_id`); only `ids.format` is id-wide.
+//! `info` (the scope's `effective_workspace_id`, else the project's workspace as last placed,
+//! `cached_project_workspace_id`); only `ids.format` is id-wide.
 //!
-//! It is not yet among the sources a session's card or the Work list reads (`BUILT_IN`), so
-//! nothing shows its tickets until it can read them. A request that names its id gets its rules
-//! (a reference, a key, its name) and a refusal for what it can't do yet.
+//! A session's card shows the tickets its branch names: the card pass queues exact reads
+//! (`jobs.rs`) and the card reads what they kept (`caches.rs`), the ticket's last title when the
+//! command can't be asked. Its open list, its details and creating a ticket come later; a request
+//! for one gets a refusal in its own words.
 
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde_json::Value;
 
@@ -30,10 +34,116 @@ impl CommandSource {
         CommandSourceId::known(self.id).and_then(id_format)
     }
 
+    /// The scope's workspace: its own, else the project's as last placed (the projection's scopes
+    /// name none).
+    fn workspace_of(&self, scope: &TicketScope) -> Option<String> {
+        scope
+            .effective_workspace_id
+            .map(str::to_string)
+            .or_else(|| cached_project_workspace_id(scope.project_id))
+    }
+
     /// The scope's workspace's command, when it pins this id.
     fn pinned(&self, scope: &TicketScope) -> Option<Arc<WorkspaceCommand>> {
-        workspace_command(scope.effective_workspace_id?)
-            .filter(|command| command.source_id == self.id)
+        workspace_command(&self.workspace_of(scope)?).filter(|command| command.source_id == self.id)
+    }
+
+    /// The exact reads a card pass queues: per workspace that pins this id, the tickets its
+    /// projects' sessions name that were never read at the workspace's generation or are no longer
+    /// fresh, a session still waiting for its PR first, at most `MAX_COMMAND_CALLS_PER_PASS` calls
+    /// of `MAX_EXACT_IDS`. Each project's placement is read once, and goes with the read, which
+    /// runs only while the project is still placed there. Remembers whether each workspace's
+    /// command can run, which the card reads.
+    pub(crate) fn exact_reads_for(&self, pass: &TicketPass) -> Vec<ExactRead> {
+        let Some(source) = CommandSourceId::known(self.id).map(WorkSourceId::Command) else {
+            return Vec::new();
+        };
+        let placed: BTreeMap<&str, Option<String>> = pass
+            .projects
+            .keys()
+            .map(|project_id| (*project_id, cached_project_workspace_id(project_id)))
+            .collect();
+        #[derive(Default)]
+        struct Wanted {
+            ids: Vec<String>,
+            awaiting_pull_request: Vec<String>,
+            projects: Vec<String>,
+        }
+        let mut wanted: BTreeMap<String, Wanted> = BTreeMap::new();
+        for session in pass.sessions {
+            let Some((project_id, project)) = session
+                .get("projectId")
+                .and_then(Value::as_str)
+                .and_then(|project_id| pass.projects.get_key_value(project_id))
+            else {
+                continue;
+            };
+            let Some(Some(workspace_id)) = placed.get(*project_id) else {
+                continue;
+            };
+            if !work_sources_of(Some(workspace_id)).contains(&source) {
+                continue;
+            }
+            let targets = work_targets_in(project, session, Some(workspace_id));
+            let ids = targets.ids_of(source);
+            let entry = wanted.entry(workspace_id.clone()).or_default();
+            if targets.pull_request.is_none() {
+                entry.awaiting_pull_request.extend(ids.iter().cloned());
+            }
+            if !ids.is_empty() && !entry.projects.iter().any(|known| known == *project_id) {
+                entry.projects.push(project_id.to_string());
+            }
+            entry.ids.extend(ids);
+        }
+        let mut reads = Vec::new();
+        for (workspace_id, mut wanted) in wanted {
+            let Some(plan) = self.plan_in(&workspace_id) else {
+                continue;
+            };
+            let can_run = self.can_read(&TicketScope {
+                effective_workspace_id: Some(&workspace_id),
+                credentials: Some(pass.credentials),
+                ..TicketScope::default()
+            });
+            remember_command_readiness(&workspace_id, plan.generation, can_run);
+            if !can_run {
+                continue;
+            }
+            let now = Instant::now();
+            wanted.ids.sort();
+            wanted.ids.dedup();
+            wanted.ids.retain(|id| command_ticket_due(&plan, id, now));
+            wanted
+                .ids
+                .sort_by_key(|id| !wanted.awaiting_pull_request.contains(id));
+            for chunk in wanted
+                .ids
+                .chunks(MAX_EXACT_IDS)
+                .take(MAX_COMMAND_CALLS_PER_PASS)
+            {
+                reads.push(ExactRead {
+                    plan: plan.clone(),
+                    ids: chunk.to_vec(),
+                    awaiting_pull_request: chunk
+                        .iter()
+                        .filter(|id| wanted.awaiting_pull_request.contains(id))
+                        .cloned()
+                        .collect(),
+                    projects: wanted.projects.clone(),
+                    paths: pass.paths.clone(),
+                });
+            }
+        }
+        reads
+    }
+
+    /// The workspace's plan for this id at its generation now.
+    fn plan_in(&self, workspace_id: &str) -> Option<JobPlan> {
+        Some(JobPlan {
+            workspace_id: workspace_id.to_string(),
+            source: CommandSourceId::known(self.id)?,
+            generation: work_source_generation(workspace_id),
+        })
     }
 
     /// The workspace's `info.name`; else the name its retired record kept; else the id.
@@ -156,8 +266,13 @@ impl WorkSource for CommandSource {
 
     fn refresh_list(&self, _plan: &WorkFeedPlan, _force: bool) {}
 
-    /// Nothing reads its tickets yet.
-    fn refresh_tickets(&self, _pass: &TicketPass) {}
+    /// Queues the exact reads the pass's sessions need (`exact_reads_for`); never waits for the
+    /// command.
+    fn refresh_tickets(&self, pass: &TicketPass) {
+        for read in self.exact_reads_for(pass) {
+            queue_exact_read(read);
+        }
+    }
 
     fn known_keys(&self, scope: &TicketScope, _plan: &WorkFeedPlan) -> Vec<String> {
         self.pinned(scope)
@@ -178,11 +293,12 @@ impl WorkSource for CommandSource {
     fn can_read(&self, scope: &TicketScope) -> bool {
         let (Some(command), Some(workspace_id), Some(credentials)) = (
             self.pinned(scope),
-            scope.effective_workspace_id,
+            self.workspace_of(scope),
             scope.credentials,
         ) else {
             return false;
         };
+        let workspace_id = workspace_id.as_str();
         if credentials.workspace_has_team(workspace_id)
             || !ghostex_paths::powershell::launchable(&command.resolved_path)
         {
@@ -206,9 +322,33 @@ impl WorkSource for CommandSource {
         SourceList::default()
     }
 
-    /// Nothing has read it.
-    fn cached_ticket(&self, _scope: &TicketScope, _id: &str) -> TicketRead {
-        TicketRead::Unavailable { title: None }
+    /// What the last exact read at the workspace's generation kept. The command can't be asked
+    /// (no longer pinned here, the workspace in a team, the last pass found it unable to run, or
+    /// its read failed before it ever found the ticket): `Unavailable`, with the ticket's last
+    /// title. Nothing read yet at this generation: `Unread`.
+    fn cached_ticket(&self, scope: &TicketScope, id: &str) -> TicketRead {
+        let Some(workspace_id) = self.workspace_of(scope) else {
+            return TicketRead::Unavailable { title: None };
+        };
+        let unavailable = || TicketRead::Unavailable {
+            title: last_ticket_title(&workspace_id, self.id, id),
+        };
+        let Some(plan) = self
+            .pinned(scope)
+            .filter(|_| !cached_workspace_in_team(&workspace_id))
+            .and_then(|_| self.plan_in(&workspace_id))
+        else {
+            return unavailable();
+        };
+        if command_readiness(&workspace_id, plan.generation) == Some(false) {
+            return unavailable();
+        }
+        match cached_command_ticket(&plan, id) {
+            None => TicketRead::Unread,
+            Some(CachedTicket::Found(ticket)) => TicketRead::Found(ticket),
+            Some(CachedTicket::NotFound) => TicketRead::NotFound,
+            Some(CachedTicket::Failed) => unavailable(),
+        }
     }
 
     fn read_detail(&self, scope: &TicketScope, _id: &str, _force: bool) -> Result<Value, String> {
@@ -231,4 +371,52 @@ impl WorkSource for CommandSource {
             self.display_name(scope)
         ))
     }
+}
+
+/// The tickets a branch names of a ticket command the workspace no longer reads (not among
+/// `sources`: cleared, switched from, or stopped in a team): only those it answered for there,
+/// which have a last title, by the format its id still has on this computer. Its ID keys went with
+/// its `info`, so a key-number id's key is taken from the titled tickets themselves.
+pub(crate) fn unread_command_tickets_in_branch(
+    workspace_id: &str,
+    sources: &[WorkSourceId],
+    branch: &str,
+) -> Vec<TicketRef> {
+    let mut titled: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (source_id, ticket_id) in titled_tickets(workspace_id) {
+        titled.entry(source_id).or_default().push(ticket_id);
+    }
+    let mut tickets = Vec::new();
+    for (source_id, ids) in titled {
+        let Some(id) = CommandSourceId::known(&source_id) else {
+            continue;
+        };
+        let source = WorkSourceId::Command(id);
+        if sources.contains(&source) {
+            continue;
+        }
+        let named: Vec<String> = match id_format(id) {
+            Some(IdFormat::KeyNumber) => {
+                let mut keys: Vec<String> = ids
+                    .iter()
+                    .filter_map(|ticket| ticket.split_once('-').map(|(key, _)| key.to_string()))
+                    .collect();
+                keys.sort();
+                keys.dedup();
+                linear_identifiers_in_branch(branch, &keys)
+            }
+            Some(IdFormat::Number) => github_issue_in_branch(branch)
+                .map(|number| number.to_string())
+                .into_iter()
+                .collect(),
+            None => Vec::new(),
+        };
+        tickets.extend(
+            named
+                .into_iter()
+                .filter(|ticket| ids.contains(ticket))
+                .map(|ticket| TicketRef::new(source, ticket)),
+        );
+    }
+    tickets
 }

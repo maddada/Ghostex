@@ -308,7 +308,8 @@ pub(crate) fn read_work_item(
     });
 
     if let (WorkItemRef::PullRequest(_), Some(pr)) = (item_ref, pull_request.as_ref()) {
-        let known_keys: Vec<(WorkSourceId, Vec<String>)> = WorkSourceId::BUILT_IN
+        let known_keys: Vec<(WorkSourceId, Vec<String>)> = plan
+            .sources()
             .into_iter()
             .map(|source| {
                 (
@@ -321,7 +322,7 @@ pub(crate) fn read_work_item(
             push_ticket(&mut pr_tickets, ticket);
         }
         if let Some(url) = pr.get("url").and_then(Value::as_str) {
-            for source in WorkSourceId::BUILT_IN {
+            for source in plan.sources() {
                 let source_rules = work_source(source);
                 let scope = scope_for(source);
                 if !source_rules.can_read(&scope) {

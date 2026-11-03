@@ -246,7 +246,7 @@ pub(crate) fn seed_work_feeds(
 
 /// Whether any of the plan's feeds is missing or stale.
 pub(crate) fn work_feeds_stale(plan: &WorkFeedPlan) -> bool {
-    WorkSourceId::BUILT_IN
+    plan.sources()
         .into_iter()
         .any(|source| work_source(source).list_stale(plan))
         || {
@@ -281,7 +281,7 @@ pub(crate) fn refresh_work_feeds(plan: &WorkFeedPlan, force: bool) {
     };
     std::thread::scope(|scope| {
         // First, so each source judges what is stale before the `gh` checks below take their time.
-        for source in WorkSourceId::BUILT_IN {
+        for source in plan.sources() {
             scope.spawn(move || work_source(source).refresh_list(plan, force));
         }
         let github_cwds = plan.github_cwds();

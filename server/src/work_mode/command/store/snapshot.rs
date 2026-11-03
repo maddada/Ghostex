@@ -55,26 +55,44 @@ pub(crate) fn save_work_sources(
     Ok(())
 }
 
-/// The startup step: loads the record before the first request, and logs one error in fixed
-/// words when it can't be read (a damaged row can hold a credential, so nothing of it is quoted).
+/// The startup step: loads the record and the tickets' last titles before the first request, and
+/// logs one error in fixed words for what can't be read (a damaged row can hold a credential, so
+/// nothing of it is quoted).
 pub(crate) fn load_work_source_store_at_startup(
     paths: &crate::paths::GxserverPaths,
     logger: &crate::logging::GxserverLogger,
 ) {
-    let loaded = crate::storage::open_gxserver_database(paths)
-        .map_err(|_| "the database can't be opened")
-        .and_then(|db| load_work_source_store(&db).map_err(|_| "the record can't be read"));
-    if let Err(why) = loaded {
+    let log = |event: &str, error: String| {
         let _ = logger.log(crate::logging::GxserverLogInput {
             level: crate::logging::LogLevel::Error,
-            event: "work_sources_unreadable".to_string(),
+            event: event.to_string(),
             server_id: None,
             request_id: None,
             client: None,
             duration_ms: None,
-            error: Some(format!("Ticket commands are off until restart: {why}.")),
+            error: Some(error),
             details: None,
         });
+    };
+    let Ok(db) = crate::storage::open_gxserver_database(paths) else {
+        log(
+            "work_sources_unreadable",
+            "Ticket commands are off until restart: the database can't be opened.".to_string(),
+        );
+        return;
+    };
+    if load_work_source_store(&db).is_err() {
+        log(
+            "work_sources_unreadable",
+            "Ticket commands are off until restart: the record can't be read.".to_string(),
+        );
+    }
+    if load_ticket_titles(&db).is_err() {
+        log(
+            "work_ticket_titles_unreadable",
+            "Ticket commands' tickets show no last title until restart: the titles can't be read."
+                .to_string(),
+        );
     }
 }
 

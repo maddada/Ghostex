@@ -131,6 +131,7 @@ pub(super) async fn route_workspaces_http(
                     // Its projects fall back to the default workspace and take its default.
                     let changed =
                         reapply_workspace_defaults(repository, &workspaces, DEFAULT_WORKSPACE_ID)?;
+                    crate::work_mode::replace_project_workspaces(&state.paths, repository, db)?;
                     publish_projects(&state, db, repository, &changed)?;
                     let _ = store_linear_api_key(
                         &state.paths,
@@ -160,11 +161,21 @@ pub(super) async fn route_workspaces_http(
                     };
                     let workspaces = read_sidebar_workspaces(db)?;
                     let workspace_id = required_workspace(&workspaces, params)?;
-                    let changed = move_project_to_workspace(
+                    // Placed before they publish, so their rows show the new workspace's ticket
+                    // command; and under the ticket command store's writer lock, which a
+                    // background read holds from its placement check until its command starts.
+                    let changed = crate::work_mode::place_projects_after(
+                        &state.paths,
                         repository,
-                        &workspaces,
-                        &project_id,
-                        &workspace_id,
+                        db,
+                        || {
+                            move_project_to_workspace(
+                                repository,
+                                &workspaces,
+                                &project_id,
+                                &workspace_id,
+                            )
+                        },
                     )?;
                     if !changed.is_empty() {
                         leave_old_workspace_groups(&state, db, &changed)?;

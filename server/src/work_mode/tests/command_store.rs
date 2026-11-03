@@ -15,6 +15,7 @@ use crate::storage::{initialize_gxserver_storage, open_gxserver_database, Gxserv
 
 use super::*;
 
+mod cards;
 mod published;
 mod stored_values;
 

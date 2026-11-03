@@ -8,9 +8,9 @@ use crate::domain::{
     find_project_by_path_in, merge_project_update, normalize_existing_directory_path,
     normalize_project_input, normalize_project_root_path, normalize_project_system_kind,
     normalize_project_visibility, now_iso, path_basename, project_from_row, project_insert_params,
-    project_row_from_sql, project_row_without_session_history_from_sql, read_optional_text,
-    read_string_field, read_unvalidated_project_lookup_id, recent_project_from_project, sql_error,
-    DomainRepository, DomainResult, DomainStateError,
+    project_insert_values, project_row_from_sql, project_row_without_session_history_from_sql,
+    read_optional_text, read_string_field, read_unvalidated_project_lookup_id,
+    recent_project_from_project, sql_error, DomainRepository, DomainResult, DomainStateError,
 };
 use crate::ids::create_project_id;
 
@@ -18,6 +18,198 @@ use crate::ids::create_project_id;
 const PROJECT_COLUMNS_WITHOUT_SESSION_HISTORY: &str = "projectId, name, path, identityIconJson, isPinned, isFavorite, isRecentProject, recentClosedAt, visibility, systemKind, defaultCommand, worktreeJson, customAgentsJson, customAgentOrderJson, customCommandsJson, customCommandOrderJson, deletedDefaultCommandIdsJson, launchSettingsJson, runtimeSettingsJson, completionRulesJson, attentionRulesJson, notificationRulesJson, gitConfigJson, projectBoardConfigJson, createdAt, updatedAt";
 
 pub(crate) const MAX_ID_GENERATION_ATTEMPTS: usize = 1024;
+
+/// What places an existing project in a workspace (`workspaces::project_workspace_id`): its own
+/// stored workspace and, for a worktree, its parent.
+fn placement_inputs(project: &Value) -> (Option<String>, Option<String>) {
+    (
+        crate::workspaces::stored_project_workspace_id(project).map(str::to_string),
+        project
+            .get("worktree")
+            .and_then(|worktree| worktree.get("parentProjectId"))
+            .and_then(Value::as_str)
+            .map(str::to_string),
+    )
+}
+
+/// Held while an existing project's placement changes (its stored workspace or its worktree
+/// parent, or its removal), around the write, after which the projection forgets where the project
+/// and its worktrees were (`forget_project_placement`); by a ticket command's background read from its
+/// placement check until its command starts, which reads placement from the database under it
+/// and writes nothing while it holds it (`work_mode::prepare`); by a worktree rename around its
+/// transaction; and by a replace of the projection's map, from its reads through its publish
+/// (`work_mode::replace_project_workspaces`). So a read never starts a command for a project that
+/// has moved since its check.
+///
+/// The lock order is the ticket command store's writer lock, then this one, then SQLite's write
+/// lock. Taking it twice on one thread, or the writer lock while holding it, panics rather than
+/// waiting forever; a placement change inside a transaction that started without it is refused
+/// (`DomainRepository::hold_placement`).
+///
+/// CDXC:WorkMode 2026-11-02 WHY:
+/// Taken here, in the only functions that write those rows, not by each caller: a project's placement changes through many routes and helpers (moves, updates, removals, re-registering a path), and a lock each caller had to remember was missed four times. A placement change runs outside a transaction, or inside one that took this lock first, so a read under the lock sees every one that happened.
+pub(crate) fn hold_project_placement() -> PlacementGuard {
+    static PLACEMENT: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    assert!(
+        !placement_held_here(),
+        "the placement lock is taken twice on one thread"
+    );
+    let lock = PLACEMENT
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    PLACEMENT_HELD.with(|held| held.set(true));
+    PlacementGuard { _lock: lock }
+}
+
+thread_local! {
+    static PLACEMENT_HELD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this thread holds the placement lock (`hold_project_placement`).
+pub(crate) fn placement_held_here() -> bool {
+    PLACEMENT_HELD.with(std::cell::Cell::get)
+}
+
+/// The placement lock, held until dropped on the thread that took it.
+pub(crate) struct PlacementGuard {
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+impl Drop for PlacementGuard {
+    fn drop(&mut self) {
+        PLACEMENT_HELD.with(|held| held.set(false));
+    }
+}
+
+/// The refusal when a placement change would take the placement lock after SQLite's.
+pub(crate) const PLACEMENT_CHANGE_IN_TRANSACTION: &str =
+    "A project's workspace can't change inside a transaction that started without the placement lock.";
+
+/// The error when a project changed under every attempt of an update (`update_project`).
+pub(crate) const PROJECT_CHANGED_DURING_UPDATE: &str =
+    "The project changed while it was being updated. Try again.";
+
+/// How many times `update_project` reads, merges and writes before it gives up.
+const PROJECT_UPDATE_ATTEMPTS: usize = 3;
+
+impl DomainRepository<'_> {
+    /// The placement lock for a write on this repository's connection. `None` when this thread
+    /// already holds it, which a caller took before any transaction it opened (the worktree
+    /// rename). Refused, in every build, inside a transaction that started without it: the lock
+    /// would come after SQLite's, and a read under it would not see the change until it commits.
+    fn hold_placement(&self, project_id: &str) -> DomainResult<Option<PlacementGuard>> {
+        if placement_held_here() {
+            return Ok(None);
+        }
+        if !self.db.is_autocommit() {
+            return Err(DomainStateError {
+                code: "internalError",
+                message: PLACEMENT_CHANGE_IN_TRANSACTION.to_string(),
+            });
+        }
+        #[cfg(test)]
+        notify_placement_for_test(project_id);
+        #[cfg(not(test))]
+        let _ = project_id;
+        Ok(Some(hold_project_placement()))
+    }
+
+    /// The project and its two placement columns as stored, read in one statement, for
+    /// `update_project`'s compare-and-set.
+    fn get_project_for_update(
+        &self,
+        project_id: &str,
+    ) -> DomainResult<Option<(Value, StoredPlacement)>> {
+        let row = self
+            .db
+            .prepare_cached("SELECT * FROM projects WHERE projectId = ?1")
+            .map_err(sql_error)?
+            .query_row([project_id], |row| {
+                Ok((
+                    project_row_from_sql(row)?,
+                    StoredPlacement {
+                        launch_settings_json: row.get("launchSettingsJson")?,
+                        worktree_json: row.get("worktreeJson")?,
+                    },
+                ))
+            })
+            .optional()
+            .map_err(sql_error)?;
+        row.map(|(row, stored)| Ok((project_from_row(row)?, stored)))
+            .transpose()
+    }
+}
+
+/// A project row's `launchSettingsJson` and `worktreeJson` as read, which hold its placement.
+struct StoredPlacement {
+    launch_settings_json: Option<String>,
+    worktree_json: Option<String>,
+}
+
+/// Holds an update between its read and its write once (`pause_project_update`).
+#[cfg(test)]
+type UpdatePauses =
+    std::collections::HashMap<String, (std::sync::mpsc::Sender<()>, std::sync::mpsc::Receiver<()>)>;
+
+#[cfg(test)]
+fn update_pauses() -> std::sync::MutexGuard<'static, UpdatePauses> {
+    static PAUSES: std::sync::OnceLock<std::sync::Mutex<UpdatePauses>> = std::sync::OnceLock::new();
+    PAUSES
+        .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+fn paused_update_for_test(project_id: &str) {
+    let pause = update_pauses().remove(project_id);
+    if let Some((reached, release)) = pause {
+        let _ = reached.send(());
+        let _ = release.recv();
+    }
+}
+
+/// Pauses the next `update_project` of `project_id` after it read and merged the row, before it
+/// writes: it says so on `reached` and waits for `release`.
+#[cfg(test)]
+pub(crate) fn pause_project_update(
+    project_id: &str,
+    reached: std::sync::mpsc::Sender<()>,
+    release: std::sync::mpsc::Receiver<()>,
+) {
+    update_pauses().insert(project_id.to_string(), (reached, release));
+}
+
+/// One notice per project, sent when a change to its placement is about to take
+/// `hold_project_placement` (`notify_project_placement`).
+#[cfg(test)]
+fn placement_notices(
+) -> std::sync::MutexGuard<'static, std::collections::HashMap<String, std::sync::mpsc::Sender<()>>>
+{
+    static NOTICES: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, std::sync::mpsc::Sender<()>>>,
+    > = std::sync::OnceLock::new();
+    NOTICES
+        .get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+#[cfg(test)]
+fn notify_placement_for_test(project_id: &str) {
+    if let Some(notify) = placement_notices().remove(project_id) {
+        let _ = notify.send(());
+    }
+}
+
+/// Asks for one notice when the next change to `project_id`'s placement is about to take the
+/// placement lock, so a test can tell waiting for it from not having started.
+#[cfg(test)]
+pub(crate) fn notify_project_placement(project_id: &str) -> std::sync::mpsc::Receiver<()> {
+    let (notify, notice) = std::sync::mpsc::channel();
+    placement_notices().insert(project_id.to_string(), notify);
+    notice
+}
 
 impl<'a> DomainRepository<'a> {
     pub fn create_project(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -48,16 +240,37 @@ impl<'a> DomainRepository<'a> {
         Ok(project)
     }
 
+    /// Writes the merged row only while its placement columns still hold what was read, so an
+    /// update that read the row before a move never writes the old workspace back. When they
+    /// changed, it reads and merges again, up to `PROJECT_UPDATE_ATTEMPTS` times, then fails with
+    /// `PROJECT_CHANGED_DURING_UPDATE`, or with `notFound` when the row is gone by then.
+    ///
+    /// CDXC:WorkMode 2026-11-03 WHY:
+    /// Compare-and-set rather than the placement lock around every update: most updates (names, pins, board links, settings) don't move the project, and the lock around each read and write would serialize them all and be taken after SQLite's inside a transaction such as the worktree rename's.
     pub fn update_project(&self, params: &Map<String, Value>) -> DomainResult<Value> {
         let project_id = read_unvalidated_project_lookup_id(params);
-        let current = self.get_project(&project_id)?.ok_or_else(|| {
-            DomainStateError::not_found(format!("Project {project_id} does not exist."))
-        })?;
         let updated_at = now_iso();
-        let project = merge_project_update(current, &updated_at, params)?;
-        self.db
-            .execute(
-                r#"
+        for _ in 0..PROJECT_UPDATE_ATTEMPTS {
+            let (current, stored) = self.get_project_for_update(&project_id)?.ok_or_else(|| {
+                DomainStateError::not_found(format!("Project {project_id} does not exist."))
+            })?;
+            let moves = placement_inputs(&current);
+            let project = merge_project_update(current, &updated_at, params)?;
+            #[cfg(test)]
+            paused_update_for_test(&project_id);
+            let changes_placement = placement_inputs(&project) != moves;
+            let _placement = if changes_placement {
+                self.hold_placement(&project_id)?
+            } else {
+                None
+            };
+            let mut values = project_insert_values(&project)?;
+            values.push(stored.launch_settings_json.into());
+            values.push(stored.worktree_json.into());
+            let written = self
+                .db
+                .execute(
+                    r#"
                 UPDATE projects SET
                   name = ?2,
                   path = ?3,
@@ -84,12 +297,29 @@ impl<'a> DomainRepository<'a> {
                   updatedAt = ?25,
                   visibility = ?26,
                   systemKind = ?27
-                WHERE projectId = ?1
+                WHERE projectId = ?1 AND launchSettingsJson IS ?28 AND worktreeJson IS ?29
                 "#,
-                project_insert_params(&project)?,
-            )
-            .map_err(sql_error)?;
-        Ok(project)
+                    rusqlite::params_from_iter(values),
+                )
+                .map_err(sql_error)?;
+            if written == 0 {
+                continue;
+            }
+            if changes_placement {
+                crate::work_mode::forget_project_placement(&project_id);
+            }
+            return Ok(project);
+        }
+        // The last write may have missed because the row is gone, not because it changed.
+        if self.get_project(&project_id)?.is_none() {
+            return Err(DomainStateError::not_found(format!(
+                "Project {project_id} does not exist."
+            )));
+        }
+        Err(DomainStateError {
+            code: "conflict",
+            message: PROJECT_CHANGED_DURING_UPDATE.to_string(),
+        })
     }
 
     pub fn relocate_project(&self, params: &Map<String, Value>) -> DomainResult<Value> {
@@ -227,9 +457,11 @@ impl<'a> DomainRepository<'a> {
         let current = self.get_project(project_id)?.ok_or_else(|| {
             DomainStateError::not_found(format!("Project {project_id} does not exist."))
         })?;
+        let _placement = self.hold_placement(project_id)?;
         self.db
             .execute("DELETE FROM projects WHERE projectId = ?1", [project_id])
             .map_err(sql_error)?;
+        crate::work_mode::forget_project_placement(project_id);
         Ok(current)
     }
 

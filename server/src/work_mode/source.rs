@@ -1,17 +1,19 @@
-//! Where a workspace's tickets come from. Each source (Linear, GitHub issues) answers the same
-//! questions: what its tickets are called (keys, labels, link kinds), which tickets a branch, a PR
-//! or a typed reference names, which tickets the Work list shows, what its caches know about one
-//! ticket, its details with comments, and how to create one. PRs,
+//! Where a workspace's tickets come from. Each source (Linear, GitHub issues, a workspace's ticket
+//! command) answers the same questions: what its tickets are called (keys, labels, link kinds),
+//! which tickets a branch, a PR or a typed reference names, which tickets the Work list shows,
+//! what its caches know about one ticket, its details with comments, and how to create one. PRs,
 //! checks and the Clean up offer are not a source's business: they belong to the code host
 //! (GitHub) whatever the tracker is.
 //!
 //! CDXC:WorkMode 2026-10-27 SEE-ALSO:
-//! `source_linear.rs` and `source_github.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
+//! `source_linear.rs`, `source_github.rs` and `source_command.rs` (the sources); `PresentationSessionWork.tickets` and `PresentationSessionLink.state_group` in packages/gx-protocol/src/presentation.rs; the Work page's `WorkItem.source` in apps/desktop/views/work/types.ts.
 
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 
 use serde_json::{json, Map, Value};
+
+use crate::paths::GxserverPaths;
 
 use super::*;
 
@@ -67,6 +69,32 @@ impl WorkSourceId {
     pub(crate) fn from_wire_built_in(value: Option<&Value>) -> Option<Self> {
         Self::parse_built_in(value?.as_str()?)
     }
+}
+
+/// The sources a workspace's branches, links and cards are read for: Linear, GitHub, then the
+/// workspace's ticket command, unless the workspace is in a team, where its command is stopped and
+/// keeps its settings. Without a workspace, Linear and GitHub.
+pub(crate) fn work_sources_of(workspace_id: Option<&str>) -> Vec<WorkSourceId> {
+    work_sources_for(workspace_id)
+}
+
+/// The sources of several workspaces (the Work list's, the card pass's): Linear and GitHub first,
+/// then each workspace's command once, so `BUILT_IN`'s order still breaks ties.
+pub(crate) fn work_sources_for<'a>(
+    workspace_ids: impl IntoIterator<Item = &'a str>,
+) -> Vec<WorkSourceId> {
+    let mut sources = WorkSourceId::BUILT_IN.to_vec();
+    for workspace_id in workspace_ids {
+        let command = (!cached_workspace_in_team(workspace_id))
+            .then(|| workspace_command(workspace_id))
+            .flatten()
+            .and_then(|command| CommandSourceId::known(&command.source_id))
+            .map(WorkSourceId::Command);
+        if let Some(command) = command.filter(|command| !sources.contains(command)) {
+            sources.push(command);
+        }
+    }
+    sources
 }
 
 /// Which kind of project a source's tickets sit in: a Linear project or a GitHub Project. The
@@ -224,6 +252,7 @@ pub(crate) struct TicketScope<'a> {
 
 /// What one background card pass hands every source.
 pub(crate) struct TicketPass<'a> {
+    pub(crate) paths: &'a GxserverPaths,
     pub(crate) credentials: &'a WorkCredentials,
     /// The work-mode projects, by id.
     pub(crate) projects: &'a HashMap<&'a str, &'a Value>,
@@ -304,7 +333,8 @@ pub(crate) trait WorkSource: Sync {
     /// own while `refresh_work_feeds` holds its lock.
     fn refresh_list(&self, plan: &WorkFeedPlan, force: bool);
     /// Reads what the pass's session cards need from it, within its own per-pass budget.
-    /// Blocking; the background pass, before the code host's reads.
+    /// Blocking for Linear; a ticket command only queues its calls (`jobs.rs`). The background
+    /// pass, before the code host's reads.
     fn refresh_tickets(&self, pass: &TicketPass);
     /// The ticket-id prefixes it knows outside a Work list (`SourceList::known_keys`), for a PR's
     /// details.
