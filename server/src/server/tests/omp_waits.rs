@@ -2,8 +2,8 @@
 //! extension forwards them: a PermissionRequest for the approval dialog OMP shows, the dialog's
 //! answer as `post_approval_response`, and the `ask` call's pre- and post-tool events. They take
 //! Claude Code's path (stored card, attention, needs-input row, `awaitingApproval`,
-//! `awaitingAnswer`), here in OMP 18.13.3's order from live run 9, with OMP's OSC 7501 records read
-//! through the watch line's parser and the presentation projection the phone's summary forwards.
+//! `awaitingAnswer`), with OMP's OSC 7501 records read through the watch line's parser and the
+//! presentation projection the phone's summary forwards.
 
 use super::*;
 use crate::program_status::ProgramStatusRecord;
@@ -459,14 +459,14 @@ async fn an_omp_ask_without_its_questions_stores_no_card() {
     assert_eq!(fixture.awaiting_answer(&session), None);
 }
 
-/// Step 2 of the live test plan in OMP 18.13.3's order: the `ask` tool starts (OMP reports
+/// The `ask` tool starts (OMP reports
 /// `blocked`/`question` and the extension's pre-tool event arrives before or after that report),
 /// OMP repeats its record while the question waits and through its custom-answer prompt, and the
 /// answer ends the tool (OMP reports `working`, the post-tool event before or after it). One wait:
 /// one row, attention until the user looks, the question card until the answer, as Claude's
 /// AskUserQuestion; no question dot (`pendingQuestionCount` counts question forms only).
 #[tokio::test]
-async fn step_2_an_ask_answered_with_own_text_is_one_wait() {
+async fn an_ask_answered_with_own_text_is_one_wait() {
     for (start_first, end_first) in [(false, false), (true, true), (false, true), (true, false)] {
         let label = format!("start event first: {start_first}, end event first: {end_first}");
         let fixture = Fixture::new();
@@ -521,9 +521,9 @@ async fn step_2_an_ask_answered_with_own_text_is_one_wait() {
     }
 }
 
-/// Step 2b: an `ask` answered by picking an option: one wait, which the answer ends.
+/// An `ask` answered by picking an option is one wait, which the answer ends.
 #[tokio::test]
-async fn step_2b_an_ask_answered_by_an_option_is_one_wait() {
+async fn an_ask_answered_by_an_option_is_one_wait() {
     let fixture = Fixture::new();
     let session = fixture.running_omp_turn().await;
     fixture.report(
@@ -544,30 +544,30 @@ async fn step_2b_an_ask_answered_by_an_option_is_one_wait() {
     fixture.forget(&session);
 }
 
-/// Steps 5 and 7 as OMP runs one approved call per assistant message (step 7: two foreground
-/// `sleep 45`). The tool starts (OMP reports `blocked`/`permission` and keeps it, repeating it,
+/// OMP runs one approved call per assistant message, including repeated foreground commands.
+/// The tool starts (OMP reports `blocked`/`permission` and keeps it, repeating it,
 /// until the tool ends), OMP shows the dialog (PermissionRequest), the user looks and answers
 /// (`post_approval_response`, before or after a repeat), the tool runs and ends. Each dialog is one
 /// wait with the card's text in its row; after the look the session reads idle with the red
 /// approval flag, as Claude's does; the answer retires the card and the session reads working
 /// while the approved tool runs; the turn's end is the one finished row.
 #[tokio::test]
-async fn steps_5_and_7_each_approval_is_a_claude_permission_request() {
+async fn each_omp_approval_is_a_claude_permission_request() {
     let plans: [(&str, &[&str]); 2] = [
-        ("step 7", &["sleep 45", "sleep 45"]),
+        ("foreground commands", &["sleep 45", "sleep 45"]),
         (
-            "step 5",
+            "successive approvals",
             &["echo ghostex-approval-test", "echo second-approval"],
         ),
     ];
-    for (step, commands) in plans {
+    for (plan, commands) in plans {
         for answer_first in [false, true] {
             let fixture = Fixture::new();
             let session = fixture.running_omp_turn().await;
             let mut seq = 1;
             let mut seen = Vec::new();
             for (index, command) in commands.iter().enumerate() {
-                let label = format!("{step}, call {index}, answer before repeat: {answer_first}");
+                let label = format!("{plan}, call {index}, answer before repeat: {answer_first}");
                 let call = format!("toolu_{index}");
                 let prompt = allow(command);
                 seq += 1;
@@ -639,21 +639,19 @@ async fn steps_5_and_7_each_approval_is_a_claude_permission_request() {
             }
             fixture.report(&session, seq + 1, "done", None, None);
             fixture.hook(&session, json!({ "eventName": "Stop" })).await;
-            assert_eq!(fixture.rows(&session, "finished").len(), 1, "{step}");
+            assert_eq!(fixture.rows(&session, "finished").len(), 1, "{plan}");
             fixture.forget(&session);
         }
     }
 }
 
-/// Step 5 in the order live run 9 recorded it: Haiku sent three `bash` calls in one assistant
-/// message (14:25:29.66Z); OMP started them together, requested the three approvals at once and
-/// showed one dialog at a time. The extension forwards the dialog OMP shows: card 1 approved (its
-/// `sleep 3` ends at 14:25:46 while card 2 shows), card 2 denied (14:26:11), card 3 denied with a
-/// message (14:26:37). Every dialog is its own wait with its own row and notification (run 9 F5:
-/// only the first was). The first call's end while card 2 shows reads working, as a Claude
-/// subagent's tool hook does; card 2 stays stored and its row is already out.
+/// OMP starts three calls from one assistant message together, requests their approvals at once
+/// and shows one dialog at a time. The extension forwards each shown dialog as its own wait with
+/// its own row and notification. The first call is approved and ends while the second dialog is
+/// open; the next two are denied, the last with a message. The first call's end reads working,
+/// as a Claude subagent's tool hook does, but the second card and its already-published row stay.
 #[tokio::test]
-async fn step_5_three_approvals_in_one_message_are_three_waits() {
+async fn three_omp_approvals_in_one_message_are_three_waits() {
     let fixture = Fixture::new();
     let session = fixture.running_omp_turn().await;
     let commands = [
@@ -725,62 +723,111 @@ async fn step_5_three_approvals_in_one_message_are_three_waits() {
     fixture.forget(&session);
 }
 
-/// The same approval read the same way for Claude Code and OMP (10.40.0's Claude behaviour): an
-/// open request is attention with the red flag; after the look it reads idle with the flag; while
-/// a subagent runs it reads working without the flag; when the child stops the flag is back.
+/// Claude Code and OMP derive the same summary from complete tool input, including JSON fallback
+/// and the shared display cap. An open approval is attention with the red flag; after the look
+/// it reads idle with the flag; while a subagent runs it reads working without the flag; when
+/// the child stops the flag is back.
 #[tokio::test]
 async fn an_omp_approval_reads_like_a_claude_one() {
-    let mut readings = Vec::new();
-    for agent in ["claude", "omp"] {
-        let fixture = Fixture::new();
-        let session = fixture.session(agent);
-        let (tool, call) = if agent == "claude" {
-            ("Bash", None)
-        } else {
-            ("bash", Some("toolu_1"))
-        };
-        let mut start = json!({ "eventName": "PreToolUse", "agentName": agent, "toolName": tool });
-        let mut request = json!({
-            "eventName": "PermissionRequest", "agentName": agent, "toolName": tool,
-            "toolInput": { "command": "sleep 45" },
-        });
-        if let Some(call) = call {
-            start["toolUseId"] = json!(call);
-            request["toolUseId"] = json!(call);
+    let cases = [
+        (
+            json!({ "command": "sleep 45", "description": "Wait", "timeout": 60 }),
+            "sleep 45".to_string(),
+        ),
+        (
+            json!({ "file_path": "example.txt", "content": "hello" }),
+            "example.txt".to_string(),
+        ),
+        (json!({ "path": "src" }), "src".to_string()),
+        (
+            json!({ "url": "https://example.com" }),
+            "https://example.com".to_string(),
+        ),
+        (json!({ "pattern": "*.rs" }), "*.rs".to_string()),
+        (
+            json!({ "settings": { "enabled": true }, "targets": ["a", "b"] }),
+            r#"{"settings":{"enabled":true},"targets":["a","b"]}"#.to_string(),
+        ),
+        (
+            json!({ "command": "", "path": "src" }),
+            r#"{"command":"","path":"src"}"#.to_string(),
+        ),
+        (
+            json!({ "command": 42, "path": "src" }),
+            r#"{"command":42,"path":"src"}"#.to_string(),
+        ),
+        (json!({}), "{}".to_string()),
+        (
+            json!({ "content": "é".repeat(220) }),
+            format!("{{\"content\":\"{}\u{2026}", "é".repeat(188)),
+        ),
+    ];
+    for (input, summary) in cases {
+        let mut readings = Vec::new();
+        for agent in ["claude", "omp"] {
+            let fixture = Fixture::new();
+            let session = fixture.session(agent);
+            let (tool, call) = if agent == "claude" {
+                ("Bash", None)
+            } else {
+                ("bash", Some("toolu_1"))
+            };
+            let mut start =
+                json!({ "eventName": "PreToolUse", "agentName": agent, "toolName": tool });
+            let mut request = json!({
+                "eventName": "PermissionRequest", "agentName": agent, "toolName": tool,
+                "toolInput": input,
+            });
+            if let Some(call) = call {
+                start["toolUseId"] = json!(call);
+                request["toolUseId"] = json!(call);
+            }
+            fixture.hook(&session, start).await;
+            fixture.hook(&session, request).await;
+            assert_eq!(
+                fixture.stored_prompt(&session),
+                Some(SessionChatInteractivePrompt::Approval {
+                    tool: tool.to_string(),
+                    summary: Some(summary.clone()),
+                    tool_use_id: call.map(str::to_string),
+                }),
+                "{agent}: {input}"
+            );
+            let read = |fixture: &Fixture| {
+                (
+                    fixture.flag(&session, "activity"),
+                    fixture.flag(&session, "attention").is_some(),
+                    fixture.awaiting_approval(&session),
+                )
+            };
+            let open = read(&fixture);
+            let body = fixture.rows(&session, "needsInput")[0].2.clone();
+            fixture.acknowledge(&session).await;
+            let looked_at = read(&fixture);
+            fixture.set_fleet(&session, true);
+            let child_runs = read(&fixture);
+            fixture.set_fleet(&session, false);
+            let child_stopped = read(&fixture);
+            readings.push((open, looked_at, child_runs, child_stopped, body));
         }
-        fixture.hook(&session, start).await;
-        fixture.hook(&session, request).await;
-        let read = |fixture: &Fixture| {
-            (
-                fixture.flag(&session, "activity"),
-                fixture.flag(&session, "attention").is_some(),
-                fixture.awaiting_approval(&session),
-            )
-        };
-        let open = read(&fixture);
-        let body = fixture.rows(&session, "needsInput")[0].2.clone();
-        fixture.acknowledge(&session).await;
-        let looked_at = read(&fixture);
-        fixture.set_fleet(&session, true);
-        let child_runs = read(&fixture);
-        fixture.set_fleet(&session, false);
-        let child_stopped = read(&fixture);
-        readings.push((open, looked_at, child_runs, child_stopped, body));
+        let (claude, omp) = (&readings[0], &readings[1]);
+        assert_eq!(
+            claude.0,
+            (Some(json!("attention")), true, Some(json!(true)))
+        );
+        assert_eq!(claude.1, (Some(json!("idle")), false, Some(json!(true))));
+        assert_eq!(claude.2, (Some(json!("working")), false, None));
+        assert_eq!(claude.3, claude.1);
+        assert_eq!(
+            (&omp.0, &omp.1, &omp.2, &omp.3),
+            (&claude.0, &claude.1, &claude.2, &claude.3)
+        );
+        assert_eq!(
+            claude.4,
+            format!("Waiting for your approval: Bash: {summary}")
+        );
+        assert_eq!(omp.4, approval_body(&summary));
     }
-    let (claude, omp) = (&readings[0], &readings[1]);
-    assert_eq!(
-        claude.0,
-        (Some(json!("attention")), true, Some(json!(true)))
-    );
-    assert_eq!(claude.1, (Some(json!("idle")), false, Some(json!(true))));
-    assert_eq!(claude.2, (Some(json!("working")), false, None));
-    assert_eq!(claude.3, claude.1);
-    assert_eq!(
-        (&omp.0, &omp.1, &omp.2, &omp.3),
-        (&claude.0, &claude.1, &claude.2, &claude.3)
-    );
-    assert_eq!(claude.4, "Waiting for your approval: Bash: sleep 45");
-    assert_eq!(omp.4, approval_body("sleep 45"));
 }
 
 /// OMP's own `blocked` record raises nothing (its hooks carry the waits); another program's root

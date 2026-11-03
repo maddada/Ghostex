@@ -266,12 +266,12 @@ fn hook_status_reports_legacy_pi_agent_extension_as_update_required() {
     assert_eq!(row.get("hookInstalled"), Some(&json!(false)));
 }
 
-/// An OMP extension installed before it forwarded the `ask` tool's questions (marker v4) or before
-/// it sent a PermissionRequest for the approval dialog OMP shows (v5 to v8) is rewritten by the
-/// status read the desktop makes before every agent launch.
+/// An OMP extension installed before it forwarded questions, the shown approval dialog or the
+/// complete approval input (markers v4 to v9) is rewritten by the status read the desktop makes
+/// before every agent launch.
 #[test]
 fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwarding() {
-    for previous in ["v4", "v5", "v6", "v7", "v8"] {
+    for previous in ["v4", "v5", "v6", "v7", "v8", "v9"] {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = get_gxserver_paths(Some(temp.path().to_path_buf()));
         let hook_paths = HookPaths::from_paths(&paths);
@@ -313,6 +313,11 @@ fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwa
         );
         assert!(
             read_file_text(&extension_path).contains("sendApprovalHook(\"PermissionRequest\""),
+            "{previous}"
+        );
+        assert!(
+            read_file_text(&extension_path)
+                .contains("callInputs.set(id, (event as { input?: unknown }).input)"),
             "{previous}"
         );
     }

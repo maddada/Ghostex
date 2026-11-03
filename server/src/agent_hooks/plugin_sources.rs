@@ -740,18 +740,6 @@ function toolCallId(event: unknown): string | undefined {
   return firstString((event as { toolCallId?: unknown }).toolCallId) ?? undefined;
 }
 
-// The approval card names the call by the one input field its summary reads
-// (summarize_approval_input in server/src/session_chat_interactive.rs), so only that field is sent.
-function approvalSummaryInput(input: unknown): Record<string, string> | undefined {
-  if (!input || typeof input !== "object") return undefined;
-  for (const key of ["command", "file_path", "path", "url", "pattern"]) {
-    const value = (input as Record<string, unknown>)[key];
-    if (value === undefined || value === null) continue;
-    return typeof value === "string" && value.length > 0 ? { [key]: value } : undefined;
-  }
-  return undefined;
-}
-
 type OptionalEventHandler = (event: unknown, ctx: ExtensionContext) => void | Promise<void>;
 
 function registerOptional(api: ExtensionAPI, name: string, handler: OptionalEventHandler): void {
@@ -859,10 +847,10 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   const chat = new GhostexChatChannel(api);
   // OMP asks for every call of a message at once, without the call's input, and shows one approval
   // dialog at a time in that order. Claude's PermissionRequest comes per dialog it shows, so one is
-  // sent for the dialog OMP shows, with the call's summary input from its `tool_call` event; the
+  // sent for the dialog OMP shows, with the call's complete input from its `tool_call` event; the
   // dialog's answer goes out as `post_approval_response` (the answer event gxserver maps to working)
   // and only after that hook ran the next dialog's request, so each dialog is a wait of its own.
-  const callInputs = new Map<string, Record<string, string>>();
+  const callInputs = new Map<string, unknown>();
   let approvals: { id: string; toolName: string | null }[] = [];
   let approvalHooks: Promise<void> = Promise.resolve();
   const sendApprovalHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown>) => {
@@ -948,8 +936,7 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
 
   registerOptional(api, "tool_call", (event) => {
     const id = toolCallId(event);
-    const input = approvalSummaryInput((event as { input?: unknown }).input);
-    if (id && input) callInputs.set(id, input);
+    if (id) callInputs.set(id, (event as { input?: unknown }).input);
   });
 
   registerOptional(api, "tool_approval_requested", (event, ctx) => {
@@ -994,7 +981,7 @@ pub(crate) fn current_plugin_marker(marker: &str) -> String {
     } else if marker == AMP_PLUGIN_MARKER {
         format!("{marker} v5")
     } else if marker == OMP_EXTENSION_MARKER {
-        format!("{marker} v9")
+        format!("{marker} v10")
     } else {
         format!("{marker} v2")
     }
