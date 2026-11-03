@@ -729,6 +729,28 @@ pub(super) fn open(demo: &super::DemoEnv, cx: &mut App) {
                                         move |_| {
                                             let mut state = host.borrow_mut();
                                             let last = index == STORY_OUTPUT.len() - 1;
+                                            // `GHOSTEX_ONBOARDING_DEMO_FAIL_AGENT=<id>`: that agent's install fails, to preview the Install guide's failed row.
+                                            let fails =
+                                                std::env::var("GHOSTEX_ONBOARDING_DEMO_FAIL_AGENT")
+                                                    .ok()
+                                                    .as_deref()
+                                                    == Some(agent_id.as_str());
+                                            if last && fails {
+                                                if let Some(job) = state.jobs.get_mut(&agent_id) {
+                                                    let output = format!(
+                                                        "{}npm error code EACCES\nnpm error syscall mkdir\nnpm error path /usr/local/lib/node_modules\nnpm error The operation was rejected by your operating system.\n",
+                                                        job.get("output")
+                                                            .and_then(Value::as_str)
+                                                            .unwrap_or_default()
+                                                    );
+                                                    job["output"] = json!(output);
+                                                    job["status"] = json!("failed");
+                                                    job["error"] = json!(
+                                                        "npm could not write to /usr/local/lib/node_modules (EACCES)."
+                                                    );
+                                                }
+                                                return;
+                                            }
                                             if last {
                                                 state.installed_now.insert(agent_id.clone());
                                             }

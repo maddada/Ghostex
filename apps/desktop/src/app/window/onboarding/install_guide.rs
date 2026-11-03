@@ -2,6 +2,7 @@
 //! (install-guide-popup.tsx (deleted 2026-10-01), `.modal*` and `.install-*` in styles/base.css).
 use super::GpuiOnboardingWindow;
 use super::OnboardingCommand;
+use super::agent_cli::{GuideRowStatus, guide_lists_agent, guide_row_status, strip_ansi};
 use super::fonts::{MANROPE, PLEX_MONO};
 use super::interact;
 use super::model::{INSTALL_GUIDE_URL, PRIMARY_AGENTS, catalog_agent_name, cli_catalog};
@@ -193,6 +194,32 @@ fn thin_scrollbar(s: S, handle: &ScrollHandle) -> AnyElement {
         .into_any_element()
 }
 
+/// The Install button's shape while its install is queued or running: a spinner and the state, not
+/// clickable.
+fn busy_button(s: S, spinner: AnyElement, label: &str) -> Div {
+    div()
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(s.px(7.0))
+        .h(s.px(30.0))
+        .pl(s.px(9.0))
+        .pr(s.px(11.0))
+        .rounded(s.px(9.0))
+        .border_1()
+        .border_color(rgba(110, 150, 255, 0.3))
+        .bg(rgba(60, 90, 200, 0.10))
+        .font_family(super::fonts::dm_sans())
+        .font_weight(gpui::FontWeight(500.0))
+        .text_size(s.px(13.0))
+        .line_height(s.px(13.0 * LH_DM_SANS))
+        .text_color(hex(0xc9d0dc))
+        .whitespace_nowrap()
+        .cursor_default()
+        .child(spinner)
+        .child(label.to_string())
+}
+
 pub(crate) fn modal_p(s: S) -> Div {
     sans(s, 14.5, 400.0, hex(0xb3bac7)).line_height(s.px(14.5 * 1.5))
 }
@@ -240,7 +267,14 @@ impl GpuiOnboardingWindow {
             .collect();
         let mut entries: Vec<_> = cli_catalog()
             .into_iter()
-            .filter(|entry| !installed.contains(&entry.agent_id))
+            .filter(|entry| {
+                guide_lists_agent(
+                    installed.contains(&entry.agent_id),
+                    self.cli_rows
+                        .get(&format!("guide:{}", entry.agent_id))
+                        .is_some(),
+                )
+            })
             .collect();
         let rank = |agent_id: &str| {
             PRIMARY_AGENTS
@@ -293,47 +327,48 @@ impl GpuiOnboardingWindow {
                 move |this, _, cx| this.send(OnboardingCommand::OpenExternalUrl(docs.clone()), cx),
             );
             let row = self.cli_rows.get(&key);
-            let error = row.and_then(|row| row.error());
+            let status = guide_row_status(row, installed.contains(&entry.agent_id));
+            let error = row
+                .filter(|_| status == GuideRowStatus::Failed)
+                .and_then(|row| row.error());
             let command = row
                 .and_then(|row| row.method())
                 .map(|method| method.command.clone())
                 .or_else(|| entry.install_command.clone());
-            let running = row.is_some_and(|row| row.running());
-            let row_installed = row.is_some_and(|row| row.installed());
-            let action: Option<AnyElement> = if running {
-                Some(
-                    detpill(
+            let output = row
+                .filter(|_| status == GuideRowStatus::Failed)
+                .and_then(|row| row.job_output())
+                .map(strip_ansi);
+            let show_output = output.is_some() && row.is_some_and(|row| row.show_output);
+            let progress = row.and_then(|row| row.progress_line());
+            let action: Option<AnyElement> = match status {
+                GuideRowStatus::Queued | GuideRowStatus::Installing => Some(
+                    busy_button(
                         s,
-                        div()
-                            .flex()
-                            .items_center()
-                            .child(div().mr(s.px(8.0)).child(spinner(
-                                s,
-                                14.0,
-                                1.5,
-                                self.opened_at,
-                                now,
-                            )))
-                            .child("Installing…"),
-                        DetTone::Wait,
-                        (28.0, 10.0, 12.5),
+                        spinner(s, 13.0, 1.5, self.opened_at, now).into_any_element(),
+                        if status == GuideRowStatus::Queued {
+                            "Queued…"
+                        } else {
+                            "Installing…"
+                        },
                     )
                     .into_any_element(),
-                )
-            } else if row_installed {
-                Some(detpill(s, "Installed", DetTone::On, (28.0, 10.0, 12.5)).into_any_element())
-            } else if connection {
-                let key = key.clone();
-                let title = command.clone().unwrap_or_default();
-                let id = SharedString::from(format!("guide-install-{}", entry.agent_id));
-                Some(
-                    self.control(
+                ),
+                GuideRowStatus::Installed => Some(
+                    detpill(s, "Installed", DetTone::On, (28.0, 10.0, 12.5)).into_any_element(),
+                ),
+                _ if connection => {
+                    let failed = status == GuideRowStatus::Failed;
+                    let install_key = key.clone();
+                    let title = command.clone().unwrap_or_default();
+                    let id = SharedString::from(format!("guide-install-{}", entry.agent_id));
+                    let install = self.control(
                         s,
                         install_button(
                             s,
                             id.clone(),
-                            if error.is_some() { "refresh" } else { "plus" },
-                            if error.is_some() { "Retry" } else { "Install" },
+                            if failed { "refresh" } else { "plus" },
+                            if failed { "Retry" } else { "Install" },
                             false,
                             (30.0, 9.0, 11.0, 13.0, 14.0),
                         )
@@ -342,13 +377,45 @@ impl GpuiOnboardingWindow {
                         interact::Ring::new(9.0, 1.0),
                         interact::Keys::EnterSpace,
                         cx,
-                        move |this, _, cx| this.cli_install(&key, cx),
+                        move |this, _, cx| this.cli_install(&install_key, cx),
+                    );
+                    let details = output.is_some().then(|| {
+                        let details_key = key.clone();
+                        let id = SharedString::from(format!("guide-details-{}", entry.agent_id));
+                        self.control(
+                            s,
+                            ghost(
+                                s,
+                                id.clone(),
+                                if show_output { "Hide" } else { "Details" },
+                                13.0,
+                                false,
+                            )
+                            .h(s.px(30.0))
+                            .px(s.px(4.0)),
+                            id,
+                            interact::Ring::new(7.0, 0.0),
+                            interact::Keys::EnterSpace,
+                            cx,
+                            move |this, _, cx| {
+                                this.cli_rows.toggle_output(&details_key);
+                                cx.notify();
+                            },
+                        )
+                    });
+                    Some(
+                        div()
+                            .flex()
+                            .flex_none()
+                            .items_center()
+                            .gap(s.px(6.0))
+                            .children(details)
+                            .child(install)
+                            .into_any_element(),
                     )
-                    .into_any_element(),
-                )
-            } else if let Some(command) = command.clone() {
-                let id = SharedString::from(format!("guide-copy-{}", entry.agent_id));
-                Some(
+                }
+                _ => command.clone().map(|command| {
+                    let id = SharedString::from(format!("guide-copy-{}", entry.agent_id));
                     self.control(
                         s,
                         icon_button(s, id.clone(), "copy", 15.0),
@@ -361,10 +428,8 @@ impl GpuiOnboardingWindow {
                             this.show_toast(format!("Copied {command}"), cx);
                         },
                     )
-                    .into_any_element(),
-                )
-            } else {
-                None
+                    .into_any_element()
+                }),
             };
             let middle: AnyElement = match &error {
                 Some(error) => {
@@ -387,8 +452,10 @@ impl GpuiOnboardingWindow {
                         .into_any_element()
                 }
                 None => {
-                    let text = command
+                    // While it installs, the row shows the installer's latest line instead of the command.
+                    let text = progress
                         .clone()
+                        .or_else(|| command.clone())
                         .unwrap_or_else(|| "See the install docs".to_string());
                     let tip = text.clone();
                     div()
@@ -409,21 +476,51 @@ impl GpuiOnboardingWindow {
                         .into_any_element()
                 }
             };
+            let output_panel = output.filter(|_| show_output).map(|output| {
+                div()
+                    .id(SharedString::from(format!(
+                        "guide-output-{}",
+                        entry.agent_id
+                    )))
+                    .mt(s.px(10.0))
+                    .max_h(s.px(150.0))
+                    .overflow_y_scroll()
+                    .p(s.px(10.0))
+                    .rounded(s.px(8.0))
+                    .bg(rgba(0, 0, 0, 0.35))
+                    .border_1()
+                    .border_color(white(0.06))
+                    .font_family(PLEX_MONO)
+                    .text_size(s.px(11.0))
+                    .line_height(s.px(11.0 * 1.45))
+                    .text_color(hex(0xb3bac7))
+                    .child(output.trim().to_string())
+            });
             div()
                 .flex()
+                .flex_col()
                 .flex_none()
-                .items_center()
-                .gap(s.px(12.0))
                 .py(s.px(10.0))
                 .px(s.px(12.0))
                 .rounded(s.px(10.0))
                 .bg(white(0.03))
                 .border_1()
-                .border_color(white(0.07))
-                .child(agent_logo(s, &self.catalog, &entry.agent_id, 18.0))
-                .child(name_link)
-                .child(middle)
-                .children(action)
+                .border_color(if error.is_some() {
+                    rgba(255, 107, 98, 0.22)
+                } else {
+                    white(0.07)
+                })
+                .child(
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(s.px(12.0))
+                        .child(agent_logo(s, &self.catalog, &entry.agent_id, 18.0))
+                        .child(name_link)
+                        .child(middle)
+                        .children(action),
+                )
+                .children(output_panel)
                 .into_any_element()
         });
         let lead = if connection {

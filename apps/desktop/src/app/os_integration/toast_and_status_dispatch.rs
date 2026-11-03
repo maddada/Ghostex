@@ -272,6 +272,17 @@ impl GhostexGpuiApp {
         the walk like the macOS catch path.
         */
         if self.agent_hook_status_request_in_flight {
+            /*
+            CDXC:Onboarding 2026-11-03 WHY:
+            A rescan asked for while a walk runs used to be dropped, so the rescan the Install guide
+            asks for when an install finishes was lost whenever the panel's own scan (or Settings')
+            was still walking: that walk had probed before the install, and the new agent never
+            showed as installed. The request now waits and runs once the walk ends.
+            */
+            self.agent_hook_status_request_queued = Some(merge_queued_agent_hook_status_request(
+                self.agent_hook_status_request_queued.take(),
+                requested_agent_ids,
+            ));
             return;
         }
         self.agent_hook_status_request_in_flight = true;
@@ -325,8 +336,11 @@ impl GhostexGpuiApp {
                 }
                 merged = Some(next);
             }
-            let _ = this.update(cx, |this, _| {
+            let _ = this.update(cx, |this, cx| {
                 this.agent_hook_status_request_in_flight = false;
+                if let Some(queued) = this.agent_hook_status_request_queued.take() {
+                    this.run_gpui_progressive_agent_hook_status_task(queued, cx);
+                }
             });
         })
         .detach();
@@ -394,5 +408,47 @@ impl GhostexGpuiApp {
             });
         })
         .detach();
+    }
+}
+
+/// Folds a status request into the one already waiting: every agent wins, otherwise the ids add up.
+fn merge_queued_agent_hook_status_request(
+    queued: Option<Option<Vec<String>>>,
+    requested: Option<Vec<String>>,
+) -> Option<Vec<String>> {
+    match (queued, requested) {
+        (None, requested) => requested,
+        (Some(None), _) | (_, None) => None,
+        (Some(Some(mut ids)), Some(more)) => {
+            for id in more {
+                if !ids.contains(&id) {
+                    ids.push(id);
+                }
+            }
+            Some(ids)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::merge_queued_agent_hook_status_request as merge;
+
+    #[test]
+    fn a_rescan_asked_for_during_a_walk_is_kept_not_dropped() {
+        assert_eq!(merge(None, None), None);
+        assert_eq!(
+            merge(None, Some(vec!["gemini".into()])),
+            Some(vec!["gemini".into()])
+        );
+        assert_eq!(merge(Some(Some(vec!["gemini".into()])), None), None);
+        assert_eq!(merge(Some(None), Some(vec!["gemini".into()])), None);
+        assert_eq!(
+            merge(
+                Some(Some(vec!["gemini".into()])),
+                Some(vec!["amp".into(), "gemini".into()])
+            ),
+            Some(vec!["gemini".into(), "amp".into()])
+        );
     }
 }

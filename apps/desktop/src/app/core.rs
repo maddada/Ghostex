@@ -970,6 +970,8 @@ pub struct GhostexGpuiApp {
     /// Built-in agent ids the sidebar launchers map to; `None` until the first HUD read completes.
     pub(crate) titlebar_tips_sidebar_agent_ids: Option<HashSet<String>>,
     pub(crate) agent_hook_status_request_in_flight: bool,
+    /// A status walk asked for while one was running (`Some(None)` = every agent), run when it ends.
+    pub(crate) agent_hook_status_request_queued: Option<Option<Vec<String>>>,
     pub(crate) native_sidebar: crate::app::native_sidebar::state::NativeSidebarState,
     /// The native Kanban board's state; see app/native_kanban/.
     /// The native Docs view's state; see app/native_docs/.
