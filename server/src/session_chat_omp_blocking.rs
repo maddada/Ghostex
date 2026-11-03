@@ -32,6 +32,9 @@ sends whenever such a component hides the measured OMP composer.
 use std::borrow::Cow;
 
 use crate::session_chat_options::{normalize_spaces, strip_ansi_sgr};
+use crate::session_chat_resume_prompt::{
+    SessionChatTerminalPicker, SessionChatTerminalPickerKind, SessionChatTerminalPickerRow,
+};
 
 const OMP_BLOCKING_SCAN_LINES: usize = 240;
 const OMP_PAIR_RADIUS: usize = 100;
@@ -218,6 +221,8 @@ fn has_choice_controls(text: &str) -> bool {
             "enter / click",
             "\u{21b5} log out account",
             "enter log out account",
+            // CDXC:AgentScreenDetection 2026-11-03 WHY: a tool approval with a draft typed into it (OMP 18.13.3's `approval-dialog.ts`: the first typed key goes to the composer below, the highlight moves to "Deny and send message") swaps its footer for "⏎ deny and send · … · ⎋ deny". Without this pair the approval stopped reading as one after the first key a chat card passed through, and the card went away while OMP still waited.
+            "enter deny and send",
         ],
     );
     let exit = contains_any(
@@ -366,6 +371,14 @@ fn live_unframed(
 
 /// CDXC:AgentScreenDetection 2026-10-28 WHY:
 /// OMP 18.13 draws a tool approval inline and keeps its composer on screen right below it (the `pi` and the `box` shape alike), and removes the frame as soon as the call is approved or denied. The stale-scrollback rule, which retires a frame with the live composer below it, therefore dropped every live approval: the chat showed no card, the composer read as ready, and a chat message would have reached OMP, whose footer reads "type to deny and steer". An approval frame is live while nothing but the composer follows it; with any line between them it stays retired like every other frame.
+fn is_live_approval(text: &str, composer: Option<usize>, end: usize) -> bool {
+    text.contains("allow tool:")
+        && text.contains("approve")
+        && text.contains("deny")
+        && has_choice_controls(text)
+        && (composer == Some(end + 1) || !composer_after(composer, end))
+}
+
 fn classify_rounded_frame(
     lines: &[String],
     composer: Option<usize>,
@@ -378,12 +391,7 @@ fn classify_rounded_frame(
     let title = frame_title(&lines[start]);
     let text = folded(&lines[start..=end]);
 
-    if text.contains("allow tool:")
-        && text.contains("approve")
-        && text.contains("deny")
-        && has_choice_controls(&text)
-        && (composer == Some(end + 1) || !composer_after(composer, end))
-    {
+    if is_live_approval(&text, composer, end) {
         return Some(OmpBlockingScreen {
             title: "OMP is waiting for tool approval",
             detail:
@@ -464,6 +472,68 @@ fn classify_rounded_frame(
     }
 
     None
+}
+
+/// CDXC:AgentScreenDetection 2026-11-03 WHY:
+/// OMP's tool approval is answered in the chat from its own rows, the way Claude Code's, Antigravity's, Copilot's and Grok's permission prompts are: the dialog's choices (the grants and their remember toggle when offered, Approve, Approve for this session, Deny) in the order OMP lists them, with OMP's highlight. Its rows carry no numbers, so a pick walks the highlight and presses Enter. Once a key typed in OMP's terminal turned the dialog into "Deny and send message" (the footer says "deny and send"), Enter sends that message, so the dialog is left to the pass-through card the blocking detector above makes of it.
+pub fn detect_omp_permission_picker(text: &str) -> Option<SessionChatTerminalPicker> {
+    let (lines, composer) = scan_lines(text);
+    let (start, end) = rounded_frames(&lines).into_iter().find(|&(start, end)| {
+        composer != Some(start) && is_live_approval(&folded(&lines[start..=end]), composer, end)
+    })?;
+    if folded(&lines[start..=end]).contains("enter deny and send") {
+        return None;
+    }
+    let inner = |line: &str| {
+        line.trim()
+            .trim_matches(|c| matches!(c, '\u{2502}' | '\u{2503}'))
+            .trim()
+            .to_string()
+    };
+    let divider =
+        (start + 1..end).rfind(|index| lines[*index].trim_start().starts_with('\u{251c}'))?;
+    let mut rows = Vec::new();
+    for line in lines[start + 1..divider].iter().rev() {
+        let line = inner(line);
+        let (selected, label) = match ["\u{276f} ", "\u{f054} ", "> "]
+            .iter()
+            .find_map(|cursor| line.strip_prefix(*cursor))
+        {
+            Some(label) => (true, label.trim()),
+            None => (false, line.as_str()),
+        };
+        if !(label == "Deny"
+            || label.starts_with("Approve")
+            || label.starts_with("Always Approve")
+            || label.ends_with("Remember across sessions"))
+        {
+            break;
+        }
+        rows.push(SessionChatTerminalPickerRow {
+            number: 0,
+            label: label.to_string(),
+            selected,
+        });
+    }
+    rows.reverse();
+    let selected_index = rows.iter().position(|row| row.selected)?;
+    let detail = std::iter::once(&lines[start])
+        .chain(&lines[start + 1..divider - rows.len()])
+        .map(|line| {
+            inner(line)
+                .trim_matches(|c| matches!(c, '\u{256d}' | '\u{256e}' | '\u{2500}'))
+                .trim()
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    Some(SessionChatTerminalPicker {
+        kind: SessionChatTerminalPickerKind::OmpPermission,
+        detail: (!detail.is_empty()).then_some(detail),
+        rows,
+        selected_index,
+    })
 }
 
 /// Classify a live OMP surface that owns terminal input in place of its normal

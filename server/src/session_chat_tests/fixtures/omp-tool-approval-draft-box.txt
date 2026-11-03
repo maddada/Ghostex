@@ -1,0 +1,14 @@
+ Testing a Ghostex integration: run the bash command echo ghostex-approval-test exactly once. Do nothing else and do not call any other tool.
+
+
+  ⎋ Running approval test echo
+
+╭─ Allow tool: bash ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Command: echo ghostex-approval-test                                                                                                                                                                  │
+│   Approve                                                                                                                                                                                            │
+│ ❯ Deny and send message                                                                                                                                                                              │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ ⏎ deny and send · ⌃⏎/⌃Q approve · ⎋ deny · ⌃O details                                                                                                                                                │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭── ⬢ Opus 5.5 👁 · ◑ med   📁 …te/ghostex-omp-iso/projects/omp-unicode   ⏱ 5h 17% (1h 38m) · 7d 19% (5d 1h)   💾 99.99%   ✅ APPRV: Run Ghostex approval test echo   💾 28K ─3%──────────┃────────1M───╮
+╰─ N                                                                                                                                                                                                  ─╯

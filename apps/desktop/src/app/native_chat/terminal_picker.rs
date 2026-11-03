@@ -450,6 +450,7 @@ impl NativeChatView {
         &mut self,
         notice: &Value,
         p: &ChatAppearance,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let passthrough = &notice["passthrough"];
@@ -463,11 +464,26 @@ impl NativeChatView {
                     .into_any_element(),
             );
         }
+        let screen = text(passthrough, "screen");
+        if self.passthrough_screen_shown.as_deref() != Some(screen.as_str()) {
+            self.passthrough_screen_scroll.scroll_to_bottom();
+            self.passthrough_screen_shown = Some(screen.clone());
+        }
         body.push(
             div()
                 .id("terminal-passthrough-screen")
-                // The agent's picker is at the bottom of the tail, so the whole tail (24 lines at
-                // most) is shown rather than a box that opens scrolled to its top.
+                /*
+                CDXC:SessionChat 2026-11-02 WHY:
+                The region showed the whole tail unbounded and wrapped, so OMP's 200-column tool approval rows broke into several lines each, the card grew past the chat's height and the transcript above it had no room left to scroll (live test, 2026-11-02). Like the phone's card (TerminalPickerCard.tsx in the phone app: at most 320 points, scrolled to its end, rows scroll sideways), the region is bounded, keeps one terminal row per line, scrolls both ways and keeps its end in view as the agent repaints, because the agent's picker is at the bottom of the tail.
+                */
+                .max_h(px(
+                    (320.0 * s).min(f32::from(window.viewport_size().height) * 0.25)
+                ))
+                .overflow_scroll()
+                .track_scroll(&self.passthrough_screen_scroll)
+                .flex()
+                .flex_col()
+                .items_start()
                 .rounded(px(8.0 * s))
                 .border_1()
                 .border_color(p.control_border.opacity(0.65))
@@ -475,7 +491,9 @@ impl NativeChatView {
                 .p(px(12.0 * s))
                 .font_family(crate::app::native_chat::fonts::CHAT_MONO)
                 .text_size(px(12.0 * s))
-                .child(text(passthrough, "screen"))
+                .line_height(px(16.0 * s))
+                .whitespace_nowrap()
+                .child(screen)
                 .into_any_element(),
         );
         body.push(
@@ -495,7 +513,9 @@ impl NativeChatView {
                         .text_color(p.primary)
                         .flex_shrink_0(),
                 )
-                .child(text(passthrough, "hint"))
+                // The hint is longer than one row in a narrow chat, and a flex row's text does
+                // not wrap on its own.
+                .child(div().flex_1().min_w_0().child(text(passthrough, "hint")))
                 .into_any_element(),
         );
         if let Some(error) = self.snapshot["noticeError"].as_str() {

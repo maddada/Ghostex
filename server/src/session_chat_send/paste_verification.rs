@@ -11,6 +11,10 @@ pub(crate) async fn write_session_chat_payload(
     source: &str,
     payload: &str,
 ) -> Result<(), String> {
+    #[cfg(test)]
+    if let Some(written) = stand_in_terminal_write(zmx_name, payload) {
+        return written;
+    }
     crate::zmx::log_temporary_zmx_input_write(
         project_id,
         session_id,
@@ -62,6 +66,10 @@ pub(crate) async fn session_agent_process_running(zmx_name: &str, home_dir: &Pat
 }
 
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
+    #[cfg(test)]
+    if let Some(screen) = stand_in_terminal_capture(zmx_name) {
+        return screen;
+    }
     let zmx_name = zmx_name.to_string();
     let capture =
         tokio::task::spawn_blocking(move || crate::zmx::read_zmx_session_screen_capture(&zmx_name))
@@ -222,3 +230,105 @@ pub(super) fn log_session_chat_paste_verification(
 /// Why a message was not sent when the agent's terminal did not take it.
 const TERMINAL_REFUSED: &str =
     "The agent's terminal didn't take your message. Retry, or open Terminal view to check it.";
+
+/// What a test's stand-in terminal shows and was sent.
+#[cfg(test)]
+#[derive(Default)]
+struct StandInTerminal {
+    screen: Option<String>,
+    writes: Vec<String>,
+    captures: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static STAND_IN_TERMINALS: std::cell::RefCell<HashMap<String, StandInTerminal>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+#[cfg(test)]
+fn stand_in_terminal_write(zmx_name: &str, payload: &str) -> Option<Result<(), String>> {
+    STAND_IN_TERMINALS.with(|terminals| {
+        let mut terminals = terminals.borrow_mut();
+        let terminal = terminals.get_mut(zmx_name)?;
+        terminal.writes.push(payload.to_string());
+        Some(Ok(()))
+    })
+}
+
+#[cfg(test)]
+fn stand_in_terminal_capture(zmx_name: &str) -> Option<Option<String>> {
+    STAND_IN_TERMINALS.with(|terminals| {
+        let mut terminals = terminals.borrow_mut();
+        let terminal = terminals.get_mut(zmx_name)?;
+        terminal.captures += 1;
+        Some(terminal.screen.clone())
+    })
+}
+
+/// Takes the session's terminal out of the test when dropped.
+#[cfg(test)]
+#[must_use = "bind it for the whole test: `let terminal = ...`; a bare `_` drops it at once"]
+pub(crate) struct StandInTerminalForTest {
+    zmx_name: String,
+}
+
+#[cfg(test)]
+impl StandInTerminalForTest {
+    /// What the next screen read returns; `None` is a screen that could not be read.
+    pub(crate) fn show(&self, screen: Option<&str>) {
+        STAND_IN_TERMINALS.with(|terminals| {
+            if let Some(terminal) = terminals.borrow_mut().get_mut(&self.zmx_name) {
+                terminal.screen = screen.map(str::to_string);
+            }
+        });
+    }
+
+    /// Every payload written to the terminal, in order.
+    pub(crate) fn writes(&self) -> Vec<String> {
+        STAND_IN_TERMINALS.with(|terminals| {
+            terminals
+                .borrow()
+                .get(&self.zmx_name)
+                .map(|terminal| terminal.writes.clone())
+                .unwrap_or_default()
+        })
+    }
+
+    /// How often the screen was read.
+    pub(crate) fn captures(&self) -> usize {
+        STAND_IN_TERMINALS.with(|terminals| {
+            terminals
+                .borrow()
+                .get(&self.zmx_name)
+                .map_or(0, |terminal| terminal.captures)
+        })
+    }
+}
+
+#[cfg(test)]
+impl Drop for StandInTerminalForTest {
+    fn drop(&mut self) {
+        STAND_IN_TERMINALS.with(|terminals| terminals.borrow_mut().remove(&self.zmx_name));
+    }
+}
+
+/// CDXC:SessionChat 2026-11-03 WHY: a key from a chat card goes through the answer function, the session's send queue and its worker, and only the worker reads the screen and writes; a test of the key's bytes alone missed a key written as the wrong key and a key written to a screen that no longer showed the card. This stands in for the session's terminal at the two calls that reach zmx (`capture_session_terminal_text`, `write_session_chat_payload`), so a test drives that whole route and sees what reached the terminal. Per thread for the reason `assume_gh_cli_available_for_test` is: the worker runs on the test's thread under `#[tokio::test]`.
+#[cfg(test)]
+pub(crate) fn stand_in_terminal_for_test(
+    zmx_name: &str,
+    screen: Option<&str>,
+) -> StandInTerminalForTest {
+    STAND_IN_TERMINALS.with(|terminals| {
+        terminals.borrow_mut().insert(
+            zmx_name.to_string(),
+            StandInTerminal {
+                screen: screen.map(str::to_string),
+                ..StandInTerminal::default()
+            },
+        )
+    });
+    StandInTerminalForTest {
+        zmx_name: zmx_name.to_string(),
+    }
+}

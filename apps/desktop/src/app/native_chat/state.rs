@@ -175,6 +175,10 @@ pub(crate) struct NativeChatView {
     pub(super) secret_request_inputs: super::secret_request::SecretRequestInputs,
     pub(super) terminal_dialog_key_focus: gpui::FocusHandle,
     pub(super) terminal_picker_input: Option<super::terminal_picker::TerminalPickerInput>,
+    /// The pass-through card's screen region, kept scrolled to its end (terminal_picker.rs).
+    pub(super) passthrough_screen_scroll: gpui::ScrollHandle,
+    /// The screen text that region last showed; new text scrolls it to its end again.
+    pub(super) passthrough_screen_shown: Option<String>,
     pub(crate) note_input: Option<Entity<TextareaState>>,
     pub(crate) note_subscription: Option<Subscription>,
     /// The note and text boxes of the open question forms, by `<form id>:<question>`.
@@ -492,6 +496,8 @@ impl NativeChatView {
             secret_request_inputs: Default::default(),
             terminal_dialog_key_focus: cx.focus_handle(),
             terminal_picker_input: None,
+            passthrough_screen_scroll: Default::default(),
+            passthrough_screen_shown: None,
             note_input: None,
             note_subscription: None,
             form_inputs: Default::default(),

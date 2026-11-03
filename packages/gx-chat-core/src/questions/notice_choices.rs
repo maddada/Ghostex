@@ -8,19 +8,19 @@ use crate::questions::model::TerminalNotice;
 pub const COLLAPSED_CHOICE_COUNT: u32 = 2;
 
 /// The visible rows a folded picker shows, as positions into its visible rows, in the agent's own
-/// order: the row Cmd+Enter answers and the row Escape answers.
+/// order: the row Cmd+Enter answers and the row Escape answers in a session of `agent`.
 ///
 /// CDXC:SessionChat 2026-10-28 DECISION: User picked "Yes, always show No" (Q706): a folded
 /// approval card shows the first Yes and the No. A permission prompt's rows are Yes, then "Yes, and
 /// don't ask again" style rows, then No, so the first two rows hid No until the card was expanded.
 /// The folded card now shows the Cmd+Enter row and the Escape row; a card without an Escape row,
 /// or whose two rows are already within the first two, keeps its first `COLLAPSED_CHOICE_COUNT`.
-pub fn collapsed_choice_positions(notice: &TerminalNotice) -> Vec<usize> {
+pub fn collapsed_choice_positions(notice: &TerminalNotice, agent: Option<&str>) -> Vec<usize> {
     let visible = notice.visible_choices().len();
     let first: Vec<usize> = (0..visible.min(COLLAPSED_CHOICE_COUNT as usize)).collect();
     let (Some(primary), Some(secondary)) = (
         notice.primary_choice_position(),
-        notice.secondary_choice_position(),
+        notice.secondary_choice_position(agent),
     ) else {
         return first;
     };
@@ -150,7 +150,7 @@ mod tests {
             "choices": choices,
         })))
         .expect("notice");
-        collapsed_choice_positions(&notice)
+        collapsed_choice_positions(&notice, None)
     }
 
     #[test]

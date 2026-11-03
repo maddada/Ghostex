@@ -29,7 +29,7 @@ impl NativeChatView {
         }
         self.terminal_picker_input = None;
         if notice["passthrough"].is_object() {
-            return Some(self.passthrough_card(notice, p, cx));
+            return Some(self.passthrough_card(notice, p, window, cx));
         }
         let key = format!(
             "notice:{}:{}",

@@ -136,10 +136,11 @@ pub fn passthrough_presentation(notice: &TerminalNotice) -> Option<Value> {
             )
         })
         .collect();
+    // CDXC:SessionChat 2026-11-02 WHY: the release button used to read "Return keyboard to chat", and a user who clicked it on OMP's tool approval could not tell whether it had approved the call; the card went away and OMP kept waiting. The label says what it does, and the hint that nothing is answered.
     Some(json!({
         "screen": passthrough_screen(notice.screen_tail.as_deref().unwrap_or_default()),
-        "hint": "This card has the keyboard: letters, numbers, arrows, Enter and Esc go to the agent's terminal.",
-        "releaseLabel": "Return keyboard to chat",
+        "hint": "This card has the keyboard: letters, numbers, arrows, Enter and Esc go to the agent's terminal. Hiding it sends nothing, and the agent keeps waiting.",
+        "releaseLabel": "Hide and type in chat",
         "keys": keys,
         // The renderer puts the typed character in `text`.
         "textAnswer": { "kind": "terminalKey", "text": "" },

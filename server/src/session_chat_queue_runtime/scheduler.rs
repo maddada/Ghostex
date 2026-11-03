@@ -724,14 +724,10 @@ impl SessionChatQueueRuntime {
             if self.composer_holds.screen_read_due(key, &head.id, now) {
                 (self.compacting_refresher)(project_id, session_id, composer_agent.as_deref());
             }
-            // An agent that could not start says so on its row, not as an unreadable box.
-            if let Some(notice) = (self.notice_reader)(project_id, session_id) {
-                if notice.missing_login() {
-                    return hold(head, WaitReason::MissingLogin);
-                }
-                if notice.start_failed() {
-                    return hold(head, WaitReason::StartFailed);
-                }
+            if let Some(reason) =
+                (self.notice_reader)(project_id, session_id).and_then(|n| startup_notice_wait(&n))
+            {
+                return hold(head, reason);
             }
             if draft
                 || composer.screen_tail.is_empty()
@@ -1300,6 +1296,25 @@ fn notice_fails_a_row(notice: &crate::session_chat_notice::SessionChatTerminalNo
         && notice.kind != crate::session_chat_notice::SESSION_CHAT_NOTICE_DELIVERY_FAILED
 }
 
+/// What a held startup send waits for when the screen's notice explains its unready input box,
+/// or `None` to leave the row to the starting and input-box checks. An agent that could not start
+/// says so on its row, not as an unreadable box.
+///
+/// CDXC:SessionChat 2026-11-02 WHY: a screen the chat passes keys through to (OMP's tool approval, another agent's own picker) stands in for the input box until the user answers it, the same wait the activity gate calls `Answer` for a queued row. The input-box ladder is for a box that cannot be read: a message sent during an OMP approval said "the agent's input box can't be read yet, asking it to redraw its screen", and after five minutes it would have said the box was gone (live test, 2026-11-02).
+fn startup_notice_wait(
+    notice: &crate::session_chat_notice::SessionChatTerminalNotice,
+) -> Option<WaitReason> {
+    if notice.missing_login() {
+        Some(WaitReason::MissingLogin)
+    } else if notice.start_failed() {
+        Some(WaitReason::StartFailed)
+    } else if notice.blocks_input() && notice.passes_keys_through() {
+        Some(WaitReason::Answer)
+    } else {
+        None
+    }
+}
+
 /// An account switch or recovery is under way, which owns the session's next input.
 fn account_recovery_waiting(session: &Value) -> bool {
     matches!(
@@ -1537,5 +1552,43 @@ mod tests {
             not_running_head(Some("sleeping"), None),
             NotRunningHead::Wait
         );
+    }
+
+    #[test]
+    fn a_message_sent_during_an_omp_tool_approval_waits_for_the_answer() {
+        // The open approval is a permission card with rows: a send meets the chat's "Answer it in
+        // chat before sending" refusal, as during Claude Code's (`is_answerable`, send.rs).
+        for screen in [
+            include_str!("../session_chat_tests/fixtures/omp-tool-approval-pi.txt"),
+            include_str!("../session_chat_tests/fixtures/omp-tool-approval-box.txt"),
+        ] {
+            let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
+                Some("omp"),
+                screen,
+            )
+            .expect("the open approval is a notice");
+            assert!(notice.is_answerable());
+        }
+        // With a message typed into it in OMP's terminal it is the card that passes keys through.
+        for screen in [
+            include_str!("../session_chat_tests/fixtures/omp-tool-approval-draft-pi.txt"),
+            include_str!("../session_chat_tests/fixtures/omp-tool-approval-draft-box.txt"),
+        ] {
+            let notice = crate::session_chat_notice::classify_session_chat_terminal_notice(
+                Some("omp"),
+                screen,
+            )
+            .expect("the approval with a draft is a notice");
+            let reason = startup_notice_wait(&notice).expect("the row waits for the approval");
+            // The row says the agent waits for the user, not that its input box is unreadable,
+            // and the input-box ladder (redraws, "send anyway", the five-minute "box gone"
+            // words and the watchdog) leaves it alone.
+            assert_eq!(
+                reason.text(),
+                "Waiting for you to answer the agent's question."
+            );
+            assert!(!reason.is_input_box());
+            assert!(!reason.escalates());
+        }
     }
 }

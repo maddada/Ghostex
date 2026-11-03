@@ -38,7 +38,7 @@ pub fn document(state: &ChatState, context: &ChatContext, into: &mut Document) {
     };
     into.terminal_notice = match (state.session.terminal_notice.as_ref(), notice.as_ref()) {
         (Some(raw), Some(notice)) => {
-            let mut decorated = decorate_notice(raw, notice);
+            let mut decorated = decorate_notice(raw, notice, state.session.agent.as_deref());
             if let Some(object) = decorated.as_object_mut() {
                 crate::questions::account_wait::decorate(
                     object,
@@ -133,7 +133,7 @@ fn approval_ask(tool: &str) -> &'static str {
 
 /// The folded notice plus what the card needs: the collapsed row count, the dialog's own
 /// presentation, and the answer each row and each action sends.
-fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
+fn decorate_notice(raw: &Value, notice: &TerminalNotice, agent: Option<&str>) -> Value {
     let mut object = raw.as_object().cloned().unwrap_or_default();
     object.insert("tone".to_string(), json!(notice_tone::notice_tone(notice)));
     object.insert(
@@ -143,7 +143,7 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
     // The exact rows a folded card shows (positions into `choices`), so every renderer folds the same way.
     object.insert(
         "collapsedChoices".to_string(),
-        json!(collapsed_choice_positions(notice)),
+        json!(collapsed_choice_positions(notice, agent)),
     );
     // The visible rows Cmd+Enter and Escape answer, so the card puts each hint on its row.
     object.insert(
@@ -152,7 +152,7 @@ fn decorate_notice(raw: &Value, notice: &TerminalNotice) -> Value {
     );
     object.insert(
         "secondaryChoice".to_string(),
-        json!(notice.secondary_choice_position()),
+        json!(notice.secondary_choice_position(agent)),
     );
     // CDXC:SessionChat 2026-09-29 WHY:
     // A collapsed command approval showed only "Would you like to run the following command?" and its buttons, so "Yes, proceed" was one click away from a command the card never named. The `$ ` lines of the dialog body are what is being approved; the renderers draw them under the title while the card is collapsed.

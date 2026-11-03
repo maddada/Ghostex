@@ -40,6 +40,8 @@ pub fn sync(state: &mut ChatState) -> Vec<Effect> {
         state.questions.active_notice_key = next_notice_key;
         state.questions.answered_notice_key = None;
         state.questions.notice_error = None;
+        // CDXC:SessionChat 2026-11-02 WHY: a pass-through card the user took the keyboard back from stays hidden only until the agent closes that screen (the 2026-10-11 DECISION in server/src/session_chat_resume_picker.rs). Its key cannot say that on its own: gxserver gives a screen notice that comes back with the same words within ten minutes its old `detectedAt` (session_chat_options/detector.rs), so OMP's next tool approval carried the released key and its card never showed; ↓ and Enter pressed for it reached the empty composer instead of OMP (live test, 2026-11-02).
+        state.questions.released_notice_key = None;
     }
 
     let next_prompt_key = prompt_key(prompt.as_ref());

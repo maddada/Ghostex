@@ -105,7 +105,8 @@ fn notice_from_picker(
         SessionChatTerminalPickerKind::PermissionPrompt
         | SessionChatTerminalPickerKind::AntigravityPermission
         | SessionChatTerminalPickerKind::CopilotPermission
-        | SessionChatTerminalPickerKind::GrokPermission => {
+        | SessionChatTerminalPickerKind::GrokPermission
+        | SessionChatTerminalPickerKind::OmpPermission => {
             (SESSION_CHAT_NOTICE_PERMISSION_PROMPT, "Allow this?")
         }
     };
@@ -521,6 +522,11 @@ pub fn classify_session_chat_terminal_notice(
         }
     }
     if agent == SessionChatOptionAgent::Omp {
+        if let Some(picker) =
+            crate::session_chat_omp_blocking::detect_omp_permission_picker(screen_text)
+        {
+            return Some(notice_from_picker(&screen, picker));
+        }
         if let Some(blocking) =
             crate::session_chat_omp_blocking::detect_omp_blocking_screen(screen_text)
         {

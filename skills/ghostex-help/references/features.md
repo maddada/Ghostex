@@ -1738,7 +1738,8 @@ chat switches to that conversation. Other agents' pickers and menus that take ov
 their terminal (and Codex screens the chat can't read) show that part of the terminal
 in a card instead. While that card is up it has the chat's keyboard: letters, numbers,
 the arrow keys, Enter and Escape go straight to the agent, even if you were typing a
-message. Click Return keyboard to chat on the card to type in the chat box again. On
+message. Click Hide and type in chat on the card to type in the chat box again: the
+card hides until the agent closes that screen, and nothing is sent to the agent. On
 the phone, the card's key buttons send the keys.
 A new Claude Code install's first-run setup is answered in the chat too: the
 text style, the login method, and Sign in to Claude, where you paste the code the
@@ -1864,6 +1865,11 @@ Default, Plan, Auto review and Always approve, the context meter shows how full
 Grok's context window is, and Fork starts a copy of the conversation in a new
 session. Picking a model in the chat also makes it Grok's default for new
 sessions, because Grok saves every model switch.
+When OMP asks to approve a tool call, the request appears as a card with OMP's
+own choices (Approve, Approve for this session when OMP offers it, Deny); click
+one to answer. Once you start typing in OMP's terminal, OMP turns the request
+into "Deny and send message", and the chat shows that as a terminal card that
+passes your keys to OMP.
 Empryo chats show your messages as you typed them (without the repository map
 Empryo adds for its model), its replies and thinking, and the tools it runs with
 their results, and they can be exported like any other chat. Empryo saves a

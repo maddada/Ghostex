@@ -203,15 +203,17 @@ impl TerminalNotice {
         Some(0)
     }
 
-    /// Which visible row Escape answers.
+    /// Which visible row Escape answers in a session of `agent`.
     ///
     /// CDXC:SessionChat 2026-09-26 WHY: Escape declines. A permission prompt's rows are Yes, then any "Yes, and don't ask again" / "Yes, and switch to accept edits" rows, then No, and a plan's are "Yes, and switch to bypass permissions", "Yes, manually approve edits", "Tell Claude what to change", so taking the second row made Escape grant a standing permission or start the plan. Escape answers a row that says No; only Claude's two-way choosers (resume, model or effort switch, session paused), whose second row is the alternative rather than a yes, keep it on that row, and anything else leaves Escape unanswered.
-    pub fn secondary_choice_position(&self) -> Option<usize> {
+    /// On OMP's approval card Escape answers its Deny row, because Escape is OMP's own key for it (its dialog's hint reads "⎋ deny"). Empryo's Allow/Deny card also has a Deny row, but there Esc cancels (`CDXC:AgentScreenDetection 2026-10-06 DECISION` in server/src/session_chat_empryo_question.rs), so Deny counts only in OMP sessions.
+    pub fn secondary_choice_position(&self, agent: Option<&str>) -> Option<usize> {
         let choices = self.visible_choices();
-        if let Some(no) = choices
-            .iter()
-            .rposition(|choice| choice.label.trim_start().starts_with("No"))
-        {
+        let omp = agent == Some("omp");
+        if let Some(no) = choices.iter().rposition(|choice| {
+            let label = choice.label.trim_start();
+            label.starts_with("No") || (omp && label.trim_end() == "Deny")
+        }) {
             return Some(no);
         }
         let two_way = matches!(

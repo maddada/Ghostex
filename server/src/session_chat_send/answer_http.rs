@@ -676,14 +676,49 @@ async fn answer_session_chat_prompt(
                     return domain_error_response(endpoint_path, request_id, error);
                 }
             }
-            let payload = if approval_send.is_empty() {
-                crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string()
+            let omp = session_chat_agent_for_session(&target.session)
+                .map(|agent| {
+                    crate::session_chat_follower::omp_agent_for_pi_transcript(
+                        &target.session,
+                        agent,
+                    )
+                })
+                .as_deref()
+                == Some("omp");
+            if approval_send.is_empty() {
+                vec![crate::session_chat_send::SessionChatSendStep::Write(
+                    crate::session_chat_send::SESSION_CHAT_INTERRUPT.to_string(),
+                )]
+            } else if omp {
+                // OMP reads a typed "1" as the start of a "deny and send" message, so its Allow is
+                // the Approve row of the dialog it shows now (`detect_omp_permission_picker`).
+                let screen =
+                    crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
+                let Some(answer_key) = screen
+                    .as_deref()
+                    .and_then(crate::session_chat_omp_blocking::detect_omp_permission_picker)
+                    .and_then(|picker| {
+                        let approve = picker.rows.iter().position(|row| {
+                            matches!(row.label.as_str(), "Approve" | "Approve Once")
+                        })?;
+                        picker.answer_key(approve)
+                    })
+                else {
+                    return domain_error_response(
+                        endpoint_path,
+                        request_id,
+                        DomainStateError {
+                            code: "invalidState",
+                            message: "OMP's approval is no longer on screen.".to_string(),
+                        },
+                    );
+                };
+                crate::session_chat_send::build_terminal_picker_answer_steps(&answer_key)
             } else {
-                approval_send.to_string()
-            };
-            vec![crate::session_chat_send::SessionChatSendStep::Write(
-                payload,
-            )]
+                vec![crate::session_chat_send::SessionChatSendStep::Write(
+                    approval_send.to_string(),
+                )]
+            }
         }
         "question" => {
             let agent = session_chat_agent_for_session(&target.session);
@@ -1165,7 +1200,9 @@ async fn answer_session_chat_prompt(
             if let Err(error) = verify_answer_targets_shown_prompt(state, &target, &params).await {
                 return domain_error_response(endpoint_path, request_id, error);
             }
-            let agent = session_chat_agent_for_session(&target.session);
+            let agent = session_chat_agent_for_session(&target.session).map(|agent| {
+                crate::session_chat_follower::omp_agent_for_pi_transcript(&target.session, agent)
+            });
             let screen =
                 crate::session_chat_send::capture_session_terminal_text(&target.zmx_name).await;
             let skips_outright = screen.as_deref().is_some_and(|text| {
@@ -1204,6 +1241,11 @@ async fn answer_session_chat_prompt(
                                 .is_some()
                         {
                             crate::session_chat_copilot_permission::detect_copilot_permission_picker(text)
+                                .and_then(|picker| picker.answer_key(choice_index))
+                        } else if option_agent
+                            == Some(crate::session_chat_options::SessionChatOptionAgent::Omp)
+                        {
+                            crate::session_chat_omp_blocking::detect_omp_permission_picker(text)
                                 .and_then(|picker| picker.answer_key(choice_index))
                         } else if option_agent
                             == Some(crate::session_chat_options::SessionChatOptionAgent::Grok)
