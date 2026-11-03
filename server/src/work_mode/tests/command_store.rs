@@ -396,7 +396,14 @@ fn only_declared_single_line_credentials_are_stored() {
         other => panic!("not refused: {other:?}"),
     };
     assert!(refused(json!({ "gone": "x" })).contains("isn't a credential this command asks for"));
-    assert!(refused(json!({ "token": "two\nlines" })).contains("single line"));
+    let not_one_line = "API token must be a single line, without a NUL character.";
+    for value in ["two\nlines", "two\rlines", "tok\u{0}en"] {
+        assert_eq!(
+            refused(json!({ "token": value })),
+            not_one_line,
+            "{value:?}"
+        );
+    }
     assert!(refused(json!({ "token": "x".repeat(4097) })).contains("longer than 4 KB"));
     assert!(refused(json!({ "token": 7 })).contains("must be text or null"));
     assert!(!store
@@ -406,6 +413,21 @@ fn only_declared_single_line_credentials_are_stored() {
         set_work_source_credentials(&store.db, &store.paths, &store.ws("ws-none"), &Map::new()),
         Err(WorkSourceError::Refused(text)) if text == "Set the ticket command first."
     ));
+    // A tab or an ESC inside a value is a valid environment value: it is kept as given.
+    let workspace_id = store.ws("ws-a");
+    for value in ["pass\tword", "tok\u{1b}en"] {
+        set_work_source_credentials(
+            &store.db,
+            &store.paths,
+            &workspace_id,
+            json!({ "token": value }).as_object().unwrap(),
+        )
+        .unwrap_or_else(|error| panic!("{value:?}: {error:?}"));
+        assert_eq!(
+            stored_value(&store, &workspace_id, "token").as_deref(),
+            Some(value)
+        );
+    }
 }
 
 #[test]

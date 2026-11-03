@@ -1640,7 +1640,7 @@ async fn nothing_a_credential_save_returns_shows_a_value() {
             stored: json!({}),
             workspace: None,
             values: json!({ "token": "two\nlines" }),
-            answer: Some("API token must be a single line."),
+            answer: Some("API token must be a single line, without a NUL character."),
         },
         Row {
             name: "a value Ghostex can't mask",

@@ -14,7 +14,7 @@ use super::*;
 // This module's own, not the contract's (which reads an answer's JSON).
 use super::changes::declared_secret;
 
-/// A credential value: a single line of at most this many bytes.
+/// A credential value: one line of at most this many bytes, without a NUL character.
 const MAX_CREDENTIAL_BYTES: usize = 4 * 1024;
 
 /// A credential save whose check marked a field secret whose saved value is too short to keep
@@ -246,8 +246,8 @@ fn store_credentials(
     Ok((command, failure))
 }
 
-/// The changes a request asks for: only fields the accepted info declares, each a single line of
-/// at most `MAX_CREDENTIAL_BYTES`, or `null` to remove it. A secret field's value must be at
+/// The changes a request asks for: only fields the accepted info declares, each one line of at
+/// most `MAX_CREDENTIAL_BYTES` without a NUL character, or `null` to remove it. A secret field's value must be at
 /// least `MIN_MASKED_IN_PLACE_CHARS` long: a shorter one can't be masked where it appears (a
 /// message holding it is withheld whole), and as a team number it would refuse every ticket id
 /// containing it.
@@ -281,9 +281,12 @@ fn credential_changes(
                         field.label
                     )));
                 }
-                if text.contains(['\n', '\r']) {
+                // A NUL keeps the command from starting: the value reaches it as an environment
+                // variable. A line break is refused because a credential is one line (the CLI
+                // reads one from stdin).
+                if text.contains(['\0', '\n', '\r']) {
                     return Err(refused(format!(
-                        "{} must be a single line.",
+                        "{} must be a single line, without a NUL character.",
                         field.label
                     )));
                 }
