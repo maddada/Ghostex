@@ -39,22 +39,27 @@ impl NativeChatView {
                 .role(gpui::Role::Alert)
                 .aria_label(title.clone())
                 .w_full()
-                .child(self.tone_card(
-                    ToneCardParts {
-                        look: tone_look(&text(&card, "tone"), p),
-                        title,
-                        detail: text(&card, "detail"),
-                        trailing: Vec::new(),
-                        body: Vec::new(),
-                        footer_start: Vec::new(),
-                        // The way out takes the room beside Pick model, as in the mockup.
-                        footer_note: Some(text(&card, "note")),
-                        footer_end: vec![pick],
-                    },
-                    None,
-                    None,
-                    p,
-                ))
+                .child(
+                    self.tone_card(
+                        ToneCardParts {
+                            look: tone_look(&text(&card, "tone"), p),
+                            title,
+                            detail: text(&card, "body"),
+                            trailing: Vec::new(),
+                            body: self
+                                .details_toggle("model-hold", vec![text(&card, "detail")], p, cx)
+                                .into_iter()
+                                .collect(),
+                            footer_start: Vec::new(),
+                            // The way out takes the room beside Pick model, as in the mockup.
+                            footer_note: Some(text(&card, "note")),
+                            footer_end: vec![pick],
+                        },
+                        None,
+                        None,
+                        p,
+                    ),
+                )
                 .into_any_element(),
         )
     }

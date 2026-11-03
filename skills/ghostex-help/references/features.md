@@ -1085,7 +1085,8 @@ where they are while you open, change and close views.
   the chat's model menu (the same one, or another); once it applies, the dot
   clears and the waiting messages are sent. Once Ghostex has stopped retrying the change,
   the session's chat also shows a card above the chat box with how many messages wait
-  and why; its Pick model button opens the model menu.
+  and which change failed. Open Details for the agent's diagnostic, including the
+  model and thinking level you picked; Pick model opens the model menu.
 - A new session goes straight into Drafts, below Pinned and above Sessions,
   and stays there until its first message is sent or its agent starts
   working, whether it is empty or holds unsent text. Drafts starts collapsed,

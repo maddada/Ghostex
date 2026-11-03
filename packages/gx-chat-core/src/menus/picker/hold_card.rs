@@ -12,9 +12,9 @@ use crate::state::ChatState;
 /// What releases the held messages, in the card's footer.
 pub const MODEL_HOLD_WAY_OUT: &str = "Pick a model again; held messages send once it applies.";
 
-/// The sentence a failed model change is explained with.
+/// The diagnostic a failed model change is explained with.
 ///
-/// CDXC:SessionChat 2026-10-30 SEE-ALSO: gxserver writes the same sentence as the sidebar's red-dot reason (`note_model_selection_failure` in server/src/session_chat_model_selection_alert.rs calls this), so the card and the tooltip read alike.
+/// CDXC:SessionChat 2026-10-30 SEE-ALSO: gxserver writes this diagnostic as the sidebar's red-dot reason (`note_model_selection_failure` in server/src/session_chat_model_selection_alert.rs calls this); the card keeps it behind Details.
 pub fn model_selection_failure_reason(model: &str, effort: &str, message: &str) -> String {
     match (model.is_empty(), effort.is_empty()) {
         (true, true) => format!("The chat option change failed: {message}"),
@@ -99,6 +99,11 @@ impl ModelHoldMemo {
 }
 
 fn card(inputs: &HoldInputs<'_>) -> Value {
+    let body = match (inputs.model.is_empty(), inputs.effort.is_empty()) {
+        (true, true) => "The chat setting change failed.",
+        (true, false) => "The thinking-level change failed.",
+        (false, _) => "The model change failed.",
+    };
     let detail = if inputs.message.trim().is_empty() {
         String::new()
     } else {
@@ -112,6 +117,7 @@ fn card(inputs: &HoldInputs<'_>) -> Value {
     json!({
         "tone": "warning",
         "title": title,
+        "body": body,
         "detail": detail,
         "note": MODEL_HOLD_WAY_OUT,
         "action": { "id": "pickModel", "label": "Pick model" },

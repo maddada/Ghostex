@@ -220,7 +220,8 @@ pub struct Document {
     #[serde(default, skip_serializing_if = "Tri::is_absent")]
     pub pending_model_selection: Tri<Value>,
     /// The card above the composer while a failed model change holds messages, absent otherwise
-    /// (`menus/picker/hold_card.rs`). Family e.
+    /// (`menus/picker/hold_card.rs`). `body` is the plain failure sentence; `detail` retains the
+    /// diagnostic for the renderer's Details disclosure. Family e.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub model_hold_card: Option<std::sync::Arc<Value>>,
 

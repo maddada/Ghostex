@@ -1,5 +1,6 @@
 //! The card above the composer while a model change that failed for good holds messages: one
-//! card that counts the held messages, gives gxserver's reason and offers Pick model, shown only
+//! card that counts the held messages, names the failed change, keeps the diagnostic behind
+//! Details and offers Pick model, shown only
 //! while a failed change holds at least one queued message, in every agent's chat that has a
 //! model menu.
 //!
@@ -203,6 +204,7 @@ fn one_held_message_gets_one_card_with_the_reason_and_pick_model() {
         json!({
             "tone": "warning",
             "title": "1 message is held",
+            "body": "The model change failed.",
             "detail": SENTENCE,
             "note": "Pick a model again; held messages send once it applies.",
             "action": { "id": "pickModel", "label": "Pick model" },
@@ -213,6 +215,37 @@ fn one_held_message_gets_one_card_with_the_reason_and_pick_model() {
     let document = chat.document();
     assert!(document["modelMenu"].is_object());
     assert_eq!(document["modelSelection"]["selectionError"], json!(REASON));
+
+    for (model, effort, body, detail) in [
+        (
+            "openrouter/qwen3.8-max",
+            "",
+            "The model change failed.",
+            "The change to openrouter/qwen3.8-max failed: No API key for openrouter.",
+        ),
+        (
+            "",
+            "high",
+            "The thinking-level change failed.",
+            "The change to high failed: No API key for openrouter.",
+        ),
+        (
+            "",
+            "",
+            "The chat setting change failed.",
+            "The chat option change failed: No API key for openrouter.",
+        ),
+    ] {
+        let mut pending = selection(model, "failed", Some(REASON));
+        pending["effort"] = json!(effort);
+        chat.state(json!({ "pendingModelSelection": pending }));
+        assert_eq!(chat.card()["body"], json!(body));
+        assert_eq!(chat.card()["detail"], json!(detail));
+        assert_eq!(
+            chat.document()["modelSelection"]["selectionError"],
+            json!(REASON)
+        );
+    }
 }
 
 #[test]
