@@ -232,7 +232,8 @@ pub(crate) struct NativeChatView {
     pub(super) draft_machine_chip_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     /// The new chat bar's where and detail parts, which their menus open from (`worktree_tray.rs`).
     pub(super) worktree_tray_where_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
-    pub(super) worktree_tray_detail_bounds: std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
+    pub(super) worktree_tray_detail_bounds:
+        std::rc::Rc<std::cell::Cell<gpui::Bounds<gpui::Pixels>>>,
     pub(crate) draft_revision: u64,
     pub(crate) draft_id: String,
     /// A send left this composer and has not settled; Enter does not wait for it (the core holds
