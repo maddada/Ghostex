@@ -64,11 +64,13 @@ pub(super) fn observe_remote_session(session: Option<&Value>) -> RemoteObservati
         "sleeping" => return RemoteObservation::Sleeping,
         _ => return RemoteObservation::Closed,
     }
-    let waiting = session
-        .get("pendingQuestionCount")
-        .and_then(Value::as_u64)
-        .is_some_and(|count| count > 0)
-        || session.get("awaitingApproval").and_then(Value::as_bool) == Some(true);
+    let waiting = ghostex_gx_protocol::session_has_question(
+        session
+            .get("pendingQuestionCount")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        session.get("awaitingAnswer").and_then(Value::as_bool) == Some(true),
+    ) || session.get("awaitingApproval").and_then(Value::as_bool) == Some(true);
     if waiting {
         return RemoteObservation::Waiting;
     }
@@ -623,6 +625,27 @@ async fn deliver(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_open_question_card_keeps_a_remote_thread_waiting() {
+        for activity in ["working", "attention", "idle"] {
+            let session = json!({
+                "lifecycleState": "running", "activity": activity,
+                "pendingQuestionCount": 0, "awaitingAnswer": true,
+            });
+            assert_eq!(
+                observe_remote_session(Some(&session)),
+                RemoteObservation::Waiting
+            );
+            assert_eq!(session["pendingQuestionCount"], 0);
+        }
+        assert_eq!(
+            observe_remote_session(Some(&json!({
+                "lifecycleState": "sleeping", "awaitingAnswer": true,
+            }))),
+            RemoteObservation::Sleeping
+        );
+    }
 
     #[test]
     fn a_thread_on_another_computer_is_read_from_its_presentation_row() {
