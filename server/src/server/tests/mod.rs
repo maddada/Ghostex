@@ -10,6 +10,7 @@ mod renderer_and_titles;
 mod voice_remote_sessions;
 #[cfg(unix)]
 mod work_mode_pass;
+#[cfg(unix)]
 mod work_source_routes;
 #[cfg(unix)]
 mod workspace_deletion_routes;
