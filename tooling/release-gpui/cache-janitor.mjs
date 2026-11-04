@@ -17,6 +17,13 @@
  * release-critical family is never touched, and nothing created in the last
  * 24 hours is deleted.
  *
+ * CDXC:ReleaseKache 2026-11-04: the Rust builds moved from sccache to kache.
+ * Each warm run saves one kache store per build set as
+ * kache-<KACHE_STORE_SET>-<commit sha>, and release jobs restore the newest.
+ * The kache family is protected, so the newest store of every set survives
+ * and the older ones go through the superseded tier. The sccache rules stay
+ * until the last sccache objects (no longer read by any run) have aged out.
+ *
  * Usage:
  *   node tooling/release-gpui/cache-janitor.mjs [--apply] [--repo maddada/Ghostex]
  *     [--budget-gb 9] [--sccache-unused-days 6] [--min-age-hours 24]
@@ -60,6 +67,7 @@ export const DEFAULT_OPTIONS = Object.freeze({
 /** @type {Array<[string, RegExp]>} */
 const FAMILY_RULES = [
   ['sccache', /^sccache\//u],
+  ['kache', /^kache-/u],
   ['cargo-reg', /^cargo-reg-/u],
   ['cargo-check', /^cargo-check-/u],
   ['cef', /^cef-/u],
@@ -79,6 +87,7 @@ const FAMILY_RULES = [
  * prefix (an entry restore-keys would no longer pick) are candidates.
  */
 export const PROTECTED_FAMILIES = new Set([
+  'kache',
   'cargo-reg',
   'cargo-check',
   'cef',

@@ -277,7 +277,7 @@ fn build_wasm(release: bool) -> Res {
     if release {
         cargo.arg("--release");
     }
-    // Cargo can use response files for web-sys's long feature list; sccache's Windows process invocation exceeds the command-line limit.
+    // Cargo can use response files for web-sys's long feature list; the rustc wrapper's Windows process invocation (measured with sccache; kept off for kache) exceeds the command-line limit.
     if cfg!(windows) {
         cargo.env("RUSTC_WRAPPER", "");
     }

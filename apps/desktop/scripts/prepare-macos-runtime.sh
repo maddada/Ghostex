@@ -421,12 +421,12 @@ EOF
 	# Cargo tracks the whole dependency graph and its warm freshness check takes about 0.2 seconds.
 
 	# CDXC:Build 2026-06-24-20:22: Local start must fail before packaging when server no longer compiles. This function is called outside command substitution so `set -e` can abort on Cargo errors instead of stamping the current source digest and copying a stale daemon binary.
-	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `cargo xtask start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (sccache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
+	# CDXC:Build 2026-09-02: cargo discovers `.cargo/config.toml` from its working directory, not from `--manifest-path`, and `cargo xtask start` runs this script from the repo root. Build from inside the server crate so `server/.cargo/config.toml` (kache rustc-wrapper) applies; the target dir is still `$GXSERVER_RS_ROOT/target`, so the output paths above are unchanged.
 	# CDXC:Build 2026-09-04 WHY:
 	# gxserver is one 168k-line leaf crate, so every local start that touched
 	# server/ paid a full non-incremental release compile (~27s). The per-package
 	# override enables incremental codegen for the gxserver package only;
-	# dependencies keep their profile hash and stay served by sccache, and
+	# dependencies keep their profile hash and stay served by kache, and
 	# release builds (no GHOSTEX_LOCAL_START) keep the plain release profile.
 	# SEE-ALSO: apps/desktop/scripts/build-macos-rust.sh does the same for the desktop crate.
 	local -a cargo_profile_args=()

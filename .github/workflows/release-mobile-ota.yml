@@ -87,6 +87,14 @@ jobs:
         with:
           path: apps/mobile/app/assets/chat-core/chat-core.html
           key: chat-core-page-${{ runner.os }}-${{ hashFiles('packages/gx-chat-wasm/src/**', 'packages/gx-chat-wasm/page/**', 'packages/gx-chat-wasm/Cargo.*', 'packages/gx-chat-wasm/rust-toolchain.toml', 'packages/gx-chat-json/**', 'packages/gx-chat-core/**', 'packages/gx-protocol/**', 'packages/gx-visual/**', 'tooling/xtask/src/mobile_chat_wasm.rs', 'tooling/release-mobile/chat-core-page.sh') }}
+      # CDXC:ReleaseKache 2026-11-04: the page build compiles Rust, so it goes through kache like every Rust build. No store is persisted: the page itself is cached on its inputs above, so this only runs on a page cache miss.
+      - name: Install kache
+        if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          github-cache: 'false'
+          pr-comment: 'false'
       - name: Build the chat core page
         if: steps.chat_core_page_cache.outputs.cache-hit != 'true'
         run: tooling/release-mobile/chat-core-page.sh

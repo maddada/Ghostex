@@ -19,13 +19,15 @@ if (!$VsRoot) {
 }
 if ($Missing.Count) { throw ($Missing -join "`n") }
 
-if (!(Get-Command sccache -ErrorAction SilentlyContinue) -and $Install) {
-    if (!(Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Install sccache with cargo install sccache --locked, then run cargo xtask setup-windows again.' }
-    & winget install --id Mozilla.sccache --exact --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
-    if ($LASTEXITCODE -ne 0) { throw 'sccache installation failed.' }
+# CDXC:Build 2026-11-04: the crates' .cargo/config.toml name kache as the rustc wrapper; in CI, kache-action exports RUSTC_WRAPPER as the kache executable's path. Require whichever wrapper this build will run.
+$RustcWrapper = if ($null -ne $env:RUSTC_WRAPPER) { $env:RUSTC_WRAPPER } else { 'kache' }
+if ($RustcWrapper -eq 'kache' -and !(Get-Command kache -ErrorAction SilentlyContinue) -and $Install) {
+    if (!(Get-Command winget -ErrorAction SilentlyContinue)) { throw 'Install kache with cargo install kache --locked, then run cargo xtask setup-windows again.' }
+    & winget install --id kunobi-ninja.kache --exact --source winget --scope user --accept-package-agreements --accept-source-agreements --disable-interactivity
+    if ($LASTEXITCODE -ne 0) { throw 'kache installation failed.' }
     $env:PATH += ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
 }
-if (!(Get-Command sccache -ErrorAction SilentlyContinue)) { $Missing.Add('sccache is missing. Run cargo xtask setup-windows, then open a new PowerShell window.') }
+if ($RustcWrapper -and !(Get-Command $RustcWrapper -ErrorAction SilentlyContinue)) { $Missing.Add("$RustcWrapper (the rustc wrapper) is missing. Run cargo xtask setup-windows, then open a new PowerShell window.") }
 
 $ToolchainFile = Join-Path $RepoRoot 'apps/desktop/rust-toolchain.toml'
 $RustVersion = [regex]::Match((Get-Content -Raw $ToolchainFile), '(?m)^channel\s*=\s*"([^"]+)"').Groups[1].Value
@@ -61,4 +63,4 @@ foreach ($Tool in @('cl', 'cmake', 'ninja', 'rc')) {
     if (!(Get-Command $Tool -ErrorAction SilentlyContinue)) { $Missing.Add("$Tool is missing from the Visual Studio build environment. Install the C++ workload, Windows SDK, and CMake tools.") }
 }
 if ($Missing.Count) { throw ("Windows build prerequisites are missing:`n" + ($Missing -join "`n")) }
-Write-Host "Windows $Arch build tools are ready (Rust $RustVersion, Zig 0.17.0, sccache, MSVC, CMake, Ninja)."
+Write-Host "Windows $Arch build tools are ready (Rust $RustVersion, Zig 0.17.0, $RustcWrapper, MSVC, CMake, Ninja)."

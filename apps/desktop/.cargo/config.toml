@@ -12,7 +12,7 @@
 # "Building from source" section in README.md), not here: the sccache server
 # is a long-lived daemon and only reads its configuration when it starts.
 [build]
-rustc-wrapper = "sccache"
+rustc-wrapper = "kache"
 
 # CDXC:PlatformSupport 2026-09-28 WHY: link the C runtime statically on Windows.
 # A clean Windows install has no Visual C++ redistributable, and every Ghostex
