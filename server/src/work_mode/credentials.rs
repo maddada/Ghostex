@@ -213,6 +213,11 @@ impl WorkCredentials {
         }
     }
 
+    /// The gxserver whose credentials file this reads.
+    pub(crate) fn paths(&self) -> &GxserverPaths {
+        &self.paths
+    }
+
     /// Credentials holding only one project's own Linear key (none without one), for tests that
     /// never touch the file.
     #[cfg(test)]

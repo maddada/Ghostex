@@ -16,10 +16,10 @@ use super::published::{command_source, record_pinning};
 use super::*;
 
 /// How long a handshake waits before a test fails instead of hanging.
-const HANDSHAKE: Duration = Duration::from_secs(20);
+pub(super) const HANDSHAKE: Duration = Duration::from_secs(20);
 
 /// The stored `token` of `id`'s fixture, which no test output may show.
-fn token_of(id: &str) -> String {
+pub(super) fn token_of(id: &str) -> String {
     format!("tok-{id}-secret")
 }
 
@@ -33,7 +33,13 @@ pub(super) fn pin(store: &Store, workspace: &str, id: &str, mode: &str) -> Strin
     workspace_id
 }
 
-fn store_values(paths: &GxserverPaths, workspace_id: &str, id: &str, token: &str, mode: &str) {
+pub(super) fn store_values(
+    paths: &GxserverPaths,
+    workspace_id: &str,
+    id: &str,
+    token: &str,
+    mode: &str,
+) {
     mutate_credentials(paths, |credentials| {
         let workspaces = credentials
             .entry("workspaceSourceCredentials".to_string())
@@ -82,7 +88,7 @@ fn move_project(store: &Store, project: &Value, workspace_id: &str) {
     place(store);
 }
 
-fn project_id(project: &Value) -> &str {
+pub(super) fn project_id(project: &Value) -> &str {
     project["projectId"].as_str().unwrap()
 }
 
@@ -94,7 +100,7 @@ pub(super) fn session_on_acm_12(project: &Value) -> Value {
     session(project_id(project), "S1", json!({}))
 }
 
-fn plan_of(workspace_id: &str, id: &str) -> JobPlan {
+pub(super) fn plan_of(workspace_id: &str, id: &str) -> JobPlan {
     let WorkSourceId::Command(source) = command_source(id) else {
         unreachable!("a command id")
     };
@@ -109,7 +115,6 @@ pub(super) fn exact_read(store: &Store, workspace_id: &str, id: &str, ids: &[&st
     ExactRead {
         plan: plan_of(workspace_id, id),
         ids: ids.iter().map(|id| id.to_string()).collect(),
-        awaiting_pull_request: Vec::new(),
         projects: Vec::new(),
         paths: store.paths.clone(),
     }
@@ -131,7 +136,7 @@ fn planned_reads(store: &Store, project: &Value, sessions: &[Value], id: &str) -
 }
 
 /// A card pass: queues what it plans for the background workers.
-fn card_pass(store: &Store, project: &Value, sessions: &[Value], id: &str) {
+pub(super) fn card_pass(store: &Store, project: &Value, sessions: &[Value], id: &str) {
     let credentials = WorkCredentials::new(&store.paths);
     let projects: HashMap<&str, &Value> = HashMap::from([(project_id(project), project)]);
     work_source(command_source(id)).refresh_tickets(&TicketPass {
@@ -143,7 +148,7 @@ fn card_pass(store: &Store, project: &Value, sessions: &[Value], id: &str) {
 }
 
 /// The command's own read of `ticket`, as the projection's scope (only the project) asks it.
-fn card_read(project: &Value, id: &str, ticket: &str) -> TicketRead {
+pub(super) fn card_read(project: &Value, id: &str, ticket: &str) -> TicketRead {
     work_source(command_source(id)).cached_ticket(
         &TicketScope {
             project_id: project_id(project),
@@ -184,7 +189,7 @@ fn unavailable(id: &str) -> Value {
 }
 
 /// The verbs the fixture ran as `id`, in order.
-fn calls(store: &Store, id: &str) -> Vec<String> {
+pub(super) fn calls(store: &Store, id: &str) -> Vec<String> {
     let dir = command_work_dir(&store.paths, Some(id)).expect("work dir");
     std::fs::read_to_string(dir.join("calls.txt"))
         .unwrap_or_default()
@@ -194,12 +199,12 @@ fn calls(store: &Store, id: &str) -> Vec<String> {
 }
 
 /// Lets a `wait-release` fixture running as `id` answer.
-fn release(store: &Store, id: &str) {
+pub(super) fn release(store: &Store, id: &str) {
     let dir = command_work_dir(&store.paths, Some(id)).expect("work dir");
     std::fs::write(dir.join("release"), "").expect("release");
 }
 
-fn wait_until(what: &str, done: impl Fn() -> bool) {
+pub(super) fn wait_until(what: &str, done: impl Fn() -> bool) {
     let deadline = Instant::now() + HANDSHAKE;
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
@@ -219,7 +224,7 @@ fn title_rows(store: &Store, workspace_id: &str) -> Vec<(String, String)> {
         .expect("rows")
 }
 
-fn log_lines(store: &Store, event: &str) -> Vec<String> {
+pub(super) fn log_lines(store: &Store, event: &str) -> Vec<String> {
     std::fs::read_to_string(&store.paths.log_file)
         .unwrap_or_default()
         .lines()
@@ -856,7 +861,7 @@ fn a_found_ticket_stays_found_when_a_later_read_fails() {
     ));
     // The command answers without a word about this ticket.
     let plan = plan_of(&workspace_id, "card-later");
-    remember_exact_read(&plan, &["ACM-12".to_string()], &[], Some((&[], &[])));
+    remember_exact_read(&plan, &["ACM-12".to_string()], Some((&[], &[])));
     let TicketRead::Found(ticket) = card_read(&project, "card-later", "ACM-12") else {
         panic!("still found");
     };
@@ -995,6 +1000,9 @@ fn a_job_that_panics_frees_its_key_and_its_worker_goes_on() {
     let (ran, finished) = mpsc::channel::<Vec<String>>();
     std::thread::spawn(move || {
         drain(queue, move |job| {
+            let CommandJob::ExactRead(job) = job else {
+                return;
+            };
             if job.ids == ["ACM-1"] {
                 // Unwinds like a panic, without the panic hook's report.
                 std::panic::resume_unwind(Box::new("a job panics"));
@@ -1026,6 +1034,9 @@ fn a_job_that_panics_holding_a_slot_and_the_lock_frees_both() {
     let (done, finished) = mpsc::channel::<Vec<String>>();
     std::thread::spawn(move || {
         drain(queue, move |job| {
+            let CommandJob::ExactRead(job) = job else {
+                return;
+            };
             let _ended = Ended(done.clone(), job.ids.clone());
             run_exact_read(job);
         })
@@ -1147,6 +1158,8 @@ fn last_titles_keep_the_newest_2000() {
         last_ticket_title(&workspace_id, "titles-cap", "ACM-0"),
         None
     );
+    // Nor among the workspace's titled tickets.
+    assert!(!titled_tickets(&workspace_id)["titles-cap"].contains(&"ACM-0".to_string()));
     assert_eq!(
         last_ticket_title(&workspace_id, "titles-cap", "ACM-new").as_deref(),
         Some("Newest")

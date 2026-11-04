@@ -19,6 +19,8 @@ good_ticket='"id": "ACM-12", "title": "Spec the contract", "url": "https://track
   "labels": ["server"], "branchName": "leandro/acm-12-spec",
   "pullRequestUrls": ["https://github.com/acme/app/pull/7"], "team": "ACM", "repo": "acme/app"'
 
+good_detail="{ $good_ticket, \"description\": \"Body\", \"author\": \"Ana\", \"comments\": [ { \"author\": \"Ana\", \"body\": \"Hi\", \"createdAt\": \"2026-10-28T08:00:00Z\" } ], \"secretField\": \"x\" }"
+
 # The credential `a"b\c` as JSON writes it: escaped, and as \u escapes.
 escaped='a\"b\\c and \u0061\u0022\u0062\u005c\u0063'
 
@@ -40,7 +42,7 @@ good)
 EOF
 		;;
 	list) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
-	detail) printf '{ %s, "description": "Body", "author": "Ana", "comments": [ { "author": "Ana", "body": "Hi", "createdAt": "2026-10-28T08:00:00Z" } ], "secretField": "x" }\n' "$good_ticket" ;;
+	detail) printf '%s\n' "$good_detail" ;;
 	create) printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "leandro/acm-41" }\n' ;;
 	esac
 	;;
@@ -170,10 +172,53 @@ slow)
 not-found)
 	echo '{ "tickets": [], "notFound": ["acm-12"] }'
 	;;
+hourly\ *)
+	# `hourly <id> <variant>`: the `good` info as a test pins it under <id>, or a variant of it.
+	set -- $mode
+	id=$2
+	name=Fixture format=key-number keys='"ACM"' extra=''
+	case "$3" in
+	renamed) name="Fixture Two" ;;
+	number) format=number keys='' ;;
+	wait)
+		# The same answer, once a `release` file sits in the folder it runs in.
+		while [ ! -e release ]; do sleep 0.02; done
+		;;
+	keys-zzq) keys='"ACM", "ZZQ"' ;;
+	pin-secret) extra=', { "name": "pin", "label": "PIN" }' ;;
+	fail)
+		echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+		exit 1
+		;;
+	esac
+	case "$verb" in
+	info)
+		printf '{ "id": "%s", "name": "%s", "icon": "<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 24 24\\"><path d=\\"M2 2h20v20H2z\\" fill=\\"currentColor\\"/></svg>", "ids": { "format": "%s", "keys": [%s] }, "credentials": [ { "name": "mode", "label": "Mode", "secret": false }, { "name": "token", "label": "API token", "required": true }%s ], "canCreate": true }\n' "$id" "$name" "$format" "$keys" "$extra"
+		;;
+	*) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
+	esac
+	;;
 wait-release)
 	# A good answer once a `release` file sits in the folder it runs in.
 	while [ ! -e release ]; do sleep 0.02; done
-	printf '{ "tickets": [ { %s } ] }\n' "$good_ticket"
+	case "$verb" in
+	detail) printf '%s\n' "$good_detail" ;;
+	*) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
+	esac
+	;;
+fail-after-release)
+	# A failure once a `release` file sits in the folder it runs in.
+	while [ ! -e release ]; do sleep 0.02; done
+	echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+	exit 1
+	;;
+detail-token)
+	# Details whose description and comment hold the token.
+	printf '{ "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "description": "Use %s here", "comments": [ { "author": "Ana", "body": "token %s", "createdAt": "2026-10-28T08:00:00Z" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
+	;;
+detail-other)
+	# Details of another ticket than the one asked for.
+	printf '%s\n' "$(printf '%s' "$good_detail" | sed 's/ACM-12/ACM-13/')"
 	;;
 title-kept)
 	# A title holding a value this source was never given.

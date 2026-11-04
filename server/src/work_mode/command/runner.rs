@@ -718,7 +718,16 @@ fn info_secrecy(env: &CommandEnv, stdout: &[u8]) -> InfoSecrecy {
 /// secrets of both. Stdout that isn't JSON declares nothing, so the accepted flags apply to it.
 /// A failure carries out what its answer makes secret (`InfoFailure`).
 pub(crate) fn command_info(call: &CommandCall) -> Result<CommandInfo, InfoFailure> {
-    let answer = run_answer(call, || {})
+    command_info_after_spawn(call, || {})
+}
+
+/// `command_info`, calling `after_spawn` once the process started or failed to
+/// (`run_bounded_after_spawn`); a call refused before that drops it unrun.
+pub(crate) fn command_info_after_spawn(
+    call: &CommandCall,
+    after_spawn: impl FnOnce(),
+) -> Result<CommandInfo, InfoFailure> {
+    let answer = run_answer(call, after_spawn)
         .map_err(|failed| InfoFailure::new(failed.failure, call.env, failed.info.as_ref()))?;
     let secrecy = answer.info.as_ref();
     let env = secrecy.map_or(call.env, |info| &info.env);
@@ -755,15 +764,26 @@ pub(crate) fn command_list_after_spawn(
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
 
+/// `command_detail`, calling `after_spawn` once the process started or failed to
+/// (`run_bounded_after_spawn`); a call refused before that drops it unrun.
+pub(crate) fn command_detail_after_spawn(
+    call: &CommandCall,
+    format: IdFormat,
+    projects: &[CommandProject],
+    after_spawn: impl FnOnce(),
+) -> Result<CommandDetail, CommandFailure> {
+    let answer = run_answer(call, after_spawn)?;
+    parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
+        .map_err(|what| unreadable(call.env, &what, &answer.stdout))
+}
+
 /// Runs `detail` and reads its answer.
 pub(crate) fn command_detail(
     call: &CommandCall,
     format: IdFormat,
     projects: &[CommandProject],
 ) -> Result<CommandDetail, CommandFailure> {
-    let answer = run_answer(call, || {})?;
-    parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
-        .map_err(|what| unreadable(call.env, &what, &answer.stdout))
+    command_detail_after_spawn(call, format, projects, || {})
 }
 
 /// Runs `create` and reads its answer.

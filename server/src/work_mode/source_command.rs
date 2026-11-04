@@ -5,8 +5,10 @@
 //!
 //! A session's card shows the tickets its branch names: the card pass queues exact reads
 //! (`jobs.rs`) and the card reads what they kept (`caches.rs`), the ticket's last title when the
-//! command can't be asked. Its open list, its details and creating a ticket come later; a request
-//! for one gets a refusal in its own words.
+//! command can't be asked. A ticket's details are asked of the command while someone waits for
+//! them (`detail.rs`), and the card pass checks the command's `info` again hourly
+//! (`info_check.rs`). Its open list and creating a ticket come later; a request for one gets a
+//! refusal in its own words.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -124,17 +126,41 @@ impl CommandSource {
                 reads.push(ExactRead {
                     plan: plan.clone(),
                     ids: chunk.to_vec(),
-                    awaiting_pull_request: chunk
-                        .iter()
-                        .filter(|id| wanted.awaiting_pull_request.contains(id))
-                        .cloned()
-                        .collect(),
                     projects: wanted.projects.clone(),
                     paths: pass.paths.clone(),
                 });
             }
         }
         reads
+    }
+
+    /// The hourly checks a card pass queues: per workspace its projects are placed in that pins
+    /// this id and whose command can run, when its accepted `info` is due (`info_check_wanted`).
+    pub(crate) fn info_checks_for(&self, pass: &TicketPass) -> Vec<InfoCheck> {
+        let mut workspaces: Vec<String> = pass
+            .projects
+            .keys()
+            .filter_map(|project_id| cached_project_workspace_id(project_id))
+            .collect();
+        workspaces.sort();
+        workspaces.dedup();
+        workspaces
+            .into_iter()
+            .filter_map(|workspace_id| {
+                let command = workspace_command(&workspace_id)
+                    .filter(|command| command.source_id == self.id)?;
+                let plan = self.plan_in(&workspace_id)?;
+                let can_run = self.can_read(&TicketScope {
+                    effective_workspace_id: Some(&workspace_id),
+                    credentials: Some(pass.credentials),
+                    ..TicketScope::default()
+                });
+                (can_run && info_check_wanted(&plan, &command.checked_at)).then(|| InfoCheck {
+                    plan,
+                    paths: pass.paths.clone(),
+                })
+            })
+            .collect()
     }
 
     /// The workspace's plan for this id at its generation now.
@@ -266,11 +292,14 @@ impl WorkSource for CommandSource {
 
     fn refresh_list(&self, _plan: &WorkFeedPlan, _force: bool) {}
 
-    /// Queues the exact reads the pass's sessions need (`exact_reads_for`); never waits for the
-    /// command.
+    /// Queues the exact reads the pass's sessions need (`exact_reads_for`) and the hourly checks
+    /// that are due (`info_checks_for`); never waits for the command.
     fn refresh_tickets(&self, pass: &TicketPass) {
         for read in self.exact_reads_for(pass) {
             queue_exact_read(read);
+        }
+        for check in self.info_checks_for(pass) {
+            queue_info_check(check);
         }
     }
 
@@ -351,11 +380,52 @@ impl WorkSource for CommandSource {
         }
     }
 
-    fn read_detail(&self, scope: &TicketScope, _id: &str, _force: bool) -> Result<Value, String> {
-        Err(format!(
-            "Ghostex can't open {} tickets yet.",
-            self.display_name(scope)
-        ))
+    /// Asks the scope's workspace's command (`run_detail`), through the details cache at the
+    /// workspace's generation and one call for every caller asking at the same time. Each caller's
+    /// own plan is checked again after that answers (`detail_still_planned`): a cached answer, or
+    /// one read for another project of the workspace, reaches only a project still placed there.
+    fn read_detail(&self, scope: &TicketScope, id: &str, force: bool) -> Result<Value, String> {
+        let name = self.display_name(scope);
+        let read = match (self.workspace_of(scope), scope.credentials) {
+            (Some(workspace_id), Some(credentials)) if self.can_read(scope) => {
+                self.plan_in(&workspace_id).map(|plan| DetailRead {
+                    plan,
+                    id: id.to_string(),
+                    project: [scope.project_id.to_string()],
+                    paths: credentials.paths().clone(),
+                })
+            }
+            _ => None,
+        }
+        .ok_or_else(|| format!("Ghostex can't ask {name} for this ticket right now."))?;
+        let key = read.cache_key();
+        let changed_meanwhile = |answer: &Result<Value, String>| {
+            answer
+                .as_ref()
+                .is_err_and(|message| message == DETAIL_CHANGED_MEANWHILE)
+        };
+        let answer = cached_detail(key.clone(), force, || {
+            single_flight(&key, || run_detail(&read, &name))
+        });
+        // A "changed meanwhile" can be another project's, one that moved while the shared call
+        // read; the generation doesn't move with a project, so it is never kept for the others.
+        let shared_changed = changed_meanwhile(&answer);
+        if shared_changed {
+            forget_detail(&key);
+        }
+        // Checked for a failure too: its words are about the workspace's command.
+        if !detail_still_planned(&read) {
+            return Err(DETAIL_CHANGED_MEANWHILE.to_string());
+        }
+        if !shared_changed {
+            return answer;
+        }
+        // This caller is still placed, so it reads once more, on its own.
+        let answer = cached_detail(key.clone(), true, || run_detail(&read, &name));
+        if changed_meanwhile(&answer) {
+            forget_detail(&key);
+        }
+        answer
     }
 
     fn create(&self, scope: &TicketScope, _draft: &TicketDraft) -> Result<CreatedTicket, String> {
@@ -382,12 +452,8 @@ pub(crate) fn unread_command_tickets_in_branch(
     sources: &[WorkSourceId],
     branch: &str,
 ) -> Vec<TicketRef> {
-    let mut titled: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (source_id, ticket_id) in titled_tickets(workspace_id) {
-        titled.entry(source_id).or_default().push(ticket_id);
-    }
     let mut tickets = Vec::new();
-    for (source_id, ids) in titled {
+    for (source_id, ids) in titled_tickets(workspace_id) {
         let Some(id) = CommandSourceId::known(&source_id) else {
             continue;
         };

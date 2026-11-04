@@ -14,8 +14,11 @@ use super::*;
 
 /// How long a found ticket counts as fresh; a failure counts as long, as Linear's do.
 const FOUND_TTL: Duration = Duration::from_secs(120);
-/// For a session still waiting for its PR, which the ticket can bring along.
-const AWAITING_PULL_REQUEST_TTL: Duration = Duration::from_secs(45);
+/// For a found ticket that reports pull requests, whose state moves while they're in review.
+///
+/// CDXC:WorkMode 2026-11-03 DECISION:
+/// The repository owner: "A session without a PR counts as awaiting one (`caches.rs:18`), which is most sessions most of the time. So each workspace's command starts about every 45 s, up to 4 calls per pass. That matches Linear's TTL, but there it is one HTTP request; here it's a process start, and for many scripts another API call. Consider `FOUND_TTL` for commands, or the short TTL only when the ticket actually reports `pull_request_urls`." The short TTL is for a ticket whose own answer reports pull requests; every other found ticket keeps `FOUND_TTL`.
+const PULL_REQUEST_TICKET_TTL: Duration = Duration::from_secs(45);
 const NOT_FOUND_TTL: Duration = Duration::from_secs(600);
 /// How long a call that `backs_off` keeps its key from running.
 pub(crate) const BACK_OFF: Duration = Duration::from_secs(300);
@@ -45,7 +48,6 @@ struct TicketEntry {
     read: CachedTicket,
     failed: bool,
     read_at: Instant,
-    awaiting_pull_request: bool,
     /// Its read is due on the next pass whatever its age (its title couldn't be saved).
     expired: bool,
 }
@@ -57,7 +59,9 @@ impl TicketEntry {
         }
         let ttl = match (&self.read, self.failed) {
             (CachedTicket::NotFound, false) => NOT_FOUND_TTL,
-            _ if self.awaiting_pull_request => AWAITING_PULL_REQUEST_TTL,
+            (CachedTicket::Found(ticket), false) if !ticket.pull_request_urls.is_empty() => {
+                PULL_REQUEST_TICKET_TTL
+            }
             _ => FOUND_TTL,
         };
         now.duration_since(self.read_at) < ttl
@@ -150,7 +154,6 @@ pub(crate) fn command_ticket_due(plan: &JobPlan, id: &str, now: Instant) -> bool
 pub(crate) fn remember_exact_read(
     plan: &JobPlan,
     ids: &[String],
-    awaiting_pull_request: &[String],
     answer: Option<(&[Ticket], &[String])>,
 ) {
     let now = Instant::now();
@@ -170,14 +173,12 @@ pub(crate) fn remember_exact_read(
                 read: CachedTicket::Found(ticket.clone()),
                 failed: false,
                 read_at: now,
-                awaiting_pull_request: false,
                 expired: false,
             },
             (None, true) => TicketEntry {
                 read: CachedTicket::NotFound,
                 failed: false,
                 read_at: now,
-                awaiting_pull_request: false,
                 expired: false,
             },
             (None, false) => TicketEntry {
@@ -187,17 +188,10 @@ pub(crate) fn remember_exact_read(
                 },
                 failed: true,
                 read_at: now,
-                awaiting_pull_request: false,
                 expired: false,
             },
         };
-        caches.tickets.insert(
-            key,
-            TicketEntry {
-                awaiting_pull_request: awaiting_pull_request.contains(id),
-                ..entry
-            },
-        );
+        caches.tickets.insert(key, entry);
     }
     while caches.tickets.len() > MAX_CACHED_TICKETS {
         let Some(oldest) = caches

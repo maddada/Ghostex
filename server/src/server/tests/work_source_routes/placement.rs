@@ -25,7 +25,6 @@ async fn update_races_a_paused_read(
     let job = crate::work_mode::ExactRead {
         plan: plan.clone(),
         ids: vec!["ACM-12".to_string()],
-        awaiting_pull_request: Vec::new(),
         projects: vec![project_id.to_string()],
         paths: routes.paths.clone(),
     };
