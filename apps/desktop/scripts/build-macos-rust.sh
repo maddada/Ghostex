@@ -30,7 +30,7 @@ cargo_args=(build --release --bin ghostex-gpui --bin ghostex-gpui-cef-helper)
 # The desktop crate is one 170k-line leaf crate, so every local start paid a
 # full non-incremental release compile of it (~27s) even for a one-line edit.
 # A per-package profile override turns incremental codegen on for that crate
-# only: dependencies keep their profile hash and stay served by sccache, and
+# only: dependencies keep their profile hash and stay served by kache, and
 # release packaging (no GHOSTEX_LOCAL_START) keeps the plain release profile.
 # Do not move this into Cargo.toml or the release build inherits it.
 if [[ "${GHOSTEX_LOCAL_START:-0}" == "1" ]]; then

@@ -104,17 +104,21 @@ jobs:
             echo "GHOSTEX_ZIG=$zig_bin"
             echo "ZIG_GLOBAL_CACHE_DIR=$tools/zig-global-cache"
             echo "BUN_INSTALL_CACHE_DIR=$tools/bun-cache"
-            echo "SCCACHE_DIR=$tools/sccache"
-            echo "SCCACHE_CACHE_SIZE=20G"
+            echo "KACHE_CACHE_DIR=$tools/kache"
+            echo "KACHE_MAX_SIZE=20GiB"
           } >> "$GITHUB_ENV"
           echo "$CARGO_HOME/bin" >> "$GITHUB_PATH"
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      # The desktop and gxserver crates set rustc-wrapper = sccache in their .cargo/config.toml, so cargo fails without it on PATH.
-      - name: Install sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The crates set rustc-wrapper = kache in their .cargo/config.toml, so cargo fails without kache on PATH. kache-action installs it and exports RUSTC_WRAPPER; the store lives on the toolchain disk (KACHE_CACHE_DIR above), not in the GitHub cache.
+      - name: Install kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          github-cache: 'false'
+          pr-comment: 'false'
 
       - name: Install JavaScript dependencies
         run: |
@@ -157,7 +161,7 @@ jobs:
       - name: Release the persistent disks
         if: ${{ always() }}
         run: |
-          sccache --stop-server >/dev/null 2>&1 || true
+          kache daemon stop >/dev/null 2>&1 || true
           df -h "$HOME/gx-work" "$HOME/gx-tools" || true
           if [[ -n "${GX_ROOT:-}" ]] && mountpoint -q "$GX_ROOT"; then
             sudo umount "$GX_ROOT" || sudo umount -l "$GX_ROOT"

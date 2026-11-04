@@ -97,9 +97,7 @@ jobs:
       GHOSTEX_RELEASE_SOURCE_SHA: ${{ github.sha }}
       GHOSTEX_RELEASE_WORKFLOW_SHA: ${{ github.sha }}
       CARGO_INCREMENTAL: '0'
-      RUSTC_WRAPPER: sccache
-      SCCACHE_GHA_ENABLED: 'true'
-      SCCACHE_GHA_VERSION: linux-${{ inputs.arch }}-1
+      KACHE_STORE_SET: linux-${{ inputs.arch }}-1
       GHOSTEX_RELEASE_BUILD_ONLY: ${{ inputs.build_only && '1' || '0' }}
       LINUX_ARCH: ${{ inputs.arch }}
       LINUX_DEB_ARCH: ${{ inputs.arch == 'arm64' && 'arm64' || 'amd64' }}
@@ -113,14 +111,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.4
-      # sccache with the GitHub Actions cache backend. The registry cache below
+      # kache (CDXC:ReleaseKache 2026-11-04, replacing sccache's GitHub Actions backend). The registry cache below
       # only stores crate *sources*; every `cargo build --release` on this
       # runner was a cold compile, ~50% of the 31-minute critical path on 8.5.0.
-      # RUSTC_WRAPPER/SCCACHE_GHA_ENABLED are job-level env so the wrapper
+      # kache-action exports RUSTC_WRAPPER into GITHUB_ENV, so the wrapper
       # reaches every cargo invocation, including the one inside
       # build-linux-app.sh (via linux-stage.sh). Zig builds are not cargo and are
-      # untouched. Pinned to an exact tag; the release preflight asserts every
-      # release build workflow uses this same tag.
+      # untouched. Pinned to one commit; the release preflight asserts every
+      # release build workflow uses this same pin.
       # Component tags are published to a separate repository that
       # github.token cannot write; fail before any build work when the PAT is
       # missing (see tooling/release-gpui/components-repo-setup.md).
@@ -133,9 +131,23 @@ jobs:
             echo "::error::COMPONENTS_GITHUB_TOKEN is not configured; component tags are published to $(node tooling/release-gpui/components-repo.mjs) and github.token cannot write there. See tooling/release-gpui/components-repo-setup.md."
             exit 1
           fi
-      - name: Install sccache
-        id: sccache
-        uses: mozilla-actions/sccache-action@v0.0.11
+      # The kache store this job compiles through: the newest one warm-rust-build-cache.yml saved for this set.
+      - name: Restore the kache store
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ runner.temp }}/kache
+          key: kache-${{ env.KACHE_STORE_SET }}-${{ github.sha }}
+          restore-keys: kache-${{ env.KACHE_STORE_SET }}-
+      # kache-action v1 (pinned by commit): installs kache v2.0.0 and exports RUSTC_WRAPPER for every later step.
+      - name: Install kache
+        id: kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          cache-dir: ${{ runner.temp }}/kache
+          github-cache: 'false'
+          max-size: 1536MiB
+          pr-comment: 'false'
       - name: Validate the requested architecture and gxserver source
         env:
           GXSERVER_SOURCE: ${{ inputs.gxserver_source || 'run' }}
@@ -451,9 +463,9 @@ jobs:
         uses: actions/attest-build-provenance@v4
         with:
           subject-path: build/release-gpui/${{ inputs.version }}/linux-deb-${{ env.LINUX_ARCH }}/ghostex_${{ inputs.version }}_${{ env.LINUX_DEB_ARCH }}.deb
-      - name: Report sccache statistics
-        if: ${{ always() && steps.sccache.conclusion == 'success' }}
-        run: sccache --show-stats
+      - name: Report kache statistics
+        if: ${{ always() && steps.kache.conclusion == 'success' }}
+        run: kache stats
       - name: Record job observability
         if: ${{ always() }}
         run: |

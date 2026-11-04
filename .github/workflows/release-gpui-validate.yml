@@ -152,6 +152,13 @@ jobs:
       # No fetch-zig-deps.sh here: ZIG_GLOBAL_CACHE_DIR must stay a native
       # Windows path, which the bash prefetch helper cannot produce. The
       # restored Zig package cache serves the same purpose on this runner.
+      # CDXC:ReleaseKache 2026-11-04: the type-checks run rustc, so they go through kache like every Rust build. No kache store is persisted: the cargo-check target cache above already keeps this job's outputs, and a second copy would only spend the 10 GB cache budget.
+      - name: Install kache
+        uses: kunobi-ninja/kache-action@ad7317540dcdd71c904f7a60a87b620a0c0e67ed
+        with:
+          version: v2.0.0
+          github-cache: 'false'
+          pr-comment: 'false'
       - name: Type-check the Windows x64 desktop tree
         shell: bash
         run: cargo check --locked --all-targets --manifest-path apps/desktop/Cargo.toml --target x86_64-pc-windows-msvc

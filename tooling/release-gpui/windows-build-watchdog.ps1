@@ -35,8 +35,8 @@ for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
     $offsets = @{ $stdoutPath = [int64]0; $stderrPath = [int64]0 }
 
     # No -UseNewEnvironment: the child inherits this step's full
-    # environment block, including PATH (sccache, cargo, zig) and the
-    # sccache/RUSTC_WRAPPER variables from the job env.
+    # environment block, including PATH (kache, cargo, zig) and the
+    # RUSTC_WRAPPER/KACHE_* variables kache-action exported.
     $proc = Start-Process -FilePath 'pwsh' -PassThru -NoNewWindow `
         -WorkingDirectory $env:GITHUB_WORKSPACE `
         -RedirectStandardOutput $stdoutPath `
