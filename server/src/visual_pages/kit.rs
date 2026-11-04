@@ -86,6 +86,9 @@
 ///
 /// CDXC:SessionChat 2026-11-02 SEE-ALSO:
 /// The question card's text tokens (`--gx-fg`, `--gx-card-muted`, `--gx-control`) are still the chat card's (apps/desktop/src/app/native_chat/appearance.rs `foreground`, `card_muted`, `control_primary`; the phone's copy is apps/mobile/app/src/chat/native/transcript/theme.ts), so change those together. Its surfaces (`--gx-card`, `--gx-footer`, `--gx-option`, `--gx-card-border`, `--gx-option-border`) are the page's frosted glass instead (theme.rs, CDXC:SessionChat 2026-11-02 DECISION) and no longer follow the chat card.
+///
+/// CDXC:SessionChat 2026-11-04 DECISION:
+/// User, of the solid black "Send answers ⌘ Enter" tooltip over a question page's send bar: "please make tooltips inside the inline htmls glassy and not black bg like this". The kit's one tooltip bubble (`#gx-tip`, every `data-gx-tip` on a page and in the floating window's picture viewer) is the page's neutral glass, the material the app's own tooltips take under window glass: a translucent fill (`--gx-tip-bg`, 66% of #171717 in dark, 78% white in light, a little denser than the cards so it stays readable over a busy wallpaper), a 20px blur like the app's tooltip Menu blur, the cards' neutral edge, a 10px radius like the choices, a soft shadow (`--gx-tip-shadow`), and key caps drawn as ink washes on that glass. Supersedes the opaque #0a0a0a / #fcfcfc bubble.
 pub(super) const KIT_STYLE: &str = r#"<style id="ghostex-kit">
 gx-page,gx-questions{display:grid;grid-template-columns:minmax(var(--gx-gutter),1fr) minmax(0,var(--gx-text-width)) minmax(var(--gx-gutter),1fr);row-gap:20px;align-content:start;padding:56px 0 88px;font-size:15px;line-height:1.65;color:var(--gx-text)}
 gx-page{display:grid}
@@ -245,11 +248,11 @@ html[data-gx-theme=light] .gx-pill{color:#5f9878}
 .gx-send-status{flex:1;min-width:0;font-size:12.5px;color:var(--gx-muted)}
 .gx-send-status.gx-error{color:var(--destructive)}
 .gx-send-info{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;padding:0;border:0;background:none;color:var(--gx-muted);font:inherit;cursor:default}
-#gx-tip{position:fixed;left:0;top:0;z-index:2147483647;margin:0;inset:auto;display:flex;align-items:center;gap:16px;box-sizing:border-box;max-width:min(280px,calc(100vw - 16px));padding:8px 11px;border-radius:8px;border:1px solid var(--gx-tip-border);background:var(--gx-tip-bg);color:var(--gx-tip-fg);font:500 12.5px/1.4 Inter,var(--font-sans);letter-spacing:0;text-align:left;white-space:normal;box-shadow:0 4px 6px -1px rgba(0,0,0,.1),0 2px 4px -2px rgba(0,0,0,.1);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
+#gx-tip{position:fixed;left:0;top:0;z-index:2147483647;margin:0;inset:auto;display:flex;align-items:center;gap:16px;box-sizing:border-box;max-width:min(280px,calc(100vw - 16px));padding:8px 11px;border-radius:10px;border:1px solid var(--gx-tip-border);background:var(--gx-tip-bg);color:var(--gx-tip-fg);-webkit-backdrop-filter:blur(20px) saturate(1.15);backdrop-filter:blur(20px) saturate(1.15);font:500 12.5px/1.4 Inter,var(--font-sans);letter-spacing:0;text-align:left;white-space:normal;box-shadow:var(--gx-tip-shadow);pointer-events:none;opacity:0;visibility:hidden;transition:opacity .12s ease,visibility 0s linear .12s}
 #gx-tip.gx-tip-on{opacity:1;visibility:visible;transition:opacity .12s ease}
 #gx-tip .gx-tip-label{min-width:0}
 #gx-tip .gx-tip-keys{display:flex;flex:none;align-items:center;gap:3px}
-#gx-tip kbd{min-width:17px;box-sizing:border-box;padding:0 4px;border-radius:4px;border:1px solid color-mix(in srgb,var(--gx-tip-fg) 8%,transparent);background:color-mix(in srgb,var(--gx-tip-fg) 10%,transparent);color:color-mix(in srgb,var(--gx-tip-fg) 82%,transparent);font:600 11px/16px Inter,var(--font-sans);text-align:center}
+#gx-tip kbd{min-width:17px;box-sizing:border-box;padding:0 4px;border-radius:5px;border:1px solid color-mix(in srgb,var(--gx-tip-fg) 16%,transparent);background:color-mix(in srgb,var(--gx-tip-fg) 9%,transparent);color:color-mix(in srgb,var(--gx-tip-fg) 86%,transparent);font:600 11px/16px Inter,var(--font-sans);text-align:center}
 </style>"#;
 
 /// The kit's behaviour: turns the first `<gx-questions>` into a working form once the page has

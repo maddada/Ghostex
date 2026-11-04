@@ -22,7 +22,7 @@ macro_rules! light_tokens {
             "--gx-glass-shadow:0 14px 36px rgba(89,89,89,0.12);--gx-glass-dim:var(--gx-glass-tint-light,rgba(247,247,247,0.7));",
             "--gx-backdrop:radial-gradient(60% 50% at 85% 100%,rgba(185,185,185,0.28),transparent 70%),radial-gradient(55% 45% at 5% 0%,rgba(165,165,165,0.3),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(163,163,163,0.16),transparent 70%),linear-gradient(180deg,#f0f0f0 0%,#eeeeee 45%,#eeeeee 100%);--gx-backdrop-top:#f0f0f0;",
             "--gx-card-muted:#71717b;--gx-control:#18181b;",
-            "--gx-tip-bg:#fcfcfc;--gx-tip-fg:#292929;--gx-tip-border:rgba(0,0,0,0.12)"
+            "--gx-tip-bg:rgba(252,252,252,0.78);--gx-tip-fg:#292929;--gx-tip-border:rgba(67,67,67,0.14);--gx-tip-shadow:0 10px 28px rgba(89,89,89,0.18)"
         )
     };
 }
@@ -88,9 +88,9 @@ pub(super) const THEME_STYLE: &str = concat!(
     "--gx-glass-shadow:0 16px 40px rgba(5,5,5,0.32);--gx-glass-dim:var(--gx-glass-tint-dark,rgba(12,12,12,0.68));",
     "--gx-backdrop:radial-gradient(60% 50% at 82% 100%,rgba(160,160,160,0.11),transparent 70%),radial-gradient(55% 45% at 8% 0%,rgba(122,122,122,0.13),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(113,113,113,0.08),transparent 70%),linear-gradient(180deg,#131313 0%,#151515 32%,#161616 60%,#181818 84%,#191919 100%);--gx-backdrop-top:#131313;",
     "--gx-card-muted:#b4b8bf;--gx-control:#e5e5e5;",
-    // The app's tooltip bubble without window glass (apps/desktop/src/app/helpers/titlebar/chrome_colors.rs
-    // `apply_gpui_component_theme`: the menu colour, darkened in dark mode; its border and text).
-    "--gx-tip-bg:#0a0a0a;--gx-tip-fg:#fcfcfc;--gx-tip-border:rgba(255,255,255,0.12)}",
+    // The tooltip bubble: the app's tooltip under window glass, the frosted menus' material (the menu
+    // colour #171717 over a blur), on the page's neutral glass (CDXC:SessionChat 2026-11-04 DECISION on KIT_STYLE's `#gx-tip`, kit.rs).
+    "--gx-tip-bg:rgba(23,23,23,0.66);--gx-tip-fg:#fcfcfc;--gx-tip-border:rgba(233,233,233,0.14);--gx-tip-shadow:0 10px 28px rgba(5,5,5,0.36)}",
     "@media (prefers-color-scheme: light){:where(:root:not([data-gx-theme=dark])){",
     light_tokens!(),
     "}}",
