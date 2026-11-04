@@ -36,7 +36,7 @@ pub(crate) fn set_work_source_credentials(
     workspace_id: &str,
     values: &Map<String, Value>,
 ) -> Result<CredentialsSaved, WorkSourceError> {
-    let held = writer();
+    let held = writer()?;
     let mut stored = stored_values(db, paths, workspace_id)?;
     let mask = proposed_values_mask(values).masking_too(&stored.mask);
     // Its check runs with the values it stores, as they are declared; what it masks besides is
@@ -148,7 +148,7 @@ fn store_credentials(
         &current.info.credentials,
         &stored.mask,
     );
-    let _writer = writer();
+    let _writer = writer()?;
     if still_current(db, paths, workspace_id, generation).is_err() {
         // Something changed while `info` ran: its answer is dropped, the values stay stored.
         return Ok((current, None));

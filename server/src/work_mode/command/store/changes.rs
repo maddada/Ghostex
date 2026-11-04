@@ -52,20 +52,24 @@ const CHANGED_MEANWHILE: &str =
 static WRITER: Mutex<()> = Mutex::new(());
 
 /// The store's writer lock, which comes before the placement lock (`hold_project_placement`):
-/// taking it while holding that one panics rather than waiting forever.
-pub(super) fn writer() -> MutexGuard<'static, ()> {
-    assert!(
-        !crate::domain::repository::project::placement_held_here(),
-        "the ticket command store's writer lock is taken while holding the placement lock"
-    );
-    WRITER
+/// taken while holding that one, it fails the assertion in a debug build and answers
+/// `LOCK_ORDER_REFUSED` in a release build, rather than waiting forever.
+pub(super) fn writer() -> Result<MutexGuard<'static, ()>, DomainStateError> {
+    if crate::domain::repository::project::placement_held_here() {
+        debug_assert!(
+            false,
+            "the ticket command store's writer lock is taken while holding the placement lock"
+        );
+        return Err(crate::domain::repository::project::lock_order_refused());
+    }
+    Ok(WRITER
         .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .unwrap_or_else(|poisoned| poisoned.into_inner()))
 }
 
 /// The store's writer lock, for a background job (`jobs.rs`): held from its plan check until its
 /// command has started, and again while it keeps the result, so no change lands in between.
-pub(crate) fn hold_work_source_writer() -> MutexGuard<'static, ()> {
+pub(crate) fn hold_work_source_writer() -> Result<MutexGuard<'static, ()>, DomainStateError> {
     writer()
 }
 
@@ -100,10 +104,13 @@ pub(super) fn bump_generation(workspace_id: &str) {
 /// Runs `change` under the store's writer lock after bumping the workspace's generation: for a
 /// change made elsewhere that alters what its ticket command may run with (joining or leaving a
 /// team). `change` may take the credentials file's lock; it must not take this one again.
-pub(crate) fn change_work_source_config<T>(workspace_id: &str, change: impl FnOnce() -> T) -> T {
-    let _writer = writer();
+pub(crate) fn change_work_source_config<T>(
+    workspace_id: &str,
+    change: impl FnOnce() -> T,
+) -> Result<T, DomainStateError> {
+    let _writer = writer()?;
     bump_generation(workspace_id);
-    change()
+    Ok(change())
 }
 
 /// Why a change was not made.
@@ -361,7 +368,10 @@ pub(crate) fn set_work_source(
     switch: bool,
     references: References,
 ) -> WorkSourceChange<WorkspaceCommand> {
-    let held = writer();
+    let held = match writer() {
+        Ok(held) => held,
+        Err(error) => return WorkSourceChange::unmasked(error.into()),
+    };
     let stored = match stored_values(db, paths, workspace_id) {
         Ok(stored) => stored,
         Err(error) => return WorkSourceChange::unmasked(error),
@@ -383,7 +393,7 @@ pub(crate) fn set_work_source(
 /// `stored` was read under.
 ///
 /// CDXC:WorkMode 2026-11-02 WHY:
-/// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the decision on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
+/// A path to another program than the pinned one's is asked without the pinned command's credentials, and its answer changes what is secret only when it answers with the pinned id; its failure changes nothing in the record. Otherwise `set ~/bin/wrong-tool` would hand the real tracker's token to that tool, and its refused answer could still make the pinned record's fields secret or remove their short saved values. So "any answer" in the rule on `remove_short_secrets` means any answer of the pinned command's program, or of another program answering with its id.
 #[allow(clippy::too_many_arguments)]
 fn run_and_pin(
     db: &Connection,
@@ -437,7 +447,7 @@ fn run_and_pin(
         ),
     };
 
-    let _writer = writer();
+    let _writer = writer()?;
     still_current(db, paths, workspace_id, plan.generation)?;
     let mut sources = read_work_sources(db)?;
     // Another program's answer changes what is secret, in the record and among the stored
@@ -621,7 +631,10 @@ pub(crate) fn clear_work_source(
     workspace_id: &str,
     references: References,
 ) -> WorkSourceChange<()> {
-    let _writer = writer();
+    let _writer = match writer() {
+        Ok(writer) => writer,
+        Err(error) => return WorkSourceChange::unmasked(error.into()),
+    };
     let mask = match stored_values(db, paths, workspace_id) {
         Ok(stored) => stored.mask,
         Err(error) => return WorkSourceChange::unmasked(error),
@@ -693,7 +706,7 @@ pub(crate) fn delete_workspace_work_source(
     workspace_id: &str,
     references: References,
 ) -> Result<WorkSourceDeletion, WorkSourceError> {
-    let writer = writer();
+    let writer = writer()?;
     let read = read_work_sources(db)?;
     let mut sources = read.clone();
     let mut published = None;

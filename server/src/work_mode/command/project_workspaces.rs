@@ -37,7 +37,7 @@ pub(crate) fn replace_project_workspaces(
     repository: &DomainRepository,
     db: &Connection,
 ) -> Result<(), DomainStateError> {
-    let _writer = hold_placement_writer(paths, PlacementChange::Replace);
+    let _writer = hold_placement_writer(paths, PlacementChange::Replace)?;
     replace_placement(paths, repository, db)
 }
 
@@ -54,7 +54,7 @@ pub(crate) enum PlacementChange {
 fn hold_placement_writer(
     paths: &GxserverPaths,
     change: PlacementChange,
-) -> std::sync::MutexGuard<'static, ()> {
+) -> Result<std::sync::MutexGuard<'static, ()>, DomainStateError> {
     #[cfg(test)]
     about_to_take_placement_writer(paths, change);
     #[cfg(not(test))]
@@ -73,7 +73,7 @@ fn replace_placement(
     repository: &DomainRepository,
     db: &Connection,
 ) -> Result<(), DomainStateError> {
-    let _placement = crate::domain::repository::project::hold_project_placement();
+    let _placement = crate::domain::repository::project::hold_project_placement()?;
     let workspaces = crate::workspaces::read_sidebar_workspaces(db)?;
     let projects = repository.list_projects_without_session_history()?;
     let mut placement = Placement::default();
@@ -165,7 +165,7 @@ pub(crate) fn place_projects_after<T>(
     db: &Connection,
     change: impl FnOnce() -> Result<T, DomainStateError>,
 ) -> Result<T, DomainStateError> {
-    let _writer = hold_placement_writer(paths, PlacementChange::Move);
+    let _writer = hold_placement_writer(paths, PlacementChange::Move)?;
     let changed = change()?;
     replace_placement(paths, repository, db)?;
     Ok(changed)

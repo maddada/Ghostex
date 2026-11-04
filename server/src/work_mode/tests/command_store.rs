@@ -639,6 +639,7 @@ fn join_team(store: &Store, workspace_id: &str) {
                 json!({ "deploymentUrl": "https://team.example", "memberToken": "member" });
         })
     })
+    .expect("changed")
     .expect("joined");
 }
 
@@ -1112,7 +1113,7 @@ fn every_change_bumps_the_workspace_generation() {
     .expect("stored");
     let stored = work_source_generation(&store.ws("ws-gen"));
     assert!(stored > pinned);
-    change_work_source_config(&store.ws("ws-gen"), || {});
+    change_work_source_config(&store.ws("ws-gen"), || {}).expect("changed");
     assert_eq!(work_source_generation(&store.ws("ws-gen")), stored + 1);
 }
 
@@ -1208,7 +1209,7 @@ fn a_team_join_while_info_runs_commits_nothing() {
                     json!({ &workspace_id: { "deploymentUrl": "https://team.example", "memberToken": "member" } }),
                 );
             })
-        })
+        }).expect("changed")
         .expect("joined");
     });
     assert!(
@@ -1486,7 +1487,7 @@ fi"#;
                     json!({ &workspace_id: { "deploymentUrl": "https://team.example", "memberToken": "member" } }),
                 );
             })
-        })
+        }).expect("changed")
         .expect("joined");
         stored.join().expect("thread")
     });
@@ -1735,6 +1736,7 @@ fn a_write_waiting_on_a_deletion_lands_after_its_undo() {
                     )
                 })
             })
+            .expect("changed")
         });
         waiting.recv().expect("started");
         // The writer waits on the store's lock; the deletion fails and is undone first.
@@ -1813,4 +1815,58 @@ fn a_failed_check_carries_what_the_log_line_needs_masked() {
         Err(WorkSourceError::Failed(failure)) => assert_eq!(failure.source_id, None),
         other => panic!("not a failed check: {other:?}"),
     }
+}
+
+/// A Switch to an id with another name changes what the project row publishes, with the same
+/// Issues Workflow parts, so the card pass sends the row again instead of leaving the old name on
+/// it.
+#[test]
+fn a_switch_to_another_name_republishes_the_project_row() {
+    let store = Store::new();
+    store.answer("good");
+    store.set("ws-a", false).expect("pinned");
+    let workspace_id = store.ws("ws-a");
+    let repository = crate::domain::DomainRepository::new(&store.db, "test");
+    let project = repository
+        .create_project(
+            json!({ "name": "App", "launchSettings": { "workspaceId": workspace_id } })
+                .as_object()
+                .unwrap(),
+        )
+        .expect("project");
+    replace_project_workspaces(&store.paths, &repository, &store.db).expect("placed");
+    let project_id = project["projectId"].as_str().unwrap();
+    let before = published_project_work(project_id, &project);
+    assert_eq!(
+        presentation_work_source(&project).expect("shown")["name"],
+        json!("Fixture")
+    );
+    store.answer("info-renamed");
+    store.set("ws-a", true).expect("switched");
+    let after = published_project_work(project_id, &project);
+    assert_eq!(
+        presentation_work_source(&project).expect("shown")["name"],
+        json!("Renamed")
+    );
+    assert_eq!(before.parts, after.parts);
+    assert_ne!(before, after);
+}
+
+/// The store's writer lock taken while holding the placement lock, which comes after it: a debug
+/// build stops at the assertion; a release build refuses in fixed words instead of waiting forever.
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    should_panic(
+        expected = "the ticket command store's writer lock is taken while holding the placement lock"
+    )
+)]
+fn the_writer_lock_taken_after_the_placement_lock_is_refused() {
+    let _placement = crate::domain::repository::project::hold_project_placement().expect("held");
+    let refused = hold_work_source_writer().expect_err("refused");
+    assert_eq!(refused.code, "internalError");
+    assert_eq!(
+        refused.message,
+        crate::domain::repository::project::LOCK_ORDER_REFUSED
+    );
 }

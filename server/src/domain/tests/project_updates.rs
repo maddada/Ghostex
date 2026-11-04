@@ -154,7 +154,7 @@ fn a_placement_change_inside_a_transaction_needs_the_placement_lock_first() {
     assert_eq!(refused.message, PLACEMENT_CHANGE_IN_TRANSACTION);
     drop(transaction);
 
-    let placement = hold_project_placement();
+    let placement = hold_project_placement().expect("held");
     let transaction = db.unchecked_transaction().expect("transaction");
     move_to(
         &DomainRepository::new(&transaction, "S7k"),
@@ -168,4 +168,21 @@ fn a_placement_change_inside_a_transaction_needs_the_placement_lock_first() {
         .expect("read")
         .expect("project");
     assert_eq!(stored["launchSettings"]["workspaceId"], json!("ws-b"));
+}
+
+/// The placement lock taken twice on one thread: a debug build stops at the assertion; a release
+/// build refuses in fixed words instead of waiting forever.
+#[test]
+#[cfg_attr(
+    debug_assertions,
+    should_panic(expected = "the placement lock is taken twice on one thread")
+)]
+fn the_placement_lock_taken_twice_on_one_thread_is_refused() {
+    let _held = hold_project_placement().expect("held");
+    let refused = hold_project_placement().err().expect("refused");
+    assert_eq!(refused.code, "internalError");
+    assert_eq!(
+        refused.message,
+        crate::domain::repository::project::LOCK_ORDER_REFUSED
+    );
 }

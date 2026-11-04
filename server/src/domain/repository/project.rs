@@ -43,23 +43,38 @@ fn placement_inputs(project: &Value) -> (Option<String>, Option<String>) {
 /// has moved since its check.
 ///
 /// The lock order is the ticket command store's writer lock, then this one, then SQLite's write
-/// lock. Taking it twice on one thread, or the writer lock while holding it, panics rather than
-/// waiting forever; a placement change inside a transaction that started without it is refused
+/// lock. Taking it twice on one thread, or the writer lock while holding it, fails the assertion
+/// in a debug build and answers `LOCK_ORDER_REFUSED` in a release build, rather than waiting
+/// forever; a placement change inside a transaction that started without it is refused
 /// (`DomainRepository::hold_placement`).
+///
+/// CDXC:WorkMode 2026-11-03 DECISION:
+/// The repository owner, on the two lock-order guards: "I'd keep it as `debug_assert!` plus an `internalError` return in release, so a future wrong order fails one request in fixed words instead of unwinding through the handler."
 ///
 /// CDXC:WorkMode 2026-11-02 WHY:
 /// Taken here, in the only functions that write those rows, not by each caller: a project's placement changes through many routes and helpers (moves, updates, removals, re-registering a path), and a lock each caller had to remember was missed four times. A placement change runs outside a transaction, or inside one that took this lock first, so a read under the lock sees every one that happened.
-pub(crate) fn hold_project_placement() -> PlacementGuard {
+pub(crate) fn hold_project_placement() -> DomainResult<PlacementGuard> {
     static PLACEMENT: std::sync::Mutex<()> = std::sync::Mutex::new(());
-    assert!(
-        !placement_held_here(),
-        "the placement lock is taken twice on one thread"
-    );
+    if placement_held_here() {
+        debug_assert!(false, "the placement lock is taken twice on one thread");
+        return Err(lock_order_refused());
+    }
     let lock = PLACEMENT
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     PLACEMENT_HELD.with(|held| held.set(true));
-    PlacementGuard { _lock: lock }
+    Ok(PlacementGuard { _lock: lock })
+}
+
+/// What a lock taken out of order answers with in a release build.
+pub(crate) const LOCK_ORDER_REFUSED: &str =
+    "Ghostex refused a change that took its locks in the wrong order, and changed nothing.";
+
+pub(crate) fn lock_order_refused() -> DomainStateError {
+    DomainStateError {
+        code: "internalError",
+        message: LOCK_ORDER_REFUSED.to_string(),
+    }
 }
 
 thread_local! {
@@ -112,7 +127,7 @@ impl DomainRepository<'_> {
         notify_placement_for_test(project_id);
         #[cfg(not(test))]
         let _ = project_id;
-        Ok(Some(hold_project_placement()))
+        Ok(Some(hold_project_placement()?))
     }
 
     /// The project and its two placement columns as stored, read in one statement, for
