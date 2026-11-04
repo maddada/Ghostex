@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 const HAIKU: &str = "anthropic/claude-haiku-5-5";
 
 /// OMP's lineup as gxserver publishes it (Claude Haiku 5.5 offers low to max, so the middle of its
-/// list is high), and Claude Code's, for the agents that must not change.
+/// list is high), with Claude Code and Codex to cover both model-switch level policies.
 fn catalog() -> AgentModelCatalog {
     let levels = ["low", "medium", "high", "max"];
     parse_agent_model_catalog(&json!({"schemaVersion":1,"updatedAt":"2026-11-03","effortLabels":{},"agents":{
@@ -29,7 +29,8 @@ fn catalog() -> AgentModelCatalog {
             {"value":HAIKU,"label":"Claude Haiku 5.5","efforts":levels},
             {"value":"anthropic/claude-sonnet-5-5","label":"Claude Sonnet 5.5","efforts":levels}
         ]},
-        "claude":{"name":"Claude Code","efforts":levels,"models":[{"value":"opus","label":"Opus","efforts":levels}]}
+        "claude":{"name":"Claude Code","efforts":levels,"models":[{"value":"opus","label":"Opus","efforts":levels}]},
+        "codex":{"name":"Codex","efforts":levels,"models":[{"value":"gpt-6.1-sol","label":"GPT-6.1 Sol","efforts":levels}]}
     }}))
     .unwrap()
 }
@@ -83,31 +84,35 @@ fn context(
 }
 
 fn catalogs(catalog: &AgentModelCatalog) -> ModelMenuCatalogs {
-    [ModelPickerProvider::Omp, ModelPickerProvider::Claude]
-        .into_iter()
-        .map(|provider| {
-            let options = session_option_catalog(catalog, Some(provider.as_str())).unwrap();
-            let choices = options
-                .model
-                .choice_list()
-                .iter()
-                .map(|choice| ModelChoice {
-                    value: choice.value.clone(),
-                    label: choice.label.clone(),
-                    description: choice.description.clone(),
-                    legacy: false,
-                })
-                .collect();
-            (
-                provider.as_str().to_string(),
-                ModelMenuCatalog {
-                    model_icon: options.model_icon.clone(),
-                    choices,
-                    agent_name: None,
-                },
-            )
-        })
-        .collect()
+    [
+        ModelPickerProvider::Omp,
+        ModelPickerProvider::Claude,
+        ModelPickerProvider::Codex,
+    ]
+    .into_iter()
+    .map(|provider| {
+        let options = session_option_catalog(catalog, Some(provider.as_str())).unwrap();
+        let choices = options
+            .model
+            .choice_list()
+            .iter()
+            .map(|choice| ModelChoice {
+                value: choice.value.clone(),
+                label: choice.label.clone(),
+                description: choice.description.clone(),
+                legacy: false,
+            })
+            .collect();
+        (
+            provider.as_str().to_string(),
+            ModelMenuCatalog {
+                model_icon: options.model_icon.clone(),
+                choices,
+                agent_name: None,
+            },
+        )
+    })
+    .collect()
 }
 
 /// The `modelMenu` document key both renderers draw.
@@ -170,76 +175,84 @@ fn omp_menu_shows_the_level_omps_transcript_reports() {
     assert_eq!(menu["pill"]["suffix"], "Low");
 }
 
-/// With no level reported (OMP has not written its transcript yet and its footer is not readable),
-/// nothing in the menu names a level as OMP's, and a pick from the row without choosing a level
-/// asks for no change.
+/// Agents that keep their own level do not mark an unknown level or request a replacement level
+/// when their own model row is picked without browsing one.
 #[test]
-fn omp_menu_marks_no_level_while_omps_level_is_unknown() {
+fn agents_that_keep_effort_mark_no_level_while_theirs_is_unknown() {
     let catalog = catalog();
-    let context = context(
-        &catalog,
-        ModelPickerProvider::Omp,
-        json!({
-            "model": {"value": HAIKU, "label": "Claude Haiku 5.5", "source": "transcript"},
-            "detectedAt": "2026-11-03T08:37:20.000Z",
-        }),
-    );
-    let menu = menu(&catalog, &context);
-    let row = own_row(&menu);
-    assert_eq!(row["effort"], "");
-    assert_eq!(
-        row["efforts"].as_array().unwrap().len(),
-        4,
-        "the levels stay pickable"
-    );
-    assert!(marked_levels(&menu).is_empty());
-    assert_eq!(reasoning(&menu)["valueLabel"], Value::Null);
-    assert_eq!(menu["pill"]["suffix"], Value::Null);
+    for (provider, model, label) in [
+        (ModelPickerProvider::Omp, HAIKU, "Claude Haiku 5.5"),
+        (ModelPickerProvider::Claude, "opus", "Opus"),
+    ] {
+        let context = context(
+            &catalog,
+            provider,
+            json!({
+                "model": {"value": model, "label": label, "source": "transcript"},
+                "detectedAt": "2026-11-03T08:37:20.000Z",
+            }),
+        );
+        let menu = menu(&catalog, &context);
+        let row = own_row(&menu);
+        assert_eq!(row["effort"], "", "{provider:?}");
+        assert_eq!(
+            row["efforts"].as_array().unwrap().len(),
+            4,
+            "the levels stay pickable"
+        );
+        assert!(marked_levels(&menu).is_empty());
+        assert_eq!(reasoning(&menu)["valueLabel"], Value::Null);
+        assert_eq!(menu["pill"]["suffix"], Value::Null);
 
-    // The phone's apply and the desktop's Enter send the row's own level when none was browsed.
-    let rows = model_menu_visible_rows(
-        &context,
-        &ModelMenuView::default(),
-        &catalogs(&catalog),
-        &[],
-    );
-    let selected = rows.iter().find(|row| row.selected).unwrap();
-    let pick = model_menu_pick(
-        selected,
-        &context,
-        Some(row["effort"].as_str().unwrap().to_string()),
-        |_, _, _| unreachable!("the session's own agent is no hand-off"),
-    );
-    let ModelMenuPick::Select {
-        value,
-        effort: Some(effort),
-    } = pick
-    else {
-        panic!("a level-carrying pick of the session's own model: {pick:?}");
-    };
-    assert!(model_selection_unchanged(
-        &ModelPickerSelection {
-            model: value,
-            effort
-        },
-        None,
-        context.model_value.as_deref(),
-        context.effort_value.as_deref(),
-        Some(ModelPickerProvider::Omp),
-        false,
-        Some(model_pick_scope(Some(ModelPickerProvider::Omp), false)),
-    ));
+        // The phone's apply and the desktop's Enter send the row's own level when none was browsed.
+        let rows = model_menu_visible_rows(
+            &context,
+            &ModelMenuView::default(),
+            &catalogs(&catalog),
+            &[],
+        );
+        let selected = rows.iter().find(|row| row.selected).unwrap();
+        let pick = model_menu_pick(
+            selected,
+            &context,
+            Some(row["effort"].as_str().unwrap().to_string()),
+            |_, _, _| unreachable!("the session's own agent is no hand-off"),
+        );
+        let ModelMenuPick::Select {
+            value,
+            effort: Some(effort),
+        } = pick
+        else {
+            panic!("a level-carrying pick of the session's own model: {pick:?}");
+        };
+        assert!(effort.is_empty(), "{provider:?}");
+        // OMP's unchanged pick is a no-op; Claude's default scope can still update its saved model.
+        if provider == ModelPickerProvider::Omp {
+            assert!(model_selection_unchanged(
+                &ModelPickerSelection {
+                    model: value,
+                    effort
+                },
+                None,
+                context.model_value.as_deref(),
+                context.effort_value.as_deref(),
+                Some(provider),
+                false,
+                Some(model_pick_scope(Some(provider), false)),
+            ));
+        }
+    }
 }
 
-/// Other agents still start their own row on a level when theirs is unknown.
+/// An agent whose model switch sets a level keeps its own row's start when its level is unknown.
 #[test]
-fn other_agents_keep_their_start_level_when_theirs_is_unknown() {
+fn codex_keeps_its_start_level_when_its_level_is_unknown() {
     let catalog = catalog();
     let context = context(
         &catalog,
-        ModelPickerProvider::Claude,
+        ModelPickerProvider::Codex,
         json!({
-            "model": {"value": "opus", "label": "Opus", "source": "terminal"},
+            "model": {"value": "gpt-6.1-sol", "label": "GPT-6.1 Sol", "source": "terminal"},
             "detectedAt": "2026-11-03T08:37:20.000Z",
         }),
     );
@@ -252,7 +265,11 @@ fn other_agents_keep_their_start_level_when_theirs_is_unknown() {
             .unwrap()
             .iter()
             .any(|level| level["value"] == effort),
-        "Claude's own row starts on one of its levels, got {effort:?}"
+        "Codex's own row starts on one of its levels, got {effort:?}"
+    );
+    assert_eq!(
+        effort, "high",
+        "the middle level remains the starting level"
     );
 }
 
