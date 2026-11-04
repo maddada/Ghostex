@@ -10,7 +10,7 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::{ElementExt as _, h_flex};
 use serde_json::{Value, json};
 
-use ghostex_gx_core::unified_sidebar::UnifiedStatus;
+use ghostex_gx_core::unified_sidebar::{UnifiedBranchLine, UnifiedStatus};
 
 use super::model::UnifiedCard;
 use crate::GhostexGpuiApp;
@@ -262,8 +262,7 @@ impl GhostexGpuiApp {
         )
     }
 
-    /// A card: three lines, or two when there is no branch or pull request to show and its folder
-    /// is not known to be outside git.
+    /// A card: always three lines.
     ///
     /// CDXC:Sidebar 2026-10-30 DECISION:
     /// User (Q785, Q789): a Unified row is a three-line card. Line one names the project by its repository, followed by the machine's name for a session on another machine, with the status on the right; line two is the title; line three is the branch, the pull request and the agent. Hovering it shows Snooze and Park in the status's place (hover.rs).
@@ -337,23 +336,23 @@ impl GhostexGpuiApp {
         CDXC:Sidebar 2026-11-04 DECISION:
         User: "for threads on madda folder which doesn't have github it just shows 2 rows (it shouldn't do this, should say something that indicates that it's without source control for that thread, with an icon there too to indicate this (no need for different color tho)". A card whose folder is in no git repository (gx-core unified_sidebar `no_source_control`) keeps its third line, reading "Untracked" (Q1239: "'No source control' is way too long man") beside a crossed-out branch, in the branch line's colour, so every card is the same height.
         */
-        let no_source_control = card.no_source_control;
-        let branch_line = card
-            .row
-            .menu_facts
-            .branch
-            .clone()
-            .map(|branch| ("titlebar/git-branch.svg", branch))
-            .or_else(|| {
-                no_source_control.then(|| {
-                    (
-                        "titlebar/git-branch-deleted.svg",
-                        "Untracked".to_string(),
-                    )
-                })
-            });
-        let has_branch_line = branch_line.is_some();
-        let has_meta = has_branch_line || pull_request.is_some();
+        // CDXC:Sidebar 2026-11-05 DECISION: every card draws its third line, so every card is three
+        // lines high (gx-core `unified_branch_line`): a branch it last showed, or a quiet "No
+        // branch", stands in while its branch is not known.
+        let (branch_icon, branch_text, placeholder) = match &card.branch_line {
+            UnifiedBranchLine::Branch(branch) => ("titlebar/git-branch.svg", branch.clone(), false),
+            UnifiedBranchLine::Untracked => (
+                "titlebar/git-branch-deleted.svg",
+                "Untracked".to_string(),
+                false,
+            ),
+            UnifiedBranchLine::LastKnown(branch) => {
+                ("titlebar/git-branch.svg", branch.clone(), true)
+            }
+            UnifiedBranchLine::Unknown => {
+                ("titlebar/git-branch.svg", "No branch".to_string(), true)
+            }
+        };
         let agent = || {
             div().flex_shrink_0().opacity(0.75).child(
                 crate::app::native_sidebar::icons::session_icon(
@@ -456,56 +455,51 @@ impl GhostexGpuiApp {
                     .children(crate::app::native_sidebar::threads::coordinator_badge(
                         session, appearance,
                     ))
-                    .when(!has_meta && !(title_line_only && hovered), |line| {
-                        line.child(agent())
-                    })
                     .children(right.take()),
             )
-            .when(has_meta, |column| {
-                column.child(
-                    h_flex()
-                        .h(px(CARD_META_LINE * scale))
-                        .gap(px(5.0 * scale))
-                        .text_size(px(12.5 * scale))
-                        .font_weight(gpui::FontWeight::NORMAL)
-                        .text_color(appearance.muted)
-                        .children(branch_line.map(|(icon, branch)| {
-                            h_flex()
-                                .min_w_0()
-                                .flex_1()
-                                .gap(px(4.0 * scale))
-                                .child(
-                                    gpui::svg()
-                                        .path(icon)
-                                        .size(px(12.0 * scale))
-                                        .flex_shrink_0()
-                                        .text_color(appearance.muted),
-                                )
-                                .child(div().min_w_0().truncate().child(branch))
-                        }))
-                        .when(!has_branch_line, |line| line.child(div().flex_1()))
-                        .children(pull_request.map(|pull_request| {
-                            let color: Hsla = match pull_request.state.as_str() {
-                                "merged" => chrome_color(0xa371f7, 0x8250df).into(),
-                                "closed" => rgb(FAILED_COLOR).into(),
-                                "draft" => appearance.muted,
-                                _ => chrome_color(0x3fb950, 0x1a7f37).into(),
-                            };
-                            h_flex()
-                                .flex_shrink_0()
-                                .gap(px(2.0 * scale))
-                                .text_color(color)
-                                .child(
-                                    gpui::svg()
-                                        .path("titlebar/git-pull-request.svg")
-                                        .size(px(12.0 * scale))
-                                        .text_color(color),
-                                )
-                                .child(format!("#{}", pull_request.number))
-                        }))
-                        .child(agent()),
-                )
-            })
+            .child(
+                h_flex()
+                    .h(px(CARD_META_LINE * scale))
+                    .gap(px(5.0 * scale))
+                    .text_size(px(12.5 * scale))
+                    .font_weight(gpui::FontWeight::NORMAL)
+                    .text_color(appearance.muted)
+                    .child(
+                        h_flex()
+                            .min_w_0()
+                            .flex_1()
+                            .gap(px(4.0 * scale))
+                            .when(placeholder, |line| line.opacity(0.6))
+                            .child(
+                                gpui::svg()
+                                    .path(branch_icon)
+                                    .size(px(12.0 * scale))
+                                    .flex_shrink_0()
+                                    .text_color(appearance.muted),
+                            )
+                            .child(div().min_w_0().truncate().child(branch_text)),
+                    )
+                    .children(pull_request.map(|pull_request| {
+                        let color: Hsla = match pull_request.state.as_str() {
+                            "merged" => chrome_color(0xa371f7, 0x8250df).into(),
+                            "closed" => rgb(FAILED_COLOR).into(),
+                            "draft" => appearance.muted,
+                            _ => chrome_color(0x3fb950, 0x1a7f37).into(),
+                        };
+                        h_flex()
+                            .flex_shrink_0()
+                            .gap(px(2.0 * scale))
+                            .text_color(color)
+                            .child(
+                                gpui::svg()
+                                    .path("titlebar/git-pull-request.svg")
+                                    .size(px(12.0 * scale))
+                                    .text_color(color),
+                            )
+                            .child(format!("#{}", pull_request.number))
+                    }))
+                    .child(agent()),
+            )
             .when(focused, |row| {
                 mark_active(
                     row,

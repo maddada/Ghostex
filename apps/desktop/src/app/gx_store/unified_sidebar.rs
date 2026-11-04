@@ -11,8 +11,8 @@ use std::sync::Arc;
 use ghostex_gx_core::unified_sidebar::{
     UNIFIED_SAVED_STATE_KEY, UnifiedFilter, UnifiedFilterOption, UnifiedMachineInput, UnifiedRow,
     UnifiedSavedState, UnifiedSettings, UnifiedShelf, build_unified_sidebar, group_unified_sidebar,
-    move_unified_project, repo_of_project, unified_lane_inputs, unified_lane_menu_inputs,
-    unified_machine_spaces,
+    move_unified_project, repo_of_project, unified_branch_line, unified_lane_inputs,
+    unified_lane_menu_inputs, unified_machine_spaces, unified_shows_machine,
 };
 use ghostex_gx_core::{
     ChangeSummary, Core, HoverAction, LOCAL_MACHINE_ID, MachineId, MenuHost, MenuItem, SessionKey,
@@ -61,6 +61,9 @@ pub(crate) struct UnifiedSidebarHost {
     /// A project picked in Quick Access whose repository the filter is set to once the list
     /// holds it (a reopened project arrives a moment later).
     pending_project: Option<String>,
+    /// The branch each card last showed, by machine and row id, for the card's third line while
+    /// its branch is not known (`unified_branch_line`).
+    last_branches: HashMap<(MachineId, String), String>,
 }
 
 impl UnifiedSidebarHost {
@@ -181,7 +184,8 @@ impl UnifiedSidebarHost {
                 continue;
             }
             let machine = MachineId::Remote(tab.machine_id.clone());
-            if tab.fed && !tab.this_computer && store.loaded(&machine).is_some() {
+            // A computer that is not connected gives no cards (`unified_shows_machine`).
+            if tab.fed && !tab.this_computer && unified_shows_machine(store, &machine) {
                 machines.push((machine, tab.label.clone()));
             }
         }
@@ -312,7 +316,36 @@ impl UnifiedSidebarHost {
         } else {
             Vec::new()
         };
+        for row in view
+            .drafts
+            .iter()
+            .chain(&view.pinned)
+            .chain(&view.active)
+            .chain(&view.working)
+            .chain(&view.snoozed)
+            .chain(&view.parked)
+        {
+            if let Some(branch) = &row.session.row.menu_facts.branch {
+                self.last_branches.insert(
+                    (
+                        row.machine.clone(),
+                        row.session.row.sidebar_session_id.clone(),
+                    ),
+                    branch.clone(),
+                );
+            }
+        }
+        let last_branches = &self.last_branches;
         let card = |row: UnifiedRow| -> Option<UnifiedCard> {
+            let branch_line = unified_branch_line(
+                &row,
+                last_branches
+                    .get(&(
+                        row.machine.clone(),
+                        row.session.row.sidebar_session_id.clone(),
+                    ))
+                    .map(String::as_str),
+            );
             Some(UnifiedCard {
                 session: sessions
                     .get(&(
@@ -325,7 +358,7 @@ impl UnifiedSidebarHost {
                 repo_label: row.repo.label,
                 machine_label: row.machine_label,
                 status: row.status,
-                no_source_control: row.no_source_control,
+                branch_line,
                 in_group: grouped && row.shelf != UnifiedShelf::Drafts,
             })
         };

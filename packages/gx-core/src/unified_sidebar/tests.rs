@@ -868,3 +868,105 @@ fn a_card_says_no_source_control_only_for_a_project_outside_git_without_a_branch
     assert_eq!(claims.get("S2"), Some(&true), "a plain folder");
     assert_eq!(claims.get("S3"), Some(&false), "a session with a branch");
 }
+
+#[test]
+fn a_computer_gives_cards_only_while_its_stream_is_live() {
+    use crate::presentation_store::{PresentationStore, SnapshotOrigin};
+    use crate::ConnectionUpdate;
+
+    let snapshot = || {
+        serde_json::from_value(serde_json::json!({
+            "revision": 1,
+            "generatedAt": "2026-11-05T00:00:00.000Z",
+            "projects": [],
+            "groups": [],
+            "sessions": [],
+        }))
+        .expect("a snapshot")
+    };
+    let windows = MachineId::Remote("windows".to_string());
+    let mut store = PresentationStore::default();
+    assert!(
+        unified_shows_machine(&store, &MachineId::Local),
+        "this computer always"
+    );
+    assert!(!unified_shows_machine(&store, &windows), "not loaded");
+
+    store.seed_last_seen(&windows, snapshot());
+    assert!(
+        !unified_shows_machine(&store, &windows),
+        "only its stored copy"
+    );
+
+    store.apply_snapshot(&windows, "S8g", snapshot(), SnapshotOrigin::Stream);
+    store.apply_connection(&windows, ConnectionUpdate::Live, 1);
+    assert!(unified_shows_machine(&store, &windows), "live");
+
+    store.apply_connection(&windows, ConnectionUpdate::Lost { error: None }, 2);
+    assert!(!unified_shows_machine(&store, &windows), "disconnected");
+    store.apply_connection(&windows, ConnectionUpdate::Connecting { attempt: 1 }, 3);
+    assert!(!unified_shows_machine(&store, &windows), "reconnecting");
+
+    store.apply_connection(&windows, ConnectionUpdate::Live, 4);
+    assert!(
+        unified_shows_machine(&store, &windows),
+        "back once it reconnects"
+    );
+}
+
+#[test]
+fn every_card_has_a_third_line() {
+    let local = MachineId::Local;
+    let mut on_branch = row(&local, "P1", "S1");
+    on_branch.menu_facts.branch = Some("feature".to_string());
+    let mut repo = group(
+        "P1",
+        "/r/repo",
+        None,
+        vec![on_branch, row(&local, "P1", "S2")],
+    );
+    Arc::make_mut(&mut repo.core)
+        .project_context
+        .as_mut()
+        .expect("a project")
+        .git_work_tree = true;
+    let folder = group("P2", "/Users/a", None, vec![row(&local, "P2", "S3")]);
+    let view = sidebar(vec![repo, folder]);
+    let list = build_unified_sidebar(
+        &[UnifiedMachineInput {
+            machine: local.clone(),
+            label: "Mac".to_string(),
+            view: &view,
+            spaces: None,
+        }],
+        settings(),
+        &UnifiedFilter::default(),
+        NOW,
+    );
+    let find = |id: &str| {
+        list.active
+            .iter()
+            .find(|row| row.session.row.sidebar_session_id == id)
+            .expect("a card")
+    };
+    assert_eq!(
+        unified_branch_line(find("S1"), Some("old")),
+        UnifiedBranchLine::Branch("feature".to_string())
+    );
+    assert_eq!(
+        unified_branch_line(find("S3"), None),
+        UnifiedBranchLine::Untracked
+    );
+    assert_eq!(
+        unified_branch_line(find("S2"), Some("main")),
+        UnifiedBranchLine::LastKnown("main".to_string())
+    );
+    assert_eq!(
+        unified_branch_line(find("S2"), None),
+        UnifiedBranchLine::Unknown
+    );
+    assert_eq!(
+        unified_branch_line(find("S2"), Some(" ")),
+        UnifiedBranchLine::Unknown
+    );
+}

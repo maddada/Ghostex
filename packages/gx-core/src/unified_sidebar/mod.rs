@@ -11,6 +11,7 @@ mod choices;
 mod fixture_tests;
 mod grouping;
 mod lanes;
+mod machines;
 mod repo;
 mod saved;
 #[cfg(test)]
@@ -33,6 +34,7 @@ pub use choices::{
 };
 pub use grouping::{group_unified_sidebar, move_unified_project, ordered_repo_keys, UnifiedGroup};
 pub use lanes::{unified_lane_inputs, unified_lane_menu_inputs};
+pub use machines::{unified_branch_line, unified_shows_machine, UnifiedBranchLine};
 pub use repo::{
     merge_repo_identities, normalize_git_remote, origin_keys_of, repo_identity,
     resolve_repo_identity, RepoIdentity,
