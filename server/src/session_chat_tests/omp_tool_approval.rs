@@ -16,8 +16,8 @@ use crate::session_chat_notice::{
 use crate::session_chat_omp_blocking::{detect_omp_blocking_screen, detect_omp_permission_picker};
 use crate::session_chat_resume_picker::answer_terminal_key;
 use crate::session_chat_send::{
-    stand_in_terminal_for_test, SessionChatSendTarget, StandInTerminalForTest,
-    SESSION_CHAT_INTERRUPT,
+    test_terminal::{self, TestTerminal},
+    SessionChatSendTarget, SESSION_CHAT_INTERRUPT,
 };
 
 const PI: &str = include_str!("fixtures/omp-tool-approval-pi.txt");
@@ -143,14 +143,19 @@ fn an_approval_with_a_typed_message_becomes_the_terminal_card() {
 struct CardSession {
     target: SessionChatSendTarget,
     agent: String,
-    terminal: StandInTerminalForTest,
 }
 
 impl CardSession {
     fn new(name: &str, agent: &str, screen: Option<&str>) -> Self {
         let zmx_name = format!("omp-tool-approval-{name}");
+        test_terminal::open(
+            &zmx_name,
+            TestTerminal {
+                screen: Some(screen.map(str::to_string)),
+                ..TestTerminal::default()
+            },
+        );
         Self {
-            terminal: stand_in_terminal_for_test(&zmx_name, screen),
             target: SessionChatSendTarget {
                 project_id: "omp-tool-approval".to_string(),
                 session_id: zmx_name.clone(),
@@ -186,17 +191,16 @@ async fn a_message_typed_on_the_card_reaches_omp_and_enter_denies_and_sends() {
                 .answer(typed(&letter.to_string()))
                 .await
                 .unwrap_or_else(|error| panic!("{shape}: letter {index} refused: {error:?}"));
-            // OMP's answer to the first letter: the approval switches to its draft mode.
-            session.terminal.show(Some(drafting));
         }
         // Enter on a draft is OMP's "deny and send"; it has to reach OMP as Enter.
         session
             .answer(key("enter"))
             .await
             .unwrap_or_else(|error| panic!("{shape}: Enter refused: {error:?}"));
-        assert_eq!(session.terminal.writes().concat(), format!("{message}\r"));
+        let terminal = test_terminal::terminal(&session.target.zmx_name);
+        assert_eq!(terminal.writes.concat(), format!("{message}\r"));
         // Every key was checked against the screen before it was written.
-        assert_eq!(session.terminal.captures(), message.chars().count() + 1);
+        assert_eq!(terminal.captures, message.chars().count() + 1);
     }
 }
 
@@ -226,7 +230,11 @@ async fn every_card_key_reaches_omp_as_that_key() {
             .expect("a letter on the card");
         let mut expected: Vec<String> = keys.iter().map(|(_, bytes)| bytes.to_string()).collect();
         expected.push("y".to_string());
-        assert_eq!(session.terminal.writes(), expected, "{shape}");
+        assert_eq!(
+            test_terminal::terminal(&session.target.zmx_name).writes,
+            expected,
+            "{shape}"
+        );
     }
 }
 
@@ -260,7 +268,7 @@ async fn no_card_key_reaches_a_screen_that_no_longer_shows_the_card() {
                     *screen,
                 );
                 let result = session.answer(answer.clone()).await;
-                let writes = session.terminal.writes();
+                let writes = test_terminal::terminal(&session.target.zmx_name).writes;
                 if result.is_ok() || !writes.is_empty() {
                     written.push(format!(
                         "{agent} screen {screen_index} {answer}: accepted {} wrote {writes:?}",

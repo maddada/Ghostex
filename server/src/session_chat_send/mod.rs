@@ -74,6 +74,8 @@ mod send_http;
 mod single_paste;
 mod steps;
 #[cfg(test)]
+pub(crate) mod test_terminal;
+#[cfg(test)]
 mod tests;
 mod worker;
 
