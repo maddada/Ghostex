@@ -243,9 +243,9 @@ pub(crate) fn attention_state(session: &Value, generated_at: &str) -> Value {
 }
 
 /// Whether a turn-complete attention of `session` waits on the user, the rule `attention.kind`
-/// and the phone push both use: unanswered async questions or open question forms (counted in
-/// every lifecycle state, unlike the published `pendingQuestionCount`), an approval, a stored chat
-/// prompt or a waiting connector card.
+/// uses: unanswered async questions or open question forms (counted in every lifecycle state,
+/// unlike the published `pendingQuestionCount`), an approval, a stored chat prompt or a waiting
+/// connector card. Push notifications keep the committed feed row's kind instead.
 pub(crate) fn turn_end_waits_on_user(session: &Value, generated_at: &str) -> bool {
     crate::session_chat_async_questions::pending_question_count(session)
         + crate::session_chat_open_questions::open_question_count(session)

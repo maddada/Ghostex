@@ -4491,9 +4491,10 @@ turning notifications off for the computer, removing the computer in the app, or
 removing a phone paired by QR code from Paired devices on the computer deletes it
 there. A push names the agent and the project and says what happened (finished,
 needs input, failed), never what the agent wrote, and tapping it opens the
-session; a turn that ends with a question or approval Ghostex already knows about
-comes as needs input, while a question Ghostex notices only after a finished push
-brings no second push. Each phone gets at most one new push per session every 20
+session. Each push keeps its feed row's kind: a finished row says Finished and
+uses the Finished switch even when a question or approval is open; a needs-input
+row uses Waiting and says Waiting for you or Has a question. Each phone gets at
+most one new push per session every 20
 seconds and at most eight push requests a minute; when Expo does not take a push,
 Ghostex tries the same push up to twice more within its hour, and those tries
 count toward the eight. A push still undelivered after an hour is dropped, and

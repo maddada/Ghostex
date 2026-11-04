@@ -8,19 +8,15 @@ use super::message::{AgentStartEvent, AlertEvent, AlertKind};
 
 /// CDXC:Notifications 2026-11-01 WHY:
 /// A phone hears of exactly the rows the feed committed: a finished, needs-input or failed row is queued for push with its own id once the row is stored, so the push and the row are one notice on the phone, and a row that was not stored sends nothing. Bell, custom and account rows stay on the computer. The title uses the same launcher display name as the mobile summary and the row's project name; the row's title (the session's title) and its text never go out.
-/// A finished row whose session already waits on the user (an unanswered question or form, an approval, a stored prompt or connector card, the rule `attention.kind` uses) goes out as needs input, so the phone's Waiting switch covers a turn that ended by asking. A question recognised only after the push has gone gets no second push.
-/// SEE-ALSO: server/src/notification_feed/producer.rs and failure.rs (where rows are committed), `turn_end_waits_on_user` in server/src/presentation/session_attributes.rs.
+/// Finished rows keep the Finished switch and wording even while the session waits on the user; needs-input rows use the Waiting switch and its question wording.
+/// SEE-ALSO: server/src/notification_feed/producer.rs and failure.rs (where rows are committed).
 pub(crate) fn announce_feed_row(
     state: &AppState,
     repository: &DomainRepository<'_>,
     session: &Value,
     row: &Value,
 ) {
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let kind = match row.get("kind").and_then(Value::as_str) {
-        Some("finished") if crate::presentation::turn_end_waits_on_user(session, &now) => {
-            AlertKind::NeedsInput
-        }
         Some("finished") => AlertKind::Finished,
         Some("needsInput") => AlertKind::NeedsInput,
         Some("failed") => AlertKind::Failed,

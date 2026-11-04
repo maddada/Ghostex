@@ -256,10 +256,9 @@ async fn push_send_uses_the_phones_custom_launcher_name() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn push_send_known_question_goes_out_as_needs_input() {
+async fn push_send_finished_question_keeps_its_event_kind_and_switch() {
     let fixture = Fixture::new().await;
-    // Waiting on, Finished off: a turn that ended with a question the host already knows reaches
-    // the phone as needs input, with the finished row's id.
+    // Waiting on, Finished off: even an unanswered question does not change the feed event.
     fixture.register((false, true, false)).await;
     let asking = fixture.session_with(
         "Asks before stopping",
@@ -274,13 +273,9 @@ async fn push_send_known_question_goes_out_as_needs_input() {
         .await;
     let rows = fixture.rows(&asking, "finished");
     assert_eq!(rows.len(), 1);
-    let sends = fixture.sends();
-    assert_eq!(sends.len(), 1, "{sends:?}");
-    assert_eq!(message(&sends[0])["body"], "Has a question");
-    assert_eq!(message(&sends[0])["data"]["kind"], "needsInput");
-    assert_eq!(message(&sends[0])["data"]["notificationId"], rows[0]["id"]);
+    assert!(fixture.sends().is_empty());
 
-    // The inverse: Finished on, Waiting off. The same kind of turn sends nothing, a plain one does.
+    // Finished on, Waiting off: a turn with a question still announces Finished with its row id.
     fixture.register((true, false, false)).await;
     let asking_again = fixture.session_with(
         "Asks again",
@@ -293,7 +288,14 @@ async fn push_send_known_question_goes_out_as_needs_input() {
             json!({ "agentName": "claude", "eventName": "Stop" }),
         )
         .await;
-    assert_eq!(fixture.sends().len(), 1);
+    let rows = fixture.rows(&asking_again, "finished");
+    assert_eq!(rows.len(), 1);
+    let sends = fixture.sends();
+    assert_eq!(sends.len(), 1, "{sends:?}");
+    assert_eq!(message(&sends[0])["title"], "Claude · Delivery");
+    assert_eq!(message(&sends[0])["body"], "Finished");
+    assert_eq!(message(&sends[0])["data"]["kind"], "finished");
+    assert_eq!(message(&sends[0])["data"]["notificationId"], rows[0]["id"]);
     let plain = fixture.session("Plain turn", "working");
     fixture
         .hook(
