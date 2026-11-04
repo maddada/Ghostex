@@ -299,15 +299,7 @@ async fn the_work_list_lists_a_command_trackers_tickets() {
     let (status, first) = routes.call("/api/listWorkItems", list.clone()).await;
     assert_eq!(status, StatusCode::OK, "{first}");
     assert_eq!(first["result"]["refreshing"], json!(true), "{first}");
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-    let answer = loop {
-        let (_, answer) = routes.call("/api/listWorkItems", list.clone()).await;
-        if answer["result"]["refreshing"] == json!(false) {
-            break answer;
-        }
-        assert!(std::time::Instant::now() < deadline, "{answer}");
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    };
+    let answer = work_list_once_read(&routes, &list).await;
     let rows: Vec<&Value> = answer["result"]["items"]
         .as_array()
         .unwrap()
@@ -317,4 +309,88 @@ async fn the_work_list_lists_a_command_trackers_tickets() {
     assert_eq!(rows.len(), 1, "{answer}");
     assert_eq!(rows[0]["id"], "ACM-12");
     assert_eq!(rows[0]["canStart"], false);
+}
+
+/// `/api/listWorkItems` once it has stopped refreshing: every open list it owes has been read.
+async fn work_list_once_read(routes: &Routes, list: &Value) -> Value {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let (_, answer) = routes.call("/api/listWorkItems", list.clone()).await;
+        if answer["result"]["refreshing"] == json!(false) {
+            return answer;
+        }
+        assert!(std::time::Instant::now() < deadline, "{answer}");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+/// A ticket command's details are read in a workspace that pins it. With two workspaces pinning
+/// `fixture` and both answering `ACM-12`, a request naming neither a project nor the row's
+/// `sourceKey`, or naming a project whose workspace has no command, is refused, and either one
+/// reads that workspace's row.
+#[tokio::test]
+async fn a_command_tickets_details_need_their_workspace() {
+    let routes = Routes::new();
+    routes.answer("good");
+    let db = crate::storage::open_gxserver_database(&routes.paths).expect("db");
+    let repository = crate::domain::DomainRepository::new(&db, "test");
+    let mut placed = Vec::new();
+    for name in ["details-a", "details-b", "details-bare"] {
+        let workspace_id = if name == "details-bare" {
+            routes.workspace(name).await
+        } else {
+            let workspace_id = with_token(&routes, name, &format!("tok-{name}")).await;
+            let (status, body) = pick(&routes, &workspace_id, "fixture").await;
+            assert_eq!(status, StatusCode::OK, "{body}");
+            workspace_id
+        };
+        let folder = routes.paths.app_data_dir.join(name);
+        fs::create_dir_all(&folder).expect("folder");
+        let project = repository
+            .create_project(
+                json!({ "name": name, "path": folder, "launchSettings": { "workspaceId": workspace_id } })
+                    .as_object()
+                    .unwrap(),
+            )
+            .expect("project");
+        placed.push((
+            workspace_id,
+            project["projectId"].as_str().unwrap().to_string(),
+        ));
+    }
+    crate::work_mode::replace_project_workspaces(&routes.paths, &repository, &db).expect("placed");
+    // Its tickets name no PR, so the details read nothing from GitHub.
+    routes.answer("title-kept");
+    let project_ids: Vec<&str> = placed.iter().map(|(_, id)| id.as_str()).collect();
+    work_list_once_read(&routes, &json!({ "projectIds": project_ids })).await;
+    let read = |extra: Value| {
+        let mut params =
+            json!({ "source": "fixture", "ticketId": "ACM-12", "projectIds": project_ids });
+        for (key, value) in extra.as_object().unwrap() {
+            params[key] = value.clone();
+        }
+        routes.logged_call("/api/readWorkItem", params)
+    };
+
+    let (pinned, bare) = placed.split_at(2);
+    for refused in [json!({}), json!({ "projectId": bare[0].1 })] {
+        let (status, body) = read(refused.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}: {body}");
+        assert_eq!(error_text(&body), crate::work_mode::COMMAND_DETAILS_REFUSAL);
+    }
+    for (workspace_id, project_id) in pinned {
+        let key = crate::work_mode::source_key(workspace_id, "fixture");
+        for extra in [
+            json!({ "projectId": project_id }),
+            json!({ "sourceKey": key }),
+        ] {
+            let (status, body) = read(extra.clone()).await;
+            assert_eq!(status, StatusCode::OK, "{extra}: {body}");
+            assert_eq!(
+                body["result"]["item"]["sourceKey"],
+                json!(key),
+                "{extra}: {body}"
+            );
+        }
+    }
 }

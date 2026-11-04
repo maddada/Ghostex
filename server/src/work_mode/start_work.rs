@@ -233,23 +233,14 @@ fn plan_ticket_work(
         .as_ref()
         .map(|plan| json!({ "number": plan.number, "url": plan.url }));
 
-    let tracker = cached_project_work_tracker(project_id);
-    let existing_worktree =
-        repository
-            .list_sessions(Some(project_id))?
-            .iter()
-            .find_map(|session| {
-                let marker = read_worktree_session_marker(session)?;
-                if !Path::new(&marker.path).is_dir() {
-                    return None;
-                }
-                let targets = work_targets(&project, session);
-                let linked = match &pull_request {
-                    Some(plan) => plan.is_linked(&targets, &marker.branch),
-                    None => ticket.is_linked(&targets, &marker.branch, tracker),
-                };
-                linked.then_some(marker.path)
-            });
+    let existing_worktree = existing_ticket_worktree(
+        &db,
+        &state.paths,
+        &repository,
+        &project,
+        ticket,
+        pull_request.as_ref(),
+    )?;
     if existing_worktree.is_some() {
         return Ok(TicketWorkPlan {
             project_id: project_id.to_string(),
@@ -297,6 +288,43 @@ fn plan_ticket_work(
         links,
         pull_request: pull_request_value,
     })
+}
+
+/// The worktree of a session in the project that already works on the ticket (or on the PR, by its
+/// plan), still on disk.
+pub(crate) fn existing_ticket_worktree(
+    db: &rusqlite::Connection,
+    paths: &crate::paths::GxserverPaths,
+    repository: &DomainRepository,
+    project: &Value,
+    ticket: &WorkTicket,
+    pull_request: Option<&PullRequestPlan>,
+) -> Result<Option<String>, DomainStateError> {
+    // From the workspace state now, not the background pass's copy: a tracker picked since the
+    // last pass (or before the first) decides which ticket a worktree's bare number names.
+    let workspaces = crate::workspaces::read_sidebar_workspaces(db)?;
+    let projects = repository.list_projects()?;
+    let tracker = project_work_tracker(paths, &workspaces, project, &projects);
+    let workspace_id = crate::workspaces::project_workspace_id(&workspaces, project, &projects);
+    let project_id = project
+        .get("projectId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    Ok(repository
+        .list_sessions(Some(project_id))?
+        .iter()
+        .find_map(|session| {
+            let marker = read_worktree_session_marker(session)?;
+            if !Path::new(&marker.path).is_dir() {
+                return None;
+            }
+            let targets = work_targets_with(project, session, Some(&workspace_id), tracker);
+            let linked = match pull_request {
+                Some(plan) => plan.is_linked(&targets, &marker.branch),
+                None => ticket.is_linked(&targets, &marker.branch, tracker),
+            };
+            linked.then_some(marker.path)
+        }))
 }
 
 /// `<gh user>/<number>-<slug of the title>`, like `yahia/218-arabic-plan-cards`.

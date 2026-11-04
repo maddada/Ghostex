@@ -48,7 +48,9 @@ export function statusMatches(filter: StatusFilter, group: WorkStatusGroup): boo
 
 /** The request fields that name an item for `work.read` and `work.startChat`. */
 export function itemRef(item: WorkItem): WorkItemRef {
-  if (item.kind === 'ticket') return { projectId: item.projectId, source: item.source, ticketId: item.ticketId };
+  if (item.kind === 'ticket') {
+    return { projectId: item.projectId, source: item.source, ticketId: item.ticketId, sourceKey: item.sourceKey };
+  }
   return {
     projectId: item.projectId,
     pullRequest: item.pullRequestRef ?? item.pullRequest?.url,
@@ -60,6 +62,11 @@ export function refKey(ref: WorkItemRef): string {
   if (ref.source === 'github') return `issue:${ref.projectId ?? ''}#${ref.ticketId}`;
   if (ref.ticketId != null) return `${ref.source}:${ref.ticketId}`;
   return `pr:${ref.pullRequest ?? ''}`;
+}
+
+/** The label of a row's button that opens it in the browser: a ticket in its own source, a PR on GitHub. */
+export function openItemLabel(item: Pick<WorkItem, 'kind' | 'source'>): string {
+  return item.kind === 'ticket' ? sourceText(item.source).open : 'Open on GitHub';
 }
 
 /** How the page names a ticket's source; one it does not know is named by its id. */

@@ -1,8 +1,9 @@
 //! A ticket command's open tickets, for the Work list of a workspace whose tracker it is: one list
 //! per workspace, read by a background worker (`jobs.rs`) like a card's exact read, so
 //! `refresh_work_feeds` only queues it and its lock never waits for a command. The answer is kept
-//! at the workspace's generation for as long as the other sources' feeds, and while it is owed the
-//! list route keeps answering `refreshing: true` (`command_lists_pending`).
+//! at the workspace's generation, for the projects it was asked for, for as long as the other
+//! sources' feeds, and while it is owed the list route keeps answering `refreshing: true`
+//! (`command_lists_pending`).
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -23,7 +24,9 @@ pub(crate) struct OpenList {
     pub(crate) plan: JobPlan,
     /// The workspace's work-mode projects whose tracker the command is, which `list` is given.
     pub(crate) projects: Vec<CommandProject>,
-    project_ids: Vec<String>,
+    /// Their ids, sorted: `list` is given the projects, so its answer is kept, and its job queued,
+    /// per set of projects (a Work list can ask for some of the workspace's).
+    pub(crate) project_ids: Vec<String>,
     /// Why the command can't be asked right now (its program gone, a required credential unset),
     /// for the Work page's errors; `None` when it can.
     pub(crate) blocked: Option<String>,
@@ -37,7 +40,8 @@ impl OpenList {
         blocked: Option<String>,
         paths: GxserverPaths,
     ) -> Self {
-        let project_ids = projects.iter().map(|project| project.id.clone()).collect();
+        let mut project_ids: Vec<String> = projects.iter().map(|project| project.id.clone()).collect();
+        project_ids.sort();
         Self {
             plan,
             projects,
@@ -82,8 +86,15 @@ struct Entry {
     fetched_at: Instant,
 }
 
-fn lists() -> MutexGuard<'static, HashMap<JobPlan, Entry>> {
-    static LISTS: OnceLock<Mutex<HashMap<JobPlan, Entry>>> = OnceLock::new();
+/// A list's plan and its sorted project ids (`OpenList::project_ids`).
+type ListKey = (JobPlan, Vec<String>);
+
+fn list_key(list: &OpenList) -> ListKey {
+    (list.plan.clone(), list.project_ids.clone())
+}
+
+fn lists() -> MutexGuard<'static, HashMap<ListKey, Entry>> {
+    static LISTS: OnceLock<Mutex<HashMap<ListKey, Entry>>> = OnceLock::new();
     LISTS
         .get_or_init(|| Mutex::new(HashMap::new()))
         .lock()
@@ -91,15 +102,16 @@ fn lists() -> MutexGuard<'static, HashMap<JobPlan, Entry>> {
 }
 
 /// Keeps a list's answer, in place of what an older generation of the workspace kept.
-fn remember_open_list(plan: &JobPlan, answer: OpenListAnswer) {
+fn remember_open_list(list: &OpenList, answer: OpenListAnswer) {
+    let plan = &list.plan;
     let mut lists = lists();
-    lists.retain(|kept, _| {
+    lists.retain(|(kept, _), _| {
         kept.workspace_id != plan.workspace_id
             || kept.source != plan.source
             || kept.generation == plan.generation
     });
     lists.insert(
-        plan.clone(),
+        list_key(list),
         Entry {
             answer,
             fetched_at: Instant::now(),
@@ -107,18 +119,18 @@ fn remember_open_list(plan: &JobPlan, answer: OpenListAnswer) {
     );
 }
 
-/// What the last list at the plan's generation answered, however old.
-pub(crate) fn cached_open_list(plan: &JobPlan) -> Option<OpenListAnswer> {
-    lists().get(plan).map(|entry| entry.answer.clone())
+/// What the last list at the plan's generation, for the same projects, answered, however old.
+pub(crate) fn cached_open_list(list: &OpenList) -> Option<OpenListAnswer> {
+    lists().get(&list_key(list)).map(|entry| entry.answer.clone())
 }
 
 /// Whether the list should be read again: its command can run, it isn't backing off, and nothing
-/// was kept at its generation, or what was is older than `OPEN_LIST_TTL`.
+/// was kept at its generation for its projects, or what was is older than `OPEN_LIST_TTL`.
 pub(crate) fn open_list_stale(list: &OpenList) -> bool {
     list.blocked.is_none()
         && !backing_off(&list.plan, CommandVerb::OpenList)
         && lists()
-            .get(&list.plan)
+            .get(&list_key(list))
             .is_none_or(|entry| entry.fetched_at.elapsed() >= OPEN_LIST_TTL)
 }
 
@@ -167,9 +179,9 @@ pub(crate) fn run_open_list(job: &OpenList) {
     let duration = started.elapsed();
     let plan = &job.plan;
     let committed = commit_if_current(job, || match &answer {
-        Ok(list) => remember_open_list(plan, Ok(list.tickets.clone())),
+        Ok(list) => remember_open_list(job, Ok(list.tickets.clone())),
         Err(failure) => {
-            remember_open_list(plan, Err(failure.message(&env.shown(&name))));
+            remember_open_list(job, Err(failure.message(&env.shown(&name))));
             if backs_off(failure) {
                 back_off(plan, CommandVerb::OpenList);
             }

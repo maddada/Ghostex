@@ -170,7 +170,9 @@ async fn list_work_items(
     Ok(list)
 }
 
-/// `{ projectId?, projectIds?, source + ticketId | pullRequest, force? }`.
+/// `{ projectId?, projectIds?, source + ticketId | pullRequest, sourceKey?, force? }`. A ticket
+/// command's ticket needs a project in a workspace that pins the command: `projectId`, or the
+/// row's `sourceKey` when the row names no project (`command_ticket_project`).
 async fn read_work_item_route(
     state: Arc<AppState>,
     params: Map<String, Value>,
@@ -195,6 +197,19 @@ async fn read_work_item_route(
             .and_then(Value::as_bool)
             .unwrap_or(false);
         let projects = load_work_projects(&state, wanted.as_deref())?;
+        let project_id = match &item_ref {
+            WorkItemRef::Ticket(ticket)
+                if matches!(ticket.source, crate::work_mode::WorkSourceId::Command(_)) =>
+            {
+                Some(crate::work_mode::command_ticket_project(
+                    &projects,
+                    ticket.source,
+                    project_id.as_deref(),
+                    params.get("sourceKey").and_then(Value::as_str),
+                )?)
+            }
+            _ => project_id,
+        };
         let plan = work_feed_plan(&projects);
         let details = read_work_item(
             &state.paths,

@@ -14,10 +14,13 @@ use super::*;
 
 /// What the details already know without a network call: the list row the PR folded into (or the
 /// ticket its own row names) and the sessions on this computer that link the PR. `repo` is the
-/// requesting project's `owner/repo`, for a PR named by number.
+/// requesting project's `owner/repo`, for a PR named by number; `workspace_id` its workspace,
+/// whose sessions alone give ticket command tickets, since another workspace's command can pin the
+/// same id and answer the same ticket ids.
 pub(crate) fn pull_request_tickets_known_locally(
     selector: &str,
     repo: Option<&str>,
+    workspace_id: Option<&str>,
     item: Option<&Value>,
     projects: &[WorkProjectInput],
 ) -> Vec<WorkItemRef> {
@@ -50,6 +53,11 @@ pub(crate) fn pull_request_tickets_known_locally(
             }
             // A session's GitHub issues are in its own repo, which is the PR's.
             for linked in targets.tickets {
+                if matches!(linked.ticket.source, WorkSourceId::Command(_))
+                    && workspace_id != Some(input.workspace_id.as_str())
+                {
+                    continue;
+                }
                 push_ticket(&mut tickets, WorkItemRef::Ticket(linked.ticket));
             }
         }

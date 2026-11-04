@@ -143,7 +143,7 @@ impl CommandJob {
             Self::OpenList(list) => JobKey {
                 plan: list.plan.clone(),
                 verb: CommandVerb::OpenList,
-                ids: Vec::new(),
+                ids: list.project_ids.clone(),
             },
         }
     }
@@ -154,6 +154,7 @@ impl CommandJob {
 struct JobKey {
     plan: JobPlan,
     verb: CommandVerb,
+    /// An exact read's ticket ids, or an open list's project ids, sorted.
     ids: Vec<String>,
 }
 

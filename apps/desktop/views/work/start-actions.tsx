@@ -10,7 +10,7 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Dropdown, MenuItem, Spinner, cx } from './components';
-import { sourceText } from './format';
+import { openItemLabel, sourceText } from './format';
 import type {
   CloudDraft,
   CloudProvider,
@@ -121,8 +121,9 @@ function ProviderIcon({ provider, agents }: { provider: CloudProvider; agents: W
 }
 
 /**
- * The ticket's action row: the primary split button (Open chat, Start chat, or Open on GitHub for
- * a PR) with its ▾ menu, and Start in cloud ▾ beside it. Both reach the same clouds.
+ * The ticket's action row: the primary split button (Open chat, Start chat, or the button that opens
+ * it in the browser: Open on GitHub for a PR, and its source's for a ticket that work can't start
+ * on yet) with its ▾ menu, and Start in cloud ▾ beside it. Both reach the same clouds.
  *
  * CDXC:WorkMode 2026-10-09 DECISION:
  * User: the ticket's one button is "Open chat" when one of your sessions links it (it selects that
@@ -197,7 +198,7 @@ export function StartActions({
       onClick={() => onOpenUrl(item.url ?? '')}
     >
       <IconExternalLink size={14} />
-      Open on GitHub
+      {openItemLabel(item)}
     </Button>
   );
 

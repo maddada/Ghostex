@@ -383,3 +383,114 @@ fn a_list_the_full_queue_turns_away_stays_owed() {
         1
     );
 }
+
+/// `list` is given the Work list's projects, so a list is kept, and queued, per set of them: one
+/// project's answer never stands in for two's, and two's job isn't taken for one's.
+#[test]
+fn an_open_list_is_kept_and_queued_per_set_of_projects() {
+    let store = Store::new();
+    let workspace_id = pin(&store, "ws-a", "wl-subset", "good");
+    let first = project_in(&store, &workspace_id, json!({}));
+    let other_path = store.paths.app_data_dir.join("project-subset-second");
+    std::fs::create_dir_all(&other_path).expect("project folder");
+    let second = project_in(&store, &workspace_id, json!({ "path": other_path }));
+    let input = |project: &Value| tracked(&store, project, Vec::new(), &workspace_id, "wl-subset");
+    let one = work_feed_plan(&[input(&first)]);
+    let both = work_feed_plan(&[input(&second), input(&first)]);
+
+    let queue = JobQueue::new(2);
+    assert_eq!(queue.push(one.command_lists[0].clone()), QueueOutcome::Queued);
+    assert_eq!(queue.push(both.command_lists[0].clone()), QueueOutcome::Queued);
+    // The same projects in another order are the same list.
+    let reordered = work_feed_plan(&[input(&first), input(&second)]);
+    assert_eq!(
+        queue.push(reordered.command_lists[0].clone()),
+        QueueOutcome::Duplicate
+    );
+
+    run_open_list(&one.command_lists[0]);
+    assert!(!command_lists_pending(&one));
+    assert!(command_lists_pending(&both), "one project's answer isn't two's");
+    run_open_list(&both.command_lists[0]);
+    assert!(!command_lists_pending(&both));
+}
+
+/// A ticket's details are read from the row of the requesting project's workspace: two workspaces
+/// pinning the same id answer the same ticket id, each in its own row.
+#[test]
+fn a_command_tickets_details_use_their_own_workspaces_row() {
+    let store = Store::new();
+    // Its tickets name no PR, so the details read nothing from GitHub.
+    let first = pin(&store, "ws-a", "wl-details", "title-kept");
+    let second = pin(&store, "ws-b", "wl-details", "title-kept");
+    let first_project = project_in(&store, &first, json!({}));
+    let second_project = project_in(&store, &second, json!({}));
+    let projects = [
+        tracked(&store, &first_project, Vec::new(), &first, "wl-details"),
+        tracked(&store, &second_project, Vec::new(), &second, "wl-details"),
+    ];
+    let plan = work_feed_plan(&projects);
+    read_lists(&plan);
+    let ticket = WorkItemRef::Ticket(TicketRef::new(
+        super::published::command_source("wl-details"),
+        "ACM-12",
+    ));
+    for (workspace_id, project) in [(&first, &first_project), (&second, &second_project)] {
+        let read = read_work_item(
+            &store.paths,
+            &projects,
+            &plan,
+            Some(project_id(project)),
+            &ticket,
+            false,
+        );
+        assert_eq!(
+            read["item"]["sourceKey"],
+            source_key(workspace_id, "wl-details"),
+            "{read}"
+        );
+    }
+}
+
+/// A PR's details take the ticket command tickets of the sessions in the requesting project's
+/// workspace only, since another workspace's command can answer the same ids; the other sources'
+/// tickets come from every session that links the PR, as before.
+#[test]
+fn a_prs_details_take_command_tickets_from_their_own_workspace() {
+    let store = Store::new();
+    let first = pin(&store, "ws-a", "wl-pr-details", "good");
+    let second = pin(&store, "ws-b", "wl-pr-details", "good");
+    let first_project = project_in(&store, &first, json!({}));
+    let second_project = project_in(&store, &second, json!({}));
+    let links = |project: &Value, session_id: &str, links: Value| {
+        let mut input = tracked(
+            &store,
+            project,
+            vec![session(project_id(project), session_id, links)],
+            if session_id == "S1" { &first } else { &second },
+            "wl-pr-details",
+        );
+        input.repo = Some("acme/app".to_string());
+        input
+    };
+    let projects = [
+        links(
+            &first_project,
+            "S1",
+            json!({ "pullRequest": 9, "tickets": { "wl-pr-details": ["ACM-12"] } }),
+        ),
+        links(
+            &second_project,
+            "S2",
+            json!({ "pullRequest": 9, "githubIssues": [5], "tickets": { "wl-pr-details": ["ACM-34"] } }),
+        ),
+    ];
+    let named = pull_request_tickets_known_locally("9", Some("acme/app"), Some(&first), None, &projects)
+        .into_iter()
+        .map(|ticket| match ticket {
+            WorkItemRef::Ticket(ticket) => format!("{}:{}", ticket.source.as_wire(), ticket.id),
+            WorkItemRef::PullRequest(_) => "a PR".to_string(),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(named, ["wl-pr-details:ACM-12", "github:5"]);
+}

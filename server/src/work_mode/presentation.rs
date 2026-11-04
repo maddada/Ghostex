@@ -73,6 +73,23 @@ pub(crate) fn work_targets_in(
     session: &Value,
     workspace_id: Option<&str>,
 ) -> WorkTargets {
+    let tracker = cached_project_work_tracker(
+        project
+            .get("projectId")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    work_targets_with(project, session, workspace_id, tracker)
+}
+
+/// `work_targets_in` with the project's tracker as the caller read it: Start reads it from the
+/// workspace state, which a tracker picked since the last card pass has already reached.
+pub(crate) fn work_targets_with(
+    project: &Value,
+    session: &Value,
+    workspace_id: Option<&str>,
+    tracker: WorkSourceId,
+) -> WorkTargets {
     let project_id = project
         .get("projectId")
         .and_then(Value::as_str)
@@ -90,7 +107,6 @@ pub(crate) fn work_targets_in(
         cwd: cwd.as_deref(),
         credentials: None,
     };
-    let tracker = cached_project_work_tracker(project_id);
     let in_branch = |source: WorkSourceId| match branch.as_deref() {
         Some(branch) if reads_bare_numbers(source, tracker) => {
             work_source(source).tickets_in_branch(&scope, branch)

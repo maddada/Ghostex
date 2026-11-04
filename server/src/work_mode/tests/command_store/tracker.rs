@@ -184,3 +184,58 @@ fn a_prs_branch_and_starts_worktree_follow_the_trackers_bare_numbers() {
     assert!(issue.is_linked(&unlinked, "218-fix", WorkSourceId::Linear));
     assert!(!issue.is_linked(&unlinked, "218-fix", command));
 }
+
+/// Start reads the tracker from the workspace state, not the card pass's copy: right after a
+/// number-format command becomes the tracker, before a pass has run, Start for GitHub issue 218
+/// doesn't reuse a `218-fix` worktree, whose number is now the command's ticket.
+#[test]
+fn start_reads_a_tracker_picked_since_the_last_pass() {
+    let store = Store::new();
+    let sources =
+        super::published::record_pinning(&store, "ws-a", "start-numbers", IdFormat::Number);
+    save_work_sources(&store.db, &sources).expect("pinned");
+    let workspace_id = store.ws("ws-a");
+    let project = project_in(&store, &workspace_id, json!({}));
+    let worktree = store.paths.app_data_dir.join("worktree-218");
+    std::fs::create_dir_all(&worktree).expect("worktree");
+    // Its git status is cached too, as the background poll leaves it.
+    set_branch(worktree.to_str().unwrap(), "218-fix");
+    let repository = DomainRepository::new(&store.db, "test");
+    repository
+        .create_session(
+            json!({
+                "projectId": project_id(&project),
+                "kind": "agent",
+                "agentId": "codex",
+                "title": "S",
+                "lifecycleState": "running",
+                "cwd": worktree,
+                "runtimeSettings": { "worktreeSession": { "branch": "218-fix", "path": worktree } },
+            })
+            .as_object()
+            .unwrap(),
+            false,
+        )
+        .expect("session");
+    let issue = WorkTicket::from_params(
+        json!({ "source": "github", "ticketId": 218 })
+            .as_object()
+            .unwrap(),
+    )
+    .expect("an issue");
+    let reused = || {
+        existing_ticket_worktree(&store.db, &store.paths, &repository, &project, &issue, None)
+            .expect("sessions")
+    };
+
+    assert_eq!(remember_tracker(&store, &project), WorkSourceId::Github);
+    assert_eq!(reused(), Some(worktree.to_string_lossy().to_string()));
+
+    pick_command_tracker(&store.db, &store.paths, &workspace_id, "start-numbers").expect("picked");
+    // No pass has run since: its copy still says GitHub.
+    assert_eq!(
+        cached_project_work_tracker(project_id(&project)),
+        WorkSourceId::Github
+    );
+    assert_eq!(reused(), None);
+}

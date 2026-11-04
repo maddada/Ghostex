@@ -441,7 +441,7 @@ impl WorkSource for CommandSource {
                 list.errors.push(blocked.clone());
                 continue;
             }
-            match cached_open_list(&open.plan) {
+            match cached_open_list(open) {
                 None => {}
                 Some(Err(error)) => list.errors.push(error),
                 Some(Ok(tickets)) => {

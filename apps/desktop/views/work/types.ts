@@ -114,6 +114,8 @@ export interface WorkItemRef {
   source?: string;
   ticketId?: string;
   pullRequest?: string;
+  /** A ticket command's row: its workspace and command, which name where it is read when the row has no project. */
+  sourceKey?: string;
 }
 
 export interface WorkComment {
