@@ -72,6 +72,34 @@ fn is_antigravity_mode_hint(text: &str, body: &[&(char, Style)]) -> bool {
             .all(|(_, style)| style.foreground_index.is_some() || style.foreground_rgb.is_some())
 }
 
+/// CDXC:AgentScreenDetection 2026-11-04 WHY:
+/// While `/ide` is connected, Claude Code (2.1.312, read from the shipped binary's `leadingPill`) draws the editor's context at the start of its input row, before any typed text: `❯ [⧉ In main.rs] ` for the open file, `❯ [⧉ 3 lines selected] ` or `[⧉ 3 lines from main.rs] ` for a selection, the label cut in the middle with `…` past 32 columns. Kill-line keys cannot remove it (only Backspace on an empty box dismisses it), so read as a draft it made every chat send fail with composerNotCleared and restart the agent for nothing (issue #406). It is not typed text: both Claude readers skip it, and the styled reader also requires its explicit `ide` colour, since typed text keeps the terminal's default colour.
+/// Returns the pill's length in chars when `text` (the row after the `❯`, leading spaces removed) starts with one.
+fn claude_ide_pill_len(text: &str) -> Option<usize> {
+    let label = text.strip_prefix("[⧉ ")?;
+    let close = label.find(']')?;
+    let after = &label[close + 1..];
+    let inner = &label[..close];
+    let is_file = inner.starts_with("In ");
+    let is_selection = inner
+        .split_once(' ')
+        .is_some_and(|(count, _)| !count.is_empty() && count.chars().all(|c| c.is_ascii_digit()));
+    ((is_file || is_selection) && (after.is_empty() || after.starts_with(' ')))
+        .then(|| "[⧉ ".chars().count() + inner.chars().count() + 1)
+}
+
+/// The char range of Claude's IDE pill in `chars` (a row after its marker), when it is drawn in a
+/// colour of its own.
+fn claude_ide_pill(chars: &[(char, Style)]) -> Option<Range<usize>> {
+    let start = chars.iter().position(|(ch, _)| !ch.is_whitespace())?;
+    let text: String = chars[start..].iter().map(|(ch, _)| *ch).collect();
+    let end = start + claude_ide_pill_len(&text)?;
+    chars[start..end]
+        .iter()
+        .all(|(_, style)| style.foreground_index.is_some() || style.foreground_rgb.is_some())
+        .then_some(start..end)
+}
+
 /// One row of Antigravity's active-items list: a status glyph, the task's start time in brackets,
 /// then its command and state.
 fn is_antigravity_active_item(line: &str) -> bool {
@@ -768,7 +796,21 @@ pub fn claude_composer_draft(screen: &str) -> Option<String> {
     let lines: Vec<_> = screen.lines().map(strip_ansi_sgr).collect();
     let region = rule_input_region(&lines, CLAUDE_COMPOSER_MARKERS)?;
     let first = lines[region.start].trim_start();
-    let text = first.strip_prefix('❯').unwrap_or(first);
+    let text = first.strip_prefix('❯').unwrap_or(first).trim_start();
+    // A plain capture has no colours, so the IDE pill is told by its shape alone here.
+    let (shell, rest) = match text.strip_prefix('!') {
+        Some(rest) => ("!", rest.trim_start()),
+        None => ("", text),
+    };
+    let text = match claude_ide_pill_len(rest) {
+        Some(len) => format!(
+            "{shell} {}",
+            rest.char_indices()
+                .nth(len)
+                .map_or("", |(at, _)| &rest[at..])
+        ),
+        None => text.to_string(),
+    };
     Some(
         std::iter::once(text.trim())
             .chain(
@@ -1201,8 +1243,14 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
         }
     })?;
     let shell_mode = matches!(agent, "claude" | "openclaude") && first.chars[marker].0 == '!';
-    let body: Vec<_> = first.chars[marker + 1..]
-        .iter()
+    let ide_pill = matches!(agent, "claude" | "openclaude")
+        .then(|| claude_ide_pill(&first.chars[marker + 1..]))
+        .flatten()
+        .map(|pill| marker + 1 + pill.start..marker + 1 + pill.end);
+    let outside_pill = |index: &usize| !ide_pill.as_ref().is_some_and(|pill| pill.contains(index));
+    let body: Vec<_> = (marker + 1..first.chars.len())
+        .filter(outside_pill)
+        .map(|index| &first.chars[index])
         .chain(
             lines[region.start + 1..region.end]
                 .iter()
@@ -1213,9 +1261,9 @@ pub fn session_chat_composer_input(agent: &str, screen: &str) -> Option<SessionC
     // The shell marker is part of the logical draft, including for paste and returned-prompt comparisons.
     let text_start = if shell_mode { marker } else { marker + 1 };
     let text = std::iter::once(
-        first.chars[text_start..]
-            .iter()
-            .map(|(ch, _)| *ch)
+        (text_start..first.chars.len())
+            .filter(outside_pill)
+            .map(|index| first.chars[index].0)
             .collect::<String>(),
     )
     .chain(
@@ -1437,5 +1485,126 @@ mod antigravity_mode_hint_tests {
                 .text,
             typed
         );
+    }
+}
+
+#[cfg(test)]
+mod claude_ide_pill_tests {
+    use super::*;
+    use crate::session_chat_composer::{
+        claude_composer_input_text, detect_session_chat_composer_ready,
+    };
+
+    /// The bottom of a Claude Code 2.1.312 screen with `/ide` connected: the input row starts with
+    /// the IDE pill in the theme's `ide` colour (RGB 71,130,200 in the dark theme), typed text in
+    /// the default colour after it.
+    fn screen(input_row: &str) -> String {
+        let rule = "─".repeat(80);
+        [
+            "✻ Churned for 6s".to_string(),
+            rule.clone(),
+            format!("❯ {input_row}"),
+            rule,
+            "  ⏵⏵ bypass permissions on (shift+tab to cycle)".to_string(),
+        ]
+        .join("\n")
+    }
+
+    fn pill(label: &str) -> String {
+        format!("\u{1b}[38;2;71;130;200m[⧉ {label}]\u{1b}[39m ")
+    }
+
+    const LABELS: &[&str] = &[
+        "In main.rs",
+        "3 lines selected",
+        "1 line selected",
+        "12 lines from main.rs",
+        "In session_chat_co…poser_input.rs",
+    ];
+
+    #[test]
+    fn the_ide_pill_reads_as_an_empty_input() {
+        for label in LABELS {
+            let screen = screen(&pill(label));
+            let input = session_chat_composer_input("claude", &screen).unwrap();
+            assert!(input.is_empty(), "{label}: {:?}", input.text);
+            assert!(
+                !detect_session_chat_composer_ready(Some("claude"), &screen)
+                    .blocks_message_for(Some("claude")),
+                "{label}"
+            );
+            assert_eq!(
+                claude_composer_draft(&screen).as_deref(),
+                Some(""),
+                "{label}"
+            );
+            assert_eq!(claude_composer_input_text(&screen), None, "{label}");
+        }
+        // ANSI themes colour it by palette index.
+        let ansi = screen("\u{1b}[94m[⧉ In main.rs]\u{1b}[39m ");
+        assert!(session_chat_composer_input("claude", &ansi)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn text_typed_after_the_pill_reads_as_the_draft() {
+        for label in LABELS {
+            let screen = screen(&format!("{}fix the failing test", pill(label)));
+            let input = session_chat_composer_input("claude", &screen).unwrap();
+            assert!(!input.is_empty(), "{label}");
+            assert_eq!(input.text, "fix the failing test", "{label}");
+            assert_eq!(
+                claude_composer_draft(&screen).as_deref(),
+                Some("fix the failing test"),
+                "{label}"
+            );
+        }
+    }
+
+    #[test]
+    fn typed_brackets_stay_a_draft() {
+        // The same characters typed by hand carry the default colour.
+        for typed in ["[⧉ In main.rs]", "[⧉ 3 lines selected] and more"] {
+            let input = session_chat_composer_input("claude", &screen(typed)).unwrap();
+            assert!(!input.is_empty(), "{typed}");
+            assert_eq!(input.text, typed);
+        }
+        // Coloured, but not a label Claude's pill spells.
+        let other = screen("\u{1b}[38;2;71;130;200m[⧉ Notes]\u{1b}[39m ");
+        assert!(!session_chat_composer_input("claude", &other)
+            .unwrap()
+            .is_empty());
+    }
+
+    /// The input rows as zmx's VT capture (`zmx history --vt --screen`) serializes them.
+    #[test]
+    fn zmx_captures_tell_the_pill_from_typed_text() {
+        let rule = "\u{1b}[0m\u{1b}[38;2;136;136;136m────────────────────────────────────────";
+        let capture = |row: &str| {
+            format!("{rule}\n\u{1b}[0m❯\u{1b}[1C{row}\n{rule}\n\u{1b}[0m  ? for shortcuts")
+        };
+        for label in ["In main.rs", "3 lines selected"] {
+            let screen = capture(&format!(
+                "\u{1b}[38;2;71;130;200m[⧉ {label}]\u{1b}[0m\u{1b}[7m \u{1b}[0m"
+            ));
+            assert!(
+                session_chat_composer_input("claude", &screen)
+                    .unwrap()
+                    .is_empty(),
+                "{label}"
+            );
+            assert!(
+                !detect_session_chat_composer_ready(Some("claude"), &screen)
+                    .blocks_message_for(Some("claude")),
+                "{label}"
+            );
+        }
+        let typed = session_chat_composer_input(
+            "claude",
+            &capture("\u{1b}[38;2;71;130;200m[⧉ In main.rs]\u{1b}[0m hello"),
+        )
+        .unwrap();
+        assert_eq!(typed.text, "hello");
     }
 }
