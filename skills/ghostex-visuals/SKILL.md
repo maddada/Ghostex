@@ -379,14 +379,15 @@ Ghostex injects the page's look, so a page that styles itself fights it:
 
 ### Theme
 
-Ghostex paints every page itself: a soft dusk (dark) or dawn (light)
-backdrop behind frosted glass cards, so never paint `html` or `body`.
+Ghostex paints every page itself: a soft neutral grey backdrop (or, in
+the desktop's page window, the reader's blurred wallpaper) behind frosted
+glass cards, so never paint `html` or `body`.
 Style what you draw with the theme tokens, so it reads right in dark and
 light: `--gx-bg`, `--gx-surface` (soft fills inside a card), `--gx-raised`
 (controls), `--gx-card` and `--gx-card-border` (a glass panel of your own;
 add `backdrop-filter: blur(22px)`), `--gx-line`, `--gx-line-strong`,
 `--gx-fg` (titles), `--gx-text`, `--gx-muted`, `--gx-accent`, `--gx-pick`
-(the warm amber of a highlight or a pick), `--gx-warn`, `--gx-good`,
+(the neutral ink of a highlight or a pick), `--gx-warn`, `--gx-good`,
 `--gx-bad`, `--gx-code-bg`, `--chart-1` … `--chart-6`, `--font-sans` and
 `--font-mono`. Never an opaque black or grey slab around your own content:
 it hides the backdrop and reads as a hole in the glass.
@@ -499,7 +500,6 @@ and `data-choice` (first bullet below), which gives it a Pick button:
     <gx-choice>Compact</gx-choice>
     <gx-choice>Large title</gx-choice>
   </gx-question>
-  <gx-question title="Anything else?" type="text"></gx-question>
 </gx-questions>
 ```
 
@@ -551,11 +551,12 @@ and `data-choice` (first bullet below), which gives it a Pick button:
   mark it with `recommended` where it already sits. A question whose choices
   run C, B, A under mockups A, B, C makes the reader pick the wrong one.
 - Write only that markup. The kit letters the choices, ends every choice
-  question with "Other / none of these" and a note box, and adds the send
-  button. Nothing is ever preselected (the reader can also click a pick again
+  question with "Other / none of these" and a note box, ends the page with
+  an "Anything else?" box (the reader can type there and paste images) just
+  above the send button, and adds the send button. Nothing is ever preselected (the reader can also click a pick again
   to clear it), and a question left blank arrives as `"skipped"` (`null` in older
   Ghostex versions). Don't write your
-  own form, button, "Other" choice or note box. Newer Ghostex versions also add
+  own form, button, "Other" choice, note box or "Anything else?" question. Newer Ghostex versions also add
   a Skip all button; a skipped question arrives as `"skipped"`.
 - Once sent, the page is locked; opening it again shows the answers and an
   Answered note.
@@ -565,7 +566,9 @@ and `data-choice` (first bullet below), which gives it a Pick button:
 - After pasting the card, end your turn. Don't poll or wait in a loop: the
   answers arrive as the next user message, which the chat shows as an answers
   card while the page's card reads Answered. A note arrives under the
-  question's key plus ` (note)`:
+  question's key plus ` (note)`, and the "Anything else?" box, when filled
+  in, arrives last as `"Additional notes"`. A pasted image arrives as an
+  `[Image #N](path)` reference you can open:
 
   ```text
   <ghostex-page-answers page="7ea5c5be1f2d68ebc9e40f790db0ef29" title="Settings redesign">
@@ -574,7 +577,7 @@ and `data-choice` (first bullet below), which gives it a Pick button:
     "Which layout should I build? (note)": "keep search at the top",
     "Which platforms first?": ["macOS", "Other / none of these"],
     "Which platforms first? (note)": "Linux too",
-    "Anything else?": null
+    "Additional notes": "keep search at the top [Image #1](/Users/me/…/shot.png)"
   }
   </ghostex-page-answers>
   ```

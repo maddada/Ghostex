@@ -70,7 +70,7 @@
 //! User: every question page offers "Other / none of these" with a note box, consistently, instead of each agent hand-rolling it, and the reader may leave a question unanswered. No choice is ever preselected; an agent marks the one it recommends with a Recommended mark and the reader picks. Mockups can use the full width of the page between or above the questions, and the Answered note is as wide as the question cards.
 //!
 //! CDXC:SessionChat 2026-11-02 DECISION:
-//! User: "make the 'recommended' tag more subtle, not like a pill, and not all caps." The recommended choice in a question and the recommended variant's `.gx-ribbon` both show the same quiet mark: a small muted "Recommended" in sentence case after a faint amber star, with no pill, fill or border. The chat's own question card (apps/desktop/src/app/native_chat/ask_card.rs `recommended_mark`, the phone's askCard.tsx `RecommendedMark`) shows the same mark. The ribbon sits centred just above its card instead of on the card's top edge, so no card's title or layout moves for it (beside the title it pushed long titles onto two lines).
+//! User: "make the 'recommended' tag more subtle, not like a pill, and not all caps." The recommended choice in a question and the recommended variant's `.gx-ribbon` both show the same quiet mark: a small muted "Recommended" in sentence case after a faint star in the pick colour (`--gx-pick`, neutral ink since 2026-11-04, theme.rs), with no pill, fill or border. The chat's own question card (apps/desktop/src/app/native_chat/ask_card.rs `recommended_mark`, the phone's askCard.tsx `RecommendedMark`) shows the same mark. The ribbon sits centred just above its card instead of on the card's top edge, so no card's title or layout moves for it (beside the title it pushed long titles onto two lines).
 //!
 //! CDXC:SessionChat 2026-10-24 DECISION:
 //! User, after an agent's page showed its variants A, B, C but listed the question's choices C, B, A (recommended first): "some agent gave me the options flipped in the selection area below!! ... the order of the options above, has to match their order below!" The kit enforces it instead of trusting every agent: before lettering, a question's choices are sorted into the order their `data-question` / `data-choice` mockups appear in the document (matched by the choice's value or label; a bare letter cannot rank because letters come from the order). Choices no mockup names keep their relative order after the matched ones, "Other / none of these" stays last, and a question with no mockups is left as written. skills/ghostex-visuals/SKILL.md teaches the same rule.
@@ -209,6 +209,15 @@ html[data-gx-theme=light] .gx-pill{color:#5f9878}
 .gx-paste{margin:4px 0 0;font-size:12.5px;color:var(--gx-muted)}
 .gx-paste[hidden]{display:none}
 .gx-paste.gx-error{color:var(--destructive)}
+.gx-notes{display:block;width:100%;box-sizing:border-box;min-width:0;border:1px solid var(--gx-card-border);background:var(--gx-card);color:var(--gx-card-muted);border-radius:16px;padding:12px 14px 14px;box-shadow:var(--gx-glass-shadow);-webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15)}
+.gx-notes[hidden]{display:none}
+.gx-notes>.gx-q-head{margin-bottom:0}
+.gx-notes .gx-text{min-height:72px}
+.gx-thumbs{gap:8px;margin-top:8px}
+.gx-thumb{position:relative;display:block;flex:none;width:64px;height:64px;box-sizing:border-box;border-radius:9px;overflow:hidden;border:1px solid var(--gx-card-border);background:var(--gx-option)}
+.gx-thumb>img{display:block;width:100%;height:100%;object-fit:cover}
+.gx-thumb>.gx-pill-x{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,.62);color:#fff;font-size:13px}
+.gx-thumb>.gx-pill-x:hover{background:rgba(0,0,0,.82);color:#fff}
 .gx-has-pick{display:flex;align-items:center;gap:8px}
 .gx-pick{display:inline-flex;flex:none;align-items:center;gap:4px;margin-left:auto;padding:2px 10px;vertical-align:middle;border:1px solid var(--gx-line-strong);border-radius:999px;background:transparent;color:var(--gx-text);font:500 12px/1.5 var(--font-sans);cursor:pointer}
 .gx-pick:hover:not(:disabled):not([aria-pressed=true]){background:var(--gx-surface);color:var(--gx-fg)}
@@ -245,8 +254,11 @@ html[data-gx-theme=light] .gx-pill{color:#5f9878}
 ///
 /// CDXC:Clipboard 2026-11-02 DECISION:
 /// User: "i also want to be able to paste images into the notes of questions in inline html or the inline questions you send please. when i paste an image now nothing happens. pls fix. (it can just show like this like we show it in chat: [Image #1](…/2026-11-02_Ghostex_06-18-47@2x.png)". An image pasted into a note or text box is saved on the computer through the page's own `/image` route (images.rs, beside the chat's pasted images) and written into the box as `[Image #N](path)`, the reference a chat message carries, so the answers carry it and the agent can open the file. The numbers count across every box of the page, which all go in one answers message. A textarea cannot draw a pill inside its text, so each box lists its images under it as pills (the chat's image icon and colour, the path in the tooltip, × removes the reference). The in-chat form does the same with the composer's own pills (apps/desktop/src/app/native_chat/form_attachments.rs).
+///
+/// CDXC:SessionChat 2026-11-04 DECISION:
+/// User, of a question page's send bar: "please always at the end of the inline html pages we must have a text area where i can write text and paste images there (should show thumbnails) so i can write more". Every `<gx-questions>` page ends, just above its send bar, with an "Anything else?" box the kit adds by itself (`.gx-notes`), unless the page's own last question is already a text question of that kind ("Anything else?", "Additional notes", "Notes", "Comments"). Its text arrives last in the answers under "Additional notes", the key the chat's inline forms use for their notes box (packages/gx-visual/src/questions.rs `NOTES_KEY`, numbered the same way when a question already answers under it), and an empty box sends nothing. Pasted images go through the same `/image` route and `[Image #N](path)` references as the question notes, so they reach the agent the same way; in this box they show as removable thumbnails rather than pills. A thumbnail is drawn from the pasted file itself; a small copy of each is kept with the page's draft (`thumbs`, up to about 24 KB in all, so the draft stays well under its 64 KiB limit), so a reopened page still shows them; any image without one shows as a pill.
 pub(super) const KIT_SCRIPT: &str = r#"<script>(function(){
-var OTHER="Other / none of these",SKIPPED="skipped";
+var OTHER="Other / none of these",SKIPPED="skipped",NOTES="Additional notes",OWN_NOTES=/^(anything else|any other|additional notes|other notes|notes|comments?)\b/i;
 var IMAGE_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 8h.01"/><path d="M6 3h12a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3z"/><path d="m3 16 5-5c.928-.893 2.072-.893 3 0l5 5"/><path d="m14 14 1-1c.928-.893 2.072-.893 3 0l3 3"/></svg>';
 var TILE_ICON='<svg class="gx-q-wait" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.5 3.6 5.6 5.5 3.6M2.5 10.5l1.1 1.1 1.9-2M8 4.6h5.5M8 10.6h5.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg><svg class="gx-q-done" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3.5h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H7l-3 2.5V11.5H3a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M6.6 6.2a1.5 1.5 0 1 1 2.1 1.4c-.5.2-.7.5-.7 1" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="8" cy="10" r=".7" fill="currentColor"/></svg><span class="gx-q-badge gx-ask"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3.4 3.6a1.7 1.7 0 1 1 2.4 1.5c-.5.25-.8.55-.8 1.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="5" cy="8.1" r=".8" fill="currentColor"/></svg></span><span class="gx-q-badge gx-check"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5.2 4.2 7.4 8 2.8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e;}
@@ -418,14 +430,22 @@ function autoTie(questions,explicit){
 }
 function setup(root){
   var used={},questions=[],options=[];
-  function collect(){var out={};questions.forEach(function(q){q.collect(out);});return out;}
-  function restore(answers){questions.forEach(function(q){q.restore(answers);});}
+  function collect(){var out={};questions.forEach(function(q){q.collect(out);});var t=notes&&notes.value.trim();if(t)out[notesKey]=t;return out;}
+  function restore(answers){questions.forEach(function(q){q.restore(answers);});if(notes)notes.value=typeof answers[notesKey]==="string"?answers[notesKey]:"";}
   function syncOptions(){options.forEach(function(o){o.sync();});}
   /* The reader's picks so far are kept on the host (PAGE_API's draft), so closing and reopening the page loses nothing. */
   function changed(){syncOptions();if(window.ghostex&&ghostex.__saveDraft)ghostex.__saveDraft("kit",collect());}
   questions=Array.prototype.map.call(root.querySelectorAll("gx-question"),function(qe,index){return question(qe,index,used,changed);});
   var explicit=bindOptions(questions),auto=autoTie(questions,explicit);
   options=explicit.concat(auto.options);window.__ghostexKit={tied:explicit.length,auto:auto.report.auto,untied:auto.report.untied};syncOptions();
+  /* "Anything else?": see the SessionChat 2026-11-04 DECISION on KIT_SCRIPT. */
+  var last=questions[questions.length-1],notes=null,notesCard=null,notesKey=NOTES;
+  for(var copy=2;questions.some(function(q){return q.key===notesKey||q.key+" (note)"===notesKey;});copy++)notesKey=NOTES+" ("+copy+")";
+  if(!(last&&!last.choices.length&&OWN_NOTES.test(last.title))){
+    notesCard=el("div","gx-notes");var notesHead=el("div","gx-q-head"),notesTitle=el("div","gx-q-title","Anything else?");notesTitle.id="gx-notes-title";
+    notes=el("textarea","gx-text");notes.setAttribute("aria-labelledby","gx-notes-title");notes.placeholder="Write anything more, or paste images (optional)";notes.__gxThumbs=true;
+    notes.addEventListener("input",changed);notesHead.append(notesTitle);notesCard.append(notesHead,notes);
+  }
   var bar=el("div","gx-send"),button=el("button","gx-send-button"),label=el("span",null,root.getAttribute("submit")||"Send answers"),status=el("span","gx-send-status"),info=el("button","gx-send-info");
   /* The sentence about blank questions is an (i) icon with the quick tooltip, not a line of text beside the buttons (the SessionChat 2026-10-24 DECISION in apps/desktop/src/app/native_chat/ask_card.rs `ask_info_hint`). Any status message replaces the icon. */
   info.type="button";info.setAttribute("aria-label","Questions you leave blank are sent as skipped.");info.setAttribute("data-gx-tip","Questions you leave blank are sent as skipped.");info.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0"/><path d="M12 9h.01"/><path d="M11 12h1v4h1"/></svg>';status.append(info);
@@ -434,27 +454,36 @@ function setup(root){
   button.setAttribute("data-gx-tip","Send answers");button.setAttribute("data-gx-tip-keys",mac?"⌘ Enter":"Ctrl Enter");
   /* Skip all: sends at once with every question as skipped and no notes, whatever is picked or typed (see the SessionChat DECISION on SKIPPED in packages/gx-visual/src/questions.rs). */
   var skipAll=el("button","gx-skip-all");skipAll.type="button";skipAll.append(el("span",null,"Skip all"));skipAll.setAttribute("data-gx-tip","Skip all");skipAll.setAttribute("data-gx-tip-keys",mac?"⌘ ⇧ Enter":"Ctrl Shift Enter");
-  button.type="button";button.append(label);bar.append(status,skipAll,button);root.append(bar);
+  button.type="button";button.append(label);bar.append(status,skipAll,button);if(notesCard)root.append(notesCard);root.append(bar);
   skipAll.addEventListener("click",function(){
     if(button.disabled)return;
     var out={};questions.forEach(function(q){out[q.key]=SKIPPED;});
     /* Once sent, the page shows what went: no picks and no notes. */
     send(out,function(){restore({});root.querySelectorAll("textarea").forEach(function(t){t.value="";});});
   });
-  function lock(){questions.forEach(function(q){q.lock();});syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent="Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent="Sent to the agent.";}
+  function lock(){questions.forEach(function(q){q.lock();});if(notes){notes.readOnly=true;notesCard.hidden=!notes.value.trim();}syncOptions();allPills();button.disabled=true;skipAll.remove();label.textContent="Sent";button.removeAttribute("data-gx-tip");button.removeAttribute("data-gx-tip-keys");status.classList.remove("gx-error");status.textContent="Sent to the agent.";}
   if(!window.ghostex){button.disabled=true;skipAll.remove();status.textContent="This Ghostex can't send answers from a page; type them in the chat.";return;}
   if(ghostex.answered){restore(ghostex.answers||{});lock();return;}
   var saved=ghostex.__draft&&ghostex.__draft("kit");if(saved&&typeof saved==="object"){restore(saved);syncOptions();}
   /* Pasted images: see the Clipboard DECISION on KIT_SCRIPT. */
   var pendingImages=0,base=location.pathname.replace(/\/+$/,"");
+  var thumbs={},kept={},keptSize=0,savedThumbs=ghostex.__draft&&ghostex.__draft("thumbs");
+  if(savedThumbs&&typeof savedThumbs==="object")Object.keys(savedThumbs).forEach(function(k){var d=savedThumbs[k];if(typeof d==="string"&&/^data:image\//.test(d)){thumbs[k]=kept[k]=d;keptSize+=d.length;}});
+  /* A small JPEG of the pasted image for the draft, so a reopened page still shows its thumbnail. */
+  function small(file){return new Promise(function(resolve){var url=URL.createObjectURL(file),img=new Image();
+    img.onload=function(){var k=Math.min(1,112/Math.max(img.naturalWidth,img.naturalHeight,1)),c=document.createElement("canvas");c.width=Math.max(1,Math.round(img.naturalWidth*k));c.height=Math.max(1,Math.round(img.naturalHeight*k));var g=c.getContext("2d");g.fillStyle="rgb(128,128,128)";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);try{resolve(c.toDataURL("image/jpeg",0.7));}catch(x){resolve(null);}};
+    img.onerror=function(){URL.revokeObjectURL(url);resolve(null);};img.src=url;});}
+  function keepThumb(path,file){thumbs[path]=URL.createObjectURL(file);small(file).then(function(d){if(!d||keptSize+d.length>24000||button.disabled)return;kept[path]=d;keptSize+=d.length;if(ghostex.__saveDraft)ghostex.__saveDraft("thumbs",kept);});}
   function boxes(){return Array.prototype.slice.call(root.querySelectorAll("textarea.gx-note,textarea.gx-text"));}
   function nextImage(){var top=0;boxes().forEach(function(t){t.value.replace(/\[Image #(\d+)\]\(/g,function(_,n){top=Math.max(top,+n);});});return top+1;}
   function edited(area){area.dispatchEvent(new Event("input",{bubbles:true}));}
   function pills(area){
-    var row=area.__gxPills;if(!row){row=el("div","gx-pills");area.after(row);area.__gxPills=row;}
+    var row=area.__gxPills;if(!row){row=el("div",area.__gxThumbs?"gx-pills gx-thumbs":"gx-pills");area.after(row);area.__gxPills=row;}
     row.textContent="";var re=/\[(Image #\d+)\]\(((?:\\.|[^)\\\r\n])*)\)/g,m;
     while((m=re.exec(area.value))){
-      var pill=el("span","gx-pill"),start=m.index,end=re.lastIndex;pill.innerHTML=IMAGE_ICON;pill.append(el("span",null,m[1]));pill.setAttribute("data-gx-tip",m[2]);
+      var src=area.__gxThumbs&&thumbs[m[2]],pill,start=m.index,end=re.lastIndex;
+      if(src){pill=el("span","gx-thumb");var img=el("img");img.src=src;img.alt=m[1];pill.append(img);pill.setAttribute("data-gx-tip",m[1]+": "+m[2]);}
+      else{pill=el("span","gx-pill");pill.innerHTML=IMAGE_ICON;pill.append(el("span",null,m[1]));pill.setAttribute("data-gx-tip",m[2]);}
       if(!area.readOnly){var x=el("button","gx-pill-x","\u00d7");x.type="button";x.setAttribute("aria-label","Remove "+m[1]);x.addEventListener("click",(function(s,e){return function(){var v=area.value;if(s>0&&v.charAt(s-1)===" ")s--;else if(v.charAt(e)===" ")e++;area.value=v.slice(0,s)+v.slice(e);edited(area);};})(start,end));pill.append(x);}
       row.append(pill);
     }
@@ -470,7 +499,7 @@ function setup(root){
     if(!files.length)return;
     e.preventDefault();
     var original=area.value,start=area.selectionStart,end=area.selectionEnd,paths=[];pendingImages++;hint(area,files.length>1?"Saving the pasted images…":"Saving the pasted image…");
-    files.reduce(function(chain,f){return chain.then(function(){return upload(f).then(function(p){paths.push(p);});});},Promise.resolve()).then(function(){hint(area,"");},function(error){hint(area,error&&error.message||"The pasted image could not be saved.",true);}).then(function(){
+    files.reduce(function(chain,f){return chain.then(function(){return upload(f).then(function(p){paths.push(p);if(area.__gxThumbs)keepThumb(p,f);});});},Promise.resolve()).then(function(){hint(area,"");},function(error){hint(area,error&&error.message||"The pasted image could not be saved.",true);}).then(function(){
       pendingImages--;if(!paths.length)return;
       /* Typing went on while it saved: the selection taken at the paste no longer fits, so the references go at the end. */
       var v=area.value,s=v===original?start:v.length,en=v===original?end:s;

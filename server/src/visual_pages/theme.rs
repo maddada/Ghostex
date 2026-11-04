@@ -3,7 +3,7 @@ macro_rules! light_tokens {
     () => {
         concat!(
             "color-scheme:light;",
-            "--background:#f3efea;--foreground:#262626;",
+            "--background:#f0f0f0;--foreground:#262626;",
             "--muted:#f1f1f1;--muted-foreground:#626262;",
             "--card:#ffffff;--card-foreground:#262626;",
             "--border:rgba(0,0,0,0.14);--input:rgba(0,0,0,0.16);--ring:#737373;",
@@ -13,14 +13,14 @@ macro_rules! light_tokens {
             "--code-background:#f6f8fa;--code-foreground:#1f2328;",
             "--chart-1:#2563eb;--chart-2:#d97706;--chart-3:#059669;",
             "--chart-4:#db2777;--chart-5:#7c3aed;--chart-6:#0891b2;",
-            "--gx-bg:#f3efea;--gx-surface:rgba(255,255,255,0.55);--gx-raised:rgba(255,255,255,0.78);",
-            "--gx-line:rgba(70,45,30,0.09);--gx-line-strong:rgba(70,45,30,0.15);",
+            "--gx-bg:#f0f0f0;--gx-surface:rgba(255,255,255,0.55);--gx-raised:rgba(255,255,255,0.78);",
+            "--gx-line:rgba(51,51,51,0.09);--gx-line-strong:rgba(51,51,51,0.15);",
             "--gx-fg:#18181b;--gx-text:#3f3f46;--gx-muted:#71717b;",
-            "--gx-accent:#2563eb;--gx-warn:#a16207;--gx-good:#047857;--gx-bad:#b91c1c;--gx-code-bg:rgba(255,255,255,0.62);--gx-pick:#c2661c;",
+            "--gx-accent:#2563eb;--gx-warn:#a16207;--gx-good:#047857;--gx-bad:#b91c1c;--gx-code-bg:rgba(255,255,255,0.62);--gx-pick:#262626;",
             "--gx-card:rgba(255,255,255,0.62);--gx-footer:rgba(255,255,255,0.68);--gx-option:rgba(255,255,255,0.5);",
-            "--gx-card-border:rgba(90,60,40,0.13);--gx-option-border:rgba(90,60,40,0.1);",
-            "--gx-glass-shadow:0 14px 36px rgba(120,80,50,0.12);--gx-glass-dim:var(--gx-glass-tint-light,rgba(250,247,242,0.7));",
-            "--gx-backdrop:radial-gradient(60% 50% at 85% 100%,rgba(240,170,120,0.28),transparent 70%),radial-gradient(55% 45% at 5% 0%,rgba(140,165,215,0.3),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(230,140,110,0.16),transparent 70%),linear-gradient(180deg,#eef0f6 0%,#f1edf0 45%,#f6ece3 100%);--gx-backdrop-top:#eef0f6;",
+            "--gx-card-border:rgba(67,67,67,0.13);--gx-option-border:rgba(67,67,67,0.1);",
+            "--gx-glass-shadow:0 14px 36px rgba(89,89,89,0.12);--gx-glass-dim:var(--gx-glass-tint-light,rgba(247,247,247,0.7));",
+            "--gx-backdrop:radial-gradient(60% 50% at 85% 100%,rgba(185,185,185,0.28),transparent 70%),radial-gradient(55% 45% at 5% 0%,rgba(165,165,165,0.3),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(163,163,163,0.16),transparent 70%),linear-gradient(180deg,#f0f0f0 0%,#eeeeee 45%,#eeeeee 100%);--gx-backdrop-top:#f0f0f0;",
             "--gx-card-muted:#71717b;--gx-control:#18181b;",
             "--gx-tip-bg:#fcfcfc;--gx-tip-fg:#292929;--gx-tip-border:rgba(0,0,0,0.12)"
         )
@@ -56,12 +56,14 @@ macro_rules! light_tokens {
 /// CDXC:SessionChat 2026-11-02 DECISION:
 /// User, of a page in dark mode: "make it darker bg on dark mode, it's too light now". The dark dusk, its glows, the page colour and the cards' glass are darker, and over the desktop's picture the page takes the work area's own tint (CDXC:SessionChat 2026-11-02 DECISION in apps/desktop/src/app/window/visual_page_modal/glass.rs).
 /// CDXC:SessionChat 2026-11-04 DECISION:
-/// User: "can we make the titlebar part of the inline html instead of being a different color? it looks bad now with the black titlebar". The desktop's page window paints the page's backdrop behind its header: the picture and tint the page gets, or without a picture `--gx-backdrop-top`, the colour the dusk (`#10131c`) and dawn (`#eef0f6`) start from. A floating page (`data-gx-floating`) fades its painted backdrop into that colour over its top 56px, so its glows never meet the header in a seam (apps/desktop/src/app/window/visual_page_modal/glass.rs `PAGE_TOP_DARK` / `PAGE_TOP_LIGHT` hold the same colours). A page that paints its own background keeps it.
+/// User: "can we make the titlebar part of the inline html instead of being a different color? it looks bad now with the black titlebar". The desktop's page window paints the page's backdrop behind its header: the picture and tint the page gets, or without a picture `--gx-backdrop-top`, the colour the dusk (`#131313`) and dawn (`#f0f0f0`) start from. A floating page (`data-gx-floating`) fades its painted backdrop into that colour over its top 56px, so its glows never meet the header in a seam (apps/desktop/src/app/window/visual_page_modal/glass.rs `PAGE_TOP_DARK` / `PAGE_TOP_LIGHT` hold the same colours). A page that paints its own background keeps it.
+/// CDXC:SessionChat 2026-11-04 DECISION:
+/// User, shown four glass looks for the elements inside pages (issues-1027/page-element-looks, Q1213), picked a mix: "D but i want the tint to not be towards blue/purple like we have now that's all. Should be nutral color for the tint of the glass please but same degree for the glass transparency and color lightness", and "Neutral ink" for picks (Q1214). Every glass, edge, shadow and backdrop colour (the dusk and dawn, their glows, `--gx-card`, `--gx-surface`, the lines and borders, `--gx-bg`) is now a grey of the same luminance and alpha as before, and `--gx-pick` is the app's neutral ink (#e5e5e5 dark, #262626 light) instead of amber. Text, accent and status colours keep the app's own. Supersedes the warm amber of the 2026-11-02 decision above.
 /// SEE-ALSO: kit.rs (`KIT_STYLE` uses the `--gx-*` tokens; the switch and "follow paint" are in `KIT_SCRIPT`), skills/ghostex-visuals/SKILL.md (the tokens agents may use).
 pub(super) const THEME_STYLE: &str = concat!(
     "<style id=\"ghostex-theme\">",
     ":where(:root){color-scheme:dark;",
-    "--background:#12131b;--foreground:#c8cdd5;",
+    "--background:#131313;--foreground:#c8cdd5;",
     "--muted:#2a2a2a;--muted-foreground:#747b85;",
     "--card:#252525;--card-foreground:#c8cdd5;",
     "--border:rgba(255,255,255,0.11);--input:rgba(255,255,255,0.15);--ring:#737373;",
@@ -76,15 +78,15 @@ pub(super) const THEME_STYLE: &str = concat!(
     "--font-mono:\"SF Mono\", Menlo, Consolas, \"Liberation Mono\", monospace;",
     // The page template's tokens (kit.rs): widths, surfaces, text and tones.
     "--gx-text-width:720px;--gx-wide-width:1120px;--gx-gutter:24px;",
-    "--gx-bg:#12131b;--gx-surface:rgba(255,244,234,0.06);--gx-raised:rgba(255,244,234,0.1);",
-    "--gx-line:rgba(255,232,214,0.09);--gx-line-strong:rgba(255,232,214,0.17);",
+    "--gx-bg:#131313;--gx-surface:rgba(246,246,246,0.06);--gx-raised:rgba(246,246,246,0.1);",
+    "--gx-line:rgba(236,236,236,0.09);--gx-line-strong:rgba(236,236,236,0.17);",
     "--gx-fg:#fcfcfc;--gx-text:#c8cdd5;--gx-muted:#8b919a;",
-    "--gx-accent:#7da4f8;--gx-warn:#d2a024;--gx-good:#34d399;--gx-bad:#fb7185;--gx-code-bg:rgba(12,10,18,0.42);--gx-pick:#f2b06f;",
+    "--gx-accent:#7da4f8;--gx-warn:#d2a024;--gx-good:#34d399;--gx-bad:#fb7185;--gx-code-bg:rgba(11,11,11,0.42);--gx-pick:#e5e5e5;",
     // The question card's glass and the painted backdrop behind every page (CDXC:SessionChat 2026-11-02 DECISION above).
-    "--gx-card:rgba(30,27,40,0.55);--gx-footer:rgba(30,27,40,0.6);--gx-option:rgba(255,244,234,0.035);",
-    "--gx-card-border:rgba(255,228,204,0.13);--gx-option-border:rgba(255,228,204,0.09);",
-    "--gx-glass-shadow:0 16px 40px rgba(6,4,10,0.32);--gx-glass-dim:var(--gx-glass-tint-dark,rgba(12,11,18,0.68));",
-    "--gx-backdrop:radial-gradient(60% 50% at 82% 100%,rgba(226,138,88,0.11),transparent 70%),radial-gradient(55% 45% at 8% 0%,rgba(92,122,176,0.13),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(184,82,58,0.08),transparent 70%),linear-gradient(180deg,#10131c 0%,#13141e 32%,#17151f 60%,#1b161d 84%,#1d1719 100%);--gx-backdrop-top:#10131c;",
+    "--gx-card:rgba(29,29,29,0.55);--gx-footer:rgba(29,29,29,0.6);--gx-option:rgba(246,246,246,0.035);",
+    "--gx-card-border:rgba(233,233,233,0.13);--gx-option-border:rgba(233,233,233,0.09);",
+    "--gx-glass-shadow:0 16px 40px rgba(5,5,5,0.32);--gx-glass-dim:var(--gx-glass-tint-dark,rgba(12,12,12,0.68));",
+    "--gx-backdrop:radial-gradient(60% 50% at 82% 100%,rgba(160,160,160,0.11),transparent 70%),radial-gradient(55% 45% at 8% 0%,rgba(122,122,122,0.13),transparent 70%),radial-gradient(40% 35% at 100% 0%,rgba(113,113,113,0.08),transparent 70%),linear-gradient(180deg,#131313 0%,#151515 32%,#161616 60%,#181818 84%,#191919 100%);--gx-backdrop-top:#131313;",
     "--gx-card-muted:#b4b8bf;--gx-control:#e5e5e5;",
     // The app's tooltip bubble without window glass (apps/desktop/src/app/helpers/titlebar/chrome_colors.rs
     // `apply_gpui_component_theme`: the menu colour, darkened in dark mode; its border and text).
@@ -208,8 +210,8 @@ mod tests {
     /// `PAGE_TOP_LIGHT` in apps/desktop/src/app/window/visual_page_modal/glass.rs).
     #[test]
     fn a_floating_page_fades_into_the_colour_its_window_header_paints() {
-        assert!(THEME_STYLE.contains("--gx-backdrop-top:#10131c;"));
-        assert_eq!(THEME_STYLE.matches("--gx-backdrop-top:#eef0f6;").count(), 2);
+        assert!(THEME_STYLE.contains("--gx-backdrop-top:#131313;"));
+        assert_eq!(THEME_STYLE.matches("--gx-backdrop-top:#f0f0f0;").count(), 2);
         assert!(THEME_STYLE.contains(
             ":where(:root[data-gx-floating]){--gx-backdrop-fade:linear-gradient(var(--gx-backdrop-top),transparent 56px),}"
         ));

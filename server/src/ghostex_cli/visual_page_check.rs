@@ -866,7 +866,7 @@ mod tests {
         let answer = cdp
             .call(
                 "Runtime.evaluate",
-                json!({ "expression": expression, "returnByValue": true }),
+                json!({ "expression": expression, "awaitPromise": true, "returnByValue": true }),
             )
             .expect("the expression");
         let text = answer
@@ -1096,6 +1096,111 @@ mod tests {
         assert_eq!(
             file_url(Path::new("/tmp/a b/page.html")),
             "file:///tmp/a%20b/page.html"
+        );
+    }
+    /// What the page sends when its Send button is pressed, as JSON text (`ghostex.submit` caught).
+    const SENT: &str = r#"(function(){var sent=null;ghostex.submit=function(out){sent=out;return Promise.resolve({});};
+      document.querySelector(".gx-send-button").click();return JSON.stringify({sent:sent,keys:sent?Object.keys(sent):[],notes:document.querySelectorAll(".gx-notes").length});})()"#;
+
+    /// Every question page ends with the kit's "Anything else?" box just above the send bar; its
+    /// text arrives last under "Additional notes", and an empty box sends nothing extra
+    /// (CDXC:SessionChat 2026-11-04 DECISION on KIT_SCRIPT).
+    #[test]
+    fn a_question_page_ends_with_an_anything_else_box_sent_as_additional_notes() {
+        let body = format!(
+            "<gx-questions>{}</gx-questions>",
+            question("Q1", "Which layout?", &["Tabs", "One long page"])
+        );
+        let expression = format!(
+            r#"(function(){{var card=document.querySelector(".gx-notes"),next=card&&card.nextElementSibling;
+              var empty=JSON.parse({SENT});
+              return {{order:next&&next.className,title:card&&card.querySelector(".gx-q-title").textContent,empty:empty}};}})()"#
+        );
+        let Some(empty) = eval_in_page(&body, &format!("JSON.stringify({expression})")) else {
+            return;
+        };
+        assert_eq!(empty["order"], "gx-send");
+        assert_eq!(empty["title"], "Anything else?");
+        assert_eq!(empty["empty"]["notes"], 1);
+        assert_eq!(empty["empty"]["sent"], json!({ "Which layout?": "skipped" }));
+
+        let expression = format!(
+            r#"(function(){{document.querySelectorAll(".gx-choice")[0].click();var t=document.querySelector(".gx-notes textarea");t.value="  Ship macOS first  ";t.dispatchEvent(new Event("input",{{bubbles:true}}));return {SENT};}})()"#
+        );
+        let Some(written) = eval_in_page(&body, &expression) else {
+            return;
+        };
+        assert_eq!(
+            written["sent"],
+            json!({ "Which layout?": "Tabs", "Additional notes": "Ship macOS first" })
+        );
+        assert_eq!(written["keys"], json!(["Which layout?", "Additional notes"]));
+    }
+
+    /// A question that already answers under "Additional notes" moves the box's key on, the way the
+    /// chat's forms number it; a page whose last question is its own "Anything else?" text question
+    /// gets no second box.
+    #[test]
+    fn the_anything_else_box_keeps_clear_of_the_pages_own_questions() {
+        let taken = format!(
+            "<gx-questions>{}</gx-questions>",
+            question("Q1", "Additional notes", &["Yes", "No"])
+        );
+        let expression = format!(
+            r#"(function(){{var t=document.querySelector(".gx-notes textarea");t.value="more";t.dispatchEvent(new Event("input",{{bubbles:true}}));return {SENT};}})()"#
+        );
+        let Some(numbered) = eval_in_page(&taken, &expression) else {
+            return;
+        };
+        assert_eq!(
+            numbered["sent"],
+            json!({ "Additional notes": "skipped", "Additional notes (2)": "more" })
+        );
+
+        let own = format!(
+            "<gx-questions>{}<gx-question title=\"Anything else?\" type=\"text\"></gx-question></gx-questions>",
+            question("Q1", "Which layout?", &["Tabs", "One long page"])
+        );
+        let Some(sent) = eval_in_page(&own, SENT) else {
+            return;
+        };
+        assert_eq!(sent["notes"], 0);
+        assert_eq!(
+            sent["sent"],
+            json!({ "Which layout?": "skipped", "Anything else?": "skipped" })
+        );
+    }
+
+    /// An image pasted into the box goes through the page's `/image` route like a note's, is written
+    /// in as `[Image #1](path)` so the answers carry it, and shows as a thumbnail that removes it.
+    #[test]
+    fn an_image_pasted_into_the_anything_else_box_shows_as_a_thumbnail_and_is_sent() {
+        let body = format!(
+            "<gx-questions>{}</gx-questions>",
+            question("Q1", "Which layout?", &["Tabs", "One long page"])
+        );
+        let expression = format!(
+            r#"new Promise(function(done){{
+              window.fetch=function(url){{return Promise.resolve(new Response(JSON.stringify({{ok:true,path:"/Users/me/pasted shot.png"}}),{{status:200}}));}};
+              var c=document.createElement("canvas");c.width=40;c.height=30;var g=c.getContext("2d");g.fillStyle="red";g.fillRect(0,0,40,30);
+              c.toBlob(function(blob){{var t=document.querySelector(".gx-notes textarea"),dt=new DataTransfer();t.value="See this";t.focus();t.setSelectionRange(8,8);
+                dt.items.add(new File([blob],"shot.png",{{type:"image/png"}}));
+                t.dispatchEvent(new ClipboardEvent("paste",{{clipboardData:dt,bubbles:true,cancelable:true}}));
+                (function wait(n){{var thumb=document.querySelector(".gx-notes .gx-thumb img");
+                  if(!thumb&&n<50)return setTimeout(function(){{wait(n+1);}},50);
+                  var text=t.value,sent=JSON.parse({SENT});
+                  done(JSON.stringify({{text:text,thumb:!!thumb&&/^blob:/.test(thumb.src),pills:document.querySelectorAll(".gx-notes .gx-pill").length,sent:sent.sent}}));}})(0);
+              }},"image/png");}})"#
+        );
+        let Some(pasted) = eval_in_page(&body, &expression) else {
+            return;
+        };
+        assert_eq!(pasted["text"], "See this [Image #1](/Users/me/pasted shot.png) ");
+        assert_eq!(pasted["thumb"], true);
+        assert_eq!(pasted["pills"], 0);
+        assert_eq!(
+            pasted["sent"]["Additional notes"],
+            "See this [Image #1](/Users/me/pasted shot.png)"
         );
     }
 }

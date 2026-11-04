@@ -1772,10 +1772,12 @@ it. A question you leave blank is sent to the agent as skipped, so it moves on
 without asking again, and Skip all (or Ctrl+Shift+Enter, Cmd+Shift+Enter on
 macOS) sends right away with every question marked skipped, even ones you already picked. A
 form with more than one question also ends with an optional notes box
-for anything else you want the agent to know. You can paste a picture (a
-screenshot or a copied image) into any note or text box, in a form or a
-question page: it shows as an Image #1 pill and goes to the agent with your
-answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
+for anything else you want the agent to know, and every question page ends
+with an "Anything else?" box just above Send, whatever the agent wrote. You
+can paste a picture (a screenshot or a copied image) into any note or text
+box, in a form or a question page: it shows as an Image #1 pill (as a
+thumbnail you can remove in a page's "Anything else?" box) and goes to the
+agent with your answers, so it can open it. Send (or Ctrl+Enter, Cmd+Enter
 on macOS, from anywhere in the form or page) delivers your answers to the agent
 as a message; the chat shows them as a card, and the form then reads Answered.
 Answers from question forms and chat pages send like normal chat messages; a busy

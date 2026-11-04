@@ -30,8 +30,8 @@ const GLASS_CHECK_EVERY: Duration = Duration::from_secs(1);
 /// The top of the page's painted dusk (dark) and dawn (light), which the header paints when there
 /// is no picture: `--gx-backdrop-top` in server/src/visual_pages/theme.rs, where the floating
 /// window's page fades its backdrop into this colour at its top edge.
-pub(super) const PAGE_TOP_DARK: u32 = 0x10131c;
-pub(super) const PAGE_TOP_LIGHT: u32 = 0xeef0f6;
+pub(super) const PAGE_TOP_DARK: u32 = 0x131313;
+pub(super) const PAGE_TOP_LIGHT: u32 = 0xf0f0f0;
 
 /// What the page was last handed.
 #[derive(Default)]
