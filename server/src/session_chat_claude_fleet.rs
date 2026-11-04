@@ -438,6 +438,10 @@ fn read_parent_record(parent: &mut Parent, record: &Value) {
     }
 }
 
+/// The lead's transcript read from where the last read stopped.
+///
+/// CDXC:SessionStatus 2026-11-04 WHY:
+/// A transcript can hold a line that is not JSON: after an interrupted write Windows left a 275 MB Claude transcript with two lines of nothing but NUL bytes (1.5 MB and 0.3 MB, measured 2026-11-04). Failing the whole read on such a line kept nothing of it, so every follower tick, fleet refresh and workflow-card read parsed the 200 MB before it again, about one CPU core of gxserver continuously. A complete line that does not parse is passed over and the read goes on.
 fn read_parent(path: &Path) -> anyhow::Result<Parent> {
     static CACHE: OnceLock<Mutex<HashMap<PathBuf, ParentCacheEntry>>> = OnceLock::new();
     let cache = CACHE.get_or_init(Mutex::default);
@@ -479,8 +483,8 @@ fn read_parent(path: &Path) -> anyhow::Result<Parent> {
         if bytes.last() != Some(&b'\n') {
             break;
         }
-        if !bytes.iter().all(u8::is_ascii_whitespace) {
-            let record = serde_json::from_slice::<Value>(&bytes)?;
+        // A complete line that is not JSON never becomes JSON, so it is passed over like a blank one.
+        if let Ok(record) = serde_json::from_slice::<Value>(&bytes) {
             if let Some(at) = timestamp(&record) {
                 apply_process_starts(&mut entry.parent, &starts, at);
             }
