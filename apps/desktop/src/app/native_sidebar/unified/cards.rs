@@ -335,7 +335,7 @@ impl GhostexGpuiApp {
             .and_then(|work| work.pull_request.as_ref());
         /*
         CDXC:Sidebar 2026-11-04 DECISION:
-        User: "for threads on madda folder which doesn't have github it just shows 2 rows (it shouldn't do this, should say something that indicates that it's without source control for that thread, with an icon there too to indicate this (no need for different color tho)". A card whose folder is in no git repository (gx-core unified_sidebar `no_source_control`) keeps its third line, reading "No source control" beside a crossed-out branch, in the branch line's colour, so every card is the same height.
+        User: "for threads on madda folder which doesn't have github it just shows 2 rows (it shouldn't do this, should say something that indicates that it's without source control for that thread, with an icon there too to indicate this (no need for different color tho)". A card whose folder is in no git repository (gx-core unified_sidebar `no_source_control`) keeps its third line, reading "Untracked" (Q1239: "'No source control' is way too long man") beside a crossed-out branch, in the branch line's colour, so every card is the same height.
         */
         let no_source_control = card.no_source_control;
         let branch_line = card
@@ -348,7 +348,7 @@ impl GhostexGpuiApp {
                 no_source_control.then(|| {
                     (
                         "titlebar/git-branch-deleted.svg",
-                        "No source control".to_string(),
+                        "Untracked".to_string(),
                     )
                 })
             });
