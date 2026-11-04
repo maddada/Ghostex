@@ -59,6 +59,8 @@ macro_rules! light_tokens {
 /// User: "can we make the titlebar part of the inline html instead of being a different color? it looks bad now with the black titlebar". The desktop's page window paints the page's backdrop behind its header: the picture and tint the page gets, or without a picture `--gx-backdrop-top`, the colour the dusk (`#131313`) and dawn (`#f0f0f0`) start from. A floating page (`data-gx-floating`) fades its painted backdrop into that colour over its top 56px, so its glows never meet the header in a seam (apps/desktop/src/app/window/visual_page_modal/glass.rs `PAGE_TOP_DARK` / `PAGE_TOP_LIGHT` hold the same colours). A page that paints its own background keeps it.
 /// CDXC:SessionChat 2026-11-04 DECISION:
 /// User, shown four glass looks for the elements inside pages (issues-1027/page-element-looks, Q1213), picked a mix: "D but i want the tint to not be towards blue/purple like we have now that's all. Should be nutral color for the tint of the glass please but same degree for the glass transparency and color lightness", and "Neutral ink" for picks (Q1214). Every glass, edge, shadow and backdrop colour (the dusk and dawn, their glows, `--gx-card`, `--gx-surface`, the lines and borders, `--gx-bg`) is now a grey of the same luminance and alpha as before, and `--gx-pick` is the app's neutral ink (#e5e5e5 dark, #262626 light) instead of amber. Text, accent and status colours keep the app's own. Supersedes the warm amber of the 2026-11-02 decision above.
+/// CDXC:SessionChat 2026-11-05 DECISION:
+/// User: "pls make the bg of the actual body of the inline htmls not show this gray when i overscroll on macos". In the desktop's page window, scrolling past the top or bottom pulled the page away and showed a grey band: the browser view's own colour, which can't be the blurred wallpaper. A floating page (`data-gx-floating`) stops at its ends instead (`overscroll-behavior:none`), so nothing but the page's own backdrop ever shows. A page in the reader's own browser keeps the browser's bounce.
 /// SEE-ALSO: kit.rs (`KIT_STYLE` uses the `--gx-*` tokens; the switch and "follow paint" are in `KIT_SCRIPT`), skills/ghostex-visuals/SKILL.md (the tokens agents may use).
 pub(super) const THEME_STYLE: &str = concat!(
     "<style id=\"ghostex-theme\">",
@@ -113,6 +115,9 @@ pub(super) const THEME_STYLE: &str = concat!(
     // (apps/desktop/src/app/window/visual_page_modal.rs `TOP_BAND_HEIGHT`), so a floating page
     // starts that much lower and the template's 56px top padding drops by as much.
     "html[data-gx-floating] gx-page,html[data-gx-floating] gx-questions{padding-top:20px}",
+    // macOS pulls a page past its ends with a rubber band, and what that shows is the browser's
+    // own solid colour, never the page's picture (CDXC:SessionChat 2026-11-05 DECISION below).
+    "html[data-gx-floating]{overscroll-behavior:none}",
     "code,kbd,pre,samp{font-family:var(--font-mono)}",
     // The notice an old-layout page shows above itself (`PAGE_API`).
     "#gx-layout-notice{display:flex;align-items:flex-start;gap:10px;box-sizing:border-box;",
@@ -212,6 +217,11 @@ mod tests {
 
     /// The desktop's page window paints these behind its header (`PAGE_TOP_DARK` /
     /// `PAGE_TOP_LIGHT` in apps/desktop/src/app/window/visual_page_modal/glass.rs).
+    #[test]
+    fn a_floating_page_never_rubber_bands_past_its_ends() {
+        assert!(THEME_STYLE.contains("html[data-gx-floating]{overscroll-behavior:none}"));
+    }
+
     #[test]
     fn a_floating_page_starts_under_its_window_band_where_a_tab_would() {
         // 56px in a browser tab, less the page window's 36px band.

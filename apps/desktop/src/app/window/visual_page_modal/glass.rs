@@ -14,6 +14,8 @@
 //! User: "why are the bgs of inline htmls still not showing my real wallpaper but blurred like we agreed?". The scripts above never took: a script added for new documents (`Page.addScriptToEvaluateOnNewDocument`) runs before the parser has made `<html>`, so `document.documentElement` was null and both scripts threw (`TypeError: Cannot read properties of null (reading 'setAttribute')`, reproduced in Chromium with the same DevTools call), and the page kept the painted dusk. They were only ever sent again when the picture or the look changed, so the page window never showed the picture unless the wallpaper changed while it was open. Each script now waits for `<html>` (`on_root`), which still comes before the page's first script and first paint.
 //! CDXC:SessionChat 2026-11-04 DECISION:
 //! User: "can we make the titlebar part of the inline html instead of being a different color?" and "want to be able to resize and move them". The window paints the page's backdrop behind its header too: this picture under this tint at the same place on screen, or the page's own top colour without one (`PAGE_TOP_DARK` / `PAGE_TOP_LIGHT`). The picture is placed for the whole window and the page is told its part of it (`picture_rect`), so it runs on unbroken from the header into the page. While the window moves or is resized the new placement goes straight into the current page (`execute_app_owned_script`); the scripts kept for later documents are only added again on the once-a-second check, so a long drag does not pile them up.
+//! CDXC:SessionChat 2026-11-05 DECISION:
+//! User: "please make the bg more blurred (can't be changed by user basically), let's just set a heavier blur once here that we decide on". The main window's picture comes with the reader's own Blur setting (theirs is 3 points, so the picture was nearly sharp under the page's text), so the page window softens it once more itself: made small and blurred by a fixed `PICTURE_BLUR_POINTS` points of the screen (`soften`), the same for every reader. The window's band paints the same softened picture, so the two still match exactly.
 //! SEE-ALSO: .dependencies/zed/crates/gpui_macos/src/window_wallpaper.rs (`jpeg`), server/src/visual_pages/theme.rs (`data-gx-glass`, `--gx-glass-tint-dark` / `-light`, `--gx-backdrop-top`).
 
 use super::{GpuiVisualPageModalWindow, TOP_BAND_HEIGHT};
@@ -23,6 +25,14 @@ use std::{sync::Arc, time::Duration};
 
 /// The picture's largest width in pixels: under the glass's blur no finer detail survives.
 const PICTURE_MAX_WIDTH: u32 = 640;
+
+/// How soft the page's picture is: a blur of this many points on the screen, whatever the main
+/// window's own Blur setting (CDXC:SessionChat 2026-11-05 DECISION above).
+const PICTURE_BLUR_POINTS: f32 = 60.0;
+
+/// The softened picture's width in pixels. Under that blur nothing finer than a few points
+/// survives, so a small picture scaled up looks the same, and blurring and encoding it is cheap.
+const SOFT_PICTURE_WIDTH: u32 = 320;
 
 /// How often the open window checks whether the app's glass or theme changed.
 const GLASS_CHECK_EVERY: Duration = Duration::from_secs(1);
@@ -183,10 +193,58 @@ fn page_glass(window: &Window, cx: &mut App) -> Option<Glass> {
             .opacity(crate::app::helpers::work_area_glass_alpha()),
     );
     Some(Glass {
-        jpeg: snapshot.jpeg,
+        jpeg: softened(&snapshot.jpeg, f32::from(snapshot.screen.width)),
         rect: picture_rect(bounds.size, snapshot.screen, on_screen),
         tint,
     })
+}
+
+/// `jpeg`, the main window's picture of a screen `screen_width` points wide, softened for the page
+/// (`soften`). The last one is kept, so the check every second costs nothing while the picture
+/// stays the same; a picture that can't be read is handed over as it is.
+fn softened(jpeg: &[u8], screen_width: f32) -> Vec<u8> {
+    use std::hash::{Hash as _, Hasher as _};
+    static LAST: std::sync::Mutex<Option<(u64, Vec<u8>)>> = std::sync::Mutex::new(None);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    jpeg.hash(&mut hasher);
+    screen_width.to_bits().hash(&mut hasher);
+    let key = hasher.finish();
+    if let Ok(last) = LAST.lock()
+        && let Some((last_key, soft)) = last.as_ref()
+        && *last_key == key
+    {
+        return soft.clone();
+    }
+    let soft = soften(jpeg, screen_width, PICTURE_BLUR_POINTS).unwrap_or_else(|| jpeg.to_vec());
+    if let Ok(mut last) = LAST.lock() {
+        *last = Some((key, soft.clone()));
+    }
+    soft
+}
+
+/// `jpeg`, a picture of a whole screen `screen_width` points wide, made at most
+/// `SOFT_PICTURE_WIDTH` pixels wide and blurred by `blur_points` points of that screen.
+fn soften(jpeg: &[u8], screen_width: f32, blur_points: f32) -> Option<Vec<u8>> {
+    let picture = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
+        .ok()?
+        .to_rgb8();
+    let width = picture.width().clamp(1, SOFT_PICTURE_WIDTH);
+    let height = ((picture.height() as f32 * width as f32 / picture.width().max(1) as f32).round()
+        as u32)
+        .max(1);
+    let small = image::imageops::resize(
+        &picture,
+        width,
+        height,
+        image::imageops::FilterType::Triangle,
+    );
+    let sigma = blur_points * width as f32 / screen_width.max(1.0);
+    let soft = image::imageops::fast_blur(&small, sigma);
+    let mut out = Vec::new();
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 88)
+        .encode_image(&soft)
+        .ok()?;
+    Some(out)
 }
 
 /// Where a picture laid out on a whole screen of `screen` lies in a window of `window_size`, in
@@ -341,6 +399,75 @@ mod tests {
             look.contains("\"--gx-glass-tint-dark\",\"rgba(0,0,0,0.770)\""),
             "{look}"
         );
+    }
+
+    /// A picture of hard black and white stripes, `width` x `height`, as a JPEG.
+    fn stripes(width: u32, height: u32) -> Vec<u8> {
+        let picture = image::RgbImage::from_fn(width, height, |x, _| {
+            if (x / 4) % 2 == 0 {
+                image::Rgb([0, 0, 0])
+            } else {
+                image::Rgb([255, 255, 255])
+            }
+        });
+        let mut out = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 95)
+            .encode_image(&picture)
+            .unwrap();
+        out
+    }
+
+    /// How far a picture's pixels stray from its mean brightness.
+    fn spread(jpeg: &[u8]) -> f32 {
+        let picture = image::load_from_memory(jpeg).unwrap().to_luma8();
+        let values: Vec<f32> = picture
+            .pixels()
+            .map(|pixel| f32::from(pixel.0[0]))
+            .collect();
+        let mean = values.iter().sum::<f32>() / values.len() as f32;
+        (values
+            .iter()
+            .map(|value| (value - mean).powi(2))
+            .sum::<f32>()
+            / values.len() as f32)
+            .sqrt()
+    }
+
+    #[test]
+    fn the_page_picture_is_softened_small_whatever_the_window_blur() {
+        let sharp = stripes(640, 360);
+        let soft = soften(&sharp, 1728.0, PICTURE_BLUR_POINTS).unwrap();
+        let picture = image::load_from_memory(&soft).unwrap();
+        assert_eq!(
+            (picture.width(), picture.height()),
+            (SOFT_PICTURE_WIDTH, 180)
+        );
+        // Stripes 4 pixels wide are gone: what is left is close to an even grey.
+        assert!(spread(&sharp) > 100.0);
+        assert!(spread(&soft) < 15.0, "{}", spread(&soft));
+    }
+
+    #[test]
+    fn a_heavier_blur_leaves_less_of_the_picture() {
+        let picture = image::RgbImage::from_fn(640, 360, |x, y| {
+            image::Rgb([
+                (x % 256) as u8,
+                (y % 256) as u8,
+                ((x / 64 + y / 64) % 2 * 255) as u8,
+            ])
+        });
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 95)
+            .encode_image(&picture)
+            .unwrap();
+        let light = spread(&soften(&jpeg, 1728.0, 10.0).unwrap());
+        let heavy = spread(&soften(&jpeg, 1728.0, 90.0).unwrap());
+        assert!(heavy < light, "{heavy} < {light}");
+    }
+
+    #[test]
+    fn a_picture_that_cannot_be_read_is_handed_over_as_it_is() {
+        assert_eq!(softened(b"not a jpeg", 1728.0), b"not a jpeg".to_vec());
     }
 
     #[test]
