@@ -429,7 +429,12 @@ pub(crate) fn assemble(input: AssembleInput<'_>) -> SidebarView {
         .iter()
         .filter_map(|group_id| input.builds.get(group_id))
     {
-        for session in &build.store_rows {
+        // A coordinator's thread on another computer counts on that computer's tab.
+        for session in build
+            .store_rows
+            .iter()
+            .filter(|session| !session.row.is_borrowed_thread())
+        {
             if session.row.activity == "working" {
                 machine_summary.working_count += 1;
             }

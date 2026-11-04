@@ -560,6 +560,9 @@ pub struct SessionRow {
     /// computers' own rows.
     pub coordinator_remote_threads:
         Vec<ghostex_gx_protocol::presentation::PresentationRemoteThread>,
+    /// The name of the computer a coordinator's thread runs on, for a thread drawn under a
+    /// coordinator on another computer (`remote_thread_rows`): the row's badge.
+    pub computer_name: Option<String>,
     /// The agentbox box the session's agent runs in, when it does not run on its machine.
     pub agentbox: Option<crate::agentbox::SessionAgentbox>,
     /// The Cloud Box the session runs on (its ☁ badge and state dot), or the box a draft's tray
@@ -633,6 +636,18 @@ pub struct SessionTiming {
 }
 
 impl SessionRow {
+    /// A coordinator's thread on another computer, drawn in the coordinator's computer's list
+    /// under it (`remote_thread_rows`).
+    ///
+    /// CDXC:RemoteMachines 2026-11-04 WHY:
+    /// The thread's own computer lists it too, so a reader that takes each computer's list as that computer's sessions (the Running Agents panel, the Unified sidebar, Quick Access) leaves this copy out. Without that the Running Agents panel listed a thread running on Windows under the Mac's project, with Windows at "No running agents", and the Unified sidebar drew it twice, once without its computer's name.
+    pub fn is_borrowed_thread(&self) -> bool {
+        matches!(
+            (&self.key, &self.coordinator_parent),
+            (Some(key), Some(parent)) if key.machine != parent.machine
+        )
+    }
+
     /// The compact countdown a row draws instead of its relative time, at the host's clock.
     pub fn timer_label(&self, now_ms: u64) -> Option<String> {
         timer_trailing_label(self, now_ms)

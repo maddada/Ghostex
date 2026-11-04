@@ -193,7 +193,7 @@ pub(crate) fn start_coordinator_remote_runtime(state: Arc<AppState>) {
     });
 }
 
-fn remote_rpc(computer: &ConnectedComputer, path: &str, params: Value) -> Option<Value> {
+pub(super) fn remote_rpc(computer: &ConnectedComputer, path: &str, params: Value) -> Option<Value> {
     let body = json!({ "params": params, "protocolVersion": GXSERVER_PROTOCOL_VERSION });
     let response = crate::http_agent::answering_agent()
         .post(format!("{}{path}", computer.base_url))

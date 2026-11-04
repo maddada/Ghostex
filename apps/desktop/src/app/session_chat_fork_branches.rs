@@ -6,6 +6,7 @@
 //! stopped branch before focusing it.
 
 use crate::*;
+use ghostex_gx_core::MachineId;
 use std::time::Duration;
 
 impl GhostexGpuiApp {
@@ -40,12 +41,34 @@ impl GhostexGpuiApp {
         // The family is derived by the daemon that owns this chat, so a remote session's branches
         // live on that same machine and take its tunnel.
         // A Cloud Box start names the box's machine (`cloudbox:<boxId>`) the new session is on.
+        // CDXC:RemoteMachines 2026-11-04 WHY: a coordinator's worker on another computer than the
+        // coordinator's names that computer's gxserver (`serverId`, server/coordinator_open_http.rs),
+        // which may be this computer itself when the coordinator runs elsewhere. Without a machine
+        // for it the click must not open a session of the same ids on the coordinator's computer.
+        let on_server = match field("serverId") {
+            Some(server_id) => match self.machine_for_server_id(&server_id) {
+                Some(machine) => Some(machine),
+                None => {
+                    self.dispatch_gpui_app_modal_toast(
+                        "warning",
+                        "Could not open that worker",
+                        "Its computer isn't connected. Connect it in Settings › Remote and try again.",
+                        cx,
+                    );
+                    return;
+                }
+            },
+            None => None,
+        };
         let remote_machine_id = match (
+            on_server,
             field("machineId"),
             self.workspace_terminal_key_for_shell_session(session_id),
         ) {
-            (Some(machine_id), _) => Some(machine_id),
-            (None, Some(GpuiWorkspaceTerminalSessionKey::Remote(key))) => {
+            (Some(MachineId::Local), _, _) => None,
+            (Some(MachineId::Remote(machine_id)), _, _) => Some(machine_id),
+            (None, Some(machine_id), _) => Some(machine_id),
+            (None, None, Some(GpuiWorkspaceTerminalSessionKey::Remote(key))) => {
                 Some(key.remote_machine_id)
             }
             _ => None,
@@ -118,6 +141,28 @@ impl GhostexGpuiApp {
         } else {
             self.report_session_chat_fork_branch_failure(cx);
         }
+    }
+
+    /// The machine whose gxserver is `server_id`: this computer, or a remote machine the store
+    /// holds rows of, else a connected computer the registration named
+    /// (remote_conn/connected_computers.rs).
+    fn machine_for_server_id(&self, server_id: &str) -> Option<MachineId> {
+        self.gx_store
+            .core
+            .presentation()
+            .machines()
+            .find(|(_, entry)| {
+                entry
+                    .loaded()
+                    .is_some_and(|loaded| loaded.server_id == server_id)
+            })
+            .map(|(machine, _)| machine.clone())
+            .or_else(|| {
+                crate::app::remote_conn::connected_computers::gpui_remote_machine_for_server_id(
+                    server_id,
+                )
+                .map(MachineId::Remote)
+            })
     }
 
     fn report_session_chat_fork_branch_failure(&mut self, cx: &mut gpui::Context<Self>) {

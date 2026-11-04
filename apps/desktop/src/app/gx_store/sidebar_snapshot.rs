@@ -936,6 +936,8 @@ fn build_session(
         }
     }
     insert_optional(&mut details, "threadState", row.thread_state.clone());
+    // The computer a coordinator's thread runs on, drawn by native_sidebar/threads.rs.
+    insert_optional(&mut details, "computerName", row.computer_name.clone());
     // The box an agentbox session runs in, drawn by native_sidebar/agentbox.rs.
     if let Some(agentbox) = &row.agentbox {
         details.insert(

@@ -21,6 +21,7 @@ use serde_json::{json, Map, Value};
 use super::brief::report_headline;
 use super::endpoint::session_title_of;
 use super::records::{list_coordinators, list_threads, SessionKey, ThreadRecord};
+use super::remote_threads::{list_remote_threads, RemoteThreadRecord};
 use super::state::{
     classify_thread_session, thread_needs_user_approval, waiting_prompt, ThreadProgress,
     ThreadState,
@@ -232,6 +233,60 @@ fn build_row(
     row
 }
 
+/// A thread on another computer this one is connected to, from what the remote supervisor last saw
+/// of it (server/coordinator_remote_runtime.rs). `serverId` tells the panel's click to open it on
+/// that computer, and `computer` names it on the row.
+///
+/// CDXC:RemoteMachines 2026-11-04 WHY:
+/// User, of a thread this Mac's coordinator started on their Windows computer: "why dont i see that thread in the workers under you??". The Workers list read only `coordinator_threads`, the links of threads on this computer, so a coordinator's threads on other computers (`coordinator_remote_threads`, linked by `start-thread --computer`) were missing from it. They are built here from the link alone: the other computer may run an older gxserver and knows nothing of the coordinator. A thread whose computer is not connected reads asleep, as the sidebar draws it.
+fn build_remote_row(thread: &RemoteThreadRecord, now: chrono::DateTime<chrono::Utc>) -> Value {
+    let computer = crate::connected_computers::find(&thread.server_id)
+        .map(|computer| computer.name)
+        .unwrap_or_default();
+    let unreachable = thread.state() == "unreachable";
+    let state = if unreachable {
+        "sleeping"
+    } else {
+        thread.state()
+    };
+    let detail = match state {
+        _ if unreachable => "Its computer isn't connected".to_string(),
+        "working" => report_headline(&thread.task, 140),
+        "waiting" => "Waiting for an answer".to_string(),
+        _ => thread
+            .last_report
+            .as_deref()
+            .map(|report| report_headline(report, 140))
+            .unwrap_or_default(),
+    };
+    let title = Some(thread.title.trim())
+        .filter(|title| !title.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| report_headline(&thread.task, 60));
+    let mut row = json!({
+        "serverId": thread.server_id,
+        "computer": computer,
+        "projectId": thread.project_id,
+        "sessionId": thread.session_id,
+        "title": title,
+        "state": state,
+        "detail": detail,
+        "activeAt": thread.updated_at,
+    });
+    if is_recent(&thread.updated_at, now) {
+        row["recent"] = json!(true);
+    }
+    if let Some(lifecycle) = match state {
+        "closed" => Some("stopped"),
+        "sleeping" => Some("sleeping"),
+        "done" => None,
+        _ => Some("running"),
+    } {
+        row["lifecycleState"] = json!(lifecycle);
+    }
+    row
+}
+
 /// When `is_recent` turns false for this row, if it is true now.
 fn recent_until(row: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
     if row["recent"] != true {
@@ -256,6 +311,7 @@ pub fn refresh_coordinator_panels(
         return Vec::new();
     };
     let threads = list_threads(db).unwrap_or_default();
+    let remote_threads = list_remote_threads(db).unwrap_or_default();
     let generated_at = now_iso();
     let now = chrono::Utc::now();
     let mut session_rows = db
@@ -320,6 +376,12 @@ pub fn refresh_coordinator_panels(
             }
             panel_rows.push(row);
         }
+        panel_rows.extend(
+            remote_threads
+                .iter()
+                .filter(|thread| thread.coordinator_key() == key)
+                .map(|thread| build_remote_row(thread, now)),
+        );
         built.push((key, panel_rows));
     }
     if let Ok(mut rows) = rows().lock() {
@@ -346,4 +408,57 @@ pub fn refresh_coordinator_panels(
     changed.sort();
     *panels = next;
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn remote_thread(last_state: Option<&str>) -> RemoteThreadRecord {
+        RemoteThreadRecord {
+            server_id: "S4k".to_string(),
+            project_id: "P7".to_string(),
+            session_id: "G2".to_string(),
+            coordinator_project_id: "P1".to_string(),
+            coordinator_session_id: "G1".to_string(),
+            task: "Find the CPU churn".to_string(),
+            title: "Windows CPU churn".to_string(),
+            resolved_at: None,
+            observed_working: true,
+            reported_at: None,
+            reported_prompt_key: None,
+            last_report: None,
+            last_state: last_state.map(str::to_string),
+            reported_message_id: None,
+            checked_activity_ms: None,
+            updated_at: "2026-11-04T17:00:00.000Z".to_string(),
+        }
+    }
+
+    /// A coordinator's thread on another computer is a Workers row that names that computer's
+    /// server, so the click opens it there, and is in flight while it works.
+    #[test]
+    fn a_thread_on_another_computer_is_a_workers_row() {
+        let now = chrono::DateTime::parse_from_rfc3339("2026-11-04T17:30:00.000Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let row = build_remote_row(&remote_thread(Some("working")), now);
+        assert_eq!(row["serverId"], "S4k");
+        assert_eq!(row["projectId"], "P7");
+        assert_eq!(row["sessionId"], "G2");
+        assert_eq!(row["title"], "Windows CPU churn");
+        assert_eq!(row["state"], "working");
+        assert_eq!(row["detail"], "Find the CPU churn");
+        assert_eq!(row["recent"], true);
+        assert_eq!(panel_rank(&row), 0);
+        let panel = cached_panel(vec![row], None);
+        assert_eq!(panel.summary["total"], 1);
+        assert_eq!(panel.summary["threads"][0]["serverId"], "S4k");
+
+        // Its computer is not connected: asleep, and the row says why.
+        let away = build_remote_row(&remote_thread(Some("unreachable")), now);
+        assert_eq!(away["state"], "sleeping");
+        assert_eq!(away["detail"], "Its computer isn't connected");
+        assert_eq!(away["lifecycleState"], "sleeping");
+    }
 }

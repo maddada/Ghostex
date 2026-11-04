@@ -169,8 +169,12 @@ impl NativeChatView {
             .filter(|part| !part.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
+        // A worker on another computer than the coordinator's: its name, and its server, which
+        // the click opens it on.
+        let computer = text(row, "computer");
         let command = json!({
             "type": "openCoordinatorThread",
+            "serverId": row["serverId"],
             "projectId": row["projectId"],
             "sessionId": row["sessionId"],
         });
@@ -235,6 +239,31 @@ impl NativeChatView {
                     .text_color(p.card_muted)
                     .child(detail),
             )
+            .when(!computer.is_empty(), |this| {
+                this.child(
+                    div()
+                        .flex_shrink_0()
+                        .flex()
+                        .items_center()
+                        .gap(px(3.0 * s))
+                        .max_w(px(120.0 * s))
+                        .child(
+                            gpui::svg()
+                                .path("titlebar/device-desktop.svg")
+                                .flex_shrink_0()
+                                .size(px(11.0 * s))
+                                .text_color(p.muted),
+                        )
+                        .child(
+                            div()
+                                .min_w_0()
+                                .truncate()
+                                .text_size(px(11.0 * s))
+                                .text_color(p.muted)
+                                .child(computer),
+                        ),
+                )
+            })
             .when(!branch.is_empty(), |this| {
                 this.child(
                     div()

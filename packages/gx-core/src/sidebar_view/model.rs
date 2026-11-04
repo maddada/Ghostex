@@ -945,9 +945,23 @@ fn remote_thread_rows(
                 project_id: thread.project_id.clone(),
                 session_id: thread.session_id.clone(),
             };
+            // The machine's tab names it; this computer's tab when the coordinator is elsewhere.
+            let machine_id = key.machine.remote_id().unwrap_or(super::LOCAL_MACHINE_ID);
+            let computer_name = inputs
+                .host
+                .machine(machine_id)
+                .map(|tab| tab.label.trim())
+                .filter(|label| !label.is_empty())
+                .unwrap_or(if key.machine.is_local() {
+                    "This computer"
+                } else {
+                    machine_id
+                })
+                .to_string();
             if let Some(row) = state.box_rows.get(&key).filter(|row| {
                 row.row.coordinator_parent.as_ref() == Some(&parent)
                     && row.row.thread_state == thread.thread_state
+                    && row.row.computer_name.as_deref() == Some(computer_name.as_str())
             }) {
                 threads.push(row.clone());
                 continue;
@@ -968,6 +982,7 @@ fn remote_thread_rows(
             );
             row.coordinator_parent = Some(parent.clone());
             row.thread_state = thread.thread_state.clone();
+            row.computer_name = Some(computer_name.clone());
             state.next_row_id += 1;
             state.work.rows_built += 1;
             let row = RowRef {

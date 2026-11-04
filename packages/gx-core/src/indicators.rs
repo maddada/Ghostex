@@ -188,6 +188,10 @@ pub fn indicator_candidates(
                     return candidates;
                 }
                 let row = &session.row;
+                // A coordinator's thread on another computer counts on that computer.
+                if row.is_borrowed_thread() {
+                    continue;
+                }
                 let session_number = unsorted
                     .iter()
                     .position(|candidate| candidate.sidebar_session_id == row.sidebar_session_id)

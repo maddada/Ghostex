@@ -33,6 +33,9 @@ pub struct RemoteThreadRecord {
     /// The other computer's own activity time (ms) the last finished check covered (migration
     /// 0053), compared only with that computer's later times, never with this computer's clock.
     pub checked_activity_ms: Option<i64>,
+    /// When anything about the link last changed on this computer (its state, title or report),
+    /// the activity time the coordinator's Workers list orders it by.
+    pub updated_at: String,
 }
 
 impl RemoteThreadRecord {
@@ -67,7 +70,7 @@ impl RemoteThreadRecord {
     }
 }
 
-const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState, reportedMessageId, checkedActivityMs";
+const COLUMNS: &str = "serverId, projectId, sessionId, coordinatorProjectId, coordinatorSessionId, task, title, resolvedAt, observedWorking, reportedAt, reportedPromptKey, lastReport, lastState, reportedMessageId, checkedActivityMs, updatedAt";
 
 fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
     Ok(RemoteThreadRecord {
@@ -86,6 +89,7 @@ fn from_row(row: &Row<'_>) -> rusqlite::Result<RemoteThreadRecord> {
         last_state: row.get(12)?,
         reported_message_id: row.get(13)?,
         checked_activity_ms: row.get(14)?,
+        updated_at: row.get(15)?,
     })
 }
 

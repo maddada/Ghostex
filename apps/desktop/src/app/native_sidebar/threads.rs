@@ -228,6 +228,47 @@ pub(crate) fn coordinator_badge(
     )
 }
 
+/// The computer a thread runs on, after its title, for a thread drawn under a coordinator on
+/// another computer (gx-core's `remote_thread_rows`, `computerName` in the row's details).
+///
+/// CDXC:RemoteMachines 2026-11-04 DECISION:
+/// User, of a thread a coordinator here started on their Windows computer: "why dont i see that thread in the workers under you??". The thread sits under its coordinator like a local one, and says which computer runs it in the muted text a Cloud Box row names its box with, so a click that opens it there is no surprise.
+pub(crate) fn computer_badge(
+    session: &NativeSidebarSession,
+    appearance: &SidebarAppearance,
+) -> Option<AnyElement> {
+    let name = session
+        .details
+        .get("computerName")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())?
+        .to_owned();
+    let scale = appearance.scale;
+    Some(
+        div()
+            .flex_shrink_0()
+            .flex()
+            .items_center()
+            .gap(px(3.0 * scale))
+            .max_w(px(96.0 * scale))
+            .child(titlebar_svg_icon(
+                "titlebar/device-desktop.svg",
+                12.0 * scale,
+                appearance.muted,
+            ))
+            .child(
+                div()
+                    .min_w_0()
+                    .truncate()
+                    .text_size(px(11.5 * scale))
+                    .text_color(appearance.muted)
+                    .child(name),
+            )
+            .into_any_element(),
+    )
+}
+
 /// The "N older threads" row's height, unscaled and without the gap under it.
 const OLDER_THREADS_ROW_HEIGHT: f32 = 24.0;
 

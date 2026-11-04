@@ -380,6 +380,7 @@ pub(crate) fn session_row(
             .coordinator_remote_threads
             .clone()
             .unwrap_or_default(),
+        computer_name: None,
         agentbox: session
             .agentbox
             .as_ref()

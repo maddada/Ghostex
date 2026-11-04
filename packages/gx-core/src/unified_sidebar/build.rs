@@ -473,7 +473,11 @@ pub fn build_unified_sidebar(
                 .as_ref()
                 .map(|spaces| space_filter_key(&machine.machine, &space_of_group(spaces, group)));
             for session in &group.core.sessions {
-                if session.row.is_browser || session.row.key.is_none() {
+                // A coordinator's thread on another computer is that computer's card.
+                if session.row.is_browser
+                    || session.row.key.is_none()
+                    || session.row.is_borrowed_thread()
+                {
                     continue;
                 }
                 rows.push(UnifiedRow {

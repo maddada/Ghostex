@@ -72,6 +72,7 @@ pub fn handle_with_ids(
         // gxserver resumes a closed thread first; the host's focus follows its answer.
         ActionKind::OpenCoordinatorThread => crate::extras::coordinator_threads::open_thread(
             &mut state.extras.panels,
+            text(action, "serverId"),
             text(action, "projectId"),
             text(action, "sessionId"),
             next_request_id(),

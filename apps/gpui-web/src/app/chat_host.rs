@@ -60,10 +60,41 @@ impl GhostexGpuiApp {
                 };
                 if let (Some(project_id), Some(session_id)) = (text("projectId"), text("sessionId"))
                 {
+                    // A coordinator's worker on another computer names that computer's gxserver;
+                    // this build streams only its own computer (and Cloud Boxes), so a worker
+                    // elsewhere is not opened as a session of the same ids here.
+                    let on_server = match text("serverId").filter(|id| !id.is_empty()) {
+                        Some(server_id) => {
+                            let machine = self
+                                .gx_store
+                                .core
+                                .presentation()
+                                .machines()
+                                .find(|(_, entry)| {
+                                    entry
+                                        .loaded()
+                                        .is_some_and(|loaded| loaded.server_id == server_id)
+                                })
+                                .map(|(machine, _)| machine.clone());
+                            if machine.is_none() {
+                                self.dispatch_gpui_app_modal_toast(
+                                    "warning",
+                                    "Could not open that worker",
+                                    "It runs on another computer this browser can't reach. Open it in the Ghostex app.",
+                                    cx,
+                                );
+                                return;
+                            }
+                            machine
+                        }
+                        None => None,
+                    };
                     // A Cloud Box start names the box's machine (`cloudbox:<boxId>`) the session is on.
-                    let machine = text("machineId")
-                        .map(ghostex_gx_core::MachineId::Remote)
-                        .unwrap_or_else(|| session.machine.clone());
+                    let machine = on_server.unwrap_or_else(|| {
+                        text("machineId")
+                            .map(ghostex_gx_core::MachineId::Remote)
+                            .unwrap_or_else(|| session.machine.clone())
+                    });
                     self.web_open_session_in_work_area(
                         SessionKey {
                             machine,
