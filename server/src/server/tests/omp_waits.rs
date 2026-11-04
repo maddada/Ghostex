@@ -235,6 +235,22 @@ impl Fixture {
         self.flag(session_id, "awaitingApproval")
     }
 
+    fn mobile_summary(&self, session_id: &str) -> Value {
+        let stored = self.stored_session(session_id);
+        let generated_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let presentation = crate::presentation::project_presentation_session(
+            &self.project,
+            "group",
+            &stored,
+            &generated_at,
+        );
+        crate::ghostex_cli::sessions::mobile_summary_for_session(
+            &stored,
+            &self.project,
+            &presentation,
+        )
+    }
+
     /// The session's feed rows of `kind`, oldest first: (attention event, read, body).
     fn rows(&self, session_id: &str, kind: &str) -> Vec<(Option<String>, bool, String)> {
         let db = open_gxserver_database(&self.state.paths).expect("db");
@@ -645,11 +661,80 @@ async fn each_omp_approval_is_a_claude_permission_request() {
     }
 }
 
-/// OMP starts three calls from one assistant message together, requests their approvals at once
-/// and shows one dialog at a time. The extension forwards each shown dialog as its own wait with
-/// its own row and notification. The first call is approved and ends while the second dialog is
-/// open; the next two are denied, the last with a message. The first call's end reads working,
-/// as a Claude subagent's tool hook does, but the second card and its already-published row stay.
+/// Replay the generated extension's received hooks, not a hand-reordered sequence: every shown
+/// dialog stays a mobile needs-input wait until its answer, even when other calls run.
+#[cfg(unix)]
+#[tokio::test]
+async fn delivered_omp_hooks_keep_each_dialog_waiting_until_answered() {
+    let delivered = crate::agent_hooks::tests::omp_dialog_hook_sequence(false);
+    let fixture = Fixture::new();
+    let session = fixture.running_omp_turn().await;
+    let mut open = None;
+    let mut seen = Vec::new();
+    for payload in delivered {
+        let event = payload["hook_event_name"].as_str().expect("hook event");
+        let call = payload["tool_use_id"].as_str();
+        if event == "post_approval_response" {
+            assert_eq!(open.as_deref(), call, "answer pairs with the shown dialog");
+            open = None;
+        }
+        let mut params = json!({ "eventName": event });
+        for (source, target) in [
+            ("tool_name", "toolName"),
+            ("tool_use_id", "toolUseId"),
+            ("tool_input", "toolInput"),
+        ] {
+            if let Some(value) = payload.get(source) {
+                params[target] = value.clone();
+            }
+        }
+        fixture.hook(&session, params).await;
+        if event == "PermissionRequest" {
+            assert!(open.is_none(), "one shown dialog at a time");
+            open = Some(call.expect("approval call id").to_string());
+            let body = fixture
+                .rows(&session, "needsInput")
+                .last()
+                .expect("row")
+                .2
+                .clone();
+            seen.push(fixture.assert_new_wait(&session, &seen, &body, event));
+        }
+        let summary = fixture.mobile_summary(&session);
+        println!("{event} {call:?}: {summary}");
+        if let Some(shown) = open.as_deref() {
+            assert_eq!(summary["activity"], json!("attention"), "{event} {call:?}");
+            assert_eq!(
+                fixture
+                    .rows(&session, "needsInput")
+                    .last()
+                    .expect("needs-input row")
+                    .0,
+                summary["attention"]["eventId"].as_str().map(str::to_string),
+                "{event} {call:?}",
+            );
+            assert_eq!(summary["awaitingApproval"], json!(true), "{event} {call:?}");
+            assert_eq!(
+                fixture
+                    .stored_prompt(&session)
+                    .as_ref()
+                    .and_then(SessionChatInteractivePrompt::tool_use_id),
+                Some(shown),
+            );
+        } else if event == "post_approval_response" {
+            assert_eq!(summary["activity"], json!("working"));
+            assert!(summary.get("awaitingApproval").is_none());
+        }
+    }
+    assert!(open.is_none());
+    assert_eq!(seen.len(), 3);
+    assert_eq!(fixture.rows(&session, "needsInput").len(), 3);
+    assert_eq!(fixture.rows(&session, "finished").len(), 1);
+    fixture.forget(&session);
+}
+
+/// Without the extension's hold, a late tool end overwrites a raw dialog's activity but leaves
+/// its card and feed row. Keep the server's existing acknowledgement and answer behavior.
 #[tokio::test]
 async fn three_omp_approvals_in_one_message_are_three_waits() {
     let fixture = Fixture::new();
@@ -721,6 +806,43 @@ async fn three_omp_approvals_in_one_message_are_three_waits() {
         .collect();
     assert_eq!(events, seen.into_iter().map(Some).collect::<Vec<_>>());
     fixture.forget(&session);
+}
+
+/// A serial transport alone does not protect a dialog: either another call's start or an
+/// earlier call's end overwrites its wait. The extension must keep these out of the window.
+#[tokio::test]
+async fn unheld_omp_tool_hooks_overwrite_an_open_approval() {
+    for event in ["PreToolUse", "PostToolUse"] {
+        let fixture = Fixture::new();
+        let session = fixture.running_omp_turn().await;
+        fixture.hook(&session, bash_start("shown")).await;
+        fixture.hook(&session, dialog_shown("shown", "true")).await;
+        let waiting = fixture.mobile_summary(&session);
+        assert_eq!(waiting["activity"], json!("attention"));
+        assert_eq!(
+            fixture
+                .rows(&session, "needsInput")
+                .last()
+                .expect("needs-input row")
+                .0,
+            waiting["attention"]["eventId"].as_str().map(str::to_string),
+        );
+        assert_eq!(waiting["awaitingApproval"], json!(true));
+        fixture
+            .hook(
+                &session,
+                json!({
+                    "eventName": event, "toolName": "bash", "toolUseId": "other",
+                }),
+            )
+            .await;
+        let overwritten = fixture.mobile_summary(&session);
+        println!("unheld {event}: {overwritten}");
+        assert_eq!(overwritten["activity"], json!("working"), "{event}");
+        assert!(overwritten.get("awaitingApproval").is_none(), "{event}");
+        fixture.hook(&session, dialog_answered("shown")).await;
+        fixture.forget(&session);
+    }
 }
 
 /// Claude Code and OMP derive the same summary from complete tool input, including JSON fallback

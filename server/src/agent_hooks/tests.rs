@@ -325,6 +325,41 @@ fn hook_status_upgrades_an_omp_extension_installed_before_ask_and_approval_forwa
 #[cfg(unix)]
 #[test]
 fn omp_extension_delivers_hooks_in_event_order_without_blocking_handlers() {
+    for aborted in [false, true] {
+        let delivered = omp_dialog_hook_sequence(aborted);
+        let order: Vec<Value> = delivered
+            .iter()
+            .map(|payload| json!([payload["hook_event_name"], payload["tool_use_id"]]))
+            .collect();
+        assert_eq!(
+            Value::Array(order),
+            json!([
+                ["SessionStart", null],
+                ["UserPromptSubmit", null],
+                ["PreToolUse", "first"],
+                ["PermissionRequest", "first"],
+                ["post_approval_response", "first"],
+                ["SubagentStart", "second"],
+                ["PreToolUse", "third"],
+                ["PermissionRequest", "second"],
+                ["post_approval_response", "second"],
+                ["PostToolUse", "first"],
+                ["PreToolUse", "unrestricted"],
+                ["PostToolUse", "unrestricted"],
+                ["PermissionRequest", "third"],
+                ["post_approval_response", "third"],
+                ["SubagentStop", "second"],
+                ["PostToolUse", "third"],
+                [if aborted { "Interrupt" } else { "Stop" }, null],
+            ]),
+            "aborted: {aborted}"
+        );
+    }
+}
+
+/// Execute the generated extension once; the server tests replay these received payloads too.
+#[cfg(unix)]
+pub(crate) fn omp_dialog_hook_sequence(aborted: bool) -> Vec<Value> {
     let temp = tempfile::tempdir().expect("tempdir");
     let notify = temp.path().join("notify");
     write_test_file(
@@ -343,7 +378,7 @@ if (event === "PreToolUse" || event === "SubagentStart") {
 }
 appendFileSync(
   process.env.GHOSTEX_HOOK_ORDER_FILE,
-  JSON.stringify([event, payload.tool_use_id ?? null]) + "\n",
+  JSON.stringify(payload) + "\n",
 );
 "#,
     );
@@ -371,23 +406,7 @@ const emit = async (name, event = {}) => {
   assert(handlers.has(name), `missing handler: ${name}`);
   await handlers.get(name)(event, ctx);
 };
-const expected = [
-  ["SessionStart", null],
-  ["UserPromptSubmit", null],
-  ["PreToolUse", "first"],
-  ["PermissionRequest", "first"],
-  ["SubagentStart", "second"],
-  ["post_approval_response", "first"],
-  ["PermissionRequest", "second"],
-  ["PostToolUse", "first"],
-  ["post_approval_response", "second"],
-  ["SubagentStop", "second"],
-  ["PreToolUse", "third"],
-  ["PermissionRequest", "third"],
-  ["post_approval_response", "third"],
-  ["PostToolUse", "third"],
-  ["Stop", null],
-];
+const count = 17;
 const watchdog = setTimeout(() => {
   console.error("hook delivery timed out or an event handler waited for a hook process");
   process.exit(1);
@@ -397,35 +416,38 @@ try {
   await emit("before_agent_start", { prompt: "Check hook order" });
   const first = { toolCallId: "first", toolName: "bash", input: { command: "true" } };
   const second = { toolCallId: "second", toolName: "Task", input: { task: "Check" } };
-  await emit("tool_call", first);
-  await emit("tool_call", second);
+  const third = { toolCallId: "third", toolName: "bash", input: { command: "true" } };
+  for (const call of [first, second, third]) await emit("tool_call", call);
   await emit("tool_execution_start", first);
   await emit("tool_approval_requested", first);
   await emit("tool_execution_start", second);
   await emit("tool_approval_requested", second);
-  await emit("tool_approval_resolved", first);
-  await emit("tool_execution_end", first);
-  await emit("tool_approval_resolved", second);
-  await emit("tool_execution_end", second);
-  const third = { toolCallId: "third", toolName: "bash", input: { command: "true" } };
-  await emit("tool_call", third);
   await emit("tool_execution_start", third);
   await emit("tool_approval_requested", third);
-  await emit("tool_approval_resolved", third);
+  const aborted = process.env.GHOSTEX_TEST_ABORT === "1";
+  const answer = (call) => ({ ...call, approved: !aborted, reason: aborted ? "dialog aborted" : undefined });
+  await emit("tool_approval_resolved", answer(first));
+  // The first approved call finishes while the second dialog is already open.
+  await emit("tool_execution_end", first);
+  const unrestricted = { toolCallId: "unrestricted", toolName: "bash" };
+  await emit("tool_execution_start", unrestricted);
+  await emit("tool_execution_end", unrestricted);
+  await emit("tool_approval_resolved", answer(second));
+  await emit("tool_execution_end", second);
+  await emit("tool_approval_resolved", answer(third));
   await emit("tool_execution_end", third);
-  await emit("agent_end", { messages: [] });
+  await emit("agent_end", { messages: aborted ? [{ role: "assistant", stopReason: "aborted" }] : [] });
   // A hook cannot complete a start until every handler above has returned.
   writeFileSync(process.env.GHOSTEX_HOOK_RELEASE_FILE, "");
   let received = [];
-  while (received.length < expected.length) {
+  while (received.length < count) {
     await Bun.sleep(5);
     if (existsSync(process.env.GHOSTEX_HOOK_ORDER_FILE)) {
       received = readFileSync(process.env.GHOSTEX_HOOK_ORDER_FILE, "utf8")
         .trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
     }
   }
-  console.log(JSON.stringify({ expected, received }, null, 2));
-  assert.deepEqual(received, expected);
+  console.log(JSON.stringify(received));
 } finally {
   clearTimeout(watchdog);
 }
@@ -437,6 +459,7 @@ try {
         .env_remove("GHOSTEX_OMP_HOOKS_DISABLED")
         .env("GHOSTEX_HOOK_ORDER_FILE", temp.path().join("order.jsonl"))
         .env("GHOSTEX_HOOK_RELEASE_FILE", temp.path().join("release"))
+        .env("GHOSTEX_TEST_ABORT", if aborted { "1" } else { "0" })
         .output()
         .expect("run generated extension with bun");
     println!("{}", String::from_utf8_lossy(&output.stdout));
@@ -445,6 +468,7 @@ try {
         "generated extension failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    serde_json::from_slice(&output.stdout).expect("received hook payloads")
 }
 
 #[test]

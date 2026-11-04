@@ -24,7 +24,7 @@ pub mod statusline;
 #[cfg(windows)]
 mod statusline_launch_windows;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 #[cfg(windows)]
 pub(crate) mod windows;
 #[cfg(any(windows, test))]

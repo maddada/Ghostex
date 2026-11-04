@@ -659,6 +659,17 @@ fn to_mobile_custom_session_tags(tags_state: Option<&Value>) -> Option<Value> {
     }))
 }
 
+/// Exercise both CLI whitelists on the same presentation row the session inventory consumes.
+#[cfg(test)]
+pub(crate) fn mobile_summary_for_session(
+    session: &Value,
+    project: &Value,
+    presentation: &Value,
+) -> Value {
+    let cli = super::to_cli_session(session, Some(project), 0, Some(presentation), Some(0));
+    to_mobile_session_list(&json!({ "sessions": [cli] }), &Map::new())["sessions"][0].clone()
+}
+
 fn to_mobile_session_summary(session: &Value) -> Value {
     let s = |key: &str| session.get(key);
     let mut map = Map::new();

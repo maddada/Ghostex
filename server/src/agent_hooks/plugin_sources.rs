@@ -841,15 +841,24 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
   // dialog at a time in that order. Claude's PermissionRequest comes per dialog it shows, so one is
   // sent for the dialog OMP shows, with the call's complete input from its `tool_call` event; the
   // dialog's answer goes out as `post_approval_response` (the answer event gxserver maps to working)
-  // and only after that hook ran the next dialog's request, so each dialog is a wait of its own.
+  // and only after that hook and the hooks held during the dialog ran, the next dialog's request,
+  // so another call's start or end cannot overwrite a dialog's wait.
   const callInputs = new Map<string, unknown>();
   let approvals: { id: string; toolName: string | null }[] = [];
-  // All hooks share the approval chain so a delayed start cannot overwrite its approval wait
-  // and a delayed tool end cannot overwrite the turn's stop. Handlers only enqueue, never wait.
+  // All hooks use one process-exit chain. While its FIFO head awaits an answer, only approval
+  // hooks may enter the chain; other hooks keep their captured input and event order until the
+  // answer. Handlers only enqueue, never wait on a hook process.
   let hooks: Promise<void> = Promise.resolve();
+  const heldHooks: (() => Promise<void>)[] = [];
   const sendHook = (event: string, ctx: ExtensionContext, extra: Record<string, unknown> = {}) => {
     const invocation = hookInvocation(event, ctx, extra);
-    if (invocation) hooks = hooks.then(() => deliverHook(invocation));
+    if (!invocation) return;
+    const deliver = () => deliverHook(invocation);
+    if (approvals.length > 0 && event !== "PermissionRequest" && event !== "post_approval_response") {
+      heldHooks.push(deliver);
+    } else {
+      hooks = hooks.then(deliver);
+    }
   };
   const requestShownApproval = (ctx: ExtensionContext) => {
     const shown = approvals[0];
@@ -948,6 +957,8 @@ export default function ghostexOmpSessionExtension(api: ExtensionAPI) {
     approvals = approvals.filter((approval) => approval.id !== id);
     if (!shown) return;
     sendHook("post_approval_response", ctx, { tool_use_id: id });
+    for (const deliver of heldHooks) hooks = hooks.then(deliver);
+    heldHooks.length = 0;
     requestShownApproval(ctx);
   });
 
