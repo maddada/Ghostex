@@ -121,9 +121,8 @@ fn gws_signed_in(paths: &GxserverPaths, workspace: &str) -> bool {
 /// Whether the workspace has its own sign-in for the tool.
 pub(crate) fn signed_in(paths: &GxserverPaths, workspace: &str, tool: CliTool) -> bool {
     match tool {
-        CliTool::Gh => gh_hosts(paths, workspace).is_some_and(|hosts| {
-            github_account(&hosts).is_some() && github_has_file_token(&hosts)
-        }),
+        CliTool::Gh => gh_hosts(paths, workspace)
+            .is_some_and(|hosts| github_account(&hosts).is_some() && github_has_file_token(&hosts)),
         CliTool::Gws => gws_signed_in(paths, workspace),
     }
 }
