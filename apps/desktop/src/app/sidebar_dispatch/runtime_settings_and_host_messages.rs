@@ -251,10 +251,35 @@ impl GhostexGpuiApp {
             return false;
         }
 
+        /*
+        CDXC:Extensions 2026-11-05 WHY:
+        The bootstrap also carries the focused and visible sessions, so every session switch
+        came through here and re-read the extension list, every project and the whole
+        presentation snapshot (about 0.9 MB on a Mac with 45 sessions), none of which follows
+        focus: with the snapshot reads behind it, most of what gxserver served the desktop
+        (measured 2026-11-05, issues-1027/macos-perf). A new connection (another gxserver, URL,
+        token or client) still refreshes at once; a focus change refreshes at most every 30
+        seconds, like the other unrelated changes (`refresh_extensions_if_stale`).
+        */
+        let connection_changed = self
+            .sidebar_gxserver_bootstrap
+            .as_ref()
+            .is_none_or(|previous| {
+                next_bootstrap.as_ref().is_none_or(|next| {
+                    previous.base_url != next.base_url
+                        || previous.auth_token != next.auth_token
+                        || previous.protocol_version != next.protocol_version
+                        || previous.client_id != next.client_id
+                })
+            });
         self.sidebar_gxserver_bootstrap = next_bootstrap;
         self.sync_gx_store_transport(cx);
         self.refresh_session_chat_runtime_endpoints(false, cx);
-        self.refresh_extensions_in_background(cx);
+        if force_replay || connection_changed {
+            self.refresh_extensions_in_background(cx);
+        } else {
+            self.refresh_extensions_if_stale(cx);
+        }
         self.reconcile_agents_pane_surfaces(cx);
         true
     }

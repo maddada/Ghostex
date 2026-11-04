@@ -740,3 +740,51 @@ async fn the_other_computers_renewals_cannot_undo_this_computers_off_switch() {
     assert!(issued["result"]["peerToken"].is_string());
     crate::connected_computers::tests::reset();
 }
+
+/// A snapshot read for named sessions (`onlySessions`, what a remote coordinator asks for its
+/// threads) holds exactly the rows the whole snapshot holds for them, and nothing else.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_snapshot_for_named_sessions_holds_their_rows_as_the_whole_snapshot_does() {
+    let (_dir, state) = temp_state("S7o");
+    let first = agent_session(&state, json!({ "activity": "working" }));
+    let second = agent_session(&state, json!({ "activity": "idle" }));
+    let third = agent_session(&state, json!({ "activity": "idle" }));
+    let read = |params: Value| {
+        let state = state.clone();
+        async move {
+            let response = route_http(
+                state.clone(),
+                rpc_request(
+                    "/api/readPresentationSnapshot",
+                    &state.auth_token,
+                    json!({ "params": params }),
+                ),
+                "snapshot".to_string(),
+            )
+            .await;
+            response_json(response.response).await["result"]["snapshot"]["sessions"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        }
+    };
+    let whole = read(json!({})).await;
+    let named = read(json!({ "onlySessions": [
+        { "projectId": first.0, "sessionId": first.1 },
+        { "projectId": third.0, "sessionId": third.1 },
+        { "projectId": "Pnone", "sessionId": "Gnone" },
+    ] }))
+    .await;
+    let row = |rows: &[Value], key: &(String, String)| {
+        rows.iter()
+            .find(|row| row["projectId"] == key.0.as_str() && row["sessionId"] == key.1.as_str())
+            .cloned()
+    };
+    assert_eq!(named.len(), 2, "{named:?}");
+    for key in [&first, &third] {
+        let expected = row(&whole, key).expect("in the whole snapshot");
+        let found = row(&named, key).expect("in the named snapshot");
+        assert_eq!(found, expected);
+    }
+    assert!(row(&named, &second).is_none());
+}

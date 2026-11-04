@@ -393,7 +393,7 @@ pub(super) async fn route_sessions_http(
             endpoint.path,
             request_id,
             &body_json,
-            |repository, db, _, server_id| {
+            |repository, db, params, server_id| {
                 /*
                 CDXC:StateSync 2026-09-01:
                 One session list feeds all three sync passes and the snapshot
@@ -408,7 +408,35 @@ pub(super) async fn route_sessions_http(
                 was pure cost. Fork families are derived inside the snapshot
                 from the narrow fork-row read over the whole registry.
                 */
-                let sessions = repository.list_presentation_sessions()?;
+                /*
+                CDXC:Coordinators 2026-11-05 WHY:
+                A coordinator with threads on another computer asks that computer every three
+                seconds how they stand (coordinator_remote_runtime.rs), and the whole snapshot it
+                got back (every project and session, built for it alone) was most of the snapshot
+                reads a Mac served while a Windows coordinator had a thread on it (measured
+                2026-11-05, issues-1027/macos-perf). `onlySessions` names the sessions wanted: the
+                rows are read by key with the same scope as the full list, and the snapshot holds
+                only them. A gxserver from before this ignores it and sends the whole snapshot,
+                which the asker searches the same way.
+                */
+                let only_sessions: Option<Vec<(String, String)>> = params
+                    .get("onlySessions")
+                    .and_then(Value::as_array)
+                    .map(|keys| {
+                        keys.iter()
+                            .filter_map(|key| {
+                                Some((
+                                    key.get("projectId")?.as_str()?.to_string(),
+                                    key.get("sessionId")?.as_str()?.to_string(),
+                                ))
+                            })
+                            .collect()
+                    });
+                let list = || match &only_sessions {
+                    Some(keys) => repository.list_presentation_sessions_for(keys),
+                    None => repository.list_presentation_sessions(),
+                };
+                let sessions = list()?;
                 /*
                 CDXC:StateSync 2026-09-18 WHY:
                 Every client read ran the three repair passes, and the desktop
@@ -438,11 +466,7 @@ pub(super) async fn route_sessions_http(
                         "read-presentation-snapshot",
                     )?;
                 }
-                let sessions = if sessions_changed {
-                    repository.list_presentation_sessions()?
-                } else {
-                    sessions
-                };
+                let sessions = if sessions_changed { list()? } else { sessions };
                 read_presentation_snapshot_in_sequence(&state, db, server_id, sessions)
                     .map(|snapshot| json!({ "snapshot": snapshot }))
             },

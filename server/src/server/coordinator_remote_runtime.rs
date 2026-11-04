@@ -257,9 +257,19 @@ pub(super) fn tick(
         // its threads keep their state until it is back.
         let computer =
             crate::connected_computers::find(&server_id).filter(|computer| computer.agent_access);
-        let snapshot = computer
-            .as_ref()
-            .and_then(|computer| remote_rpc(computer, "/api/readPresentationSnapshot", json!({})));
+        // Only this computer's threads (`onlySessions`, route_http/sessions.rs); an older gxserver
+        // sends its whole snapshot, which is searched the same way.
+        let only_sessions: Vec<Value> = threads
+            .iter()
+            .map(|thread| json!({ "projectId": thread.project_id, "sessionId": thread.session_id }))
+            .collect();
+        let snapshot = computer.as_ref().and_then(|computer| {
+            remote_rpc(
+                computer,
+                "/api/readPresentationSnapshot",
+                json!({ "onlySessions": only_sessions }),
+            )
+        });
         let (Some(computer), Some(snapshot)) = (computer, snapshot) else {
             for thread in &threads {
                 if record_remote_thread_progress(

@@ -771,6 +771,39 @@ impl<'a> DomainRepository<'a> {
             .collect()
     }
 
+    /// `list_presentation_sessions` narrowed to `keys` (project id, session id): the same rows the
+    /// full list holds for those sessions, read by key instead of listing the whole registry.
+    pub fn list_presentation_sessions_for(
+        &self,
+        keys: &[(String, String)],
+    ) -> DomainResult<Vec<Value>> {
+        let mut statement = self
+            .db
+            .prepare_cached(
+                r#"
+                SELECT * FROM sessions
+                WHERE projectId = ?1 AND sessionId = ?2
+                  AND (lifecycleState IN ('running', 'sleeping', 'missing', 'unknown')
+                    OR (lifecycleState = 'stopped'
+                      AND (isPinned = 1 OR isParked = 1 OR isFavorite = 1
+                        OR (sessionTag IS NOT NULL AND sessionTag <> ''))))
+                "#,
+            )
+            .map_err(sql_error)?;
+        let mut sessions = Vec::with_capacity(keys.len());
+        for (project_id, session_id) in keys {
+            let rows = statement
+                .query_map([project_id, session_id], session_row_from_sql)
+                .map_err(sql_error)?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(sql_error)?;
+            for row in rows {
+                sessions.push(session_from_row(&self.server_id, row)?);
+            }
+        }
+        Ok(sessions)
+    }
+
     /// `list_sessions` narrowed to rows that are not durably `stopped`, i.e.
     /// `running`, `sleeping`, `missing`, and `unknown`.
     ///

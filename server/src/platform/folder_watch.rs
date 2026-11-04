@@ -46,7 +46,18 @@ struct Entry<V> {
     watch: Option<FolderWatch>,
     answer: Option<V>,
     used: Instant,
+    /// When the answer was read, for a folder in no repository (`OUTSIDE_REPOSITORY_FOR`).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    outside_repository_read: Option<Instant>,
+    outside_repository: bool,
 }
+
+/// How long the answer for a folder in no repository is kept (macOS).
+///
+/// CDXC:Git 2026-11-05 WHY:
+/// A project in no repository answered "not a repository" with two git starts (`diff`, then `rev-parse`) on every header poll, because a folder outside a repository has no Git folders to watch (measured 2026-11-05 on macOS, issues-1027/macos-perf). macOS watches the folder itself, which sees a `git init` in it; a repository created in a folder above it is not seen there, so the answer is also read again after this long.
+#[cfg(target_os = "macos")]
+const OUTSIDE_REPOSITORY_FOR: Duration = Duration::from_secs(5 * 60);
 
 impl<V: Clone> ChangeGatedCache<V> {
     pub(crate) fn new() -> Self {
@@ -60,14 +71,38 @@ impl<V: Clone> ChangeGatedCache<V> {
         let mut entries = self.entries.lock().ok()?;
         let now = Instant::now();
         entries.retain(|_, entry| now.duration_since(entry.used) < UNUSED_FOR);
-        let entry = entries.entry(key.to_string()).or_insert_with(|| Entry {
-            watch: FolderWatch::new(&watched_folders(project, git)),
-            answer: None,
-            used: now,
+        let entry = entries.entry(key.to_string()).or_insert_with(|| {
+            let folders = watched_folders(project, git);
+            // macOS watches a folder in no repository too (`OUTSIDE_REPOSITORY_FOR`).
+            #[cfg(target_os = "macos")]
+            if folders.is_empty() && project.is_dir() {
+                return Entry {
+                    watch: FolderWatch::new(&[project.to_path_buf()]),
+                    answer: None,
+                    used: now,
+                    outside_repository_read: None,
+                    outside_repository: true,
+                };
+            }
+            Entry {
+                watch: FolderWatch::new(&folders),
+                answer: None,
+                used: now,
+                outside_repository_read: None,
+                outside_repository: false,
+            }
         });
         entry.used = now;
         let watch = entry.watch.as_ref()?;
         if watch.take_changed() {
+            entry.answer = None;
+        }
+        #[cfg(target_os = "macos")]
+        if entry.outside_repository
+            && entry
+                .outside_repository_read
+                .is_none_or(|read| now.duration_since(read) >= OUTSIDE_REPOSITORY_FOR)
+        {
             entry.answer = None;
         }
         entry.answer.clone()
@@ -79,6 +114,9 @@ impl<V: Clone> ChangeGatedCache<V> {
             if let Some(entry) = entries.get_mut(key) {
                 if entry.watch.is_some() {
                     entry.answer = Some(answer);
+                    if entry.outside_repository {
+                        entry.outside_repository_read = Some(Instant::now());
+                    }
                 }
             }
         }
@@ -278,7 +316,20 @@ mod tests {
         if watched_folders(&plain, GitFolders::WorkTree).is_empty() {
             assert_eq!(cache.unchanged("p", &plain, GitFolders::WorkTree), None);
             cache.remember("p", 1);
+            // Windows reads a folder in no repository every time; macOS watches the folder itself.
+            #[cfg(windows)]
             assert_eq!(cache.unchanged("p", &plain, GitFolders::WorkTree), None);
+            #[cfg(target_os = "macos")]
+            {
+                assert_eq!(cache.unchanged("p", &plain, GitFolders::WorkTree), Some(1));
+                // `git init` there is a change.
+                std::fs::create_dir(plain.join(".git")).unwrap();
+                let dropped = (0..100).any(|_| {
+                    std::thread::sleep(Duration::from_millis(20));
+                    cache.unchanged("p", &plain, GitFolders::WorkTree).is_none()
+                });
+                assert!(dropped);
+            }
         }
     }
 
