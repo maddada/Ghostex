@@ -63,7 +63,7 @@ pub(crate) async fn session_agent_process_running(zmx_name: &str, home_dir: &Pat
 pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<String> {
     #[cfg(test)]
     if let Some(screen) = test_terminal::capture(zmx_name) {
-        return Some(screen);
+        return screen;
     }
     let zmx_name = zmx_name.to_string();
     let capture =
@@ -77,7 +77,7 @@ pub(crate) async fn capture_session_terminal_text(zmx_name: &str) -> Option<Stri
 pub(crate) async fn capture_session_terminal_text_vt(zmx_name: &str) -> Option<String> {
     #[cfg(test)]
     if let Some(screen) = test_terminal::capture(zmx_name) {
-        return Some(screen);
+        return screen;
     }
     let name = zmx_name.to_string();
     let capture =
