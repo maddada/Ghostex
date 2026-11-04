@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use super::model::{UnifiedShelfView, UnifiedSidebarSnapshot};
 use crate::GhostexGpuiApp;
+use crate::app::helpers::chrome_ink;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
 
 impl GhostexGpuiApp {
@@ -43,14 +44,31 @@ impl GhostexGpuiApp {
             shelf: ghostex_gx_core::unified_sidebar::UnifiedShelf::Drafts,
             cards: unified.drafts.clone(),
         });
+        let sessions_below = !unified.groups.is_empty()
+            || !unified.list.is_empty()
+            || !unified.shelves.is_empty();
         v_flex()
             .w_full()
             .children(empty)
             .children(drafts.map(|drafts| {
+                // CDXC:Sidebar 2026-11-05 DECISION: User: "put a separator line below drafts area in unified sidebar so it's diffrentiated from othrr sessions". A hairline in the sidebar's divider ink (the Links panel's rule, which follows dark and light and glass), inset to the shelf header's text and evenly spaced above and below, stands where the 10px gap was; with nothing below Drafts it stays a plain gap, so no rule dangles.
                 v_flex()
                     .w_full()
                     .child(self.render_native_unified_shelf(&drafts, None, hud, appearance, cx))
-                    .child(div().h(px(10.0 * scale)))
+                    .child(if sessions_below {
+                        v_flex()
+                            .w_full()
+                            .py(px(6.0 * scale))
+                            .child(
+                                div()
+                                    .mx(px(9.0 * scale))
+                                    .h(px(1.0 * scale))
+                                    .bg(chrome_ink().opacity(0.12)),
+                            )
+                            .into_any_element()
+                    } else {
+                        div().h(px(10.0 * scale)).into_any_element()
+                    })
             }))
             .children(
                 unified
