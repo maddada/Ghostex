@@ -13,10 +13,11 @@ use gpui::prelude::*;
 use gpui::{
     AnyElement, App, Context, Entity, FocusHandle, Focusable as _, KeyDownEvent, MouseButton,
     SharedString, Subscription, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds,
-    WindowKind, WindowOptions, div, px, rgb, rgba,
+    WindowKind, WindowOptions, div, px, rgb,
 };
 use gpui_component::input::{Input, InputEvent, InputState};
 
+use super::glass::{PanelPalette, panel_background_appearance};
 use super::machine_sections::{MachineSection, PanelMachine, split_by_machine};
 use super::model::*;
 use super::persistence;
@@ -235,11 +236,16 @@ impl GhostexGpuiApp {
                     is_minimizable: false,
                     app_id: crate::gpui_platform_window_app_id(),
                     icon: crate::gpui_platform_window_icon(),
-                    window_background: WindowBackgroundAppearance::Transparent,
+                    window_background: panel_background_appearance(),
                     ..Default::default()
                 },
                 move |window, cx| {
-                    crate::app::window::popup_frame::round_popup_window(window, px(14.0), false);
+                    // The panel closes once it loses focus, so changing the Glass settings (in
+                    // Settings) always reopens it with the new ones.
+                    let glass =
+                        panel_background_appearance() == WindowBackgroundAppearance::Blurred;
+                    crate::app::window::popup_frame::round_popup_window(window, px(14.0), glass);
+                    crate::app::helpers::apply_frosted_menu_blur(window);
                     let focus = cx.focus_handle();
                     let filter = cx.new(|cx| {
                         InputState::new(window, cx).placeholder("Filter projects and sessions")
@@ -429,17 +435,17 @@ impl CapturePanelView {
     }
 }
 
-fn status_dot(session: &PanelSession) -> AnyElement {
-    let (color, square) = if session.question {
-        (0xf472b6, false)
+fn status_dot(session: &PanelSession, palette: &PanelPalette) -> AnyElement {
+    let (color, square): (gpui::Hsla, bool) = if session.question {
+        (rgb(0xf472b6).into(), false)
     } else {
         match session.status {
-            GpuiStatusIndicatorStatus::Working => (0xc68a06, true),
-            GpuiStatusIndicatorStatus::Attention => (0x0093fe, false),
-            GpuiStatusIndicatorStatus::Available => (0xd9d9d9, false),
+            GpuiStatusIndicatorStatus::Working => (rgb(0xc68a06).into(), true),
+            GpuiStatusIndicatorStatus::Attention => (rgb(0x0093fe).into(), false),
+            GpuiStatusIndicatorStatus::Available => (palette.idle_dot, false),
         }
     };
-    let dot = div().flex_none().bg(rgb(color));
+    let dot = div().flex_none().bg(color);
     if square {
         dot.size(px(8.0)).rounded(px(1.0)).into_any_element()
     } else {
@@ -454,6 +460,7 @@ fn project_header(
     title: &str,
     sessions: &[PanelSession],
     open: bool,
+    palette: &PanelPalette,
 ) -> gpui::Stateful<gpui::Div> {
     let question = sessions.iter().filter(|session| session.question).count();
     let count = |status: GpuiStatusIndicatorStatus| {
@@ -475,7 +482,7 @@ fn project_header(
         .items_center()
         .gap(px(8.0))
         .rounded(px(8.0))
-        .hover(|style| style.bg(rgb(0x202020)))
+        .hover(|style| style.bg(palette.row_hover))
         .cursor_pointer()
         .child(
             gpui::svg()
@@ -485,7 +492,7 @@ fn project_header(
                     "titlebar/chevron-right.svg"
                 })
                 .size(px(12.0))
-                .text_color(rgb(0x9a9a9a)),
+                .text_color(palette.muted),
         )
         .child(
             div()
@@ -496,7 +503,7 @@ fn project_header(
                 .text_ellipsis()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(0xcfd2d8))
+                .text_color(palette.title)
                 .child(SharedString::from(title.to_string())),
         )
         .children(
@@ -514,7 +521,7 @@ fn project_header(
         .child(
             div()
                 .text_size(px(11.5))
-                .text_color(rgb(0x6b6b6b))
+                .text_color(palette.faint)
                 .child(sessions.len().to_string()),
         )
 }
@@ -526,6 +533,7 @@ fn machine_header(
     machine: &PanelMachine,
     projects: &[PanelProject],
     open: bool,
+    palette: &PanelPalette,
 ) -> gpui::Stateful<gpui::Div> {
     let sessions: Vec<&PanelSession> = projects
         .iter()
@@ -543,6 +551,7 @@ fn machine_header(
         (question, 0xf472b6),
         (count(GpuiStatusIndicatorStatus::Working), 0xc68a06),
     ];
+    let palette = *palette;
     let row = div()
         .id(SharedString::from(format!(
             "ghostex-capture-machine-{}",
@@ -554,7 +563,7 @@ fn machine_header(
         .items_center()
         .gap(px(8.0))
         .rounded(px(8.0))
-        .hover(|style| style.bg(rgb(0x202020)))
+        .hover(|style| style.bg(palette.row_hover))
         .cursor_pointer()
         .child(
             gpui::svg()
@@ -564,19 +573,19 @@ fn machine_header(
                     "titlebar/chevron-right.svg"
                 })
                 .size(px(12.0))
-                .text_color(rgb(0x9a9a9a)),
+                .text_color(palette.muted),
         )
         .child(
             gpui::svg()
                 .path("titlebar/cloud.svg")
                 .size(px(13.0))
-                .text_color(rgb(if machine.failed {
-                    0xe5767a
+                .text_color(if machine.failed {
+                    rgb(0xe5767a).into()
                 } else if machine.connected {
-                    0x9a9a9a
+                    palette.muted
                 } else {
-                    0x6b6b6b
-                })),
+                    palette.faint
+                }),
         )
         .child(
             div()
@@ -587,11 +596,11 @@ fn machine_header(
                 .text_ellipsis()
                 .text_size(px(12.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(if machine.connected {
-                    0xcfd2d8
+                .text_color(if machine.connected {
+                    palette.title
                 } else {
-                    0x8a8a8a
-                }))
+                    palette.offline
+                })
                 .child(SharedString::from(machine.name.clone())),
         );
     if !machine.connected {
@@ -600,7 +609,7 @@ fn machine_header(
                 .flex_none()
                 .whitespace_nowrap()
                 .text_size(px(11.5))
-                .text_color(rgb(0x6b6b6b))
+                .text_color(palette.faint)
                 .child(SharedString::from(machine.status.clone())),
         );
     }
@@ -619,13 +628,13 @@ fn machine_header(
     .child(
         div()
             .text_size(px(11.5))
-            .text_color(rgb(0x6b6b6b))
+            .text_color(palette.faint)
             .child(sessions.len().to_string()),
     )
 }
 
 /// A quiet line inside a machine's section.
-fn machine_note(text: String) -> AnyElement {
+fn machine_note(text: String, palette: &PanelPalette) -> AnyElement {
     div()
         .min_h(px(SESSION_ROW_HEIGHT))
         .px(px(12.0))
@@ -633,7 +642,7 @@ fn machine_note(text: String) -> AnyElement {
         .flex()
         .items_center()
         .text_size(px(12.0))
-        .text_color(rgb(0x6b6b6b))
+        .text_color(palette.faint)
         .child(SharedString::from(text))
         .into_any_element()
 }
@@ -643,7 +652,9 @@ fn action_button(
     label: &'static str,
     key: &'static str,
     icon: &'static str,
+    palette: &PanelPalette,
 ) -> gpui::Stateful<gpui::Div> {
+    let palette = *palette;
     div()
         .id(id)
         // Equal shares of the row, whatever the label: a long label wraps instead of pushing the
@@ -659,22 +670,26 @@ fn action_button(
         .h(px(ACTIONS_HEIGHT))
         .px(px(4.0))
         .rounded(px(9.0))
-        .bg(rgb(0x1d1d1d))
+        .bg(palette.tile)
         .border_1()
-        .border_color(rgba(0xffffff14))
-        .hover(|style| style.bg(rgb(0x232323)).border_color(rgba(0xffffff29)))
+        .border_color(palette.tile_edge)
+        .hover(move |style| {
+            style
+                .bg(palette.tile_hover)
+                .border_color(palette.tile_edge_hover)
+        })
         .cursor_pointer()
         .child(
             gpui::svg()
                 .path(icon)
                 .size(px(22.0))
-                .text_color(rgb(0xb4b8c0)),
+                .text_color(palette.body),
         )
         .child(
             div()
                 .w_full()
                 .text_size(px(11.5))
-                .text_color(rgb(0xe8e8e8))
+                .text_color(palette.strong)
                 .text_center()
                 .line_height(px(14.0))
                 .child(label),
@@ -683,17 +698,22 @@ fn action_button(
             div()
                 .text_size(px(10.0))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(0xe8e8e8))
+                .text_color(palette.strong)
                 .px(px(5.0))
                 .rounded(px(4.0))
                 .border_1()
-                .border_color(rgba(0xffffff29))
-                .bg(rgb(0x222222))
+                .border_color(palette.key_edge)
+                .bg(palette.key)
                 .child(key),
         )
 }
 
-fn footer_button(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::Div> {
+fn footer_button(
+    id: &'static str,
+    label: &'static str,
+    palette: &PanelPalette,
+) -> gpui::Stateful<gpui::Div> {
+    let palette = *palette;
     div()
         .id(id)
         .flex_1()
@@ -702,30 +722,38 @@ fn footer_button(id: &'static str, label: &'static str) -> gpui::Stateful<gpui::
         .items_center()
         .justify_center()
         .rounded(px(7.0))
+        .bg(palette.button)
         .border_1()
-        .border_color(rgba(0xffffff14))
+        .border_color(palette.button_edge)
         .text_size(px(12.0))
-        .text_color(rgb(0x9a9a9a))
-        .hover(|style| style.bg(rgb(0x202020)).text_color(rgb(0xe8e8e8)))
+        .text_color(palette.muted)
+        .hover(move |style| style.bg(palette.button_hover).text_color(palette.strong))
         .cursor_pointer()
         .child(label)
 }
 
-fn separator() -> impl IntoElement {
+fn separator(palette: &PanelPalette) -> impl IntoElement {
     div()
         .h(px(SEPARATOR_HEIGHT))
         .flex()
         .items_center()
-        .child(div().h(px(1.0)).w_full().bg(rgba(0xffffff14)))
+        .child(div().h(px(1.0)).w_full().bg(palette.hairline))
 }
 
 impl CapturePanelView {
-    fn render_actions(&self, has_draft: bool, cx: &mut Context<Self>) -> AnyElement {
+    fn render_actions(
+        &self,
+        has_draft: bool,
+        palette: &PanelPalette,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let accent = *palette;
         let mut prompt_tile = action_button(
             "ghostex-capture-prompt",
             "Write Prompt",
             "T",
             "titlebar/message.svg",
+            palette,
         )
         .relative()
         .on_click(cx.listener(|this, _, _, cx| this.run(CaptureAction::Prompt, cx)));
@@ -741,12 +769,12 @@ impl CapturePanelView {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .bg(rgb(0x2a3a44))
+                    .bg(accent.accent_fill)
                     .border_1()
-                    .border_color(rgba(0x86d3f866))
+                    .border_color(accent.accent_edge)
                     .text_size(px(12.0))
-                    .text_color(rgb(0x86d3f8))
-                    .hover(|style| style.bg(rgb(0x33495a)))
+                    .text_color(accent.accent)
+                    .hover(move |style| style.bg(accent.accent_fill_hover))
                     .cursor_pointer()
                     .tooltip(|window, cx| {
                         super::tooltip::solid_tooltip("Continue your draft", window, cx)
@@ -767,6 +795,7 @@ impl CapturePanelView {
                     "Capture Area",
                     "A",
                     "capture/area.svg",
+                    palette,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.run(CaptureAction::Area, cx))),
             )
@@ -776,6 +805,7 @@ impl CapturePanelView {
                     "Capture App",
                     "Space",
                     "capture/app-window.svg",
+                    palette,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.run(CaptureAction::CurrentApp, cx))),
             )
@@ -785,6 +815,7 @@ impl CapturePanelView {
                     "Capture Screen",
                     "F",
                     "titlebar/device-desktop.svg",
+                    palette,
                 )
                 .on_click(cx.listener(|this, _, _, cx| this.run(CaptureAction::FullScreen, cx))),
             )
@@ -796,8 +827,10 @@ impl CapturePanelView {
         &self,
         project_id: String,
         session: PanelSession,
+        palette: &PanelPalette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let hover = palette.row_hover;
         let session_id = session.session_id.clone();
         div()
             .id(SharedString::from(format!(
@@ -809,9 +842,9 @@ impl CapturePanelView {
             .flex()
             .items_center()
             .gap(px(10.0))
-            .hover(|style| style.bg(rgb(0x202020)))
+            .hover(move |style| style.bg(hover))
             .cursor_pointer()
-            .child(status_dot(&session))
+            .child(status_dot(&session, palette))
             .child(
                 div()
                     .flex_1()
@@ -820,13 +853,13 @@ impl CapturePanelView {
                     .whitespace_nowrap()
                     .text_ellipsis()
                     .text_size(px(13.0))
-                    .text_color(rgb(0xb4b8c0))
+                    .text_color(palette.body)
                     .child(SharedString::from(session.title)),
             )
             .child(
                 div()
                     .text_size(px(12.0))
-                    .text_color(rgb(0x6b6b6b))
+                    .text_color(palette.faint)
                     .child(SharedString::from(session.trailing)),
             )
             .on_click(cx.listener(move |this, _, _, cx| {
@@ -845,6 +878,7 @@ impl CapturePanelView {
         rank: usize,
         project: &PanelProject,
         all: bool,
+        palette: &PanelPalette,
         cx: &mut Context<Self>,
     ) -> Option<gpui::Div> {
         let titles: Vec<&str> = project
@@ -870,6 +904,7 @@ impl CapturePanelView {
             &project.title,
             &project.sessions,
             open.is_some(),
+            palette,
         )
         .on_click(cx.listener(move |this, _, window, cx| {
             if this.list.toggle(rank, &project_id) {
@@ -883,14 +918,15 @@ impl CapturePanelView {
             .flex_col()
             .rounded(px(8.0))
             .border_1()
-            .border_color(rgba(0x3a3a3ab8))
-            .bg(rgb(0x161616))
+            .border_color(palette.card_edge)
+            .bg(palette.card)
             .child(header);
         for index in open.unwrap_or_default() {
             if let Some(session) = project.sessions.get(index) {
                 card = card.child(self.render_session_row(
                     project.project_id.clone(),
                     session.clone(),
+                    palette,
                     cx,
                 ));
             }
@@ -904,15 +940,17 @@ impl CapturePanelView {
         &self,
         section: MachineSection,
         first_rank: usize,
+        palette: &PanelPalette,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
+        let button = *palette;
         let MachineSection { machine, projects } = section;
         let filtering = self.list.filtering();
         let cards: Vec<gpui::Div> = projects
             .iter()
             .enumerate()
             .filter_map(|(index, project)| {
-                self.render_project_card(first_rank + index, project, false, cx)
+                self.render_project_card(first_rank + index, project, false, palette, cx)
             })
             .collect();
         let shown = self.list.machine_shown(
@@ -928,7 +966,7 @@ impl CapturePanelView {
         };
         let machine_id = machine.machine_id.clone();
         let connected = machine.connected;
-        let mut header = machine_header(&machine, &projects, open).on_click(cx.listener(
+        let mut header = machine_header(&machine, &projects, open, palette).on_click(cx.listener(
             move |this, _, window, cx| {
                 if this.list.toggle_machine(&machine_id, connected) {
                     this.filter
@@ -951,11 +989,12 @@ impl CapturePanelView {
                     .flex()
                     .items_center()
                     .rounded(px(6.0))
+                    .bg(button.button)
                     .border_1()
-                    .border_color(rgba(0xffffff1f))
+                    .border_color(button.button_edge)
                     .text_size(px(11.0))
-                    .text_color(rgb(0xb4b8c0))
-                    .hover(|style| style.bg(rgb(0x262626)).text_color(rgb(0xe8e8e8)))
+                    .text_color(button.body)
+                    .hover(move |style| style.bg(button.button_hover).text_color(button.strong))
                     .cursor_pointer()
                     .child(if machine.failed {
                         "Reconnect"
@@ -981,14 +1020,14 @@ impl CapturePanelView {
                 None if machine.busy => "Its running agents show once it connects.".to_string(),
                 None => "Connect to see its running agents.".to_string(),
             };
-            return Some(column.child(machine_note(note)).into_any_element());
+            return Some(column.child(machine_note(note, palette)).into_any_element());
         }
         if name_matched {
             let all: Vec<gpui::Div> = projects
                 .iter()
                 .enumerate()
                 .filter_map(|(index, project)| {
-                    self.render_project_card(first_rank + index, project, true, cx)
+                    self.render_project_card(first_rank + index, project, true, palette, cx)
                 })
                 .collect();
             column = column.children(all);
@@ -996,7 +1035,7 @@ impl CapturePanelView {
             column = column.children(cards);
         }
         if projects.is_empty() {
-            column = column.child(machine_note("No running agents".to_string()));
+            column = column.child(machine_note("No running agents".to_string(), palette));
         }
         Some(column.into_any_element())
     }
@@ -1005,6 +1044,7 @@ impl CapturePanelView {
         &self,
         projects: Vec<PanelProject>,
         machines: Vec<PanelMachine>,
+        palette: &PanelPalette,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let (local, sections) = split_by_machine(projects, &machines);
@@ -1012,14 +1052,16 @@ impl CapturePanelView {
         let mut items: Vec<AnyElement> = local
             .iter()
             .enumerate()
-            .filter_map(|(rank, project)| self.render_project_card(rank, project, false, cx))
+            .filter_map(|(rank, project)| {
+                self.render_project_card(rank, project, false, palette, cx)
+            })
             .map(IntoElement::into_any_element)
             .collect();
         let local_shown = !items.is_empty();
         let mut machine_items = Vec::new();
         for section in sections {
             let count = section.projects.len();
-            if let Some(element) = self.render_machine_section(section, rank, cx) {
+            if let Some(element) = self.render_machine_section(section, rank, palette, cx) {
                 machine_items.push(element);
             }
             rank += count;
@@ -1049,7 +1091,7 @@ impl CapturePanelView {
                     .items_center()
                     .justify_center()
                     .text_size(px(13.0))
-                    .text_color(rgb(0x6b6b6b))
+                    .text_color(palette.faint)
                     .child(empty)
                     .into_any_element(),
             );
@@ -1058,7 +1100,7 @@ impl CapturePanelView {
         list.children(items).into_any_element()
     }
 
-    fn render_filter(&self) -> AnyElement {
+    fn render_filter(&self, palette: &PanelPalette) -> AnyElement {
         div()
             .h(px(FILTER_HEIGHT))
             .flex()
@@ -1074,13 +1116,13 @@ impl CapturePanelView {
                     .px(px(9.0))
                     .rounded(px(7.0))
                     .border_1()
-                    .border_color(rgba(0xffffff14))
-                    .bg(rgb(0x1b1b1b))
+                    .border_color(palette.field_edge)
+                    .bg(palette.field)
                     .child(
                         gpui::svg()
                             .path("titlebar/search.svg")
                             .size(px(13.0))
-                            .text_color(rgb(0x6b6b6b)),
+                            .text_color(palette.faint),
                     )
                     .child(
                         Input::new(&self.filter)
@@ -1091,41 +1133,43 @@ impl CapturePanelView {
                             .px(px(0.0))
                             .py(px(0.0))
                             .text_size(px(12.5))
-                            .text_color(rgb(0xe8e8e8)),
+                            .text_color(palette.strong),
                     ),
             )
             .into_any_element()
     }
 
-    fn render_footer(&self, cx: &mut Context<Self>) -> AnyElement {
+    fn render_footer(&self, palette: &PanelPalette, cx: &mut Context<Self>) -> AnyElement {
         div()
             .flex()
             .gap(px(6.0))
             .child(
-                footer_button("ghostex-capture-open", "Open Ghostex").on_click(cx.listener(
-                    |this, _, _, cx| {
+                footer_button("ghostex-capture-open", "Open Ghostex", palette).on_click(
+                    cx.listener(|this, _, _, cx| {
                         this.with_app(cx, |app, cx| {
                             app.close_ghostex_capture_panel(cx);
                             app.ghostex_capture_bring_ghostex_forward(cx);
                         })
-                    },
-                )),
+                    }),
+                ),
             )
             .child(
-                footer_button("ghostex-capture-hide", "Hide button").on_click(cx.listener(
-                    |this, _, _, cx| this.with_app(cx, |app, cx| app.hide_ghostex_capture(cx)),
-                )),
+                footer_button("ghostex-capture-hide", "Hide button", palette).on_click(
+                    cx.listener(|this, _, _, cx| {
+                        this.with_app(cx, |app, cx| app.hide_ghostex_capture(cx))
+                    }),
+                ),
             )
             .child(
-                footer_button("ghostex-capture-restart", "Restart").on_click(cx.listener(
+                footer_button("ghostex-capture-restart", "Restart", palette).on_click(cx.listener(
                     |_, _, _, cx| cx.dispatch_action(&crate::app::actions::RestartGhostexGpui),
                 )),
             )
-            .child(footer_button("ghostex-capture-quit", "Quit").on_click(
-                cx.listener(|_, _, _, cx| {
-                    cx.dispatch_action(&crate::app::actions::QuitGhostexGpui)
-                }),
-            ))
+            .child(
+                footer_button("ghostex-capture-quit", "Quit", palette).on_click(cx.listener(
+                    |_, _, _, cx| cx.dispatch_action(&crate::app::actions::QuitGhostexGpui),
+                )),
+            )
             .into_any_element()
     }
 }
@@ -1144,6 +1188,7 @@ impl Render for CapturePanelView {
                 )
             })
             .unwrap_or_default();
+        let palette = PanelPalette::resolve();
         let heading = div()
             .h(px(HEADING_HEIGHT))
             .px(px(4.0))
@@ -1151,16 +1196,16 @@ impl Render for CapturePanelView {
             .items_center()
             .justify_between()
             .text_size(px(11.0))
-            .text_color(rgb(0x9a9a9a))
+            .text_color(palette.muted)
             .child("RUNNING AGENTS")
             .child(crate::app::render::window_drag_region::window_drag_region(
                 div().id("ghostex-capture-panel-drag").flex_1().h_full(),
             ))
             .child("LOCAL + REMOTE");
-        let actions = self.render_actions(has_draft, cx);
-        let filter = self.render_filter();
-        let list = self.render_list(projects, machines, cx);
-        let footer = self.render_footer(cx);
+        let actions = self.render_actions(has_draft, &palette, cx);
+        let filter = self.render_filter(&palette);
+        let list = self.render_list(projects, machines, &palette, cx);
+        let footer = self.render_footer(&palette, cx);
         div()
             .id("ghostex-capture-panel")
             .track_focus(&self.focus)
@@ -1194,15 +1239,15 @@ impl Render for CapturePanelView {
             .flex_col()
             .p(px(PANEL_PAD))
             .rounded(px(14.0))
-            .bg(rgb(0x161616))
+            .bg(palette.surface)
             .border_1()
-            .border_color(rgb(0x3a3a3a))
+            .border_color(palette.edge)
             .child(actions)
-            .child(separator())
+            .child(separator(&palette))
             .child(heading)
             .child(filter)
             .child(list)
-            .child(separator())
+            .child(separator(&palette))
             .child(footer)
     }
 }

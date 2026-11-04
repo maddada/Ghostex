@@ -12,11 +12,13 @@ use std::time::{Duration, Instant};
 
 use gpui::prelude::*;
 use gpui::{
-    App, Context, DispatchPhase, ImageSource, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, RenderImage, Subscription, WeakEntity, Window, WindowBackgroundAppearance,
-    WindowBounds, WindowKind, WindowOptions, canvas, div, img, px, rgb, rgba,
+    App, Bounds, Context, DispatchPhase, ImageSource, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, RenderImage, Subscription, WeakEntity, Window,
+    WindowBackgroundAppearance, WindowBounds, WindowKind, WindowOptions, canvas, div, img, point,
+    px, rgb, rgba,
 };
 
+use super::glass::{TrayPalette, button_glass, one_side_rounded};
 use super::model::*;
 use super::persistence;
 use super::placement::{self, Screen};
@@ -64,6 +66,10 @@ fn app_icon_image() -> Option<Arc<RenderImage>> {
 pub(crate) struct CaptureIconView {
     app: WeakEntity<GhostexGpuiApp>,
     _observe: Subscription,
+    /// The window's background and blur region as last set; the button stays up while window
+    /// glass is turned on or off and while its tray changes size (`glass.rs`).
+    background: WindowBackgroundAppearance,
+    blur_region: Vec<(Bounds<Pixels>, Pixels)>,
 }
 
 impl GhostexGpuiApp {
@@ -162,6 +168,8 @@ impl GhostexGpuiApp {
                             None => Subscription::new(|| {}),
                         },
                         app: observed.clone(),
+                        background: WindowBackgroundAppearance::Transparent,
+                        blur_region: Vec::new(),
                     })
                 },
             );
@@ -376,6 +384,34 @@ fn count_text(value: u64, color: u32, size: f32) -> gpui::Div {
 }
 
 impl CaptureIconView {
+    /// Blurs what is behind the tray or the docked tab, and only there: `region` is their shape,
+    /// or `None` when they are not frosted or not shown (an empty region would blur the whole
+    /// window, the icon's clear surroundings included).
+    fn sync_glass(&mut self, window: &mut Window, region: Option<Vec<(Bounds<Pixels>, Pixels)>>) {
+        let background = if region.is_some() {
+            WindowBackgroundAppearance::Blurred
+        } else {
+            WindowBackgroundAppearance::Transparent
+        };
+        if let Some(region) = region
+            && region != self.blur_region
+        {
+            // Set before the blur is, so the blur never covers the whole window.
+            window.set_background_blur_region(region.clone());
+            self.blur_region = region;
+        }
+        if background != self.background {
+            window.set_background_appearance(background);
+            self.background = background;
+        }
+        // The button stays up, so it follows the Menu blur slider here rather than at open
+        // (CDXC:Theming 2026-10-15 on `apply_frosted_menu_blur`).
+        #[cfg(target_os = "macos")]
+        if background == WindowBackgroundAppearance::Blurred {
+            crate::app::helpers::apply_frosted_menu_blur(window);
+        }
+    }
+
     fn with_app(
         &self,
         cx: &mut Context<Self>,
@@ -418,7 +454,7 @@ fn drag_tracker(view: WeakEntity<CaptureIconView>) -> impl IntoElement {
 }
 
 impl Render for CaptureIconView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let root = div()
             .id("ghostex-capture-button")
             .size_full()
@@ -450,12 +486,16 @@ impl Render for CaptureIconView {
             }))
             .child(drag_tracker(cx.weak_entity()));
         let Some(app) = self.app.upgrade() else {
+            self.sync_glass(window, None);
             return root;
         };
         let app = app.read(cx);
         let Some(icon) = app.ghostex_capture.icon.as_ref() else {
+            self.sync_glass(window, None);
             return root;
         };
+        let glass = button_glass();
+        let palette = TrayPalette::resolve(glass);
         let layout = icon.layout;
         let counts = app.ghostex_capture_counts();
         let active = app.ghostex_capture.panel.is_some();
@@ -469,9 +509,17 @@ impl Render for CaptureIconView {
                 .items_center()
                 .justify_center()
                 .gap(px(1.0))
-                .bg(rgba(0x0a0c10e6))
+                .bg(palette.tab_fill(glass))
                 .border_1()
-                .border_color(rgba(0xffffff26));
+                .border_color(palette.tab_edge);
+            let region = glass.then(|| {
+                one_side_rounded(
+                    Bounds::new(point(px(0.0), px(0.0)), window.viewport_size()),
+                    px(10.0),
+                    edge == DockEdge::Left,
+                )
+            });
+            self.sync_glass(window, region);
             let tab = match edge {
                 DockEdge::Right => tab.rounded_l(px(10.0)).border_r_0(),
                 DockEdge::Left => tab.rounded_r(px(10.0)).border_l_0(),
@@ -497,6 +545,23 @@ impl Render for CaptureIconView {
         let tray_left = placement::tray_on_left(layout);
         let tray_width = placement::tray_width(counts);
         let mut root = root;
+        let tray_x = if tray_left {
+            offset.x + px(TRAY_TUCK) - px(tray_width)
+        } else {
+            offset.x + px(ICON_SIZE - TRAY_TUCK)
+        };
+        // The tray is rounded on its outer side; the side tucked under the icon is square.
+        let region = (glass && tray_width > 0.0).then(|| {
+            one_side_rounded(
+                Bounds::new(
+                    point(tray_x, px(ICON_PAD)),
+                    gpui::size(px(tray_width), px(ICON_SIZE)),
+                ),
+                px(12.0),
+                !tray_left,
+            )
+        });
+        self.sync_glass(window, region);
         if tray_width > 0.0 {
             let rows = shown.len() as f32;
             let tray = div()
@@ -509,12 +574,13 @@ impl Render for CaptureIconView {
                 .justify_center()
                 .items_center()
                 .gap(px(if rows >= 3.0 { 0.0 } else { 2.0 }))
-                .bg(rgba(0x080a0ee0))
+                .left(tray_x)
+                .bg(palette.fill)
                 .border_1()
                 .border_color(if active {
-                    rgba(0x86d3f859)
+                    rgba(0x86d3f859).into()
                 } else {
-                    rgba(0xffffff1a)
+                    palette.edge
                 })
                 .children(shown.iter().map(|(value, color)| {
                     count_text(*value, *color, if rows >= 3.0 { 11.0 } else { 12.5 })
@@ -522,15 +588,9 @@ impl Render for CaptureIconView {
                         .into_any_element()
                 }));
             let tray = if tray_left {
-                tray.left(offset.x + px(TRAY_TUCK) - px(tray_width))
-                    .pr(px(TRAY_TUCK))
-                    .rounded_l(px(12.0))
-                    .border_r_0()
+                tray.pr(px(TRAY_TUCK)).rounded_l(px(12.0)).border_r_0()
             } else {
-                tray.left(offset.x + px(ICON_SIZE - TRAY_TUCK))
-                    .pl(px(TRAY_TUCK))
-                    .rounded_r(px(12.0))
-                    .border_l_0()
+                tray.pl(px(TRAY_TUCK)).rounded_r(px(12.0)).border_l_0()
             };
             root = root.child(tray);
         }

@@ -9,6 +9,7 @@
 mod capture;
 mod drafts;
 mod editor;
+mod glass;
 mod grab;
 mod hotkeys;
 mod icon_window;
