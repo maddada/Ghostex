@@ -4,7 +4,11 @@
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The phone draws the same card in apps/mobile/app/src/chat/native/transcript/PageAnswersCard.tsx; the page's own card reads Answered in visual.rs. Change them together.
 
-use super::ask_card::{answer_aside, answered_ask_head, plain_answer, receipt_row};
+use super::ask_card::{
+    RECEIPT_QUESTION_LINE, answer_aside, answered_ask_head, plain_answer, receipt_question,
+    receipt_row,
+};
+use super::link_words::LinkWords;
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use crate::app::helpers::ThrottledAnimationExt as _;
 use crate::app::native_chat::cursor::ChatCursor as _;
@@ -49,9 +53,28 @@ impl NativeChatView {
             } else {
                 vec![answer_aside(note, false, p)]
             };
+            // The question's links open on a click (`labelRuns`, gx-chat-core questions/form_links.rs).
+            let label = text(row, "label");
+            let question = if row["labelRuns"].is_array() {
+                Some(self.link_words(
+                    &format!("answers-question:{}:{index}", text(answers, "pageId")),
+                    LinkWords {
+                        plain: label,
+                        runs: &row["labelRuns"],
+                        size: 13.0,
+                        line_height: RECEIPT_QUESTION_LINE,
+                        weight: gpui::FontWeight::NORMAL,
+                        color: p.muted,
+                    },
+                    p,
+                    cx,
+                ))
+            } else {
+                receipt_question(label, p)
+            };
             body = body.child(receipt_row(
                 index + 1,
-                text(row, "label"),
+                question,
                 vec![answer],
                 below,
                 index == 0,

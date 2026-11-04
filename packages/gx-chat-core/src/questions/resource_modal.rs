@@ -452,6 +452,7 @@ pub fn project(state: &ChatState, context: &ChatContext) -> Value {
         .map(|row| row.title.clone())
         .filter(|title| !title.is_empty())
         .or_else(|| modal.form.as_ref().map(|form| form.title.clone()))
+        .map(|title| crate::questions::form_links::plain_words(&title))
         .unwrap_or_default();
     json!({
         "id": modal.id,

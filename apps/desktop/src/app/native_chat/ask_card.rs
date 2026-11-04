@@ -832,13 +832,25 @@ pub(super) fn plain_answer(words: String, p: &ChatAppearance) -> AnyElement {
 }
 
 /// The line height of an answered question in a receipt row.
-const RECEIPT_QUESTION_LINE: f32 = 19.0;
+pub(super) const RECEIPT_QUESTION_LINE: f32 = 19.0;
+
+/// A receipt row's question as plain muted text, or nothing when there is none.
+pub(super) fn receipt_question(question: String, p: &ChatAppearance) -> Option<AnyElement> {
+    (!question.is_empty()).then(|| {
+        div()
+            .text_size(px(13.0 * p.scale))
+            .line_height(px(RECEIPT_QUESTION_LINE * p.scale))
+            .text_color(p.muted)
+            .child(question)
+            .into_any_element()
+    })
+}
 
 /// One answered question in a receipt: its number, the question (muted), and under it the plain
 /// answer and whatever follows it (an option's description, a note, "Show all options").
 pub(super) fn receipt_row(
     number: usize,
-    question: String,
+    question: Option<AnyElement>,
     answer: Vec<AnyElement>,
     below: Vec<AnyElement>,
     first: bool,
@@ -868,15 +880,7 @@ pub(super) fn receipt_row(
                 .gap(px(4.0 * s))
                 // The question's first line sits centred on the tile.
                 .pt(px(question_lead * s))
-                .when(!question.is_empty(), |column| {
-                    column.child(
-                        div()
-                            .text_size(px(13.0 * s))
-                            .line_height(px(RECEIPT_QUESTION_LINE * s))
-                            .text_color(p.muted)
-                            .child(question),
-                    )
-                })
+                .when_some(question, |column, question| column.child(question))
                 .child(
                     div()
                         .flex()

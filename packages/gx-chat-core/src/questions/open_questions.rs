@@ -23,6 +23,8 @@
 //! CDXC:SessionChat 2026-10-27 DECISION:
 //! User, of the list: "we're not indicating HTML pages from normal questions here", "also please show "All" "Html" "Q&A" "Charts" as 4 selections so i can jump to previous generated content", "also i wanna see even Htmls that don't have any questions in them so i can jump back to them". Every row says what it is (`kind`: an HTML page, a Q&A form or a chart), and four filters sit over the list (`filters`, the reader's pick `filter`): All, Html (pages, with or without questions), Q&A (```questions forms) and Charts (```visual drawings: charts, stats, tables). Forms and question pages keep the Unanswered, For later, Answered and Withdrawn sections; pages that ask nothing are listed under Pages and charts under Charts, newest first. The pill's count, dot and ping stay about unanswered questions only.
 
+// A title shows a link's words, not its Markdown (`questions/form_links.rs`).
+use crate::questions::form_links::plain_words;
 use serde::{Deserialize, Serialize};
 
 use crate::effect::Effect;
@@ -422,7 +424,7 @@ fn indexed_row(entry: &ResourceEntry, status: String, context: &ChatContext) -> 
         title: if entry.title.is_empty() {
             fallback.to_string()
         } else {
-            entry.title.clone()
+            plain_words(&entry.title)
         },
         status,
         tags: entry.tags.clone(),
@@ -548,7 +550,7 @@ fn list_row(asker: &Asker, context: &ChatContext) -> QuestionListRow {
             AskerKind::Page => "Page".to_string(),
         }
     } else {
-        asker.title.clone()
+        plain_words(&asker.title)
     };
     QuestionListRow {
         id: asker.id.clone(),
@@ -584,7 +586,7 @@ fn content_row(
         title: if item.title.is_empty() {
             fallback.to_string()
         } else {
-            item.title.clone()
+            plain_words(&item.title)
         },
         status: String::new(),
         tags: Vec::new(),

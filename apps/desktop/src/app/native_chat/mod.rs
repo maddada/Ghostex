@@ -51,6 +51,7 @@ pub(crate) mod image_viewer;
 mod images;
 mod inter_agent_message;
 mod launch;
+mod link_words;
 mod menu_toggle;
 mod minimap;
 mod nested_scroll;

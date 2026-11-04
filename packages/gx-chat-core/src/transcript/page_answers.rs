@@ -13,6 +13,7 @@
 //! CDXC:SessionChat 2026-10-11 SEE-ALSO:
 //! The envelope is written by server/src/visual_pages/answers.rs; the cards are drawn by apps/desktop/src/app/native_chat/page_answers.rs and visual.rs, and on the phone by apps/mobile/app/src/chat/native/transcript/PageAnswersCard.tsx and VisualBlock.tsx. Change them together.
 
+use crate::questions::form_links::{plain_words, word_runs};
 use ghostex_gx_protocol::{ChatMessage, ChatRole};
 use serde_json::{json, Value};
 
@@ -268,12 +269,16 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
                     .filter(|note| note.as_str().is_some_and(|note| !note.trim().is_empty()));
                 let note_as_answer = unpicked.then_some(own_note).flatten();
                 let mut row = json!({
-                    "label": label,
-                    "value": match note_as_answer {
+                    "label": plain_words(&label),
+                    "value": plain_words(&match note_as_answer {
                         Some(note) => display_value(note),
                         None => display_answer(value, asked),
-                    },
+                    }),
                 });
+                // The question's links, drawn as links (`questions/form_links.rs`).
+                if let Some(runs) = word_runs(&label) {
+                    row["labelRuns"] = runs;
+                }
                 let notes: Vec<String> = fields
                     .iter()
                     .filter_map(|(note_key, note)| match note_owner(fields, note_key) {
@@ -301,8 +306,38 @@ pub fn project_page_answers(answers: &PageAnswers, form: Option<&QuestionForm>) 
     let more = rows.len().saturating_sub(MAX_ROWS);
     json!({
         "pageId": answers.page_id,
-        "title": answers.title,
+        "title": plain_words(&answers.title),
         "rows": rows.into_iter().take(MAX_ROWS).collect::<Vec<_>>(),
         "more": more,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_question_with_links_shows_their_words_and_runs() {
+        let answers = PageAnswers {
+            page_id: "f".to_string(),
+            title: "About [the picker](https://discord.com/c/1)".to_string(),
+            answers: json!({
+                "randomsand's asks ([Discord](https://discord.com/c/2)): what now?": "Fix all 4",
+                "Plain one?": "Yes",
+            }),
+        };
+        let card = project_page_answers(&answers, None);
+        assert_eq!(card["title"], "About the picker");
+        let row = &card["rows"][0];
+        assert_eq!(row["label"], "randomsand's asks (Discord): what now?");
+        assert_eq!(
+            row["labelRuns"],
+            json!([
+                {"text": "randomsand's asks ("},
+                {"text": "Discord", "href": "https://discord.com/c/2"},
+                {"text": "): what now?"},
+            ])
+        );
+        assert!(card["rows"][1].get("labelRuns").is_none());
+    }
 }

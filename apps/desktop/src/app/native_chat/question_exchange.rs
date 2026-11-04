@@ -7,8 +7,8 @@
 //! same after the fact as it did while it was being given.
 
 use super::ask_card::{
-    AskBodyMotion, AskTone, answer_aside, plain_answer, receipt_row, single_line_ask_head,
-    single_line_press_head,
+    AskBodyMotion, AskTone, answer_aside, plain_answer, receipt_question, receipt_row,
+    single_line_ask_head, single_line_press_head,
 };
 use super::{appearance::ChatAppearance, state::NativeChatView, transcript::text};
 use gpui::{
@@ -130,7 +130,7 @@ impl NativeChatView {
         if !fallback.is_empty() {
             rows = rows.child(receipt_row(
                 total + 1,
-                String::new(),
+                None,
                 vec![plain_answer(fallback, p)],
                 Vec::new(),
                 total == 0,
@@ -278,7 +278,14 @@ impl NativeChatView {
                 ));
             }
         }
-        receipt_row(index + 1, prompt, answer_line, below, index == 0, p)
+        receipt_row(
+            index + 1,
+            receipt_question(prompt, p),
+            answer_line,
+            below,
+            index == 0,
+            p,
+        )
     }
 }
 

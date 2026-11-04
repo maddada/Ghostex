@@ -1,17 +1,16 @@
-//! The links in a question form's words: a question's title and detail and a choice's detail turn
-//! into Markdown the chat draws the way it draws a message, so a `[#407](https://…)` link or a bare
-//! `https://…` address opens on a click, and every other character stays exactly as written.
+//! The links in a question's words: a question's title and detail, a choice's detail, and the
+//! question above each answer on the "You answered" card, as runs of words the renderers draw with
+//! links that open on a click. Text with nothing to link stays plain text.
 //!
 //! CDXC:SessionChat 2026-11-04 DECISION:
-//! User, on a form asking about "#407 (Arc-style layout)": "i'm annoyed u asked me here about #407 but i can't click on the link to open that pr. please fix for customers and for all future ones". A question's title and detail and a choice's detail show Markdown links (`[label](https://…)` or a file path) and bare http(s) addresses as links that open the way a message's links do, on the desktop and the phone. Text with no link stays plain text, drawn as before. Only the links are read: the rest is escaped, so `*`, `_` or a leading `1.` read as written. A choice's label stays plain (the whole row is its button) and shows a link's words without the markup. A bare `#407` is left for the renderer: the desktop links it to the project's GitHub issues (`issue_links`, the chat's own rule); the phone has no such helper and keeps it text. Agents are told to link what they ask about (skills/ghostex-visuals/SKILL.md, the coordinator playbook).
+//! User, on a form asking about "#407 (Arc-style layout)": "i'm annoyed u asked me here about #407 but i can't click on the link to open that pr. please fix for customers and for all future ones". A question's title and detail, a choice's detail and the question on the "You answered" card show Markdown links (`[label](https://…)` or a file path) and bare http(s) addresses as their words only, opening on a click the way a message's links do, on the desktop and the phone. Then, of the answered card showing raw `([Discord](https://…))`: "should show as links but not blue color, just should have dotted lines under links basically like we did for threads before". So every question link keeps the text's own colour with the faint dotted underline a session name has on a "Message to" card (desktop `session_name_underline` in inter_agent_message.rs), the same on question pages (server/src/visual_pages/kit.rs). Nothing but the links is read, so `*`, `_` or a leading `1.` show as written. A choice's label stays plain (the whole row is its button) and shows a link's words without the markup, as do the "?" list's and the Resources modal's titles (`plain_words`). A bare `#407` is an `issue` run: the desktop links it to the project's GitHub issues when the project has a GitHub `origin` (the chat's own `issue_links` rule); the phone has no such helper and keeps it text. The answer key the agent receives stays the question's title as written, links included, so forms answered before this still match their answers. Agents are told to link what they ask about (skills/ghostex-visuals/SKILL.md, the coordinator playbook).
 //!
 //! CDXC:SessionChat 2026-11-04 SEE-ALSO:
-//! apps/desktop/src/app/native_chat/question_form.rs and apps/mobile/app/src/chat/native/transcript/QuestionForm.tsx draw these; server/src/visual_pages/kit.rs links a page question's title the same way.
+//! apps/desktop/src/app/native_chat/link_words.rs and apps/mobile/app/src/chat/native/transcript/LinkWords.tsx draw the runs; question_form.rs / QuestionForm.tsx and page_answers.rs / PageAnswersCard.tsx use them.
 
 use serde_json::{json, Value};
 
 use crate::transcript::links::{classify_link_href, LinkTarget};
-use crate::transcript::markdown_links::markdown_link;
 
 /// One piece of a text: words, or a link's words and where it goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -194,111 +193,78 @@ pub fn link_runs(text: &str) -> Vec<LinkRun> {
     runs
 }
 
-/// A `#` and a digit at the start of a word: a bare `#407` the desktop may link to the project's
-/// GitHub issues (its `issue_links`, which decides the rest).
-fn has_issue_number(text: &str) -> bool {
+/// A bare `#407` in `text` at `at`: the digits' end when it is one. The rule is the desktop chat's
+/// (`issue_references` in gpui-component's text code): a whole token, 1 to 9 digits, no leading
+/// zero, and never 6 or 8 digits, which read as a hex colour.
+fn issue_at(text: &str, at: usize) -> Option<usize> {
     let bytes = text.as_bytes();
-    bytes.windows(2).enumerate().any(|(at, pair)| {
-        pair[0] == b'#'
-            && pair[1].is_ascii_digit()
-            && (at == 0 || !(bytes[at - 1].is_ascii_alphanumeric() || bytes[at - 1] == b'_'))
-    })
-}
-
-/// Words as Markdown that reads exactly as written: every character Markdown would take as markup
-/// is escaped, and each line's leading spaces go (four of them make a code block).
-fn escape_text(text: &str, out: &mut String) {
-    let mut line_start = out.is_empty() || out.ends_with('\n');
-    let mut chars = text.chars().peekable();
-    while let Some(character) = chars.next() {
-        if line_start && character == ' ' {
-            continue;
-        }
-        if character == '\n' {
-            // A line break the reader saw stays one.
-            out.push_str("  \n");
-            line_start = true;
-            continue;
-        }
-        let at_line_start = line_start;
-        line_start = false;
-        // A `#` opens a heading only before a space (`#407` stays bare for the issue link).
-        let heading = character == '#'
-            && chars
-                .peek()
-                .is_none_or(|next| matches!(next, ' ' | '\t' | '\n' | '#'));
-        if "\\`*_[]<>~|&$!{}".contains(character)
-            || (at_line_start && (heading || ">-+=".contains(character)))
-        {
-            out.push('\\');
-            out.push(character);
-            continue;
-        }
-        out.push(character);
-        // `1.` or `1)` at a line's start opens a list.
-        if at_line_start && character.is_ascii_digit() {
-            while let Some(&digit) = chars.peek().filter(|next| next.is_ascii_digit()) {
-                out.push(digit);
-                chars.next();
-            }
-            if let Some(&mark @ ('.' | ')')) = chars.peek() {
-                out.push('\\');
-                out.push(mark);
-                chars.next();
-            }
-        }
-    }
-}
-
-/// A link's words inside `[…]`: only what would end or break the link is escaped, so the label the
-/// renderers look the reference up by is the label as written.
-fn escape_label(label: &str, out: &mut String) {
-    for character in label.chars() {
-        if matches!(character, '\\' | '[' | ']' | '`' | '\n') {
-            if character == '\n' {
-                out.push(' ');
-                continue;
-            }
-            out.push('\\');
-        }
-        out.push(character);
-    }
-}
-
-/// A destination written inside `<…>`, which holds anything but angle brackets and line breaks.
-fn safe_destination(href: &str) -> String {
-    href.replace('<', "%3C")
-        .replace('>', "%3E")
-        .replace(['\n', '\r'], "")
-}
-
-/// The words with their links as `{"markdown", "references"}` for the renderers' Markdown, or
-/// `None` when they hold nothing to link and stay plain text.
-pub fn linked_text(text: &str) -> Option<Value> {
-    let runs = link_runs(text);
-    if runs.iter().all(|run| run.href.is_none()) && !has_issue_number(text) {
+    let word = |byte: u8| byte.is_ascii_alphanumeric() || byte == b'_';
+    if bytes.get(at) != Some(&b'#') {
         return None;
     }
-    let mut markdown = String::new();
-    let mut references = Vec::new();
-    for run in &runs {
-        match &run.href {
-            None => escape_text(&run.text, &mut markdown),
-            Some(href) => {
-                let href = safe_destination(href);
-                markdown.push('[');
-                escape_label(&run.text, &mut markdown);
-                markdown.push_str("](<");
-                markdown.push_str(&href);
-                markdown.push_str(">)");
-                references.extend(markdown_link(&href, &run.text));
-            }
-        }
+    if at > 0 && (word(bytes[at - 1]) || matches!(bytes[at - 1], b'/' | b'#' | b'&')) {
+        return None;
     }
-    Some(json!({ "markdown": markdown, "references": references }))
+    let end = at
+        + 1
+        + bytes[at + 1..]
+            .iter()
+            .take_while(|byte| byte.is_ascii_digit())
+            .count();
+    let digits = end - at - 1;
+    let closes = end >= bytes.len() || !(word(bytes[end]) || matches!(bytes[end], b'/' | b'-'));
+    (closes && (1..=9).contains(&digits) && digits != 6 && digits != 8 && bytes[at + 1] != b'0')
+        .then_some(end)
 }
 
-/// A choice label as its row shows it: a link's words without the Markdown around them.
+fn word_run(text: &str) -> Value {
+    json!({ "text": text })
+}
+
+/// The words with their links as runs, `{text}`, `{text, href}` or `{text, issue}` (a bare
+/// `#407`'s number), or `None` when there is nothing to link and they stay plain text.
+pub fn word_runs(text: &str) -> Option<Value> {
+    let mut runs = Vec::new();
+    let mut linked = false;
+    for run in link_runs(text) {
+        if let Some(href) = run.href {
+            linked = true;
+            runs.push(json!({ "text": run.text, "href": href }));
+            continue;
+        }
+        let words = run.text.as_str();
+        let mut copied = 0;
+        let mut at = 0;
+        while let Some(found) = words[at..].find('#') {
+            let start = at + found;
+            match issue_at(words, start) {
+                Some(end) => {
+                    if copied < start {
+                        runs.push(word_run(&words[copied..start]));
+                    }
+                    runs.push(
+                        json!({ "text": &words[start..end], "issue": &words[start + 1..end] }),
+                    );
+                    linked = true;
+                    copied = end;
+                    at = end;
+                }
+                None => at = start + 1,
+            }
+        }
+        if copied < words.len() {
+            runs.push(word_run(&words[copied..]));
+        }
+    }
+    linked.then(|| Value::Array(runs))
+}
+
+/// The words a reader sees: each link's words without the Markdown around it.
+pub fn plain_words(text: &str) -> String {
+    link_runs(text).into_iter().map(|run| run.text).collect()
+}
+
+/// A choice label as its row shows it, when it holds a link.
 pub fn shown_label(label: &str) -> Option<String> {
     let runs = link_runs(label);
     runs.iter()
@@ -306,8 +272,8 @@ pub fn shown_label(label: &str) -> Option<String> {
         .then(|| runs.into_iter().map(|run| run.text).collect())
 }
 
-/// Adds the linked words to one form as the document carries it (`questions/forms.rs`, `project`):
-/// `titleLinks` and `detailLinks` on a question, `detailLinks` and `shownLabel` on a choice, each
+/// Adds the runs to one form as the document carries it (`questions/forms.rs`, `project`):
+/// `titleRuns` and `detailRuns` on a question, `detailRuns` and `shownLabel` on a choice, each
 /// only when there is something to link.
 pub fn add_links(form: &mut Value) {
     let Some(questions) = form.get_mut("questions").and_then(Value::as_array_mut) else {
@@ -317,13 +283,13 @@ pub fn add_links(form: &mut Value) {
         let Some(question) = question.as_object_mut() else {
             continue;
         };
-        for (field, key) in [("title", "titleLinks"), ("detail", "detailLinks")] {
-            if let Some(links) = question
+        for (field, key) in [("title", "titleRuns"), ("detail", "detailRuns")] {
+            if let Some(runs) = question
                 .get(field)
                 .and_then(Value::as_str)
-                .and_then(linked_text)
+                .and_then(word_runs)
             {
-                question.insert(key.to_string(), links);
+                question.insert(key.to_string(), runs);
             }
         }
         let Some(choices) = question.get_mut("choices").and_then(Value::as_array_mut) else {
@@ -333,12 +299,12 @@ pub fn add_links(form: &mut Value) {
             let Some(choice) = choice.as_object_mut() else {
                 continue;
             };
-            if let Some(links) = choice
+            if let Some(runs) = choice
                 .get("detail")
                 .and_then(Value::as_str)
-                .and_then(linked_text)
+                .and_then(word_runs)
             {
-                choice.insert("detailLinks".to_string(), links);
+                choice.insert("detailRuns".to_string(), runs);
             }
             if let Some(shown) = choice
                 .get("label")
@@ -420,45 +386,46 @@ mod tests {
 
     #[test]
     fn text_without_links_stays_plain() {
-        assert_eq!(linked_text("Which layout? Use *tabs* or 1. pages"), None);
-        assert_eq!(linked_text("Ship it, colour #fff?"), None);
-        assert_eq!(linked_text("a word http:// alone"), None);
+        assert_eq!(word_runs("Which layout? Use *tabs* or 1. pages"), None);
+        assert_eq!(
+            word_runs("Ship it, colour #fff or #ff0000 or #a1b2c3?"),
+            None
+        );
+        assert_eq!(word_runs("a word http:// alone, a#407, #0, #123456"), None);
     }
 
     #[test]
-    fn the_markdown_escapes_everything_but_the_links() {
-        let links = linked_text(
-            "1. Keep [#407](https://github.com/o/r/pull/407)'s *style* or `snake_case`?",
-        )
-        .unwrap();
+    fn the_runs_keep_every_other_character() {
         assert_eq!(
-            links["markdown"],
-            "1\\. Keep [#407](<https://github.com/o/r/pull/407>)'s \\*style\\* or \\`snake\\_case\\`?"
+            word_runs("1. Keep ([Discord](https://discord.com/channels/1/2)): *style*?").unwrap(),
+            json!([
+                {"text": "1. Keep ("},
+                {"text": "Discord", "href": "https://discord.com/channels/1/2"},
+                {"text": "): *style*?"},
+            ])
         );
-        assert_eq!(
-            links["references"][0]["href"],
-            "https://github.com/o/r/pull/407"
-        );
-        assert_eq!(links["references"][0]["sourceLabel"], "#407");
-        assert_eq!(links["references"][0]["kind"], "url");
     }
 
     #[test]
-    fn a_bare_issue_number_reaches_the_renderer_as_text() {
-        let links = linked_text("#407 (Arc-style layout): reply?").unwrap();
-        assert_eq!(links["markdown"], "#407 (Arc-style layout): reply?");
-        assert_eq!(links["references"], json!([]));
-        assert_eq!(linked_text("Fix a#407"), None);
+    fn a_bare_issue_number_is_an_issue_run() {
+        assert_eq!(
+            word_runs("#407 (Arc-style layout), see #12.").unwrap(),
+            json!([
+                {"text": "#407", "issue": "407"},
+                {"text": " (Arc-style layout), see "},
+                {"text": "#12", "issue": "12"},
+                {"text": "."},
+            ])
+        );
     }
 
     #[test]
-    fn a_line_start_cannot_become_a_heading_quote_or_list() {
-        let links =
-            linked_text("# not a heading\n> nor a quote\n- nor a list https://a.dev").unwrap();
+    fn plain_words_drop_the_markup() {
         assert_eq!(
-            links["markdown"],
-            "\\# not a heading  \n\\> nor a quote  \n\\- nor a list [https://a.dev](<https://a.dev>)"
+            plain_words("randomsand's asks ([Discord](https://discord.com/c/1)): what now?"),
+            "randomsand's asks (Discord): what now?"
         );
+        assert_eq!(plain_words("No links, #407"), "No links, #407");
     }
 
     #[test]
@@ -471,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    fn a_form_gets_its_links() {
+    fn a_form_gets_its_runs() {
         let mut form = json!({"questions": [{
             "title": "About [#407](https://github.com/o/r/pull/407)?",
             "detail": "Plain detail.",
@@ -483,14 +450,18 @@ mod tests {
         add_links(&mut form);
         let question = &form["questions"][0];
         assert_eq!(
-            question["titleLinks"]["markdown"],
-            "About [#407](<https://github.com/o/r/pull/407>)?"
+            question["titleRuns"],
+            json!([
+                {"text": "About "},
+                {"text": "#407", "href": "https://github.com/o/r/pull/407"},
+                {"text": "?"},
+            ])
         );
-        assert!(question.get("detailLinks").is_none());
+        assert!(question.get("detailRuns").is_none());
         assert_eq!(question["choices"][0]["shownLabel"], "Read the PR");
         assert_eq!(
-            question["choices"][0]["detailLinks"]["markdown"],
-            "See [https://a.dev](<https://a.dev>)"
+            question["choices"][0]["detailRuns"],
+            json!([{"text": "See "}, {"text": "https://a.dev", "href": "https://a.dev"}])
         );
         assert!(question["choices"][1].get("shownLabel").is_none());
     }

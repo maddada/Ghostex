@@ -109,7 +109,7 @@ impl NameUnderlineFade {
 ///
 /// CDXC:SessionChat 2026-10-31 DECISION: User, of the name on a "Message to <session>" card: "please make the name of the other session have faint dotted underline to indicate that it's clickable (the underline gets undimmed when i hover on it (animated fade between colors)". Only the underline's colour moves, over the app's hover fade (the resize rails' 180ms, `SIDEBAR_DIVIDER_HOVER_FADE_DURATION`), both ways; the name's own colour, size and place do not. A name that opens nothing (its session is gone, or the card has no session) has no underline.
 /// CDXC:SessionChat 2026-10-31 WHY: GPUI text underlines are solid or wavy (`UnderlineStyle`), so the dots are painted one by one on device pixels, at the height GPUI would put an underline. The fade runs in paint with the pointer read from a hit-test probe that takes no input, because a hover change only reaches a row's render through the row's cached view and the fade must not depend on anything else being redrawn.
-fn session_name_underline(
+pub(super) fn session_name_underline(
     key: String,
     left: f32,
     right: f32,
