@@ -18,7 +18,9 @@ use crate::composer::trigger::{
     detect_composer_trigger, file_basename, file_directory, file_mention, filter_files,
     filter_skills, linked_skill_mention, skill_detail, ComposerTrigger, Skill, TriggerKind,
 };
-use crate::transcript::session_mentions::{choice_mention, filter_session_choices, SessionChoice};
+use crate::transcript::session_mentions::{
+    choice_detail, choice_mention, filter_session_choices, SessionChoice,
+};
 
 /// The heading above the composer's `@` file list.
 pub const FILE_SUGGESTION_HEADING: &str = "Project files";
@@ -98,7 +100,8 @@ pub struct SuggestionSources {
     /// `None` until a read has answered.
     pub files: Option<Vec<String>>,
     pub files_loading: bool,
-    /// The `+` list: this project's other agent sessions, newest first (`session_choices`).
+    /// The `+` list: this project's other agent sessions, then those on the other connected
+    /// computers, newest first (`session_choices`).
     pub sessions: Vec<SessionChoice>,
     /// The agent the skills list was read for, so a switch re-reads it.
     pub skills_agent: Option<String>,
@@ -472,16 +475,7 @@ pub fn suggestion_popup(
         SuggestionKind::Session => matches
             .session_matches
             .iter()
-            .map(|choice| {
-                (
-                    choice.title.clone(),
-                    if choice.agent_name.is_empty() {
-                        choice.state.clone()
-                    } else {
-                        format!("{} \u{b7} {}", choice.agent_name, choice.state)
-                    },
-                )
-            })
+            .map(|choice| (choice.title.clone(), choice_detail(choice)))
             .collect(),
     };
     let choice = |row_index: usize| {
