@@ -11,6 +11,7 @@
 mod answer_guard;
 mod caches;
 mod contract;
+mod detail;
 mod failure_log;
 mod icon;
 mod jobs;
@@ -23,6 +24,7 @@ mod titles;
 pub(crate) use answer_guard::*;
 pub(crate) use caches::*;
 pub(crate) use contract::*;
+pub(crate) use detail::*;
 pub(crate) use failure_log::*;
 pub(crate) use icon::*;
 pub(crate) use jobs::*;

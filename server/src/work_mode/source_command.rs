@@ -5,8 +5,9 @@
 //!
 //! A session's card shows the tickets its branch names: the card pass queues exact reads
 //! (`jobs.rs`) and the card reads what they kept (`caches.rs`), the ticket's last title when the
-//! command can't be asked. Its open list, its details and creating a ticket come later; a request
-//! for one gets a refusal in its own words.
+//! command can't be asked. A ticket's details are asked of the command while someone waits for
+//! them (`detail.rs`). Its open list and creating a ticket come later; a request for one gets a
+//! refusal in its own words.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -351,11 +352,33 @@ impl WorkSource for CommandSource {
         }
     }
 
-    fn read_detail(&self, scope: &TicketScope, _id: &str, _force: bool) -> Result<Value, String> {
-        Err(format!(
-            "Ghostex can't open {} tickets yet.",
-            self.display_name(scope)
-        ))
+    /// Asks the scope's workspace's command (`run_detail`), through the details cache at the
+    /// workspace's generation and one call for every caller asking at the same time. Each caller's
+    /// own plan is checked again after that answers (`detail_still_planned`): a cached answer, or
+    /// one read for another project of the workspace, reaches only a project still placed there.
+    fn read_detail(&self, scope: &TicketScope, id: &str, force: bool) -> Result<Value, String> {
+        let name = self.display_name(scope);
+        let read = match (self.workspace_of(scope), scope.credentials) {
+            (Some(workspace_id), Some(credentials)) if self.can_read(scope) => {
+                self.plan_in(&workspace_id).map(|plan| DetailRead {
+                    plan,
+                    id: id.to_string(),
+                    project: [scope.project_id.to_string()],
+                    paths: credentials.paths().clone(),
+                })
+            }
+            _ => None,
+        }
+        .ok_or_else(|| format!("Ghostex can't ask {name} for this ticket right now."))?;
+        let key = read.cache_key();
+        let answer = cached_detail(key.clone(), force, || {
+            single_flight(&key, || run_detail(&read, &name))
+        });
+        // Checked for a failure too: its words are about the workspace's command.
+        if !detail_still_planned(&read) {
+            return Err(DETAIL_CHANGED_MEANWHILE.to_string());
+        }
+        answer
     }
 
     fn create(&self, scope: &TicketScope, _draft: &TicketDraft) -> Result<CreatedTicket, String> {

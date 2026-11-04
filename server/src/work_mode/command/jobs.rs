@@ -57,6 +57,28 @@ impl std::fmt::Debug for ExactRead {
     }
 }
 
+/// What a call was planned against and for, which `prepare` and `commit_if_current` check again.
+pub(crate) trait PlannedCall {
+    fn plan(&self) -> &JobPlan;
+    /// The projects it reads for, each placed in the plan's workspace when it was planned.
+    fn projects(&self) -> &[String];
+    fn paths(&self) -> &GxserverPaths;
+}
+
+impl PlannedCall for ExactRead {
+    fn plan(&self) -> &JobPlan {
+        &self.plan
+    }
+
+    fn projects(&self) -> &[String] {
+        &self.projects
+    }
+
+    fn paths(&self) -> &GxserverPaths {
+        &self.paths
+    }
+}
+
 impl ExactRead {
     fn key(&self) -> JobKey {
         let mut ids = self.ids.clone();
@@ -301,7 +323,7 @@ impl Drop for SlotGuard<'_> {
     }
 }
 
-fn slots() -> &'static Slots {
+pub(super) fn slots() -> &'static Slots {
     static SLOTS: OnceLock<Slots> = OnceLock::new();
     SLOTS.get_or_init(|| Slots::new(PROCESS_SLOTS))
 }
@@ -314,7 +336,7 @@ pub(crate) struct PreparedRun {
     pub(crate) env: CommandEnv,
     pub(crate) work_dir: PathBuf,
     /// The store's writer lock and the placement lock, both released once the command starts.
-    writer: (
+    pub(super) writer: (
         MutexGuard<'static, ()>,
         crate::domain::repository::project::PlacementGuard,
     ),
@@ -343,14 +365,14 @@ impl std::fmt::Debug for PreparedRun {
 /// not in a team, and every project the job reads for still placed in it, as the database says
 /// (`project_placed_in`). The caller holds the store's writer lock and the placement lock
 /// (`hold_project_placement`), which every change to a project's placement takes.
-fn plan_holds(job: &ExactRead, db: &rusqlite::Connection) -> bool {
-    let plan = &job.plan;
+fn plan_holds(job: &impl PlannedCall, db: &rusqlite::Connection) -> bool {
+    let plan = job.plan();
     work_source_generation(&plan.workspace_id) == plan.generation
         && workspace_command(&plan.workspace_id)
             .is_some_and(|command| command.source_id == plan.source.as_str())
-        && !crate::team_sync::workspace_has_team(&job.paths, &plan.workspace_id)
+        && !crate::team_sync::workspace_has_team(job.paths(), &plan.workspace_id)
         && job
-            .projects
+            .projects()
             .iter()
             .all(|project_id| project_placed_in(db, project_id, &plan.workspace_id))
 }
@@ -381,8 +403,8 @@ fn project_placed_in(db: &rusqlite::Connection, project_id: &str, workspace_id: 
 /// credentials, and the mask of everything the workspace stores (`stored_values`, read strictly),
 /// which masks the answer without being passed to the command. `None` when the plan no longer
 /// holds or what the workspace stores can't be read: then nothing runs.
-pub(crate) fn prepare(job: &ExactRead) -> Option<PreparedRun> {
-    let (plan, paths) = (&job.plan, &job.paths);
+pub(crate) fn prepare(job: &impl PlannedCall) -> Option<PreparedRun> {
+    let (plan, paths) = (job.plan(), job.paths());
     let db = crate::storage::open_gxserver_database(paths).ok()?;
     let writer = hold_work_source_writer().ok()?;
     let placement = crate::domain::repository::project::hold_project_placement().ok()?;
@@ -404,8 +426,8 @@ pub(crate) fn prepare(job: &ExactRead) -> Option<PreparedRun> {
 /// Under the store's writer lock again: runs `effects` (caches, back-off, titles) only while the
 /// job's plan still holds, its projects' placement included, and says whether it did. A writer
 /// that changes the setup, or moves one of its projects, waits for them.
-pub(crate) fn commit_if_current(job: &ExactRead, effects: impl FnOnce()) -> bool {
-    let Ok(db) = crate::storage::open_gxserver_database(&job.paths) else {
+pub(crate) fn commit_if_current(job: &impl PlannedCall, effects: impl FnOnce()) -> bool {
+    let Ok(db) = crate::storage::open_gxserver_database(job.paths()) else {
         return false;
     };
     let Ok(_writer) = hold_work_source_writer() else {
@@ -469,21 +491,7 @@ pub(crate) fn run_exact_read(job: &ExactRead) {
                 &job.awaiting_pull_request,
                 Some((&tickets, &list.not_found)),
             );
-            let titles: Vec<(String, String)> = tickets
-                .iter()
-                .filter_map(|ticket| Some((ticket.ticket.id.clone(), ticket.title.clone()?)))
-                .collect();
-            let saved = crate::storage::open_gxserver_database(&job.paths)
-                .map_err(|_| ())
-                .and_then(|db| {
-                    save_ticket_titles(&db, &plan.workspace_id, plan.source.as_str(), &titles)
-                        .map_err(|_| ())
-                });
-            if saved.is_err() {
-                // Read again on the next pass, which saves its titles then.
-                expire_command_tickets(plan, &job.ids);
-                log_titles_unsaved(&job.paths);
-            }
+            keep_titles(&job.paths, plan, &tickets, &job.ids);
         }
         Err(failure) => {
             remember_exact_read(plan, &job.ids, &job.awaiting_pull_request, None);
@@ -501,6 +509,31 @@ pub(crate) fn run_exact_read(job: &ExactRead) {
             &env.shown(&plan.workspace_id),
             Some(&env.shown(plan.source.as_str())),
         );
+    }
+}
+
+/// Saves the last titles of `tickets`, which a read of `ids` answered. When they can't be saved,
+/// those tickets are read again on the next pass, which saves their titles then, and one line in
+/// fixed words is logged.
+pub(super) fn keep_titles(
+    paths: &GxserverPaths,
+    plan: &JobPlan,
+    tickets: &[Ticket],
+    ids: &[String],
+) {
+    let titles: Vec<(String, String)> = tickets
+        .iter()
+        .filter_map(|ticket| Some((ticket.ticket.id.clone(), ticket.title.clone()?)))
+        .collect();
+    let saved = crate::storage::open_gxserver_database(paths)
+        .map_err(|_| ())
+        .and_then(|db| {
+            save_ticket_titles(&db, &plan.workspace_id, plan.source.as_str(), &titles)
+                .map_err(|_| ())
+        });
+    if saved.is_err() {
+        expire_command_tickets(plan, ids);
+        log_titles_unsaved(paths);
     }
 }
 

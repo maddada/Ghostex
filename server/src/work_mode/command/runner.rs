@@ -755,15 +755,26 @@ pub(crate) fn command_list_after_spawn(
         .map_err(|what| unreadable(call.env, &what, &answer.stdout))
 }
 
+/// `command_detail`, calling `after_spawn` once the process started or failed to
+/// (`run_bounded_after_spawn`); a call refused before that drops it unrun.
+pub(crate) fn command_detail_after_spawn(
+    call: &CommandCall,
+    format: IdFormat,
+    projects: &[CommandProject],
+    after_spawn: impl FnOnce(),
+) -> Result<CommandDetail, CommandFailure> {
+    let answer = run_answer(call, after_spawn)?;
+    parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
+        .map_err(|what| unreadable(call.env, &what, &answer.stdout))
+}
+
 /// Runs `detail` and reads its answer.
 pub(crate) fn command_detail(
     call: &CommandCall,
     format: IdFormat,
     projects: &[CommandProject],
 ) -> Result<CommandDetail, CommandFailure> {
-    let answer = run_answer(call, || {})?;
-    parse_detail(&answer.value, format, projects, &AnswerGuard::new(call.env))
-        .map_err(|what| unreadable(call.env, &what, &answer.stdout))
+    command_detail_after_spawn(call, format, projects, || {})
 }
 
 /// Runs `create` and reads its answer.

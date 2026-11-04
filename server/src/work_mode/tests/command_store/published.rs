@@ -71,7 +71,8 @@ fn a_saved_record_is_published_with_its_ids_interned() {
         .tickets_in_branch(&scope_in(&elsewhere), "acm-12-spec")
         .is_empty());
     assert_eq!(rules.name(&scope_in(&elsewhere)), "pub-keys");
-    // Not read yet, and refused where it can't be used.
+    // Not read yet, and refused where it can't be used: the details only with the workspace's
+    // credentials at hand.
     assert!(matches!(
         rules.cached_ticket(&scope_in(&workspace_id), "ACM-12"),
         TicketRead::Unread
@@ -80,7 +81,7 @@ fn a_saved_record_is_published_with_its_ids_interned() {
         rules
             .read_detail(&scope_in(&workspace_id), "ACM-12", false)
             .unwrap_err(),
-        "Ghostex can't open Fixture tickets yet."
+        "Ghostex can't ask Fixture for this ticket right now."
     );
     let start =
         crate::work_mode::WorkTicket::of(WorkItemRef::Ticket(TicketRef::new(source, "ACM-12")));

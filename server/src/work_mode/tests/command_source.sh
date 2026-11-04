@@ -19,6 +19,8 @@ good_ticket='"id": "ACM-12", "title": "Spec the contract", "url": "https://track
   "labels": ["server"], "branchName": "leandro/acm-12-spec",
   "pullRequestUrls": ["https://github.com/acme/app/pull/7"], "team": "ACM", "repo": "acme/app"'
 
+good_detail="{ $good_ticket, \"description\": \"Body\", \"author\": \"Ana\", \"comments\": [ { \"author\": \"Ana\", \"body\": \"Hi\", \"createdAt\": \"2026-10-28T08:00:00Z\" } ], \"secretField\": \"x\" }"
+
 # The credential `a"b\c` as JSON writes it: escaped, and as \u escapes.
 escaped='a\"b\\c and \u0061\u0022\u0062\u005c\u0063'
 
@@ -40,7 +42,7 @@ good)
 EOF
 		;;
 	list) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
-	detail) printf '{ %s, "description": "Body", "author": "Ana", "comments": [ { "author": "Ana", "body": "Hi", "createdAt": "2026-10-28T08:00:00Z" } ], "secretField": "x" }\n' "$good_ticket" ;;
+	detail) printf '%s\n' "$good_detail" ;;
 	create) printf '{ "id": "ACM-41", "url": "https://tracker.example/ACM-41", "branchName": "leandro/acm-41" }\n' ;;
 	esac
 	;;
@@ -173,7 +175,20 @@ not-found)
 wait-release)
 	# A good answer once a `release` file sits in the folder it runs in.
 	while [ ! -e release ]; do sleep 0.02; done
-	printf '{ "tickets": [ { %s } ] }\n' "$good_ticket"
+	case "$verb" in
+	detail) printf '%s\n' "$good_detail" ;;
+	*) printf '{ "tickets": [ { %s } ] }\n' "$good_ticket" ;;
+	esac
+	;;
+fail-after-release)
+	# A failure once a `release` file sits in the folder it runs in.
+	while [ ! -e release ]; do sleep 0.02; done
+	echo '{ "error": { "code": "other", "message": "the tracker is down" } }'
+	exit 1
+	;;
+detail-token)
+	# Details whose description and comment hold the token.
+	printf '{ "id": "ACM-12", "title": "Spec the contract", "state": { "group": "progress", "name": "In progress" }, "description": "Use %s here", "comments": [ { "author": "Ana", "body": "token %s", "createdAt": "2026-10-28T08:00:00Z" } ] }\n' "$GHOSTEX_CREDENTIAL_TOKEN" "$GHOSTEX_CREDENTIAL_TOKEN"
 	;;
 title-kept)
 	# A title holding a value this source was never given.
