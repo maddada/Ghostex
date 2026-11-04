@@ -17,9 +17,11 @@ use crate::document::{ChatPill, WorkingCard, WorkingStrip};
 use crate::session::terminal::visible_terminal_tool;
 use crate::state::ChatState;
 use crate::transcript::foreign::terminal_tool_activity;
+use crate::transcript::tool_card::mcp_call_label;
 use crate::transcript::tool_fold::ToolPair;
+use crate::transcript::tool_label::LabelTense;
 use crate::transcript::tool_rows::tool_preview;
-use crate::transcript::tool_summary::tool_description;
+use crate::transcript::tool_summary::{tool_description, tool_display_name};
 
 /// The card's projection from the working strip and the pills the document already holds.
 pub fn working_card(state: &ChatState, strip: &WorkingStrip, pills: &[ChatPill]) -> WorkingCard {
@@ -128,11 +130,18 @@ fn running_call_label(state: &ChatState) -> Option<String> {
                     if !description.is_empty() {
                         return Some(description);
                     }
+                    // An MCP call of an app the tool cards know reads as a verb on it
+                    // ("Read SPX-412 in Linear").
+                    if let Some(label) = mcp_call_label(name, input, LabelTense::Base) {
+                        return Some(label);
+                    }
                     if let Some(label) =
                         crate::transcript::tool_label::tool_label(name, input, None, false)
                     {
                         return Some(label.text);
                     }
+                    // A tool nothing here knows: its name in words and, at most, the one argument
+                    // that reads as a summary, never its arguments as JSON (`tool_input_gist`).
                     let preview = tool_preview(
                         &ToolPair {
                             call: Some(block),
@@ -140,8 +149,9 @@ fn running_call_label(state: &ChatState) -> Option<String> {
                         },
                         None,
                     );
+                    let name = tool_display_name(name);
                     return Some(if preview.is_empty() {
-                        name.clone()
+                        name
                     } else {
                         format!("{name}: {preview}")
                     });

@@ -413,6 +413,14 @@ impl McpCall {
     }
 }
 
+/// An MCP call's line in the given tense ("Read SPX-412 in Linear", "Use spaceo click"), for a
+/// tool named `mcp__<server>__<tool>`; `None` for any other name.
+pub fn mcp_call_label(name: &str, input: &Value, tense: LabelTense) -> Option<String> {
+    name.strip_prefix("mcp__")
+        .and_then(|rest| mcp_call(rest, input))
+        .map(|call| call.label(tense))
+}
+
 /// `mcp__<server>__<tool>`, past its `mcp__`.
 fn mcp_call(server_tool: &str, input: &Value) -> Option<McpCall> {
     let (server, tool) = server_tool.split_once("__").unwrap_or(("", server_tool));
