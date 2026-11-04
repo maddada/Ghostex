@@ -203,7 +203,7 @@ impl GhostexGpuiApp {
             .w_full()
             .pb(px(1.0 * scale))
             .px(px(3.0 * scale))
-            .child(self.unified_row_interactions(row, card, cx))
+            .child(self.unified_row_interactions(row, card, appearance, cx))
             .into_any_element()
     }
 }

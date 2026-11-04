@@ -325,18 +325,23 @@ impl GhostexGpuiApp {
                                             },
                                         ),
                                     )
+                                    // The Unified list's cards drag only onto the panes: there
+                                    // the zone would move a session into the classic list's last
+                                    // project.
                                     .child(
                                         div()
                                             .id("native-sidebar-ungroup-drop")
                                             .h(px(24.0 * appearance.scale))
                                             .w_full()
                                             .flex_shrink_0()
-                                            .sidebar_drop_target(
-                                                "ungroup",
-                                                String::new(),
-                                                None,
-                                                cx,
-                                            ),
+                                            .when(classic, |zone| {
+                                                zone.sidebar_drop_target(
+                                                    "ungroup",
+                                                    String::new(),
+                                                    None,
+                                                    cx,
+                                                )
+                                            }),
                                     ),
                             ),
                     ))

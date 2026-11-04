@@ -3,10 +3,10 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::{
-    AnyElement, AppContext as _, DragMoveEvent, Hsla, InteractiveElement, IntoElement,
+    AnyElement, AppContext as _, DragMoveEvent, Hsla, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Render, StatefulInteractiveElement, Styled, div, px,
 };
-use gpui_component::{h_flex, v_flex};
+use gpui_component::{ElementExt as _, h_flex, v_flex};
 use serde_json::Value;
 
 use ghostex_gx_core::unified_sidebar::UnifiedStatus;
@@ -93,6 +93,10 @@ impl GhostexGpuiApp {
             background: appearance.selected,
         };
         let new_key = key.clone();
+        let menu_key = key.clone();
+        // The menu hangs below the header, as a Project sidebar header's does.
+        let owner = crate::app::native_sidebar::menus::MenuOwner::default();
+        let record_owner = crate::app::native_sidebar::menus::record_menu_owner(&owner);
         let header = h_flex()
             .id(format!("native-unified-group-header-{key}"))
             .group(hover_group.clone())
@@ -177,6 +181,28 @@ impl GhostexGpuiApp {
                     .text_color(appearance.muted)
                     .child(group.count.to_string()),
             )
+            .on_prepaint(move |bounds, window, app| record_owner(bounds, window, app))
+            /*
+            CDXC:Sidebar 2026-11-05 DECISION:
+            User: "in the unified sidebar i can't right click on the project header when i group by project. pls fix." The header had no right-click handler at all. It now opens the Project sidebar header's menu for that project, from the same builder the filter menu's project row uses (`gx_store_unified_project_menu`), so its rows run the same actions. A repository on several computers opens the menu of its main checkout on this computer when it has one there, else on another (`repo_menu_groups`, CDXC:Sidebar 2026-11-01 in header.rs).
+            */
+            .on_mouse_down(
+                MouseButton::Right,
+                cx.listener(move |app, event: &gpui::MouseDownEvent, window, cx| {
+                    cx.stop_propagation();
+                    let Some(menu) = app.unified_group_menu(&menu_key) else {
+                        return;
+                    };
+                    Self::show_native_sidebar_context_menu(
+                        &menu,
+                        owner.get(),
+                        event.position,
+                        scale,
+                        window,
+                        cx,
+                    );
+                }),
+            )
             .on_click(cx.listener(move |app, _, _, cx| {
                 cx.stop_propagation();
                 let host = &mut app.gx_store.unified_sidebar;
@@ -242,6 +268,19 @@ impl GhostexGpuiApp {
                     .when(!after, |line| line.top_0())
             }))
             .into_any_element()
+    }
+
+    /// A header's right-click menu: the Project sidebar menu of the project its repository's filter
+    /// row opens.
+    fn unified_group_menu(&mut self, repo_key: &str) -> Option<Value> {
+        let group_id = self
+            .native_sidebar
+            .unified
+            .as_ref()?
+            .repo_menu_groups
+            .get(repo_key)?
+            .clone();
+        self.gx_store_unified_project_menu(&group_id)
     }
 
     /// The "+" on a header: the New thread picker on that project, on the machine it starts on.

@@ -10,12 +10,16 @@ use gpui_component::tooltip::ManagedTooltipExt as _;
 use gpui_component::{ElementExt as _, h_flex};
 use serde_json::{Value, json};
 
+use ghostex_gx_core::SessionRow;
 use ghostex_gx_core::unified_sidebar::{UnifiedBranchLine, UnifiedStatus};
 
 use super::model::UnifiedCard;
 use crate::GhostexGpuiApp;
 use crate::app::helpers::chrome_color;
 use crate::app::native_sidebar::appearance::SidebarAppearance;
+use crate::app::native_sidebar::drag::{SidebarDrag, SidebarDragPreview};
+use crate::app::native_sidebar::drag_source::SidebarDragSource as _;
+use crate::app::native_sidebar::row_drag::{RowDragIdentity, RowDragPreview};
 use crate::app::native_sidebar::status::{self, FAILED_COLOR, QUESTION_COLOR, WORKING_COLOR};
 
 pub(super) fn now_ms() -> i64 {
@@ -150,6 +154,12 @@ pub(super) fn repo_tile(
     }
 }
 
+/// Whether a card drags onto the Agents panes, as a Project sidebar row does: a session on this
+/// computer, never a browser tab.
+fn drags_to_panes(row: &SessionRow) -> bool {
+    !row.is_browser && row.key.as_ref().is_some_and(|key| key.machine.is_local())
+}
+
 /// Marks a card or a slim row as the open session: its fill, and an outline drawn over it.
 ///
 /// CDXC:Sidebar 2026-10-30 DECISION:
@@ -159,14 +169,43 @@ pub(super) fn mark_active<E: Styled + ParentElement>(row: E, fill: Hsla, outline
 }
 
 impl GhostexGpuiApp {
-    /// The click, right-click and hover a card and a slim row share with the classic row.
+    /// The click, right-click, hover and drag a card and a slim row share with the classic row.
     pub(super) fn unified_row_interactions(
         &self,
         row: gpui::Stateful<gpui::Div>,
         card: &UnifiedCard,
+        appearance: &SidebarAppearance,
         cx: &mut gpui::Context<Self>,
     ) -> gpui::Stateful<gpui::Div> {
         let session_id = card.session.session_id.clone();
+        /*
+        CDXC:Sidebar 2026-11-05 DECISION:
+        User: "please allow me to drag a session card to split like i can for project sidebar". A Unified card or slim row is the Project sidebar row's drag source (`SidebarDrag` of kind "session", drag_source.rs), so the Agents panes take it with the same split and centre zones, refusals and preview (session_pane_placement.rs). Like that row, only a session on this computer drags, and not while a menu is open; it fades while it is dragged. The Unified list has no reorder, so a release back in the sidebar does nothing; a plain click still opens the session, since a press only becomes a drag once the pointer moves.
+        */
+        let dragged = drags_to_panes(&card.row).then(|| SidebarDrag {
+            kind: "session",
+            preview: SidebarDragPreview::Row(RowDragPreview {
+                identity: RowDragIdentity::Session {
+                    session: card.session.clone(),
+                },
+                appearance: appearance.clone(),
+                width: px(0.0),
+                pointer_x: px(0.0),
+            }),
+            id: session_id.clone(),
+            title: card.session.title().to_owned(),
+            scale: appearance.scale,
+            refused: Default::default(),
+        });
+        let row = row
+            .when(
+                self.native_sidebar.is_dragging("session", &session_id),
+                |row| row.opacity(0.2),
+            )
+            .when_some(
+                dragged.filter(|_| self.native_sidebar.menu.is_none()),
+                |row, dragged| row.sidebar_drag_source(dragged, cx),
+            );
         let hover_id = session_id.clone();
         let menu = card
             .session
@@ -507,7 +546,7 @@ impl GhostexGpuiApp {
                     crate::app::native_sidebar::decorations::session_outline(appearance),
                 )
             });
-        let card_row = self.unified_row_interactions(card_row, card, cx);
+        let card_row = self.unified_row_interactions(card_row, card, appearance, cx);
         div()
             .w_full()
             .pb(px(CARD_GAP * scale))
@@ -550,6 +589,28 @@ mod tests {
             .py(px(7.0))
             .rounded(px(5.0))
             .relative()
+    }
+
+    #[test]
+    fn only_a_session_on_this_computer_drags_onto_the_panes() {
+        use ghostex_gx_core::{MachineId, SessionKey};
+        let row = |key: Option<SessionKey>, is_browser: bool| SessionRow {
+            key,
+            is_browser,
+            ..SessionRow::default()
+        };
+        assert!(drags_to_panes(&row(
+            Some(SessionKey::local("p", "s")),
+            false
+        )));
+        let mut remote = SessionKey::local("p", "s");
+        remote.machine = MachineId::Remote("remote-ab12".to_string());
+        assert!(!drags_to_panes(&row(Some(remote), false)));
+        assert!(!drags_to_panes(&row(None, true)));
+        assert!(!drags_to_panes(&row(
+            Some(SessionKey::local("p", "s")),
+            true
+        )));
     }
 
     #[test]
